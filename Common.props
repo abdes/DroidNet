@@ -10,7 +10,7 @@
         <PackageIcon>icon.png</PackageIcon>
         <PackageIconUrl>https://github.com/abdes/hc-monorepo/blob/master/icon.png</PackageIconUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <CommonTags>HappyCoding;Windows</CommonTags>
+        <CommonTags>HappyCoding;Windows;csharp;dotnet</CommonTags>
 
         <!-- Customize for each published project -->
         <!--
