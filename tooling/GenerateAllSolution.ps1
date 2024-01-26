@@ -39,7 +39,8 @@ $projects = [System.Collections.ArrayList]::new()
 
 # Application projects
 [void]$projects.Add(".\projects\*\src\*.csproj")
-[void]$projects.Add(".\projects\*\tests\*.Tests.csproj")
+[void]$projects.Add(".\projects\*\tests\**\*.Tests.csproj")
+[void]$projects.Add(".\projects\*\samples\**\*.csproj")
 
 # Tooling Projects
 [void]$projects.Add(".\tooling\samples\**\*.csproj")
