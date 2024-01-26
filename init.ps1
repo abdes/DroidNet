@@ -36,6 +36,8 @@ Param (
     [Parameter()]
     [switch]$Interactive,
     [Parameter()]
+    [switch]$NoPreCommitHooks,
+    [Parameter()]
     [switch]$Help
 )
 
