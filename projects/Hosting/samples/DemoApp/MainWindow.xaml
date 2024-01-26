@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<Window
+    x:Class="DroidNet.Hosting.Demo.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Top"
+        Orientation="Vertical">
+        <Expander HorizontalContentAlignment="Left" IsExpanded="True">
+            <Expander.Header>
+                <TextBlock
+                    FontSize="20"
+                    FontWeight="Bold"
+                    Text="CommandLine Arguments" />
+            </Expander.Header>
+            <Expander.Content>
+                <StackPanel Orientation="Vertical">
+                    <TextBlock
+                        Width="400"
+                        Margin="0,0,0,10"
+                        TextWrapping="Wrap">
+                        Try launching the application with the command line like this:
+                    </TextBlock>
+                    <TextBlock
+                        Width="400"
+                        Margin="0,0,0,30"
+                        FontStyle="Italic"
+                        TextWrapping="Wrap">
+                        --int-value=125 --string-value="just a string from the command line" --boolean-flag=true
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Width="200">Boolean Flag:</TextBlock>
+                        <TextBlock Text="{x:Bind booleanFlag}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Width="200">Integer Value:</TextBlock>
+                        <TextBlock Text="{x:Bind intValue}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Width="200">String Value:</TextBlock>
+                        <TextBlock Text="{x:Bind stringValue}" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander.Content>
+        </Expander>
+        <Expander HorizontalContentAlignment="Left" IsExpanded="True">
+            <Expander.Header>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Text="Custom Configuration Section" />
+                </StackPanel>
+            </Expander.Header>
+            <Expander.Content>
+                <TextBlock Text="{x:Bind settings.Greeting, FallbackValue=''}" />
+            </Expander.Content>
+        </Expander>
+        <StackPanel Orientation="Horizontal">
+            <Button Margin="20,20,10,20" Click="LogSomething">
+                Click me to emit a log (Warning level)!
+            </Button>
+            <Button
+                Margin="10,20,10,20"
+                Background="{ThemeResource SystemControlBackgroundAccentBrush}"
+                Click="Exit">
+                Click me to Exit the Application!
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</Window>

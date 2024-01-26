@@ -6,6 +6,16 @@
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     </PropertyGroup>
 
+    <!-- Windows App SDK-->
+    <ItemGroup>
+        <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.4.231115000" />
+        <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    </ItemGroup>
+
     <!-- Tooling -->
     <ItemGroup>
         <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.507" />
@@ -22,6 +32,7 @@
         <PackageVersion Include="coverlet.collector" Version="6.0.0" />
         <PackageVersion Include="coverlet.msbuild" Version="6.0.0" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+        <PackageVersion Include="Moq" Version="4.20.69" />
     </ItemGroup>
 
 </Project>
