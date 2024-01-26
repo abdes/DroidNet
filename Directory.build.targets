@@ -120,7 +120,7 @@
 
     <!-- Packaging -->
     <PropertyGroup>
-        <CommonTags>$(CommonTags);WinUI;WindowsAppSDKWinAppSDK</CommonTags>
+        <CommonTags>$(CommonTags);WinUI;WindowsAppSDK;WinAppSDK</CommonTags>
         <PackageTags Condition="'$(PackageTags)' != ''">$(CommonTags);$(PackageTags)</PackageTags>
         <PackageTags Condition="'$(PackageTags)' == ''">$(CommonTags)</PackageTags>
     </PropertyGroup>
