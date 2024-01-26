@@ -6,5 +6,6 @@ namespace DroidNet.Samples.Samples.NetClassLibrary;
 
 public class HelloWorld
 {
-    public string Greeting { get; } = "Hello World!";
+    public string Greeting { get; }
+        = $"Hello World ({ThisAssembly.AssemblyVersion}/{ThisAssembly.AssemblyInformationalVersion})!";
 }
