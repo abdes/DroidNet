@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<!--
+    NOTE: .props files are imported early in the import order.
+
+    - Set defaults in .props files for behavior that might be customized in an
+      individual project.
+    - Avoid setting dependent properties in .props files by reading the value of
+      a possibly-customized property, because the customization won't happen
+      until the user project.
+    - Include items in .props files (conditioned on a property). All properties
+      are considered before any item, so user-project property customizations
+      will be picked up, and this gives the user project the opportunity to
+      Remove or Update any item brought in by the import.
+-->
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <Import Project="Common.props" />
+
+    <PropertyGroup>
+        <RootNamespace>DroidNet</RootNamespace>
+        <AssemblyName>$(RootNamespace).$(MSBuildProjectName)</AssemblyName>
+        <PackageId>$(AssemblyName)</PackageId>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!--
+            Make sure any documentation comments which are included in code get
+            checked for syntax during the build, but do not report warnings for
+            missing comments.
+
+            - CS1573: Parameter 'parameter' has no matching param tag in the XML
+              comment for 'parameter' (but other parameters do)
+            - CS1591: Missing XML comment for publicly visible type or member
+              'Type_or_Member'
+            - CS1712: Type parameter 'type_parameter' has no matching typeparam
+              tag in the XML comment on 'type_or_member' (but other type
+              parameters do)
+        -->
+        <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
+        <GenerateDocumentationFile>True</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
+        <WarningLevel>999</WarningLevel>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <!-- For projects targeting .Net 5 or earlier -->
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    </PropertyGroup>
+
+</Project>

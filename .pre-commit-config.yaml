@@ -1,0 +1,38 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.1.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
+
+# Disabled for now - it's too slow
+#
+#   - repo: local
+#     hooks:
+#     # Use dotnet format already installed locally
+#     - id: dotnet-format
+#       name: C# dotnet-format
+#       language: system
+#       entry: dotnet format --include
+#       types_or: ["c#"]
+
+  - repo: local
+    hooks:
+    # Use XamlStyler already installed locally as a dotnet tool
+    - id: xaml-styler
+      name: XAML styler
+      language: system
+      entry: dotnet xstyler -f
+      types: [file]
+      files: \.xaml$

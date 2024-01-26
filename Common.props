@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <!-- Meta Options -->
+    <PropertyGroup>
+        <Authors>Abdessattar Sassi</Authors>
+        <Company>Happy Coding</Company>
+        <Copyright>(c) Abdessattar Sassi and Contributors.</Copyright>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageIconUrl>https://github.com/abdes/hc-monorepo/blob/master/icon.png</PackageIconUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <CommonTags>HappyCoding;Windows</CommonTags>
+
+        <!-- Customize for each published project -->
+        <!--
+        <PackageProjectUrl>https://github.com/abdes/winui-routing</PackageProjectUrl>
+        <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+        -->
+    </PropertyGroup>
+
+    <!-- Language Options -->
+    <PropertyGroup>
+        <Features>Strict</Features>
+        <Nullable>enable</Nullable>
+        <WarningsAsErrors>nullable</WarningsAsErrors>
+        <LangVersion>12</LangVersion>
+        <DefaultLanguage>en-US</DefaultLanguage>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <NoPackageAnalysis>true</NoPackageAnalysis>
+    </PropertyGroup>
+
+    <!-- Package Options -->
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <IsPublishable>true</IsPublishable>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <DebugType>Embedded</DebugType>
+        <PackageOutputPath>bin\Package</PackageOutputPath>
+        <AllowedOutputExtensionsInPackageBuildOutputFolder>.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    </PropertyGroup>
+
+    <!-- Build Options -->
+    <PropertyGroup>
+        <Deterministic>false</Deterministic>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+        <Deterministic>true</Deterministic>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <AccelerateBuildsInVisualStudio>false</AccelerateBuildsInVisualStudio>
+    </PropertyGroup>
+
+</Project>

@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<!--
+    NOTE: .targets files are imported late in the build order.
+
+    - Set dependent properties in .targets files, because they'll pick up
+      customizations from individual projects.
+    - Define targets in .targets files. But remember that this makes overriding
+      the target more difficult if the .targets file is imported by an SDK,
+      because the user project doesn't have a place to override it by default.
+
+    - Set defaults in .props files for behavior that might be customized in an
+      individual project.
+    - Avoid setting dependent properties in .props files by reading the value of
+      a possibly-customized property, because the customization won't happen
+      until the user project.
+    - Include items in .props files (conditioned on a property). All properties
+      are considered before any item, so user-project property customizations
+      will be picked up, and this gives the user project the opportunity to
+      Remove or Update any item brought in by the import.
+-->
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
+         TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
+
+    <PropertyGroup>
+        <MyTopLevelDirectory>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))</MyTopLevelDirectory>
+        <MyToolingDirectory>$(MyTopLevelDirectory)tooling</MyToolingDirectory>
+    </PropertyGroup>
+
+    <!--
+        Install pre-commit hooks if it has not been done already or if the lock
+        file was removed to force a reinstall
+    -->
+    <PropertyGroup>
+        <PreCommitInstallLockFilePath>$(MyTopLevelDirectory)\.pre-commit.installed.lock</PreCommitInstallLockFilePath>
+    </PropertyGroup>
+    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists($(PreCommitInstallLockFilePath))">
+        <Touch Files="$(PreCommitInstallLockFilePath)" AlwaysCreate="true" />
+        <Exec Command="pre-commit install" />
+    </Target>
+    <!-- End pre-commit hooks -->
+
+    <!--
+        Visual Studio solution generator is a MSBuild target, which can be used on
+        any project for which a solution needs to be generated. Rather than adding
+        it to many places, it is recommended to simply add the reference in the
+        root `Directory.build.props`.
+
+        To use it on a project, move to the project folder and run:
+
+        $ msbuild /Target:SlnGen /Verbosity:Minimal /NoLogo
+    -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.VisualStudio.SlnGen" />
+    </ItemGroup>
+    <ItemGroup>
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), '.editorconfig'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'settings.xamlstyler'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), '*.md'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'GlobalUsings*.cs'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'stylecop.json'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'Directory.packages.props'))" />
+    </ItemGroup>
+    <!-- End Visual Studio solution generator -->
+
+    <!--
+        Code Quality
+
+        Use StyleCop (https://github.com/DotNetAnalyzers/StyleCopAnalyzers).
+        Rules are in .editorconfig, additional options for stylecop analyzers are
+        in stylecop.json.
+
+        Enable maximum help from the compiler and IDE.
+    -->
+    <ItemGroup>
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'stylecop.json'))" Link="stylecop.json" />
+    </ItemGroup>
+    <PropertyGroup Condition="'$(Configuration)'=='Release'">
+        <!-- Treat warnings as errors only in Release builds -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+    <!-- End Code Quality -->
+
+    <!-- Git Versioning -->
+    <ItemGroup>
+        <PackageReference Include="Nerdbank.GitVersioning" Condition="!Exists('packages.config')">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+    <!-- End Git Versioning -->
+
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+            <PropertyGroup>
+                <IsTestProject>True</IsTestProject>
+                <IsPackable>False</IsPackable>
+            </PropertyGroup>
+            <ItemGroup>
+                <PackageReference Include="MSTest.TestAdapter" />
+                <PackageReference Include="MSTest.TestFramework" />
+                <PackageReference Include="FluentAssertions" />
+                <PackageReference Include="coverlet.collector" />
+                <PackageReference Include="coverlet.msbuild" />
+            </ItemGroup>
+        </When>
+    </Choose>
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+            <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" />
+            </ItemGroup>
+        </When>
+    </Choose>
+
+    <!-- Packaging -->
+    <PropertyGroup>
+        <CommonTags>$(CommonTags);WinUI;WindowsAppSDKWinAppSDK</CommonTags>
+        <PackageTags Condition="'$(PackageTags)' != ''">$(CommonTags);$(PackageTags)</PackageTags>
+        <PackageTags Condition="'$(PackageTags)' == ''">$(CommonTags)</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(Configuration)' == 'Release'">
+        <PackageReference Include="NuGet.Build.Tasks.Pack" PrivateAssets="all" Pack="false" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(IsPackable)'=='True'">
+        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
+        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <!-- End Packaging -->
+
+</Project>

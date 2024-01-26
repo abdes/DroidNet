@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "isRoot": true,
+    "tools": {
+        "dotnet-format": {
+            "version": "5.1.250801",
+            "commands": ["dotnet-format"]
+        },
+        "xamlstyler.console": {
+            "version": "3.2311.2",
+            "commands": ["xstyler"]
+        },
+        "microsoft.visualstudio.slngen.tool": {
+            "version": "11.1.0",
+            "commands": ["slngen"]
+        },
+        "nbgv": {
+            "version": "3.6.133",
+            "commands": ["nbgv"]
+        }
+    }
+}
