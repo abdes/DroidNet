@@ -46,6 +46,7 @@
 
     <!-- Build Options -->
     <PropertyGroup>
+        <DN_PrecommitHooks>true</DN_PrecommitHooks>
         <Deterministic>false</Deterministic>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">

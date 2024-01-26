@@ -34,7 +34,7 @@
     <PropertyGroup>
         <PreCommitInstallLockFilePath>$(MyTopLevelDirectory)\.pre-commit.installed.lock</PreCommitInstallLockFilePath>
     </PropertyGroup>
-    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists($(PreCommitInstallLockFilePath))">
+    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists($(PreCommitInstallLockFilePath)) And $(DN_PrecommitHooks) != 'false'">
         <Touch Files="$(PreCommitInstallLockFilePath)" AlwaysCreate="true" />
         <Exec Command="pre-commit install" />
     </Target>
