@@ -12,6 +12,11 @@ internal static class Program
     {
         _ = args;
 
+        Console.WriteLine($"My AssemblyFileVersion         : {ThisAssembly.AssemblyFileVersion}");
+        Console.WriteLine($"My AssemblyInformationalVersion: {ThisAssembly.AssemblyInformationalVersion}");
+
+        Console.WriteLine();
+
         Console.WriteLine(new HelloWorld().Greeting);
     }
 }
