@@ -50,5 +50,8 @@ jobs:
         - name: Generate 'All Projects' solution file
           run: ./GenerateAllSolution
 
+        - name: Build projects
+          run: dotnet build /p:DN_PreCommitHooks=false -c $env:configuration
+
         - name: Execute Unit Tests
-          run: dotnet test
+          run: dotnet test --no-build
