@@ -5,7 +5,7 @@ on:
     branches: [ "master" ]
   push:
     branches:
-    - ci/github-workflow
+    - master
     paths:
     - '*'
     - '!/docs/*' # Don't run workflow when files are only in the /docs directory
