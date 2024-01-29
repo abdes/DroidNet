@@ -1,38 +1,44 @@
-<?xml version="1.0" encoding="utf-8" ?>
-
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-
-    <PropertyGroup>
-        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    </PropertyGroup>
-
-    <!-- Windows App SDK-->
-    <ItemGroup>
-        <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.4.231115000" />
-        <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-    </ItemGroup>
-
-    <!-- Tooling -->
-    <ItemGroup>
-        <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.507" />
-        <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.133" />
-        <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.1.0" />
-        <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.7.0" />
-    </ItemGroup>
-
-    <!-- Testing -->
-    <ItemGroup>
-        <PackageVersion Include="MSTest.TestAdapter" Version="3.2.0" />
-        <PackageVersion Include="MSTest.TestFramework" Version="3.2.0" />
-        <PackageVersion Include="FluentAssertions" Version="6.12.0" />
-        <PackageVersion Include="coverlet.collector" Version="6.0.0" />
-        <PackageVersion Include="coverlet.msbuild" Version="6.0.0" />
-        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-        <PackageVersion Include="Moq" Version="4.20.69" />
-    </ItemGroup>
-
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <!-- Windows App SDK-->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.4.231219000" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="System.Reactive" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Xaml.Behaviors.WinUI.Managed" Version="2.0.9" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
+    <PackageVersion Include="Handlebars.Net" Version="2.1.4" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+  <!-- Tooling -->
+  <ItemGroup>
+    <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.133" />
+    <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.1.0" />
+    <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.7.0" />
+  </ItemGroup>
+  <!-- Testing -->
+  <ItemGroup>
+    <PackageVersion Include="MSTest.TestAdapter" Version="3.1.1" />
+    <PackageVersion Include="MSTest.TestFramework" Version="3.1.1" />
+    <PackageVersion Include="FluentAssertions" Version="6.12.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.0" />
+    <PackageVersion Include="coverlet.msbuild" Version="6.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageVersion Include="Moq" Version="4.20.70" />
+    <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.8.0" />
+    <PackageVersion Include="Verify.DiffPlex" Version="2.3.0" />
+    <PackageVersion Include="Verify.MSTest" Version="23.0.1" />
+    <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
+  </ItemGroup>
 </Project>
