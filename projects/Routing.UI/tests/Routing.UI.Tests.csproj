@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <EnablePreviewMsixTooling>true</EnablePreviewMsixTooling>
+        <UseWinUI>true</UseWinUI>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+
+        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
+        <UseRidGraph>true</UseRidGraph>
+
+        <RootNamespace>$(RootNamespace).Routing.UI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AppxManifest Include="Package.appxmanifest">
+            <SubType>Designer</SubType>
+        </AppxManifest>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\LockScreenLogo.scale-200.png" />
+        <Content Include="Assets\SplashScreen.scale-200.png" />
+        <Content Include="Assets\Square150x150Logo.scale-200.png" />
+        <Content Include="Assets\Square44x44Logo.scale-200.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+        <Content Include="Assets\StoreLogo.png" />
+        <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Routing.UI.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+
+        <RootNamespace>$(RootNamespace).Routing</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Routing.csproj" />
+        <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Utils\" />
+    </ItemGroup>
+
+</Project>

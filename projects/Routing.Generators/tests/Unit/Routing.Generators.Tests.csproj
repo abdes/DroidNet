@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+
+        <RootNamespace>$(RootNamespace).Routing.Generators</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Verify.DiffPlex" />
+        <PackageReference Include="Verify.MSTest" />
+        <PackageReference Include="Verify.SourceGenerators" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\Routing.Generators\src\Routing.Generators.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+    </ItemGroup>
+
+</Project>

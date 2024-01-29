@@ -1,0 +1,267 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace DroidNet.Routing;
+
+using System.Diagnostics.CodeAnalysis;
+using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+
+/// <summary>
+/// Unit test cases for the <see cref="UrlSegmentGroup" /> class.
+/// </summary>
+[TestClass]
+[ExcludeFromCodeCoverage]
+public class UrlSegmentGroupTests
+{
+    /// <summary>
+    /// Test the Serialize method with a single segment and one child.
+    /// </summary>
+    [TestMethod]
+    public void AddChild_SetsParentForChild()
+    {
+        // Arrange
+        var segment = MockUrlSegment("foo");
+        var group = new UrlSegmentGroup(new[] { segment });
+        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+
+        // Act
+        group.AddChild("baz", child);
+
+        // Assert
+        _ = child.Parent.Should().Be(group);
+    }
+
+    /// <summary>
+    /// Test that the SortedChildren property returns all children in their
+    /// original order if no child is primary.
+    /// </summary>
+    [TestMethod]
+    public void SortedChildren_NoPrimary_ReturnsChildren()
+    {
+        var group = new UrlSegmentGroup(
+            [],
+            new Dictionary<string, UrlSegmentGroup>
+            {
+                { "a", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { "c", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+            });
+
+        var children = group.SortedChildren;
+        var keys = children.Select(c => c.Key).ToList();
+
+        _ = keys.Should().ContainInConsecutiveOrder("a", "b", "c");
+    }
+
+    /// <summary>
+    /// Test that the SortedChildren property returns the primary outlet child
+    /// first.
+    /// </summary>
+    [TestMethod]
+    public void SortedChildren_Primary_ReturnsPrimaryFirst()
+    {
+        var group = new UrlSegmentGroup(
+            [],
+            new Dictionary<string, UrlSegmentGroup>
+            {
+                { "a", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { UrlSegmentGroup.PrimaryOutlet, new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+            });
+
+        var children = group.SortedChildren;
+        var keys = children.Select(c => c.Key).ToList();
+
+        _ = keys.Should().ContainInConsecutiveOrder(UrlSegmentGroup.PrimaryOutlet, "a", "b");
+    }
+
+    /// <summary>
+    /// Test the Serialize method with a single segment and no children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_NoSegmentNoChildren_ReturnsEmpty()
+    {
+        // Arrange
+        var group = new UrlSegmentGroup([]);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be(string.Empty);
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with a single segment and no children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_SingleSegmentNoChildren_ReturnsSegmentValue()
+    {
+        // Arrange
+        var segment = MockUrlSegment("foo");
+        var group = new UrlSegmentGroup(new[] { segment });
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("foo");
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with multiple segments and no children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_MultipleSegmentsNoChildren_ReturnsSlashSeparatedSegments()
+    {
+        // Arrange
+        var segment1 = MockUrlSegment("foo");
+        var segment2 = MockUrlSegment("bar");
+        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("foo/bar");
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with a single segment and one child.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_SingleSegmentOneChild_ReturnsSegmentValueWithChildValue()
+    {
+        // Arrange
+        var segment = MockUrlSegment("foo");
+        var group = new UrlSegmentGroup(new[] { segment });
+        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        group.AddChild("baz", child);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = group.Children.Count.Should().Be(1);
+        _ = result.Should().Be("foo(baz:qux)");
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with multiple segments and multiple children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_MultipleSegmentsMultipleChildren_ReturnsSegmentsValueWithChildrenValue()
+    {
+        // Arrange
+        var segment1 = MockUrlSegment("foo");
+        var segment2 = MockUrlSegment("bar");
+        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
+        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("grault"), MockUrlSegment("garply") });
+        group.AddChild("baz", child1);
+        group.AddChild("corge", child2);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("foo/bar(baz:qux//corge:grault/garply)");
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with multiple segments and multiple children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_OneChildPrimaryOutlet_ReturnsSegmentsValueWithChildValueNoParenthesis()
+    {
+        // Arrange
+        var segment1 = MockUrlSegment("foo");
+        var segment2 = MockUrlSegment("bar");
+        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
+        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        group.AddChild(UrlSegmentGroup.PrimaryOutlet, child);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("foo/bar/qux");
+        _ = result.Should().Be(group.ToString());
+    }
+
+    /// <summary>
+    /// Test the Serialize method with multiple segments and no children.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_NoSegmentsOnePrimaryChild_ReturnsChildValueNoParenthesis()
+    {
+        // Arrange
+        var group = new UrlSegmentGroup([]);
+        var child = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        group.AddChild(UrlSegmentGroup.PrimaryOutlet, child);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("foo");
+    }
+
+    /// <summary>
+    /// Test the Serialize method with a single segment and one child.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_NoSegmentsNoPrimaryChild_ReturnsChildrenValueParenthesis()
+    {
+        // Arrange
+        var group = new UrlSegmentGroup([]);
+        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        group.AddChild("left", child1);
+        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("bar") });
+        group.AddChild("right", child2);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("(left:foo//right:bar)");
+    }
+
+    /// <summary>
+    /// Test the Serialize method with a single segment and one child.
+    /// </summary>
+    [TestMethod]
+    public void Serialize_NoSegmentsPrimaryAndChildren_ReturnsPrimaryThenChildrenValueParenthesis()
+    {
+        // Arrange
+        var group = new UrlSegmentGroup([]);
+        var main = new UrlSegmentGroup(new[] { MockUrlSegment("main") });
+        group.AddChild(UrlSegmentGroup.PrimaryOutlet, main);
+        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        group.AddChild("left", child1);
+        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("bar") });
+        group.AddChild("right", child2);
+
+        // Act
+        var result = group.ToString();
+
+        // Assert
+        _ = result.Should().Be("main(left:foo//right:bar)");
+    }
+
+    // Create a mock UrlSegment with a given value
+    private static UrlSegment MockUrlSegment(string value)
+    {
+        var mock = new Mock<UrlSegment>(value, new Dictionary<string, string>());
+        _ = mock.Setup(m => m.ToString()).Returns(value);
+        return mock.Object;
+    }
+}
