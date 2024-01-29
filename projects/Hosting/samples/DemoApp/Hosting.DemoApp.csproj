@@ -31,12 +31,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Content Include="appsettings.json">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-      </ItemGroup>
-
-    <ItemGroup>
         <Content Include="appsettings.json" />
         <Content Include="Assets\SplashScreen.scale-200.png" />
         <Content Include="Assets\LockScreenLogo.scale-200.png" />
