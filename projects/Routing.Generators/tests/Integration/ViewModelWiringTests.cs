@@ -24,6 +24,7 @@ public class ViewModelWiringTests
     /// and export the ViewModel property.
     /// </summary>
     [UITestMethod]
+    [TestCategory("UITest")]
     public void GenerateViewExtensionsCorrectly()
     {
         var view = Ioc.Default.GetService<IViewFor<DemoViewModel>>();
@@ -48,6 +49,7 @@ public class ViewModelWiringTests
     /// event when the ViewModel property is changed.
     /// </summary>
     [UITestMethod]
+    [TestCategory("UITest")]
     public void TriggerEventWhenViewModelIsChanged()
     {
         var view = Ioc.Default.GetRequiredService<IViewFor<DemoViewModel>>();
