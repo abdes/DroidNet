@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="DroidNet.Routing.Debugger.UI.Shell.TopNavBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:res="using:DroidNet.Routing.Debugger.UI.Styles"
+    xmlns:styles="using:DroidNet.Routing.Debugger.UI.Styles"
+    mc:Ignorable="d">
+
+    <!--  Toolbar  -->
+    <Grid Height="48" Padding="4,0,4,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="20*" />
+            <ColumnDefinition Width="1*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <styles:TopNavBarButtonRow Grid.Column="0">
+            <res:TopNavBarButton Tooltip="Navigate back">
+                <Button.Content>
+                    <FontIcon Glyph="&#xF0B0;" />
+                </Button.Content>
+            </res:TopNavBarButton>
+            <res:TopNavBarButton Tooltip="Navigate forward">
+                <Button.Content>
+                    <FontIcon Glyph="&#xF0AF;" />
+                </Button.Content>
+            </res:TopNavBarButton>
+            <res:TopNavBarButton Tooltip="Rebuild the router state">
+                <Button.Content>
+                    <FontIcon Glyph="&#xE72C;" />
+                </Button.Content>
+            </res:TopNavBarButton>
+        </styles:TopNavBarButtonRow>
+
+        <!--  Spacer  -->
+
+        <styles:TopNavBarUrlBox
+            Grid.Column="2"
+            KeyUp="UrlTextBox_KeyUp"
+            Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <!--  Spacer  -->
+
+        <styles:TopNavBarButtonRow Grid.Column="4">
+            <res:TopNavBarButton Tooltip="Customize and control the debugger">
+                <Button.Content>
+                    <FontIcon Glyph="&#xE712;" />
+                </Button.Content>
+            </res:TopNavBarButton>
+        </styles:TopNavBarButtonRow>
+    </Grid>
+</UserControl>
