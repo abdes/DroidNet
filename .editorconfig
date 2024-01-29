@@ -682,6 +682,11 @@ insert_final_newline = false
 tab_width = unset
 trim_trailing_whitespace = false
 
+# Editor Guidelines
+[*]
+guidelines = 80, 120, 130
+rulers = 80, 120, 130
+
 ##########################################
 # License
 ##########################################
