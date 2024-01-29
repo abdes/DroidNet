@@ -12,6 +12,9 @@
         <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
         <UseRidGraph>true</UseRidGraph>
 
+        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
+        <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
+
         <RootNamespace>$(RootNamespace).Routing.UI</RootNamespace>
     </PropertyGroup>
 
