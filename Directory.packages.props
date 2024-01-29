@@ -19,6 +19,11 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.4" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Collections" Version="8.0.240109" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.0.240109" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.0.240109" />
+    <PackageVersion Include="CommunityToolkit.WinUI.UI.Behaviors" Version="7.1.2" />
+    <PackageVersion Include="CommunityToolkit.WinUI.UI.Controls.Layout" Version="7.1.2" />
   </ItemGroup>
   <!-- Tooling -->
   <ItemGroup>

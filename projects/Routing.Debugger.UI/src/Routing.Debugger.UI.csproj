@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+        <UseWinUI>true</UseWinUI>
+
+        <!--
+        Visual Studio can show the generated source files in the dependencies
+        under the generator package. The below setting may be useful if not
+        using Visual Studio.
+        -->
+        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
+
+        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
+        <UseRidGraph>true</UseRidGraph>
+
+        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
+        <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
+
+        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
+
+        <RootNamespace>$(RootNamespace).Routing.Debugger.UI</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Collections" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+        <PackageReference Include="CommunityToolkit.WinUI.UI.Behaviors" />
+        <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Layout" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
+        <ProjectReference Include="..\..\Routing\src\Routing.csproj" />
+        <ProjectReference Include="..\..\Routing.UI\src\Routing.UI.csproj" />
+
+        <ProjectReference Include="..\..\Routing.Generators\src\Routing.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <!-- We DO reference the attributes dll -->
+        <ProjectReference Include="..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+</Project>
