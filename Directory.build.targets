@@ -110,13 +110,17 @@
             </ItemGroup>
         </When>
     </Choose>
-    <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-            <ItemGroup>
-                <PackageReference Include="Microsoft.NET.Test.Sdk" />
-            </ItemGroup>
-        </When>
-    </Choose>
+    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="Microsoft.TestPlatform.TestHost">
+            <ExcludeAssets>build</ExcludeAssets>
+        </PackageReference>
+        <ProjectCapability Include="TestContainer" />
+    </ItemGroup>
+    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    </ItemGroup>
 
     <!-- Packaging -->
     <PropertyGroup>
