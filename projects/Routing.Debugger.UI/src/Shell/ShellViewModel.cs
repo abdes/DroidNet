@@ -5,34 +5,15 @@
 namespace DroidNet.Routing.Debugger.UI.Shell;
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing.Debugger.UI;
-using DroidNet.Routing.Debugger.UI.WorkSpace;
-using DroidNet.Routing.UI.Contracts;
+using DroidNet.Routing.UI;
 
-public partial class ShellViewModel : ObservableObject, IOutletContainer
+public partial class ShellViewModel : AbstractOutletContainer
 {
     [ObservableProperty]
     private string? url;
 
-    public WorkSpaceViewModel WorkSpace { get; } = new();
-
-    public void LoadContent(object viewModel, string? outletName = null)
+    protected override Dictionary<string, object?> Outlets { get; } = new(StringComparer.OrdinalIgnoreCase)
     {
-        switch (outletName)
-        {
-            case null:
-            case Router.Outlet.Primary:
-            case DebuggerConstants.AppOutletName:
-                this.WorkSpace.LoadApp(viewModel);
-                break;
-
-            default:
-                this.WorkSpace.LoadDockable(viewModel, outletName);
-                break;
-        }
-    }
-
-    public object? GetViewModelForOutlet(string? outletName) => throw new NotImplementedException();
-
-    public string GetPropertyNameForOutlet(string? outletName) => throw new NotImplementedException();
+        { "dock", null },
+    };
 }

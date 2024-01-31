@@ -5,8 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:router="using:DroidNet.Routing.UI.Controls"
     xmlns:shell="using:DroidNet.Routing.Debugger.UI.Shell"
-    xmlns:workSpace="using:DroidNet.Routing.Debugger.UI.WorkSpace"
     mc:Ignorable="d">
 
 
@@ -16,6 +16,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <shell:TopNavBar Grid.Row="0" />
-        <workSpace:WorkSpaceView Grid.Row="1" ViewModel="{x:Bind ViewModel.WorkSpace, Mode=OneWay}" />
+        <router:RouterOutlet Grid.Row="1" OutletName="dock" />
     </Grid>
 </UserControl>

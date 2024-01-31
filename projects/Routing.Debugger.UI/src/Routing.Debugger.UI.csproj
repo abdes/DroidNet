@@ -50,8 +50,4 @@
         <ProjectReference Include="..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
-    <ItemGroup>
-        <Folder Include="WorkSpace\" />
-    </ItemGroup>
-
 </Project>
