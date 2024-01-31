@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:shell="using:DroidNet.Routing.Debugger.UI.Shell"
+    xmlns:workSpace="using:DroidNet.Routing.Debugger.UI.WorkSpace"
     mc:Ignorable="d">
 
 
@@ -15,21 +16,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <shell:TopNavBar Grid.Row="0" />
-        <ContentControl
-            Grid.Row="1"
-            HorizontalContentAlignment="Stretch"
-            VerticalContentAlignment="Stretch"
-            Content="{x:Bind ViewModel.AppViewModel, Converter={StaticResource VmToViewConverter}}" />
-        <!--<ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Docker.Dockables}">
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="old:IDockable">
-                    <StackPanel Orientation="Vertical">
-                        <TextBlock Text="{x:Bind Id}" />
-                        <TextBlock Text="{x:Bind DockingState}" />
-                        <TextBlock Text="{x:Bind ViewModel.GetType(), FallbackValue='null'}" />
-                    </StackPanel>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>-->
+        <workSpace:WorkSpaceView Grid.Row="1" ViewModel="{x:Bind ViewModel.WorkSpace, Mode=OneWay}" />
     </Grid>
 </UserControl>

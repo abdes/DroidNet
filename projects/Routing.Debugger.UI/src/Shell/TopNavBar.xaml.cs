@@ -14,6 +14,7 @@ using Windows.System;
 [ObservableObject]
 public sealed partial class TopNavBar
 {
+    // TODO(abdes): avoid using Ioc.Default, set router in control
     private static readonly DependencyProperty RouterProperty = DependencyProperty.Register(
         nameof(Router),
         typeof(Router),

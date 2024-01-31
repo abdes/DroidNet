@@ -65,13 +65,15 @@ public partial class App
         try
         {
             this.router.Navigate(
-                "/(WorkSpace)",
+                "/(app:Welcome)",
                 new NavigationOptions { Target = Target.Main });
         }
         catch (NavigationFailedException)
         {
             this.lifetime.StopApplication();
         }
+
+        // "/(app:Welcome//dock:(1:One;lef;pinned//2:Two;below=1//3:Three;left;pinned//4:Four;bottom))",
 
         // "/(app:Blank//dock:left(routes:Config/Routes;pinned))",
         // "/(app:Home/Welcome//dock:left(1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))",
