@@ -133,12 +133,6 @@ public static partial class Program
             ViewModelType = typeof(ShellViewModel),
             Children = new Routes(
             [
-                new Route
-                {
-                    Outlet = "app",
-                    Path = "Welcome",
-                    ViewModelType = typeof(WelcomeViewModel),
-                },
                 /*new Route
                 {
                     Path = "Home",
@@ -203,6 +197,12 @@ public static partial class Program
                     ViewModelType = typeof(WorkSpaceViewModel),
                     Children = new Routes(
                     [
+                        new Route
+                        {
+                            Outlet = "app",
+                            Path = "Welcome",
+                            ViewModelType = typeof(WelcomeViewModel),
+                        },
                         new Route
                         {
                             Outlet = "routes",
