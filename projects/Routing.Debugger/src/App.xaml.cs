@@ -65,7 +65,7 @@ public partial class App
         try
         {
             this.router.Navigate(
-                "/(dock:(app:Welcome//routes:Config/Routes;left;pinned))",
+                "/(dock:(app:Welcome//routes:Config/Routes;top;pinned))",
                 new NavigationOptions { Target = Target.Main });
         }
         catch (NavigationFailedException)

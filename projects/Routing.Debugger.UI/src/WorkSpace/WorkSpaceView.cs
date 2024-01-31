@@ -8,29 +8,77 @@ using CommunityToolkit.WinUI.Controls;
 using DroidNet.Docking;
 using DroidNet.Routing.Debugger.UI.Styles;
 using DroidNet.Routing.Generators;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 [ViewModel(typeof(WorkSpaceViewModel))]
 public partial class WorkSpaceView : ContentControl
 {
     public WorkSpaceView()
     {
-        this.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        this.VerticalContentAlignment = VerticalAlignment.Stretch;
         this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
-        this.ViewModelChanged += (_, _) => this.UpdateContent();
+        this.ViewModelChanged += (_, _) => this.Content = this.GridForDockGroup(this.ViewModel.Root);
     }
 
-    private void UpdateContent() => this.Content = this.GridForDockGroup(this.ViewModel.Root);
+    private static void AddSplitter(Grid grid, int row, int column)
+    {
+        var splitter = new DockingSplitter()
+        {
+            ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext,
+            ResizeDirection = GridSplitter.GridResizeDirection.Auto,
+        };
 
-    private UIElement? GridForDockGroup(IDockGroup group)
+        if (row == 0)
+        {
+            splitter.Width = 14;
+        }
+        else
+        {
+            splitter.Height = 14;
+        }
+
+        splitter.SetValue(Grid.RowProperty, row);
+        splitter.SetValue(Grid.ColumnProperty, column);
+        grid.Children.Add(splitter);
+    }
+
+    private static void DefineSlot(Grid grid, GridLength partLength, bool useColumns)
+    {
+        if (useColumns)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = partLength });
+        }
+        else
+        {
+            grid.RowDefinitions.Add(new RowDefinition() { Height = partLength });
+        }
+    }
+
+    private static void DefineSlots(IDockGroup group, Grid grid, GridLength partLength, bool useColumns)
+    {
+        if (group.First != null)
+        {
+            DefineSlot(grid, partLength, useColumns);
+        }
+
+        if (group.Second == null)
+        {
+            return;
+        }
+
+        if (group.First != null)
+        {
+            DefineSlot(grid, GridLength.Auto, useColumns);
+        }
+
+        DefineSlot(grid, partLength, useColumns);
+    }
+
+    private Border? GridForDockGroup(IDockGroup group)
         => group.IsEmpty ? this.GroupWithNoDocks(group) : this.GroupWithDocks(group);
 
-    private UIElement GroupWithDocks(IDockGroup group)
+    private Border GroupWithDocks(IDockGroup group)
     {
         var grid = new Grid
         {
@@ -47,7 +95,7 @@ public partial class WorkSpaceView : ContentControl
         };
     }
 
-    private UIElement? GroupWithNoDocks(IDockGroup group)
+    private Border? GroupWithNoDocks(IDockGroup group)
     {
         if (group.First is null && group.Second is null)
         {
@@ -63,9 +111,10 @@ public partial class WorkSpaceView : ContentControl
         var partLength = new GridLength(group.First is null || group.Second is null ? 1.0 : 0.5, GridUnitType.Star);
         var useColumns = group.Orientation is Docking.Orientation.Horizontal or Docking.Orientation.Horizontal;
 
+        DefineSlots(group, grid, partLength, useColumns);
+
         if (group.First != null)
         {
-            DefineSlot(grid, partLength, useColumns);
             this.AddContentForSlot(grid, group.First, 0, 0);
         }
 
@@ -73,11 +122,9 @@ public partial class WorkSpaceView : ContentControl
         {
             if (group.First != null)
             {
-                DefineSlot(grid, GridLength.Auto, useColumns);
-                AddSeparator(grid, useColumns ? 0 : 1, useColumns ? 1 : 0);
+                AddSplitter(grid, useColumns ? 0 : 1, useColumns ? 1 : 0);
             }
 
-            DefineSlot(grid, partLength, useColumns);
             this.AddContentForSlot(grid, group.Second, useColumns ? 0 : 2, useColumns ? 2 : 0);
         }
 
@@ -87,30 +134,6 @@ public partial class WorkSpaceView : ContentControl
             BorderBrush = this.BorderBrush,
             BorderThickness = this.BorderThickness,
         };
-    }
-
-    private static void AddSeparator(Grid grid, int row, int column)
-    {
-        var splitter = row == 0
-            ? new DockingSplitter()
-            {
-                Width = 6,
-                VerticalAlignment = VerticalAlignment.Stretch,
-            }
-            : new GridSplitter()
-            {
-                Height = 6,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-            };
-
-        splitter.Background = new SolidColorBrush(Colors.Transparent);
-        splitter.Padding = new Thickness(0);
-        splitter.ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext;
-        splitter.ResizeDirection = GridSplitter.GridResizeDirection.Auto;
-        splitter.SetValue(Grid.RowProperty, row);
-        splitter.SetValue(Grid.ColumnProperty, column);
-
-        grid.Children.Add(splitter);
     }
 
     private void AddContentForSlot(Grid grid, IDockGroup group, int row, int column)
@@ -124,17 +147,5 @@ public partial class WorkSpaceView : ContentControl
         content.SetValue(Grid.RowProperty, row);
         content.SetValue(Grid.ColumnProperty, column);
         grid.Children.Add(content);
-    }
-
-    private static void DefineSlot(Grid grid, GridLength partLength, bool useColumns)
-    {
-        if (useColumns)
-        {
-            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = partLength });
-        }
-        else
-        {
-            grid.RowDefinitions.Add(new RowDefinition() { Height = partLength });
-        }
     }
 }
