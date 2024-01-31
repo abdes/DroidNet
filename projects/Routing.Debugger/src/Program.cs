@@ -14,6 +14,8 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
 using DroidNet.Routing.Debugger.UI.Shell;
+using DroidNet.Routing.Debugger.UI.WorkSpace;
+using DroidNet.Routing.Debugger.Welcome;
 using DroidNet.Routing.UI;
 using DroidNet.Routing.UI.Converters;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,6 +89,8 @@ public static partial class Program
         _ = builder.Services
                 .AddTransient<ShellViewModel>()
                 .AddTransient<ShellView>()
+                .AddTransient<WelcomeViewModel>()
+                .AddTransient<WelcomeView>()
                 .AddTransient<WorkSpaceViewModel>()
                 .AddTransient<WorkSpaceView>()
                 .AddTransient<RoutesViewModel>()
@@ -131,8 +135,9 @@ public static partial class Program
             [
                 new Route
                 {
-                    Path = "WorkSpace",
-                    ViewModelType = typeof(WorkSpaceViewModel),
+                    Outlet = "app",
+                    Path = "Welcome",
+                    ViewModelType = typeof(WelcomeViewModel),
                 },
                 /*new Route
                 {
@@ -194,7 +199,8 @@ public static partial class Program
                 new Route
                 {
                     Outlet = "dock",
-                    Path = ":position",
+                    Path = string.Empty,
+                    ViewModelType = typeof(WorkSpaceViewModel),
                     Children = new Routes(
                     [
                         new Route

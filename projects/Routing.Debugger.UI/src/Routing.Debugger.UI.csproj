@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
@@ -31,11 +31,8 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="CommunityToolkit.WinUI.Collections" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
         <PackageReference Include="CommunityToolkit.WinUI.Converters" />
-        <PackageReference Include="CommunityToolkit.WinUI.UI.Behaviors" />
-        <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.Layout" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
@@ -51,6 +48,10 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="WorkSpace\" />
     </ItemGroup>
 
 </Project>
