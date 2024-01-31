@@ -23,7 +23,6 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.0.240109" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.0.240109" />
     <PackageVersion Include="CommunityToolkit.WinUI.UI.Behaviors" Version="7.1.2" />
-    <PackageVersion Include="CommunityToolkit.WinUI.UI.Controls.Layout" Version="7.1.2" />
   </ItemGroup>
   <!-- Tooling -->
   <ItemGroup>
