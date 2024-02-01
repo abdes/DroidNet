@@ -151,7 +151,7 @@ public partial class DockGroup
         foreach (var item in this.docks)
         {
             group.docks.Add(item);
-            item.AsBaseDock().Group = group;
+            item.AsDock().Group = group;
         }
 
         this.docks.Clear();
@@ -293,7 +293,7 @@ public partial class DockGroup
                 $"method {nameof(this.AddDock)} should only be used when the group is empty");
         }
 
-        ((DroidNet.Docking.Detail.Dock)dock).Group = this;
+        dock.AsDock().Group = this;
 
         // TODO(abdes): make insert position for new docks configurable
         this.docks.Add(dock);
@@ -367,7 +367,7 @@ public partial class DockGroup
         var after = items[(relativeToIndex + 1)..];
 
         var hostGroup = new DockGroup() { Orientation = requiredOrientation };
-        relativeItem.AsBaseDock().Group = hostGroup;
+        relativeItem.AsDock().Group = hostGroup;
         hostGroup.docks.Add(relativeItem);
 
         var beforeGroup = before.Count != 0 ? new DockGroup() { Orientation = this.Orientation } : null;
@@ -375,7 +375,7 @@ public partial class DockGroup
         {
             foreach (var item in before)
             {
-                item.AsBaseDock().Group = beforeGroup;
+                item.AsDock().Group = beforeGroup;
                 beforeGroup.docks.Add(item);
             }
         }
@@ -385,7 +385,7 @@ public partial class DockGroup
         {
             foreach (var item in after)
             {
-                item.AsBaseDock().Group = afterGroup;
+                item.AsDock().Group = afterGroup;
                 afterGroup.docks.Add(item);
             }
         }
