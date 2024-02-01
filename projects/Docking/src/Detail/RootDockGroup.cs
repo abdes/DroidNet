@@ -8,7 +8,8 @@ using System.Diagnostics;
 
 public class RootDockGroup : DockGroup
 {
-    private readonly DockGroup center = new();
+    // The center dock group is protected and cannot be removed
+    private readonly DockGroup center = new() { IsProtected = true };
     private DockGroup? left;
     private DockGroup? top;
     private DockGroup? right;

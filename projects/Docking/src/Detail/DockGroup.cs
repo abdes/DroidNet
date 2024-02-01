@@ -66,6 +66,8 @@ public partial class DockGroup : IDockGroup
 
     internal DockGroup? Parent { get; private set; }
 
+    internal bool IsProtected { get; init; }
+
     public override string ToString()
     {
         string[] children =
@@ -108,6 +110,11 @@ public partial class DockGroup
 {
     internal void RemoveGroup(IDockGroup group)
     {
+        if (group.AsDockGroup().IsProtected)
+        {
+            return;
+        }
+
         var mine = false;
         if (this.First == group)
         {
