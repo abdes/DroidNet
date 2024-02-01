@@ -10,10 +10,12 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
+[TestCategory(nameof(Dockable))]
 [ExcludeFromCodeCoverage]
 public class DockableTests
 {
     [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
     public void Title_Setter_ShouldTriggerPropertyChange_ForMinimizedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
@@ -46,6 +48,7 @@ public class DockableTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
     public void Title_Setter_ShouldTriggerPropertyChange_ForTabbedTitle_WhenCurrentValueIsNull()
     {
         // Arrange

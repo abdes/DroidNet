@@ -15,6 +15,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class DockGroupTests
 {
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupLast_ToEmptyLeaf_UsesFirstSlot()
     {
         // Arrange
@@ -30,6 +31,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupLast_ToNonEmptyGroup()
     {
         // Arrange
@@ -48,6 +50,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupLast_FirstPartOccupied_UsesSecondSlot()
     {
         // Arrange
@@ -66,6 +69,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupLast_SecondPartOccupied_SwapsFirstAndSecond()
     {
         // Arrange
@@ -84,6 +88,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupLast_BothPartsOccupied_ExpandsSecondToAdd()
     {
         // Arrange
@@ -106,6 +111,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupFirst_ToEmptyLeaf_UsesFirstSlot()
     {
         // Arrange
@@ -121,6 +127,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupFirst_ToNonEmptyGroup()
     {
         // Arrange
@@ -139,6 +146,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupFirst_FirstPartOccupied_SwapFirstAndSecond()
     {
         // Arrange
@@ -157,6 +165,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupFirst_SecondPartOccupied_UseFirstSlot()
     {
         // Arrange
@@ -175,6 +184,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupFirst_BothPartsOccupied_ExpandsFirstToAdd()
     {
         // Arrange

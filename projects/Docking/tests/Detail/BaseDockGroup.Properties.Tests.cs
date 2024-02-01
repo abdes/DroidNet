@@ -15,6 +15,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class DockGroupTests
 {
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsHorizontal_ReturnsTrueForHorizontalOrientation()
     {
         // Arrange
@@ -32,6 +33,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsVertical_ReturnsTrueForVerticalOrientation()
     {
         // Arrange
@@ -49,6 +51,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsLeaf_ReturnsTrueForGroupWithNoChildren()
     {
         // Arrange
@@ -64,6 +67,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsLeaf_ReturnsFalseWithFirstChild()
     {
         // Arrange
@@ -78,6 +82,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsLeaf_ReturnsFalseWithSecondChild()
     {
         // Arrange
@@ -92,6 +97,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsLeaf_ReturnsFalseWithBothChildren()
     {
         // Arrange
@@ -107,6 +113,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetFirst_WithNull_Works()
     {
         // Arrange
@@ -120,6 +127,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetSecond_WithNull_Works()
     {
         // Arrange
@@ -133,6 +141,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetSecond_Child_UpdatesChildParent()
     {
         // Arrange
@@ -148,6 +157,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetFirst_Child_UpdatesChildParent()
     {
         // Arrange
@@ -163,6 +173,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetFirst_ChildWithParent_UpdatesChildParent()
     {
         // Arrange
@@ -180,6 +191,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetSecond_ChildWithParent_UpdatesChildParent()
     {
         // Arrange
@@ -197,6 +209,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetFirst_ToSelf_Throws()
     {
         // Arrange
@@ -210,6 +223,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetSecond_ToSelf_Throws()
     {
         // Arrange
@@ -223,6 +237,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetFirst_ThrowsIfNotEmptyAndChildIsNotNull()
     {
         // Arrange
@@ -237,6 +252,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void SetSecond_ThrowsIfNotEmptyAndChildIsNotNull()
     {
         // Arrange

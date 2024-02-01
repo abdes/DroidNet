@@ -14,10 +14,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// features.
 /// </summary>
 [TestClass]
+[TestCategory(nameof(DockGroup))]
 [ExcludeFromCodeCoverage]
 public partial class DockGroupTests : TestSuiteWithAssertions
 {
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.General")]
     public void BaseDockGroup_Ctor_StartsWithNullParts()
     {
         // Arrange & Act

@@ -16,6 +16,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class DockGroupTests
 {
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void RemoveGroup_ThrowsOnLeaf()
     {
         // Arrange
@@ -29,6 +30,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void RemoveGroup_ThrowsOnNonChild()
     {
         // Arrange
@@ -43,6 +45,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void RemoveGroup_Child_Works()
     {
         // Arrange
@@ -62,6 +65,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void RemoveGroup_RemovesSelfFromParent_WhenLeftWithNoChildren()
     {
         // Arrange
