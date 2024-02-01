@@ -59,7 +59,7 @@ public class FunctionalTests
         var docker = new Docker();
 
         var root = CreateToolDockOrFail();
-        docker.DockToRoot(root);
+        docker.DockToCenter(root);
         DumpGroup(docker.Root);
 
         var dock = CreateToolDockOrFail();
