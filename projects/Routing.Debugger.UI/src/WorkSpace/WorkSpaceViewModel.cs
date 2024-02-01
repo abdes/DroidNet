@@ -114,7 +114,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             "could not create a dock");
 
         // Dock at the center
-        this.docker.DockToRoot(dock);
+        this.docker.DockToCenter(dock);
     }
 
     private void LoadDockable(object viewModel, string dockableId)
