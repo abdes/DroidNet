@@ -15,6 +15,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class DockGroupTests
 {
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupRelative_ToNotChild_Throws()
     {
         // Arrange
@@ -32,6 +33,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupBefore_UsesFirstSlotWhenFree()
     {
         // Arrange
@@ -49,6 +51,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupAfter_UsesSecondSlotWhenFree()
     {
         // Arrange
@@ -66,6 +69,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupBefore_WhenOnlySecondIsFree_SwapsFirstAndSecond()
     {
         // Arrange
@@ -83,6 +87,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void AddGroupAfter_WhenOnlyFirstIsFree_SwapsFirstAndSecond()
     {
         // Arrange
@@ -100,6 +105,7 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     [DataRow(0)]
     [DataRow(1)]
     public void AddGroupBefore_WhenBothPartsAreOccupied_ExpandsSiblingToAddAtFirst(int siblingIndex)
