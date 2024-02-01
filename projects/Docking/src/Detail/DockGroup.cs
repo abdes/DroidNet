@@ -283,14 +283,22 @@ public partial class DockGroup
 /// </summary>
 public partial class DockGroup
 {
-    public void AddDock(IDock dock)
+    /// <summary>
+    /// Add the first dock to an empty group. Can only be used if the group is
+    /// empty; otherwise, use the version with anchor.
+    /// </summary>
+    /// <param name="dock">The dock to be added to this group.</param>
+    /// <exception cref="InvalidOperationException">
+    /// If the group is not empty.
+    /// </exception>
+    internal void AddDock(IDock dock)
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
         if (!this.IsEmpty)
         {
             throw new InvalidOperationException(
-                $"method {nameof(this.AddDock)} should only be used when the group is empty");
+                $"method {nameof(this.AddDock)} with no anchor should only be used when the group is empty");
         }
 
         dock.AsDock().Group = this;
