@@ -282,8 +282,7 @@ public partial class DockGroupTests
         private bool migrateCalled;
         private bool shouldMigrateBeCalled;
 
-        public NonEmptyDockGroup()
-            => this.AddDock(ToolDock.New() ?? throw new AssertFailedException("could not create dock"));
+        public NonEmptyDockGroup() => this.AddDock(DummyDock.New());
 
         public void ExpectMigrateToBeCalled() => this.shouldMigrateBeCalled = true;
 
@@ -301,5 +300,15 @@ public partial class DockGroupTests
             base.MigrateDocksToGroup(group);
             this.migrateCalled = true;
         }
+    }
+
+    private sealed class DummyDock : Dock
+    {
+        private DummyDock()
+        {
+        }
+
+        public static DummyDock New() => Factory.CreateDock(typeof(DummyDock)) as DummyDock ??
+                                         throw new AssertFailedException($"could not create a {nameof(DummyDock)}");
     }
 }

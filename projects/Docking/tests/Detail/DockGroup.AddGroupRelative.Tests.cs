@@ -21,7 +21,7 @@ public partial class DockGroupTests
         // Arrange
         var sut = new EmptyDockGroup();
         var sibling = new EmptyDockGroup(); // not a child of sut
-        var newGroup = new DummyDockGroup();
+        var newGroup = new MockDockGroup();
 
         // Act
         var before = () => sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);

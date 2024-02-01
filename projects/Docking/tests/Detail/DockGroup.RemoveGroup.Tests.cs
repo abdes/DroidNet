@@ -4,8 +4,6 @@
 
 namespace DroidNet.Docking.Detail;
 
-using System.Collections.ObjectModel;
-using DroidNet.Docking;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -23,7 +21,7 @@ public partial class DockGroupTests
         var sut = new MockDockGroup();
 
         // Act
-        var act = () => sut.RemoveGroup(new DummyDockGroup());
+        var act = () => sut.RemoveGroup(new MockDockGroup());
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -38,7 +36,7 @@ public partial class DockGroupTests
         sut.SetFirst(new MockDockGroup());
 
         // Act
-        var act = () => sut.RemoveGroup(new DummyDockGroup());
+        var act = () => sut.RemoveGroup(new MockDockGroup());
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -82,22 +80,5 @@ public partial class DockGroupTests
         // Assert
         _ = sut.First.Should().BeNull();
         _ = parent.First.Should().BeNull();
-    }
-
-    private sealed class DummyDockGroup : IDockGroup
-    {
-        public ReadOnlyObservableCollection<IDock> Docks => throw new NotImplementedException();
-
-        public bool IsHorizontal => throw new NotImplementedException();
-
-        public bool IsVertical => throw new NotImplementedException();
-
-        public bool IsEmpty => throw new NotImplementedException();
-
-        public Orientation Orientation => throw new NotImplementedException();
-
-        public IDockGroup First => throw new NotImplementedException();
-
-        public IDockGroup Second => throw new NotImplementedException();
     }
 }
