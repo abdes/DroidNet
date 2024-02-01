@@ -25,7 +25,7 @@ public class Docker : IDocker
         group.AsDockGroup().AddDock(dock, anchor);
     }
 
-    public void DockToRoot(IDock dock) => this.root.DockCenter(dock);
+    public void DockToCenter(IDock dock) => this.root.DockCenter(dock);
 
     public void DockToRoot(IDock dock, AnchorPosition position)
     {

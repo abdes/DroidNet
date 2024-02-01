@@ -10,7 +10,7 @@ public interface IDocker
 
     void Dock(IDock dock, Anchor anchor);
 
-    void DockToRoot(IDock dock);
+    void DockToCenter(IDock dock);
 
     void DockToRoot(IDock dock, AnchorPosition position);
 }
