@@ -9,9 +9,8 @@ using System.Diagnostics;
 using System.Reflection;
 
 /// <summary>
-/// Extension of the <see cref="Dock" /> class, implementing a Factory. Instances
-/// of `Dock` can only be created through this `Factory` to ensure that each one
-/// of them has a unique ID.
+/// Extension of the <see cref="Dock" /> class, implementing a generic Factory
+/// to create instances of a specific dock type.
 /// </summary>
 public partial class Dock
 {
