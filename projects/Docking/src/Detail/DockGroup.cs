@@ -108,11 +108,6 @@ public partial class DockGroup
 {
     internal void RemoveGroup(IDockGroup group)
     {
-        if (this.IsLeaf)
-        {
-            throw new InvalidOperationException($"group with Id={group} is not one my(Id={this.debugId}) children");
-        }
-
         var mine = false;
         if (this.First == group)
         {
@@ -127,7 +122,7 @@ public partial class DockGroup
 
         if (!mine)
         {
-            throw new InvalidOperationException($"group with Id={group} is not one my(Id={this.debugId}) children");
+            throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.debugId}) children");
         }
 
         if (this.IsLeaf)
@@ -370,12 +365,9 @@ public partial class DockGroup
     {
         var items = this.docks.ToList();
         var relativeToIndex = relativeTo is null ? 0 : this.docks.IndexOf(relativeTo);
-
-        if (relativeToIndex == -1)
-        {
-            throw new InvalidOperationException(
+        Debug.Assert(
+            relativeToIndex != -1,
                 $"Relative dock `{relativeTo}` does not belong to this dock group Id=`{this}`");
-        }
 
         var before = items[..relativeToIndex];
         var relativeItem = items[relativeToIndex];
