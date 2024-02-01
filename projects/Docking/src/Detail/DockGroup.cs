@@ -327,11 +327,18 @@ public partial class DockGroup
             ? this.Repartition(relativeTo, requiredOrientation)
             : this;
 
-        // TODO(abdes): make insert position for new docks configurable
-        dock.AsBaseDock().Group = hostGroup;
-        hostGroup.docks.Insert(
-            anchor.Position is AnchorPosition.Left or AnchorPosition.Top ? 0 : hostGroup.docks.Count,
-            dock);
+        dock.AsDock().Group = hostGroup;
+
+        var insertPosition = 0;
+        if (!hostGroup.IsEmpty)
+        {
+            var relativeToPosition = hostGroup.Docks.IndexOf(relativeTo);
+            insertPosition = anchor.Position is AnchorPosition.Left or AnchorPosition.Top
+                ? int.Max(0, relativeToPosition - 1)
+                : relativeToPosition + 1;
+        }
+
+        hostGroup.docks.Insert(insertPosition, dock);
     }
 
     internal void RemoveDock(IDock dock)
