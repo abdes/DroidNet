@@ -55,6 +55,8 @@ public class DockFactoryTests : TestSuiteWithAssertions
             .And.BeEquivalentTo(
                 new CustomDock(intArg, strArg),
                 options => options.Excluding(exc => exc.Id));
+        _ = ((CustomDock)dock!).IntArg.Should().Be(intArg);
+        _ = ((CustomDock)dock).StrArg.Should().Be(strArg);
     }
 
     [TestMethod]
@@ -79,21 +81,18 @@ public class DockFactoryTests : TestSuiteWithAssertions
 
     private sealed class CustomDock : Dock
     {
-        public CustomDock() => this.DefaultConstructorCalled = true;
+        public CustomDock()
+        {
+        }
 
         public CustomDock(int intArg, string strArg)
         {
-            this.ArgsConstructorCalled = true;
             this.IntArg = intArg;
             this.StrArg = strArg;
         }
 
-        public bool DefaultConstructorCalled { get; init; }
+        public string StrArg { get; } = string.Empty;
 
-        public int? IntArg { get; set; }
-
-        public string? StrArg { get; set; }
-
-        public bool ArgsConstructorCalled { get; set; }
+        public int IntArg { get; }
     }
 }
