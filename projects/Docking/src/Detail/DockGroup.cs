@@ -373,7 +373,7 @@ public partial class DockGroup
         var relativeToIndex = relativeTo is null ? 0 : this.docks.IndexOf(relativeTo);
         Debug.Assert(
             relativeToIndex != -1,
-                $"Relative dock `{relativeTo}` does not belong to this dock group Id=`{this}`");
+            $"Relative dock `{relativeTo}` does not belong to this dock group Id=`{this}`");
 
         var before = items[..relativeToIndex];
         var relativeItem = items[relativeToIndex];
@@ -415,11 +415,13 @@ public partial class DockGroup
         this.First = beforeGroup ?? hostGroup;
         this.Second = beforeGroup is null
             ? afterGroup
-            : new DockGroup()
-            {
-                First = hostGroup,
-                Second = afterGroup,
-            };
+            : afterGroup is null
+                ? hostGroup
+                : new DockGroup()
+                {
+                    First = hostGroup,
+                    Second = afterGroup,
+                };
 
         Debug.Assert(hostGroup.IsLeaf, "re-partitioning will always return a host group which can host docks");
         return hostGroup;
