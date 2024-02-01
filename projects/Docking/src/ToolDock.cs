@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
+namespace DroidNet.Docking;
+
+using DroidNet.Docking.Detail;
 
 public class ToolDock : Dock
 {
