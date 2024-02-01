@@ -125,6 +125,10 @@ public partial class DockGroup
             throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.debugId}) children");
         }
 
+        // The group remains with only one part, so its orientation is flexible
+        // and should be set to Undetermined.
+        this.Orientation = Orientation.Undetermined;
+
         if (this.IsLeaf)
         {
             this.Parent?.RemoveGroup(this);
