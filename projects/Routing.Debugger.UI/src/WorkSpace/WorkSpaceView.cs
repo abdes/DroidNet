@@ -10,6 +10,7 @@ using DroidNet.Routing.Debugger.UI.Styles;
 using DroidNet.Routing.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Orientation = Microsoft.UI.Xaml.Controls.Orientation;
 
 [ViewModel(typeof(WorkSpaceViewModel))]
 public partial class WorkSpaceView : ContentControl
@@ -25,19 +26,11 @@ public partial class WorkSpaceView : ContentControl
     {
         var splitter = new DockingSplitter()
         {
+            Orientation = row == 0 ? Orientation.Vertical : Orientation.Horizontal,
+            Padding = new Thickness(0),
             ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext,
             ResizeDirection = GridSplitter.GridResizeDirection.Auto,
         };
-
-        if (row == 0)
-        {
-            splitter.Width = 14;
-        }
-        else
-        {
-            splitter.Height = 14;
-        }
-
         splitter.SetValue(Grid.RowProperty, row);
         splitter.SetValue(Grid.ColumnProperty, column);
         grid.Children.Add(splitter);
