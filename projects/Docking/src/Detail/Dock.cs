@@ -34,7 +34,7 @@ public abstract partial class Dock : IDock
 
     public DockId Id { get; private set; }
 
-    internal IDockGroup? Group { get; set; }
+    internal DockGroup? Group { get; set; }
 
     public override string ToString() => $"{this.Id}";
 }

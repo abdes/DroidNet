@@ -22,7 +22,7 @@ public class Docker : IDocker
             $"dock `{dock}` does not belong to a group and cannot be used as an anchor",
             nameof(anchor));
 
-        group.AsDockGroup().AddDock(dock, anchor);
+        group.AddDock(dock, anchor);
     }
 
     public void DockToCenter(IDock dock) => this.root.DockCenter(dock);
