@@ -6,6 +6,9 @@ namespace DroidNet.Routing.Debugger.UI.Config;
 
 using DroidNet.Routing.Generators;
 
+/// <summary>
+/// A custom view for the router's configuration.
+/// </summary>
 [ViewModel(typeof(RoutesViewModel))]
 public partial class RoutesView
 {

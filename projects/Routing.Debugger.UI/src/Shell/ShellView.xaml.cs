@@ -6,6 +6,9 @@ namespace DroidNet.Routing.Debugger.UI.Shell;
 
 using DroidNet.Routing.Generators;
 
+/// <summary>
+/// The view for the debugger shell.
+/// </summary>
 [ViewModel(typeof(ShellViewModel))]
 public sealed partial class ShellView
 {

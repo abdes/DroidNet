@@ -11,6 +11,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
+/// <summary>
+/// A custom control for the debugger top navigation bar.
+/// </summary>
 [ObservableObject]
 public sealed partial class TopNavBar
 {

@@ -7,6 +7,9 @@ namespace DroidNet.Routing.Debugger.UI.Config;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
+/// <summary>
+/// Adapter for a <see cref="Route" /> so it can be used inside the <see cref="RoutesView" /> control.
+/// </summary>
 public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
 {
     public const string RootPath = "__root";

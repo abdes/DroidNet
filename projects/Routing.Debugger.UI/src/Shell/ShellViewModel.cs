@@ -7,6 +7,9 @@ namespace DroidNet.Routing.Debugger.UI.Shell;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.UI;
 
+/// <summary>
+/// A ViewModel fpr the debugger shell.
+/// </summary>
 public partial class ShellViewModel : AbstractOutletContainer
 {
     [ObservableProperty]

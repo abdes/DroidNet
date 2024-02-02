@@ -9,6 +9,12 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+/// <summary>
+/// Base class for a view model supporting a tree-based view.
+/// </summary>
+/// <param name="showRoot">
+/// Indicates if the tree root node show be shown or not.
+/// </param>
 public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
 {
     [ObservableProperty]
