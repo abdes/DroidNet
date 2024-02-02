@@ -7,6 +7,10 @@ namespace DroidNet.Routing.Debugger.Welcome;
 using DroidNet.Routing.Debugger.UI.Shell;
 using DroidNet.Routing.Generators;
 
+/// <summary>
+/// A simple welcome page used as a placeholder for the application main view
+/// inside the <seealso cref="ShellView" />.
+/// </summary>
 [ViewModel(typeof(ShellViewModel))]
 public sealed partial class WelcomeView
 {
