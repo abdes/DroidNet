@@ -82,9 +82,9 @@ public partial class DockGroupTests
 
     [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.DockManagement")]
-    [DataRow(Orientation.Horizontal)]
-    [DataRow(Orientation.Vertical)]
-    public void AddDockWithAnchor_SameOrientation(Orientation orientation)
+    [DataRow(DockGroupOrientation.Horizontal)]
+    [DataRow(DockGroupOrientation.Vertical)]
+    public void AddDockWithAnchor_SameOrientation(DockGroupOrientation orientation)
     {
         // Arrange
         var sut = new NonEmptyDockGroup();
@@ -94,7 +94,7 @@ public partial class DockGroupTests
         var after = DummyDock.New();
 
         // Act
-        if (orientation == Orientation.Horizontal)
+        if (orientation == DockGroupOrientation.Horizontal)
         {
             sut.AddDock(after, new AnchorRight(anchor.Id));
             sut.AddDock(before, new AnchorLeft(anchor.Id));
@@ -122,7 +122,7 @@ public partial class DockGroupTests
         public AddDockWithAnchorDifferentOrientation()
         {
             this.sut = new NonEmptyDockGroup();
-            this.sut.SetOrientation(Orientation.Horizontal);
+            this.sut.SetOrientation(DockGroupOrientation.Horizontal);
             this.second = this.sut.Docks.First();
             this.first = DummyDock.New();
             this.third = DummyDock.New();
@@ -143,15 +143,15 @@ public partial class DockGroupTests
             this.sut.AddDock(newDock, new AnchorTop(this.first.Id));
 
             // Assert
-            _ = this.sut.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.Docks.Should().BeEmpty();
             _ = this.sut.First.Should().NotBeNull();
             _ = this.sut.Second.Should().NotBeNull();
 
-            _ = this.sut.First!.Orientation.Should().Be(Orientation.Vertical);
+            _ = this.sut.First!.Orientation.Should().Be(DockGroupOrientation.Vertical);
             _ = this.sut.First!.Docks.Should().ContainInOrder(newDock, this.first);
 
-            _ = this.sut.Second!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.Second!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.Second!.Docks.Should().ContainInOrder(this.second, this.third);
         }
 
@@ -168,15 +168,15 @@ public partial class DockGroupTests
             this.sut.AddDock(newDock, new AnchorBottom(this.third.Id));
 
             // Assert
-            _ = this.sut.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.Docks.Should().BeEmpty();
             _ = this.sut.First.Should().NotBeNull();
             _ = this.sut.Second.Should().NotBeNull();
 
-            _ = this.sut.First!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.First!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.First!.Docks.Should().ContainInOrder(this.first, this.second);
 
-            _ = this.sut.Second!.Orientation.Should().Be(Orientation.Vertical);
+            _ = this.sut.Second!.Orientation.Should().Be(DockGroupOrientation.Vertical);
             _ = this.sut.Second!.Docks.Should().ContainInOrder(this.third, newDock);
         }
 
@@ -193,7 +193,7 @@ public partial class DockGroupTests
             this.sut.AddDock(newDock, new AnchorTop(this.second.Id));
 
             // Assert
-            _ = this.sut.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.Docks.Should().BeEmpty();
             _ = this.sut.First.Should().NotBeNull();
             _ = this.sut.Second.Should().NotBeNull();
@@ -201,13 +201,13 @@ public partial class DockGroupTests
             _ = newNode.First.Should().NotBeNull();
             _ = newNode.Second.Should().NotBeNull();
 
-            _ = this.sut.First!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.First!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.First!.Docks.Should().ContainInOrder(this.first);
 
-            _ = newNode.First!.Orientation.Should().Be(Orientation.Vertical);
+            _ = newNode.First!.Orientation.Should().Be(DockGroupOrientation.Vertical);
             _ = newNode.First!.Docks.Should().ContainInOrder(newDock, this.second);
 
-            _ = newNode.Second!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = newNode.Second!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = newNode.Second!.Docks.Should().ContainInOrder(this.third);
         }
 
@@ -224,7 +224,7 @@ public partial class DockGroupTests
             this.sut.AddDock(newDock, new AnchorBottom(this.second.Id));
 
             // Assert
-            _ = this.sut.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.Docks.Should().BeEmpty();
             _ = this.sut.First.Should().NotBeNull();
             _ = this.sut.Second.Should().NotBeNull();
@@ -232,13 +232,13 @@ public partial class DockGroupTests
             _ = newNode.First.Should().NotBeNull();
             _ = newNode.Second.Should().NotBeNull();
 
-            _ = this.sut.First!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = this.sut.First!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = this.sut.First!.Docks.Should().ContainInOrder(this.first);
 
-            _ = newNode.First!.Orientation.Should().Be(Orientation.Vertical);
+            _ = newNode.First!.Orientation.Should().Be(DockGroupOrientation.Vertical);
             _ = newNode.First!.Docks.Should().ContainInOrder(this.second, newDock);
 
-            _ = newNode.Second!.Orientation.Should().Be(Orientation.Horizontal);
+            _ = newNode.Second!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = newNode.Second!.Docks.Should().ContainInOrder(this.third);
         }
     }

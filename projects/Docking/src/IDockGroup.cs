@@ -16,7 +16,7 @@ public interface IDockGroup
 
     bool IsEmpty { get; }
 
-    Orientation Orientation { get; }
+    DockGroupOrientation Orientation { get; }
 
     IDockGroup? First { get; }
 

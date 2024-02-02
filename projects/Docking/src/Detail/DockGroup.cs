@@ -44,11 +44,11 @@ public partial class DockGroup : IDockGroup
 
     public ReadOnlyObservableCollection<IDock> Docks { get; }
 
-    public bool IsHorizontal => this.Orientation == Orientation.Horizontal;
+    public bool IsHorizontal => this.Orientation == DockGroupOrientation.Horizontal;
 
-    public bool IsVertical => this.Orientation == Orientation.Vertical;
+    public bool IsVertical => this.Orientation == DockGroupOrientation.Vertical;
 
-    public virtual Orientation Orientation { get; protected set; }
+    public virtual DockGroupOrientation Orientation { get; protected set; }
 
     public virtual IDockGroup? First
     {
@@ -134,7 +134,7 @@ public partial class DockGroup
 
         // The group remains with only one part, so its orientation is flexible
         // and should be set to Undetermined.
-        this.Orientation = Orientation.Undetermined;
+        this.Orientation = DockGroupOrientation.Undetermined;
 
         if (this.IsLeaf)
         {
@@ -142,14 +142,16 @@ public partial class DockGroup
         }
     }
 
-    internal void AddGroupLast(IDockGroup group, Orientation orientation) => this.AddGroup(group, false, orientation);
+    internal void AddGroupLast(IDockGroup group, DockGroupOrientation orientation)
+        => this.AddGroup(group, false, orientation);
 
-    internal void AddGroupFirst(IDockGroup group, Orientation orientation) => this.AddGroup(group, true, orientation);
+    internal void AddGroupFirst(IDockGroup group, DockGroupOrientation orientation)
+        => this.AddGroup(group, true, orientation);
 
-    internal void AddGroupAfter(IDockGroup group, IDockGroup sibling, Orientation orientation)
+    internal void AddGroupAfter(IDockGroup group, IDockGroup sibling, DockGroupOrientation orientation)
         => this.AddGroupRelativeTo(group, sibling, true, orientation);
 
-    internal void AddGroupBefore(IDockGroup group, IDockGroup sibling, Orientation orientation)
+    internal void AddGroupBefore(IDockGroup group, IDockGroup sibling, DockGroupOrientation orientation)
         => this.AddGroupRelativeTo(group, sibling, false, orientation);
 
     protected virtual void MigrateDocksToGroup(DockGroup group)
@@ -163,9 +165,9 @@ public partial class DockGroup
         this.docks.Clear();
     }
 
-    private void AddGroup(IDockGroup group, bool isFirst, Orientation orientation)
+    private void AddGroup(IDockGroup group, bool isFirst, DockGroupOrientation orientation)
     {
-        if (this.Orientation == Orientation.Undetermined)
+        if (this.Orientation == DockGroupOrientation.Undetermined)
         {
             this.Orientation = orientation;
         }
@@ -234,7 +236,7 @@ public partial class DockGroup
 
     private void SwapFirstAndSecond() => (this.First, this.Second) = (this.Second, this.First);
 
-    private void AddGroupRelativeTo(IDockGroup group, IDockGroup sibling, bool after, Orientation orientation)
+    private void AddGroupRelativeTo(IDockGroup group, IDockGroup sibling, bool after, DockGroupOrientation orientation)
     {
         if (this.First != sibling && this.Second != sibling)
         {
@@ -245,7 +247,7 @@ public partial class DockGroup
         // then it must be empty.
         Debug.Assert(this.IsEmpty, "a group with parts can only be empty");
 
-        if (this.Orientation == Orientation.Undetermined)
+        if (this.Orientation == DockGroupOrientation.Undetermined)
         {
             this.Orientation = orientation;
         }
@@ -326,8 +328,8 @@ public partial class DockGroup
         // Determine the required orientation based on the requested relative
         // positioning.
         var requiredOrientation = anchor.Position is AnchorPosition.Left or AnchorPosition.Right
-            ? Orientation.Horizontal
-            : Orientation.Vertical;
+            ? DockGroupOrientation.Horizontal
+            : DockGroupOrientation.Vertical;
 
         // If the group is empty or has a single item, its orientation can
         // still be redefined.
@@ -374,7 +376,7 @@ public partial class DockGroup
         }
     }
 
-    private DockGroup Repartition(IDock? relativeTo, Orientation requiredOrientation)
+    private DockGroup Repartition(IDock? relativeTo, DockGroupOrientation requiredOrientation)
     {
         var items = this.docks.ToList();
         var relativeToIndex = relativeTo is null ? 0 : this.docks.IndexOf(relativeTo);

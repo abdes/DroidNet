@@ -15,7 +15,7 @@ public class RootDockGroup : DockGroup
     private DockGroup? right;
     private DockGroup? bottom;
 
-    public RootDockGroup() => this.AddGroupFirst(this.center, Orientation.Undetermined);
+    public RootDockGroup() => this.AddGroupFirst(this.center, DockGroupOrientation.Undetermined);
 
     public IDockGroup Center => this.center;
 
@@ -34,78 +34,78 @@ public class RootDockGroup : DockGroup
     {
         if (this.left == null)
         {
-            this.AddBeforeCenter(group, Orientation.Horizontal);
+            this.AddBeforeCenter(group, DockGroupOrientation.Horizontal);
             this.left = group;
 
-            if (this.Orientation == Orientation.Undetermined)
+            if (this.Orientation == DockGroupOrientation.Undetermined)
             {
-                this.Orientation = Orientation.Horizontal;
+                this.Orientation = DockGroupOrientation.Horizontal;
             }
 
             return;
         }
 
-        AppendToRoot(this.left, group, Orientation.Horizontal);
+        AppendToRoot(this.left, group, DockGroupOrientation.Horizontal);
     }
 
     public void DockTop(DockGroup group)
     {
         if (this.top == null)
         {
-            this.AddBeforeCenter(group, Orientation.Vertical);
+            this.AddBeforeCenter(group, DockGroupOrientation.Vertical);
             this.top = group;
 
-            if (this.Orientation == Orientation.Undetermined)
+            if (this.Orientation == DockGroupOrientation.Undetermined)
             {
-                this.Orientation = Orientation.Vertical;
+                this.Orientation = DockGroupOrientation.Vertical;
             }
 
             return;
         }
 
-        AppendToRoot(this.top, group, Orientation.Vertical);
+        AppendToRoot(this.top, group, DockGroupOrientation.Vertical);
     }
 
     public void DockRight(DockGroup group)
     {
         if (this.right == null)
         {
-            this.AddAfterCenter(group, Orientation.Horizontal);
+            this.AddAfterCenter(group, DockGroupOrientation.Horizontal);
             this.right = group;
 
-            if (this.Orientation == Orientation.Undetermined)
+            if (this.Orientation == DockGroupOrientation.Undetermined)
             {
-                this.Orientation = Orientation.Horizontal;
+                this.Orientation = DockGroupOrientation.Horizontal;
             }
 
             return;
         }
 
-        PrependToRoot(this.right, group, Orientation.Horizontal);
+        PrependToRoot(this.right, group, DockGroupOrientation.Horizontal);
     }
 
     public void DockBottom(DockGroup group)
     {
         if (this.bottom == null)
         {
-            this.AddAfterCenter(group, Orientation.Vertical);
+            this.AddAfterCenter(group, DockGroupOrientation.Vertical);
             this.bottom = group;
 
-            if (this.Orientation == Orientation.Undetermined)
+            if (this.Orientation == DockGroupOrientation.Undetermined)
             {
-                this.Orientation = Orientation.Vertical;
+                this.Orientation = DockGroupOrientation.Vertical;
             }
 
             return;
         }
 
-        PrependToRoot(this.bottom, group, Orientation.Vertical);
+        PrependToRoot(this.bottom, group, DockGroupOrientation.Vertical);
     }
 
-    private static void PrependToRoot(DockGroup root, IDockGroup group, Orientation orientation)
+    private static void PrependToRoot(DockGroup root, IDockGroup group, DockGroupOrientation orientation)
         => root.AddGroupFirst(group, orientation);
 
-    private static void AppendToRoot(DockGroup root, IDockGroup group, Orientation orientation)
+    private static void AppendToRoot(DockGroup root, IDockGroup group, DockGroupOrientation orientation)
     {
         var parent = LastAvailableSlot(root).AsDockGroup();
         parent.AddGroupLast(group, orientation);
@@ -154,14 +154,14 @@ public class RootDockGroup : DockGroup
         DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
     }
 
-    private void AddBeforeCenter(IDockGroup group, Orientation orientation)
+    private void AddBeforeCenter(IDockGroup group, DockGroupOrientation orientation)
     {
         var parent = this.center.Parent;
         Debug.Assert(parent is not null, "center always has a parent");
         parent.AddGroupBefore(group, this.center, orientation);
     }
 
-    private void AddAfterCenter(IDockGroup group, Orientation orientation)
+    private void AddAfterCenter(IDockGroup group, DockGroupOrientation orientation)
     {
         var parent = this.center.Parent;
         Debug.Assert(parent is not null, "center always has a parent");

@@ -23,7 +23,7 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        sut.AddGroupLast(newGroup, Orientation.Undetermined);
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().NotBeNull().And.BeEquivalentTo(newGroup);
@@ -41,7 +41,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupLast(newGroup, Orientation.Undetermined);
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         sut.Verify();
@@ -61,7 +61,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupLast(newGroup, Orientation.Undetermined);
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(oldFirst);
@@ -80,7 +80,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupLast(newGroup, Orientation.Undetermined);
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(oldSecond);
@@ -101,7 +101,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupLast(newGroup, Orientation.Undetermined);
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(oldFirst);
@@ -119,7 +119,7 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        sut.AddGroupFirst(newGroup, Orientation.Undetermined);
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().NotBeNull().And.BeEquivalentTo(newGroup);
@@ -137,7 +137,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupFirst(newGroup, Orientation.Undetermined);
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         sut.Verify();
@@ -157,7 +157,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupFirst(newGroup, Orientation.Undetermined);
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(newGroup);
@@ -176,7 +176,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupFirst(newGroup, Orientation.Undetermined);
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(newGroup);
@@ -197,7 +197,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupFirst(newGroup, Orientation.Undetermined);
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.Second.Should().BeSameAs(oldSecond);
