@@ -18,7 +18,7 @@ public class IndentToMarginConverter : IValueConverter
         if (value is int indentLevel && targetType == typeof(Thickness))
         {
             return new Thickness(
-                this.InitialMargin.Left + indentLevel * this.IndentIncrement,
+                this.InitialMargin.Left + (indentLevel * this.IndentIncrement),
                 this.InitialMargin.Top,
                 this.InitialMargin.Right,
                 this.InitialMargin.Bottom);

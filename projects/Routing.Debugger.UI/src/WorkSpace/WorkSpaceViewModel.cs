@@ -19,13 +19,6 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
     {
         this.docker = new Docker();
         this.Root = this.docker.Root;
-
-        //this.Docker.DockToRoot(CreateToolDockOrFail());
-        //this.Docker.DockToRoot(CreateToolDockOrFail(), AnchorPosition.Left);
-        //this.Docker.DockToRoot(CreateToolDockOrFail(), AnchorPosition.Left);
-        //this.Docker.DockToRoot(CreateToolDockOrFail(), AnchorPosition.Left);
-        //this.Docker.DockToRoot(CreateToolDockOrFail(), AnchorPosition.Bottom);
-        //DumpGroup(this.Docker.Root);
     }
 
     public IDockGroup Root { get; }
@@ -57,9 +50,6 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
     public object? GetViewModelForOutlet(string? outletName) => throw new NotImplementedException();
 
     public string GetPropertyNameForOutlet(string? outletName) => throw new NotImplementedException();
-
-    private static ToolDock CreateToolDockOrFail()
-        => ToolDock.New() ?? throw new Exception("could not create dock");
 
     private static void DumpGroup(IDockGroup group, string indent = "")
     {

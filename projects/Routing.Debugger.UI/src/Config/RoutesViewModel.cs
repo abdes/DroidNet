@@ -5,7 +5,7 @@
 namespace DroidNet.Routing.Debugger.UI.Config;
 
 using DroidNet.Routing;
-using TreeViewModelBase = TreeView.TreeViewModelBase;
+using DroidNet.Routing.Debugger.UI.TreeView;
 
 public class RoutesViewModel : TreeViewModelBase
 {
