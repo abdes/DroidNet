@@ -19,7 +19,7 @@ public enum AnchorPosition
     Bottom,
 }
 
-public enum Orientation
+public enum DockGroupOrientation
 {
     /// <summary>
     /// When a group is empty or only has one slot occupied, its orientation can

@@ -22,7 +22,7 @@ public partial class DockGroupTests
         var sut = new EmptyDockGroup();
 
         // Act
-        sut.SetOrientation(Orientation.Horizontal);
+        sut.SetOrientation(DockGroupOrientation.Horizontal);
 
         // Assert
         using (new AssertionScope())
@@ -40,7 +40,7 @@ public partial class DockGroupTests
         var sut = new EmptyDockGroup();
 
         // Act
-        sut.SetOrientation(Orientation.Vertical);
+        sut.SetOrientation(DockGroupOrientation.Vertical);
 
         // Assert
         using (new AssertionScope())
@@ -268,7 +268,7 @@ public partial class DockGroupTests
 
     private class MockDockGroup : DockGroup
     {
-        public void SetOrientation(Orientation orientation) => this.Orientation = orientation;
+        public void SetOrientation(DockGroupOrientation orientation) => this.Orientation = orientation;
 
         public void SetFirst(IDockGroup? first) => this.First = first;
 

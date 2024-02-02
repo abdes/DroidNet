@@ -24,8 +24,8 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        var before = () => sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);
-        var after = () => sut.AddGroupAfter(newGroup, sibling, Orientation.Undetermined);
+        var before = () => sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
+        var after = () => sut.AddGroupAfter(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = before.Should().Throw<InvalidOperationException>();
@@ -43,7 +43,7 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);
+        sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(newGroup);
@@ -61,7 +61,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupAfter(newGroup, sibling, Orientation.Undetermined);
+        sut.AddGroupAfter(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(sibling);
@@ -79,7 +79,7 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);
+        sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(newGroup);
@@ -97,7 +97,7 @@ public partial class DockGroupTests
         var newGroup = new MockDockGroup();
 
         // Act
-        sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);
+        sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         _ = sut.First.Should().BeSameAs(newGroup);
@@ -126,7 +126,7 @@ public partial class DockGroupTests
         var newGroup = new EmptyDockGroup();
 
         // Act
-        sut.AddGroupBefore(newGroup, sibling, Orientation.Undetermined);
+        sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
 
         // Assert
         var split = siblingIndex == first ? sut.First : sut.Second;

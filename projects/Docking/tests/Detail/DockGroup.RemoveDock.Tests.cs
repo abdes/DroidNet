@@ -55,7 +55,7 @@ public partial class DockGroupTests
         // Arrange
         var parent = new EmptyDockGroup();
         var sut = new NonEmptyDockGroup();
-        parent.AddGroupFirst(sut, Orientation.Horizontal);
+        parent.AddGroupFirst(sut, DockGroupOrientation.Horizontal);
         _ = parent.First.Should().Be(sut);
         var first = sut.Docks.First();
 
