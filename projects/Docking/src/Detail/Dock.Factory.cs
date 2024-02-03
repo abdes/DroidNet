@@ -17,7 +17,7 @@ public partial class Dock
     internal static Dock? FromId(DockId id)
         => Factory.TryGetDock(id, out var dock) ? dock : null;
 
-    internal static class Factory
+    public static class Factory
     {
         private static readonly ConcurrentDictionary<int, Dock> Docks = [];
 
