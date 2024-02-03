@@ -22,8 +22,4 @@ public interface IOutletContainer
     /// model by its <see cref="Type" /> is not supported.
     /// </remarks>
     void LoadContent(object viewModel, string? outletName = null);
-
-    object? GetViewModelForOutlet(string? outletName);
-
-    string GetPropertyNameForOutlet(string? outletName);
 }
