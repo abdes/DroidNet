@@ -30,12 +30,12 @@ public class RootDockGroup : DockGroup
         this.center.AddDock(dock);
     }
 
-    public void DockLeft(DockGroup group)
+    public void DockLeft(IDock dock)
     {
         if (this.left == null)
         {
-            this.AddBeforeCenter(group, DockGroupOrientation.Horizontal);
-            this.left = group;
+            this.left = NewDockGroup(dock);
+            this.AddBeforeCenter(this.left, DockGroupOrientation.Horizontal);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
             {
@@ -45,15 +45,15 @@ public class RootDockGroup : DockGroup
             return;
         }
 
-        AppendToRoot(this.left, group, DockGroupOrientation.Horizontal);
+        AppendToRoot(this.left, NewDockGroup(dock), DockGroupOrientation.Horizontal);
     }
 
-    public void DockTop(DockGroup group)
+    public void DockTop(IDock dock)
     {
         if (this.top == null)
         {
-            this.AddBeforeCenter(group, DockGroupOrientation.Vertical);
-            this.top = group;
+            this.top = NewDockGroup(dock);
+            this.AddBeforeCenter(this.top, DockGroupOrientation.Vertical);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
             {
@@ -63,15 +63,15 @@ public class RootDockGroup : DockGroup
             return;
         }
 
-        AppendToRoot(this.top, group, DockGroupOrientation.Vertical);
+        AppendToRoot(this.top, NewDockGroup(dock), DockGroupOrientation.Vertical);
     }
 
-    public void DockRight(DockGroup group)
+    public void DockRight(IDock dock)
     {
         if (this.right == null)
         {
-            this.AddAfterCenter(group, DockGroupOrientation.Horizontal);
-            this.right = group;
+            this.right = NewDockGroup(dock);
+            this.AddAfterCenter(this.right, DockGroupOrientation.Horizontal);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
             {
@@ -81,15 +81,15 @@ public class RootDockGroup : DockGroup
             return;
         }
 
-        PrependToRoot(this.right, group, DockGroupOrientation.Horizontal);
+        PrependToRoot(this.right, NewDockGroup(dock), DockGroupOrientation.Horizontal);
     }
 
-    public void DockBottom(DockGroup group)
+    public void DockBottom(IDock dock)
     {
         if (this.bottom == null)
         {
-            this.AddAfterCenter(group, DockGroupOrientation.Vertical);
-            this.bottom = group;
+            this.bottom = NewDockGroup(dock);
+            this.AddAfterCenter(this.bottom, DockGroupOrientation.Vertical);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
             {
@@ -99,7 +99,14 @@ public class RootDockGroup : DockGroup
             return;
         }
 
-        PrependToRoot(this.bottom, group, DockGroupOrientation.Vertical);
+        PrependToRoot(this.bottom, NewDockGroup(dock), DockGroupOrientation.Vertical);
+    }
+
+    private static DockGroup NewDockGroup(IDock dock)
+    {
+        var newGroup = new DockGroup();
+        newGroup.AddDock(dock);
+        return newGroup;
     }
 
     private static void PrependToRoot(DockGroup root, IDockGroup group, DockGroupOrientation orientation)
