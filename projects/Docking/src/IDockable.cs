@@ -15,6 +15,4 @@ public interface IDockable
     string TabbedTitle { get; }
 
     object? ViewModel { get; }
-
-    DockingState DockingState { get; }
 }

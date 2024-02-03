@@ -15,4 +15,8 @@ internal class DockGroupWithTray : DockGroup, IDockTray
     public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
 
     public bool HasMinimizedDocks => this.minimizedDocks.Count != 0;
+
+    internal void AddMinimizedDock(IDock dock) => this.minimizedDocks.Add(dock);
+
+    internal bool RemoveMinimizedDock(IDock dock) => this.minimizedDocks.Remove(dock);
 }
