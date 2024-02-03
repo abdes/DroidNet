@@ -7,4 +7,10 @@ namespace DroidNet.Docking;
 public interface IDock
 {
     public DockId Id { get; }
+
+    DockingState State { get; }
+
+    bool CanMinimize { get; }
+
+    bool CanClose { get; }
 }

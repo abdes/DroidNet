@@ -8,9 +8,17 @@ public interface IDocker
 {
     IDockGroup Root { get; }
 
-    void Dock(IDock dock, Anchor anchor);
+    void CloseDock(IDock dock);
+
+    void Dock(IDock dock, Anchor anchor, bool minimized = false);
 
     void DockToCenter(IDock dock);
 
-    void DockToRoot(IDock dock, AnchorPosition position);
+    void DockToRoot(IDock dock, AnchorPosition position, bool minimized = false);
+
+    void FloatDock(IDock dock);
+
+    void MinimizeDock(IDock dock);
+
+    void PinDock(IDock dock);
 }

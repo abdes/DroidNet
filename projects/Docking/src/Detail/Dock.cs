@@ -32,6 +32,12 @@ public abstract partial class Dock : IDock
     {
     }
 
+    public virtual bool CanMinimize => true;
+
+    public virtual bool CanClose => true;
+
+    public DockingState State { get; internal set; } = DockingState.Undocked;
+
     public DockId Id { get; private set; }
 
     internal DockGroup? Group { get; set; }

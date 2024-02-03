@@ -18,9 +18,6 @@ public partial class Dockable(string id) : ObservableObject, IDockable
 
     private string? tabbedTitle;
 
-    [ObservableProperty]
-    private DockingState dockingState = DockingState.Undocked;
-
     public string Title
     {
         get => this.title ?? this.Id;
