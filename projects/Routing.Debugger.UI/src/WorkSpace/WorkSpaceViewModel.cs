@@ -94,7 +94,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
     private void LoadApp(object viewModel)
     {
-        var dock = SingleItemDock.New() ?? throw new ContentLoadingException(
+        var dock = ApplicationDock.New() ?? throw new ContentLoadingException(
             DebuggerConstants.AppOutletName,
             viewModel,
             "could not create a dock");
