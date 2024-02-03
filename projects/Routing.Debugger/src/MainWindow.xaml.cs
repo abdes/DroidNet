@@ -77,10 +77,4 @@ public sealed partial class MainWindow : IOutletContainer
 
         this.Content = (UIElement)viewForShell;
     }
-
-    public object? GetViewModelForOutlet(string? outletName)
-        => throw new NotImplementedException("The main window's outlet is managed only by itself");
-
-    public string GetPropertyNameForOutlet(string? outletName)
-        => throw new NotImplementedException("The main window's outlet is managed only by itself");
 }

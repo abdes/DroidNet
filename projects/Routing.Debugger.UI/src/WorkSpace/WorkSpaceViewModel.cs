@@ -47,10 +47,6 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         DumpGroup(this.docker.Root);
     }
 
-    public object? GetViewModelForOutlet(string? outletName) => throw new NotImplementedException();
-
-    public string GetPropertyNameForOutlet(string? outletName) => throw new NotImplementedException();
-
     private static void DumpGroup(IDockGroup group, string indent = "")
     {
         Debug.WriteLine($"{indent}{group}");

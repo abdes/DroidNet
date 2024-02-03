@@ -6,17 +6,20 @@ namespace DroidNet.Docking;
 
 public enum AnchorPosition
 {
-    /// <summary>Dock on the left side of the window.</summary>
+    /// <summary>Dock on the left side of the anchor.</summary>
     Left,
 
-    /// <summary>Dock at the top of the window.</summary>
+    /// <summary>Dock at the top of the anchor.</summary>
     Top,
 
-    /// <summary>Dock on the right side of the window.</summary>
+    /// <summary>Dock on the right side of the anchor.</summary>
     Right,
 
-    /// <summary>Dock at the bottom of the window.</summary>
+    /// <summary>Dock at the bottom of the anchor.</summary>
     Bottom,
+
+    /// <summary>Dock together with the anchor.</summary>
+    With,
 }
 
 public enum DockGroupOrientation
