@@ -34,7 +34,7 @@ public class RootDockGroup : DockGroup
     {
         if (this.left == null)
         {
-            this.left = NewDockGroup(dock);
+            this.left = NewDockGroupWithTray(dock);
             this.AddBeforeCenter(this.left, DockGroupOrientation.Horizontal);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
@@ -52,7 +52,7 @@ public class RootDockGroup : DockGroup
     {
         if (this.top == null)
         {
-            this.top = NewDockGroup(dock);
+            this.top = NewDockGroupWithTray(dock);
             this.AddBeforeCenter(this.top, DockGroupOrientation.Vertical);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
@@ -70,7 +70,7 @@ public class RootDockGroup : DockGroup
     {
         if (this.right == null)
         {
-            this.right = NewDockGroup(dock);
+            this.right = NewDockGroupWithTray(dock);
             this.AddAfterCenter(this.right, DockGroupOrientation.Horizontal);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
@@ -88,7 +88,7 @@ public class RootDockGroup : DockGroup
     {
         if (this.bottom == null)
         {
-            this.bottom = NewDockGroup(dock);
+            this.bottom = NewDockGroupWithTray(dock);
             this.AddAfterCenter(this.bottom, DockGroupOrientation.Vertical);
 
             if (this.Orientation == DockGroupOrientation.Undetermined)
@@ -105,6 +105,13 @@ public class RootDockGroup : DockGroup
     private static DockGroup NewDockGroup(IDock dock)
     {
         var newGroup = new DockGroup();
+        newGroup.AddDock(dock);
+        return newGroup;
+    }
+
+    private static DockGroupWithTray NewDockGroupWithTray(IDock dock)
+    {
+        var newGroup = new DockGroupWithTray();
         newGroup.AddDock(dock);
         return newGroup;
     }
