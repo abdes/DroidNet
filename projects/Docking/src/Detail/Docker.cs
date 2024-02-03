@@ -50,6 +50,9 @@ public class Docker : IDocker
                 this.root.DockBottom(newGroup);
                 break;
 
+            case AnchorPosition.With:
+                throw new NotImplementedException();
+
             default:
                 throw new InvalidEnumArgumentException(nameof(position), (int)position, typeof(AnchorPosition));
         }
