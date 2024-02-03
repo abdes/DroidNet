@@ -43,7 +43,7 @@ public sealed partial class RouterOutlet
     [NotifyPropertyChangedFor(nameof(IsActivatedWithNoContent))]
     private object? outletContent;
 
-    private IOutletContainer? outletContainer;
+    private AbstractOutletContainer? outletContainer;
 
     public RouterOutlet()
     {
@@ -89,10 +89,10 @@ public sealed partial class RouterOutlet
          */
 
         var parentView = this.FindParentView();
-        if (parentView is not { ViewModel: IOutletContainer container })
+        if (parentView is not { ViewModel: AbstractOutletContainer container })
         {
             throw new InvalidOperationException(
-                $"you cannot use {nameof(RouterOutlet)} control outside of a view which view model implements {nameof(IOutletContainer)}");
+                $"you cannot use {nameof(RouterOutlet)} control inside a view which view model does not extend {nameof(AbstractOutletContainer)}");
         }
 
 #if DEBUG
