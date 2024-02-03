@@ -29,25 +29,22 @@ public class Docker : IDocker
 
     public void DockToRoot(IDock dock, AnchorPosition position)
     {
-        var newGroup = new DockGroup();
-        newGroup.AddDock(dock);
-
         switch (position)
         {
             case AnchorPosition.Left:
-                this.root.DockLeft(newGroup);
+                this.root.DockLeft(dock);
                 break;
 
             case AnchorPosition.Top:
-                this.root.DockTop(newGroup);
+                this.root.DockTop(dock);
                 break;
 
             case AnchorPosition.Right:
-                this.root.DockRight(newGroup);
+                this.root.DockRight(dock);
                 break;
 
             case AnchorPosition.Bottom:
-                this.root.DockBottom(newGroup);
+                this.root.DockBottom(dock);
                 break;
 
             case AnchorPosition.With:
