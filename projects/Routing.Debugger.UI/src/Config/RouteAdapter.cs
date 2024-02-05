@@ -49,7 +49,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
     public string Label
         => this.IsRoot
             ? $"Config Root ({this.CountRoutesRecursive()})"
-            : $"{this.Item.Path ?? "(Matcher)" ?? "Invalid"}";
+            : $"{this.Item.Path ?? "(Matcher)"}";
 
     public string Outlet => this.Item.Outlet;
 

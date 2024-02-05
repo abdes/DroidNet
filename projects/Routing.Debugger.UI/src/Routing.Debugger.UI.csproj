@@ -31,6 +31,7 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
         <PackageReference Include="CommunityToolkit.WinUI.Converters" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />

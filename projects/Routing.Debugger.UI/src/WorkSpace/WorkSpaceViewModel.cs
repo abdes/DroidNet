@@ -120,8 +120,16 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             var dockerActivatedRoute = this.ActiveRoute.Children.First(c => c.Outlet == dockableId);
             var dockingPosition = GetAnchorFromParams(dockerActivatedRoute.Params);
 
+            var isMinimized = false;
+            if (dockerActivatedRoute.Params.TryGetValue("minimized", out var minimized))
+            {
+                isMinimized = minimized is null || bool.Parse(minimized);
+            }
+
             // TODO(abdes): add support for relative docking
-            this.docker.DockToRoot(dock, dockingPosition);
+            // TODO(abdes): avoid explicitly creating Dockable instances
+            dock.AddDockable(new Dockable(dockableId) { ViewModel = dockerActivatedRoute.ViewModel });
+            this.docker.DockToRoot(dock, dockingPosition, isMinimized);
         }
         catch (Exception ex)
         {
