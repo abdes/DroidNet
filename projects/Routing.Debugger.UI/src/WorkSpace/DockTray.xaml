@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="DroidNet.Routing.Debugger.UI.WorkSpace.DockTray"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:docking="using:DroidNet.Docking"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:tkc="using:CommunityToolkit.WinUI.Controls"
+    xmlns:workSpace="using:DroidNet.Routing.Debugger.UI.WorkSpace"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="VerticalTemplate" x:DataType="docking:IDockable">
+            <ItemContainer>
+                <tkc:LayoutTransformControl
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    RenderTransformOrigin="0.5,0.5">
+                    <tkc:LayoutTransformControl.Transform>
+                        <RotateTransform Angle="90" />
+                    </tkc:LayoutTransformControl.Transform>
+
+                    <TextBlock
+                        Padding="10"
+                        FontWeight="ExtraLight"
+                        Foreground="White"
+                        Text="{x:Bind MinimizedTitle}" />
+                </tkc:LayoutTransformControl>
+            </ItemContainer>
+        </DataTemplate>
+
+        <DataTemplate x:Key="HorizontalTemplate" x:DataType="docking:IDockable">
+            <ItemContainer>
+                <TextBlock
+                    Padding="10"
+                    FontWeight="ExtraLight"
+                    Foreground="White"
+                    Text="{x:Bind MinimizedTitle}" />
+            </ItemContainer>
+        </DataTemplate>
+
+        <workSpace:OrientationToLayoutConverter x:Key="OrientationToLayoutConverter" />
+
+        <workSpace:OrientationTemplateSelector
+            x:Key="OrientationTemplateSelector"
+            DockTrayOrientation="{x:Bind Orientation}"
+            HorizontalTemplate="{StaticResource HorizontalTemplate}"
+            VerticalTemplate="{StaticResource VerticalTemplate}" />
+    </UserControl.Resources>
+
+    <Border
+        Grid.Column="0"
+        BorderBrush="Green"
+        BorderThickness="1">
+        <ItemsView
+            ItemTemplate="{StaticResource OrientationTemplateSelector}"
+            ItemsSource="{x:Bind ViewModel.Dockables}"
+            Layout="{x:Bind Orientation, Converter={StaticResource OrientationToLayoutConverter}}"
+            SelectionMode="None" />
+    </Border>
+</UserControl>

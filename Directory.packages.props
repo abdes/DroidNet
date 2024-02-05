@@ -5,6 +5,7 @@
   </PropertyGroup>
   <!-- Windows App SDK-->
   <ItemGroup>
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" Version="8.0.240109" />
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.4.231219000" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.2428" />
   </ItemGroup>

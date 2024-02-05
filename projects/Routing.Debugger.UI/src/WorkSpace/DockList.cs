@@ -22,9 +22,12 @@ public class DockList : VectorGrid
                 ? Orientation.Horizontal
                 : Orientation.Vertical)
     {
+        this.Name = group.ToString();
+
         var isFirst = true;
         var index = 0;
-        foreach (var dock in group.Docks)
+
+        foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
         {
             this.DefineItem(new GridLength(1, GridUnitType.Star));
             this.AddItem(
