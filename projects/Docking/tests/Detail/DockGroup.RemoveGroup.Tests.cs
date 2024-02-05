@@ -44,7 +44,7 @@ public partial class DockGroupTests
 
     [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
-    public void RemoveGroup_Child_Works()
+    public void RemoveGroup_First_IsChild_Works()
     {
         // Arrange
         var first = new MockDockGroup();
@@ -55,10 +55,28 @@ public partial class DockGroupTests
 
         // Act
         sut.RemoveGroup(first);
-        sut.RemoveGroup(second);
 
         // Assert
         _ = sut.First.Should().BeNull();
+        _ = sut.Second.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
+    public void RemoveGroup_Second_IsChild_Works()
+    {
+        // Arrange
+        var first = new MockDockGroup();
+        var second = new MockDockGroup();
+        var sut = new MockDockGroup();
+        sut.SetFirst(first);
+        sut.SetSecond(second);
+
+        // Act
+        sut.RemoveGroup(second);
+
+        // Assert
+        _ = sut.First.Should().NotBeNull();
         _ = sut.Second.Should().BeNull();
     }
 
@@ -68,8 +86,10 @@ public partial class DockGroupTests
     {
         // Arrange
         var parent = new MockDockGroup();
+        var keep = new MockDockGroup();
         var sut = new MockDockGroup();
         parent.SetFirst(sut);
+        parent.SetSecond(keep);
 
         var first = new MockDockGroup();
         sut.SetFirst(first);
