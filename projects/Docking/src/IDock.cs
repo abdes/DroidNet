@@ -4,13 +4,19 @@
 
 namespace DroidNet.Docking;
 
+using System.Collections.ObjectModel;
+
 public interface IDock
 {
     public DockId Id { get; }
+
+    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     DockingState State { get; }
 
     bool CanMinimize { get; }
 
     bool CanClose { get; }
+
+    void AddDockable(IDockable dockable);
 }

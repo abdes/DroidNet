@@ -8,7 +8,9 @@ using System.Collections.ObjectModel;
 
 public interface IDockTray
 {
-    ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
+    public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
 
-    bool HasMinimizedDocks { get; }
+    bool IsEmpty { get; }
+
+    public AnchorPosition Position { get; }
 }

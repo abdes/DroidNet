@@ -14,7 +14,7 @@ using System.Diagnostics;
 /// <para>
 /// If a group has dockables, then it is a leaf group with both slots (First and
 /// Second) empty. Otherwise, group composition is used to construct a tree of
-/// groups based on their <see cref="Orientation" />.
+/// groups based on their <see cref="DockGroupOrientation" />.
 /// </para>
 /// <para>
 /// The tree od dock groups is a binary tree, where each node only has two
@@ -24,65 +24,56 @@ using System.Diagnostics;
 /// using simple nesting of two-colum (Horizontal) or two-row (Vertical) grids.
 /// </para>
 /// </remarks>
-public partial class DockGroup : IDockGroup
+internal partial class DockGroup : DockGroupBase
 {
-    private static int nextId = 1;
-    private readonly int debugId;
-
     private readonly ObservableCollection<IDock> docks = [];
 
-    private DockGroup? first;
-    private DockGroup? second;
+    private DockGroupBase? first;
+    private DockGroupBase? second;
 
-    public DockGroup()
-    {
-        this.debugId = Interlocked.Increment(ref nextId);
-        this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
-    }
+    internal DockGroup() => this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
 
-    public bool IsEmpty => this.docks.Count == 0;
+    public override bool IsEmpty => this.docks.Count == 0;
 
-    public ReadOnlyObservableCollection<IDock> Docks { get; }
+    public override ReadOnlyObservableCollection<IDock> Docks { get; }
 
-    public bool IsHorizontal => this.Orientation == DockGroupOrientation.Horizontal;
-
-    public bool IsVertical => this.Orientation == DockGroupOrientation.Vertical;
-
-    public virtual DockGroupOrientation Orientation { get; protected set; }
-
-    public virtual IDockGroup? First
+    public override IDockGroup? First
     {
         get => this.first;
-        protected set => this.SetPart((DockGroup?)value, out this.first);
+        protected set => this.SetPart((DockGroupBase?)value, out this.first);
     }
 
-    public virtual IDockGroup? Second
+    public override IDockGroup? Second
     {
         get => this.second;
-        protected set => this.SetPart((DockGroup?)value, out this.second);
+        protected set => this.SetPart((DockGroupBase?)value, out this.second);
     }
 
     internal bool IsLeaf => this is { First: null, Second: null };
-
-    internal DockGroup? Parent { get; private set; }
-
-    internal bool IsProtected { get; init; }
 
     public override string ToString()
     {
         string[] children =
         [
-            this.first is null ? string.Empty : $"{this.first.debugId}",
-            this.second is null ? string.Empty : $"{this.second.debugId}",
+            this.first is null ? string.Empty : $"{this.first.DebugId}",
+            this.second is null ? string.Empty : $"{this.second.DebugId}",
         ];
         var childrenStr = children[0] != string.Empty || children[1] != string.Empty
             ? $" {{{string.Join(',', children)}}}"
             : string.Empty;
 
-        return $"[{this.debugId}]({string.Join(',', this.Docks)}){childrenStr}";
+        var orientation = this.Orientation switch
+        {
+            DockGroupOrientation.Undetermined => "?",
+            DockGroupOrientation.Horizontal => "--",
+            DockGroupOrientation.Vertical => "|",
+            _ => throw new NotImplementedException(),
+        };
+
+        return $"{orientation} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";
     }
 
-    private void SetPart(DockGroup? value, out DockGroup? part)
+    private void SetPart(DockGroupBase? value, out DockGroupBase? part)
     {
         // Avoid bugs with infinite recursion in the tree if the part is self.
         if (value == this)
@@ -106,15 +97,10 @@ public partial class DockGroup : IDockGroup
 /// <summary>
 /// Group management mix-in for the <see cref="DockGroup" /> class.
 /// </summary>
-public partial class DockGroup
+internal partial class DockGroup
 {
-    internal void RemoveGroup(IDockGroup group)
+    internal virtual void RemoveGroup(IDockGroup group)
     {
-        if (group.AsDockGroup().IsProtected)
-        {
-            return;
-        }
-
         var mine = false;
         if (this.First == group)
         {
@@ -129,7 +115,7 @@ public partial class DockGroup
 
         if (!mine)
         {
-            throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.debugId}) children");
+            throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.DebugId}) children");
         }
 
         // The group remains with only one part, so its orientation is flexible
@@ -138,7 +124,11 @@ public partial class DockGroup
 
         if (this.IsLeaf)
         {
-            this.Parent?.RemoveGroup(this);
+            var parent = this.Parent as DockGroup;
+            Debug.Assert(
+                parent != null,
+                $"expecting {this.Parent} to be of a concrete implementation {nameof(DockGroup)}");
+            parent.RemoveGroup(this);
         }
     }
 
@@ -203,24 +193,29 @@ public partial class DockGroup
         // in it immediately, or full, and we need to expand it.
         if (isFirst)
         {
-            this.First = this.first?.ExpandToAdd(group, isFirst) ?? group;
+            var firstImpl = this.first as DockGroup;
+            this.First = firstImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
         }
         else
         {
-            this.Second = this.second?.ExpandToAdd(group, isFirst) ?? group;
+            var secondImpl = this.second as DockGroup;
+            this.Second = secondImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
         }
     }
 
     // Expand the group by making a new group, replacing our second
     // part with it, and move our second part and the group to add to
     // it.
-    private DockGroup ExpandToAdd(IDockGroup newGroup, bool newGroupFirst)
+    private DockGroup ExpandToAdd(IDockGroup newGroup, DockGroupOrientation orientation, bool newGroupFirst)
     {
         var expanded = new DockGroup
         {
             First = newGroupFirst ? newGroup : this,
             Second = newGroupFirst ? this : newGroup,
+            Orientation = orientation,
         };
+        newGroup.AsDockGroup().Orientation = orientation;
+
         return expanded;
     }
 
@@ -258,13 +253,19 @@ public partial class DockGroup
         {
             if (this.first == sibling)
             {
-                this.First = this.first.ExpandToAdd(group, !after);
-                this.first.Orientation = orientation;
+                var firstImpl = this.first as DockGroup;
+                Debug.Assert(
+                    firstImpl != null,
+                    $"expecting {this.first} to be of a concrete implementation {nameof(DockGroup)}");
+                this.First = firstImpl.ExpandToAdd(group, orientation, !after);
             }
             else if (this.second == sibling)
             {
-                this.Second = this.second.ExpandToAdd(group, !after);
-                this.second.Orientation = orientation;
+                var secondImpl = this.second as DockGroup;
+                Debug.Assert(
+                    secondImpl != null,
+                    $"expecting {this.first} to be of a concrete implementation {nameof(DockGroup)}");
+                this.Second = secondImpl.ExpandToAdd(group, orientation, !after);
             }
 
             return;
@@ -289,7 +290,7 @@ public partial class DockGroup
 /// <summary>
 /// Dock management mix-in for the <see cref="DockGroup" /> class.
 /// </summary>
-public partial class DockGroup
+internal partial class DockGroup
 {
     /// <summary>
     /// Add the first dock to an empty group. Can only be used if the group is
@@ -372,7 +373,11 @@ public partial class DockGroup
 
         if (this.docks.Count == 0)
         {
-            this.Parent?.RemoveGroup(this);
+            var parent = this.Parent as DockGroup;
+            Debug.Assert(
+                parent != null,
+                $"expecting {this.Parent} to be of a concrete implementation {nameof(DockGroup)}");
+            parent.RemoveGroup(this);
         }
     }
 
@@ -435,4 +440,29 @@ public partial class DockGroup
         Debug.Assert(hostGroup.IsLeaf, "re-partitioning will always return a host group which can host docks");
         return hostGroup;
     }
+}
+
+internal abstract class DockGroupBase : IDockGroup
+{
+    private static int nextId = 1;
+
+    protected DockGroupBase() => this.DebugId = Interlocked.Increment(ref nextId);
+
+    public abstract ReadOnlyObservableCollection<IDock> Docks { get; }
+
+    public bool IsHorizontal => this.Orientation == DockGroupOrientation.Horizontal;
+
+    public bool IsVertical => this.Orientation == DockGroupOrientation.Vertical;
+
+    public virtual DockGroupOrientation Orientation { get; protected set; }
+
+    public abstract bool IsEmpty { get; }
+
+    public abstract IDockGroup? First { get; protected set; }
+
+    public abstract IDockGroup? Second { get; protected set; }
+
+    public int DebugId { get; }
+
+    internal DockGroupBase? Parent { get; set; }
 }

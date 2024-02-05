@@ -78,7 +78,7 @@ public enum DockingState
 /// Indicates how new views, added to a <see cref="IDock" /> should be
 /// positioned inside the dock.
 /// </summary>
-public enum Placement
+public enum DockablePlacement
 {
     /// <summary>
     /// Insert the new dockable at the first position in the dock.

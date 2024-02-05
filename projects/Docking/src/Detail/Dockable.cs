@@ -10,7 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="DockGroup" />.
 /// </summary>
 /// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
-public partial class Dockable(string id) : ObservableObject, IDockable
+public class Dockable(string id) : ObservableObject, IDockable
 {
     private string? title;
 
