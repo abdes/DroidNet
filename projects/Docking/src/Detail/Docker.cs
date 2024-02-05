@@ -160,19 +160,24 @@ public class Docker : IDocker
         dock.AsDock().State = DockingState.Floating;
     }
 
-    private static DockGroupWithTray FindTryForDock(Dock dock)
+    private static TrayGroup FindTryForDock(Dock dock)
     {
         // Walk the docking tree up until we find a dock group which implements
         // the IDockTray interface. This would be one of the root edge groups.
         var group = dock.Group;
         while (group != null)
         {
-            if (group is IDockTray tray)
+            if (group.First is TrayGroup firstAsTray)
             {
-                return (DockGroupWithTray)tray;
+                return firstAsTray;
             }
 
-            group = group.Parent;
+            if (group.Second is TrayGroup secondAsTray)
+            {
+                return secondAsTray;
+            }
+
+            group = group.Parent as DockGroup;
         }
 
         throw new InvalidOperationException(

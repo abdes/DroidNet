@@ -4,6 +4,7 @@
 
 namespace DroidNet.Docking.Detail;
 
+using System.Collections.ObjectModel;
 using DroidNet.Docking;
 
 /// <summary>
@@ -28,9 +29,11 @@ using DroidNet.Docking;
 /// </remarks>
 public abstract partial class Dock : IDock
 {
-    protected Dock()
-    {
-    }
+    private readonly ObservableCollection<IDockable> dockables = [];
+
+    protected Dock() => this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
+
+    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     public virtual bool CanMinimize => true;
 
@@ -41,6 +44,11 @@ public abstract partial class Dock : IDock
     public DockId Id { get; private set; }
 
     internal DockGroup? Group { get; set; }
+
+    public void AddDockable(IDockable dockable)
+
+        // TODO: update active dockable and place dockable properly
+        => this.dockables.Add(dockable);
 
     public override string ToString() => $"{this.Id}";
 }
