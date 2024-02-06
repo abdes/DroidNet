@@ -5,10 +5,9 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using DroidNet.Docking;
+using DroidNet.Routing.Debugger.UI.Docks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Colors = Microsoft.UI.Colors;
 
 /// <summary>
 /// A custom control representing the list of docks in a dock group. It uses a
@@ -16,7 +15,7 @@ using Colors = Microsoft.UI.Colors;
 /// </summary>
 public class DockList : VectorGrid
 {
-    public DockList(IDockGroup group)
+    public DockList(IDocker docker, IDockGroup group)
         : base(
             group.Orientation == DockGroupOrientation.Horizontal
                 ? Orientation.Horizontal
@@ -33,10 +32,13 @@ public class DockList : VectorGrid
             this.AddItem(
                 new Border()
                 {
-                    Child = new Viewbox() { Child = new TextBlock() { Text = dock.ToString() } },
-                    BorderBrush = new SolidColorBrush(Colors.Blue),
-                    BorderThickness = new Thickness(0.5),
-                    Margin = new Thickness(4),
+                    Child = dock is ApplicationDock
+                        ? new Viewbox() { Child = new TextBlock() { Text = dock.ToString() } }
+                        : new DockPanel() { ViewModel = new DockPanelViewModel(dock, docker) },
+
+                    // BorderBrush = new SolidColorBrush(Colors.Blue),
+                    // BorderThickness = new Thickness(0.5),
+                    // Margin = new Thickness(0),
                 },
                 index++);
             if (!isFirst)

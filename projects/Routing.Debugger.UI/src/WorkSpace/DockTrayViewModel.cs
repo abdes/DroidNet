@@ -9,6 +9,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Docking;
+using Microsoft.UI.Dispatching;
 
 public class DockTrayViewModel : IDisposable
 {
@@ -23,6 +24,8 @@ public class DockTrayViewModel : IDisposable
 
         this.docks = docks;
         this.UpdateDockables();
+
+        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         // Create an observable for the docks collection
         var docksObservable
@@ -47,7 +50,7 @@ public class DockTrayViewModel : IDisposable
                 evt =>
                 {
                     Debug.WriteLine($"Updating dockables because of: {evt.EventArgs.Action}");
-                    this.UpdateDockables();
+                    dispatcherQueue.TryEnqueue(this.UpdateDockables);
                 });
     }
 
