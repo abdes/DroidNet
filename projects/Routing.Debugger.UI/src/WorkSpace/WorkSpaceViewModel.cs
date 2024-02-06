@@ -13,17 +13,17 @@ using DroidNet.Routing.UI.Contracts;
 
 public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware
 {
-    private readonly Docker docker;
-
     public WorkSpaceViewModel()
     {
-        this.docker = new Docker();
-        this.Root = this.docker.Root;
+        this.Docker = new Docker();
+        this.Root = this.Docker.Root;
     }
 
     public IDockGroup Root { get; }
 
     public IActiveRoute? ActiveRoute { get; set; }
+
+    public IDocker Docker { get; }
 
     public void LoadContent(object viewModel, string? outletName = null)
     {
@@ -44,7 +44,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                 break;
         }
 
-        DumpGroup(this.docker.Root);
+        DumpGroup(this.Docker.Root);
     }
 
     private static void DumpGroup(IDockGroup group, string indent = "")
@@ -100,7 +100,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             "could not create a dock");
 
         // Dock at the center
-        this.docker.DockToCenter(dock);
+        this.Docker.DockToCenter(dock);
     }
 
     private void LoadDockable(object viewModel, string dockableId)
@@ -129,7 +129,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             // TODO(abdes): add support for relative docking
             // TODO(abdes): avoid explicitly creating Dockable instances
             dock.AddDockable(new Dockable(dockableId) { ViewModel = dockerActivatedRoute.ViewModel });
-            this.docker.DockToRoot(dock, dockingPosition, isMinimized);
+            this.Docker.DockToRoot(dock, dockingPosition, isMinimized);
         }
         catch (Exception ex)
         {

@@ -97,7 +97,7 @@ public static partial class Program
                 .AddTransient<RoutesView>()
             /*.AddTransient<DockView>()
             .AddTransient<DockPanelViewModel>()
-            .AddTransient<DockPanelView>()
+            .AddTransient<DockPanel>()
             .AddTransient<DockTestViewModel>()
             .AddTransient<DockTestView>()
             .AddTransient<EmptyShellViewModel>()
