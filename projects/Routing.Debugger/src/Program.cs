@@ -14,6 +14,8 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
 using DroidNet.Routing.Debugger.UI.Shell;
+using DroidNet.Routing.Debugger.UI.State;
+using DroidNet.Routing.Debugger.UI.UrlTree;
 using DroidNet.Routing.Debugger.UI.WorkSpace;
 using DroidNet.Routing.Debugger.Welcome;
 using DroidNet.Routing.UI;
@@ -95,6 +97,10 @@ public static partial class Program
                 .AddTransient<WorkSpaceView>()
                 .AddTransient<RoutesViewModel>()
                 .AddTransient<RoutesView>()
+                .AddTransient<UrlTreeViewModel>()
+                .AddTransient<UrlTreeView>()
+                .AddTransient<RouterStateViewModel>()
+                .AddTransient<RouterStateView>()
             /*.AddTransient<DockView>()
             .AddTransient<DockPanelViewModel>()
             .AddTransient<DockPanel>()
@@ -209,7 +215,6 @@ public static partial class Program
                             Path = "Config/Routes",
                             ViewModelType = typeof(RoutesViewModel),
                         },
-                        /*
                         new Route
                         {
                             Outlet = "urlTree",
@@ -222,7 +227,6 @@ public static partial class Program
                             Path = "Router/State",
                             ViewModelType = typeof(RouterStateViewModel),
                         },
-                    */
                     ]),
                 },
             ]),
