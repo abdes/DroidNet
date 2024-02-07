@@ -37,14 +37,26 @@ public abstract class AbstractRouteActivator(IServiceProvider serviceProvider) :
             route is ActiveRoute,
             $"expecting the {nameof(route)} to be of the internal type {typeof(ActiveRoute)}");
 
+        // Resolve the view model and then ask the concrete activator to finish
+        // activation. The ActiveRoute must be fully setup before we do the
+        // actual activation, because it may be injected in the view model being
+        // activated and used.
         try
         {
-            ((ActiveRoute)route).ViewModel = this.DoActivateRoute((ActiveRoute)route, context);
-
-            if (route.ViewModel is IRoutingAware routeViewModel)
+            // The route may be without a ViewModel (typically a route to load
+            // data or hold shared parameters).
+            var viewmodelType = route.RouteConfig.ViewModelType;
+            if (viewmodelType != null)
             {
-                routeViewModel.ActiveRoute = route;
+                var viewModel = this.ResolveViewModel(viewmodelType);
+                ((ActiveRoute)route).ViewModel = viewModel;
+                if (viewModel is IRoutingAware injectable)
+                {
+                    injectable.ActiveRoute = route;
+                }
             }
+
+            this.DoActivateRoute((ActiveRoute)route, context);
         }
         catch (Exception ex)
         {
@@ -52,11 +64,11 @@ public abstract class AbstractRouteActivator(IServiceProvider serviceProvider) :
         }
     }
 
-    protected object ResolveViewModel(Type viewModelType)
+    protected abstract void DoActivateRoute(IActiveRoute route, RouterContext context);
+
+    private object ResolveViewModel(Type viewModelType)
     {
         var viewModel = serviceProvider.GetService(viewModelType);
         return viewModel ?? throw new MissingViewModelException(viewModelType);
     }
-
-    protected abstract object? DoActivateRoute(IActiveRoute route, RouterContext context);
 }

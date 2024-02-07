@@ -21,18 +21,16 @@ using DroidNet.Routing.UI.Contracts;
 public class WindowRouteActivator(IServiceProvider provider) : AbstractRouteActivator(provider)
 {
     /// <inheritdoc />
-    protected override object? DoActivateRoute(IActiveRoute route, RouterContext context)
+    protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
     {
         Debug.Assert(context is WindowRouterContext, "expecting the router context to have been created by me");
         Debug.Assert(route.Parent is not null, "you cannot activate the root!");
 
-        if (route.RouteConfig.ViewModelType is null)
+        if (route.ViewModel is null)
         {
-            // A route without a view model -> nothing to activate.
-            return null;
+            return;
         }
 
-        object routeViewModel;
         /*
          * For a root route, load the content in the context's window outlet.
          * For a normal route, load the content in the corresponding outlet in
@@ -48,8 +46,7 @@ public class WindowRouteActivator(IServiceProvider provider) : AbstractRouteActi
 
             if (window is IOutletContainer container)
             {
-                routeViewModel = this.ResolveViewModel(route.RouteConfig.ViewModelType);
-                container.LoadContent(routeViewModel, route.Outlet);
+                container.LoadContent(route.ViewModel, route.Outlet);
             }
             else
             {
@@ -74,8 +71,7 @@ public class WindowRouteActivator(IServiceProvider provider) : AbstractRouteActi
 
             if (parent?.ViewModel is IOutletContainer container)
             {
-                routeViewModel = this.ResolveViewModel(route.RouteConfig.ViewModelType);
-                container.LoadContent(routeViewModel, route.Outlet);
+                container.LoadContent(route.ViewModel, route.Outlet);
             }
             else
             {
@@ -86,7 +82,5 @@ public class WindowRouteActivator(IServiceProvider provider) : AbstractRouteActi
                     $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
             }
         }
-
-        return routeViewModel;
     }
 }

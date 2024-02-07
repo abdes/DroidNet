@@ -9,6 +9,6 @@ using DroidNet.Routing.Contracts;
 public class HeadlessRouteActivator(IServiceProvider serviceProvider) : AbstractRouteActivator(serviceProvider)
 {
     /// <inheritdoc />
-    protected override object DoActivateRoute(IActiveRoute route, RouterContext context)
+    protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
         => throw new NotImplementedException();
 }
