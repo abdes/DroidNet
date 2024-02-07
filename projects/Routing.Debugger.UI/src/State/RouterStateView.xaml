@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<UserControl
+    x:Class="DroidNet.Routing.Debugger.UI.State.RouterStateView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:communityConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:converters1="using:DroidNet.Routing.Debugger.UI.Converters"
+    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:state="using:DroidNet.Routing.Debugger.UI.State"
+    mc:Ignorable="d">
+
+
+    <UserControl.Resources>
+        <communityConverters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
+        <converters1:ExpanderIconConverter x:Key="ExpanderIconConverter" />
+        <converters1:ItemClickEventArgsToClickedItemConverter x:Key="EventArgsToClickedItemConverter" />
+        <converters1:IndentToMarginConverter
+            x:Key="IndentToMarginConverter"
+            IndentIncrement="20"
+            InitialMargin="{StaticResource ItemMargin}" />
+
+        <Thickness x:Key="ItemMargin">0,0,0,0</Thickness>
+    </UserControl.Resources>
+
+    <ListView
+        IsItemClickEnabled="True"
+        ItemsSource="{x:Bind ViewModel.ShownItems}"
+        SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
+        SelectionMode="Single">
+        <ListView.ItemTemplate>
+            <DataTemplate x:DataType="state:RouterStateAdapter">
+                <Grid Margin="{x:Bind Level, Converter={StaticResource IndentToMarginConverter}}" Padding="0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Orientation="Horizontal">
+                        <TextBlock
+                            FontSize="16"
+                            FontWeight="bold"
+                            Text="{x:Bind Label}" />
+                        <FontIcon
+                            Margin="10,0,0,0"
+                            Foreground="Orange"
+                            Glyph="&#xF272;"
+                            Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
+                    </StackPanel>
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        FontSize="12"
+                        FontStyle="Italic"
+                        Text="{x:Bind ViewModel}"
+                        Visibility="{x:Bind IsRoot, Converter={StaticResource VisibilityConverter}, ConverterParameter=True}" />
+                    <FontIcon
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        Glyph="{x:Bind IsExpanded, Mode=OneWay, Converter={StaticResource ExpanderIconConverter}}"
+                        RelativePanel.AlignRightWithPanel="True"
+                        RelativePanel.AlignVerticalCenterWithPanel="True"
+                        Visibility="{x:Bind HasChildren, Converter={StaticResource VisibilityConverter}}" />
+                </Grid>
+            </DataTemplate>
+        </ListView.ItemTemplate>
+        <interactivity:Interaction.Behaviors>
+            <core:EventTriggerBehavior EventName="ItemClick">
+                <core:InvokeCommandAction Command="{x:Bind ViewModel.ToggleExpandedCommand}" InputConverter="{StaticResource EventArgsToClickedItemConverter}" />
+            </core:EventTriggerBehavior>
+        </interactivity:Interaction.Behaviors>
+
+    </ListView>
+</UserControl>
