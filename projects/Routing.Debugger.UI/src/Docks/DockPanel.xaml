@@ -100,18 +100,14 @@
                     Style="{StaticResource PanelTitleIcon}" />
             </Button>
         </Grid>
+        <!--  TODO(abdes): use a tabbed view  -->
         <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Dockables}">
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="docking:IDockable">
-                    <TextBlock>
-                        <Run Text="{x:Bind Title}" />
-                        <Run Text=" / " />
-                        <Run Text="{x:Bind ViewModel}" />
-                    </TextBlock>
+                    <ContentControl HorizontalContentAlignment="Stretch" Content="{x:Bind ViewModel, Converter={StaticResource VmToViewConverter}}" />
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <!--<ContentControl Grid.Row="1" Content="{x:Bind SelectedElement.ViewModel, Converter={StaticResource VmToViewConverter}}" />-->
     </Grid>
 
 </UserControl>

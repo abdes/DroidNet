@@ -128,7 +128,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
             // TODO(abdes): add support for relative docking
             // TODO(abdes): avoid explicitly creating Dockable instances
-            dock.AddDockable(new Dockable(dockableId) { ViewModel = dockerActivatedRoute.ViewModel });
+            dock.AddDockable(new Dockable(dockableId) { ViewModel = viewModel });
             this.Docker.DockToRoot(dock, dockingPosition, isMinimized);
         }
         catch (Exception ex)
