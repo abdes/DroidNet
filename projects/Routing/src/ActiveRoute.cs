@@ -69,7 +69,7 @@ internal partial class ActiveRoute
     public override string ToString()
     {
         var url = string.Join('/', this.UrlSegments.Select(s => s.Path));
-        return $"[{this.RouteConfig.Path}][{url}]";
+        return $"{this.ViewModel?.GetType().Name} (o={this.Outlet} p={this.RouteConfig.Path})";
     }
 
     /// <summary>
