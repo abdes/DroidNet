@@ -11,6 +11,9 @@ using DroidNet.Docking.Detail;
 using DroidNet.Routing.Contracts;
 using DroidNet.Routing.UI.Contracts;
 
+#pragma warning disable IDE0001 // Simplify Names
+#pragma warning restore IDE0001 // Simplify Names
+
 public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware
 {
     public WorkSpaceViewModel()
@@ -27,21 +30,19 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
     public void LoadContent(object viewModel, string? outletName = null)
     {
-        switch (outletName)
+        if (outletName is null || outletName.Equals(OutletName.Primary, StringComparison.Ordinal))
         {
-            case null:
-            case Router.Outlet.Primary:
-                throw new InvalidOperationException(
-                    $"illegal outlet name {outletName} used for a dockable; cannot be null or `{Router.Outlet.Primary}`.");
-
-            case DebuggerConstants.AppOutletName:
-                this.LoadApp(viewModel);
-                break;
-
-            default:
-                // Any other name is interpreted as the dockable ID
-                this.LoadDockable(viewModel, outletName);
-                break;
+            throw new InvalidOperationException(
+                $"illegal outlet name {outletName} used for a dockable; cannot be null or `{OutletName.Primary}`.");
+        }
+        else if (outletName == DebuggerConstants.AppOutletName)
+        {
+            this.LoadApp(viewModel);
+        }
+        else
+        {
+            // Any other name is interpreted as the dockable ID
+            this.LoadDockable(viewModel, outletName);
         }
 
         DumpGroup(this.Docker.Root);

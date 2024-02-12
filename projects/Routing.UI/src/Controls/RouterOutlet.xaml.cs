@@ -24,7 +24,7 @@ public sealed partial class RouterOutlet
             nameof(OutletName),
             typeof(string),
             typeof(RouterOutlet),
-            new PropertyMetadata(Router.Outlet.Primary));
+            new PropertyMetadata(Routing.OutletName.Primary));
 
     private static readonly DependencyProperty VmToViewConverterProperty =
         DependencyProperty.Register(

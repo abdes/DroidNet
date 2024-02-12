@@ -155,9 +155,9 @@ public class Route
 
     /// <summary>Gets the outlet for which this route is specified.</summary>
     /// <value>
-    /// An outlet name. Default is <see cref="UrlSegmentGroup.PrimaryOutlet" />.
+    /// An outlet name. Default is <see cref="OutletName.Primary" />.
     /// </value>
-    public string Outlet { get; init; } = UrlSegmentGroup.PrimaryOutlet;
+    public OutletName Outlet { get; init; } = OutletName.Primary;
 
     /// <summary>Gets a collection of child routes, if any.</summary>
     /// <value>A collection of child routes, if any.</value>
@@ -168,7 +168,7 @@ public class Route
     {
         var res = new StringBuilder();
 
-        _ = res.Append(this.Outlet == UrlSegmentGroup.PrimaryOutlet ? "<pri>" : this.Outlet)
+        _ = res.Append(this.Outlet.IsPrimary ? "<pri>" : this.Outlet)
             .Append(':')
             .Append(
                 this.Path != null

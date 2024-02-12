@@ -134,8 +134,8 @@ public class DefaultUrlParser : IUrlParser
         var root = this.ParseChild(ref remaining, absolute);
         return new UrlSegmentGroup(
             [],
-            new Dictionary<string, UrlSegmentGroup>(
-                [new KeyValuePair<string, UrlSegmentGroup>(UrlSegmentGroup.PrimaryOutlet, root)]));
+            new Dictionary<OutletName, UrlSegmentGroup>(
+                [new KeyValuePair<OutletName, UrlSegmentGroup>(OutletName.Primary, root)]));
     }
 
     /// <summary>
@@ -207,7 +207,7 @@ public class DefaultUrlParser : IUrlParser
             !remaining.PeekStartsWith('/') || remaining.PeekStartsWith("//"),
             "all '/' characters should have been consumed");
 
-        var children = new Dictionary<string, UrlSegmentGroup>();
+        var children = new Dictionary<OutletName, UrlSegmentGroup>();
 
         if (remaining.PeekStartsWith("("))
         {
@@ -339,9 +339,9 @@ public class DefaultUrlParser : IUrlParser
         parameters[decodedKey] = decodedValue;
     }
 
-    private Dictionary<string, UrlSegmentGroup> ParseParens(bool allowPrimary, ref ReadOnlySpan<char> remaining)
+    private Dictionary<OutletName, UrlSegmentGroup> ParseParens(bool allowPrimary, ref ReadOnlySpan<char> remaining)
     {
-        var segmentGroups = new Dictionary<string, UrlSegmentGroup>();
+        var segmentGroups = new Dictionary<OutletName, UrlSegmentGroup>();
         remaining.Capture('(');
 
         var closed = false;
@@ -358,7 +358,7 @@ public class DefaultUrlParser : IUrlParser
             }
             else if (allowPrimary)
             {
-                outletName = UrlSegmentGroup.PrimaryOutlet;
+                outletName = OutletName.Primary;
                 remaining.Capture(outletName);
             }
             else

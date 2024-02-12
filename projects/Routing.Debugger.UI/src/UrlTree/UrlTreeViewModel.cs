@@ -33,7 +33,7 @@ public partial class UrlTreeViewModel : TreeViewModelBase
         {
             IndexInItems = 0,
             Level = 0,
-            Outlet = UrlSegmentGroup.PrimaryOutlet,
+            Outlet = OutletName.Primary,
         };
     }
 }

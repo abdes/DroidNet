@@ -55,7 +55,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
 
     public string ExtendedLabel => this.Item.ToString();
 
-    public bool IsForOutlet => this.Item.Outlet != UrlSegmentGroup.PrimaryOutlet;
+    public bool IsForOutlet => this.Item.Outlet.IsNotPrimary;
 
     public bool HasChildren => this.ChildrenCount > 0;
 

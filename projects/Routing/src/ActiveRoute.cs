@@ -19,7 +19,7 @@ internal partial class ActiveRoute : TreeNode, IActiveRoute
 {
     public required Route RouteConfig { get; init; }
 
-    public required string Outlet { get; init; }
+    public required OutletName Outlet { get; init; }
 
     public object? ViewModel { get; internal set; }
 

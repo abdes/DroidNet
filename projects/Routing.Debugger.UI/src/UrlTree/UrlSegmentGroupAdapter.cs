@@ -17,7 +17,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
 {
     private readonly Lazy<List<UrlSegmentGroupAdapter>> children;
 
-    private readonly string outlet;
+    private readonly OutletName outlet;
 
     [ObservableProperty]
     private bool isExpanded;
@@ -54,7 +54,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
 
     public required string Outlet
     {
-        get => $"[{(this.outlet == UrlSegmentGroup.PrimaryOutlet ? "primary" : this.outlet)}]";
+        get => $"[{(this.outlet.IsPrimary ? "primary" : this.outlet)}]";
         [MemberNotNull(nameof(outlet))]
         init => this.outlet = value;
     }

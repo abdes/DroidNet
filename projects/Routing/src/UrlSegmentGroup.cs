@@ -13,13 +13,7 @@ using System.Linq;
 /// </summary>
 public class UrlSegmentGroup
 {
-    /// <summary>
-    /// A constant representing the primary outlet identifier. Never hard code
-    /// the primary outlet id.
-    /// </summary>
-    public const string PrimaryOutlet = "";
-
-    private readonly Dictionary<string, UrlSegmentGroup> children = [];
+    private readonly Dictionary<OutletName, UrlSegmentGroup> children = [];
 
     private readonly List<UrlSegment> segments = [];
 
@@ -28,7 +22,7 @@ public class UrlSegmentGroup
     /// </summary>
     /// <param name="segments">The URL segments.</param>
     /// <param name="children">The children of this <see cref="UrlSegmentGroup" />.</param>
-    public UrlSegmentGroup(IEnumerable<UrlSegment> segments, IDictionary<string, UrlSegmentGroup>? children = null)
+    public UrlSegmentGroup(IEnumerable<UrlSegment> segments, IDictionary<OutletName, UrlSegmentGroup>? children = null)
     {
         this.segments.AddRange(segments);
 
@@ -50,7 +44,7 @@ public class UrlSegmentGroup
     /// A read-only dictionary of this <see cref="UrlSegmentGroup" />'s
     /// children.
     /// </value>
-    public IReadOnlyDictionary<string, UrlSegmentGroup> Children => this.children.AsReadOnly();
+    public IReadOnlyDictionary<OutletName, UrlSegmentGroup> Children => this.children.AsReadOnly();
 
     /// <summary>
     /// Gets the children of this <see cref="UrlSegmentGroup" /> with the child
@@ -61,20 +55,20 @@ public class UrlSegmentGroup
     /// children, where the child corresponding to the primary outlet comes
     /// first.
     /// </value>
-    public ReadOnlyCollection<KeyValuePair<string, UrlSegmentGroup>> SortedChildren
+    public ReadOnlyCollection<KeyValuePair<OutletName, UrlSegmentGroup>> SortedChildren
     {
         get
         {
             UrlSegmentGroup? primary = null;
-            if (this.children.TryGetValue(PrimaryOutlet, out var value))
+            if (this.children.TryGetValue(OutletName.Primary, out var value))
             {
                 primary = value;
             }
 
-            var res = this.children.Where(c => c.Key != PrimaryOutlet).ToList();
+            var res = this.children.Where(c => c.Key.IsNotPrimary).ToList();
             if (primary != null)
             {
-                res.Insert(0, new KeyValuePair<string, UrlSegmentGroup>(PrimaryOutlet, primary));
+                res.Insert(0, new KeyValuePair<OutletName, UrlSegmentGroup>(OutletName.Primary, primary));
             }
 
             return res.AsReadOnly();
@@ -143,13 +137,13 @@ public class UrlSegmentGroup
             return this.SerializeSegments();
         }
 
-        var childrenAsString = this.children.OrderBy(pair => pair.Key != PrimaryOutlet)
+        var childrenAsString = this.children.OrderBy(pair => pair.Key.IsNotPrimary)
             .Select(
-                pair => pair.Key == PrimaryOutlet
+                pair => pair.Key.IsPrimary
                     ? string.Concat(pair.Value.ToString())
                     : string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString()))
             .ToList();
-        if (this.children.Count == 1 && this.children.ContainsKey(PrimaryOutlet))
+        if (this.children.Count == 1 && this.children.ContainsKey(OutletName.Primary))
         {
             return string.Concat(this.SerializeSegments(), '/', childrenAsString[0]);
         }
@@ -163,13 +157,13 @@ public class UrlSegmentGroup
             this.segments.Count == 0,
             "The root `UrlSegmentGroup` should not contain segments. Instead, the segments should be in the `children` so they can be associated with a named outlet.");
 
-        var primary = this.children.TryGetValue(PrimaryOutlet, out var primaryChild)
+        var primary = this.children.TryGetValue(OutletName.Primary, out var primaryChild)
             ? primaryChild.ToString()
             : string.Empty;
 
         var nonPrimary = string.Join(
             "//",
-            this.children.Where(pair => pair.Key != PrimaryOutlet)
+            this.children.Where(pair => pair.Key.IsNotPrimary)
                 .Select(pair => string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString())));
 
         return nonPrimary.Length > 0 ? string.Concat(primary, '(', nonPrimary, ')') : primary;

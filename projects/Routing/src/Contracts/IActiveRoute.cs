@@ -62,7 +62,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// usually corresponds to one of the content outlets specified in the
     /// `View` of this route's <see cref="IActiveRouteTreeNode.Parent" />.
     /// </value>
-    string Outlet { get; }
+    OutletName Outlet { get; }
 
     /// <summary>Gets The ViewModel of the route.</summary>
     /// <value>
