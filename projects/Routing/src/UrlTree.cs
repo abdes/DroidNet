@@ -59,7 +59,7 @@ public class UrlTree
     /// </value>
     public bool IsRelative
         => this.Root.Children.Count > 0 &&
-           this.Root.Children.TryGetValue(UrlSegmentGroup.PrimaryOutlet, out var primary) && primary.IsRelative;
+           this.Root.Children.TryGetValue(OutletName.Primary, out var primary) && primary.IsRelative;
 
     /// <summary>
     /// Serializes the <see cref="UrlTree" /> into a string, using

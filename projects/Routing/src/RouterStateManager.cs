@@ -56,7 +56,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
         {
             UrlSegmentGroup = urlTree.Root,
             UrlSegments = Array.Empty<UrlSegment>(),
-            Outlet = UrlSegmentGroup.PrimaryOutlet,
+            Outlet = OutletName.Primary,
             Params = ReadOnlyDictionary<string, string?>.Empty,
             QueryParams = urlTree.QueryParams.AsReadOnly(),
             RouteConfig = new Route()
@@ -67,7 +67,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
             },
         };
 
-        ProcessSegmentGroup(stateRoot, routerConfig, urlTree.Root, UrlSegmentGroup.PrimaryOutlet);
+        ProcessSegmentGroup(stateRoot, routerConfig, urlTree.Root, OutletName.Primary);
 
         return new RouterState(urlTree.ToString(), urlTree, stateRoot);
     }
@@ -76,7 +76,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
         IActiveRoute state,
         Routes config,
         UrlSegmentGroup segmentGroup,
-        string outlet)
+        OutletName outlet)
     {
         if (segmentGroup.Segments.Count == 0 && segmentGroup.Children.Count != 0)
         {
@@ -92,7 +92,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
         Routes config,
         UrlSegmentGroup segmentGroup,
         ReadOnlyCollection<UrlSegment> segments,
-        string outlet)
+        OutletName outlet)
     {
         var matchResult = MatchSegments(state, config, segmentGroup, segments, outlet);
         if (!matchResult.IsMatch)
@@ -148,7 +148,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
         Routes config,
         UrlSegmentGroup segmentGroup,
         ReadOnlyCollection<UrlSegment> segments,
-        string outlet)
+        OutletName outlet)
     {
         IActiveRoute? newState = null;
 

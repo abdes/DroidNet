@@ -84,8 +84,9 @@ public static partial class Program
          * <c>_main</c>.
          */
 
-        // The Main Window is a singleton and its content can be re-assigned
-        // as needed. It is registered with the special target "_main".
+        // The Main Window is a singleton and its content can be re-assigned as
+        // needed. It is registered with a key that corresponding to name of the
+        // special target <see cref="Target.Main" />.
         _ = builder.Services.AddKeyedSingleton<Window, MainWindow>(Target.Main);
 
         _ = builder.Services

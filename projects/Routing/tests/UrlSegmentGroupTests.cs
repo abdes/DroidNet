@@ -43,11 +43,11 @@ public class UrlSegmentGroupTests
     {
         var group = new UrlSegmentGroup(
             [],
-            new Dictionary<string, UrlSegmentGroup>
+            new Dictionary<OutletName, UrlSegmentGroup>
             {
-                { "a", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
-                { "b", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
-                { "c", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { "c", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
             });
 
         var children = group.SortedChildren;
@@ -65,17 +65,17 @@ public class UrlSegmentGroupTests
     {
         var group = new UrlSegmentGroup(
             [],
-            new Dictionary<string, UrlSegmentGroup>
+            new Dictionary<OutletName, UrlSegmentGroup>
             {
-                { "a", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
-                { UrlSegmentGroup.PrimaryOutlet, new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
-                { "b", new UrlSegmentGroup([], new Dictionary<string, UrlSegmentGroup>()) },
+                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { OutletName.Primary, new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
             });
 
         var children = group.SortedChildren;
         var keys = children.Select(c => c.Key).ToList();
 
-        _ = keys.Should().ContainInConsecutiveOrder(UrlSegmentGroup.PrimaryOutlet, "a", "b");
+        _ = keys.Should().ContainInConsecutiveOrder(OutletName.Primary, "a", "b");
     }
 
     /// <summary>
@@ -187,7 +187,7 @@ public class UrlSegmentGroupTests
         var segment2 = MockUrlSegment("bar");
         var group = new UrlSegmentGroup(new[] { segment1, segment2 });
         var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
-        group.AddChild(UrlSegmentGroup.PrimaryOutlet, child);
+        group.AddChild(OutletName.Primary, child);
 
         // Act
         var result = group.ToString();
@@ -206,7 +206,7 @@ public class UrlSegmentGroupTests
         // Arrange
         var group = new UrlSegmentGroup([]);
         var child = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
-        group.AddChild(UrlSegmentGroup.PrimaryOutlet, child);
+        group.AddChild(OutletName.Primary, child);
 
         // Act
         var result = group.ToString();
@@ -244,7 +244,7 @@ public class UrlSegmentGroupTests
         // Arrange
         var group = new UrlSegmentGroup([]);
         var main = new UrlSegmentGroup(new[] { MockUrlSegment("main") });
-        group.AddChild(UrlSegmentGroup.PrimaryOutlet, main);
+        group.AddChild(OutletName.Primary, main);
         var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
         group.AddChild("left", child1);
         var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("bar") });

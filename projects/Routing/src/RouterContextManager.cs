@@ -71,15 +71,15 @@ public class RouterContextManager : IDisposable
 
     /// <summary>
     /// Gets the <see cref="RouterContext" /> instance for the special target
-    /// <c>"_main"</c>.
+    /// <see cref="Target.Main" />.
     /// </summary>
     /// <value>
-    /// The <see cref="RouterContext" /> for the special target <c>"_main"</c>.
+    /// The <see cref="RouterContext" /> for the special target <see cref="Target.Main" />.
     /// </value>
     /// <remarks>
     /// For a certain <see cref="Router" />, there is only one routing context
-    /// for the special target <c>"_main</c>, and within an application, there
-    /// is usually a single top-level router.
+    /// for the special target <see cref="Target.Main" />, and within an
+    /// application, there is usually a single top-level router.
     /// </remarks>
     private RouterContext MainContext => this.lazyMainContext.Value;
 
@@ -105,25 +105,23 @@ public class RouterContextManager : IDisposable
     /// activator.
     /// </para>
     /// </remarks>
-    public RouterContext GetContextForTarget(string? target)
+    public RouterContext GetContextForTarget(Target? target)
     {
-        switch (target)
+        if (target is null || target.IsSelf)
         {
-            case null or Target.Self:
-                // If target is not specified or is Target.Self, then we should
-                // use the current active context, unless there is no active
-                // context yet. In such case, we fall back to the main context.
-                return this.currentContext ?? this.MainContext;
-
-            case Target.Main:
-                return this.MainContext;
-
-            default:
-            {
-                var newContext = this.contextProvider.ContextForTarget(target, this.currentContext);
-                return newContext;
-            }
+            // If target is not specified or is Target.Self, then we should
+            // use the current active context, unless there is no active
+            // context yet. In such case, we fall back to the main context.
+            return this.currentContext ?? this.MainContext;
         }
+
+        if (target.IsMain)
+        {
+            return this.MainContext;
+        }
+
+        var newContext = this.contextProvider.ContextForTarget(target, this.currentContext);
+        return newContext;
     }
 
     /// <inheritdoc />

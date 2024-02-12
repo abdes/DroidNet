@@ -41,7 +41,7 @@ internal static class RelativeUrlTreeResolver
             throw new InvalidOperationException("attempting relative resolution of an absolute url");
         }
 
-        _ = urlTree.Root.Children.TryGetValue(UrlSegmentGroup.PrimaryOutlet, out var primary);
+        _ = urlTree.Root.Children.TryGetValue(OutletName.Primary, out var primary);
         Debug.Assert(primary is not null, "if the url tree is relative, it must have a child for the primary outlet");
 
         var numLevelsUp = 0;
@@ -76,7 +76,7 @@ internal static class RelativeUrlTreeResolver
 
         var root = new UrlSegmentGroup([]);
         root.AddChild(
-            UrlSegmentGroup.PrimaryOutlet,
+            OutletName.Primary,
             new UrlSegmentGroup(resolvedSegments, primary.Children.ToDictionary()));
         return new UrlTree(root, urlTree.QueryParams);
     }

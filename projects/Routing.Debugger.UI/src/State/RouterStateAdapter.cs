@@ -6,7 +6,6 @@ namespace DroidNet.Routing.Debugger.UI.State;
 
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing;
 using DroidNet.Routing.Contracts;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
@@ -47,7 +46,7 @@ public partial class RouterStateAdapter : ObservableObject, ITreeItem<IActiveRou
 
     public string Label => this.IsRoot ? "<root>" : this.Item.ToString() ?? "invalid";
 
-    public bool IsForOutlet => this.Item.Outlet != UrlSegmentGroup.PrimaryOutlet;
+    public bool IsForOutlet => this.Item.Outlet.IsNotPrimary;
 
     public bool HasChildren => this.ChildrenCount > 0;
 

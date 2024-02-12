@@ -14,7 +14,7 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     /// <inheritdoc />
     public void LoadContent(object viewModel, string? outletName = null)
     {
-        outletName ??= nameof(Router.Outlet.Primary);
+        outletName ??= nameof(OutletName.Primary);
         if (!this.Outlets.TryGetValue(outletName, out _))
         {
             throw new ArgumentException($"unknown outlet name {outletName}", nameof(outletName));
@@ -26,13 +26,13 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
 
     public object? GetViewModelForOutlet(string? outletName)
     {
-        outletName ??= Router.Outlet.Primary;
+        outletName ??= OutletName.Primary;
         return this.Outlets.GetValueOrDefault(outletName);
     }
 
     public string GetPropertyNameForOutlet(string? outletName)
     {
-        outletName ??= Router.Outlet.Primary;
+        outletName ??= OutletName.Primary;
         if (this.Outlets.ContainsKey(outletName))
         {
             return $"{outletName}ViewModel";

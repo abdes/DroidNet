@@ -53,7 +53,7 @@ public class Routes : List<Route>
     /// specific children. We want the routes for the child's outlet to have a chance
     /// to match first.
     /// </remarks>
-    public Routes SortedByMatchingOutlet(string outlet)
+    public Routes SortedByMatchingOutlet(OutletName outlet)
     {
         var sortedRoutes = new Routes([]);
 
