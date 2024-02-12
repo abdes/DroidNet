@@ -15,7 +15,7 @@ using Microsoft.UI.Xaml.Data;
 /// </summary>
 public partial class App
 {
-    private readonly Router router;
+    private readonly IRouter router;
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
 
@@ -44,7 +44,7 @@ public partial class App
     /// </remarks>
     public App(
         IHostApplicationLifetime lifetime,
-        Router router,
+        IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter)
     {

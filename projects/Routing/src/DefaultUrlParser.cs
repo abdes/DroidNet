@@ -6,7 +6,7 @@ namespace DroidNet.Routing;
 
 using System;
 using System.Diagnostics;
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 
 /// <summary>Represents the type of parameter in a URL.</summary>
 internal enum ParamType
@@ -82,7 +82,7 @@ public class DefaultUrlParser : IUrlParser
     /// <param name="url">The URL string to parse.</param>
     /// <returns>The <see cref="UrlTree" /> representation.</returns>
     /// <exception cref="UriFormatException">if the URL string is malformed.</exception>
-    public UrlTree Parse(string url)
+    public IUrlTree Parse(string url)
     {
         var remaining = url.AsSpan();
         try
@@ -134,8 +134,8 @@ public class DefaultUrlParser : IUrlParser
         var root = this.ParseChild(ref remaining, absolute);
         return new UrlSegmentGroup(
             [],
-            new Dictionary<OutletName, UrlSegmentGroup>(
-                [new KeyValuePair<OutletName, UrlSegmentGroup>(OutletName.Primary, root)]));
+            new Dictionary<OutletName, IUrlSegmentGroup>(
+                [new KeyValuePair<OutletName, IUrlSegmentGroup>(OutletName.Primary, root)]));
     }
 
     /// <summary>
@@ -207,7 +207,7 @@ public class DefaultUrlParser : IUrlParser
             !remaining.PeekStartsWith('/') || remaining.PeekStartsWith("//"),
             "all '/' characters should have been consumed");
 
-        var children = new Dictionary<OutletName, UrlSegmentGroup>();
+        var children = new Dictionary<OutletName, IUrlSegmentGroup>();
 
         if (remaining.PeekStartsWith("("))
         {
@@ -339,9 +339,9 @@ public class DefaultUrlParser : IUrlParser
         parameters[decodedKey] = decodedValue;
     }
 
-    private Dictionary<OutletName, UrlSegmentGroup> ParseParens(bool allowPrimary, ref ReadOnlySpan<char> remaining)
+    private Dictionary<OutletName, IUrlSegmentGroup> ParseParens(bool allowPrimary, ref ReadOnlySpan<char> remaining)
     {
-        var segmentGroups = new Dictionary<OutletName, UrlSegmentGroup>();
+        var segmentGroups = new Dictionary<OutletName, IUrlSegmentGroup>();
         remaining.Capture('(');
 
         var closed = false;

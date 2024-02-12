@@ -10,10 +10,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
-/// Adapter for a <see cref="UrlSegmentGroup" /> so it can be used inside the
+/// Adapter for a <see cref="IUrlSegmentGroup" /> so it can be used inside the
 /// <see cref="UrlTreeView" /> control.
 /// </summary>
-public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSegmentGroup>
+public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<IUrlSegmentGroup>
 {
     private readonly Lazy<List<UrlSegmentGroupAdapter>> children;
 
@@ -22,7 +22,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
     [ObservableProperty]
     private bool isExpanded;
 
-    public UrlSegmentGroupAdapter(UrlSegmentGroup item)
+    public UrlSegmentGroupAdapter(IUrlSegmentGroup item)
     {
         this.Item = item;
         this.children = new Lazy<List<UrlSegmentGroupAdapter>>(
@@ -46,7 +46,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
             });
     }
 
-    public ReadOnlyCollection<UrlSegment> Segments => this.Item.Segments;
+    public ReadOnlyCollection<IUrlSegment> Segments => this.Item.Segments;
 
     public required int IndexInItems { get; init; }
 
@@ -59,9 +59,9 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
         init => this.outlet = value;
     }
 
-    public UrlSegmentGroup Item { get; }
+    public IUrlSegmentGroup Item { get; }
 
-    public string Label => this.Item.Parent is null ? " / " : this.Item.ToString();
+    public string Label => this.Item.Parent is null ? " / " : this.Item.ToString() ?? string.Empty;
 
     public bool HasChildren => this.ChildrenCount > 0;
 
@@ -71,7 +71,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<UrlSeg
 
     public List<UrlSegmentGroupAdapter> Children => this.children.Value;
 
-    IEnumerable<ITreeItem<UrlSegmentGroup>> ITreeItem<UrlSegmentGroup>.Children => this.children.Value;
+    IEnumerable<ITreeItem<IUrlSegmentGroup>> ITreeItem<IUrlSegmentGroup>.Children => this.children.Value;
 
     IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
 }

@@ -5,6 +5,7 @@
 namespace DroidNet.Routing;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Routing.Detail;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;

@@ -20,9 +20,9 @@ public sealed partial class TopNavBar
     // TODO(abdes): avoid using Ioc.Default, set router in control
     private static readonly DependencyProperty RouterProperty = DependencyProperty.Register(
         nameof(Router),
-        typeof(Router),
+        typeof(IRouter),
         typeof(TopNavBar),
-        new PropertyMetadata(Ioc.Default.GetRequiredService<Router>()));
+        new PropertyMetadata(Ioc.Default.GetRequiredService<IRouter>()));
 
     [ObservableProperty]
     private string url;
@@ -38,9 +38,9 @@ public sealed partial class TopNavBar
         // TODO(abdes): Register for router url changes to update the Url property
     }
 
-    public Router Router
+    public IRouter Router
     {
-        get => (Router)this.GetValue(RouterProperty);
+        get => (IRouter)this.GetValue(RouterProperty);
         set
         {
             this.SetValue(RouterProperty, value);

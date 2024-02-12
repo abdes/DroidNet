@@ -6,72 +6,10 @@ namespace DroidNet.Routing;
 
 using System.Diagnostics;
 using System.Reactive.Linq;
-using DroidNet.Routing.Contracts;
 using DroidNet.Routing.Events;
 using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
 
-/// <summary>
-/// The central building block of router based navigation in the application.
-/// </summary>
-/// <remarks>
-/// An MVVM application is typically structured as a tree of view models, each
-/// of which is rendered via corresponding views. In a windowed desktop
-/// environment, these views are displayed in windows. While many applications
-/// feature a single main window, more complex applications can open and manage
-/// multiple windows simultaneously. Generally, navigation within the
-/// application occurs within the same window. However, there are instances
-/// where navigation to a different window is necessary, such as when opening a
-/// document in a separate window.
-/// <para>
-/// The router facilitates navigation between view models within a specified
-/// <see cref="RouterContext">rendering context</see>, which determines where
-/// the corresponding view should be rendered. In a windowed application, this
-/// context could be the main window, a new window, or the currently active
-/// window.
-/// </para>
-/// <para>
-/// At any moment, the tree of view models loaded in the application represents
-/// the current <see cref="RouterState">router state</see>, and the URL is
-/// nothing else than the serialized form of the router state. For instance,
-/// when the application starts and its main window displays the 'Home' view
-/// model, the application state corresponds to a specific router state. In this
-/// state, the <see cref="RouterContext" /> targets the main window, and the
-/// 'Home' view is loaded as content inside an 'outlet' in that window.
-/// <para>
-/// </para>
-/// </para>
-/// <para>
-/// The primary role of the Router is to facilitate the construction of the view
-/// model tree in the application and enable navigation among them. It achieves
-/// this by allowing the application developer to specify, via a
-/// <see cref="Routes">configuration object</see>, which view models to display
-/// for a given URL. For example, the routes configuration for a simple
-/// application might look like this:
-/// </para>
-/// <code>
-/// private static Routes MakeRoutes() => new(
-/// [
-///     new Route
-///     {
-///         Path = "Home",
-///         ViewModelType = typeof(HomeViewModel),
-///         Children = new Routes(
-///         [
-///             new Route
-///             {
-///                 Path = "Documentation",
-///                 ViewModelType = typeof(DocBrowserViewModel),
-///             },
-///             new Route
-///             {
-///                 Path = "Tutorials",
-///                 ViewModelType = typeof(TutorialsViewModel),
-///             },
-///         ]),
-///     },
-/// ]);
-/// </code>
-/// </remarks>
+/// <inheritdoc />
 public class Router : IRouter
 {
     private readonly IRouterStateManager states;
@@ -98,7 +36,7 @@ public class Router : IRouter
     /// <see cref="UrlTree" />.
     /// </param>
     public Router(
-        Routes config,
+        IRoutes config,
         IRouterStateManager states,
         RouterContextManager contextManager,
         IRouteActivator routeActivator,
@@ -129,19 +67,16 @@ public class Router : IRouter
         _ = this.Events.Subscribe(e => Debug.WriteLine($"========== {e}"));
     }
 
-    /// <summary>Gets the configuration for this router.</summary>
-    /// <value>
-    /// A <see cref="Routes" /> configuration, usually injected into the Router
-    /// via the dependency injector.
-    /// </value>
-    public Routes Config { get; }
+    /// <inheritdoc />
+    public IRoutes Config { get; }
 
     public IObservable<RouterEvent> Events { get; }
 
+    /// <inheritdoc />
     public void Navigate(string url, NavigationOptions? options = null) =>
         this.Navigate(this.urlSerializer.Parse(url), options);
 
-    public UrlTree? GetCurrentUrlTreeForTarget(string target)
+    public IUrlTree? GetCurrentUrlTreeForTarget(string target)
         => this.contextManager.GetContextForTarget(target).State?.UrlTree;
 
     public IActiveRoute? GetCurrentStateForTarget(string target)
@@ -160,7 +95,7 @@ public class Router : IRouter
         // TODO(abdes) implement OptimizeRouteActivation
         _ = context;
 
-    private void Navigate(UrlTree urlTree, NavigationOptions? options = null)
+    private void Navigate(IUrlTree urlTree, NavigationOptions? options = null)
     {
         options ??= new NavigationOptions();
         try

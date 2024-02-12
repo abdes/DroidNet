@@ -57,8 +57,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\Hosting\src\Hosting.csproj" />
-        <ProjectReference Include="..\..\Routing\src\Routing.csproj" />
-        <ProjectReference Include="..\..\Routing.UI\src\Routing.UI.csproj" />
+        <ProjectReference Include="..\..\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="..\..\Routing.Debugger.UI\src\Routing.Debugger.UI.csproj" />
 
         <ProjectReference Include="..\..\Routing.Generators\src\Routing.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

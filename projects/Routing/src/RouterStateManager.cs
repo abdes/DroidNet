@@ -6,7 +6,7 @@ namespace DroidNet.Routing;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 using DroidNet.Routing.Utils;
 
 // TODO(abdes): state manager with history
@@ -19,9 +19,9 @@ using DroidNet.Routing.Utils;
 /// The router <see cref="Router.Config" /> against which the url tree segment
 /// groups will be matched.
 /// </param>
-public class RouterStateManager(Routes routerConfig) : IRouterStateManager
+public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
 {
-    private interface IExtendedMatchResult : Route.IMatchResult
+    private interface IExtendedMatchResult : IMatchResult
     {
         IActiveRoute? LastActiveRoute { get; }
     }
@@ -50,7 +50,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
     /// first match always wins. Order matters. Once all segments of the URL
     /// have been consumed, we say that a match has occurred.
     /// </remarks>
-    public IRouterState CreateFromUrlTree(UrlTree urlTree)
+    public IRouterState CreateFromUrlTree(IUrlTree urlTree)
     {
         var stateRoot = new ActiveRoute()
         {
@@ -69,13 +69,13 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
 
         ProcessSegmentGroup(stateRoot, routerConfig, urlTree.Root, OutletName.Primary);
 
-        return new RouterState(urlTree.ToString(), urlTree, stateRoot);
+        return new RouterState(urlTree.ToString() ?? string.Empty, urlTree, stateRoot);
     }
 
     private static void ProcessSegmentGroup(
         IActiveRoute state,
-        Routes config,
-        UrlSegmentGroup segmentGroup,
+        IRoutes config,
+        IUrlSegmentGroup segmentGroup,
         OutletName outlet)
     {
         if (segmentGroup.Segments.Count == 0 && segmentGroup.Children.Count != 0)
@@ -89,9 +89,9 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
 
     private static void ProcessSegments(
         IActiveRoute state,
-        Routes config,
-        UrlSegmentGroup segmentGroup,
-        ReadOnlyCollection<UrlSegment> segments,
+        IRoutes config,
+        IUrlSegmentGroup segmentGroup,
+        ReadOnlyCollection<IUrlSegment> segments,
         OutletName outlet)
     {
         var matchResult = MatchSegments(state, config, segmentGroup, segments, outlet);
@@ -114,7 +114,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
 
     private static void ProcessChildren(
         IActiveRoute state,
-        UrlSegmentGroup segmentGroup)
+        IUrlSegmentGroup segmentGroup)
     {
         var children = segmentGroup.SortedChildren;
         if (children.Count == 0)
@@ -145,9 +145,9 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
     /// </remarks>
     private static IExtendedMatchResult MatchSegments(
         IActiveRoute state,
-        Routes config,
-        UrlSegmentGroup segmentGroup,
-        ReadOnlyCollection<UrlSegment> segments,
+        IRoutes config,
+        IUrlSegmentGroup segmentGroup,
+        ReadOnlyCollection<IUrlSegment> segments,
         OutletName outlet)
     {
         IActiveRoute? newState = null;
@@ -184,7 +184,7 @@ public class RouterStateManager(Routes routerConfig) : IRouterStateManager
                 Params = parameters,
                 QueryParams = state.QueryParams,
                 RouteConfig = route,
-                UrlSegments = new List<UrlSegment>(matchResult.Consumed).AsReadOnly(),
+                UrlSegments = new List<IUrlSegment>(matchResult.Consumed).AsReadOnly(),
                 UrlSegmentGroup = segmentGroup,
             };
             if (newState == null)

@@ -5,7 +5,6 @@
 namespace DroidNet.Routing.Headless;
 
 using System;
-using DroidNet.Routing.Contracts;
 
 internal class HeadlessContextProvider : IContextProvider
 {
@@ -25,6 +24,6 @@ internal class HeadlessContextProvider : IContextProvider
 
     public void ActivateContext(RouterContext context) => throw new NotImplementedException();
 
-    public RouterContext ContextForTarget(string target, RouterContext? currentContext = null)
+    public RouterContext ContextForTarget(Target target, RouterContext? currentContext = null)
         => throw new NotImplementedException();
 }

@@ -8,9 +8,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
-/// Adapter for a <see cref="Route" /> so it can be used inside the <see cref="RoutesView" /> control.
+/// Adapter for a <see cref="IRoute" /> so it can be used inside the <see cref="RoutesView" /> control.
 /// </summary>
-public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
+public partial class RouteAdapter : ObservableObject, ITreeItem<IRoute>
 {
     public const string RootPath = "__root";
 
@@ -19,7 +19,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
     [ObservableProperty]
     private bool isExpanded;
 
-    public RouteAdapter(Route item)
+    public RouteAdapter(IRoute item)
     {
         this.Item = item;
         this.children = new Lazy<List<RouteAdapter>>(
@@ -44,7 +44,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
 
     public required int Level { get; init; }
 
-    public Route Item { get; }
+    public IRoute Item { get; }
 
     public string Label
         => this.IsRoot
@@ -53,7 +53,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
 
     public string Outlet => this.Item.Outlet;
 
-    public string ExtendedLabel => this.Item.ToString();
+    public string ExtendedLabel => this.Item.ToString() ?? string.Empty;
 
     public bool IsForOutlet => this.Item.Outlet.IsNotPrimary;
 
@@ -63,7 +63,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<Route>
 
     public string ViewModelType => this.Item.ViewModelType?.Name ?? "None";
 
-    IEnumerable<ITreeItem<Route>> ITreeItem<Route>.Children => this.children.Value;
+    IEnumerable<ITreeItem<IRoute>> ITreeItem<IRoute>.Children => this.children.Value;
 
     IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
 

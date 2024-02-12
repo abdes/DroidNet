@@ -5,7 +5,6 @@
 namespace DroidNet.Routing;
 
 using System.Diagnostics;
-using DroidNet.Routing.Contracts;
 
 /// <summary>
 /// Manages <see cref="RouterContext" /> instances used by the router.

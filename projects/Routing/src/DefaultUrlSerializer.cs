@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing;
 
-using DroidNet.Routing.Contracts;
-
 /// <summary>
 /// The default implementation of <see cref="IUrlSerializer" />.
 /// </summary>
@@ -38,10 +36,10 @@ public class DefaultUrlSerializer(IUrlParser parser) : IUrlSerializer
     public static DefaultUrlSerializer Instance => Lazy.Value;
 
     /// <inheritdoc />
-    public UrlTree Parse(string url) => parser.Parse(url);
+    public IUrlTree Parse(string url) => parser.Parse(url);
 
     /// <inheritdoc />
-    public string Serialize(UrlTree tree)
+    public string Serialize(IUrlTree tree)
     {
         var path = tree.Root.ToString();
         var queryParams = SerializeQueryParams(tree.QueryParams);

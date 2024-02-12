@@ -19,9 +19,9 @@ public partial class UrlTreeViewModel : TreeViewModelBase
     /// Initializes a new instance of the <see cref="UrlTreeViewModel" /> class.
     /// </summary>
     /// <param name="router">
-    /// The <see cref="Router" />, injected, used to fetch the current URL tree.
+    /// The router, injected, used to fetch the current URL tree.
     /// </param>
-    public UrlTreeViewModel(Router router)
+    public UrlTreeViewModel(IRouter router)
     {
         var urlTree = router.GetCurrentUrlTreeForTarget(Target.Self);
         if (urlTree == null)
