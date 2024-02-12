@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing.Headless;
 
-using DroidNet.Routing.Contracts;
-
 public class HeadlessRouteActivator(IServiceProvider serviceProvider) : AbstractRouteActivator(serviceProvider)
 {
     /// <inheritdoc />

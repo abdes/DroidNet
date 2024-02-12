@@ -4,7 +4,6 @@
 
 namespace DroidNet.Routing.Debugger;
 
-using DroidNet.Routing.UI.Contracts;
 using DroidNet.Routing.View;
 using Microsoft.UI.Xaml;
 
@@ -50,7 +49,7 @@ public sealed partial class MainWindow : IOutletContainer
     }
 
     /// <inheritdoc />
-    public void LoadContent(object viewModel, string? outletName = null)
+    public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         var viewForShell = this.viewLocator.ResolveView(viewModel) ??
                            throw new MissingViewException(viewModel.GetType());

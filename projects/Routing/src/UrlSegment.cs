@@ -19,7 +19,7 @@ namespace DroidNet.Routing;
 /// </para>
 /// </remarks>
 /// <seealso cref="UrlSegmentGroup" />
-public class UrlSegment
+public class UrlSegment : IUrlSegment
 {
     private readonly Dictionary<string, string?> parameters = [];
 

@@ -38,12 +38,13 @@
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
+        <PackageReference Include="System.Reactive" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
-        <ProjectReference Include="..\..\Routing\src\Routing.csproj" />
-        <ProjectReference Include="..\..\Routing.UI\src\Routing.UI.csproj" />
+        <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="..\..\Routing.Controls\src\Routing.Controls.csproj" />
 
         <ProjectReference Include="..\..\Routing.Generators\src\Routing.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->

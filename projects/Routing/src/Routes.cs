@@ -4,13 +4,13 @@
 
 namespace DroidNet.Routing;
 
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 
 /// <summary>
 /// A list of routes used to configure routing in a desktop application.
 /// </summary>
 /// <seealso cref="List{T}" />
-public class Routes : List<Route>
+public class Routes : List<IRoute>, IRoutes
 {
     private readonly IRouteValidator routeValidator;
 
@@ -53,7 +53,7 @@ public class Routes : List<Route>
     /// specific children. We want the routes for the child's outlet to have a chance
     /// to match first.
     /// </remarks>
-    public Routes SortedByMatchingOutlet(OutletName outlet)
+    public IRoutes SortedByMatchingOutlet(OutletName outlet)
     {
         var sortedRoutes = new Routes([]);
 
@@ -77,7 +77,7 @@ public class Routes : List<Route>
     /// When the <paramref name="route" /> validation fails.
     /// </exception>
     /// <seealso cref="ValidateRoute" />
-    public new void Add(Route route)
+    public void Add(Route route)
     {
         this.ValidateRoute(route);
         base.Add(route);
@@ -98,7 +98,7 @@ public class Routes : List<Route>
     /// </exception>
     /// <seealso cref="Add" />
     /// <seealso cref="ValidateRoute" />
-    public new void AddRange(IEnumerable<Route> routes)
+    public void AddRange(IEnumerable<Route> routes)
     {
         foreach (var route in routes)
         {

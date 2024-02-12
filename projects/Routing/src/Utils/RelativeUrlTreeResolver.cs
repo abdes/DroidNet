@@ -5,7 +5,7 @@
 namespace DroidNet.Routing.Utils;
 
 using System.Diagnostics;
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 
 /// <summary>
 /// Utility class for resolving a <see cref="UrlTree" /> relative to a
@@ -34,7 +34,7 @@ internal static class RelativeUrlTreeResolver
     /// A new absolute <see cref="UrlTree" />, but still referencing the
     /// original branches from <paramref name="urlTree" />.
     /// </returns>
-    public static UrlTree ResolveUrlTreeRelativeTo(UrlTree urlTree, IActiveRoute relativeTo)
+    public static UrlTree ResolveUrlTreeRelativeTo(IUrlTree urlTree, IActiveRoute relativeTo)
     {
         if (!urlTree.IsRelative)
         {
@@ -57,7 +57,7 @@ internal static class RelativeUrlTreeResolver
             }
         }
 
-        var resolvedSegments = new List<UrlSegment>();
+        var resolvedSegments = new List<IUrlSegment>();
 
         var origin = relativeTo;
         while (origin.Parent != null)

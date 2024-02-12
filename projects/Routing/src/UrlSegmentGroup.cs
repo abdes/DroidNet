@@ -11,18 +11,20 @@ using System.Linq;
 /// <summary>
 /// Represents a parsed sequence of URL segments, forming a path.
 /// </summary>
-public class UrlSegmentGroup
+public class UrlSegmentGroup : IUrlSegmentGroup
 {
-    private readonly Dictionary<OutletName, UrlSegmentGroup> children = [];
+    private readonly Dictionary<OutletName, IUrlSegmentGroup> children = [];
 
-    private readonly List<UrlSegment> segments = [];
+    private readonly List<IUrlSegment> segments = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlSegmentGroup" /> class.
     /// </summary>
     /// <param name="segments">The URL segments.</param>
     /// <param name="children">The children of this <see cref="UrlSegmentGroup" />.</param>
-    public UrlSegmentGroup(IEnumerable<UrlSegment> segments, IDictionary<OutletName, UrlSegmentGroup>? children = null)
+    public UrlSegmentGroup(
+        IEnumerable<IUrlSegment> segments,
+        IDictionary<OutletName, IUrlSegmentGroup>? children = null)
     {
         this.segments.AddRange(segments);
 
@@ -44,7 +46,7 @@ public class UrlSegmentGroup
     /// A read-only dictionary of this <see cref="UrlSegmentGroup" />'s
     /// children.
     /// </value>
-    public IReadOnlyDictionary<OutletName, UrlSegmentGroup> Children => this.children.AsReadOnly();
+    public IReadOnlyDictionary<OutletName, IUrlSegmentGroup> Children => this.children.AsReadOnly();
 
     /// <summary>
     /// Gets the children of this <see cref="UrlSegmentGroup" /> with the child
@@ -55,11 +57,11 @@ public class UrlSegmentGroup
     /// children, where the child corresponding to the primary outlet comes
     /// first.
     /// </value>
-    public ReadOnlyCollection<KeyValuePair<OutletName, UrlSegmentGroup>> SortedChildren
+    public ReadOnlyCollection<KeyValuePair<OutletName, IUrlSegmentGroup>> SortedChildren
     {
         get
         {
-            UrlSegmentGroup? primary = null;
+            IUrlSegmentGroup? primary = null;
             if (this.children.TryGetValue(OutletName.Primary, out var value))
             {
                 primary = value;
@@ -68,7 +70,7 @@ public class UrlSegmentGroup
             var res = this.children.Where(c => c.Key.IsNotPrimary).ToList();
             if (primary != null)
             {
-                res.Insert(0, new KeyValuePair<OutletName, UrlSegmentGroup>(OutletName.Primary, primary));
+                res.Insert(0, new KeyValuePair<OutletName, IUrlSegmentGroup>(OutletName.Primary, primary));
             }
 
             return res.AsReadOnly();
@@ -84,7 +86,7 @@ public class UrlSegmentGroup
     /// is added as a child to another <see cref="UrlSegmentGroup" />.
     /// </remarks>
     /// <value>The parent <see cref="UrlSegmentGroup" />.</value>
-    public UrlSegmentGroup? Parent { get; private set; }
+    public IUrlSegmentGroup? Parent { get; private set; }
 
     /// <summary>
     /// Gets the segments of this <see cref="UrlSegmentGroup" />.
@@ -93,7 +95,7 @@ public class UrlSegmentGroup
     /// A read-only collection of this <see cref="UrlSegmentGroup" />'s
     /// segments.
     /// </value>
-    public ReadOnlyCollection<UrlSegment> Segments => this.segments.AsReadOnly();
+    public ReadOnlyCollection<IUrlSegment> Segments => this.segments.AsReadOnly();
 
     /// <summary>
     /// Gets a value indicating whether this segment group is relative (i.e.
@@ -111,10 +113,10 @@ public class UrlSegmentGroup
     /// </summary>
     /// <param name="outlet">The outlet name.</param>
     /// <param name="child">The child <see cref="UrlSegmentGroup" />.</param>
-    public void AddChild(string outlet, UrlSegmentGroup child)
+    public void AddChild(string outlet, IUrlSegmentGroup child)
     {
         this.children.Add(outlet, child);
-        child.Parent = this;
+        ((UrlSegmentGroup)child).Parent = this;
     }
 
     /// <summary>
@@ -158,7 +160,7 @@ public class UrlSegmentGroup
             "The root `UrlSegmentGroup` should not contain segments. Instead, the segments should be in the `children` so they can be associated with a named outlet.");
 
         var primary = this.children.TryGetValue(OutletName.Primary, out var primaryChild)
-            ? primaryChild.ToString()
+            ? primaryChild.ToString() ?? string.Empty
             : string.Empty;
 
         var nonPrimary = string.Join(

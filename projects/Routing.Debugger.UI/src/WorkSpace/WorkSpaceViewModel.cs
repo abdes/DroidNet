@@ -8,8 +8,6 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Detail;
-using DroidNet.Routing.Contracts;
-using DroidNet.Routing.UI.Contracts;
 
 #pragma warning disable IDE0001 // Simplify Names
 #pragma warning restore IDE0001 // Simplify Names
@@ -28,9 +26,9 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
     public IDocker Docker { get; }
 
-    public void LoadContent(object viewModel, string? outletName = null)
+    public void LoadContent(object viewModel, OutletName? outletName = null)
     {
-        if (outletName is null || outletName.Equals(OutletName.Primary, StringComparison.Ordinal))
+        if (outletName is null || outletName.IsPrimary)
         {
             throw new InvalidOperationException(
                 $"illegal outlet name {outletName} used for a dockable; cannot be null or `{OutletName.Primary}`.");

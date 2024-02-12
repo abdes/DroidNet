@@ -30,7 +30,7 @@ public class RouteTests
         this.Group = new UrlSegmentGroup(this.Segments);
     }
 
-    private List<UrlSegment> Segments { get; }
+    private List<IUrlSegment> Segments { get; }
 
     private UrlSegmentGroup Group { get; }
 
@@ -258,7 +258,7 @@ public class RouteTests
     [TestMethod]
     public void Matcher_WhenSet_IsUsedForMatching()
     {
-        var matcherMock = new Mock<Route.PathMatcher>();
+        var matcherMock = new Mock<IRoute.PathMatcher>();
         var route = new Route
         {
             Path = "test",

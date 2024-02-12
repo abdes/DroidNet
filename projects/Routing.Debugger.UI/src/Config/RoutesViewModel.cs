@@ -4,24 +4,35 @@
 
 namespace DroidNet.Routing.Debugger.UI.Config;
 
+using System;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 public class RoutesViewModel : TreeViewModelBase
 {
-    public RoutesViewModel(Routes config)
+    public RoutesViewModel(IRoutes config)
     {
-        var configRoot = new Route()
-        {
-            Path = RouteAdapter.RootPath,
-            Children = config,
-        };
-
+        var configRoot = new RootNode(config);
         this.Root = new RouteAdapter(configRoot)
         {
             Level = 0,
         };
     }
 
-    public override string? ToString() => nameof(RoutesViewModel);
+    public override string ToString() => nameof(RoutesViewModel);
+
+    private sealed class RootNode(IRoutes config) : IRoute
+    {
+        public PathMatch MatchMethod => throw new NotImplementedException();
+
+        public string? Path => RouteAdapter.RootPath;
+
+        public IRoute.PathMatcher Matcher => throw new NotImplementedException();
+
+        public Type? ViewModelType => null;
+
+        public OutletName Outlet => OutletName.Primary;
+
+        public IRoutes Children => config;
+    }
 }

@@ -6,7 +6,6 @@ namespace DroidNet.Routing.Debugger.UI.State;
 
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing.Contracts;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>

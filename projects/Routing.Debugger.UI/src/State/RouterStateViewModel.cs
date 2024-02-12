@@ -7,10 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.State;
 using System.Diagnostics;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
-/// <summary>ViewModel for the <see cref="RouterState" />.</summary>
+/// <summary>ViewModel for the <see cref="IRouterState" />.</summary>
 public class RouterStateViewModel : TreeViewModelBase
 {
-    public RouterStateViewModel(Router router)
+    public RouterStateViewModel(IRouter router)
     {
         var stateRoot = router.GetCurrentStateForTarget(Target.Self);
         Debug.Assert(stateRoot is not null, "stateRoot can not be null in a view model");

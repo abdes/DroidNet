@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing;
 
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 
 /// <summary>
 /// Represents the context in which a navigation is taking place.
@@ -14,19 +14,12 @@ using DroidNet.Routing.Contracts;
 /// loaded.
 /// </param>
 /// <seealso cref="Target" />
-public class RouterContext(Target target)
+public class RouterContext(Target target) : IRouterContext
 {
+    /// <inheritdoc />
+    public Target Target { get; } = target;
+
     /// <summary>Gets or sets the router's internal state for this navigation context.</summary>
     /// <value>The internal <see cref="RouterState" /> for this context.</value>
     internal IRouterState? State { get; set; }
-
-    /// <summary>
-    /// Gets the name of the navigation target where the root content should be
-    /// loaded.
-    /// </summary>
-    /// <value>
-    /// The name of the navigation target where the root content should be
-    /// loaded.
-    /// </value>
-    protected Target Target { get; } = target;
 }

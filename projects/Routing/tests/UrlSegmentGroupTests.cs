@@ -43,11 +43,11 @@ public class UrlSegmentGroupTests
     {
         var group = new UrlSegmentGroup(
             [],
-            new Dictionary<OutletName, UrlSegmentGroup>
+            new Dictionary<OutletName, IUrlSegmentGroup>
             {
-                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
-                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
-                { "c", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
+                { "c", new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
             });
 
         var children = group.SortedChildren;
@@ -65,11 +65,11 @@ public class UrlSegmentGroupTests
     {
         var group = new UrlSegmentGroup(
             [],
-            new Dictionary<OutletName, UrlSegmentGroup>
+            new Dictionary<OutletName, IUrlSegmentGroup>
             {
-                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
-                { OutletName.Primary, new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
-                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, UrlSegmentGroup>()) },
+                { "a", new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
+                { OutletName.Primary, new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
+                { "b", new UrlSegmentGroup([], new Dictionary<OutletName, IUrlSegmentGroup>()) },
             });
 
         var children = group.SortedChildren;

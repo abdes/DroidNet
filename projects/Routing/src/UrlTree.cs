@@ -12,7 +12,7 @@ using System.Diagnostics;
 /// representation of the <see cref="Router" /> state, the URL is a serialized
 /// representation of that state.
 /// </remarks>
-public class UrlTree
+public class UrlTree : IUrlTree
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlTree" /> class.
@@ -40,7 +40,7 @@ public class UrlTree
     /// Gets the root <see cref="UrlSegmentGroup" /> of the <see cref="UrlTree" />.
     /// </summary>
     /// <value>The root <see cref="UrlSegmentGroup" />.</value>
-    public UrlSegmentGroup Root { get; }
+    public IUrlSegmentGroup Root { get; }
 
     /// <summary>Gets the query parameters in this URL tree.</summary>
     /// <value>

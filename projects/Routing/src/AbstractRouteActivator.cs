@@ -5,7 +5,7 @@
 namespace DroidNet.Routing;
 
 using System.Diagnostics;
-using DroidNet.Routing.Contracts;
+using DroidNet.Routing.Detail;
 
 /// <summary>
 /// Abstract route activator to just provide an implementation for
