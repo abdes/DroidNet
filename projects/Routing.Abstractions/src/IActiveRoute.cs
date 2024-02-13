@@ -20,7 +20,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// matched by this route. For example if the route is `/users/:id`, then
     /// the list will contain two segments `users` and `:id`.
     /// </value>
-    IReadOnlyList<IUrlSegment> UrlSegments { get; init; }
+    IReadOnlyList<IUrlSegment> UrlSegments { get; }
 
     /// <summary>Gets the parameters for this route.</summary>
     /// <remarks>
@@ -43,7 +43,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// <value>
     /// A read-only dictionary of the combined parameters in this route.
     /// </value>
-    IReadOnlyDictionary<string, string?> Params { get; init; }
+    IReadOnlyDictionary<string, string?> Params { get; }
 
     /// <summary>
     /// Gets the query parameters. Query parameters are shared by all routes in
@@ -51,7 +51,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// navigation URL.
     /// </summary>
     /// <value>A read-only dictionary of all query parameters.</value>
-    IReadOnlyDictionary<string, string?> QueryParams { get; init; }
+    IReadOnlyDictionary<string, string?> QueryParams { get; }
 
     /// <summary>
     /// Gets the name of the outlet where the `ViewModel for this
@@ -79,7 +79,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// <remarks>
     /// Provided mostly for debugging and troubleshooting.
     /// </remarks>
-    IRoute RouteConfig { get; init; }
+    IRoute RouteConfig { get; }
 }
 
 /// <summary>

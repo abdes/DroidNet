@@ -21,7 +21,7 @@ internal sealed class RootDockGroup : DockGroup
         if (!this.center.IsEmpty)
         {
             throw new InvalidOperationException(
-                $"the root center group is already populated, dock relative to its content");
+                "the root center group is already populated, dock relative to its content");
         }
 
         this.center.AddDock(dock);

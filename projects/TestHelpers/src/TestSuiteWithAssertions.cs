@@ -32,7 +32,7 @@ public abstract class TestSuiteWithAssertions : IDisposable
         _ = Trace.Listeners.Add(this.TraceListener);
     }
 
-    protected DebugAssertUnitTestTraceListener TraceListener { get; private set; } = new();
+    protected DebugAssertUnitTestTraceListener TraceListener { get; }
 
     /// <inheritdoc />
     public void Dispose()
