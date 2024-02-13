@@ -11,7 +11,7 @@ using DroidNet.Routing.Generators;
 /// A simple welcome page used as a placeholder for the application main view
 /// inside the <seealso cref="ShellView" />.
 /// </summary>
-[ViewModel(typeof(ShellViewModel))]
+[ViewModel(typeof(WelcomeViewModel))]
 public sealed partial class WelcomeView
 {
     public WelcomeView() => this.InitializeComponent();
