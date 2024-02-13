@@ -24,7 +24,7 @@ internal partial class ActiveRoute : TreeNode, IActiveRoute
 
     public required IReadOnlyList<IUrlSegment> UrlSegments { get; init; }
 
-    public required IReadOnlyDictionary<string, string?> Params { get; init; }
+    public required IReadOnlyDictionary<string, string?> Params { get; internal set; }
 
     public required IReadOnlyDictionary<string, string?> QueryParams { get; init; }
 

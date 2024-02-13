@@ -16,7 +16,7 @@ namespace DroidNet.Routing.Detail;
 /// <param name="root">The root <see cref="IActiveRoute" /> of the state.</param>
 internal class RouterState(string url, IUrlTree urlTree, IActiveRoute root) : IRouterState
 {
-    public string Url { get; } = url;
+    public string Url { get; set; } = url;
 
     public IActiveRoute Root { get; } = root;
 

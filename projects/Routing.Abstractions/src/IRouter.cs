@@ -79,8 +79,6 @@ public interface IRouter
 
     IObservable<RouterEvent> Events { get; }
 
-    IUrlTree? GetCurrentUrlTreeForTarget(string target);
-
     /// <summary>Navigates to the specified URL.</summary>
     /// <param name="url">
     /// The URL to navigate to. Represents an absolute URL if it starts with
@@ -95,5 +93,23 @@ public interface IRouter
     /// </remarks>
     void Navigate(string url, NavigationOptions? options = null);
 
-    IActiveRoute? GetCurrentStateForTarget(string target);
+    void Navigate(List<RouteChangeItem> changes, NavigationOptions options);
+}
+
+public enum RouteAction
+{
+    Add,
+    Update,
+    Delete,
+}
+
+public class RouteChangeItem
+{
+    public required OutletName Outlet { get; init; }
+
+    public required RouteAction Action { get; init; }
+
+    public Dictionary<string, string?>? Parameters { get; init; }
+
+    public Type? ViewModelType { get; init; }
 }

@@ -4,10 +4,8 @@
 
 namespace DroidNet.Routing;
 
-public class NavigationFailedException(Exception ex)
-    : Exception(
-        "Navigation failed due to another error",
-        ex)
+public class NavigationFailedException(string because, Exception? innerException = null)
+    : Exception($"navigation failed because: {because}", innerException)
 {
     // TODO(abdes): add extra information to this exception
 }
