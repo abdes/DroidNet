@@ -4,6 +4,4 @@
 
 namespace DroidNet.Routing.Headless;
 
-public class HeadlessRouterContext(string target) : RouterContext(target)
-{
-}
+public class HeadlessRouterContext(string target) : RouterContext(target);

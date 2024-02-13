@@ -19,7 +19,6 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
             throw new ArgumentException($"cannot use {position} for a {nameof(TrayGroup)}", nameof(position));
         }
 
-        this.Position = position;
         this.orientation
             = position is AnchorPosition.Left or AnchorPosition.Right
                 ? DockGroupOrientation.Vertical
@@ -28,8 +27,6 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
     }
 
     public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
-
-    public AnchorPosition Position { get; }
 
     public override ReadOnlyObservableCollection<IDock> Docks { get; } = new([]);
 

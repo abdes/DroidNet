@@ -86,10 +86,7 @@ public partial class WorkSpaceView : UserControl
         private readonly IDocker docker;
 
         public DockGroup(IDocker docker, IDockGroup group, bool showFirst, bool showSecond)
-            : base(
-                group.Orientation == DockGroupOrientation.Horizontal
-                    ? Orientation.Horizontal
-                    : Orientation.Vertical)
+            : base(group.IsHorizontal ? Orientation.Horizontal : Orientation.Vertical)
         {
             this.docker = docker;
             this.Name = group.ToString();
@@ -153,9 +150,7 @@ public partial class WorkSpaceView : UserControl
                 }
 
                 this.DefineItem(GridLength.Auto);
-                var trayOrientation = part.Orientation == DockGroupOrientation.Horizontal
-                    ? Orientation.Horizontal
-                    : Orientation.Vertical;
+                var trayOrientation = part.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
                 var trayControl = new DockTray(tray.MinimizedDocks, trayOrientation);
                 this.AddItem(trayControl, gridItemIndex++);
                 return true;

@@ -49,10 +49,7 @@
             VerticalTemplate="{StaticResource VerticalTemplate}" />
     </UserControl.Resources>
 
-    <Border
-        Grid.Column="0"
-        BorderBrush="Green"
-        BorderThickness="1">
+    <Border BorderBrush="Green" BorderThickness="1">
         <ItemsView
             ItemTemplate="{StaticResource OrientationTemplateSelector}"
             ItemsSource="{x:Bind ViewModel.Dockables}"

@@ -11,6 +11,4 @@ public interface IDockTray
     public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
 
     bool IsEmpty { get; }
-
-    public AnchorPosition Position { get; }
 }

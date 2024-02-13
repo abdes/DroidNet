@@ -25,7 +25,7 @@ public class RoutesViewModel : TreeViewModelBase
     {
         public PathMatch MatchMethod => throw new NotImplementedException();
 
-        public string? Path => RouteAdapter.RootPath;
+        public string Path => RouteAdapter.RootPath;
 
         public IRoute.PathMatcher Matcher => throw new NotImplementedException();
 

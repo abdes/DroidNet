@@ -51,7 +51,7 @@ public partial class RouterStateAdapter : ObservableObject, ITreeItem<IActiveRou
 
     public int ChildrenCount => this.Item.Children.Count;
 
-    public string? ViewModel => $"ViewModel = {this.Item.ViewModel?.GetType().Name}";
+    public string ViewModel => $"ViewModel = {this.Item.ViewModel?.GetType().Name}";
 
     IEnumerable<ITreeItem<IActiveRoute>> ITreeItem<IActiveRoute>.Children => this.children.Value;
 

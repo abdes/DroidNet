@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.UI;
+namespace DroidNet.Routing;
 
 using Microsoft.UI.Xaml;
 

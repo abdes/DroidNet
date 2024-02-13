@@ -4,6 +4,4 @@
 
 namespace DroidNet.Routing.Debugger.Welcome;
 
-public class WelcomeViewModel
-{
-}
+public class WelcomeViewModel;
