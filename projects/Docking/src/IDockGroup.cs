@@ -6,7 +6,7 @@ namespace DroidNet.Docking;
 
 using System.Collections.ObjectModel;
 
-public interface IDockGroup
+public interface IDockGroup : IDisposable
 {
     public ReadOnlyObservableCollection<IDock> Docks { get; }
 

@@ -11,19 +11,27 @@ public class Docker : IDocker
 {
     private readonly RootDockGroup root = new();
 
+    public event Action? LayoutChanged;
+
     public IDockGroup Root => this.root;
 
     public void Dock(IDock dock, Anchor anchor, bool minimized = false)
     {
         Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
 
-        var relativeTo = Detail.Dock.FromId(anchor.DockId) ??
+        var relativeDockId = anchor.DockId ?? throw new ArgumentException(
+            $"use {nameof(this.DockToRoot)} or {nameof(this.DockToCenter)} if you are not docking relative to an existing dock",
+            nameof(anchor));
+
+        var relativeTo = Detail.Dock.FromId(relativeDockId) ??
                          throw new ArgumentException($"invalid dock id: {anchor.DockId}", nameof(anchor));
+
         var group = relativeTo.Group ?? throw new ArgumentException(
             $"dock `{dock}` does not belong to a group and cannot be used as an anchor",
             nameof(anchor));
 
         group.AddDock(dock, anchor);
+        dock.AsDock().Anchor = anchor;
 
         if (minimized)
         {
@@ -33,15 +41,22 @@ public class Docker : IDocker
         {
             this.PinDock(dock);
         }
+
+        this.LayoutChanged?.Invoke();
     }
 
     // TODO(abdes): center dock is always pinned and cannot have any other state
-    public void DockToCenter(IDock dock) => this.root.DockCenter(dock);
+    public void DockToCenter(IDock dock)
+    {
+        this.root.DockCenter(dock);
+        this.LayoutChanged?.Invoke();
+    }
 
     public void DockToRoot(IDock dock, AnchorPosition position, bool minimized = false)
     {
         Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
 
+        dock.AsDock().Anchor = new Anchor(position);
         switch (position)
         {
             case AnchorPosition.Left:
@@ -75,6 +90,8 @@ public class Docker : IDocker
         {
             this.PinDock(dock);
         }
+
+        this.LayoutChanged?.Invoke();
     }
 
     public void MinimizeDock(IDock dock)
@@ -101,6 +118,8 @@ public class Docker : IDocker
         tray.AddMinimizedDock(dock);
 
         dock.AsDock().State = DockingState.Minimized;
+
+        this.LayoutChanged?.Invoke();
     }
 
     public void PinDock(IDock dock)
@@ -119,6 +138,8 @@ public class Docker : IDocker
         }
 
         dock.AsDock().State = DockingState.Pinned;
+
+        this.LayoutChanged?.Invoke();
     }
 
     public void CloseDock(IDock dock)
@@ -145,8 +166,13 @@ public class Docker : IDocker
         var dockImpl = dock.AsDock();
         Debug.Assert(dockImpl.Group is not null, $"expecting an already docked dock `{dock}` to have a non-null group");
         dockImpl.Group.RemoveDock(dock);
-
         dock.AsDock().State = DockingState.Undocked;
+        if (dock is IDisposable resource)
+        {
+            resource.Dispose();
+        }
+
+        this.LayoutChanged?.Invoke();
     }
 
     public void FloatDock(IDock dock)
@@ -158,6 +184,14 @@ public class Docker : IDocker
 
         // TODO: implement floating show
         dock.AsDock().State = DockingState.Floating;
+
+        this.LayoutChanged?.Invoke();
+    }
+
+    public void Dispose()
+    {
+        this.root.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private static TrayGroup FindTryForDock(Dock dock)

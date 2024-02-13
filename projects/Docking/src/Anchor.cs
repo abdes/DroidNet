@@ -4,17 +4,17 @@
 
 namespace DroidNet.Docking;
 
-public class Anchor(DockId dockId, AnchorPosition position)
+public class Anchor(AnchorPosition position, DockId? dockId = null)
 {
     public AnchorPosition Position { get; } = position;
 
-    public DockId DockId { get; } = dockId;
+    public DockId? DockId { get; } = dockId;
 }
 
-public class AnchorLeft(DockId dockId) : Anchor(dockId, AnchorPosition.Left);
+public class AnchorLeft(DockId? dockId = null) : Anchor(AnchorPosition.Left, dockId);
 
-public class AnchorRight(DockId dockId) : Anchor(dockId, AnchorPosition.Right);
+public class AnchorRight(DockId? dockId = null) : Anchor(AnchorPosition.Right, dockId);
 
-public class AnchorTop(DockId dockId) : Anchor(dockId, AnchorPosition.Top);
+public class AnchorTop(DockId? dockId = null) : Anchor(AnchorPosition.Top, dockId);
 
-public class AnchorBottom(DockId dockId) : Anchor(dockId, AnchorPosition.Bottom);
+public class AnchorBottom(DockId? dockId = null) : Anchor(AnchorPosition.Bottom, dockId);

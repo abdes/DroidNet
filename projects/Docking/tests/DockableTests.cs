@@ -14,15 +14,19 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public class DockableTests
 {
+    private readonly Dockable dockable = Dockable.New("testId")!;
+
+    [TestCleanup]
+    public void Cleanup() => this.dockable.Dispose();
+
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
     public void Title_Setter_ShouldTriggerPropertyChange_ForMinimizedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
-        var dockable = new Dockable("testId");
         var eventTriggered = false;
 
-        dockable.PropertyChanged += (_, e) =>
+        this.dockable.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Dockable.MinimizedTitle))
             {
@@ -31,17 +35,17 @@ public class DockableTests
         };
 
         // Act
-        dockable.Title = "New Title";
+        this.dockable.Title = "New Title";
 
         // Assert
         _ = eventTriggered.Should().BeTrue();
 
         // Set MinimizedTitle to non-null value
-        dockable.MinimizedTitle = "Minimized Title";
+        this.dockable.MinimizedTitle = "Minimized Title";
         eventTriggered = false;
 
         // Act
-        dockable.Title = "Another New Title";
+        this.dockable.Title = "Another New Title";
 
         // Assert
         _ = eventTriggered.Should().BeFalse();
@@ -52,10 +56,9 @@ public class DockableTests
     public void Title_Setter_ShouldTriggerPropertyChange_ForTabbedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
-        var dockable = new Dockable("testId");
         var eventTriggered = false;
 
-        dockable.PropertyChanged += (_, e) =>
+        this.dockable!.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Dockable.TabbedTitle))
             {
@@ -64,17 +67,17 @@ public class DockableTests
         };
 
         // Act
-        dockable.Title = "New Title";
+        this.dockable.Title = "New Title";
 
         // Assert
         _ = eventTriggered.Should().BeTrue();
 
         // Set TabbedTitle to non-null value
-        dockable.TabbedTitle = "Tabbed Title";
+        this.dockable.TabbedTitle = "Tabbed Title";
         eventTriggered = false;
 
         // Act
-        dockable.Title = "Another New Title";
+        this.dockable.Title = "Another New Title";
 
         // Assert
         _ = eventTriggered.Should().BeFalse();
