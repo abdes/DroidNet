@@ -120,6 +120,19 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     }
 
     /// <summary>
+    /// Remove the child <see cref="UrlSegmentGroup" /> with the specified
+    /// outlet from the segment group.
+    /// </summary>
+    /// <param name="outlet">The outlet name of the child to remove.</param>
+    /// <returns>
+    /// <see langword="true" /> if the element is successfully removed;
+    /// otherwise, <see langword="false" />. This method also returns
+    /// <see langword="false" /> if <paramref name="outlet" /> was not found
+    /// among the children.
+    /// </returns>
+    public bool RemoveChild(string outlet) => this.children.Remove(outlet);
+
+    /// <summary>
     /// Serializes the <see cref="UrlSegmentGroup" /> into a string, making
     /// sure that its outlet name and segments are percent-encoded as required.
     /// required.

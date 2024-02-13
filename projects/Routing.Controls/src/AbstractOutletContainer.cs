@@ -14,9 +14,14 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         outletName ??= OutletName.Primary;
-        if (!this.Outlets.TryGetValue(outletName, out _))
+        if (!this.Outlets.TryGetValue(outletName, out var existing))
         {
             throw new ArgumentException($"unknown outlet name {outletName}", nameof(outletName));
+        }
+
+        if (existing is IDisposable resource)
+        {
+            resource.Dispose();
         }
 
         this.Outlets[outletName] = viewModel;

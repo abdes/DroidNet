@@ -21,7 +21,7 @@ namespace DroidNet.Routing;
 /// <seealso cref="UrlSegmentGroup" />
 public class UrlSegment : IUrlSegment
 {
-    private readonly Dictionary<string, string?> parameters = [];
+    private Dictionary<string, string?> parameters = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlSegment" /> class.
@@ -159,4 +159,6 @@ public class UrlSegment : IUrlSegment
     /// </returns>
     public override string ToString()
         => $"{SerializePath(this.Path)}{SerializeMatrixParams(this.parameters)}";
+
+    internal void UpdateParameters(Dictionary<string, string?> changeParameters) => this.parameters = changeParameters;
 }
