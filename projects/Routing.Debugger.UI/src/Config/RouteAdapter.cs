@@ -33,6 +33,7 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<IRoute>
                             child => new RouteAdapter(child)
                             {
                                 Level = this.Level + 1,
+                                IsExpanded = true,
                             }));
                 }
 
@@ -62,8 +63,6 @@ public partial class RouteAdapter : ObservableObject, ITreeItem<IRoute>
     public int ChildrenCount => this.Item.Children?.Count ?? 0;
 
     public string ViewModelType => this.Item.ViewModelType?.Name ?? "None";
-
-    IEnumerable<ITreeItem<IRoute>> ITreeItem<IRoute>.Children => this.children.Value;
 
     IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
 

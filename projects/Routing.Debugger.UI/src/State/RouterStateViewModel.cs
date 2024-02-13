@@ -4,20 +4,27 @@
 
 namespace DroidNet.Routing.Debugger.UI.State;
 
-using System.Diagnostics;
+using System.Reactive.Linq;
 using DroidNet.Routing.Debugger.UI.TreeView;
+using DroidNet.Routing.Events;
 
 /// <summary>ViewModel for the <see cref="IRouterState" />.</summary>
-public class RouterStateViewModel : TreeViewModelBase
+public class RouterStateViewModel : TreeViewModelBase, IDisposable
 {
-    public RouterStateViewModel(IRouter router)
-    {
-        var stateRoot = router.GetCurrentStateForTarget(Target.Self);
-        Debug.Assert(stateRoot is not null, "stateRoot can not be null in a view model");
+    private readonly IDisposable routerEventsSub;
 
-        this.Root = new RouterStateAdapter(stateRoot)
-        {
-            Level = 0,
-        };
+    public RouterStateViewModel(IRouter router) => this.routerEventsSub = router.Events
+        .OfType<ActivationStarted>()
+        .Select(e => e.RouterState.Root)
+        .Subscribe(
+            state => this.Root = new RouterStateAdapter(state)
+            {
+                Level = 0,
+            });
+
+    public void Dispose()
+    {
+        this.routerEventsSub.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

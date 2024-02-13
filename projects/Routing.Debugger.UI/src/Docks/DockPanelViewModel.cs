@@ -27,12 +27,10 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
         {
             case DockingState.Minimized:
             case DockingState.Floating:
-                // TODO: replace with navigation to new URL
-                docker.MinimizeDock(dock);
+                docker.PinDock(dock);
                 break;
 
             case DockingState.Pinned:
-                // TODO: replace with navigation to new URL
                 docker.MinimizeDock(dock);
                 break;
 

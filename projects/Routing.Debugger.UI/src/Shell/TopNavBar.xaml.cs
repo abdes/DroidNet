@@ -4,8 +4,10 @@
 
 namespace DroidNet.Routing.Debugger.UI.Shell;
 
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Routing.Events;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,7 +17,7 @@ using Windows.System;
 /// A custom control for the debugger top navigation bar.
 /// </summary>
 [ObservableObject]
-public sealed partial class TopNavBar
+public sealed partial class TopNavBar : IDisposable
 {
     // TODO(abdes): avoid using Ioc.Default, set router in control
     private static readonly DependencyProperty RouterProperty = DependencyProperty.Register(
@@ -25,18 +27,11 @@ public sealed partial class TopNavBar
         new PropertyMetadata(Ioc.Default.GetRequiredService<IRouter>()));
 
     [ObservableProperty]
-    private string url;
+    private string? url;
 
-    public TopNavBar()
-    {
-        this.InitializeComponent();
+    private IDisposable? routerEventsSub;
 
-        // Get the current navigation URL
-        // TODO(abdes) cleanup how to get the current Url from the router
-        this.Url = this.GetCurrentNavigationUrl();
-
-        // TODO(abdes): Register for router url changes to update the Url property
-    }
+    public TopNavBar() => this.InitializeComponent();
 
     public IRouter Router
     {
@@ -44,12 +39,17 @@ public sealed partial class TopNavBar
         set
         {
             this.SetValue(RouterProperty, value);
-            this.Url = this.GetCurrentNavigationUrl();
+            this.routerEventsSub = this.Router.Events
+                .OfType<NavigationEnd>()
+                .Subscribe(
+                    e =>
+                    {
+                        this.Url = e.Url;
+                    });
         }
     }
 
-    private string GetCurrentNavigationUrl()
-        => this.Router.GetCurrentUrlTreeForTarget(Target.Self)?.ToString() ?? string.Empty;
+    public void Dispose() => this.routerEventsSub?.Dispose();
 
     private void UrlTextBox_KeyUp(object sender, KeyRoutedEventArgs e)
     {
@@ -62,7 +62,10 @@ public sealed partial class TopNavBar
                 var text = control.Text;
             }
 
-            this.Router.Navigate(this.Url);
+            if (this.Url != null)
+            {
+                this.Router.Navigate(this.Url);
+            }
         }
     }
 }
