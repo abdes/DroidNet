@@ -6,7 +6,7 @@ namespace DroidNet.Docking;
 
 using System.Collections.ObjectModel;
 
-public interface IDock
+public interface IDock : IDisposable
 {
     public DockId Id { get; }
 
@@ -17,6 +17,8 @@ public interface IDock
     bool CanMinimize { get; }
 
     bool CanClose { get; }
+
+    public Anchor? Anchor { get; }
 
     void AddDockable(IDockable dockable);
 }

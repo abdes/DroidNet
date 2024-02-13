@@ -39,6 +39,8 @@ public abstract partial class Dock : IDock
 
     public virtual bool CanClose => true;
 
+    public Anchor? Anchor { get; internal set; }
+
     public DockingState State { get; internal set; } = DockingState.Undocked;
 
     public DockId Id { get; private set; }
@@ -46,9 +48,22 @@ public abstract partial class Dock : IDock
     internal DockGroup? Group { get; set; }
 
     public void AddDockable(IDockable dockable)
-
+    {
         // TODO: update active dockable and place dockable properly
-        => this.dockables.Add(dockable);
+        dockable.Owner = this;
+        this.dockables.Add(dockable);
+    }
+
+    public void Dispose()
+    {
+        foreach (var dockable in this.dockables)
+        {
+            dockable.Dispose();
+        }
+
+        this.dockables.Clear();
+        GC.SuppressFinalize(this);
+    }
 
     public override string ToString() => $"{this.Id}";
 }

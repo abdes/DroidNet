@@ -112,7 +112,7 @@ public partial class DockGroupTests
     [TestClass]
     [TestCategory(nameof(DockGroup))]
     [ExcludeFromCodeCoverage]
-    public class AddDockWithAnchorDifferentOrientation
+    public class AddDockWithAnchorDifferentOrientation : IDisposable
     {
         private readonly NonEmptyDockGroup sut;
         private readonly IDock second;
@@ -240,6 +240,16 @@ public partial class DockGroupTests
 
             _ = newNode.Second!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = newNode.Second!.Docks.Should().ContainInOrder(this.third);
+        }
+
+        public void Dispose()
+        {
+            this.sut.Dispose();
+            this.first.Dispose();
+            this.second.Dispose();
+            this.third.Dispose();
+
+            GC.SuppressFinalize(this);
         }
     }
 }

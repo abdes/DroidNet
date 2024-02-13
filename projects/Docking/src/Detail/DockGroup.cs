@@ -73,6 +73,29 @@ internal partial class DockGroup : DockGroupBase
         return $"{orientation} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";
     }
 
+    public override void Dispose()
+    {
+        base.Dispose();
+        this.first = null;
+        this.second = null;
+
+        this.ClearDocks();
+        GC.SuppressFinalize(this);
+    }
+
+    private void ClearDocks()
+    {
+        foreach (var dock in this.docks)
+        {
+            if (dock is IDisposable resource)
+            {
+                resource.Dispose();
+            }
+        }
+
+        this.docks.Clear();
+    }
+
     private void SetPart(DockGroupBase? value, out DockGroupBase? part)
     {
         // Avoid bugs with infinite recursion in the tree if the part is self.
@@ -152,6 +175,7 @@ internal partial class DockGroup
             item.AsDock().Group = group;
         }
 
+        // Do not dispose of the docks here as we just moved them somewhere else
         this.docks.Clear();
     }
 
@@ -425,7 +449,9 @@ internal partial class DockGroup
          * is different,and a group for the docks after the relative dock.
          */
 
+        // Do not dispose of the docks here as we are moving them around
         this.docks.Clear();
+
         this.First = beforeGroup ?? hostGroup;
         this.Second = beforeGroup is null
             ? afterGroup
@@ -465,4 +491,12 @@ internal abstract class DockGroupBase : IDockGroup
     public int DebugId { get; }
 
     internal DockGroupBase? Parent { get; set; }
+
+    public virtual void Dispose()
+    {
+        this.First?.Dispose();
+        this.Second?.Dispose();
+
+        GC.SuppressFinalize(this);
+    }
 }

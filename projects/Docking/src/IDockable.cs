@@ -4,7 +4,7 @@
 
 namespace DroidNet.Docking;
 
-public interface IDockable
+public interface IDockable : IDisposable
 {
     string Id { get; }
 
@@ -15,4 +15,6 @@ public interface IDockable
     string TabbedTitle { get; }
 
     object? ViewModel { get; }
+
+    IDock? Owner { get; set; }
 }

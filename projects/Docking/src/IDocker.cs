@@ -4,8 +4,10 @@
 
 namespace DroidNet.Docking;
 
-public interface IDocker
+public interface IDocker : IDisposable
 {
+    event Action LayoutChanged;
+
     IDockGroup Root { get; }
 
     void CloseDock(IDock dock);

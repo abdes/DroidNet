@@ -9,14 +9,19 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// <summary>
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="DockGroup" />.
 /// </summary>
-/// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
-public class Dockable(string id) : ObservableObject, IDockable
+public partial class Dockable : ObservableObject, IDockable
 {
     private string? title;
 
     private string? minimizedTitle;
 
     private string? tabbedTitle;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Dockable" /> class.
+    /// </summary>
+    /// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
+    private Dockable(string id) => this.Id = id;
 
     public string Title
     {
@@ -47,7 +52,7 @@ public class Dockable(string id) : ObservableObject, IDockable
         }
     }
 
-    public string Id { get; } = id;
+    public string Id { get; }
 
     public string MinimizedTitle
     {
@@ -63,5 +68,5 @@ public class Dockable(string id) : ObservableObject, IDockable
 
     public object? ViewModel { get; set; }
 
-    internal IDock? Owner { get; set; }
+    public IDock? Owner { get; set; }
 }
