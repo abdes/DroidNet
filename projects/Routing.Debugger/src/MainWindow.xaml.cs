@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml;
 public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IViewLocator viewLocator;
+    private object? shellViewModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
@@ -51,6 +52,13 @@ public sealed partial class MainWindow : IOutletContainer
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
+        if (this.shellViewModel is IDisposable resource)
+        {
+            resource.Dispose();
+        }
+
+        this.shellViewModel = viewModel;
+
         var viewForShell = this.viewLocator.ResolveView(viewModel) ??
                            throw new MissingViewException(viewModel.GetType());
 
