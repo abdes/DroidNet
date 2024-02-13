@@ -15,7 +15,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <shell:TopNavBar Grid.Row="0" />
+        <shell:TopNavBar Grid.Row="0" Router="{x:Bind ViewModel.Router, Mode=OneWay}" />
         <router:RouterOutlet Grid.Row="1" OutletName="dock" />
     </Grid>
 </UserControl>

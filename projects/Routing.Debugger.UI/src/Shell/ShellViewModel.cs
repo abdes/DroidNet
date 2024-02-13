@@ -4,18 +4,28 @@
 
 namespace DroidNet.Routing.Debugger.UI.Shell;
 
-using CommunityToolkit.Mvvm.ComponentModel;
-
 /// <summary>
 /// A ViewModel fpr the debugger shell.
 /// </summary>
-public partial class ShellViewModel : AbstractOutletContainer
+public class ShellViewModel(IRouter router) : AbstractOutletContainer, IDisposable
 {
-    [ObservableProperty]
-    private string? url;
+    public IRouter Router { get; } = router;
 
     protected override Dictionary<string, object?> Outlets { get; } = new(StringComparer.OrdinalIgnoreCase)
     {
         { "dock", null },
     };
+
+    public void Dispose()
+    {
+        foreach (var entry in this.Outlets)
+        {
+            if (entry.Value is IDisposable resource)
+            {
+                resource.Dispose();
+            }
+        }
+
+        GC.SuppressFinalize(this);
+    }
 }

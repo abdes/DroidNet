@@ -20,6 +20,4 @@ public interface ITreeItem
 public interface ITreeItem<out T> : ITreeItem
 {
     public T Item { get; }
-
-    public new IEnumerable<ITreeItem<T>> Children { get; }
 }

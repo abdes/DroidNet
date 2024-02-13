@@ -5,18 +5,43 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Diagnostics;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Detail;
+using DroidNet.Routing.Events;
 
-#pragma warning disable IDE0001 // Simplify Names
-#pragma warning restore IDE0001 // Simplify Names
-
-public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware
+public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware, IDisposable
 {
-    public WorkSpaceViewModel()
+    private readonly IRouter router;
+    private readonly IDisposable navigationSub;
+
+    public WorkSpaceViewModel(IRouter router)
     {
+        this.router = router;
+
         this.Docker = new Docker();
+
+        this.navigationSub = this.router.Events.Where(e => e.GetType().IsAssignableTo(typeof(NavigationEvent)))
+            .Subscribe(
+                x =>
+                {
+                    switch (x)
+                    {
+                        case NavigationStart:
+                            this.Docker.LayoutChanged -= this.SyncWithRouter;
+                            break;
+
+                        case NavigationEnd:
+                        case NavigationError:
+                            this.Docker.LayoutChanged += this.SyncWithRouter;
+                            break;
+
+                        default:
+                            throw new ArgumentException($"unexpected event type {x.GetType()}");
+                    }
+                });
+
         this.Root = this.Docker.Root;
     }
 
@@ -33,7 +58,8 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             throw new InvalidOperationException(
                 $"illegal outlet name {outletName} used for a dockable; cannot be null or `{OutletName.Primary}`.");
         }
-        else if (outletName == DebuggerConstants.AppOutletName)
+
+        if (outletName == DebuggerConstants.AppOutletName)
         {
             this.LoadApp(viewModel);
         }
@@ -44,6 +70,13 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         }
 
         DumpGroup(this.Docker.Root);
+    }
+
+    public void Dispose()
+    {
+        this.navigationSub.Dispose();
+        this.Docker.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private static void DumpGroup(IDockGroup group, string indent = "")
@@ -91,6 +124,136 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         return AnchorPosition.Left;
     }
 
+    private void SyncWithRouter()
+    {
+        Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
+
+        // Build a changeset to manipulate the URL tree for our active route
+        var changes = new List<RouteChangeItem>();
+
+        // Delete closed docks
+        foreach (var dockableRoute in this.ActiveRoute.Children)
+        {
+            if (Dockable.FromId(dockableRoute.Outlet) == null)
+            {
+                changes.Add(
+                    new RouteChangeItem()
+                    {
+                        Action = RouteAction.Delete,
+                        Outlet = dockableRoute.Outlet,
+                    });
+            }
+        }
+
+        // Add and Update dockables from the managed dockables collection
+        foreach (var dockable in Dockable.All)
+        {
+            var dock = dockable.Owner;
+            Debug.Assert(
+                dock is not null,
+                $"expecting a docked dockable, but dockable with id=`{dockable.Id}` has a null owner");
+
+            var childRoute
+                = this.ActiveRoute.Children.FirstOrDefault(r => dockable.Id.Equals(r.Outlet, StringComparison.Ordinal));
+            if (childRoute is null)
+            {
+                Debug.Assert(
+                    dockable.ViewModel is not null,
+                    $"expecting a dockable to have a ViewModel, but dockable with id=`{dockable.Id}` does not");
+
+                changes.Add(
+                    new RouteChangeItem()
+                    {
+                        Action = RouteAction.Add,
+                        Outlet = dockable.Id,
+                        ViewModelType = dockable.ViewModel?.GetType(),
+                        Parameters = Parameters(dock),
+                    });
+            }
+            else
+            {
+                var parameters = Parameters(dock, childRoute.Params);
+                if (parameters != null)
+                {
+                    changes.Add(
+                        new RouteChangeItem()
+                        {
+                            Action = RouteAction.Update,
+                            Outlet = dockable.Id,
+                            Parameters = parameters,
+                        });
+                }
+            }
+        }
+
+        this.router.Navigate(changes, new NavigationOptions() { RelativeTo = this.ActiveRoute });
+        return;
+
+        static Dictionary<string, string?>? Parameters(
+            IDock dock,
+            IReadOnlyDictionary<string, string?>? currentParameters = null)
+        {
+            var changed = false;
+            Dictionary<string, string?> parameters = [];
+
+            // anything other than Minimized or Pinned is a transient state
+            // that should not be propagated to the router. We assume that
+            // at some pint in time it will be pinned or minimized, but for
+            // now, we will just consider it pinned.
+            if (dock.State == DockingState.Minimized)
+            {
+                // TODO: refactor parameter parsing for the docker
+                if (currentParameters != null)
+                {
+                    if (!currentParameters.ContainsKey("minimized"))
+                    {
+                        changed = true;
+                    }
+                    else
+                    {
+                        var current = currentParameters["minimized"];
+                        if (current != null && !bool.Parse(current))
+                        {
+                            changed = true;
+                        }
+                    }
+                }
+
+                parameters["minimized"] = null;
+            }
+
+            if (dock.Anchor != null)
+            {
+                var position = dock.Anchor.Position.ToString().ToLowerInvariant();
+                var relativeTo = dock.Anchor.DockId?.ToString();
+
+                if (currentParameters != null)
+                {
+                    if (!currentParameters.ContainsKey(position))
+                    {
+                        changed = true;
+                    }
+                    else
+                    {
+                        if (currentParameters[position] != relativeTo)
+                        {
+                            changed = true;
+                        }
+                    }
+                }
+
+                parameters[position] = relativeTo;
+            }
+
+            if (currentParameters == null)
+            {
+                changed = true;
+            }
+
+            return changed ? parameters : null;
+        }
+    }
+
     private void LoadApp(object viewModel)
     {
         var dock = ApplicationDock.New() ?? throw new ContentLoadingException(
@@ -99,6 +262,14 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             "could not create a dock");
 
         // Dock at the center
+        var dockable = Dockable.New(DebuggerConstants.AppOutletName) ??
+                       throw new ContentLoadingException(
+                           DebuggerConstants.AppOutletName,
+                           viewModel,
+                           "failed to create a dockable object");
+        dockable.ViewModel = viewModel;
+        dock.AddDockable(dockable);
+
         this.Docker.DockToCenter(dock);
     }
 
@@ -127,7 +298,13 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
             // TODO(abdes): add support for relative docking
             // TODO(abdes): avoid explicitly creating Dockable instances
-            dock.AddDockable(new Dockable(dockableId) { ViewModel = viewModel });
+            var dockable = Dockable.New(dockableId) ??
+                           throw new ContentLoadingException(
+                               dockableId,
+                               viewModel,
+                               "failed to create a dockable object");
+            dockable.ViewModel = viewModel;
+            dock.AddDockable(dockable);
             this.Docker.DockToRoot(dock, dockingPosition, isMinimized);
         }
         catch (Exception ex)

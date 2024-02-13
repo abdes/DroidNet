@@ -30,9 +30,9 @@ public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
         set
         {
             this.root = value;
+            this.ShownItems.Clear();
             if (this.root is null)
             {
-                this.ShownItems.Clear();
                 return;
             }
 

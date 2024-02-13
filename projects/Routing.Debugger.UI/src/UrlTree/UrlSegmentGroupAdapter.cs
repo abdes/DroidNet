@@ -38,6 +38,7 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<IUrlSe
                             IndexInItems = childIndexInItems,
                             Level = this.Level + 1,
                             Outlet = child.Key,
+                            IsExpanded = true,
                         });
                     ++childIndexInItems;
                 }
@@ -68,10 +69,6 @@ public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<IUrlSe
     public int ChildrenCount => this.Item.Children.Count;
 
     public bool IsRoot => this.Item.Parent is null;
-
-    public List<UrlSegmentGroupAdapter> Children => this.children.Value;
-
-    IEnumerable<ITreeItem<IUrlSegmentGroup>> ITreeItem<IUrlSegmentGroup>.Children => this.children.Value;
 
     IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
 }

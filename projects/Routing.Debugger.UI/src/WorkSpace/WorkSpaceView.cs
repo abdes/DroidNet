@@ -22,13 +22,13 @@ public partial class WorkSpaceView : UserControl
     {
         this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
-        this.ViewModelChanged += (_, _)
-            => this.Content = new Border()
-            {
-                Child = ContentForDockGroup(this.ViewModel.Docker, this.ViewModel.Root),
-                BorderBrush = this.BorderBrush,
-                BorderThickness = this.BorderThickness,
-            };
+        this.ViewModelChanged += (_, _) =>
+        {
+            this.UpdateContent();
+            this.ViewModel.Docker.LayoutChanged += this.UpdateContent;
+        };
+
+        this.Unloaded += (_, _) => this.ViewModel.Dispose();
     }
 
     private static UIElement? ContentForDockGroup(IDocker docker, IDockGroup group)
@@ -80,6 +80,15 @@ public partial class WorkSpaceView : UserControl
 
     private static DockList? GroupWithDocks(IDocker docker, IDockGroup group)
         => group.Docks.Any(d => d.State != DockingState.Minimized) ? new DockList(docker, group) : null;
+
+    private void WorkSpaceView_Unloaded(object sender, RoutedEventArgs e) => throw new NotImplementedException();
+
+    private void UpdateContent() => this.Content = new Border()
+    {
+        Child = ContentForDockGroup(this.ViewModel.Docker, this.ViewModel.Root),
+        BorderBrush = this.BorderBrush,
+        BorderThickness = this.BorderThickness,
+    };
 
     private sealed class DockGroup : VectorGrid
     {
