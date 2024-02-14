@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing.Debugger;
 
+using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.View;
 using Microsoft.UI.Xaml;
 
@@ -12,10 +13,14 @@ using Microsoft.UI.Xaml;
 /// <see cref="IOutletContainer" />
 /// for some routes.
 /// </summary>
+[ObservableObject]
 public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IViewLocator viewLocator;
     private object? shellViewModel;
+
+    [ObservableProperty]
+    private UIElement? shellView;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow" /> class.
@@ -52,15 +57,18 @@ public sealed partial class MainWindow : IOutletContainer
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
-        if (this.shellViewModel is IDisposable resource)
+        if (this.shellViewModel != viewModel)
         {
-            resource.Dispose();
+            if (this.shellViewModel is IDisposable resource)
+            {
+                resource.Dispose();
+            }
+
+            this.shellViewModel = viewModel;
         }
 
-        this.shellViewModel = viewModel;
-
-        var viewForShell = this.viewLocator.ResolveView(viewModel) ??
-                           throw new MissingViewException(viewModel.GetType());
+        var view = this.viewLocator.ResolveView(viewModel) ??
+                   throw new MissingViewException(viewModel.GetType());
 
         // Set the ViewModel property of the view here, so that we don't lose
         // the view model instance we just created and which is the one that
@@ -68,20 +76,20 @@ public sealed partial class MainWindow : IOutletContainer
         //
         // This must be done here because the MainWindow does not have a
         // ViewModel and does not use the ViewModelToViewConverter.
-        if (viewForShell is IViewFor hasViewModel)
+        if (view is IViewFor hasViewModel)
         {
             hasViewModel.ViewModel = viewModel;
         }
         else
         {
-            throw new ViewTypeException(viewForShell.GetType(), $"view is not an {nameof(IViewFor)}");
+            throw new ViewTypeException(view.GetType(), $"view is not an {nameof(IViewFor)}");
         }
 
-        if (!viewForShell.GetType().IsAssignableTo(typeof(UIElement)))
+        if (!view.GetType().IsAssignableTo(typeof(UIElement)))
         {
-            throw new ViewTypeException(viewForShell.GetType(), $"view is not a {nameof(UIElement)}");
+            throw new ViewTypeException(view.GetType(), $"view is not a {nameof(UIElement)}");
         }
 
-        this.Content = (UIElement)viewForShell;
+        this.ShellView = (UIElement)view;
     }
 }

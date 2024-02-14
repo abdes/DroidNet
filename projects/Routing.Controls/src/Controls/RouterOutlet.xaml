@@ -13,7 +13,8 @@
     <ContentControl
         HorizontalContentAlignment="Stretch"
         VerticalContentAlignment="Stretch"
-        Background="White">
+        Background="White"
+        Content="{x:Bind OutletContent, Mode=OneWay}">
 
         <interactivity:Interaction.Behaviors>
             <core:DataTriggerBehavior Binding="{x:Bind IsActivated, Mode=OneWay}" Value="False">
@@ -52,9 +53,9 @@
                             <RichTextBlock TextWrapping="Wrap">
                                 <Paragraph>
                                     <Span>The outlet '</Span>
-                                    <Run FontStyle="Italic" Text="{x:Bind OutletName}" />
+                                    <Run FontStyle="Italic" Text="{x:Bind Outlet}" />
                                     <Span>' was activated with view model of type '</Span>
-                                    <Run FontStyle="Italic" Text="{x:Bind OutletViewModel.ToString(), FallbackValue='null', Mode=OneWay}" />
+                                    <Run FontStyle="Italic" Text="{x:Bind ViewModel.ToString(), FallbackValue='null', Mode=OneWay}" />
                                     <Span>', but it has not been correctly populated with the corresponding view.</Span>
                                 </Paragraph>
                                 <Paragraph Margin="0,20,0,0">
@@ -124,9 +125,6 @@
                         </StackPanel>
                     </core:ChangePropertyAction.Value>
                 </core:ChangePropertyAction>
-            </core:DataTriggerBehavior>
-            <core:DataTriggerBehavior Binding="{x:Bind IsPopulated, Mode=OneWay}" Value="True">
-                <core:ChangePropertyAction PropertyName="Content" Value="{x:Bind OutletContent, Mode=OneWay}" />
             </core:DataTriggerBehavior>
         </interactivity:Interaction.Behaviors>
     </ContentControl>
