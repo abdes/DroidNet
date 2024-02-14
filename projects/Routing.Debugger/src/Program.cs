@@ -90,8 +90,8 @@ public static partial class Program
         _ = builder.Services.AddKeyedSingleton<Window, MainWindow>(Target.Main);
 
         _ = builder.Services
-                .AddTransient<ShellViewModel>()
-                .AddTransient<ShellView>()
+                .AddSingleton<ShellViewModel>()
+                .AddSingleton<ShellView>()
                 .AddTransient<WelcomeViewModel>()
                 .AddTransient<WelcomeView>()
                 .AddTransient<WorkSpaceViewModel>()
