@@ -145,9 +145,9 @@ public class Router : IRouter, IDisposable
     {
         foreach (var change in changes)
         {
-            switch (change.Action)
+            switch (change.ChangeAction)
             {
-                case RouteAction.Add:
+                case RouteChangeAction.Add:
                 {
                     // Compute the path based on the view model type and the active route config
                     Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
@@ -175,7 +175,7 @@ public class Router : IRouter, IDisposable
                     break;
                 }
 
-                case RouteAction.Delete:
+                case RouteChangeAction.Delete:
                 {
                     var route = activeRoute.Children.FirstOrDefault(
                         r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
@@ -186,7 +186,7 @@ public class Router : IRouter, IDisposable
                     break;
                 }
 
-                case RouteAction.Update:
+                case RouteChangeAction.Update:
                 {
                     if (change.Parameters is null)
                     {
@@ -212,7 +212,7 @@ public class Router : IRouter, IDisposable
 
                 default:
                     throw new ArgumentOutOfRangeException(
-                        $"unexpected change action `{change.Action}`",
+                        $"unexpected change action `{change.ChangeAction}`",
                         nameof(change));
             }
         }
@@ -225,9 +225,9 @@ public class Router : IRouter, IDisposable
     {
         foreach (var change in changes)
         {
-            switch (change.Action)
+            switch (change.ChangeAction)
             {
-                case RouteAction.Add:
+                case RouteChangeAction.Add:
                 {
                     // Compute the path based on the view model type and the active route config
                     Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
@@ -243,7 +243,7 @@ public class Router : IRouter, IDisposable
                     break;
                 }
 
-                case RouteAction.Delete:
+                case RouteChangeAction.Delete:
                 {
                     var removed = urlTree.RemoveChild(change.Outlet);
                     Debug.Assert(
@@ -252,7 +252,7 @@ public class Router : IRouter, IDisposable
                     break;
                 }
 
-                case RouteAction.Update:
+                case RouteChangeAction.Update:
                 {
                     if (change.Parameters is null)
                     {
@@ -281,7 +281,7 @@ public class Router : IRouter, IDisposable
 
                 default:
                     throw new ArgumentOutOfRangeException(
-                        $"unexpected change action `{change.Action}`",
+                        $"unexpected change action `{change.ChangeAction}`",
                         nameof(change));
             }
         }

@@ -139,7 +139,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                 changes.Add(
                     new RouteChangeItem()
                     {
-                        Action = RouteAction.Delete,
+                        ChangeAction = RouteChangeAction.Delete,
                         Outlet = dockableRoute.Outlet,
                     });
             }
@@ -164,7 +164,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                 changes.Add(
                     new RouteChangeItem()
                     {
-                        Action = RouteAction.Add,
+                        ChangeAction = RouteChangeAction.Add,
                         Outlet = dockable.Id,
                         ViewModelType = dockable.ViewModel?.GetType(),
                         Parameters = Parameters(dock),
@@ -178,7 +178,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                     changes.Add(
                         new RouteChangeItem()
                         {
-                            Action = RouteAction.Update,
+                            ChangeAction = RouteChangeAction.Update,
                             Outlet = dockable.Id,
                             Parameters = parameters,
                         });
