@@ -112,7 +112,7 @@ public class Router : IRouter, IDisposable
             this.eventSource.OnNext(new NavigationStart(url));
             this.eventSource.OnNext(new RoutesRecognized(currentState.UrlTree));
 
-            ApplyChangesToRouterState(changes, urlTree, activeRoute);
+            ApplyChangesToRouterState(changes, activeRoute);
 
             this.eventSource.OnNext(new ActivationStarted(currentState));
 
@@ -140,7 +140,6 @@ public class Router : IRouter, IDisposable
 
     private static void ApplyChangesToRouterState(
         List<RouteChangeItem> changes,
-        UrlSegmentGroup urlTree,
         ActiveRoute activeRoute)
     {
         foreach (var change in changes)
