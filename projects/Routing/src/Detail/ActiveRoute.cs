@@ -65,6 +65,8 @@ internal partial class ActiveRoute
     /// </value>
     internal required IUrlSegmentGroup UrlSegmentGroup { get; init; }
 
+    internal bool IsActivated { get; set; }
+
     public override string ToString()
     {
         var url = string.Join('/', this.UrlSegments.Select(s => s.Path));

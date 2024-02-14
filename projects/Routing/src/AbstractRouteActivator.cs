@@ -33,9 +33,16 @@ public abstract class AbstractRouteActivator(IServiceProvider serviceProvider) :
     /// <inheritdoc />
     public void ActivateRoute(IActiveRoute route, RouterContext context)
     {
-        Debug.Assert(
-            route is ActiveRoute,
-            $"expecting the {nameof(route)} to be of the internal type {typeof(ActiveRoute)}");
+        var routeImpl = route as ActiveRoute ?? throw new ArgumentException(
+            $"expecting the {nameof(route)} to be of the internal type {typeof(ActiveRoute)}",
+            nameof(route));
+
+        if (routeImpl.IsActivated)
+        {
+            return;
+        }
+
+        Debug.WriteLine($"Activating route `{routeImpl}` for the first time");
 
         // Resolve the view model and then ask the concrete activator to finish
         // activation. The ActiveRoute must be fully setup before we do the
@@ -45,22 +52,24 @@ public abstract class AbstractRouteActivator(IServiceProvider serviceProvider) :
         {
             // The route may be without a ViewModel (typically a route to load
             // data or hold shared parameters).
-            var viewmodelType = route.RouteConfig.ViewModelType;
+            var viewmodelType = routeImpl.RouteConfig.ViewModelType;
             if (viewmodelType != null)
             {
                 var viewModel = this.ResolveViewModel(viewmodelType);
-                ((ActiveRoute)route).ViewModel = viewModel;
+                routeImpl.ViewModel = viewModel;
                 if (viewModel is IRoutingAware injectable)
                 {
-                    injectable.ActiveRoute = route;
+                    injectable.ActiveRoute = routeImpl;
                 }
             }
 
-            this.DoActivateRoute((ActiveRoute)route, context);
+            this.DoActivateRoute(routeImpl, context);
+
+            routeImpl.IsActivated = true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Route {route} activation failed: {ex}");
+            Debug.WriteLine($"Route `{routeImpl}` activation failed: {ex}");
         }
     }
 
