@@ -7,6 +7,22 @@ namespace DroidNet.Routing;
 using DroidNet.Routing.Events;
 
 /// <summary>
+/// Specifies the different actions that can be done in a change set for
+/// manipulating the router state.
+/// </summary>
+public enum RouteChangeAction
+{
+    /// <summary>Add a new active route to the router state.</summary>
+    Add,
+
+    /// <summary>Update an existing active route in the router state.</summary>
+    Update,
+
+    /// <summary>Delete an active route from the router state.</summary>
+    Delete,
+}
+
+/// <summary>
 /// The central building block of router based navigation in the application.
 /// </summary>
 /// <remarks>
@@ -96,18 +112,37 @@ public interface IRouter
     void Navigate(List<RouteChangeItem> changes, NavigationOptions options);
 }
 
-public enum RouteAction
+/// <summary>
+/// Represents options used when requesting the <see cref="IRouter" /> to
+/// navigate.
+/// </summary>
+public class NavigationOptions
 {
-    Add,
-    Update,
-    Delete,
+    /// <summary>Gets the target of the navigation.</summary>
+    /// <value>
+    /// A string identifying the navigation target. Can refer to one of the
+    /// special <see cref="Target">targets</see> or to a custom one. In
+    /// both cases, the value should be a key to an appropriate object
+    /// registered with the dependency injector.
+    /// </value>
+    public Target? Target { get; init; }
+
+    /// <summary>
+    /// Gets the <see cref="IActiveRoute" />, relative to which the navigation
+    /// will happen.
+    /// </summary>
+    /// <value>
+    /// When not <c>null</c>, it contains the active route relative to which the
+    /// url tree for navigation will be resolved before navigation starts.
+    /// </value>
+    public IActiveRoute? RelativeTo { get; init; }
 }
 
 public class RouteChangeItem
 {
     public required OutletName Outlet { get; init; }
 
-    public required RouteAction Action { get; init; }
+    public required RouteChangeAction ChangeAction { get; init; }
 
     public Dictionary<string, string?>? Parameters { get; init; }
 

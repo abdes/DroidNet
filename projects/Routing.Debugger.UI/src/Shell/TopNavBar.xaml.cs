@@ -41,11 +41,7 @@ public sealed partial class TopNavBar : IDisposable
             this.SetValue(RouterProperty, value);
             this.routerEventsSub = this.Router.Events
                 .OfType<NavigationEnd>()
-                .Subscribe(
-                    e =>
-                    {
-                        this.Url = e.Url;
-                    });
+                .Subscribe(e => this.Url = e.Url);
         }
     }
 
