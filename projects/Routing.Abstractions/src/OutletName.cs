@@ -47,4 +47,45 @@ public record OutletName
     /// <summary>Implicitly convert an OutletName to a string.</summary>
     /// <param name="source">An OutletName object.</param>
     public static implicit operator string(OutletName source) => source.Name;
+
+    /// <summary>
+    /// Provide a custom implementation of equality comparison for the
+    /// <see cref="OutletName" /> class to use with dictionaries, etc.
+    /// </summary>
+    /// <remarks>
+    /// Comparison of outlet names uses string ordinal (binary) sort rules, and
+    /// by default, is case-insensitive, but this behavior can be customized if
+    /// needed via the <paramref name="ignoreCase" /> flag.
+    /// </remarks>
+    /// <param name="ignoreCase">
+    /// when <c>true</c>, ignore the case of the outlet names being compared.
+    /// Default is <c>true</c>.
+    /// </param>
+    public class EqualityComparer(bool ignoreCase = true) : EqualityComparer<OutletName>
+    {
+        /// <summary>
+        /// Returns the default equality comparer, which ignores the case of the
+        /// outlet names being compared.
+        /// </summary>
+        public static readonly EqualityComparer IgnoreCase = new();
+
+        /// <inheritdoc />
+        public override bool Equals(OutletName? x, OutletName? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return true;
+            }
+
+            if (x is null || y is null)
+            {
+                return false;
+            }
+
+            return x.Name.Equals(y.Name, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+
+        /// <inheritdoc />
+        public override int GetHashCode(OutletName obj) => obj.Name.GetHashCode();
+    }
 }
