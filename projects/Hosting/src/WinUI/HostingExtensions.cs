@@ -17,7 +17,7 @@ public static class HostingExtensions
 {
     /// <summary>
     /// The key used to access the <see cref="HostingContext" /> instance in
-    /// <see cref="IHostApplicationBuilder.Properties" />.
+    /// <see cref="IHostBuilder.Properties" />.
     /// </summary>
     public const string HostingContextKey = "UserInterfaceHostingContext";
 
@@ -54,28 +54,30 @@ public static class HostingExtensions
     /// <exception cref="ArgumentException">
     /// When the application's type does not extend <see cref="Application" />.
     /// </exception>
-    public static HostApplicationBuilder ConfigureWinUI<TApplication>(this HostApplicationBuilder hostBuilder)
+    public static IHostBuilder ConfigureWinUI<TApplication>(this IHostBuilder hostBuilder)
         where TApplication : Application
     {
         HostingContext context;
-        if (((IHostApplicationBuilder)hostBuilder).Properties.TryGetValue(HostingContextKey, out var contextAsObject))
+        if (hostBuilder.Properties.TryGetValue(HostingContextKey, out var contextAsObject))
         {
             context = (HostingContext)contextAsObject;
         }
         else
         {
             context = new HostingContext { IsLifetimeLinked = true };
-            ((IHostApplicationBuilder)hostBuilder).Properties[HostingContextKey] = context;
+            hostBuilder.Properties[HostingContextKey] = context;
         }
 
-        _ = hostBuilder.Services.AddSingleton(context)
-            .AddSingleton<IUserInterfaceThread, UserInterfaceThread>()
-            .AddHostedService<UserInterfaceHostedService>()
-            .AddSingleton<TApplication>();
+        _ = hostBuilder.ConfigureServices(
+            services => services.AddSingleton(context)
+                .AddSingleton<IUserInterfaceThread, UserInterfaceThread>()
+                .AddHostedService<UserInterfaceHostedService>()
+                .AddSingleton<TApplication>());
 
         if (typeof(TApplication) != typeof(Application))
         {
-            _ = hostBuilder.Services.AddSingleton<Application>(services => services.GetRequiredService<TApplication>());
+            _ = hostBuilder.ConfigureServices(
+                services => services.AddSingleton<Application>(sp => sp.GetRequiredService<TApplication>()));
         }
 
         return hostBuilder;
