@@ -72,37 +72,29 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// must be provided to the constructor.
 /// </para>
 /// </remarks>
-public partial class DefaultViewLocator : IViewLocator
+/// <remarks>
+/// Initializes a new instance of the <see cref="DefaultViewLocator" />
+/// class using the default implementation for the function mapping view
+/// model's name to view name.
+/// </remarks>
+/// <param name="serviceLocator">
+/// The DI <see cref="IServiceProvider" />.
+/// </param>
+/// <param name="loggerFactory">
+/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
+/// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
+/// from the Dependency Injector.
+/// </param>
+/// <param name="viewModelToViewFunc">
+/// The method which will convert a 'ViewModel' name into a 'View' name.
+/// </param>
+public partial class DefaultViewLocator(
+    IServiceProvider serviceLocator,
+    ILoggerFactory? loggerFactory,
+    Func<string, string>? viewModelToViewFunc = null) : IViewLocator
 {
-    private readonly ILogger logger;
-    private readonly IServiceProvider serviceLocator;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultViewLocator" />
-    /// class using the default implementation for the function mapping view
-    /// model's name to view name.
-    /// </summary>
-    /// <param name="serviceLocator">
-    /// The DI <see cref="IServiceProvider" />.
-    /// </param>
-    /// <param name="loggerFactory">
-    /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
-    /// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
-    /// from the Dependency Injector.
-    /// </param>
-    /// <param name="viewModelToViewFunc">
-    /// The method which will convert a 'ViewModel' name into a 'View' name.
-    /// </param>
-    public DefaultViewLocator(
-        IServiceProvider serviceLocator,
-        ILoggerFactory? loggerFactory,
-        Func<string, string>? viewModelToViewFunc = null)
-    {
-        this.logger = loggerFactory?.CreateLogger<Router>() ?? NullLoggerFactory.Instance.CreateLogger<Router>();
-
-        this.serviceLocator = serviceLocator;
-        this.ViewModelToViewFunc = viewModelToViewFunc ?? (vm => vm.Replace("ViewModel", "View"));
-    }
+    private readonly ILogger logger = loggerFactory?.CreateLogger<Router>() ??
+                                      NullLoggerFactory.Instance.CreateLogger<Router>();
 
     /// <summary>
     /// Gets the function that is used to convert a view model name to a
@@ -125,6 +117,7 @@ public partial class DefaultViewLocator : IViewLocator
     /// view name.
     /// </value>
     private Func<string, string> ViewModelToViewFunc { get; }
+        = viewModelToViewFunc ?? (vm => vm.Replace("ViewModel", "View"));
 
     /// <inheritdoc />
     public object? ResolveView(object viewModel)
@@ -300,7 +293,7 @@ public partial class DefaultViewLocator : IViewLocator
                 return null;
             }
 
-            var service = this.serviceLocator.GetService(viewType);
+            var service = serviceLocator.GetService(viewType);
             if (service is IViewFor view)
             {
                 return view;
