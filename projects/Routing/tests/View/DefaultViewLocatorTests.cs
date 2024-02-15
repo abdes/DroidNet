@@ -27,7 +27,7 @@ public class DefaultViewLocatorTests
     public void Initialize()
     {
         this.serviceLocatorMock = new Mock<IServiceProvider>();
-        this.viewLocator = new DefaultViewLocator(this.serviceLocatorMock!.Object);
+        this.viewLocator = new DefaultViewLocator(this.serviceLocatorMock!.Object, null);
 
         this.view = new MyView(new MyViewModel());
     }
