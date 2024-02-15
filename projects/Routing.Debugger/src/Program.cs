@@ -8,6 +8,7 @@
 
 namespace DroidNet.Routing.Debugger;
 
+using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Hosting.WinUI;
@@ -24,6 +25,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+using Serilog;
+using Serilog.Events;
+using Serilog.Templates;
 
 /// <summary>
 /// The Main entry of the application.
@@ -49,71 +53,96 @@ public static partial class Program
     {
         XamlCheckProcessRequirements();
 
-        // Use a default application host builder, which comes with logging,
-        // configuration providers for environment variables, command line,
-        // appsettings.json and secrets.
+        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .Enrich.FromLogContext()
+            .WriteTo.Debug(
+                new ExpressionTemplate(
+                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
+                    new CultureInfo("en-US")))
+            .WriteTo.Seq("http://localhost:5341/")
+            .CreateLogger();
+        try
+        {
+            Log.Information("Starting host");
+
+            // Use a default application host builder, which comes with logging,
+            // configuration providers for environment variables, command line,
+            // appsettings.json and secrets.
             var builder = Host.CreateDefaultBuilder(args);
 
-        // You can further customize and enhance the builder with additional
-        // configuration sources, logging providers, etc.
+            // You can further customize and enhance the builder with additional
+            // configuration sources, logging providers, etc.
+            _ = builder.UseSerilog();
 
-        // Setup and provision the hosting context for the User Interface
-        // service.
+            // Setup and provision the hosting context for the User Interface
+            // service.
             builder.Properties.Add(
-            HostingExtensions.HostingContextKey,
-            new HostingContext() { IsLifetimeLinked = true });
+                HostingExtensions.HostingContextKey,
+                new HostingContext() { IsLifetimeLinked = true });
 
-        // Add the WinUI User Interface hosted service as early as possible to
-        // allow the UI to start showing up while you continue setting up other
-        // services not required for the UI.
-        _ = builder.ConfigureWinUI<App>().ConfigureRouter(MakeRoutes());
+            // Add the WinUI User Interface hosted service as early as possible to
+            // allow the UI to start showing up while you continue setting up other
+            // services not required for the UI.
+            _ = builder.ConfigureWinUI<App>().ConfigureRouter(MakeRoutes());
 
-        // TODO(abdes): Add Support for Docking.
-        // _ = builder.ConfigureDocking();
+            // TODO(abdes): Add Support for Docking.
+            // _ = builder.ConfigureDocking();
 
-        // Set up the view model to view converters. We're using the standard
-        // converter, and a custom one with fall back if the view cannot be
-        // located.
+            // Set up the view model to view converters. We're using the standard
+            // converter, and a custom one with fall back if the view cannot be
+            // located.
             _ = builder.ConfigureServices(
                 services => services.AddKeyedSingleton<IValueConverter, ViewModelToView>("VmToView"));
-        /*
-         * Configure the Application's Windows. Each window represents a target
-         * in which to open the requested url. The target name is the key used
-         * when registering the window type.
-         *
-         * There should always be a Window registered for the special target
-         * <c>_main</c>.
-         */
+            /*
+             * Configure the Application's Windows. Each window represents a target
+             * in which to open the requested url. The target name is the key used
+             * when registering the window type.
+             *
+             * There should always be a Window registered for the special target
+             * <c>_main</c>.
+             */
 
-        // The Main Window is a singleton and its content can be re-assigned as
-        // needed. It is registered with a key that corresponding to name of the
-        // special target <see cref="Target.Main" />.
+            // The Main Window is a singleton and its content can be re-assigned as
+            // needed. It is registered with a key that corresponding to name of the
+            // special target <see cref="Target.Main" />.
             _ = builder.ConfigureServices(services => services.AddKeyedSingleton<Window, MainWindow>(Target.Main));
 
             _ = builder.ConfigureServices(
                 services => services
-                .AddSingleton<ShellViewModel>()
-                .AddSingleton<ShellView>()
-                .AddTransient<WelcomeViewModel>()
-                .AddTransient<WelcomeView>()
-                .AddTransient<WorkSpaceViewModel>()
-                .AddTransient<WorkSpaceView>()
-                .AddTransient<RoutesViewModel>()
-                .AddTransient<RoutesView>()
-                .AddTransient<UrlTreeViewModel>()
-                .AddTransient<UrlTreeView>()
-                .AddTransient<RouterStateViewModel>()
+                    .AddSingleton<ShellViewModel>()
+                    .AddSingleton<ShellView>()
+                    .AddTransient<WelcomeViewModel>()
+                    .AddTransient<WelcomeView>()
+                    .AddTransient<WorkSpaceViewModel>()
+                    .AddTransient<WorkSpaceView>()
+                    .AddTransient<RoutesViewModel>()
+                    .AddTransient<RoutesView>()
+                    .AddTransient<UrlTreeViewModel>()
+                    .AddTransient<UrlTreeView>()
+                    .AddTransient<RouterStateViewModel>()
                     .AddTransient<RouterStateView>());
 
-        var host = builder.Build();
+            var host = builder.Build();
 
-        // Set up the MVVM Ioc using the host built services.
-        Ioc.Default.ConfigureServices(host.Services);
+            // Set up the MVVM Ioc using the host built services.
+            Ioc.Default.ConfigureServices(host.Services);
 
-        // Finally start the host. This will block until the application
-        // lifetime is terminated through CTRL+C, closing the UI windows or
-        // programmatically.
-        host.Run();
+            // Finally start the host. This will block until the application
+            // lifetime is terminated through CTRL+C, closing the UI windows or
+            // programmatically.
+            host.Run();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Host terminated unexpectedly");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 
     private static Routes MakeRoutes() => new(
