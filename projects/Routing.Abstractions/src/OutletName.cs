@@ -48,6 +48,8 @@ public record OutletName
     /// <param name="source">An OutletName object.</param>
     public static implicit operator string(OutletName source) => source.Name;
 
+    public override string ToString() => this.Name;
+
     /// <summary>
     /// Provide a custom implementation of equality comparison for the
     /// <see cref="OutletName" /> class to use with dictionaries, etc.

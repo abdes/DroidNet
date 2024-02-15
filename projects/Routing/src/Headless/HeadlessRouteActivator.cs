@@ -4,7 +4,11 @@
 
 namespace DroidNet.Routing.Headless;
 
-public class HeadlessRouteActivator(IServiceProvider serviceProvider) : AbstractRouteActivator(serviceProvider)
+using Microsoft.Extensions.Logging;
+
+public class HeadlessRouteActivator(
+    IServiceProvider serviceProvider,
+    ILoggerFactory? loggerFactory) : AbstractRouteActivator(serviceProvider, loggerFactory)
 {
     /// <inheritdoc />
     protected override void DoActivateRoute(IActiveRoute route, RouterContext context)

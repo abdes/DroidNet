@@ -6,6 +6,8 @@ namespace DroidNet.Routing.View;
 
 using System.Diagnostics;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
 /// Default implementation for <see cref="IViewLocator" />.It uses a series of
@@ -70,8 +72,9 @@ using System.Reflection;
 /// must be provided to the constructor.
 /// </para>
 /// </remarks>
-public class DefaultViewLocator : IViewLocator
+public partial class DefaultViewLocator : IViewLocator
 {
+    private readonly ILogger logger;
     private readonly IServiceProvider serviceLocator;
 
     /// <summary>
@@ -82,26 +85,23 @@ public class DefaultViewLocator : IViewLocator
     /// <param name="serviceLocator">
     /// The DI <see cref="IServiceProvider" />.
     /// </param>
-    public DefaultViewLocator(IServiceProvider serviceLocator)
-    {
-        this.serviceLocator = serviceLocator;
-        this.ViewModelToViewFunc = vm => vm.Replace("ViewModel", "View");
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultViewLocator" />
-    /// class.
-    /// </summary>
-    /// <param name="serviceLocator">
-    /// The DI <see cref="IServiceProvider" />.
+    /// <param name="loggerFactory">
+    /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
+    /// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
+    /// from the Dependency Injector.
     /// </param>
     /// <param name="viewModelToViewFunc">
     /// The method which will convert a 'ViewModel' name into a 'View' name.
     /// </param>
-    public DefaultViewLocator(IServiceProvider serviceLocator, Func<string, string> viewModelToViewFunc)
+    public DefaultViewLocator(
+        IServiceProvider serviceLocator,
+        ILoggerFactory? loggerFactory,
+        Func<string, string>? viewModelToViewFunc = null)
     {
+        this.logger = loggerFactory?.CreateLogger<Router>() ?? NullLoggerFactory.Instance.CreateLogger<Router>();
+
         this.serviceLocator = serviceLocator;
-        this.ViewModelToViewFunc = viewModelToViewFunc;
+        this.ViewModelToViewFunc = viewModelToViewFunc ?? (vm => vm.Replace("ViewModel", "View"));
     }
 
     /// <summary>
@@ -134,28 +134,32 @@ public class DefaultViewLocator : IViewLocator
         var view = this.AttemptViewForResolutionFor(viewModelType);
         if (view is not null)
         {
-            Debug.WriteLine(
-                $"Resolved view for VM RT {viewModelType.FullName} using IViewFor<{viewModelType.FullName}>");
+            LogResolutionSuccess($"using IViewFor<{viewModelType.FullName}>");
             return view;
         }
 
         view = this.AttemptViewResolutionFor(viewModelType);
         if (view is not null)
         {
-            Debug.WriteLine($"Resolved view for {viewModelType.FullName} using View {view.GetType().FullName}");
+            LogResolutionSuccess($"using the view type");
             return view;
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(viewModelType));
         if (view is not null)
         {
-            Debug.WriteLine(
-                $"Resolved view for {viewModelType.FullName} using View {view.GetType().FullName} and toggle");
+            LogResolutionSuccess($"using view type with toggle");
             return view;
         }
 
-        Debug.WriteLine($"Failed to resolve view for view model type '{viewModelType.FullName}'.");
+        LogViewResolutionFailed(this.logger, viewModelType);
         return null;
+
+        void LogResolutionSuccess(string how)
+        {
+            Debug.Assert(view != null, nameof(view) + " != null");
+            LogViewResolved(this.logger, viewModelType, view.GetType(), how);
+        }
     }
 
     /// <inheritdoc />
@@ -165,26 +169,32 @@ public class DefaultViewLocator : IViewLocator
         var view = this.AttemptViewForResolutionFor(typeof(T));
         if (view is not null)
         {
-            Debug.WriteLine($"Resolved view for VM T {typeof(T).FullName} using IViewFor<{typeof(T).FullName}>");
+            LogResolutionSuccess($"using IViewFor<{typeof(T)}>");
             return (IViewFor<T>?)view;
         }
 
         view = this.AttemptViewResolutionFor(typeof(T));
         if (view is not null)
         {
-            Debug.WriteLine($"Resolved view for {typeof(T).FullName} using View {view.GetType().FullName}");
+            LogResolutionSuccess($"using the view type");
             return (IViewFor<T>?)view;
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(typeof(T)));
         if (view is not null)
         {
-            Debug.WriteLine($"Resolved view for {typeof(T).FullName} using View {view.GetType().FullName} and toggle");
+            LogResolutionSuccess($"using the view type with toggle");
             return (IViewFor<T>?)view;
         }
 
-        Debug.WriteLine($"Failed to resolve view for view model type '{typeof(T).FullName}'.");
+        LogViewResolutionFailed(this.logger, typeof(T));
         return null;
+
+        void LogResolutionSuccess(string how)
+        {
+            Debug.Assert(view != null, nameof(view) + " != null");
+            LogViewResolved(this.logger, typeof(T), view.GetType(), how);
+        }
     }
 
     private static Type? ToggleViewModelType(Type viewModelType)
@@ -238,6 +248,30 @@ public class DefaultViewLocator : IViewLocator
         return Type.GetType(toggledTypeName, false);
     }
 
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Resolved ViewModel with type {ViewModelType} to {ViewType}, {How}")]
+    private static partial void LogViewResolved(ILogger logger, Type viewModelType, Type viewType, string how);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Failed to get a View for the ViewModel with type {ViewModelType}")]
+    private static partial void LogViewResolutionFailed(ILogger logger, Type viewModelType);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Could not get a View with type {ViewType} from the Dependency Injector")]
+    private static partial void LogViewResolutionAttemptFailed(ILogger logger, string viewType, Exception exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "View with type {ViewType} does not implement IViewFor")]
+    private static partial void LogViewIsNotViewFor(ILogger logger, Type viewType);
+
     private IViewFor? AttemptViewForResolutionFor(Type? viewModelType)
     {
         var proposedViewTypeName = typeof(IViewFor<>).MakeGenericType(viewModelType!).AssemblyQualifiedName;
@@ -267,20 +301,22 @@ public class DefaultViewLocator : IViewLocator
             }
 
             var service = this.serviceLocator.GetService(viewType);
-
-            if (service is not IViewFor view)
+            if (service is IViewFor view)
             {
-                return null;
+                return view;
             }
 
-            Debug.WriteLine($"Resolved service type '{viewType.FullName}'");
+            if (service is not null)
+            {
+                LogViewIsNotViewFor(this.logger, viewType);
+            }
 
-            return view;
+            return null;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            Debug.WriteLine($"Exception occurred while attempting to resolve type {viewTypeName} into a view.");
-            throw;
+            LogViewResolutionAttemptFailed(this.logger, viewTypeName, exception);
+            return null;
         }
     }
 }

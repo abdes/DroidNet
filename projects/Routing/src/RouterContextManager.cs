@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing;
 
-using System.Diagnostics;
-
 /// <summary>
 /// Manages <see cref="RouterContext" /> instances used by the router.
 /// </summary>
@@ -54,12 +52,6 @@ public class RouterContextManager : IDisposable
             {
                 return;
             }
-
-            Debug.WriteLine(
-                "Context changed: " +
-                (this.currentContext == null ? "None" : this.currentContext.ToString()) +
-                " -> " +
-                (context == null ? "None" : context.ToString()));
 
             this.currentContext = context;
         };

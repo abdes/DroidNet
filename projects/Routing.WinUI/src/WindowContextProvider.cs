@@ -54,7 +54,6 @@ internal sealed class WindowContextProvider(IServiceProvider provider) : IContex
         }
 
         var context = new WindowRouterContext(target, window);
-        Debug.WriteLine($"New context '{context}' -> notifying subscribers to {nameof(this.ContextCreated)}");
         this.ContextCreated?.Invoke(this, context);
         window.Activated += (_, args) =>
         {
@@ -64,12 +63,7 @@ internal sealed class WindowContextProvider(IServiceProvider provider) : IContex
                 this,
                 args.WindowActivationState == WindowActivationState.Deactivated ? null : context);
         };
-        window.Closed += (_, _) =>
-        {
-            Debug.WriteLine(
-                $"Window for context '{context}' closed -> notifying subscribers to {nameof(this.ContextDestroyed)}");
-            this.ContextDestroyed?.Invoke(this, context);
-        };
+        window.Closed += (_, _) => this.ContextDestroyed?.Invoke(this, context);
 
         return context;
     }

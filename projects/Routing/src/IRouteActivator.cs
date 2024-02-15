@@ -21,12 +21,14 @@ public interface IRouteActivator
     /// (window, content frame, etc...) the view identified by the route URL
     /// will be loaded into.
     /// </param>
-    void ActivateRoute(IActiveRoute route, RouterContext context);
+    /// <returns>
+    /// <c>true</c> if the activation was successful; <c>false</c> otherwise.
+    /// </returns>
+    bool ActivateRoute(IActiveRoute route, RouterContext context);
 
     /// <summary>
     /// Recursively activates a tree of <see cref="IActiveRoute" />, starting
-    /// from its given  <paramref name="root" />, within the specified
-    /// <paramref name="context" />.
+    /// from its given  <paramref name="root" />, within the specified <paramref name="context" />.
     /// </summary>
     /// <param name="root">The root of the tree to activate.</param>
     /// <param name="context">
@@ -34,5 +36,9 @@ public interface IRouteActivator
     /// (window, content frame, etc...) the view identified by the route URL
     /// will be loaded into.
     /// </param>
-    void ActivateRoutesRecursive(IActiveRoute root, RouterContext context);
+    /// <returns>
+    /// <c>false</c> if any of the child routes activation was successful;
+    /// <c>true</c> otherwise.
+    /// </returns>
+    bool ActivateRoutesRecursive(IActiveRoute root, RouterContext context);
 }

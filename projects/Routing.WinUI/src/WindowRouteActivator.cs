@@ -5,6 +5,8 @@
 namespace DroidNet.Routing.WinUI;
 
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
 /// Represents a route activator (<see cref="IRouteActivator" />) that
@@ -16,7 +18,14 @@ using System.Diagnostics;
 /// parent. In such case, the content is loaded into the context's window,
 /// provided that window implements <see cref="IOutletContainer" />.
 /// </remarks>
-internal sealed class WindowRouteActivator(IServiceProvider provider) : AbstractRouteActivator(provider)
+/// <param name="loggerFactory">
+/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
+/// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
+/// from the Dependency Injector.
+/// </param>
+internal sealed partial class WindowRouteActivator(
+    IServiceProvider provider,
+    ILoggerFactory? loggerFactory) : AbstractRouteActivator(provider, loggerFactory)
 {
     /// <inheritdoc />
     protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
@@ -48,8 +57,11 @@ internal sealed class WindowRouteActivator(IServiceProvider provider) : Abstract
             }
             else
             {
-                // TODO: log a warning if we were not able to load the content
-                Debug.WriteLine($"target window of type '{window.GetType()} is not a {nameof(IOutletContainer)}");
+                LogContentLoadingError(
+                    this.Logger,
+                    route.Outlet,
+                    $"because {window.GetType()} is not an {nameof(IOutletContainer)}");
+
                 throw new InvalidOperationException(
                     $"target window of type '{window.GetType()} is not a {nameof(IOutletContainer)}");
             }
@@ -73,12 +85,20 @@ internal sealed class WindowRouteActivator(IServiceProvider provider) : Abstract
             }
             else
             {
-                // TODO: log a warning if we were not able to load the content
-                Debug.WriteLine(
-                    $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
+                var because = parent is null
+                    ? $"I could not find an {nameof(IOutletContainer)} parent for it"
+                    : $"the view model of its parent ({parent.ViewModel}) is not an {nameof(IOutletContainer)}";
+                LogContentLoadingError(this.Logger, route.Outlet, because);
+
                 throw new InvalidOperationException(
                     $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
             }
         }
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Cannot load content into {Outlet} {Because}")]
+    private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
 }
