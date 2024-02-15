@@ -24,20 +24,20 @@ public class HostingExtensionsTest
     [TestCategory("Context")]
     public void WhenProvidedWithContextItUsesIt()
     {
-        var builder = new HostApplicationBuilder();
+        var builder = Host.CreateDefaultBuilder();
 
         // Setup and provision the hosting context for the User Interface
         // service.
-        ((IHostApplicationBuilder)builder).Properties.Add(
+        builder.Properties.Add(
             HostingExtensions.HostingContextKey,
             new HostingContext() { IsLifetimeLinked = false });
 
         var host = builder.ConfigureWinUI<MyApp>()
             .Build();
-        host.Should().NotBeNull();
+        _ = host.Should().NotBeNull();
 
         var context = host.Services.GetRequiredService<HostingContext>();
-        context.IsLifetimeLinked.Should().BeFalse();
+        _ = context.IsLifetimeLinked.Should().BeFalse();
     }
 
     /// <summary>
@@ -48,13 +48,13 @@ public class HostingExtensionsTest
     [TestCategory("Context")]
     public void WhenNotProvidedWithContextItUsesDefault()
     {
-        var builder = new HostApplicationBuilder();
+        var builder = Host.CreateDefaultBuilder();
         var host = builder.ConfigureWinUI<MyApp>()
             .Build();
-        host.Should().NotBeNull();
+        _ = host.Should().NotBeNull();
 
         var context = host.Services.GetRequiredService<HostingContext>();
-        context.IsLifetimeLinked.Should().BeTrue("the default is true");
+        _ = context.IsLifetimeLinked.Should().BeTrue("the default is true");
     }
 
     /// <summary>
@@ -66,14 +66,14 @@ public class HostingExtensionsTest
     [TestCategory("Dependency Injector")]
     public void RegistersUserInterfaceThread()
     {
-        var builder = new HostApplicationBuilder();
+        var builder = Host.CreateDefaultBuilder();
         var host = builder.ConfigureWinUI<MyApp>()
             .Build();
-        host.Should().NotBeNull();
+        _ = host.Should().NotBeNull();
 
         var act = () => _ = host.Services.GetRequiredService<IUserInterfaceThread>();
 
-        act.Should().NotThrow();
+        _ = act.Should().NotThrow();
     }
 
     /// <summary>
@@ -85,15 +85,15 @@ public class HostingExtensionsTest
     [TestCategory("Dependency Injector")]
     public void RegistersUserInterfaceHostedService()
     {
-        var builder = new HostApplicationBuilder();
+        var builder = Host.CreateDefaultBuilder();
         var host = builder.ConfigureWinUI<MyApp>()
             .Build();
-        host.Should().NotBeNull();
+        _ = host.Should().NotBeNull();
 
         var uiService = host.Services.GetServices<IHostedService>()
             .First(service => service is UserInterfaceHostedService);
 
-        uiService.Should().NotBeNull();
+        _ = uiService.Should().NotBeNull();
     }
 
     /// <summary>
@@ -105,9 +105,9 @@ public class HostingExtensionsTest
     [TestCategory("Dependency Injector")]
     public void RegistersApplication()
     {
-        var builder = new HostApplicationBuilder().ConfigureWinUI<MyApp>();
+        var builder = Host.CreateDefaultBuilder().ConfigureWinUI<MyApp>();
 
-        builder.Services.Count(desc => desc.ServiceType.IsAssignableFrom(typeof(MyApp))).Should().Be(2);
+        _ = builder.ConfigureServices((_, services) => services.Should().Contain(s => s.ServiceType == typeof(MyApp)));
     }
 
     /// <summary>
@@ -118,10 +118,12 @@ public class HostingExtensionsTest
     [TestCategory("Dependency Injector")]
     public void RegistersApplicationWithBaseType()
     {
-        var builder = new HostApplicationBuilder().ConfigureWinUI<MyApp>();
+        var builder = Host.CreateDefaultBuilder().ConfigureWinUI<MyApp>();
 
-        builder.Services.Single(desc => desc.ServiceType.IsAssignableFrom(typeof(Application))).Should().NotBeNull();
+        _ = builder.ConfigureServices(
+            (_, services) => services.Should().Contain(s => s.ServiceType == typeof(Application)));
     }
 }
 
+// ReSharper disable once ClassNeverInstantiated.Global
 internal sealed class MyApp : Application;

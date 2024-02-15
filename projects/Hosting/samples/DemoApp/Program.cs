@@ -24,9 +24,9 @@ using Microsoft.Extensions.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A convenience extension method <see cref="HostingExtensions.ConfigureWinUI{TApplication}" /> is provided to
-/// simplify the setup of the User Interface hosted service for WinUI
-/// applications.
+/// A convenience extension method <see cref="HostingExtensions.ConfigureWinUI{TApplication}(IHostBuilder)" />
+/// is provided to simplify the setup of the User Interface hosted service for
+/// WinUI applications.
 /// </para>
 /// <para>
 /// The WinUI service configuration supports customization, through a
@@ -55,14 +55,14 @@ public static partial class Program
         // Use a default application host builder, which comes with logging,
         // configuration providers for environment variables, command line,
         // 'appsettings.json' and secrets.
-        var builder = Host.CreateApplicationBuilder(args);
+        var builder = Host.CreateDefaultBuilder(args);
 
         // You can further customize and enhance the builder with additional
         // configuration sources, logging providers, etc.
 
         // Setup and provision the hosting context for the User Interface
         // service.
-        ((IHostApplicationBuilder)builder).Properties.Add(
+        builder.Properties.Add(
             HostingExtensions.HostingContextKey,
             new HostingContext() { IsLifetimeLinked = true });
 
