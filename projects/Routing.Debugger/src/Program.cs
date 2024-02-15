@@ -52,14 +52,14 @@ public static partial class Program
         // Use a default application host builder, which comes with logging,
         // configuration providers for environment variables, command line,
         // appsettings.json and secrets.
-        var builder = Host.CreateApplicationBuilder(args);
+            var builder = Host.CreateDefaultBuilder(args);
 
         // You can further customize and enhance the builder with additional
         // configuration sources, logging providers, etc.
 
         // Setup and provision the hosting context for the User Interface
         // service.
-        ((IHostApplicationBuilder)builder).Properties.Add(
+            builder.Properties.Add(
             HostingExtensions.HostingContextKey,
             new HostingContext() { IsLifetimeLinked = true });
 
@@ -74,7 +74,8 @@ public static partial class Program
         // Set up the view model to view converters. We're using the standard
         // converter, and a custom one with fall back if the view cannot be
         // located.
-        _ = builder.Services.AddKeyedSingleton<IValueConverter, ViewModelToView>("VmToView");
+            _ = builder.ConfigureServices(
+                services => services.AddKeyedSingleton<IValueConverter, ViewModelToView>("VmToView"));
         /*
          * Configure the Application's Windows. Each window represents a target
          * in which to open the requested url. The target name is the key used
@@ -87,9 +88,10 @@ public static partial class Program
         // The Main Window is a singleton and its content can be re-assigned as
         // needed. It is registered with a key that corresponding to name of the
         // special target <see cref="Target.Main" />.
-        _ = builder.Services.AddKeyedSingleton<Window, MainWindow>(Target.Main);
+            _ = builder.ConfigureServices(services => services.AddKeyedSingleton<Window, MainWindow>(Target.Main));
 
-        _ = builder.Services
+            _ = builder.ConfigureServices(
+                services => services
                 .AddSingleton<ShellViewModel>()
                 .AddSingleton<ShellView>()
                 .AddTransient<WelcomeViewModel>()
@@ -101,24 +103,7 @@ public static partial class Program
                 .AddTransient<UrlTreeViewModel>()
                 .AddTransient<UrlTreeView>()
                 .AddTransient<RouterStateViewModel>()
-                .AddTransient<RouterStateView>()
-            /*.AddTransient<DockView>()
-            .AddTransient<DockPanelViewModel>()
-            .AddTransient<DockPanel>()
-            .AddTransient<DockTestViewModel>()
-            .AddTransient<DockTestView>()
-            .AddTransient<EmptyShellViewModel>()
-            .AddTransient<EmptyShellView>()
-            .AddTransient<AppShellViewModel>()
-            .AddTransient<AppShellView>()
-            .AddTransient<HomeViewModel>()
-            .AddTransient<HomeView>()
-            .AddTransient<ConfigViewModel>()
-            .AddTransient<ConfigView>()
-            .AddTransient<UrlTreeViewModel>()
-            .AddTransient<UrlTreeView>()
-            .AddTransient<RouterStateViewModel>()
-            .AddTransient<RouterStateView>()*/;
+                    .AddTransient<RouterStateView>());
 
         var host = builder.Build();
 

@@ -10,36 +10,37 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 /// <summary>
-/// Provides extension methods for the <see cref="IHostApplicationBuilder" />
+/// Provides extension methods for the <see cref="IHostBuilder" />
 /// class to configure a <see cref="Router" />.
 /// </summary>
 public static class HostBuilderExtensions
 {
     /// <summary>
     /// Configures a <see cref="Router" /> for the
-    /// <see cref="IHostApplicationBuilder" /> using the provided <see cref="Routes" />
+    /// <see cref="IHostBuilder" /> using the provided <see cref="Routes" />
     /// <paramref name="config" />.
     /// </summary>
     /// <param name="hostBuilder">
-    /// The <see cref="IHostApplicationBuilder" />instance.
+    /// The <see cref="IHostBuilder" />instance.
     /// </param>
     /// <param name="config">The <see cref="Routes" /> configuration.</param>
-    /// <returns>The <see cref="IHostApplicationBuilder" /> instance.</returns>
-    public static IHostApplicationBuilder ConfigureRouter(this IHostApplicationBuilder hostBuilder, Routes config)
+    /// <returns>The <see cref="IHostBuilder" /> instance.</returns>
+    public static IHostBuilder ConfigureRouter(this IHostBuilder hostBuilder, Routes config)
     {
-        _ = hostBuilder.Services
-            /* Configure the router support services */
-            .AddSingleton<IViewLocator, DefaultViewLocator>()
-            .AddSingleton<ViewModelToView>()
-            .AddSingleton<IUrlSerializer, DefaultUrlSerializer>()
-            .AddSingleton<IUrlParser, DefaultUrlParser>()
-            .AddSingleton<IRouteActivator, WindowRouteActivator>()
-            .AddSingleton<IContextProvider, WindowContextProvider>()
-            /* Configure the router */
-            .AddSingleton<IRoutes>(config)
-            .AddSingleton<IRouterStateManager, RouterStateManager>()
-            .AddSingleton<RouterContextManager>()
-            .AddSingleton<IRouter, Router>();
+        _ = hostBuilder.ConfigureServices(
+            (_, services) => services
+                /* Configure the router support services*/
+                .AddSingleton<IViewLocator, DefaultViewLocator>()
+                .AddSingleton<ViewModelToView>()
+                .AddSingleton<IUrlSerializer, DefaultUrlSerializer>()
+                .AddSingleton<IUrlParser, DefaultUrlParser>()
+                .AddSingleton<IRouteActivator, WindowRouteActivator>()
+                .AddSingleton<IContextProvider, WindowContextProvider>()
+                /* Configure the router */
+                .AddSingleton<IRoutes>(config)
+                .AddSingleton<IRouterStateManager, RouterStateManager>()
+                .AddSingleton<RouterContextManager>()
+                .AddSingleton<IRouter, Router>());
 
         return hostBuilder;
     }
