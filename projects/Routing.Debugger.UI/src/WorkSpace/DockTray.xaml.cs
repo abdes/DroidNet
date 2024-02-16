@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
-using System.Collections.ObjectModel;
-using DroidNet.Docking;
 using DroidNet.Routing.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,15 +16,13 @@ using Microsoft.UI.Xaml.Data;
 [ViewModel(typeof(DockTrayViewModel))]
 public sealed partial class DockTray
 {
-    public DockTray(ReadOnlyObservableCollection<IDock> docks, Orientation orientation)
+    public DockTray() => this.InitializeComponent();
+
+    private void ItemsView_OnItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
     {
-        this.InitializeComponent();
-
-        this.ViewModel = new DockTrayViewModel(docks);
-        this.Orientation = orientation;
+        _ = sender;
+        this.ViewModel.ShowDockableCommand.Execute(args.InvokedItem);
     }
-
-    public Orientation Orientation { get; }
 }
 
 internal sealed class OrientationTemplateSelector : DataTemplateSelector
@@ -56,5 +52,5 @@ internal sealed class OrientationToLayoutConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
-        => throw new NotImplementedException();
+        => throw new InvalidOperationException();
 }
