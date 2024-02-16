@@ -7,6 +7,7 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 using System.Diagnostics;
 using DroidNet.Docking;
 using DroidNet.Routing.Generators;
+using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -21,10 +22,12 @@ using Microsoft.UI.Xaml.Controls;
 public partial class WorkSpaceView : UserControl
 {
     private readonly ILogger logger;
+    private readonly IViewLocator viewLocator;
 
-    public WorkSpaceView(ILoggerFactory? loggerFactory)
+    public WorkSpaceView(ILoggerFactory? loggerFactory, IViewLocator viewLocator)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
+        this.viewLocator = viewLocator;
 
         this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
@@ -35,33 +38,6 @@ public partial class WorkSpaceView : UserControl
         };
 
         this.Unloaded += (_, _) => this.ViewModel.Dispose();
-    }
-
-    private static UIElement? ContentForDockGroup(IDocker docker, IDockGroup group, ILogger logger)
-    {
-        if (!group.IsEmpty)
-        {
-            return GroupWithDocks(docker, group, logger);
-        }
-
-        var content = GroupWithNoDocks(docker, group, logger);
-        return content == null
-            ? null
-            : new Border()
-            {
-                Child = content,
-
-                // BorderBrush = new SolidColorBrush(Colors.Red),
-                // BorderThickness = new Thickness(0.5),
-            };
-    }
-
-    private static DockGroup? GroupWithNoDocks(IDocker docker, IDockGroup group, ILogger logger)
-    {
-        var showFirst = ShouldShowGroup(group.First);
-        var showSecond = ShouldShowGroup(group.Second);
-
-        return showFirst || showSecond ? new DockGroup(docker, group, showFirst, showSecond, logger) : null;
     }
 
     private static bool ShouldShowGroup(IDockGroup? group)
@@ -84,12 +60,55 @@ public partial class WorkSpaceView : UserControl
         return ShouldShowGroup(group.First) || ShouldShowGroup(group.Second);
     }
 
-    private static DockList? GroupWithDocks(IDocker docker, IDockGroup group, ILogger logger)
-        => group.Docks.Any(d => d.State != DockingState.Minimized) ? new DockList(docker, group, logger) : null;
+    private static DockList? GroupWithDocks(
+        IDocker docker,
+        IDockGroup group,
+        IViewLocator viewLocator,
+        ILogger logger)
+        => group.Docks.Any(d => d.State != DockingState.Minimized)
+            ? new DockList(docker, group, viewLocator, logger)
+            : null;
+
+    private static DockGroup? GroupWithNoDocks(
+        IDocker docker,
+        IDockGroup group,
+        IViewLocator viewLocator,
+        ILogger logger)
+    {
+        var showFirst = ShouldShowGroup(group.First);
+        var showSecond = ShouldShowGroup(group.Second);
+
+        return showFirst || showSecond
+            ? new DockGroup(docker, group, showFirst, showSecond, viewLocator, logger)
+            : null;
+    }
+
+    private static UIElement? ContentForDockGroup(
+        IDocker docker,
+        IDockGroup group,
+        IViewLocator viewLocator,
+        ILogger logger)
+    {
+        if (!group.IsEmpty)
+        {
+            return GroupWithDocks(docker, group, viewLocator, logger);
+        }
+
+        var content = GroupWithNoDocks(docker, group, viewLocator, logger);
+        return content == null
+            ? null
+            : new Border()
+            {
+                Child = content,
+
+                // BorderBrush = new SolidColorBrush(Colors.Red),
+                // BorderThickness = new Thickness(0.5),
+            };
+    }
 
     private void UpdateContent() => this.Content = new Border()
     {
-        Child = ContentForDockGroup(this.ViewModel.Docker, this.ViewModel.Root, this.logger),
+        Child = ContentForDockGroup(this.ViewModel.Docker, this.ViewModel.Root, this.viewLocator, this.logger),
         BorderBrush = this.BorderBrush,
         BorderThickness = this.BorderThickness,
     };
@@ -97,25 +116,36 @@ public partial class WorkSpaceView : UserControl
     private sealed class DockGroup : VectorGrid
     {
         private readonly IDocker docker;
+        private readonly ILogger logger;
+        private readonly IViewLocator viewLocator;
 
-        public DockGroup(IDocker docker, IDockGroup group, bool showFirst, bool showSecond, ILogger logger)
+        public DockGroup(
+            IDocker docker,
+            IDockGroup group,
+            bool showFirst,
+            bool showSecond,
+            IViewLocator viewLocator,
+            ILogger logger)
             : base(group.IsHorizontal ? Orientation.Horizontal : Orientation.Vertical)
         {
             this.docker = docker;
+            this.viewLocator = viewLocator;
+            this.logger = logger;
+
             this.Name = group.ToString();
-            this.BuildGrid(group, showFirst, showSecond, logger);
+            this.BuildGrid(group, showFirst, showSecond);
         }
 
-        private void AddContentForSlot(VectorGrid grid, IDockGroup slot, int index, ILogger logger)
+        private void AddContentForSlot(VectorGrid grid, IDockGroup slot, int index)
         {
-            var content = ContentForDockGroup(this.docker, slot, logger);
+            var content = ContentForDockGroup(this.docker, slot, this.viewLocator, this.logger);
             if (content != null)
             {
                 grid.AddItem(content, index);
             }
         }
 
-        private void BuildGrid(IDockGroup group, bool showFirst, bool showSecond, ILogger logger)
+        private void BuildGrid(IDockGroup group, bool showFirst, bool showSecond)
         {
             Debug.Assert(
                 showFirst || showSecond,
@@ -131,7 +161,7 @@ public partial class WorkSpaceView : UserControl
                 if (!HandleTray(group.First) && !Collapse(group.First, group.First.First, group.First.Second))
                 {
                     this.DefineItem(new GridLength(1, GridUnitType.Star));
-                    this.AddContentForSlot(this, group.First!, gridItemIndex++, logger);
+                    this.AddContentForSlot(this, group.First!, gridItemIndex++);
                     showSplitter = true;
                 }
             }
@@ -149,7 +179,7 @@ public partial class WorkSpaceView : UserControl
                     }
 
                     this.DefineItem(new GridLength(1, GridUnitType.Star));
-                    this.AddContentForSlot(this, group.Second!, gridItemIndex, logger);
+                    this.AddContentForSlot(this, group.Second!, gridItemIndex);
                 }
             }
 
@@ -179,7 +209,7 @@ public partial class WorkSpaceView : UserControl
                 }
 
                 this.DefineItem(GridLength.Auto);
-                this.AddContentForSlot(this, part, gridItemIndex++, logger);
+                this.AddContentForSlot(this, part, gridItemIndex++);
                 return true;
             }
         }

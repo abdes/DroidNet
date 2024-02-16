@@ -6,11 +6,10 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using DroidNet.Docking;
 using DroidNet.Routing.Debugger.UI.Docks;
+using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Data;
-using Application = Microsoft.UI.Xaml.Application;
 
 /// <summary>
 /// A custom control representing the list of docks in a dock group. It uses a
@@ -18,7 +17,7 @@ using Application = Microsoft.UI.Xaml.Application;
 /// </summary>
 public partial class DockList : VectorGrid
 {
-    public DockList(IDocker docker, IDockGroup group, ILogger logger)
+    public DockList(IDocker docker, IDockGroup group, IViewLocator viewLocator, ILogger logger)
         : base(
             group.Orientation == DockGroupOrientation.Horizontal
                 ? Orientation.Horizontal
@@ -36,7 +35,7 @@ public partial class DockList : VectorGrid
                 new Border()
                 {
                     Child = dock is ApplicationDock
-                        ? GetApplicationContent(dock, logger)
+                        ? GetApplicationContent(dock, viewLocator, logger)
                         : new DockPanel() { ViewModel = new DockPanelViewModel(dock, docker) },
 
                     // BorderBrush = new SolidColorBrush(Colors.Blue),
@@ -60,11 +59,11 @@ public partial class DockList : VectorGrid
         Message = "Failed to load application content")]
     private static partial void LogContentLoadingError(ILogger logger, Exception exception);
 
-    private static UIElement GetApplicationContent(IDock dock, ILogger logger)
+    private static UIElement GetApplicationContent(IDock dock, IViewLocator viewLocator, ILogger logger)
     {
         try
         {
-            return TryGetApplicationContent(dock);
+            return TryGetApplicationContent(dock, viewLocator);
         }
         catch (Exception exception)
         {
@@ -79,7 +78,7 @@ public partial class DockList : VectorGrid
         }
     }
 
-    private static UIElement TryGetApplicationContent(IDock dock)
+    private static UIElement TryGetApplicationContent(IDock dock, IViewLocator viewLocator)
     {
         if (dock.Dockables.Count != 1)
         {
@@ -98,26 +97,7 @@ public partial class DockList : VectorGrid
                 "application view model is null");
         }
 
-        // TODO: refactor this constant and provide a function to get the converter
-        const string converterResourceKey = "VmToViewConverter";
-        IValueConverter vmToViewConverter;
-        try
-        {
-            vmToViewConverter = (IValueConverter)Application.Current.Resources[converterResourceKey] ??
-                                throw new ContentLoadingException(
-                                    DebuggerConstants.AppOutletName,
-                                    contentViewModel,
-                                    $"there is no ViewModel to View converter as a resource with key `{converterResourceKey}");
-        }
-        catch (Exception)
-        {
-            throw new ContentLoadingException(
-                DebuggerConstants.AppOutletName,
-                contentViewModel,
-                $"there is no ViewModel to View converter as a resource with key `{converterResourceKey}`");
-        }
-
-        var view = vmToViewConverter.Convert(contentViewModel, typeof(object), null, null);
+        var view = viewLocator.ResolveView(contentViewModel);
         if (view is UIElement content)
         {
             return content;
@@ -126,6 +106,6 @@ public partial class DockList : VectorGrid
         throw new ContentLoadingException(
             DebuggerConstants.AppOutletName,
             contentViewModel,
-            $"the view for application content is {(view is null ? "null" : "not a UIElement")}");
+            $"the view is {(view is null ? "null" : "not a UIElement")}");
     }
 }
