@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:workSpace="using:DroidNet.Routing.Debugger.UI.WorkSpace">
 
-    <!--  TODO(abdes): review this if the style application bug on SizerBase is resolved  -->
+    <!--  TODO(abdes): review this if the style application issue on SizerBase is resolved  -->
     <!--  https://github.com/CommunityToolkit/Windows/issues/273  -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="SizerBase.xaml" />

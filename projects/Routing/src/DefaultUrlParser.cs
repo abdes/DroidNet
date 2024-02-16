@@ -5,6 +5,7 @@
 namespace DroidNet.Routing;
 
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Routing.Detail;
 
@@ -411,7 +412,7 @@ public class DefaultUrlParser : IUrlParser
         {
             ParamType.Matrix => remaining.MatchMatrixParamKey(),
             ParamType.Query => remaining.MatchQueryParamKey(),
-            _ => throw new NotImplementedException(),
+            _ => throw new InvalidEnumArgumentException(),
         };
 
         if (key.Length == 0)
@@ -428,7 +429,7 @@ public class DefaultUrlParser : IUrlParser
             {
                 ParamType.Matrix => remaining.MatchMatrixParamValue(),
                 ParamType.Query => remaining.MatchQueryParamValue(),
-                _ => throw new NotImplementedException(),
+                _ => throw new InvalidEnumArgumentException(),
             };
             if (valueMatch.Length != 0)
             {

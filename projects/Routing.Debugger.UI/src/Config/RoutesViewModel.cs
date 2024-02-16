@@ -23,11 +23,11 @@ public class RoutesViewModel : TreeViewModelBase
 
     private sealed class RootNode(IRoutes config) : IRoute
     {
-        public PathMatch MatchMethod => throw new NotImplementedException();
+        public PathMatch MatchMethod => throw new InvalidOperationException();
 
         public string Path => RouteAdapter.RootPath;
 
-        public IRoute.PathMatcher Matcher => throw new NotImplementedException();
+        public IRoute.PathMatcher Matcher => throw new InvalidOperationException();
 
         public Type? ViewModelType => null;
 
