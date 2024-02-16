@@ -18,6 +18,8 @@
         <EnableMsixTooling>true</EnableMsixTooling>
         <PublishReadyToRun>true</PublishReadyToRun>
         <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+        <WindowsPackageType>None</WindowsPackageType>
+
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
 
