@@ -8,6 +8,7 @@
 
 namespace DroidNet.Hosting.Demo;
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Hosting;
@@ -38,6 +39,7 @@ using Microsoft.Extensions.Hosting;
 /// either of them will result in terminating the other.
 /// </para>
 /// </remarks>
+[ExcludeFromCodeCoverage]
 public static partial class Program
 {
     /// <summary>

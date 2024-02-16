@@ -4,12 +4,14 @@
 
 namespace DroidNet.Routing;
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
 /// <summary>Unit tests for the Routes class.</summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
 public class RoutesTest
 {
     private readonly Mock<IRouteValidator> validator;

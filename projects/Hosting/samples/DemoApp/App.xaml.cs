@@ -4,6 +4,7 @@
 
 namespace DroidNet.Hosting.Demo;
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
@@ -11,6 +12,7 @@ using Microsoft.UI.Xaml;
 /// Provides application-specific behavior to supplement the default
 /// Application class.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public partial class App
 {
     private readonly IServiceProvider serviceProvider;

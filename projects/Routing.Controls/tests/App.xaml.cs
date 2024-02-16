@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing;
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -13,6 +14,7 @@ using Microsoft.UI.Xaml;
 /// Provides application-specific behavior to supplement the default Application
 /// class.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public partial class TestApp
 {
     /// <summary>

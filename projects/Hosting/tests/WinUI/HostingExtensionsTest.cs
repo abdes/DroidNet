@@ -4,6 +4,7 @@
 
 namespace DroidNet.Hosting.WinUI;
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,6 +15,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// Uint tests for the <see cref="HostingExtensions" /> class.
 /// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
 public class HostingExtensionsTest
 {
     /// <summary>
