@@ -76,7 +76,7 @@ public class Docker : IDocker
                 break;
 
             case AnchorPosition.With:
-                throw new NotImplementedException();
+                throw new InvalidOperationException("docking to the root can only be done along the edges");
 
             default:
                 throw new InvalidEnumArgumentException(nameof(position), (int)position, typeof(AnchorPosition));
