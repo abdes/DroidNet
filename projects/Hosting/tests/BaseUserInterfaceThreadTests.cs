@@ -4,6 +4,7 @@
 
 namespace DroidNet.Hosting;
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -14,6 +15,7 @@ using Moq.Protected;
 /// Uint tests for the <see cref="BaseUserInterfaceThread{T}" /> class.
 /// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
 public class BaseUserInterfaceThreadTests
 {
     /// <summary>

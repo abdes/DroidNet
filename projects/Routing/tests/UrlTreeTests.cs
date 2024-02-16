@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing;
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -13,6 +14,7 @@ using Moq;
 /// Contains unit tests for the <see cref="UrlTree" /> class.
 /// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
 public class UrlTreeTests : TestSuiteWithAssertions
 {
     /// <summary>

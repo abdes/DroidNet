@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing.Converters;
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.View;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -13,6 +14,7 @@ using Moq;
 /// Contains test cases for the <see cref="ViewModelToView" /> class.
 /// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
 public class ViewModelToViewTests
 {
     private readonly ViewModelToView converter;
