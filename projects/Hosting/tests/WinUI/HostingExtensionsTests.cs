@@ -16,7 +16,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class HostingExtensionsTest
+public class HostingExtensionsTests
 {
     /// <summary>
     /// Tests that the <c>ConfigureWinUI()</c> extension prefers to use the
