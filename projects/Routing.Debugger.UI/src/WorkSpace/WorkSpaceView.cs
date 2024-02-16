@@ -194,7 +194,8 @@ public partial class WorkSpaceView : UserControl
 
                 this.DefineItem(GridLength.Auto);
                 var trayOrientation = part.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
-                var trayControl = new DockTray(tray.MinimizedDocks, trayOrientation);
+                var trayViewModel = new DockTrayViewModel(this.docker, tray, trayOrientation);
+                var trayControl = new DockTray() { ViewModel = trayViewModel };
                 this.AddItem(trayControl, gridItemIndex++);
                 return true;
             }

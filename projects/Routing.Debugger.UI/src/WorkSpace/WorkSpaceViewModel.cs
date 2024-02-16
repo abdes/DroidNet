@@ -200,26 +200,29 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             // that should not be propagated to the router. We assume that
             // at some pint in time it will be pinned or minimized, but for
             // now, we will just consider it pinned.
-            if (dock.State == DockingState.Minimized)
+            if (dock.State is DockingState.Minimized or DockingState.Pinned)
             {
                 // TODO: refactor parameter parsing for the docker
                 if (currentParameters != null)
                 {
-                    if (!currentParameters.ContainsKey("minimized"))
+                    if (currentParameters.TryGetValue("minimized", out var current))
                     {
-                        changed = true;
-                    }
-                    else
-                    {
-                        var current = currentParameters["minimized"];
-                        if (current != null && !bool.Parse(current))
+                        if ((current == null && dock.State != DockingState.Minimized) ||
+                            (current != null && bool.Parse(current) != (dock.State == DockingState.Minimized)))
                         {
                             changed = true;
                         }
                     }
+                    else if (dock.State != DockingState.Pinned)
+                    {
+                        changed = true;
+                    }
                 }
 
-                parameters["minimized"] = null;
+                if (dock.State == DockingState.Minimized)
+                {
+                    parameters["minimized"] = null;
+                }
             }
 
             if (dock.Anchor != null)

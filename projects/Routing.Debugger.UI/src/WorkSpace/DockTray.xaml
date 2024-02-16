@@ -44,16 +44,18 @@
 
         <workSpace:OrientationTemplateSelector
             x:Key="OrientationTemplateSelector"
-            DockTrayOrientation="{x:Bind Orientation}"
+            DockTrayOrientation="{x:Bind ViewModel.Orientation}"
             HorizontalTemplate="{StaticResource HorizontalTemplate}"
             VerticalTemplate="{StaticResource VerticalTemplate}" />
     </UserControl.Resources>
 
     <Border BorderBrush="Green" BorderThickness="1">
         <ItemsView
+            IsItemInvokedEnabled="True"
+            ItemInvoked="ItemsView_OnItemInvoked"
             ItemTemplate="{StaticResource OrientationTemplateSelector}"
             ItemsSource="{x:Bind ViewModel.Dockables}"
-            Layout="{x:Bind Orientation, Converter={StaticResource OrientationToLayoutConverter}}"
+            Layout="{x:Bind ViewModel.Orientation, Converter={StaticResource OrientationToLayoutConverter}}"
             SelectionMode="None" />
     </Border>
 </UserControl>

@@ -8,21 +8,31 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Reactive.Linq;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Controls;
 
-public class DockTrayViewModel : IDisposable
+/// <summary>
+/// The ViewModel for a docking tray control.
+/// </summary>
+public partial class DockTrayViewModel : ObservableObject, IDisposable
 {
     private readonly ObservableCollection<IDockable> dockables = [];
 
     private readonly ReadOnlyObservableCollection<IDock> docks;
     private readonly IDisposable? changeSubscription;
+    private readonly IDocker docker;
 
-    public DockTrayViewModel(ReadOnlyObservableCollection<IDock> docks)
+    public DockTrayViewModel(IDocker docker, IDockTray tray, Orientation orientation)
     {
         this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
 
-        this.docks = docks;
+        this.Orientation = orientation;
+        this.docker = docker;
+        this.docks = tray.MinimizedDocks;
+
         this.UpdateDockables();
 
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -54,12 +64,23 @@ public class DockTrayViewModel : IDisposable
                 });
     }
 
+    public Orientation Orientation { get; set; }
+
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     public void Dispose()
     {
         this.changeSubscription?.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [RelayCommand]
+    private void ShowDockable(IDockable dockable)
+    {
+        var dock = dockable.Owner;
+        Debug.Assert(dock != null, "a minimized dock in the tray should always have a valid owner dock");
+
+        this.docker.PinDock(dock);
     }
 
     private void UpdateDockables()
