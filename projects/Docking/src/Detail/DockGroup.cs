@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 
 /// <summary>
@@ -67,7 +68,7 @@ internal partial class DockGroup : DockGroupBase
             DockGroupOrientation.Undetermined => "?",
             DockGroupOrientation.Horizontal => "--",
             DockGroupOrientation.Vertical => "|",
-            _ => throw new NotImplementedException(),
+            _ => throw new InvalidEnumArgumentException(),
         };
 
         return $"{orientation} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";

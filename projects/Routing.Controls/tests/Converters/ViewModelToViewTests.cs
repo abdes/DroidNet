@@ -69,7 +69,7 @@ public class ViewModelToViewTests
     {
         var action = () => this.converter.ConvertBack(null, null, null, null);
 
-        _ = action.Should().Throw<NotImplementedException>();
+        _ = action.Should().Throw<InvalidOperationException>();
     }
 }
 
