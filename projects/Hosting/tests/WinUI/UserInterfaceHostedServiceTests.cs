@@ -13,6 +13,7 @@ using Moq;
 /// Unit tests for <see cref="UserInterfaceHostedService" />.
 /// </summary>
 [TestClass]
+[TestCategory("Lifecycle")]
 [ExcludeFromCodeCoverage]
 public class UserInterfaceHostedServiceTests
 {
