@@ -46,7 +46,7 @@ namespace DroidNet.Routing;
 /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
 public class UrlSegment : IUrlSegment
 {
-    private readonly Parameters parameters = new();
+    private readonly Parameters parameters = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlSegment" /> class.
