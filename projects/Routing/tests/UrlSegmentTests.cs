@@ -42,18 +42,16 @@ public class UrlSegmentTests
     internal static IEnumerable<object[]> ParametersData
         => new[]
         {
-            new object[] { new Dictionary<string, string>(), string.Empty },
+            new object[] { ReadOnlyParameters.Empty, string.Empty },
             [
-                new Dictionary<string,
-                    string>()
+                new Parameters
                 {
                     { "1", "one" },
                 },
                 ";1=one",
             ],
             [
-                new Dictionary<string,
-                    string>()
+                new Parameters()
                 {
                     { "foo", "foo-value" },
                     { "bar", "baz=" },
@@ -94,7 +92,7 @@ public class UrlSegmentTests
         ],
         [
             "home",
-            new Dictionary<string, string>
+            new Parameters()
             {
                 { "name", "Alice" },
             },
@@ -103,7 +101,7 @@ public class UrlSegmentTests
         ],
         [
             "home",
-            new Dictionary<string, string>
+            new Parameters()
             {
                 { "the name", "Alice The Magnificent" },
             },
@@ -112,7 +110,7 @@ public class UrlSegmentTests
         ],
         [
             "home",
-            new Dictionary<string, string>
+            new Parameters()
             {
                 { "id", "42" },
                 { "name", "Alice" },
@@ -141,52 +139,6 @@ public class UrlSegmentTests
         _ = action.Should().NotThrow("Segment path can be empty.");
     }
 
-    /// <summary>Test the constructor with an invalid parameter name.</summary>
-    [TestMethod]
-    public void Constructor_WithEmptyParameterName_ThrowsArgumentException()
-    {
-        Dictionary<string, string?> parameters = new() { { string.Empty, "value" } };
-
-        var action = () => _ = new UrlSegment("segment", parameters);
-
-        _ = action.Should().Throw<ArgumentException>("Segment path cannot be empty.");
-    }
-
-    /// <summary>Test Adding a parameter to a <see cref="UrlSegment" />.</summary>
-    [TestMethod]
-    public void AddParameter_WithValidParameterName_Works()
-    {
-        Dictionary<string, string?> parameters = new() { { "param", "value" } };
-        var segment = new UrlSegment("segment", parameters);
-
-        segment.AddParameter("foo", "bar");
-
-        _ = segment.Parameters.Should().ContainKey("foo").WhoseValue.Should().Be("bar");
-    }
-
-    /// <summary>Test Adding a parameter to a <see cref="UrlSegment" />.</summary>
-    [TestMethod]
-    public void AddParameter_WithEmptyParameterName_ThrowsArgumentException()
-    {
-        Dictionary<string, string?> parameters = new() { { string.Empty, "value" } };
-
-        var action = () => _ = new UrlSegment("segment", parameters);
-
-        _ = action.Should().Throw<ArgumentException>("Parameter name cannot be empty.");
-    }
-
-    /// <summary>Test Adding a parameter to a <see cref="UrlSegment" />.</summary>
-    [TestMethod]
-    public void AddParameter_WithExistingParameterName_ThrowsArgumentException()
-    {
-        Dictionary<string, string?> parameters = new() { { "param", "value" } };
-        var segment = new UrlSegment("segment", parameters);
-
-        var action = () => segment.AddParameter("param", "different-value");
-
-        _ = action.Should().Throw<ArgumentException>("A parameter with the same name already exists.");
-    }
-
     /// <summary>
     /// Test the constructor with a valid path and no parameters.
     /// </summary>
@@ -211,8 +163,8 @@ public class UrlSegmentTests
     [TestMethod]
     public void Constructor_WithValidPathAndSomeParameters()
     {
-        var path = "user";
-        Dictionary<string, string?> parameters = new()
+        const string path = "user";
+        var parameters = new Parameters()
         {
             { "id", "42" },
             { "name", "Alice" },
@@ -234,7 +186,7 @@ public class UrlSegmentTests
     /// <param name="displayName">Not used.</param>
     [TestMethod]
     [DynamicData(nameof(SegmentData), DynamicDataDisplayName = nameof(GetCustomDynamicDataDisplayName))]
-    public void Serialize(string path, Dictionary<string, string?> parameters, string expected, string displayName)
+    public void Serialize(string path, IParameters parameters, string expected, string displayName)
     {
         _ = displayName;
         var segment = new UrlSegment(path, parameters);
@@ -264,7 +216,7 @@ public class UrlSegmentTests
     /// <param name="expected">The expected result string.</param>
     [TestMethod]
     [DynamicData(nameof(ParametersData))]
-    public void SerializeParameters(IDictionary<string, string?> parameters, string expected)
+    public void SerializeParameters(IParameters parameters, string expected)
     {
         var result = UrlSegment.SerializeMatrixParams(parameters);
         _ = result.Should().Be(expected);

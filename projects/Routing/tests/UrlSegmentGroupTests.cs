@@ -258,9 +258,9 @@ public class UrlSegmentGroupTests
     }
 
     // Create a mock UrlSegment with a given value
-    private static UrlSegment MockUrlSegment(string value)
+    private static IUrlSegment MockUrlSegment(string value)
     {
-        var mock = new Mock<UrlSegment>(value, new Dictionary<string, string>());
+        var mock = new Mock<IUrlSegment>();
         _ = mock.Setup(m => m.ToString()).Returns(value);
         return mock.Object;
     }

@@ -144,7 +144,7 @@ public class RouteChangeItem
 
     public required RouteChangeAction ChangeAction { get; init; }
 
-    public Dictionary<string, string?>? Parameters { get; init; }
+    public IParameters? Parameters { get; init; }
 
     public Type? ViewModelType { get; init; }
 }

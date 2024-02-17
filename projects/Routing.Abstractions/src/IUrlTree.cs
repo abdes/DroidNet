@@ -10,15 +10,10 @@ public interface IUrlTree
     /// <summary>
     /// Gets the root <see cref="IUrlSegmentGroup" /> of the parsed URL tree.
     /// </summary>
-    /// <value>The root <see cref="IUrlSegmentGroup" />.</value>
     IUrlSegmentGroup Root { get; }
 
     /// <summary>Gets the query parameters in this URL tree.</summary>
-    /// <value>
-    /// A dictionary of the query parameters where the keys are parameter names
-    /// and the values are parameter values.
-    /// </value>
-    IDictionary<string, string?> QueryParams { get; }
+    IParameters QueryParams { get; }
 
     /// <summary>
     /// Gets a value indicating whether this tree represents a relative URL

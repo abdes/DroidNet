@@ -70,13 +70,11 @@ public class DefaultUrlSerializer(IUrlParser parser) : IUrlSerializer
     /// <returns>
     /// The serialized string representation of the query params.
     /// </returns>
-    private static string SerializeQueryParams(IDictionary<string, string?> parameters)
+    private static string SerializeQueryParams(IParameters parameters)
     {
         var serialized = string.Join(
             '&',
-            parameters.Select(
-                pair => Uri.EscapeDataString(pair.Key) +
-                        (pair.Value is not null ? '=' + Uri.EscapeDataString(pair.Value) : string.Empty)));
+            parameters.Select(parameter => parameter.ToString()));
 
         return serialized.Length > 0 ? string.Concat('?', serialized) : string.Empty;
     }
