@@ -68,7 +68,7 @@ public class UrlSegment : IUrlSegment
 
         foreach (var pair in parameters)
         {
-            this.parameters.TryAdd(pair.Name, pair.Value);
+            _ = this.parameters.TryAdd(pair.Name, pair.Value);
         }
     }
 
