@@ -57,8 +57,8 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
             UrlSegmentGroup = urlTree.Root,
             UrlSegments = Array.Empty<UrlSegment>(),
             Outlet = OutletName.Primary,
-            Params = ReadOnlyDictionary<string, string?>.Empty,
-            QueryParams = urlTree.QueryParams.AsReadOnly(),
+            Params = ReadOnlyParameters.Empty,
+            QueryParams = urlTree.QueryParams,
             RouteConfig = new Route()
             {
                 Path = string.Empty,
@@ -163,18 +163,18 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
             // Merge the positional parameters with the matrix parameters of
             // the last segment (only the last segment) into the activated
             // route parameters.
-            var parameters = new Dictionary<string, string?>();
+            var parameters = new Parameters();
             foreach (var pair in matchResult.PositionalParams)
             {
-                parameters[pair.Key] = pair.Value.Path;
+                parameters.AddOrUpdate(pair.Key, pair.Value.Path);
             }
 
             if (segments.Count != 0)
             {
                 var lastSegment = segments[^1];
-                foreach (var pair in lastSegment.Parameters)
+                foreach (var parameter in lastSegment.Parameters)
                 {
-                    parameters[pair.Key] = pair.Value;
+                    parameters.AddOrUpdate(parameter.Name, parameter.Value);
                 }
             }
 

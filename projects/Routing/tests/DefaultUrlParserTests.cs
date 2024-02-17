@@ -89,7 +89,7 @@ public class DefaultUrlParserTests
 
         var result = parser.ParseQueryParams(ref remaining);
 
-        _ = result.Should().ContainKey("param").WhoseValue.Should().Be("value");
+        _ = result.Should().Contain(parameter => parameter.Name == "param" && parameter.Value == "value");
     }
 
     /// <summary>
@@ -106,8 +106,8 @@ public class DefaultUrlParserTests
         var result = parser.ParseQueryParams(ref remaining);
 
         _ = result.Should().HaveCount(2);
-        _ = result.Should().ContainKey("foo").WhoseValue.Should().Be("bar");
-        _ = result.Should().ContainKey("goo").WhoseValue.Should().Be("baz");
+        _ = result.Should().Contain(parameter => parameter.Name == "foo" && parameter.Value == "bar");
+        _ = result.Should().Contain(parameter => parameter.Name == "goo" && parameter.Value == "baz");
     }
 
     /// <summary>
@@ -125,7 +125,7 @@ public class DefaultUrlParserTests
         var result = parser.ParseQueryParams(ref remaining);
 
         _ = result.Should().HaveCount(1);
-        _ = result.Should().ContainKey("foo").WhoseValue.Should().Be("bar,baz");
+        _ = result.Should().Contain(parameter => parameter.Name == "foo" && parameter.Value == "bar,baz");
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public class DefaultUrlParserTests
 
         var result = parser.ParseMatrixParams(ref remaining);
 
-        _ = result.Should().ContainKey("param").WhoseValue.Should().Be("value1,value2");
+        _ = result.Should().Contain(parameter => parameter.Name == "param" && parameter.Value == "value1,value2");
     }
 
     /// <summary>
@@ -214,8 +214,8 @@ public class DefaultUrlParserTests
         var result = parser.ParseMatrixParams(ref remaining);
 
         _ = result.Should().HaveCount(2);
-        _ = result.Should().ContainKey("foo").WhoseValue.Should().Be("bar");
-        _ = result.Should().ContainKey("goo").WhoseValue.Should().Be("baz");
+        _ = result.Should().Contain(parameter => parameter.Name == "foo" && parameter.Value == "bar");
+        _ = result.Should().Contain(parameter => parameter.Name == "goo" && parameter.Value == "baz");
     }
 
     /// <summary>
@@ -233,7 +233,7 @@ public class DefaultUrlParserTests
         var result = parser.ParseMatrixParams(ref remaining);
 
         _ = result.Should().HaveCount(1);
-        _ = result.Should().ContainKey("foo").WhoseValue.Should().Be("bar,baz");
+        _ = result.Should().Contain(parameter => parameter.Name == "foo" && parameter.Value == "bar,baz");
     }
 
     /// <summary>
@@ -351,7 +351,10 @@ public class DefaultUrlParserTests
         var result = parser.ParseSegment(ref remaining, false);
 
         _ = result.Path.Should().Be(string.Empty);
-        _ = result.Parameters.Should().HaveCount(1).And.ContainKey("param").WhoseValue.Should().Be("value");
+
+        _ = result.Parameters.Should()
+            .HaveCount(1)
+            .And.Contain(parameter => parameter.Name == "param" && parameter.Value == "value");
     }
 
     /// <summary>Tests segment parsing with no parameter value.</summary>
@@ -365,7 +368,9 @@ public class DefaultUrlParserTests
         var result = parser.ParseSegment(ref remaining, false);
 
         _ = result.Path.Should().Be("path");
-        _ = result.Parameters.Should().HaveCount(1).And.ContainKey("param").WhoseValue.Should().BeNull();
+        _ = result.Parameters.Should()
+            .HaveCount(1)
+            .And.Contain(parameter => parameter.Name == "param" && parameter.Value == null);
     }
 
     /// <summary>Tests segment parsing, no parameters.</summary>
@@ -393,7 +398,9 @@ public class DefaultUrlParserTests
         var result = parser.ParseSegment(ref remaining, false);
 
         _ = result.Path.Should().Be("test");
-        _ = result.Parameters.Should().HaveCount(1).And.ContainKey("param").WhoseValue.Should().Be("value");
+        _ = result.Parameters.Should()
+            .HaveCount(1)
+            .And.Contain(parameter => parameter.Name == "param" && parameter.Value == "value");
     }
 
     /// <summary>Test root segment parsing when the input URL is empty.</summary>

@@ -27,10 +27,10 @@ public class UrlTree : IUrlTree
     /// <see cref="QueryParams" />
     /// property will be initialized with an empty collection.
     /// </param>
-    public UrlTree(UrlSegmentGroup? root = null, IDictionary<string, string?>? queryParams = null)
+    public UrlTree(UrlSegmentGroup? root = null, IParameters? queryParams = null)
     {
         this.Root = root ?? new UrlSegmentGroup([]);
-        this.QueryParams = queryParams ?? new Dictionary<string, string?>();
+        this.QueryParams = queryParams ?? ReadOnlyParameters.Empty;
         Debug.Assert(
             this.Root.Segments.Count == 0,
             "The root `UrlSegmentGroup` should not contain segments. Instead, the segments should be in the `children` so they can be associated with a named outlet.");
@@ -42,12 +42,8 @@ public class UrlTree : IUrlTree
     /// <value>The root <see cref="UrlSegmentGroup" />.</value>
     public IUrlSegmentGroup Root { get; }
 
-    /// <summary>Gets the query parameters in this URL tree.</summary>
-    /// <value>
-    /// A dictionary of the query parameters where the keys are parameter names
-    /// and the values are parameter values.
-    /// </value>
-    public IDictionary<string, string?> QueryParams { get; }
+    /// <inheritdoc />
+    public IParameters QueryParams { get; }
 
     /// <summary>
     /// Gets a value indicating whether this tree represents a relative URL

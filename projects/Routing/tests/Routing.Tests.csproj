@@ -16,6 +16,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="..\src\Routing.csproj" />
         <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>

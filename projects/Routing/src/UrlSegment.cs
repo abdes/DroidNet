@@ -46,7 +46,7 @@ namespace DroidNet.Routing;
 /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
 public class UrlSegment : IUrlSegment
 {
-    private Dictionary<string, string?> parameters = [];
+    private readonly Parameters parameters = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlSegment" /> class.
@@ -57,7 +57,7 @@ public class UrlSegment : IUrlSegment
     /// <exception cref="ArgumentException">When <paramref name="path" /> is
     /// empty or any of the <paramref name="parameters" /> has an empty
     /// name.</exception>
-    public UrlSegment(string path, IDictionary<string, string?>? parameters = null)
+    public UrlSegment(string path, IParameters? parameters = null)
     {
         this.Path = path;
 
@@ -68,7 +68,7 @@ public class UrlSegment : IUrlSegment
 
         foreach (var pair in parameters)
         {
-            this.AddParameter(pair.Key, pair.Value);
+            this.parameters.TryAdd(pair.Name, pair.Value);
         }
     }
 
@@ -102,7 +102,7 @@ public class UrlSegment : IUrlSegment
     /// parameters. They help in keeping segment routing self-contained.
     /// </para>
     /// </remarks>
-    public IReadOnlyDictionary<string, string?> Parameters => this.parameters.AsReadOnly();
+    public IParameters Parameters => this.parameters.AsReadOnly();
 
     /// <summary>
     /// Converts the provided <paramref name="path" /> string into an escaped
@@ -140,28 +140,12 @@ public class UrlSegment : IUrlSegment
     /// The serialized string representation of the parameters.
     /// </returns>
     /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
-    public static string SerializeMatrixParams(IDictionary<string, string?> parameters)
+    public static string SerializeMatrixParams(IParameters parameters)
         => parameters.Count == 0
             ? string.Empty
             : ';' + string.Join(
                 ';',
-                parameters.Select(
-                    pair => Uri.EscapeDataString(pair.Key) +
-                            (pair.Value is not null ? '=' + Uri.EscapeDataString(pair.Value) : string.Empty)));
-
-    /// <summary>Add a parameter to the segment.</summary>
-    /// <param name="key">The parameter key. Cannot be empty (zero length).</param>
-    /// <param name="value">The parameter value.</param>
-    /// <exception cref="ArgumentException">When <paramref name="key" /> is empty.</exception>
-    public void AddParameter(string key, string? value)
-    {
-        if (key.Length == 0)
-        {
-            throw new ArgumentException("Segment parameters cannot have an empty name.", nameof(key));
-        }
-
-        this.parameters.Add(key, value);
-    }
+                parameters.Select(parameter => parameter.ToString()));
 
     /// <summary>
     /// Serializes the <see cref="UrlSegment" /> into an escaped string
@@ -180,6 +164,12 @@ public class UrlSegment : IUrlSegment
 
     /// <summary>Replace the segment parameters with the given ones.</summary>
     /// <param name="newParameters">The new parameters.</param>
-    /// TODO(abdes): validate the new parameters before setting
-    internal void UpdateParameters(Dictionary<string, string?> newParameters) => this.parameters = newParameters;
+    internal void UpdateParameters(IParameters newParameters)
+    {
+        this.parameters.Clear();
+        foreach (var parameter in newParameters)
+        {
+            this.parameters.AddOrUpdate(parameter.Name, parameter.Value);
+        }
+    }
 }

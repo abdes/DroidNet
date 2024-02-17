@@ -233,9 +233,9 @@ public class DefaultUrlParser : IUrlParser
     /// parsed and will only contain the remaining part of the URL.
     /// </param>
     /// <returns>A dictionary containing parsed query parameters.</returns>
-    internal Dictionary<string, string?> ParseQueryParams(ref ReadOnlySpan<char> remaining)
+    internal IParameters ParseQueryParams(ref ReadOnlySpan<char> remaining)
     {
-        var parameters = new Dictionary<string, string?>();
+        var parameters = new Parameters();
         if (remaining.ConsumeOptional('?'))
         {
             do
@@ -291,9 +291,9 @@ public class DefaultUrlParser : IUrlParser
     /// remaining part of the URL.
     /// </param>
     /// <returns>A dictionary containing parsed matrix parameters.</returns>
-    internal Dictionary<string, string?> ParseMatrixParams(ref ReadOnlySpan<char> remaining)
+    internal IParameters ParseMatrixParams(ref ReadOnlySpan<char> remaining)
     {
-        var parameters = new Dictionary<string, string?>();
+        var parameters = new Parameters();
         while (remaining.ConsumeOptional(';'))
         {
             this.ParseMatrixParam(parameters, ref remaining);
@@ -317,7 +317,7 @@ public class DefaultUrlParser : IUrlParser
              """);
     }
 
-    private void AddParameter(IDictionary<string, string?> parameters, string key, string? value)
+    private void AddParameter(Parameters parameters, string key, string? value)
     {
         var decodedKey = Uri.UnescapeDataString(key);
         var decodedValue = value;
@@ -337,7 +337,7 @@ public class DefaultUrlParser : IUrlParser
             decodedValue = string.Concat(existingValue, ',', decodedValue);
         }
 
-        parameters[decodedKey] = decodedValue;
+        parameters.AddOrUpdate(decodedKey, decodedValue);
     }
 
     private Dictionary<OutletName, IUrlSegmentGroup> ParseParens(bool allowPrimary, ref ReadOnlySpan<char> remaining)
@@ -397,15 +397,15 @@ public class DefaultUrlParser : IUrlParser
         return segmentGroups;
     }
 
-    private void ParseMatrixParam(IDictionary<string, string?> parameters, ref ReadOnlySpan<char> remaining)
+    private void ParseMatrixParam(Parameters parameters, ref ReadOnlySpan<char> remaining)
         => this.ParseParam(ParamType.Matrix, parameters, ref remaining);
 
-    private void ParseQueryParam(IDictionary<string, string?> parameters, ref ReadOnlySpan<char> remaining)
+    private void ParseQueryParam(Parameters parameters, ref ReadOnlySpan<char> remaining)
         => this.ParseParam(ParamType.Query, parameters, ref remaining);
 
     private void ParseParam(
         ParamType paramType,
-        IDictionary<string, string?> parameters,
+        Parameters parameters,
         ref ReadOnlySpan<char> remaining)
     {
         var key = paramType switch

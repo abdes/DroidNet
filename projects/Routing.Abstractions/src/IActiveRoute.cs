@@ -43,7 +43,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// <value>
     /// A read-only dictionary of the combined parameters in this route.
     /// </value>
-    IReadOnlyDictionary<string, string?> Params { get; }
+    IParameters Params { get; }
 
     /// <summary>
     /// Gets the query parameters. Query parameters are shared by all routes in
@@ -51,7 +51,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// navigation URL.
     /// </summary>
     /// <value>A read-only dictionary of all query parameters.</value>
-    IReadOnlyDictionary<string, string?> QueryParams { get; }
+    IParameters QueryParams { get; }
 
     /// <summary>
     /// Gets the name of the outlet where the `ViewModel for this

@@ -93,7 +93,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         }
     }
 
-    private static AnchorPosition GetAnchorFromParams(IReadOnlyDictionary<string, string?> parameters)
+    private static AnchorPosition GetAnchorFromParams(IParameters parameters)
     {
         /*
          * TODO(abdes): add support for relative docking
@@ -102,15 +102,15 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
         foreach (var anchor in Enum.GetNames<AnchorPosition>())
         {
-            if (!parameters.ContainsKey(anchor.ToLowerInvariant()))
+            if (!parameters.Contains(anchor.ToLowerInvariant()))
             {
                 continue;
             }
 
             // Check that no other anchor position is specified in the parameters
-            foreach (var other in Enum.GetNames<AnchorPosition>().Where(n => n != "left"))
+            foreach (var other in Enum.GetNames<AnchorPosition>().Where(n => n != anchor))
             {
-                if (parameters.ContainsKey(other))
+                if (parameters.Contains(other))
                 {
                     throw new InvalidOperationException(
                         $"you can only specify an anchor position for a dockable once. We first found `{anchor}`, then `{other}`");
@@ -122,6 +122,83 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
         // return default: left
         return AnchorPosition.Left;
+    }
+
+    /// <summary>
+    /// Generates a dictionary of parameters based on the provided dock's state
+    /// and anchor properties. It also checks if any parameter has changed from
+    /// the currently active parameters.
+    /// </summary>
+    /// <param name="dock">The dock instance whose properties are to be used for
+    /// generating parameters.</param>
+    /// <param name="activeParams">The currently active parameters for
+    /// comparison. Default is null.</param>
+    /// <returns>A dictionary of parameters if any parameter has changed or
+    /// active parameters are null, otherwise null.</returns>
+    private static Parameters? Parameters(
+        IDock dock,
+        IParameters? activeParams = null)
+    {
+        activeParams ??= ReadOnlyParameters.Empty;
+        var changed = false;
+        var nextParams = new Parameters();
+
+        if (dock.State is DockingState.Minimized or DockingState.Pinned)
+        {
+            changed = CheckAndSetMinimized(dock.State, activeParams, nextParams);
+        }
+
+        if (dock.Anchor != null)
+        {
+            changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
+        }
+
+        return changed ? nextParams : null;
+    }
+
+    private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
+    {
+        var minimized = dockState == DockingState.Minimized;
+        return CheckAndSetFlag("minimized", minimized, active, next);
+    }
+
+    private static bool CheckAndSetAnchor(Anchor anchor, IParameters active, Parameters next)
+    {
+        var position = anchor.Position.ToString().ToLowerInvariant();
+        var relativeTo = anchor.DockId?.ToString();
+        return CheckAndSetParameterWithValue(position, relativeTo, active, next);
+    }
+
+    /// <summary>
+    /// Checks if a parameter with value is changing from the currently active
+    /// set of parameters to next set of parameters and sets the new value in
+    /// next set of parameters.
+    /// </summary>
+    /// <param name="name">The name of the parameter.</param>
+    /// <param name="value">The new value of the parameter.</param>
+    /// <param name="active">The currently active parameter set.</param>
+    /// <param name="next">The next set of parameters.</param>
+    /// <returns>True if the parameter has changed, otherwise false.</returns>
+    private static bool CheckAndSetParameterWithValue(string name, string? value, IParameters active, Parameters next)
+    {
+        next.AddOrUpdate(name, value);
+        return active.ParameterHasValue(name, value);
+    }
+
+    /// <summary>
+    /// Checks if a flag parameter is changing from the currently active set of
+    /// parameters to next set of parameters and sets the flag in the next set
+    /// of parameters according to the specified value.
+    /// </summary>
+    /// <param name="name">The name of the parameter.</param>
+    /// <param name="value">The new value of the parameter.</param>
+    /// <param name="active">The currently active parameter set.</param>
+    /// <param name="next">The next set of parameters.</param>
+    /// <returns>True if the parameter has changed, otherwise false.</returns>
+    private static bool CheckAndSetFlag(string name, bool value, IParameters active, Parameters next)
+    {
+        next.SetFlag(name, value);
+        return active.FlagIsSet(name) != value;
     }
 
     private void SyncWithRouter()
@@ -187,74 +264,6 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         }
 
         this.router.Navigate(changes, new NavigationOptions() { RelativeTo = this.ActiveRoute });
-        return;
-
-        static Dictionary<string, string?>? Parameters(
-            IDock dock,
-            IReadOnlyDictionary<string, string?>? currentParameters = null)
-        {
-            var changed = false;
-            Dictionary<string, string?> parameters = [];
-
-            // anything other than Minimized or Pinned is a transient state
-            // that should not be propagated to the router. We assume that
-            // at some pint in time it will be pinned or minimized, but for
-            // now, we will just consider it pinned.
-            if (dock.State is DockingState.Minimized or DockingState.Pinned)
-            {
-                // TODO: refactor parameter parsing for the docker
-                if (currentParameters != null)
-                {
-                    if (currentParameters.TryGetValue("minimized", out var current))
-                    {
-                        if ((current == null && dock.State != DockingState.Minimized) ||
-                            (current != null && bool.Parse(current) != (dock.State == DockingState.Minimized)))
-                        {
-                            changed = true;
-                        }
-                    }
-                    else if (dock.State != DockingState.Pinned)
-                    {
-                        changed = true;
-                    }
-                }
-
-                if (dock.State == DockingState.Minimized)
-                {
-                    parameters["minimized"] = null;
-                }
-            }
-
-            if (dock.Anchor != null)
-            {
-                var position = dock.Anchor.Position.ToString().ToLowerInvariant();
-                var relativeTo = dock.Anchor.DockId?.ToString();
-
-                if (currentParameters != null)
-                {
-                    if (!currentParameters.ContainsKey(position))
-                    {
-                        changed = true;
-                    }
-                    else
-                    {
-                        if (currentParameters[position] != relativeTo)
-                        {
-                            changed = true;
-                        }
-                    }
-                }
-
-                parameters[position] = relativeTo;
-            }
-
-            if (currentParameters == null)
-            {
-                changed = true;
-            }
-
-            return changed ? parameters : null;
-        }
     }
 
     private void LoadApp(object viewModel)

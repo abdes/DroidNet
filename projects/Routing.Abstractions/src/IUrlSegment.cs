@@ -22,7 +22,7 @@ public interface IUrlSegment
     /// </para>
     /// </remarks>
     /// <value>The matrix parameters associated with a URL segment.</value>
-    IReadOnlyDictionary<string, string?> Parameters { get; }
+    IParameters Parameters { get; }
 
     /// <summary>Gets the path part of a URL segment.</summary>
     /// <remarks>
