@@ -6,19 +6,44 @@ namespace DroidNet.Routing;
 
 /// <summary>Represents a path segment in a router URL.</summary>
 /// <remarks>
-/// In a router URL, the path consists of a sequence of path segments separated
-/// by a slash ("/") character. The main part of a segment is its
-/// <see cref="Path" />
-/// component, but it can also have optional parameters. The semicolon (";")
-/// and equals ("=") reserved characters are used to delimit parameters and
-/// parameter values applicable to the segment.
+/// A router URL is the serialized form of a certain router state, which
+/// represents the hierarchy of activated routes at that state. Each route is
+/// identified by a path, consisting of a sequence of path segments separated by
+/// a slash ("/") character.
+/// <para>
+/// The main part of a segment is its <see cref="Path" /> component, which is
+/// always defined, though <b>it may be empty</b> (zero length). Aside from
+/// that, a segment may have parameters, indicated by the presence of a
+/// semicolon (';') after its path component. The first parameter is specified
+/// after the first semicolon, and subsequent parameters can be specified, each
+/// one after a new semicolon character.
+/// </para>
+/// <para>
+/// A segment matrix parameter must have a key and may have an optional value.
+/// The equals ('=') reserved character is used to separate the key from the
+/// value (when present). The key and the optional value of a parameter are
+/// completely opaque to the URL parser, although they add valuable information
+/// at the application level and can be interpreted in multiple ways. For
+/// example the presence of a key without a value may be interpreted as a
+/// boolean flag that is set, eliminating the need for something like
+/// <c>flag=true</c>. Another example uses the comma (',') which is not a
+/// reserved character in a segment, to indicate multiple values for a
+/// parameter.
+/// </para>
+/// <para>
+/// The path segments "." and "..", also known as dot-segments, are defined for
+/// relative reference within the hierarchy of routes. When present, these
+/// segments are only used to indicate relative position within the hierarchy of
+/// segments in a URL path, and are removed as part of the URL resolution
+/// process. They <b>cannot have parameters</b>.
+/// </para>
 /// <para>
 /// When serialized, a segment path, as well as any matrix parameter key or
-/// value, are percent-encoded in accordance with
-/// <see href="https://datatracker.ietf.org/doc/html/rfc3986">RFC 3986</see>.
+/// value, are percent-encoded in accordance with RFC 3986.
 /// </para>
 /// </remarks>
 /// <seealso cref="UrlSegmentGroup" />
+/// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
 public class UrlSegment : IUrlSegment
 {
     private Dictionary<string, string?> parameters = [];
@@ -27,13 +52,11 @@ public class UrlSegment : IUrlSegment
     /// Initializes a new instance of the <see cref="UrlSegment" /> class.
     /// </summary>
     /// <param name="path">The segment's path string.</param>
-    /// <param name="parameters">
-    /// Optional dictionary of matrix parameters for this segment.
-    /// </param>
-    /// <exception cref="ArgumentException">
-    /// When <paramref name="path" /> is empty or any of the
-    /// <paramref name="parameters" /> has an empty name.
-    /// </exception>
+    /// <param name="parameters">Optional dictionary of matrix parameters for
+    /// this segment.</param>
+    /// <exception cref="ArgumentException">When <paramref name="path" /> is
+    /// empty or any of the <paramref name="parameters" /> has an empty
+    /// name.</exception>
     public UrlSegment(string path, IDictionary<string, string?>? parameters = null)
     {
         this.Path = path;
@@ -49,21 +72,19 @@ public class UrlSegment : IUrlSegment
         }
     }
 
-    /// <summary>Gets the path part of a URL segment.</summary>
+    /// <summary>Gets the path component of a URL segment.</summary>
     /// <remarks>
-    /// The <see cref="Path" /> is always defined for a segment and cannot be
-    /// empty (zero length).
+    /// The <see cref="Path" /> is always defined for a segment, though it may
+    /// be empty (zero length).
     /// <para>
-    /// When the <see cref="Path" /> of a segment is (".") or (".."), also
-    /// known as dot-segments, the segment is used for relative reference
-    /// within the routing hierarchy. Such segments are intended for use at the
-    /// beginning of a relative-path reference to indicate relative position
-    /// within the hierarchical tree of names. They are only interpreted within
-    /// the URL path hierarchy and are removed as part of the resolution
-    /// process.
+    /// When the path of a segment is (".") or (".."), also known as
+    /// dot-segments, the segment is used for relative reference within the
+    /// routing hierarchy. Such segments are intended for use at the beginning
+    /// of a relative-path reference to indicate relative position within the
+    /// hierarchical tree of names. They are only interpreted within the URL
+    /// path hierarchy and are removed as part of the resolution process.
     /// </para>
     /// </remarks>
-    /// <value>The path part of a URL segment.</value>
     public string Path { get; }
 
     /// <summary>
@@ -71,17 +92,16 @@ public class UrlSegment : IUrlSegment
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Segment matrix parameters can only have a single value and such value
-    /// is completely opaque to the <see cref="Router" />. The comma (",")
-    /// reserved character can be used as a way to enable specifying multiple
-    /// values for a parameter (e.g. <c>key=value1,value2,value3</c>).
+    /// Segment matrix parameters can only have a single value and such value is
+    /// completely opaque to the <see cref="Router" />. The comma (",") reserved
+    /// character can be used as a way to enable specifying multiple values for
+    /// a parameter (e.g. <c>key=value1,value2,value3</c>).
     /// </para>
     /// <para>
     /// Segment specific matrix parameters are not in conflict with url query
     /// parameters. They help in keeping segment routing self-contained.
     /// </para>
     /// </remarks>
-    /// <value>The matrix parameters associated with a URL segment.</value>
     public IReadOnlyDictionary<string, string?> Parameters => this.parameters.AsReadOnly();
 
     /// <summary>
@@ -90,12 +110,12 @@ public class UrlSegment : IUrlSegment
     /// </summary>
     /// <remarks>
     /// This method assumes that <paramref name="path" /> string has no escape
-    /// sequences in it. It converts all characters except for
-    /// <see href="https://datatracker.ietf.org/doc/html/rfc3986">RFC 3986</see>
+    /// sequences in it. It converts all characters except for RFC 3986
     /// unreserved characters to their hexadecimal representation.
     /// </remarks>
     /// <param name="path">The path string to serialize.</param>
     /// <returns>The serialized string representation of the path.</returns>
+    /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
     public static string SerializePath(string path) => Uri.EscapeDataString(path);
 
     /// <summary>
@@ -111,15 +131,15 @@ public class UrlSegment : IUrlSegment
     /// <para>
     /// This method assumes that <c>key</c> and <c>value</c> strings in any of
     /// the <paramref name="parameters" /> entries have no escape sequences in
-    /// it. It converts all characters except for
-    /// <see href="https://datatracker.ietf.org/doc/html/rfc3986">RFC 3986</see>
-    /// unreserved characters to their hexadecimal representation.
+    /// it. It converts all characters except for RFC 3986 unreserved characters
+    /// to their hexadecimal representation.
     /// </para>
     /// </remarks>
     /// <param name="parameters">The matrix parameters to serialize.</param>
     /// <returns>
     /// The serialized string representation of the parameters.
     /// </returns>
+    /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
     public static string SerializeMatrixParams(IDictionary<string, string?> parameters)
         => parameters.Count == 0
             ? string.Empty
@@ -148,10 +168,8 @@ public class UrlSegment : IUrlSegment
     /// representation.
     /// </summary>
     /// <remarks>
-    /// This method assumes that the segment's <see cref="Path" /> and
-    /// <see cref="Parameters" /> have no escape sequences in them. It converts
-    /// all characters except for
-    /// <see href="https://datatracker.ietf.org/doc/html/rfc3986">RFC 3986</see>
+    /// This method assumes that the segment's path and parameters have no
+    /// escape sequences in them. It converts all characters except for RFC 3986
     /// unreserved characters to their hexadecimal representation.
     /// </remarks>
     /// <returns>
@@ -160,5 +178,8 @@ public class UrlSegment : IUrlSegment
     public override string ToString()
         => $"{SerializePath(this.Path)}{SerializeMatrixParams(this.parameters)}";
 
-    internal void UpdateParameters(Dictionary<string, string?> changeParameters) => this.parameters = changeParameters;
+    /// <summary>Replace the segment parameters with the given ones.</summary>
+    /// <param name="newParameters">The new parameters.</param>
+    /// TODO(abdes): validate the new parameters before setting
+    internal void UpdateParameters(Dictionary<string, string?> newParameters) => this.parameters = newParameters;
 }
