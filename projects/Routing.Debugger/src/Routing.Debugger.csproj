@@ -81,6 +81,11 @@
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
+    <ItemGroup>
+      <Content Update="Assets\DroidNet.png">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
 
     <!--
         Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
