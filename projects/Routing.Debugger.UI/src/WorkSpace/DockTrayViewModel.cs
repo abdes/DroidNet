@@ -5,24 +5,20 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Diagnostics;
-using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>
 /// The ViewModel for a docking tray control.
 /// </summary>
-public partial class DockTrayViewModel : ObservableObject, IDisposable
+public partial class DockTrayViewModel : ObservableObject
 {
     private readonly ObservableCollection<IDockable> dockables = [];
 
     private readonly ReadOnlyObservableCollection<IDock> docks;
-    private readonly IDisposable? changeSubscription;
     private readonly IDocker docker;
 
     public DockTrayViewModel(IDocker docker, IDockTray tray, Orientation orientation)
@@ -33,46 +29,16 @@ public partial class DockTrayViewModel : ObservableObject, IDisposable
         this.docker = docker;
         this.docks = tray.MinimizedDocks;
 
+        // The tray is recreated every time it is needed. Therefore, we only
+        // update the minimized dockables here. We do not need to track changes
+        // to the docks and their dockables. A change will trigger a layout
+        // update, which will recreate the trays as needed.
         this.UpdateDockables();
-
-        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-
-        // Create an observable for the docks collection
-        var docksObservable
-            = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                handler => ((INotifyCollectionChanged)this.docks).CollectionChanged += handler,
-                handler => ((INotifyCollectionChanged)this.docks).CollectionChanged -= handler);
-
-        // Create observables for each dock in the docks collection
-        var dockObservables = this.docks.Select(
-            dock => Observable
-                .FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                    handler => ((INotifyCollectionChanged)dock.Dockables).CollectionChanged += handler,
-                    handler => ((INotifyCollectionChanged)dock.Dockables).CollectionChanged -= handler));
-
-        // Merge the observables
-        var mergedObservable = docksObservable.Merge(dockObservables.Merge());
-
-        // Subscribe to the merged observable
-        this.changeSubscription = mergedObservable
-            .Throttle(TimeSpan.FromMilliseconds(500))
-            .Subscribe(
-                evt =>
-                {
-                    Debug.WriteLine($"Updating dockables because of: {evt.EventArgs.Action}");
-                    dispatcherQueue.TryEnqueue(this.UpdateDockables);
-                });
     }
 
     public Orientation Orientation { get; set; }
 
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
-
-    public void Dispose()
-    {
-        this.changeSubscription?.Dispose();
-        GC.SuppressFinalize(this);
-    }
 
     [RelayCommand]
     private void ShowDockable(IDockable dockable)
@@ -85,10 +51,6 @@ public partial class DockTrayViewModel : ObservableObject, IDisposable
 
     private void UpdateDockables()
     {
-        Debug.Assert(
-            this.docks is not null,
-            $"expecting docks to be not null when {nameof(this.UpdateDockables)} is called");
-
         // Create a new list of IDockable objects in the order they appear in the docks collection
         var orderedDockables = this.docks.SelectMany(dock => dock.Dockables).ToList();
 
