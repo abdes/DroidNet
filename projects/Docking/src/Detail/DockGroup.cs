@@ -63,7 +63,9 @@ internal partial class DockGroup : DockGroupBase
             ? $" {{{string.Join(',', children)}}}"
             : string.Empty;
 
-        var orientation = this.Orientation switch
+        var orientation = this.IsCenter
+            ? "*"
+            : this.Orientation switch
         {
             DockGroupOrientation.Undetermined => "?",
             DockGroupOrientation.Horizontal => "--",
@@ -476,6 +478,8 @@ internal abstract class DockGroupBase : IDockGroup
     protected DockGroupBase() => this.DebugId = Interlocked.Increment(ref nextId);
 
     public abstract ReadOnlyObservableCollection<IDock> Docks { get; }
+
+    public bool IsCenter { get; protected internal init; }
 
     public bool IsHorizontal => this.Orientation == DockGroupOrientation.Horizontal;
 
