@@ -21,15 +21,25 @@ public class VectorGrid : Grid
         this.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
-    public void DefineItem(GridLength length)
+    public void DefineItem(GridLength length, double minLength)
     {
         if (this.orientation == Orientation.Horizontal)
         {
-            this.ColumnDefinitions.Add(new ColumnDefinition() { Width = length });
+            this.ColumnDefinitions.Add(
+                new ColumnDefinition()
+                {
+                    Width = length,
+                    MinWidth = minLength,
+                });
         }
         else
         {
-            this.RowDefinitions.Add(new RowDefinition() { Height = length });
+            this.RowDefinitions.Add(
+                new RowDefinition()
+                {
+                    Height = length,
+                    MinHeight = minLength,
+                });
         }
     }
 

@@ -131,6 +131,20 @@ public partial class WorkSpaceView : UserControl
             this.BuildGrid(group, showFirst, showSecond);
         }
 
+        private static GridLength GetLengthForSlot(IDockGroup group)
+            => group.IsCenter ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+
+        private static bool ShouldStretch(IDockGroup group)
+        {
+            if (group.IsCenter)
+            {
+                return true;
+            }
+
+            return (group.First != null && ShouldStretch(group.First)) ||
+                   (group.Second != null && ShouldStretch(group.Second));
+        }
+
         private void AddContentForSlot(VectorGrid grid, IDockGroup slot, int index)
         {
             var content = ContentForDockGroup(this.docker, slot, this.viewLocator, this.logger);
@@ -155,7 +169,15 @@ public partial class WorkSpaceView : UserControl
 
                 if (!HandleTray(group.First) && !Collapse(group.First, group.First.First, group.First.Second))
                 {
-                    this.DefineItem(new GridLength(1, GridUnitType.Star));
+                    var stretch = ShouldStretch(group.First);
+                    Debug.WriteLine($"Group {group.First} should {(stretch ? string.Empty : " NOT")}stretch");
+
+                    // TODO: calculate length based on children
+                    this.DefineItem(
+                        stretch
+                            ? new GridLength(1, GridUnitType.Star)
+                            : GridLength.Auto,
+                        32);
                     this.AddContentForSlot(this, group.First!, gridItemIndex++);
                     showSplitter = true;
                 }
@@ -169,12 +191,20 @@ public partial class WorkSpaceView : UserControl
                 {
                     if (showSplitter)
                     {
-                        this.DefineItem(GridLength.Auto);
+                        this.DefineItem(GridLength.Auto, 4);
                         this.AddSplitter(gridItemIndex++);
                     }
 
-                    this.DefineItem(new GridLength(1, GridUnitType.Star));
-                    this.AddContentForSlot(this, group.Second!, gridItemIndex);
+                    var stretch = ShouldStretch(group.Second);
+                    Debug.WriteLine($"Group {group.Second} should {(stretch ? string.Empty : " NOT")}stretch");
+
+                    // TODO: calculate length based on children
+                    this.DefineItem(
+                        stretch
+                            ? new GridLength(1, GridUnitType.Star)
+                            : GridLength.Auto,
+                        32);
+                    this.AddContentForSlot(this, group.Second, gridItemIndex);
                 }
             }
 
@@ -187,7 +217,7 @@ public partial class WorkSpaceView : UserControl
                     return false;
                 }
 
-                this.DefineItem(GridLength.Auto);
+                this.DefineItem(GridLength.Auto, 32);
                 var trayOrientation = part.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
                 var trayViewModel = new DockTrayViewModel(this.docker, tray, trayOrientation);
                 var trayControl = new DockTray() { ViewModel = trayViewModel };
@@ -204,7 +234,7 @@ public partial class WorkSpaceView : UserControl
                     return false;
                 }
 
-                this.DefineItem(GridLength.Auto);
+                this.DefineItem(GridLength.Auto, 32);
                 this.AddContentForSlot(this, part, gridItemIndex++);
                 return true;
             }

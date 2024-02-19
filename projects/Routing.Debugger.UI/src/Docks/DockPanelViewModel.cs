@@ -5,9 +5,11 @@
 namespace DroidNet.Routing.Debugger.UI.Docks;
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
+using Windows.Foundation;
 
 /// <summary>The ViewModel for a dock panel.</summary>
 /// <param name="dock">The dock.</param>
@@ -18,6 +20,8 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
     private string title = dock.ToString() ?? "EMPTY";
 
     public ReadOnlyObservableCollection<IDockable> Dockables => dock.Dockables;
+
+    public void OnSizeChanged(Size newSize) => Debug.WriteLine($"DockPanel {dock.Id} size changed: {newSize}");
 
     // TODO: combine CanMinimize and CanClose into a IsLocked flag where the dock is locked in place as Pinned
     [RelayCommand]

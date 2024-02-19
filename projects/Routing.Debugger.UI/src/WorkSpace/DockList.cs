@@ -30,13 +30,25 @@ public partial class DockList : VectorGrid
 
         foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
         {
-            this.DefineItem(new GridLength(1, GridUnitType.Star));
+            if (dock is ApplicationDock)
+            {
+                this.DefineItem(new GridLength(1, GridUnitType.Star), 100);
+            }
+            else
+            {
+                // TODO: Temporary fixed width dock panel - resize dock panel when grid is resized
+                this.DefineItem(new GridLength(300), 32);
+            }
+
             this.AddItem(
                 new Border()
                 {
                     Child = dock is ApplicationDock
                         ? GetApplicationContent(dock, viewLocator, logger)
-                        : new DockPanel() { ViewModel = new DockPanelViewModel(dock, docker) },
+                        : new DockPanel()
+                        {
+                            ViewModel = new DockPanelViewModel(dock, docker),
+                        },
 
                     // BorderBrush = new SolidColorBrush(Colors.Blue),
                     // BorderThickness = new Thickness(0.5),
@@ -45,7 +57,7 @@ public partial class DockList : VectorGrid
                 index++);
             if (!isFirst)
             {
-                this.DefineItem(GridLength.Auto);
+                this.DefineItem(new GridLength(1, GridUnitType.Star), 32);
                 this.AddSplitter(index++);
             }
 
