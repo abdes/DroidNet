@@ -184,15 +184,6 @@ internal partial class DockGroup
 
     private void AddGroup(IDockGroup group, bool isFirst, DockGroupOrientation orientation)
     {
-        // If the orientation of the group being added is still undetermined,
-        // set it to be the same as the requested orientation of the parent
-        // group. That way, the group will have a consistent layout with its
-        // parent.
-        if (group is DockGroup myGroup && group.Orientation == DockGroupOrientation.Undetermined)
-        {
-            myGroup.Orientation = orientation;
-        }
-
         if (this.Orientation == DockGroupOrientation.Undetermined)
         {
             this.Orientation = orientation;

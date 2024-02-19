@@ -11,4 +11,10 @@ public interface IDockTray
     public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
 
     bool IsEmpty { get; }
+
+    bool IsVertical { get; }
+
+    bool IsHorizontal { get; }
+
+    DockGroupOrientation Orientation { get; }
 }
