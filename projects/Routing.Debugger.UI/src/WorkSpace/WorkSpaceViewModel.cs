@@ -102,7 +102,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
         foreach (var anchor in Enum.GetNames<AnchorPosition>())
         {
-            if (!parameters.Contains(anchor.ToLowerInvariant()))
+            if (!parameters.Contains(anchor))
             {
                 continue;
             }
@@ -164,6 +164,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
 
     private static bool CheckAndSetAnchor(Anchor anchor, IParameters active, Parameters next)
     {
+        // TODO: if the active parameters has any anchor that is not the same then what we need to set next, it should trigger a change
         var position = anchor.Position.ToString().ToLowerInvariant();
         var relativeTo = anchor.DockId?.ToString();
         return CheckAndSetParameterWithValue(position, relativeTo, active, next);
@@ -298,15 +299,10 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                 viewModel,
                 "could not create a dock");
 
-            // TODO(abdes): make the Params map case-insensitive
             var dockerActivatedRoute = this.ActiveRoute.Children.First(c => c.Outlet == dockableId);
             var dockingPosition = GetAnchorFromParams(dockerActivatedRoute.Params);
 
-            var isMinimized = false;
-            if (dockerActivatedRoute.Params.TryGetValue("minimized", out var minimized))
-            {
-                isMinimized = minimized is null || bool.Parse(minimized);
-            }
+            var isMinimized = dockerActivatedRoute.Params.FlagIsSet("minimized");
 
             // TODO(abdes): add support for relative docking
             // TODO(abdes): avoid explicitly creating Dockable instances
@@ -323,29 +319,5 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         {
             throw new ContentLoadingException(dockableId, viewModel, ex.Message, ex);
         }
-
-        /*
-                Debug.Assert(
-                    this.ActiveRoute is not null,
-                    $"when `{nameof(this.LoadContent)}`() is called, an {nameof(IActiveRoute)} should have been injected into my `{nameof(this.ActiveRoute)}` property.");
-
-                // TODO(abdes): make the Params map case-insensitive
-
-                var dockerActivatedRoute = this.ActiveRoute.Children.First(c => c.Outlet == "dock");
-                var dockingPosition = dockerActivatedRoute.Params["position"] ??
-                                      throw new InvalidOperationException("must specify a docking position");
-
-                var dockableActivatedRoute = dockerActivatedRoute.Children.First(c => c.Outlet == dockableId);
-                var isPinned = false;
-                if (dockableActivatedRoute.Params.TryGetValue("pinned", out var pinned))
-                {
-                    isPinned = pinned is null || bool.Parse(pinned);
-                }
-
-                var dockable = this.docking.CreateDockable(dockableId, viewModel);
-                var dock = this.docking.CreateDock();
-                this.dockers[dockingPosition]
-                    .AddDockable(dockable, dock, isPinned ? DockingState.Pinned : DockingState.Minimized);
-        */
     }
 }

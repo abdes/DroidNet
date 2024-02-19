@@ -47,14 +47,9 @@ public partial class WorkSpaceView : UserControl
             return false;
         }
 
-        if (group is IDockTray { IsEmpty: false })
-        {
-            return true;
-        }
-
         if (!group.IsEmpty)
         {
-            return group.Docks.Any(d => d.State != DockingState.Minimized);
+            return group is IDockTray || group.Docks.Any(d => d.State != DockingState.Minimized);
         }
 
         return ShouldShowGroup(group.First) || ShouldShowGroup(group.Second);
