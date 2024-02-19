@@ -8,7 +8,7 @@ using System.Diagnostics;
 
 internal sealed class RootDockGroup : DockGroup
 {
-    private readonly DockGroup center = new();
+    private readonly DockGroup center = new() { IsCenter = true };
     private DockGroup? left;
     private DockGroup? top;
     private DockGroup? right;

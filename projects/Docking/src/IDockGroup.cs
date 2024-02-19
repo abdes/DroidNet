@@ -10,6 +10,8 @@ public interface IDockGroup : IDisposable
 {
     public ReadOnlyObservableCollection<IDock> Docks { get; }
 
+    bool IsCenter { get; }
+
     bool IsHorizontal { get; }
 
     bool IsVertical { get; }
