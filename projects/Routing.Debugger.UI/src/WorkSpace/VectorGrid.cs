@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
+using System.Diagnostics;
 using CommunityToolkit.WinUI.Controls;
 using DroidNet.Routing.Debugger.UI.Styles;
 using Microsoft.UI.Xaml;
@@ -11,19 +12,40 @@ using Microsoft.UI.Xaml.Controls;
 
 public class VectorGrid : Grid
 {
-    private readonly Orientation orientation;
+    private readonly List<bool> childrenSizingInfo = [];
 
     public VectorGrid(Orientation orientation)
     {
-        this.orientation = orientation;
+        this.Orientation = orientation;
 
         this.HorizontalAlignment = HorizontalAlignment.Stretch;
         this.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
-    public void DefineItem(GridLength length, double minLength)
+    public Orientation Orientation { get; }
+
+    public void AddFixedSizeItem(UIElement content, GridLength length, double minLength)
     {
-        if (this.orientation == Orientation.Horizontal)
+        this.DefineItem(length, minLength);
+        this.AddItem(content);
+        this.childrenSizingInfo.Add(false);
+    }
+
+    public void AddResizableItem(UIElement content, GridLength length, double minLength)
+    {
+        if (this.Children.Count > 0 && this.childrenSizingInfo[this.Children.Count - 1])
+        {
+            this.AddSplitter();
+        }
+
+        this.DefineItem(length, minLength);
+        this.AddItem(content);
+        this.childrenSizingInfo.Add(true);
+    }
+
+    private void DefineItem(GridLength length, double minLength)
+    {
+        if (this.Orientation == Orientation.Horizontal)
         {
             this.ColumnDefinitions.Add(
                 new ColumnDefinition()
@@ -43,23 +65,28 @@ public class VectorGrid : Grid
         }
     }
 
-    public void AddSplitter(int index)
+    private void AddSplitter()
     {
         var splitter = new DockingSplitter
         {
             Padding = new Thickness(0),
             ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext,
             ResizeDirection = GridSplitter.GridResizeDirection.Auto,
-            Orientation = this.orientation == Orientation.Horizontal
+            Orientation = this.Orientation == Orientation.Horizontal
                 ? Orientation.Vertical
                 : Orientation.Horizontal,
         };
-        this.AddItem(splitter, index);
+        this.DefineItem(GridLength.Auto, 6);
+        this.AddItem(splitter);
+        this.childrenSizingInfo.Add(false);
     }
 
-    public void AddItem(UIElement content, int index)
+    private void AddItem(UIElement content)
     {
-        var (row, column) = this.orientation == Orientation.Horizontal ? (0, index) : (index, 0);
+        var (row, column) = this.Orientation == Orientation.Horizontal
+            ? (0, this.Children.Count)
+            : (this.Children.Count, 0);
+        Debug.WriteLine($"Adding item {content} to VG at row={row}, col={column}");
         content.SetValue(RowProperty, row);
         content.SetValue(ColumnProperty, column);
         this.Children.Add(content);
