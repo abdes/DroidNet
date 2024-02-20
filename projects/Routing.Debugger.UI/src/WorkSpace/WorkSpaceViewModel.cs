@@ -10,17 +10,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Detail;
 using DroidNet.Routing.Events;
+using DroidNet.Routing.View;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
-public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware, IDisposable
+/// <summary>The ViewModel for the docking workspace.</summary>
+public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware, IDisposable
 {
+    private readonly ILogger logger;
     private readonly IRouter router;
     private readonly IDisposable navigationSub;
+    private readonly Docker docker = new();
 
-    public WorkSpaceViewModel(IRouter router)
+    [ObservableProperty]
+    private IDockGroup root;
+
+    public WorkSpaceViewModel(IRouter router, IViewLocator viewLocator, ILoggerFactory? loggerFactory)
     {
+        this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
         this.router = router;
-
-        this.Docker = new Docker();
+        this.Layout = new WorkSpaceLayout(this.docker, viewLocator, this.logger);
 
         this.navigationSub = this.router.Events.Where(e => e.GetType().IsAssignableTo(typeof(NavigationEvent)))
             .Subscribe(
@@ -29,12 +38,15 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                     switch (x)
                     {
                         case NavigationStart:
-                            this.Docker.LayoutChanged -= this.SyncWithRouter;
+                            this.docker.LayoutChanged -= this.SyncWithRouter;
                             break;
 
                         case NavigationEnd:
                         case NavigationError:
-                            this.Docker.LayoutChanged += this.SyncWithRouter;
+                            this.docker.LayoutChanged += this.SyncWithRouter;
+
+                            // Raise the PropertyChanged event for the Root property
+                            this.OnPropertyChanged(nameof(this.Root));
                             break;
 
                         default:
@@ -42,14 +54,12 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                     }
                 });
 
-        this.Root = this.Docker.Root;
+        this.Root = this.docker.Root;
     }
-
-    public IDockGroup Root { get; }
 
     public IActiveRoute? ActiveRoute { get; set; }
 
-    public IDocker Docker { get; }
+    public WorkSpaceLayout Layout { get; }
 
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
@@ -69,15 +79,21 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
             this.LoadDockable(viewModel, outletName);
         }
 
-        DumpGroup(this.Docker.Root);
+        DumpGroup(this.docker.Root);
     }
 
     public void Dispose()
     {
         this.navigationSub.Dispose();
-        this.Docker.Dispose();
+        this.docker.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Syncing docker workspace layout with the router...")]
+    private static partial void LogSyncWithRouter(ILogger logger);
 
     private static void DumpGroup(IDockGroup group, string indent = "")
     {
@@ -206,6 +222,8 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
     {
         Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
+        LogSyncWithRouter(this.logger);
+
         // Build a changeset to manipulate the URL tree for our active route
         var changes = new List<RouteChangeItem>();
 
@@ -283,7 +301,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
         dockable.ViewModel = viewModel;
         dock.AddDockable(dockable);
 
-        this.Docker.DockToCenter(dock);
+        this.docker.DockToCenter(dock);
     }
 
     private void LoadDockable(object viewModel, string dockableId)
@@ -313,7 +331,7 @@ public class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAw
                                "failed to create a dockable object");
             dockable.ViewModel = viewModel;
             dock.AddDockable(dockable);
-            this.Docker.DockToRoot(dock, dockingPosition, isMinimized);
+            this.docker.DockToRoot(dock, dockingPosition, isMinimized);
         }
         catch (Exception ex)
         {
