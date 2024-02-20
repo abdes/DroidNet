@@ -4,9 +4,8 @@
 
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
-using System.Reactive.Linq;
+using System.ComponentModel;
 using DroidNet.Routing.Generators;
-using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -20,26 +19,47 @@ using Microsoft.UI.Xaml.Controls;
 [ViewModel(typeof(WorkSpaceViewModel))]
 public partial class WorkSpaceView : UserControl
 {
-    public WorkSpaceView(ILoggerFactory? loggerFactory, IViewLocator viewLocator)
-    {
-        this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
+    private readonly ILogger logger;
 
-        var logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
+    public WorkSpaceView(ILoggerFactory? loggerFactory)
+    {
+        this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
+        this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
         this.ViewModelChanged += (_, _)
             =>
         {
-            var layout = new WorkSpaceLayout(this.ViewModel.Docker, viewLocator, logger);
-            this.Content = layout.UpdateContent();
-
-            _ = Observable.FromEvent(
-                    h => this.ViewModel.Docker.LayoutChanged += h,
-                    h => this.ViewModel.Docker.LayoutChanged -= h)
-                .Throttle(TimeSpan.FromMilliseconds(200))
-                .ObserveOn(System.Windows.Threading.Dispatcher.CurrentDispatcher)
-                .Subscribe(_ => this.Content = layout.UpdateContent());
+            this.UpdateContent();
+            this.ViewModel.PropertyChanged += this.ViewModelPropertyChanged;
         };
 
-        this.Unloaded += (_, _) => this.ViewModel.Dispose();
+        this.Unloaded += (_, _) =>
+        {
+            this.ViewModel.PropertyChanged -= this.ViewModelPropertyChanged;
+            this.ViewModel.Dispose();
+        };
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Building workspace view from layout...")]
+    private static partial void LogUpdatingLayout(ILogger logger);
+
+    private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        _ = sender;
+
+        if (args.PropertyName == nameof(this.ViewModel.Root))
+        {
+            this.UpdateContent();
+        }
+    }
+
+    private void UpdateContent()
+    {
+        LogUpdatingLayout(this.logger);
+        var layout = this.ViewModel.Layout;
+        this.Content = layout.UpdateContent();
     }
 }

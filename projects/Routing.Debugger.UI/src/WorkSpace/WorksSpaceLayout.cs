@@ -19,7 +19,7 @@ using Microsoft.UI.Xaml.Media;
 /// <summary>
 /// A layout strategy for the workspace.
 /// </summary>
-internal sealed partial class WorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
+public sealed partial class WorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
     : ObservableObject
 {
     private readonly Stack<VectorGrid> grids = new();
