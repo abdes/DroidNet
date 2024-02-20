@@ -34,7 +34,7 @@ internal sealed partial class WorkSpaceLayout(IDocker docker, IViewLocator viewL
         this.PushGrid(grid, "root");
         this.Layout(docker.Root);
         Debug.Assert(this.grids.Count == 1, "some pushes to the grids stack were not matched by a corresponding pop");
-        this.grids.Pop();
+        _ = this.grids.Pop();
 
         return grid;
     }
@@ -123,16 +123,14 @@ internal sealed partial class WorkSpaceLayout(IDocker docker, IViewLocator viewL
 
     private void PushGrid(VectorGrid grid, string what)
     {
-        var orientation = grid.Orientation == Orientation.Horizontal ? "---" : " | ";
-        Debug.WriteLine($"{orientation} Push grid {what}");
+        Debug.WriteLine($"{(grid.Orientation == Orientation.Horizontal ? "---" : " | ")} Push grid {what}");
         this.grids.Push(grid);
     }
 
     private void PopGrid(string? what)
     {
         _ = this.grids.Pop();
-        var orientation = this.grids.Peek().Orientation == Orientation.Horizontal ? "---" : " | ";
-        Debug.WriteLine($"{orientation} Pop grid {what}");
+        Debug.WriteLine($"{(this.grids.Peek().Orientation == Orientation.Horizontal ? "---" : " | ")} Pop grid {what}");
     }
 
     private void PlaceTray(IDockTray tray)
@@ -207,37 +205,27 @@ internal sealed partial class WorkSpaceLayout(IDocker docker, IViewLocator viewL
 
         // Handle the children
         this.PushGrid(grid, (grid == this.grids.Peek() ? "!!new " : "=same ") + group);
-        if (group.First != null)
-        {
-            var first = group.First;
-
-            // A tray group
-            if (first is IDockTray tray)
-            {
-                this.PlaceTray(tray);
-            }
-            else
-            {
-                this.Layout(first);
-            }
-        }
-
-        // Handle the children
-        if (group.Second != null)
-        {
-            var second = group.Second;
-
-            // A tray group
-            if (second is IDockTray tray)
-            {
-                this.PlaceTray(tray);
-            }
-            else
-            {
-                this.Layout(second);
-            }
-        }
+        HandlePart(group.First);
+        HandlePart(group.Second);
 
         this.PopGrid(group.ToString());
+        return;
+
+        void HandlePart(IDockGroup? part)
+        {
+            switch (part)
+            {
+                case null:
+                    return;
+
+                case IDockTray tray:
+                    this.PlaceTray(tray);
+                    break;
+
+                default:
+                    this.Layout(part);
+                    break;
+            }
+        }
     }
 }
