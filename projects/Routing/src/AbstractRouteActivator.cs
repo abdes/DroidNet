@@ -59,7 +59,7 @@ public abstract partial class AbstractRouteActivator(
             return true;
         }
 
-        Trace.TraceInformation($"Activating route `{routeImpl}` for the first time");
+        Debug.WriteLine($"Activating route `{routeImpl}` for the first time");
 
         // Resolve the view model and then ask the concrete activator to finish
         // activation. The ActiveRoute must be fully setup before we do the
