@@ -19,6 +19,8 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     [ObservableProperty]
     private ITreeItem? selectedItem;
 
+    private string? url;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlTreeViewModel" /> class.
     /// </summary>
@@ -27,13 +29,22 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     /// </param>
     public UrlTreeViewModel(IRouter router) => this.routerEventsSub = router.Events
         .OfType<ActivationStarted>()
-        .Select(e => e.RouterState.UrlTree.Root)
+        .Select(e => e.RouterState)
         .Subscribe(
-            urlTree => this.Root = new UrlSegmentGroupAdapter(urlTree)
+            state =>
             {
-                IndexInItems = 0,
-                Level = 0,
-                Outlet = OutletName.Primary,
+                if (state.Url == this.url)
+                {
+                    return;
+                }
+
+                this.url = state.Url;
+                this.Root = new UrlSegmentGroupAdapter(state.UrlTree.Root)
+                {
+                    IndexInItems = 0,
+                    Level = 0,
+                    Outlet = OutletName.Primary,
+                };
             });
 
     public void Dispose()

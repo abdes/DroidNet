@@ -62,7 +62,7 @@ public static partial class Program
                 new ExpressionTemplate(
                     "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
                     new CultureInfo("en-US")))
-            .WriteTo.Seq("http://localhost:5341/")
+            /* .WriteTo.Seq("http://localhost:5341/") */
             .CreateLogger();
         try
         {
@@ -118,11 +118,11 @@ public static partial class Program
                     .AddTransient<WelcomeView>()
                     .AddTransient<WorkSpaceViewModel>()
                     .AddTransient<WorkSpaceView>()
-                    .AddTransient<RoutesViewModel>()
+                    .AddSingleton<RoutesViewModel>()
                     .AddTransient<RoutesView>()
-                    .AddTransient<UrlTreeViewModel>()
+                    .AddSingleton<UrlTreeViewModel>()
                     .AddTransient<UrlTreeView>()
-                    .AddTransient<RouterStateViewModel>()
+                    .AddSingleton<RouterStateViewModel>()
                     .AddTransient<RouterStateView>());
 
             var host = builder.Build();

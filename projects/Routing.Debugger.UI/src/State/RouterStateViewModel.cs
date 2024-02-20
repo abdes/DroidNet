@@ -13,13 +13,24 @@ public class RouterStateViewModel : TreeViewModelBase, IDisposable
 {
     private readonly IDisposable routerEventsSub;
 
+    private string? url;
+
     public RouterStateViewModel(IRouter router) => this.routerEventsSub = router.Events
         .OfType<ActivationStarted>()
-        .Select(e => e.RouterState.Root)
+        .Select(e => e.RouterState)
         .Subscribe(
-            state => this.Root = new RouterStateAdapter(state)
+            state =>
             {
-                Level = 0,
+                if (state.Url == this.url)
+                {
+                    return;
+                }
+
+                this.url = state.Url;
+                this.Root = new RouterStateAdapter(state.Root)
+                {
+                    Level = 0,
+                };
             });
 
     public void Dispose()
