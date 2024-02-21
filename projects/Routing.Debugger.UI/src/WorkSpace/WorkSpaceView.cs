@@ -30,12 +30,12 @@ public partial class WorkSpaceView : UserControl
             =>
         {
             this.UpdateContent();
-            this.ViewModel.PropertyChanged += this.ViewModelPropertyChanged;
+            this.ViewModel.Layout.PropertyChanged += this.ViewModelPropertyChanged;
         };
 
         this.Unloaded += (_, _) =>
         {
-            this.ViewModel.PropertyChanged -= this.ViewModelPropertyChanged;
+            this.ViewModel.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
             this.ViewModel.Dispose();
         };
     }
@@ -48,18 +48,19 @@ public partial class WorkSpaceView : UserControl
 
     private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        _ = sender;
-
-        if (args.PropertyName == nameof(this.ViewModel.Root))
+        if (args.PropertyName != nameof(this.ViewModel.Layout.Content))
         {
-            this.UpdateContent();
+            return;
         }
+
+        LogUpdatingLayout(this.logger);
+        this.Content = this.ViewModel.Layout.Content;
     }
 
     private void UpdateContent()
     {
         LogUpdatingLayout(this.logger);
         var layout = this.ViewModel.Layout;
-        this.Content = layout.UpdateContent();
+        this.Content = layout.Content;
     }
 }
