@@ -95,47 +95,35 @@ public interface IRouter
 
     IObservable<RouterEvent> Events { get; }
 
-    /// <summary>Navigates to the specified URL.</summary>
-    /// <param name="url">
-    /// The URL to navigate to. Represents an absolute URL if it starts with
-    /// <c>'/'</c>, or a relative one if not.
-    /// </param>
+    /// <summary>
+    /// Request a full navigation to the specified absolute URL.
+    /// </summary>
+    /// <param name="url">The URL to navigate to.</param>
     /// <param name="options">
-    /// The navigation options. When <c>null</c>, default
-    /// <see cref="NavigationOptions" /> are used.
+    /// The navigation options. When <c>null</c>, <see cref="NavigationOptions">defaults</see> are used.
     /// </param>
     /// <remarks>
     /// TODO(abdes): describe the details of the navigation process.
     /// </remarks>
-    void Navigate(string url, NavigationOptions? options = null);
-
-    void Navigate(List<RouteChangeItem> changes, NavigationOptions options);
-}
-
-/// <summary>
-/// Represents options used when requesting the <see cref="IRouter" /> to
-/// navigate.
-/// </summary>
-public class NavigationOptions
-{
-    /// <summary>Gets the target of the navigation.</summary>
-    /// <value>
-    /// A string identifying the navigation target. Can refer to one of the
-    /// special <see cref="Target">targets</see> or to a custom one. In
-    /// both cases, the value should be a key to an appropriate object
-    /// registered with the dependency injector.
-    /// </value>
-    public Target? Target { get; init; }
+    void Navigate(string url, FullNavigation? options = null);
 
     /// <summary>
-    /// Gets the <see cref="IActiveRoute" />, relative to which the navigation
-    /// will happen.
+    /// Request a partial navigation to the specified relative URL.
     /// </summary>
-    /// <value>
-    /// When not <c>null</c>, it contains the active route relative to which the
-    /// url tree for navigation will be resolved before navigation starts.
-    /// </value>
-    public IActiveRoute? RelativeTo { get; init; }
+    /// <param name="url">The relative URL to navigate to.</param>
+    /// <param name="options">The navigation options, which must contain at
+    /// least the relative route from which navigation will start.</param>
+    void Navigate(string url, PartialNavigation options);
+
+    /// <summary>
+    /// Request a partial navigation using the specified changes, which need to
+    /// be applied to the current router state.
+    /// </summary>
+    /// <param name="changes">The changes to be applied to the router
+    /// state.</param>
+    /// <param name="options">The navigation options, which must contain least
+    /// the relative route, at which the changes are to be applied.</param>
+    void Navigate(List<RouteChangeItem> changes, PartialNavigation options);
 }
 
 public class RouteChangeItem

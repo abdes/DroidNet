@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing;
 
+using System;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -90,16 +91,15 @@ public partial class Router : IRouter, IDisposable
     public IObservable<RouterEvent> Events { get; }
 
     /// <inheritdoc />
-    public void Navigate(string url, NavigationOptions? options = null) =>
-        this.Navigate(this.urlSerializer.Parse(url), options);
+    public void Navigate(string url, FullNavigation? options = null)
+        => this.Navigate(this.urlSerializer.Parse(url), options ?? new FullNavigation());
 
-    public IUrlTree? GetCurrentUrlTreeForTarget(Target target)
-        => this.contextManager.GetContextForTarget(target).State?.UrlTree;
+    /// <inheritdoc />
+    public void Navigate(string url, PartialNavigation options)
+        => this.Navigate(this.urlSerializer.Parse(url), options);
 
-    public IActiveRoute? GetCurrentStateForTarget(Target target)
-        => this.contextManager.GetContextForTarget(target).State?.Root;
-
-    public void Navigate(List<RouteChangeItem> changes, NavigationOptions options)
+    /// <inheritdoc />
+    public void Navigate(List<RouteChangeItem> changes, PartialNavigation options)
     {
         try
         {
@@ -121,7 +121,7 @@ public partial class Router : IRouter, IDisposable
                           "failed to serialize the modified URL tree into a URL string");
             ((RouterState)currentState).Url = url;
 
-            this.eventSource.OnNext(new NavigationStart(url));
+            this.eventSource.OnNext(new NavigationStart(url, options));
 
             ApplyChangesToRouterState(changes, activeRoute);
 
@@ -137,17 +137,17 @@ public partial class Router : IRouter, IDisposable
 
             if (success)
             {
-                this.eventSource.OnNext(new NavigationEnd(currentState.Url));
+                this.eventSource.OnNext(new NavigationEnd(currentState.Url, options));
             }
             else
             {
-                this.eventSource.OnNext(new NavigationError());
+                this.eventSource.OnNext(new NavigationError(options));
             }
         }
         catch (Exception ex)
         {
             LogNavigationFailed(this.logger, ex);
-            this.eventSource.OnNext(new NavigationError());
+            this.eventSource.OnNext(new NavigationError(options));
         }
     }
 
@@ -155,58 +155,6 @@ public partial class Router : IRouter, IDisposable
     {
         this.eventSource.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    public void Navigate(IUrlTree urlTree, NavigationOptions? options = null)
-    {
-        this.eventSource.OnNext(new NavigationStart(urlTree.ToString()));
-
-        options ??= new NavigationOptions();
-        try
-        {
-            // Get a context for the target.
-            var context = this.contextManager.GetContextForTarget(options.Target);
-
-            // If the navigation is relative, resolve the url tree into an
-            // absolute one.
-            if (options.RelativeTo is not null)
-            {
-                urlTree = ResolveUrlTreeRelativeTo(urlTree, options.RelativeTo);
-            }
-
-            // Parse the url tree into a router state.
-            context.State = this.states.CreateFromUrlTree(urlTree);
-
-            this.eventSource.OnNext(new RoutesRecognized(urlTree));
-
-            // TODO(abdes): eventually optimize reuse of previously activated routes in the router state
-            OptimizeRouteActivation(context);
-
-            this.eventSource.OnNext(new ActivationStarted(context.State));
-
-            // Activate routes in the router state that still need activation after
-            // the optimization.
-            var success = this.routeActivator.ActivateRoutesRecursive(context.State.Root, context);
-
-            // Finally activate the context.
-            this.contextProvider.ActivateContext(context);
-
-            this.eventSource.OnNext(new ActivationComplete(context.State));
-
-            if (success)
-            {
-                this.eventSource.OnNext(new NavigationEnd(context.State.Url));
-            }
-            else
-            {
-                this.eventSource.OnNext(new NavigationError());
-            }
-        }
-        catch (Exception ex)
-        {
-            LogNavigationFailed(this.logger, ex);
-            this.eventSource.OnNext(new NavigationError());
-        }
     }
 
     private static void ApplyChangesToRouterState(
@@ -395,4 +343,55 @@ public partial class Router : IRouter, IDisposable
         Level = LogLevel.Error,
         Message = "Navigation failed!")]
     private static partial void LogNavigationFailed(ILogger logger, Exception ex);
+
+    private void Navigate(IUrlTree urlTree, NavigationOptions options)
+    {
+        this.eventSource.OnNext(new NavigationStart(urlTree.ToString(), options));
+
+        try
+        {
+            // Get a context for the target.
+            var context = this.contextManager.GetContextForTarget(options.Target);
+
+            // If the navigation is relative, resolve the url tree into an
+            // absolute one.
+            if (options.RelativeTo is not null)
+            {
+                urlTree = ResolveUrlTreeRelativeTo(urlTree, options.RelativeTo);
+            }
+
+            // Parse the url tree into a router state.
+            context.State = this.states.CreateFromUrlTree(urlTree);
+
+            this.eventSource.OnNext(new RoutesRecognized(urlTree));
+
+            // TODO(abdes): eventually optimize reuse of previously activated routes in the router state
+            OptimizeRouteActivation(context);
+
+            this.eventSource.OnNext(new ActivationStarted(context.State));
+
+            // Activate routes in the router state that still need activation after
+            // the optimization.
+            var success = this.routeActivator.ActivateRoutesRecursive(context.State.Root, context);
+
+            // Finally activate the context.
+            this.contextProvider.ActivateContext(context);
+
+            this.eventSource.OnNext(new ActivationComplete(context.State));
+
+            if (success)
+            {
+                this.eventSource.OnNext(new NavigationEnd(context.State.Url, options));
+            }
+            else
+            {
+                this.eventSource.OnNext(new NavigationError(options));
+            }
+        }
+        catch (Exception ex)
+        {
+            LogNavigationFailed(this.logger, ex);
+            this.eventSource.OnNext(new NavigationError(options));
+        }
+    }
 }
