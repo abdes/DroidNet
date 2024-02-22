@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentControl
+    x:Class="DroidNet.Routing.Debugger.UI.Docks.EmbeddedAppView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    HorizontalContentAlignment="Center"
+    VerticalContentAlignment="Center"
+    mc:Ignorable="d">
+
+    <ContentControl.Resources>
+        <ctkConverters:EmptyObjectToObjectConverter
+            x:Key="IsNullConverter"
+            EmptyValue="True"
+            NotEmptyValue="False" />
+
+    </ContentControl.Resources>
+
+    <interactivity:Interaction.Behaviors>
+        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="True">
+            <core:ChangePropertyAction PropertyName="Content">
+                <core:ChangePropertyAction.Value>
+                    <StackPanel
+                        Padding="10"
+                        Orientation="Vertical"
+                        Spacing="10">
+                        <TextBlock Foreground="{ThemeResource SystemFillColorCritical}" Style="{StaticResource SubtitleTextBlockStyle}">
+                            Content Loading Error
+                        </TextBlock>
+                        <RichTextBlock TextWrapping="Wrap">
+                            <Paragraph>
+                                <Span>An error occurred while loading the application content:</Span>
+                                <Run Foreground="Orange" Text="{x:Bind ViewModel.ErrorDescription}" />
+                                <Span>.</Span>
+                            </Paragraph>
+                            <Paragraph Margin="0,20,0,0">
+                                There are a number of reasons why this would happen:
+                            </Paragraph>
+                        </RichTextBlock>
+                        <Grid Margin="20,0,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <FontIcon
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                VerticalAlignment="Top"
+                                Glyph="&#xE9AE;" />
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                TextWrapping="Wrap">
+                                Check that you have added the ViewModel to the Dependency Injector.
+                            </TextBlock>
+                            <FontIcon
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                VerticalAlignment="Top"
+                                Glyph="&#xE9AE;" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                TextWrapping="Wrap">
+                                Check that you have added the corresponding view to the Dependency Injector.
+                            </TextBlock>
+                            <FontIcon
+                                Grid.Row="2"
+                                Grid.Column="0"
+                                VerticalAlignment="Top"
+                                Glyph="&#xE9AE;" />
+                            <TextBlock
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                TextWrapping="Wrap">
+                                Check that you have added properly configured the ViewModel type in Route configuration.
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </core:ChangePropertyAction.Value>
+            </core:ChangePropertyAction>
+        </core:DataTriggerBehavior>
+        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="False">
+            <core:ChangePropertyAction PropertyName="Content">
+                <core:ChangePropertyAction.Value>
+                    <ContentPresenter Content="{x:Bind ViewModel.ApplicationContent}" />
+                </core:ChangePropertyAction.Value>
+            </core:ChangePropertyAction>
+        </core:DataTriggerBehavior>
+    </interactivity:Interaction.Behaviors>
+</ContentControl>
