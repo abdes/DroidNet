@@ -66,7 +66,13 @@ public partial class Dockable : ObservableObject, IDockable
         set => this.tabbedTitle = value;
     }
 
+    public IDockable.Width PreferredWidth { get; set; } = new();
+
+    public IDockable.Height PreferredHeight { get; set; } = new();
+
     public object? ViewModel { get; set; }
 
     public IDock? Owner { get; set; }
+
+    public bool IsActive { get; set; }
 }

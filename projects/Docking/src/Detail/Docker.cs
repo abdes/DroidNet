@@ -11,7 +11,7 @@ public class Docker : IDocker
 {
     private readonly RootDockGroup root = new();
 
-    public event Action? LayoutChanged;
+    public event Action<LayoutChangeReason>? LayoutChanged;
 
     public IDockGroup Root => this.root;
 
@@ -42,14 +42,14 @@ public class Docker : IDocker
             this.PinDock(dock);
         }
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
     // TODO(abdes): center dock is always pinned and cannot have any other state
     public void DockToCenter(IDock dock)
     {
         this.root.DockCenter(dock);
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
     public void DockToRoot(IDock dock, AnchorPosition position, bool minimized = false)
@@ -91,7 +91,7 @@ public class Docker : IDocker
             this.PinDock(dock);
         }
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
     public void MinimizeDock(IDock dock)
@@ -119,7 +119,7 @@ public class Docker : IDocker
 
         dock.AsDock().State = DockingState.Minimized;
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
     public void PinDock(IDock dock)
@@ -139,7 +139,22 @@ public class Docker : IDocker
 
         dock.AsDock().State = DockingState.Pinned;
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+    }
+
+    public void ResizeDock(IDock dock, IDockable.Width width, IDockable.Height height)
+    {
+        var active = dock.Dockables.FirstOrDefault(d => d.IsActive);
+        if (active == null)
+        {
+            Debug.WriteLine($"dock {dock} has no active dockable to resize");
+            return;
+        }
+
+        active.PreferredWidth = width;
+        active.PreferredHeight = height;
+
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Resize);
     }
 
     public void CloseDock(IDock dock)
@@ -172,7 +187,7 @@ public class Docker : IDocker
             resource.Dispose();
         }
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
     public void FloatDock(IDock dock)
@@ -185,7 +200,7 @@ public class Docker : IDocker
         // TODO: implement floating show
         dock.AsDock().State = DockingState.Floating;
 
-        this.LayoutChanged?.Invoke();
+        this.LayoutChanged?.Invoke(LayoutChangeReason.Floating);
     }
 
     public void Dispose()

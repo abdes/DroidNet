@@ -75,6 +75,32 @@ public enum DockingState
 }
 
 /// <summary>
+/// Indicates the origin of a layout change when the
+/// <see cref="IDocker.LayoutChanged">corresponding event</see> is triggered
+/// by the docker.
+/// </summary>
+public enum LayoutChangeReason
+{
+    /// <summary>
+    /// Indicates that the layout change is only because of docks being resized,
+    /// which does not require the existing layout to be rebuilt.
+    /// </summary>
+    Resize,
+
+    /// <summary>
+    /// Indicates that the layout change is due to operations on docks that
+    /// would require the layout to be rebuilt.
+    /// </summary>
+    Docking,
+
+    /// <summary>
+    /// Indicates that the layout change due to a dock being floated, which may
+    /// not require the existing layout to be rebuilt.
+    /// </summary>
+    Floating,
+}
+
+/// <summary>
 /// Indicates how new views, added to a <see cref="IDock" /> should be
 /// positioned inside the dock.
 /// </summary>
