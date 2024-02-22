@@ -159,6 +159,17 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
                                dockableId,
                                viewModel,
                                "failed to create a dockable object");
+
+            if (dockerActivatedRoute.Params.TryGetValue("w", out var preferredWidth))
+            {
+                dockable.PreferredWidth = new IDockable.Width(preferredWidth);
+            }
+
+            if (dockerActivatedRoute.Params.TryGetValue("h", out var preferredHeight))
+            {
+                dockable.PreferredHeight = new IDockable.Height(preferredHeight);
+            }
+
             dockable.ViewModel = viewModel;
             dock.AddDockable(dockable);
             this.docker.DockToRoot(dock, dockingPosition, isMinimized);

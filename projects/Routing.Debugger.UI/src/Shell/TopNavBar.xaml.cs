@@ -60,7 +60,7 @@ public sealed partial class TopNavBar : IDisposable
 
             if (this.Url != null)
             {
-                this.Router.Navigate(this.Url);
+                this.Router.Navigate(this.Url, new FullNavigation());
             }
         }
     }

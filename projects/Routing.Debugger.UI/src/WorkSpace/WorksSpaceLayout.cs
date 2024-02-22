@@ -42,9 +42,9 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         this.logger = logger;
 
         this.routerEventsSub = this.router.Events.Subscribe(
-            x =>
+            @event =>
             {
-                switch (x)
+                switch (@event)
                 {
                     // At the beginning of each navigation cycle, many
                     // changes will happen to ro docker model, but we want
@@ -65,7 +65,17 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     // that are not the result of navigation.
                     case NavigationEnd:
                     case NavigationError:
-                        this.Content = this.UpdateContent();
+                        var options = ((NavigationEvent)@event).Options;
+                        if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
+                        {
+                            this.Content = this.UpdateContent();
+                        }
+                        else
+                        {
+                            Debug.WriteLine(
+                                $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
+                        }
+
                         this.docker.LayoutChanged += this.SyncWithRouter;
                         break;
 
@@ -103,6 +113,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         var relativeTo = anchor.DockId?.ToString();
         return CheckAndSetParameterWithValue(position, relativeTo, active, next);
     }
+
+    private static bool CheckAndSetWidth(string value, IParameters active, Parameters next) =>
+        CheckAndSetParameterWithValue("w", value, active, next);
+
+    private static bool CheckAndSetHeight(string value, IParameters active, Parameters next) =>
+        CheckAndSetParameterWithValue("h", value, active, next);
 
     /// <summary>
     /// Checks if a parameter with value is changing from the currently active
@@ -163,6 +179,19 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         if (dock.Anchor != null)
         {
             changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
+        }
+
+        // TODO: update this after dock with is supported
+        var width = dock.Dockables.FirstOrDefault()?.PreferredWidth.Value;
+        if (width != null)
+        {
+            changed = CheckAndSetWidth(width, activeParams, nextParams) || changed;
+        }
+
+        var height = dock.Dockables.FirstOrDefault()?.PreferredHeight.Value;
+        if (height != null)
+        {
+            changed = CheckAndSetHeight(height, activeParams, nextParams) || changed;
         }
 
         return changed ? nextParams : null;
@@ -264,7 +293,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         BorderBrush = new SolidColorBrush(Colors.Red),
                         BorderThickness = new Thickness(0.5),
                     },
-                    stretch ? new GridLength(1, GridUnitType.Star) : new GridLength(300),
+                    stretch ? new GridLength(1, GridUnitType.Star) : GetGridLengthForDock(dock, grid.Orientation),
                     32);
             }
 
@@ -295,9 +324,22 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     break;
             }
         }
+
+        GridLength GetGridLengthForDock(IDock dock, Orientation gridOrientation)
+        {
+            var activeDockable = dock.Dockables.FirstOrDefault(); // TODO: change this after active dockable is tracked
+            if (activeDockable == null)
+            {
+                return new GridLength(300);
+            }
+
+            return gridOrientation == Orientation.Horizontal
+                ? activeDockable.PreferredGridWidth()
+                : activeDockable.PreferredGridHeight();
+        }
     }
 
-    private void SyncWithRouter()
+    private void SyncWithRouter(LayoutChangeReason layoutChangeReason)
     {
         Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
 
@@ -361,6 +403,14 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             }
         }
 
-        this.router.Navigate(changes, new NavigationOptions() { RelativeTo = this.activeRoute });
+        this.router.Navigate(
+            changes,
+            new PartialNavigation()
+            {
+                RelativeTo = this.activeRoute,
+                AdditionalInfo = new AdditionalInfo(layoutChangeReason != LayoutChangeReason.Resize),
+            });
     }
+
+    private record struct AdditionalInfo(bool RebuildLayout);
 }
