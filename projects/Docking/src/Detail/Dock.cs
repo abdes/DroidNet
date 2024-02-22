@@ -51,6 +51,11 @@ public abstract partial class Dock : IDock
     {
         // TODO: update active dockable and place dockable properly
         dockable.Owner = this;
+        if (this.Dockables.Count == 0)
+        {
+            dockable.IsActive = true;
+        }
+
         this.dockables.Add(dockable);
     }
 

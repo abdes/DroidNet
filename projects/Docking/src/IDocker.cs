@@ -6,7 +6,7 @@ namespace DroidNet.Docking;
 
 public interface IDocker : IDisposable
 {
-    event Action LayoutChanged;
+    event Action<LayoutChangeReason> LayoutChanged;
 
     IDockGroup Root { get; }
 
@@ -23,4 +23,6 @@ public interface IDocker : IDisposable
     void MinimizeDock(IDock dock);
 
     void PinDock(IDock dock);
+
+    void ResizeDock(IDock dock, IDockable.Width width, IDockable.Height height);
 }
