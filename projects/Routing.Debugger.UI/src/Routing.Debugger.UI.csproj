@@ -28,6 +28,9 @@
 
         <RootNamespace>$(RootNamespace).Routing.Debugger.UI</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+      <None Remove="Docks\EmbeddedAppView.xaml" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
@@ -50,6 +53,12 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Docks\EmbeddedAppView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
     </ItemGroup>
 
 </Project>

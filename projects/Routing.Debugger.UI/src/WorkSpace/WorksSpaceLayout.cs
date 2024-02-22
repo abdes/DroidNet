@@ -77,100 +77,18 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     public void Dispose() => this.routerEventsSub.Dispose();
 
-    private static IActiveRoute? FindWorkSpaceActiveRoute(IActiveRoute? node) =>
-        node is null
-            ? null
-            : node.Outlet == DebuggerConstants.DockOutletName
-                ? node
-                : node.Children.Select(FindWorkSpaceActiveRoute).FirstOrDefault();
-
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Syncing docker workspace layout with the router...")]
     private static partial void LogSyncWithRouter(ILogger logger);
 
-    private static bool ShouldShowGroup(IDockGroup? group)
-    {
-        if (group is null)
-        {
-            return false;
-        }
-
-        if (!group.IsEmpty)
-        {
-            return group is IDockTray || group.Docks.Any(d => d.State != DockingState.Minimized);
-        }
-
-        return ShouldShowGroup(group.First) || ShouldShowGroup(group.Second);
-    }
-
-    private static bool ShouldStretch(IDockGroup group)
-    {
-        if (group.IsCenter)
-        {
-            return true;
-        }
-
-        return (group.First != null && ShouldStretch(group.First)) ||
-               (group.Second != null && ShouldStretch(group.Second));
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to load application content")]
-    private static partial void LogContentLoadingError(ILogger logger, Exception exception);
-
-    private static UIElement GetApplicationContent(IDock dock, IViewLocator viewLocator, ILogger logger)
-    {
-        try
-        {
-            return TryGetApplicationContent(dock, viewLocator);
-        }
-        catch (Exception exception)
-        {
-            LogContentLoadingError(logger, exception);
-
-            // Show the error as content
-            return new TextBlock()
-            {
-                Text = exception.Message,
-                TextWrapping = TextWrapping.Wrap,
-            };
-        }
-    }
-
-    private static UIElement TryGetApplicationContent(IDock dock, IViewLocator viewLocator)
-    {
-        if (dock.Dockables.Count != 1)
-        {
-            throw new ContentLoadingException(
-                DebuggerConstants.AppOutletName,
-                null,
-                "the application dock must have exactly one dockable");
-        }
-
-        var contentViewModel = dock.Dockables[0].ViewModel;
-        if (contentViewModel is null)
-        {
-            throw new ContentLoadingException(
-                DebuggerConstants.AppOutletName,
-                contentViewModel,
-                "application view model is null");
-        }
-
-        var view = viewLocator.ResolveView(contentViewModel);
-        if (view is UIElement content)
-        {
-            return content;
-        }
-
-        throw new ContentLoadingException(
-            DebuggerConstants.AppOutletName,
-            contentViewModel,
-            $"the view is {(view is null ? "null" : "not a UIElement")}");
-    }
+    private static IActiveRoute? FindWorkSpaceActiveRoute(IActiveRoute? node) =>
+        node is null
+            ? null
+            : node.Outlet == DebuggerConstants.DockOutletName
+                ? node
+                : node.Children.Select(FindWorkSpaceActiveRoute).FirstOrDefault();
 
     private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
     {
@@ -295,13 +213,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private void Layout(IDockGroup group)
     {
-        if (!ShouldShowGroup(group))
+        if (!group.ShouldShowGroup())
         {
             Debug.WriteLine($"Skipping {group}");
             return;
         }
 
-        var stretch = ShouldStretch(group);
+        var stretch = group.ShouldStretch();
 
         var grid = this.grids.Peek();
         if (group.Orientation != DockGroupOrientation.Undetermined)
@@ -331,8 +249,14 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 grid.AddResizableItem(
                     new Border()
                     {
-                        Child = dock is ApplicationDock
-                            ? GetApplicationContent(dock, this.viewLocator, this.logger)
+                        Child = dock is ApplicationDock appDock
+                            ? new EmbeddedAppView()
+                            {
+                                ViewModel = new EmbeddedAppViewModel(
+                                    appDock.ApplicationViewModel,
+                                    this.viewLocator,
+                                    this.logger),
+                            }
                             : new DockPanel()
                             {
                                 ViewModel = new DockPanelViewModel(dock, this.docker),

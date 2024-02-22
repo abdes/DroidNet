@@ -5,13 +5,12 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using DroidNet.Docking;
-using DroidNet.Docking.Detail;
 
 /// <summary>
 /// Represents a dock that holds only one dockable. Any attempt to add a
 /// <see cref="IDockable" /> to it will result in replacing the current one.
 /// </summary>
-public class ApplicationDock : Dock
+public class ApplicationDock : SingleItemDock
 {
     protected ApplicationDock()
     {
@@ -21,5 +20,7 @@ public class ApplicationDock : Dock
 
     public override bool CanClose => false;
 
-    public static ApplicationDock? New() => Factory.CreateDock(typeof(ApplicationDock)) as ApplicationDock;
+    public object? ApplicationViewModel => this.Dockables.FirstOrDefault()?.ViewModel;
+
+    public static new ApplicationDock? New() => Factory.CreateDock(typeof(ApplicationDock)) as ApplicationDock;
 }
