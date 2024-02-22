@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml;
 [ViewModel(typeof(DockPanelViewModel))]
 public sealed partial class DockPanel
 {
-    private const double ResizeThrottleInMs = 500.0;
+    private const double ResizeThrottleInMs = 100.0;
     private IDisposable? sizeChangedSubscription;
 
     public DockPanel() => this.InitializeComponent();
