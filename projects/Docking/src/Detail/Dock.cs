@@ -47,7 +47,7 @@ public abstract partial class Dock : IDock
 
     internal DockGroup? Group { get; set; }
 
-    public void AddDockable(IDockable dockable)
+    public virtual void AddDockable(IDockable dockable)
     {
         // TODO: update active dockable and place dockable properly
         dockable.Owner = this;
