@@ -28,11 +28,6 @@ public partial class Dockable : ObservableObject, IDockable
         get => this.title ?? this.Id;
         set
         {
-            if (this.title == value)
-            {
-                return;
-            }
-
             if (!this.SetProperty(ref this.title, value))
             {
                 return;
