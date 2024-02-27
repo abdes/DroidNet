@@ -7,14 +7,14 @@
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
         <IsPackable>false</IsPackable>
 
         <AssemblyName>Routing.Debugger</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
+        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <EnableMsixTooling>true</EnableMsixTooling>
         <PublishReadyToRun>true</PublishReadyToRun>
         <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
@@ -22,9 +22,6 @@
 
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
-
-        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
-        <UseRidGraph>true</UseRidGraph>
 
         <RootNamespace>$(RootNamespace).Routing.Debugger</RootNamespace>
 
@@ -82,9 +79,9 @@
         <ProjectCapability Include="Msix" />
     </ItemGroup>
     <ItemGroup>
-      <Content Update="Assets\DroidNet.png">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </Content>
+        <Content Update="Assets\DroidNet.png">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <!--
