@@ -15,18 +15,4 @@ internal static class InternalImplExtensions
         => group as DockGroup ?? throw new ArgumentException(
             $"expecting an object that I created, i.e. `{typeof(DockGroup)}`, but got an object of type `{group.GetType()}`",
             nameof(group));
-
-    internal static Dockable AsDockable(this IDockable dockable)
-        => dockable as Dockable ?? throw new ArgumentException(
-            $"expecting an object that I created, i.e. `{typeof(Dockable)}`, but got an object of type `{dockable.GetType()}`",
-            nameof(dockable));
-
-    // internal static AbstractDock GetOwner(this IDockable dockable)
-    // {
-    //     var dockableImpl = dockable.AsDockable();
-    //     Debug.Assert(
-    //         dockableImpl.Owner is not null,
-    //         $"{nameof(IDockable)} with Id `{dockable.Id}` has no owner. Probably not created properly.");
-    //     return dockableImpl.Owner;
-    // }
 }
