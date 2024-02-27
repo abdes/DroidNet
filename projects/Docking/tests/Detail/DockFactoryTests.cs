@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory($"{nameof(Dock)}.{nameof(Dock.Factory)}")]
 public class DockFactoryTests : TestSuiteWithAssertions
 {
     [TestMethod]

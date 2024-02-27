@@ -14,19 +14,15 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public class DockableTests
 {
-    private readonly Dockable dockable = Dockable.New("testId")!;
-
-    [TestCleanup]
-    public void Cleanup() => this.dockable.Dispose();
-
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
     public void Title_Setter_ShouldTriggerPropertyChange_ForMinimizedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
+        using var dockable = Dockable.New("testId")!;
         var eventTriggered = false;
 
-        this.dockable.PropertyChanged += (_, e) =>
+        dockable.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Dockable.MinimizedTitle))
             {
@@ -35,17 +31,18 @@ public class DockableTests
         };
 
         // Act
-        this.dockable.Title = "New Title";
+        dockable.Title = "New Title";
 
         // Assert
+        _ = dockable.Title.Should().Be("New Title");
         _ = eventTriggered.Should().BeTrue();
 
         // Set MinimizedTitle to non-null value
-        this.dockable.MinimizedTitle = "Minimized Title";
+        dockable.MinimizedTitle = "Minimized Title";
         eventTriggered = false;
 
         // Act
-        this.dockable.Title = "Another New Title";
+        dockable.Title = "Another New Title";
 
         // Assert
         _ = eventTriggered.Should().BeFalse();
@@ -56,9 +53,10 @@ public class DockableTests
     public void Title_Setter_ShouldTriggerPropertyChange_ForTabbedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
+        using var dockable = Dockable.New("testId")!;
         var eventTriggered = false;
 
-        this.dockable!.PropertyChanged += (_, e) =>
+        dockable!.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Dockable.TabbedTitle))
             {
@@ -67,19 +65,84 @@ public class DockableTests
         };
 
         // Act
-        this.dockable.Title = "New Title";
+        dockable.Title = "New Title";
 
         // Assert
+        _ = dockable.Title.Should().Be("New Title");
         _ = eventTriggered.Should().BeTrue();
 
         // Set TabbedTitle to non-null value
-        this.dockable.TabbedTitle = "Tabbed Title";
+        dockable.TabbedTitle = "Tabbed Title";
         eventTriggered = false;
 
         // Act
-        this.dockable.Title = "Another New Title";
+        dockable.Title = "Another New Title";
 
         // Assert
         _ = eventTriggered.Should().BeFalse();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
+    public void Title_Setter_ShouldNotTriggerPropertyChange_IfNotDifferentValue()
+    {
+        // Arrange
+        using var dockable = Dockable.New("testId")!;
+        dockable.Title = "Title";
+        var eventTriggered = false;
+
+        dockable.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Dockable.TabbedTitle) or nameof(Dockable.MinimizedTitle))
+            {
+                eventTriggered = true;
+            }
+        };
+
+        // Act
+        dockable.Title = "Title";
+
+        // Assert
+        _ = eventTriggered.Should().BeFalse();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Collection")]
+    public void All_ReturnsAllManagedDockables()
+    {
+        // Arrange
+        using var dockable1 = Dockable.New("1");
+        using var dockable2 = Dockable.New("2");
+
+        // Assert
+        _ = Dockable.All.Should().HaveCount(2).And.Contain(dockable1).And.Contain(dockable2);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Collection")]
+    public void FromId_ReturnsDockable_WhenIdIsManaged()
+    {
+        // Arrange
+        using var dockable1 = Dockable.New("1");
+
+        // Act
+        var fromId = Dockable.FromId("1");
+
+        // Assert
+        _ = fromId.Should().NotBeNull().And.Be(dockable1);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Collection")]
+    public void FromId_ReturnsNull_WhenIdIsIsNotManaged()
+    {
+        // Arrange
+        using var dockable1 = Dockable.New("1");
+
+        // Act
+        var fromId = Dockable.FromId("__");
+
+        // Assert
+        _ = fromId.Should().BeNull();
     }
 }
