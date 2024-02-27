@@ -15,6 +15,9 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
 {
     private readonly IDisposable routerEventsSub;
 
+    [ObservableProperty]
+    private IParameters queryParams = new Parameters();
+
     /// <summary>The currently selected item in the URL tree.</summary>
     [ObservableProperty]
     private ITreeItem? selectedItem;
@@ -45,6 +48,7 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
                     Level = 0,
                     Outlet = OutletName.Primary,
                 };
+                this.QueryParams = state.UrlTree.QueryParams;
             });
 
     public void Dispose()

@@ -5,54 +5,48 @@
 namespace DroidNet.Routing.Debugger.UI.State;
 
 using System.Collections.Generic;
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// Adapter for <see cref="IActiveRoute" /> so it can be used inside the
 /// <see cref="RouterStateView" /> control.
 /// </summary>
-public partial class RouterStateAdapter : ObservableObject, ITreeItem<IActiveRoute>
+public class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase, ITreeItem<IActiveRoute>
 {
-    private readonly Lazy<List<RouterStateAdapter>> children;
+    public override bool IsRoot => this.Item.Parent == null;
 
-    [ObservableProperty]
-    private bool isExpanded;
+    public IActiveRoute Item => item;
 
-    public RouterStateAdapter(IActiveRoute item)
-    {
-        this.Item = item;
-        this.children = new Lazy<List<RouterStateAdapter>>(
-            () =>
-            {
-                List<RouterStateAdapter> value = [];
-                value.AddRange(
-                    this.Item.Children.Select(
-                        child => new RouterStateAdapter(child)
-                        {
-                            Level = this.Level + 1,
-                            IsExpanded = true,
-                        }));
-
-                return value;
-            });
-    }
-
-    public bool IsRoot => this.Item.Parent == null;
-
-    public required int Level { get; init; }
-
-    public IActiveRoute Item { get; }
-
-    public string Label => this.IsRoot ? "<root>" : this.Item.ToString() ?? "invalid";
+    public override string Label => this.IsRoot ? "<root>" : this.Item.ToString() ?? "invalid";
 
     public bool IsForOutlet => this.Item.Outlet.IsNotPrimary;
 
-    public bool HasChildren => this.ChildrenCount > 0;
+    public string Outlet => $"{(item.Outlet.IsPrimary ? "[primary]" : item.Outlet)}";
 
-    public int ChildrenCount => this.Item.Children.Count;
+    public string Path
+    {
+        get
+        {
+            var fullPath = this.Item.Parent is null
+                ? " / "
+                : string.Join('/', this.Item.UrlSegments.Select(i => i.Path).ToList());
+            return fullPath == string.Empty ? "-empty-" : fullPath;
+        }
+    }
 
-    public string ViewModel => $"ViewModel = {this.Item.ViewModel?.GetType().Name}";
+    public string ViewModel => this.Item.ViewModel?.GetType().Name ?? "-None-";
 
-    IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
+    protected override List<TreeItemAdapterBase> PopulateChildren()
+    {
+        List<RouterStateAdapter> value = [];
+        value.AddRange(
+            this.Item.Children.Select(
+                child => new RouterStateAdapter(child)
+                {
+                    Level = this.Level + 1,
+                    IsExpanded = true,
+                }));
+
+        return value.Cast<TreeItemAdapterBase>().ToList();
+    }
 }

@@ -6,69 +6,59 @@ namespace DroidNet.Routing.Debugger.UI.UrlTree;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// Adapter for a <see cref="IUrlSegmentGroup" /> so it can be used inside the
 /// <see cref="UrlTreeView" /> control.
 /// </summary>
-public partial class UrlSegmentGroupAdapter : ObservableObject, ITreeItem<IUrlSegmentGroup>
+public class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAdapterBase, ITreeItem<IUrlSegmentGroup>
 {
-    private readonly Lazy<List<UrlSegmentGroupAdapter>> children;
-
     private readonly OutletName outlet;
-
-    [ObservableProperty]
-    private bool isExpanded;
-
-    public UrlSegmentGroupAdapter(IUrlSegmentGroup item)
-    {
-        this.Item = item;
-        this.children = new Lazy<List<UrlSegmentGroupAdapter>>(
-            () =>
-            {
-                List<UrlSegmentGroupAdapter> value = [];
-                var childIndexInItems = this.IndexInItems + 1;
-                foreach (var child in this.Item.Children)
-                {
-                    value.Add(
-                        new UrlSegmentGroupAdapter(child.Value)
-                        {
-                            IndexInItems = childIndexInItems,
-                            Level = this.Level + 1,
-                            Outlet = child.Key,
-                            IsExpanded = true,
-                        });
-                    ++childIndexInItems;
-                }
-
-                return value;
-            });
-    }
 
     public ReadOnlyCollection<IUrlSegment> Segments => this.Item.Segments;
 
     public required int IndexInItems { get; init; }
 
-    public required int Level { get; init; }
-
     public required string Outlet
     {
-        get => $"[{(this.outlet.IsPrimary ? "primary" : this.outlet)}]";
+        get => $"{(this.outlet.IsPrimary ? "[primary]" : this.outlet)}";
         [MemberNotNull(nameof(outlet))]
         init => this.outlet = value;
     }
 
-    public IUrlSegmentGroup Item { get; }
+    public IUrlSegmentGroup Item => item;
 
-    public string Label => this.Item.Parent is null ? " / " : this.Item.ToString() ?? string.Empty;
+    public override string Label
+    {
+        get
+        {
+            var fullPath = this.Item.Parent is null
+                ? " / "
+                : string.Join('/', this.Item.Segments.Select(i => i.Path).ToList());
+            return fullPath == string.Empty ? "-empty-" : fullPath;
+        }
+    }
 
-    public bool HasChildren => this.ChildrenCount > 0;
+    public override bool IsRoot => this.Item.Parent is null;
 
-    public int ChildrenCount => this.Item.Children.Count;
+    protected override List<TreeItemAdapterBase> PopulateChildren()
+    {
+        List<UrlSegmentGroupAdapter> value = [];
+        var childIndexInItems = this.IndexInItems + 1;
+        foreach (var child in this.Item.Children)
+        {
+            value.Add(
+                new UrlSegmentGroupAdapter(child.Value)
+                {
+                    IndexInItems = childIndexInItems,
+                    Level = this.Level + 1,
+                    Outlet = child.Key,
+                    IsExpanded = true,
+                });
+            ++childIndexInItems;
+        }
 
-    public bool IsRoot => this.Item.Parent is null;
-
-    IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
+        return value.Cast<TreeItemAdapterBase>().ToList();
+    }
 }

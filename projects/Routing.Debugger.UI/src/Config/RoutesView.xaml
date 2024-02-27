@@ -4,34 +4,16 @@
     x:Class="DroidNet.Routing.Debugger.UI.Config.RoutesView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:communityConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:config="using:DroidNet.Routing.Debugger.UI.Config"
-    xmlns:converters="using:DroidNet.Routing.Debugger.UI.Converters"
     xmlns:core="using:Microsoft.Xaml.Interactions.Core"
-    xmlns:interactivity="using:Microsoft.Xaml.Interactivity">
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:s="using:DroidNet.Routing.Debugger.UI.Styles"
+    xmlns:t="using:DroidNet.Routing.Debugger.UI.TreeView">
 
     <UserControl.Resources>
-        <communityConverters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
-        <converters:ExpanderIconConverter x:Key="ExpanderIconConverter" />
-        <converters:ItemClickEventArgsToClickedItemConverter x:Key="EventArgsToClickedItemConverter" />
-        <converters:IndentToMarginConverter
-            x:Key="IndentToMarginConverter"
-            IndentIncrement="20"
-            InitialMargin="{StaticResource ItemMargin}" />
 
-        <Thickness x:Key="ItemMargin">0,0,0,0</Thickness>
-
-        <!--  Data for icons comes from the SVg files  -->
-        <DataTemplate x:Key="OutletIcon">
-            <Viewbox Stretch="Uniform">
-                <PathIcon Data="M79.91,3v15h-26.91c-19.29,0-35,15.7-35,35s15.71,35,35,35h26.91v15h-26.91c-27.61,0-50-22.38-50-50S25.39,3,53,3h26.91ZM75.9,43.81c-3.53-8.01-11.54-13.6-20.85-13.6-12.59,0-22.8,10.21-22.8,22.79s10.21,22.79,22.8,22.79c9.31,0,17.32-5.58,20.85-13.59h32.88v-18.39h-32.88Z" />
-            </Viewbox>
-        </DataTemplate>
-        <DataTemplate x:Key="RouteIcon">
-            <Viewbox Stretch="Uniform">
-                <PathIcon Data="M119.78,48.08h11.92c4.88,0,8.67-4.1,8.67-9.38v-12.9c0-5.28-3.79-9.38-8.67-9.38h-11.92c-4.88,0-8.67,4.1-8.67,9.38h-44.99c-6.5-7.62-15.18-11.73-24.39-11.73h-4.88C34.69,5.86,27.64,0,18.97,0,8.67,0,0,9.38,0,21.11s8.67,20.52,18.97,20.52c5.42,0,10.84-2.93,14.09-7.04,3.25,3.52,5.42,8.8,5.42,14.07v2.35c0,16.42,10.84,30.49,24.93,34.01v9.97c0,20.52,15.72,37.53,34.69,37.53h13.01c0,5.28,3.79,9.38,8.67,9.38h11.92c4.88,0,8.67-4.1,8.67-9.38v-12.9c0-5.28-3.79-9.38-8.67-9.38h-11.92c-4.88,0-8.67,4.1-8.67,9.38h-13.01c-11.92,0-22.22-10.55-22.22-24.04v-9.38h34.69c0,5.28,3.79,9.38,8.67,9.38h11.92c4.88,0,8.67-4.1,8.67-9.38v-12.9c0-5.28-3.79-9.38-8.67-9.38h-11.92c-4.88,0-8.67,4.1-8.67,9.38h-34.69v-20.52c0-4.69-.54-8.8-2.17-12.9h36.86c.54,4.1,4.34,8.21,9.21,8.21ZM50.95,51.01v-2.35c0-7.62-2.71-15.25-6.5-20.52,10.84,1.76,18.97,11.73,18.97,23.45v18.76c-7.05-2.93-12.47-10.55-12.47-19.35Z" />
-            </Viewbox>
-        </DataTemplate>
+        <ctkConverters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
 
         <Style x:Key="RootNode" TargetType="TextBlock">
             <Style.Setters>
@@ -39,110 +21,40 @@
             </Style.Setters>
         </Style>
 
-        <Style x:Key="RoutePropertyName" TargetType="TextBlock">
-            <Style.Setters>
-                <Setter Property="FontStyle" Value="Italic" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Margin" Value="5,5,5,0" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiary}" />
-            </Style.Setters>
-        </Style>
+        <DataTemplate x:Key="ItemHeaderTemplate" x:DataType="config:RouteAdapter">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <Image
+                    Height="24"
+                    Source="{ThemeResource OutletIcon}"
+                    Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
+                <TextBlock FontSize="16" Text="{x:Bind Label}">
+                    <interactivity:Interaction.Behaviors>
+                        <core:DataTriggerBehavior Binding="{x:Bind IsRoot, Mode=OneWay}" Value="True">
+                            <core:ChangePropertyAction PropertyName="Style" Value="{StaticResource RootNode}" />
+                        </core:DataTriggerBehavior>
+                    </interactivity:Interaction.Behaviors>
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
 
-        <Style x:Key="RoutePropertyValue" TargetType="TextBlock">
-            <Style.Setters>
-                <Setter Property="FontStyle" Value="Italic" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Margin" Value="5,5,0,0" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondary}" />
-            </Style.Setters>
-        </Style>
+        <DataTemplate x:Key="ItemBodyTemplate" x:DataType="config:RouteAdapter">
+            <s:ItemProperties>
+                <s:ItemProperty
+                    PropertyName="ViewModel"
+                    PropertyValue="{x:Bind ViewModelType}"
+                    Visibility="{x:Bind IsRoot, Converter={StaticResource VisibilityConverter}, ConverterParameter=True}" />
+                <s:ItemProperty
+                    PropertyName="Outlet"
+                    PropertyValue="{x:Bind Outlet}"
+                    Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
+            </s:ItemProperties>
+        </DataTemplate>
+
     </UserControl.Resources>
 
-    <ListView
-        IsItemClickEnabled="True"
-        ItemsSource="{x:Bind ViewModel.ShownItems}"
-        SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
-        SelectionMode="Single">
-        <ListView.ItemTemplate>
-            <DataTemplate x:DataType="config:RouteAdapter">
-                <Grid Margin="{x:Bind Level, Converter={StaticResource IndentToMarginConverter}}" Padding="0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel
-                        Grid.Row="0"
-                        Grid.Column="0"
-                        Grid.ColumnSpan="2"
-                        Orientation="Horizontal"
-                        Spacing="4">
-                        <ContentPresenter
-                            Height="16"
-                            ContentTemplate="{StaticResource RouteIcon}"
-                            Foreground="{ThemeResource TextFillColorSecondary}"
-                            Visibility="{x:Bind IsRoot, Converter={StaticResource VisibilityConverter}, ConverterParameter=True}" />
-                        <ContentPresenter
-                            Height="16"
-                            ContentTemplate="{StaticResource OutletIcon}"
-                            Foreground="{ThemeResource TextFillColorTertiary}"
-                            Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
-                        <TextBlock FontSize="16" Text="{x:Bind Label}">
-                            <interactivity:Interaction.Behaviors>
-                                <core:DataTriggerBehavior Binding="{x:Bind IsRoot, Mode=OneWay}" Value="True">
-                                    <core:ChangePropertyAction PropertyName="Style" Value="{StaticResource RootNode}" />
-                                </core:DataTriggerBehavior>
-                            </interactivity:Interaction.Behaviors>
-                        </TextBlock>
-                    </StackPanel>
-                    <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="0"
-                        Style="{StaticResource RoutePropertyName}"
-                        Text="ViewModel"
-                        Visibility="{x:Bind IsRoot, Converter={StaticResource VisibilityConverter}, ConverterParameter=True}" />
-                    <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="1"
-                        Grid.ColumnSpan="2"
-                        Style="{StaticResource RoutePropertyValue}"
-                        Text="{x:Bind ViewModelType}"
-                        Visibility="{x:Bind IsRoot, Converter={StaticResource VisibilityConverter}, ConverterParameter=True}" />
-                    <TextBlock
-                        Grid.Row="2"
-                        Grid.Column="0"
-                        Style="{StaticResource RoutePropertyName}"
-                        Text="Outlet"
-                        Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
-                    <TextBlock
-                        Grid.Row="2"
-                        Grid.Column="1"
-                        Grid.ColumnSpan="2"
-                        Style="{StaticResource RoutePropertyValue}"
-                        Text="{x:Bind Outlet}"
-                        Visibility="{x:Bind IsForOutlet, Converter={StaticResource VisibilityConverter}}" />
-                    <FontIcon
-                        Grid.Row="0"
-                        Grid.Column="2"
-                        Glyph="{x:Bind IsExpanded, Mode=OneWay, Converter={StaticResource ExpanderIconConverter}}"
-                        RelativePanel.AlignRightWithPanel="True"
-                        RelativePanel.AlignVerticalCenterWithPanel="True"
-                        Visibility="{x:Bind HasChildren, Converter={StaticResource VisibilityConverter}}" />
-                </Grid>
-            </DataTemplate>
-        </ListView.ItemTemplate>
-        <interactivity:Interaction.Behaviors>
-            <core:EventTriggerBehavior EventName="ItemClick">
-                <core:InvokeCommandAction Command="{x:Bind ViewModel.ToggleExpandedCommand}" InputConverter="{StaticResource EventArgsToClickedItemConverter}" />
-            </core:EventTriggerBehavior>
-        </interactivity:Interaction.Behaviors>
-
-    </ListView>
+    <t:ExpandingTreeControl
+        BodyTemplate="{StaticResource ItemBodyTemplate}"
+        HeaderTemplate="{StaticResource ItemHeaderTemplate}"
+        ViewModel="{x:Bind ViewModel}" />
 
 </UserControl>

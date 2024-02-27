@@ -4,68 +4,47 @@
 
 namespace DroidNet.Routing.Debugger.UI.Config;
 
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// Adapter for a <see cref="IRoute" /> so it can be used inside the <see cref="RoutesView" /> control.
 /// </summary>
-public partial class RouteAdapter : ObservableObject, ITreeItem<IRoute>
+public class RouteAdapter(IRoute item) : TreeItemAdapterBase, ITreeItem<IRoute>
 {
     public const string RootPath = "__root";
 
-    private readonly Lazy<List<RouteAdapter>> children;
+    public override bool IsRoot => this.Item.Path == RootPath;
 
-    [ObservableProperty]
-    private bool isExpanded;
-
-    public RouteAdapter(IRoute item)
-    {
-        this.Item = item;
-        this.children = new Lazy<List<RouteAdapter>>(
-            () =>
-            {
-                List<RouteAdapter> value = [];
-                if (this.Item.Children is not null)
-                {
-                    value.AddRange(
-                        this.Item.Children.Select(
-                            child => new RouteAdapter(child)
-                            {
-                                Level = this.Level + 1,
-                                IsExpanded = true,
-                            }));
-                }
-
-                return value;
-            });
-    }
-
-    public bool IsRoot => this.Item.Path == RootPath;
-
-    public required int Level { get; init; }
-
-    public IRoute Item { get; }
-
-    public string Label
+    public override string Label
         => this.IsRoot
             ? $"Config Root ({this.CountRoutesRecursive()})"
             : $"{this.Item.Path ?? "(Matcher)"}";
 
-    public string Outlet => this.Item.Outlet;
+    public IRoute Item => item;
 
-    public string ExtendedLabel => this.Item.ToString() ?? string.Empty;
+    public string Outlet => this.Item.Outlet;
 
     public bool IsForOutlet => this.Item.Outlet.IsNotPrimary;
 
-    public bool HasChildren => this.ChildrenCount > 0;
-
-    public int ChildrenCount => this.Item.Children?.Count ?? 0;
-
     public string ViewModelType => this.Item.ViewModelType?.Name ?? "None";
 
-    IEnumerable<ITreeItem> ITreeItem.Children => this.children.Value;
+    protected override List<TreeItemAdapterBase> PopulateChildren()
+    {
+        List<RouteAdapter> value = [];
+        if (this.Item.Children is not null)
+        {
+            value.AddRange(
+                this.Item.Children.Select(
+                    child => new RouteAdapter(child)
+                    {
+                        Level = this.Level + 1,
+                        IsExpanded = true,
+                    }));
+        }
+
+        return value.Cast<TreeItemAdapterBase>().ToList();
+    }
 
     private int CountRoutesRecursive()
-        => 0 + this.children.Value.Aggregate(0, (count, node) => count + node.CountRoutesRecursive());
+        => 0 + this.Children.Aggregate(0, (count, node) => count + ((RouteAdapter)node).CountRoutesRecursive());
 }
