@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Converters;
+namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
 public class IndentToMarginConverter : IValueConverter
 {
-    public Thickness InitialMargin { get; set; }
+    public Thickness InitialMargin { get; set; } = new(0);
 
     public int IndentIncrement { get; set; } = 20;
 

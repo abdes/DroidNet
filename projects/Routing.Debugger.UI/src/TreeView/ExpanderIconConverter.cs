@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Converters;
+namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 using Microsoft.UI.Xaml.Data;
 

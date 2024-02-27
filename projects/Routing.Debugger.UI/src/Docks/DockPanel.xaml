@@ -61,7 +61,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Background="SlateGray">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

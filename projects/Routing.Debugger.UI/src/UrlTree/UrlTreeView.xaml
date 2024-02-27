@@ -4,77 +4,105 @@
     x:Class="DroidNet.Routing.Debugger.UI.UrlTree.UrlTreeView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:converters="using:CommunityToolkit.WinUI.Converters"
-    xmlns:converters2="using:DroidNet.Routing.Debugger.UI.Converters"
     xmlns:core="using:Microsoft.Xaml.Interactions.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:router="using:DroidNet.Routing"
+    xmlns:s="using:DroidNet.Routing.Debugger.UI.Styles"
+    xmlns:t="using:DroidNet.Routing.Debugger.UI.TreeView"
     xmlns:urlTree="using:DroidNet.Routing.Debugger.UI.UrlTree"
     mc:Ignorable="d">
 
-
     <UserControl.Resources>
-        <converters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
-        <converters2:ExpanderIconConverter x:Key="ExpanderIconConverter" />
-        <converters2:ItemClickEventArgsToClickedItemConverter x:Key="EventArgsToClickedItemConverter" />
-        <converters2:IndentToMarginConverter
-            x:Key="IndentToMarginConverter"
-            IndentIncrement="20"
-            InitialMargin="{StaticResource ItemMargin}" />
 
-        <Thickness x:Key="ItemMargin">0,0,0,0</Thickness>
+        <DataTemplate x:Key="ItemHeaderTemplate" x:DataType="urlTree:UrlSegmentGroupAdapter">
+            <TextBlock FontSize="16" Text="{x:Bind Label}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="ItemBodyTemplate" x:DataType="urlTree:UrlSegmentGroupAdapter">
+            <StackPanel Orientation="Vertical" Spacing="5">
+                <s:ItemProperties>
+                    <s:ItemProperty PropertyName="Outlet" PropertyValue="{x:Bind Outlet}" />
+                </s:ItemProperties>
+                <ItemsRepeater ItemsSource="{x:Bind Segments}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Vertical" Spacing="8" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Style.Setters>
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Margin" Value="5" />
+            </Style.Setters>
+        </Style>
+
+        <DataTemplate x:Key="EmptyParameters" x:DataType="router:Parameters">
+            <TextBlock Margin="10,0" Text="None" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="Parameter" x:DataType="router:Parameter">
+            <Grid Margin="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="1.5*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{x:Bind Name}" />
+                <TextBox Grid.Column="1" Text="{x:Bind Value}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="NonEmptyParameters" x:DataType="router:Parameters">
+            <ItemsRepeater ItemTemplate="{StaticResource Parameter}" ItemsSource="{Binding}">
+                <ItemsRepeater.Layout>
+                    <StackLayout Orientation="Vertical" Spacing="4" />
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+        </DataTemplate>
+
     </UserControl.Resources>
 
-    <ListView
-        IsItemClickEnabled="True"
-        ItemsSource="{x:Bind ViewModel.ShownItems}"
-        SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
-        SelectionMode="Single">
-        <ListView.ItemTemplate>
-            <DataTemplate x:DataType="urlTree:UrlSegmentGroupAdapter">
-                <Grid Margin="{x:Bind Level, Converter={StaticResource IndentToMarginConverter}}" Padding="0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-                    <StackPanel
-                        Grid.Row="0"
-                        Grid.Column="0"
-                        Orientation="Horizontal"
-                        Spacing="5">
-                        <TextBlock FontWeight="bold" Text="{x:Bind Outlet}" />
-                        <FontIcon Foreground="Orange" Glyph="&#xE71B;" />
-                        <TextBlock FontWeight="bold" Text="{x:Bind Label}" />
-                    </StackPanel>
-                    <ItemsRepeater
-                        Grid.Row="1"
-                        Grid.Column="0"
-                        ItemsSource="{x:Bind Segments}">
-                        <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Vertical" Spacing="8" />
-                        </ItemsRepeater.Layout>
-                    </ItemsRepeater>
-                    <FontIcon
-                        Grid.Row="0"
-                        Grid.Column="1"
-                        Glyph="{x:Bind IsExpanded, Mode=OneWay, Converter={StaticResource ExpanderIconConverter}}"
-                        RelativePanel.AlignRightWithPanel="True"
-                        RelativePanel.AlignVerticalCenterWithPanel="True"
-                        Visibility="{x:Bind HasChildren, Converter={StaticResource VisibilityConverter}}" />
-                </Grid>
-            </DataTemplate>
-        </ListView.ItemTemplate>
-        <interactivity:Interaction.Behaviors>
-            <core:EventTriggerBehavior EventName="ItemClick">
-                <core:InvokeCommandAction Command="{x:Bind ViewModel.ToggleExpandedCommand}" InputConverter="{StaticResource EventArgsToClickedItemConverter}" />
-            </core:EventTriggerBehavior>
-        </interactivity:Interaction.Behaviors>
+        <TextBlock
+            Grid.Row="0"
+            VerticalAlignment="Center"
+            Style="{StaticResource SectionHeader}"
+            Text="Query Parameters" />
 
-    </ListView>
+        <ContentControl Grid.Row="1" Content="{x:Bind ViewModel.QueryParams}">
+            <interactivity:Interaction.Behaviors>
+                <core:DataTriggerBehavior Binding="{x:Bind ViewModel.QueryParams.IsEmpty, Mode=OneWay}" Value="True">
+                    <core:ChangePropertyAction PropertyName="ContentTemplate" Value="{StaticResource EmptyParameters}" />
+                </core:DataTriggerBehavior>
+                <core:DataTriggerBehavior Binding="{x:Bind ViewModel.QueryParams.IsEmpty, Mode=OneWay}" Value="False">
+                    <core:ChangePropertyAction PropertyName="ContentTemplate" Value="{StaticResource NonEmptyParameters}" />
+                </core:DataTriggerBehavior>
+            </interactivity:Interaction.Behaviors>
+        </ContentControl>
+
+        <TextBlock
+            Grid.Row="2"
+            VerticalAlignment="Center"
+            Style="{StaticResource SectionHeader}"
+            Text="Parsed URL Tree" />
+
+        <t:ExpandingTreeControl
+            Grid.Row="3"
+            BodyTemplate="{StaticResource ItemBodyTemplate}"
+            HeaderTemplate="{StaticResource ItemHeaderTemplate}"
+            ViewModel="{x:Bind ViewModel}" />
+
+    </Grid>
+
 </UserControl>
