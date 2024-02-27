@@ -6,7 +6,7 @@
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
         <!--
@@ -15,9 +15,6 @@
         using Visual Studio.
         -->
         <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
-
-        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
-        <UseRidGraph>true</UseRidGraph>
 
         <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
         <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
@@ -29,7 +26,9 @@
         <RootNamespace>$(RootNamespace).Routing.Debugger.UI</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-      <None Remove="Docks\EmbeddedAppView.xaml" />
+        <None Remove="Docks\EmbeddedAppView.xaml" />
+        <None Remove="TreeView\ExpandingTreeControl.xaml" />
+        <None Remove="TreeView\Styles.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -56,9 +55,27 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="Docks\EmbeddedAppView.xaml">
+        <Content Update="Assets\**\*.*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="TreeView\ExpandingTreeControl.xaml">
         <Generator>MSBuild:Compile</Generator>
       </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="TreeView\Styles.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Page Update="Docks\EmbeddedAppView.xaml">
+            <Generator>MSBuild:Compile</Generator>
+        </Page>
     </ItemGroup>
 
 </Project>
