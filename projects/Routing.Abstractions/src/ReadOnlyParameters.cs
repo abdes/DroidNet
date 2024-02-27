@@ -42,6 +42,8 @@ public class ReadOnlyParameters : IParameters
     /// <summary>Gets the number of parameters in the collection.</summary>
     public int Count => this.parameters.Count;
 
+    public bool IsEmpty => this.parameters.IsEmpty;
+
     /// <inheritdoc />
     public bool Contains(string parameterName) => this.parameters.Contains(parameterName);
 

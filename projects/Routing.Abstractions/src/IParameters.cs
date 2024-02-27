@@ -23,6 +23,8 @@ public interface IParameters : IEnumerable<Parameter>
 {
     public int Count { get; }
 
+    public bool IsEmpty { get; }
+
     /// <summary>
     /// Gets the value associated with the specified parameter name.
     /// </summary>

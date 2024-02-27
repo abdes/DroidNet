@@ -17,6 +17,8 @@ public class Parameters : IParameters
     /// <summary>Gets the number of parameters in the collection.</summary>
     public int Count => this.parameters.Count;
 
+    public bool IsEmpty => this.parameters.Count == 0;
+
     /// <inheritdoc />
     public bool TryGetValue(string name, out string? value) => this.parameters.TryGetValue(name, out value);
 
