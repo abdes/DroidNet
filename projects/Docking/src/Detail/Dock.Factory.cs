@@ -14,15 +14,15 @@ using System.Reflection;
 /// </summary>
 public partial class Dock
 {
-    internal static Dock? FromId(DockId id)
+    public static Dock? FromId(DockId id)
         => Factory.TryGetDock(id, out var dock) ? dock : null;
 
     public static class Factory
     {
-        private static readonly ConcurrentDictionary<int, Dock> Docks = [];
+        private static readonly ConcurrentDictionary<DockId, Dock> Docks = [];
 
         // The next value of DockId to use when creating a new dock.
-        private static int nextId;
+        private static readonly AtomicCounter NextId = new();
 
         public static IDock? CreateDock(Type dockType, params object[] args)
         {
@@ -48,14 +48,34 @@ public partial class Dock
         }
 
         public static bool TryGetDock(DockId id, out Dock? dock)
-            => Docks.TryGetValue(id.Value, out dock);
+            => Docks.TryGetValue(id, out dock);
 
         private static Dock Manage(Dock dock)
         {
-            dock.Id = new DockId(Interlocked.Increment(ref nextId));
-            var added = Docks.TryAdd(dock.Id.Value, dock);
+            dock.Id = new DockId(NextId.Increment());
+            var added = Docks.TryAdd(dock.Id, dock);
             Debug.Assert(added, "the dock id is always incremented, the key cannot already exist");
             return dock;
+        }
+
+        public class AtomicCounter
+        {
+            private uint value;
+
+            public uint Increment()
+            {
+                uint snapshot;
+                uint newValue;
+
+                do
+                {
+                    snapshot = this.value;
+                    newValue = snapshot == uint.MaxValue ? 0 : snapshot + 1;
+                }
+                while (Interlocked.CompareExchange(ref this.value, newValue, snapshot) != snapshot);
+
+                return newValue;
+            }
         }
     }
 }

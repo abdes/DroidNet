@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using DroidNet.Docking;
 
 /// <summary>
@@ -30,6 +31,7 @@ using DroidNet.Docking;
 public abstract partial class Dock : IDock
 {
     private readonly ObservableCollection<IDockable> dockables = [];
+    private Anchor? anchor;
 
     protected Dock() => this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
 
@@ -39,7 +41,18 @@ public abstract partial class Dock : IDock
 
     public virtual bool CanClose => true;
 
-    public Anchor? Anchor { get; internal set; }
+    public Anchor? Anchor
+    {
+        get => this.anchor;
+        internal set
+        {
+            // Dispose if the old anchor if we had one
+            this.anchor?.Dispose();
+
+            this.anchor = value;
+            Debug.WriteLine($"++++++++++ Dock `{this}` got a new anchor `{this.anchor}`");
+        }
+    }
 
     public DockingState State { get; internal set; } = DockingState.Undocked;
 
@@ -65,6 +78,11 @@ public abstract partial class Dock : IDock
         {
             dockable.Dispose();
         }
+
+        // Reset the anchor only after the dockables are disposed of. Our anchor
+        // maybe used to anchor the dockables that were anchored relative to our
+        // dockables.
+        this.anchor = null;
 
         this.dockables.Clear();
         GC.SuppressFinalize(this);

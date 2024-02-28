@@ -20,6 +20,9 @@ public enum AnchorPosition
 
     /// <summary>Dock together with the anchor.</summary>
     With,
+
+    /// <summary>Add to the center dock.</summary>
+    Center,
 }
 
 public enum DockGroupOrientation
