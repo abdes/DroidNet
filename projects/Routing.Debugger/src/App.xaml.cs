@@ -65,7 +65,7 @@ public partial class App
         try
         {
             this.router.Navigate(
-                "/(dock:(app:Welcome//routes:Config/Routes;minimized;left//url-tree:Parser/UrlTree;left//routes-top:Config/Routes;top//router-state:Router/State;right//routes-bottom:Config/Routes;minimized;bottom//router-state-m:Router/State;minimized;right//routes-top-m:Config/Routes;minimized;top))",
+                "/(dock:(app:Welcome//routes:Config/Routes;left//url-tree:Parser/UrlTree;bottom=routes//routes-top:Config/Routes;top//router-state:Router/State;right//routes-bottom:Config/Routes;minimized;bottom//router-state-m:Router/State;minimized;with=router-state//routes-top-m:Config/Routes;minimized;top))",
                 new FullNavigation() { Target = Target.Main });
         }
         catch (NavigationFailedException)

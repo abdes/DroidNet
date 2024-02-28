@@ -108,10 +108,14 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private static bool CheckAndSetAnchor(Anchor anchor, IParameters active, Parameters next)
     {
-        // TODO: if the active parameters has any anchor that is not the same then what we need to set next, it should trigger a change
         var position = anchor.Position.ToString().ToLowerInvariant();
-        var relativeTo = anchor.DockId?.ToString();
-        return CheckAndSetParameterWithValue(position, relativeTo, active, next);
+        next.AddOrUpdate(position, anchor.RelativeTo?.Id);
+
+        // Trigger a change if the active parameters have the same anchor key as
+        // the one we are setting next with a different value, or if it has any
+        // other anchor key than the one we are setting next.
+        return active.ParameterHasValue(position, anchor.RelativeTo?.Id) ||
+               Enum.GetNames<AnchorPosition>().Any(n => n != position && active.Contains(n));
     }
 
     private static bool CheckAndSetWidth(string value, IParameters active, Parameters next) =>
@@ -242,6 +246,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private void Layout(IDockGroup group)
     {
+        // TODO: We still have problem sizing the docks properly when they are anchored relative to each other
         if (!group.ShouldShowGroup())
         {
             Debug.WriteLine($"Skipping {group}");
@@ -251,9 +256,19 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         var stretch = group.ShouldStretch();
 
         var grid = this.grids.Peek();
-        if (group.Orientation != DockGroupOrientation.Undetermined)
+
+        // For the sake of layout, if a group has Docks and only one of them is
+        // pinned, we consider the group's orientation as Undetermined. That
+        // way, we don't create a new grid for that group.
+        var groupOrientation = group.Orientation;
+        if (!group.IsEmpty && group.Docks.Count(d => d.State == DockingState.Pinned) == 1)
         {
-            var orientation = group.Orientation == DockGroupOrientation.Vertical
+            groupOrientation = DockGroupOrientation.Undetermined;
+        }
+
+        if (groupOrientation != DockGroupOrientation.Undetermined)
+        {
+            var orientation = groupOrientation == DockGroupOrientation.Vertical
                 ? Orientation.Vertical
                 : Orientation.Horizontal;
             if (grid.Orientation != orientation)
@@ -345,7 +360,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         LogSyncWithRouter(this.logger);
 
-        // Build a changeset to manipulate the URL tree for our active route
+        // Build a change set to manipulate the URL tree for our active route
         var changes = new List<RouteChangeItem>();
 
         // Delete closed docks
