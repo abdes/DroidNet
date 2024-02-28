@@ -30,7 +30,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
     [TestMethod]
     public void CreateDock_NewDockId_AlwaysDifferent()
     {
-        var ids = new List<int>();
+        var ids = new List<uint>();
 
         for (var index = 0; index < 100; index++)
         {

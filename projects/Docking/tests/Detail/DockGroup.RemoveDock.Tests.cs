@@ -4,6 +4,7 @@
 
 namespace DroidNet.Docking.Detail;
 
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -35,10 +36,12 @@ public partial class DockGroupTests
         // Arrange
         var sut = new NonEmptyDockGroup();
         var first = sut.Docks.First();
+        first.AddDockable(new MockDockable("first"));
         var second = DummyDock.New();
-        sut.AddDock(second, new AnchorRight(first.Id));
+        second.AddDockable(new MockDockable("second"));
+        sut.AddDock(second, new AnchorRight(first.Dockables[0]));
         var third = DummyDock.New();
-        sut.AddDock(third, new AnchorRight(second.Id));
+        sut.AddDock(third, new AnchorRight(second.Dockables[0]));
 
         // Act
         sut.RemoveDock(first);

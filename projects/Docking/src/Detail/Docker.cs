@@ -19,14 +19,10 @@ public class Docker : IDocker
     {
         Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
 
-        var relativeDockId = anchor.DockId ?? throw new ArgumentException(
-            $"use {nameof(this.DockToRoot)} or {nameof(this.DockToCenter)} if you are not docking relative to an existing dock",
+        var anchorDock = anchor.RelativeTo?.Owner?.AsDock() ?? throw new ArgumentException(
+            $"invalid anchor for relative docking: {anchor}",
             nameof(anchor));
-
-        var relativeTo = Detail.Dock.FromId(relativeDockId) ??
-                         throw new ArgumentException($"invalid dock id: {anchor.DockId}", nameof(anchor));
-
-        var group = relativeTo.Group ?? throw new ArgumentException(
+        var group = anchorDock.Group ?? throw new ArgumentException(
             $"dock `{dock}` does not belong to a group and cannot be used as an anchor",
             nameof(anchor));
 
@@ -76,6 +72,7 @@ public class Docker : IDocker
                 break;
 
             case AnchorPosition.With:
+            case AnchorPosition.Center:
                 throw new InvalidOperationException("docking to the root can only be done along the edges");
 
             default:

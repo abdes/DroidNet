@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -70,10 +71,12 @@ public partial class DockGroupTests
         // Arrange
         var sut = new NonEmptyDockGroup();
         var anchor = DummyDock.New();
+        var anchorDockable = new MockDockable("anchor");
+        anchor.AddDockable(anchorDockable);
         var newDock = DummyDock.New();
 
         // Act
-        var action = () => sut.AddDock(newDock, new AnchorLeft(anchor.Id));
+        var action = () => sut.AddDock(newDock, new AnchorLeft(anchorDockable));
 
         // Assert
         _ = sut.Docks.Should().NotContain(d => d.Id.Equals(anchor.Id));
@@ -90,19 +93,21 @@ public partial class DockGroupTests
         var sut = new NonEmptyDockGroup();
         sut.SetOrientation(orientation);
         var anchor = sut.Docks.First();
+        var anchorDockable = new MockDockable("anchor");
+        anchor.AddDockable(anchorDockable);
         var before = DummyDock.New();
         var after = DummyDock.New();
 
         // Act
         if (orientation == DockGroupOrientation.Horizontal)
         {
-            sut.AddDock(after, new AnchorRight(anchor.Id));
-            sut.AddDock(before, new AnchorLeft(anchor.Id));
+            sut.AddDock(after, new AnchorRight(anchorDockable));
+            sut.AddDock(before, new AnchorLeft(anchorDockable));
         }
         else
         {
-            sut.AddDock(after, new AnchorBottom(anchor.Id));
-            sut.AddDock(before, new AnchorTop(anchor.Id));
+            sut.AddDock(after, new AnchorBottom(anchorDockable));
+            sut.AddDock(before, new AnchorTop(anchorDockable));
         }
 
         // Assert
@@ -124,10 +129,13 @@ public partial class DockGroupTests
             this.sut = new NonEmptyDockGroup();
             this.sut.SetOrientation(DockGroupOrientation.Horizontal);
             this.second = this.sut.Docks.First();
+            this.second.AddDockable(new MockDockable("second"));
             this.first = DummyDock.New();
+            this.first.AddDockable(new MockDockable("first"));
             this.third = DummyDock.New();
-            this.sut.AddDock(this.first, new AnchorLeft(this.second.Id));
-            this.sut.AddDock(this.third, new AnchorRight(this.second.Id));
+            this.third.AddDockable(new MockDockable("third"));
+            this.sut.AddDock(this.first, new AnchorLeft(this.second.Dockables[0]));
+            this.sut.AddDock(this.third, new AnchorRight(this.second.Dockables[0]));
         }
 
         [TestMethod]
@@ -140,7 +148,7 @@ public partial class DockGroupTests
             var newDock = DummyDock.New();
 
             // Act
-            this.sut.AddDock(newDock, new AnchorTop(this.first.Id));
+            this.sut.AddDock(newDock, new AnchorTop(this.first.Dockables[0]));
 
             // Assert
             _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
@@ -165,7 +173,7 @@ public partial class DockGroupTests
             var newDock = DummyDock.New();
 
             // Act
-            this.sut.AddDock(newDock, new AnchorBottom(this.third.Id));
+            this.sut.AddDock(newDock, new AnchorBottom(this.third.Dockables[0]));
 
             // Assert
             _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
@@ -190,7 +198,7 @@ public partial class DockGroupTests
             var newDock = DummyDock.New();
 
             // Act
-            this.sut.AddDock(newDock, new AnchorTop(this.second.Id));
+            this.sut.AddDock(newDock, new AnchorTop(this.second.Dockables[0]));
 
             // Assert
             _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);
@@ -221,7 +229,7 @@ public partial class DockGroupTests
             var newDock = DummyDock.New();
 
             // Act
-            this.sut.AddDock(newDock, new AnchorBottom(this.second.Id));
+            this.sut.AddDock(newDock, new AnchorBottom(this.second.Dockables[0]));
 
             // Assert
             _ = this.sut.Orientation.Should().Be(DockGroupOrientation.Horizontal);

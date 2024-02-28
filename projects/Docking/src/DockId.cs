@@ -4,13 +4,11 @@
 
 namespace DroidNet.Docking;
 
-public readonly struct DockId(int value)
+using System.Globalization;
+
+public readonly record struct DockId(uint Value)
 {
-    public int Value { get; } = value;
+    public static implicit operator uint(DockId d) => d.Value;
 
-    public bool Equals(DockId other) => this.Value == other.Value;
-
-    public override int GetHashCode() => this.Value;
-
-    public override string ToString() => $"{this.Value}";
+    public override string? ToString() => this.Value.ToString(CultureInfo.InvariantCulture);
 }

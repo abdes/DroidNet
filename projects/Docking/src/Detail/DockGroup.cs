@@ -347,10 +347,13 @@ internal partial class DockGroup
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
-        // Find the dock by its id or fail.
-        var relativeTo = this.Docks.FirstOrDefault(d => d.Id.Equals(anchor.DockId)) ??
+        // Check that the anchor dock belongs to this group.
+        var anchorDockId = anchor.RelativeTo?.Owner?.Id ?? throw new ArgumentException(
+            $"invalid anchor for relative docking: {anchor}",
+            nameof(anchor));
+        var relativeTo = this.Docks.FirstOrDefault(d => d.Id.Equals(anchorDockId)) ??
                          throw new ArgumentException(
-                             $"dock with id={anchor.DockId} does not belong to me: {this}",
+                             $"dock with id={anchorDockId} does not belong to me: {this}",
                              nameof(anchor));
 
         // Determine the required orientation based on the requested relative
