@@ -15,6 +15,8 @@ using System.Diagnostics;
 /// </summary>
 public partial class Dockable
 {
+    public event Action? OnDisposed;
+
     public static IEnumerable<IDockable> All => new AllDockables();
 
     public static Dockable? FromId(string id)
@@ -24,6 +26,10 @@ public partial class Dockable
 
     public void Dispose()
     {
+        // First invoke any subscribers to the OnDisposed event, because they
+        // may still need to use the dockable before it is disposed.
+        this.OnDisposed?.Invoke();
+
         Factory.ReleaseDockable(this.Id);
         GC.SuppressFinalize(this);
     }

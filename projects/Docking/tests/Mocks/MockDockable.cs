@@ -9,6 +9,8 @@ using System.Diagnostics.CodeAnalysis;
 [ExcludeFromCodeCoverage]
 public class MockDockable(string id) : IDockable
 {
+    public event Action? OnDisposed;
+
     public string Id => id;
 
     public string Title => this.Id;
@@ -27,7 +29,11 @@ public class MockDockable(string id) : IDockable
 
     public bool IsActive { get; set; }
 
-    public void Dispose() => GC.SuppressFinalize(this);
+    public void Dispose()
+    {
+        this.OnDisposed?.Invoke();
+        GC.SuppressFinalize(this);
+    }
 
     public override string? ToString() => this.Id;
 }
