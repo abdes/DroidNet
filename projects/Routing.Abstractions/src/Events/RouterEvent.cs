@@ -16,7 +16,7 @@ public class RoutesRecognized(IUrlTree urlTree) : RouterEvent
     public override string ToString() => $"Routes recognized -> {this.UrlTree}";
 }
 
-public class ActivationStarted(IRouterState state) : RouterEvent
+public class ActivationStarted(NavigationOptions options, IRouterState state) : NavigationEvent(options)
 {
     public IRouterState RouterState { get; } = state;
 
@@ -24,7 +24,7 @@ public class ActivationStarted(IRouterState state) : RouterEvent
     public override string ToString() => $"Routes activation started -> {this.RouterState.Root}";
 }
 
-public class ActivationComplete(IRouterState state) : RouterEvent
+public class ActivationComplete(NavigationOptions options, IRouterState state) : NavigationEvent(options)
 {
     public IRouterState RouterState { get; } = state;
 

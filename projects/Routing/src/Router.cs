@@ -127,13 +127,13 @@ public partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new RoutesRecognized(currentState.UrlTree));
 
-            this.eventSource.OnNext(new ActivationStarted(currentState));
+            this.eventSource.OnNext(new ActivationStarted(options, currentState));
 
             // TODO: Activate only the new routes
             var success = this.routeActivator.ActivateRoutesRecursive(activeRoute.Root, currentContext);
             this.contextProvider.ActivateContext(currentContext);
 
-            this.eventSource.OnNext(new ActivationComplete(currentState));
+            this.eventSource.OnNext(new ActivationComplete(options, currentState));
 
             if (success)
             {
@@ -368,7 +368,7 @@ public partial class Router : IRouter, IDisposable
             // TODO(abdes): eventually optimize reuse of previously activated routes in the router state
             OptimizeRouteActivation(context);
 
-            this.eventSource.OnNext(new ActivationStarted(context.State));
+            this.eventSource.OnNext(new ActivationStarted(options, context.State));
 
             // Activate routes in the router state that still need activation after
             // the optimization.
@@ -377,7 +377,7 @@ public partial class Router : IRouter, IDisposable
             // Finally activate the context.
             this.contextProvider.ActivateContext(context);
 
-            this.eventSource.OnNext(new ActivationComplete(context.State));
+            this.eventSource.OnNext(new ActivationComplete(options, context.State));
 
             if (success)
             {
