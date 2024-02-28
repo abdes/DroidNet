@@ -123,13 +123,13 @@ public class DockableTests
     public void FromId_ReturnsDockable_WhenIdIsManaged()
     {
         // Arrange
-        using var dockable1 = Dockable.New("1");
+        using var dockable = Dockable.New("1");
 
         // Act
         var fromId = Dockable.FromId("1");
 
         // Assert
-        _ = fromId.Should().NotBeNull().And.Be(dockable1);
+        _ = fromId.Should().Be(dockable);
     }
 
     [TestMethod]
@@ -137,12 +137,33 @@ public class DockableTests
     public void FromId_ReturnsNull_WhenIdIsIsNotManaged()
     {
         // Arrange
-        using var dockable1 = Dockable.New("1");
+        using var dockable = Dockable.New("1");
 
         // Act
         var fromId = Dockable.FromId("__");
 
         // Assert
         _ = fromId.Should().BeNull();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Dispose")]
+    public void Dispose_InvokesOnDisposed_BeforeDisposing()
+    {
+        // Arrange
+        var dockable = Dockable.New("1");
+        var invoked = false;
+        dockable.OnDisposed += () =>
+        {
+            invoked = true;
+            var fromId = Dockable.FromId("1");
+            _ = fromId.Should().NotBeNull();
+        };
+
+        // Act
+        dockable.Dispose();
+
+        // Assert
+        _ = invoked.Should().BeTrue();
     }
 }

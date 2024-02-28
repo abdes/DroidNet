@@ -8,6 +8,8 @@ using System.Globalization;
 
 public interface IDockable : IDisposable
 {
+    event Action? OnDisposed;
+
     string Id { get; }
 
     string Title { get; }
