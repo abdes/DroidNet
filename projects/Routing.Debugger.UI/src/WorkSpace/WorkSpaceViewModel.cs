@@ -167,12 +167,12 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
 
             if (dockableActiveRoute.Params.TryGetValue("w", out var preferredWidth))
             {
-                dockable.PreferredWidth = new IDockable.Width(preferredWidth);
+                dockable.PreferredWidth = new Width(preferredWidth);
             }
 
             if (dockableActiveRoute.Params.TryGetValue("h", out var preferredHeight))
             {
-                dockable.PreferredHeight = new IDockable.Height(preferredHeight);
+                dockable.PreferredHeight = new Height(preferredHeight);
             }
 
             /*

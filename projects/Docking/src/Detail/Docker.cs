@@ -139,7 +139,7 @@ public class Docker : IDocker
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
-    public void ResizeDock(IDock dock, IDockable.Width width, IDockable.Height height)
+    public void ResizeDock(IDock dock, Width width, Height height)
     {
         var active = dock.Dockables.FirstOrDefault(d => d.IsActive);
         if (active == null)

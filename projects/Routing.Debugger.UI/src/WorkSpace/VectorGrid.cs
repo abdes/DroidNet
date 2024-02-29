@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml.Controls;
 
 public class VectorGrid : Grid
 {
-    private readonly List<bool> childrenSizingInfo = [];
+    private readonly List<bool> fixedSizeItems = [];
 
     public VectorGrid(Orientation orientation)
     {
@@ -28,19 +28,19 @@ public class VectorGrid : Grid
     {
         this.DefineItem(length, minLength);
         this.AddItem(content);
-        this.childrenSizingInfo.Add(false);
+        this.fixedSizeItems.Add(false);
     }
 
     public void AddResizableItem(UIElement content, GridLength length, double minLength)
     {
-        if (this.Children.Count > 0 && this.childrenSizingInfo[this.Children.Count - 1])
+        if (this.Children.Count > 0 && this.fixedSizeItems[this.Children.Count - 1])
         {
             this.AddSplitter();
         }
 
         this.DefineItem(length, minLength);
         this.AddItem(content);
-        this.childrenSizingInfo.Add(true);
+        this.fixedSizeItems.Add(true);
     }
 
     private void DefineItem(GridLength length, double minLength)
@@ -78,7 +78,7 @@ public class VectorGrid : Grid
         };
         this.DefineItem(GridLength.Auto, 6);
         this.AddItem(splitter);
-        this.childrenSizingInfo.Add(false);
+        this.fixedSizeItems.Add(false);
     }
 
     private void AddItem(UIElement content)
