@@ -14,4 +14,6 @@ using DroidNet.Routing.Generators;
 public sealed partial class EmbeddedAppView
 {
     public EmbeddedAppView() => this.InitializeComponent();
+
+    public override string? ToString() => $"{nameof(EmbeddedAppView)}]";
 }

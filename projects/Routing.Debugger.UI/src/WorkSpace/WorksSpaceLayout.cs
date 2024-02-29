@@ -11,10 +11,8 @@ using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 /// <summary>
 /// A layout strategy for the workspace.
@@ -274,12 +272,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         Debug.WriteLine($"Layout started for Group {group}");
 
-        var grid = this.grids.Peek();
-        Debug.WriteLine($"Current grid is {grid.Orientation}");
-
-        var stretch = group.ShouldStretch();
-        Debug.WriteLine($"Group should {(stretch ? string.Empty : "not ")}stretch");
-
         // For the sake of layout, if a group has Docks and only one of them is
         // pinned, we consider the group's orientation as Undetermined. That
         // way, we don't create a new grid for that group.
@@ -291,6 +283,9 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             groupOrientation = DockGroupOrientation.Undetermined;
         }
 
+        var grid = this.grids.Peek();
+        var stretch = group.ShouldStretch();
+
         if (groupOrientation != DockGroupOrientation.Undetermined)
         {
             var orientation = groupOrientation == DockGroupOrientation.Vertical
@@ -299,8 +294,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             if (grid.Orientation != orientation)
             {
                 var newGrid = new VectorGrid(orientation) { Name = group.ToString() };
-                Debug.WriteLine($"New grid with {newGrid.Orientation} for group `{group} to VG");
-                Debug.WriteLine($"Group {group.First} should {(stretch ? string.Empty : "NOT ")}stretch");
+                Debug.WriteLine($"New grid for group `{group}");
                 grid.AddResizableItem(
                     newGrid,
                     stretch ? new GridLength(1, GridUnitType.Star) : GetGridLengthForDockGroup(group, newGrid.Orientation),
@@ -314,14 +308,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             // A group with docks -> Layout the docks as items in the vector grid.
             foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
             {
-                Debug.WriteLine($"Add dock {dock} with Width {dock.Width} and Height {dock.Height} from group `{group} to VG");
+                Debug.WriteLine($"Add dock {dock} with Width={dock.Width} and Height={dock.Height} from group `{group} to VG");
                 var gridItemLength = GetGridLengthForDock(dock, grid.Orientation);
                 Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {grid.Orientation}");
 
                 grid.AddResizableItem(
-                    new Border()
-                    {
-                        Child = dock is ApplicationDock appDock
+                    dock is ApplicationDock appDock
                             ? new EmbeddedAppView()
                             {
                                 ViewModel = new EmbeddedAppViewModel(
@@ -333,9 +325,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                             {
                                 ViewModel = new DockPanelViewModel(dock, this.docker),
                             },
-                        BorderBrush = new SolidColorBrush(Colors.Red),
-                        BorderThickness = new Thickness(0.5),
-                    },
                     gridItemLength,
                     32);
             }
@@ -344,7 +333,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         }
 
         // Handle the children
-        this.PushGrid(grid, (grid == this.grids.Peek() ? "!!new " : "=same ") + group);
+        this.PushGrid(grid, (grid == this.grids.Peek() ? "=same " : "!!new ") + group);
         HandlePart(group.First);
         HandlePart(group.Second);
 
