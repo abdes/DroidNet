@@ -14,9 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-/// <summary>
-/// A layout strategy for the workspace.
-/// </summary>
+/// <summary>A layout strategy for the workspace.</summary>
 public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 {
     private readonly Stack<VectorGrid> grids = new();
@@ -43,11 +41,11 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             {
                 switch (@event)
                 {
-                    // At the beginning of each navigation cycle, many
-                    // changes will happen to ro docker model, but we want
-                    // to batch them together and handle them at once after
-                    // the navigation completes. So we mute the
-                    // LayoutChanged event from the docker.
+                    // At the beginning of each navigation cycle, many changes
+                    // will happen to ro docker model, but we want to batch them
+                    // together and handle them at once after the navigation
+                    // completes. So we mute the LayoutChanged event from the
+                    // docker.
                     case NavigationStart:
                         this.docker.LayoutChanged -= this.SyncWithRouter;
                         break;
@@ -56,10 +54,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         this.activeRoute = FindWorkSpaceActiveRoute(activationComplete.RouterState.Root);
                         break;
 
-                    // At the end of the navigation cycle, we need to take
-                    // into account changes that resulted from the new URL.
-                    // We also resume listening to docker layout changes
-                    // that are not the result of navigation.
+                    // At the end of the navigation cycle, we need to take into
+                    // account changes that resulted from the new URL. We also
+                    // resume listening to docker layout changes that are not
+                    // the result of navigation.
                     case NavigationEnd:
                     case NavigationError:
                         var options = ((NavigationEvent)@event).Options;
@@ -108,9 +106,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         var position = anchor.Position.ToString().ToLowerInvariant();
         next.AddOrUpdate(position, anchor.RelativeTo?.Id);
 
-        // Trigger a change if the active parameters have the same anchor key as
-        // the one we are setting next with a different value, or if it has any
-        // other anchor key than the one we are setting next.
+        // Trigger a change if the active parameters have the same anchor key as the one we are setting next with a different
+        // value, or if it has any other anchor key than the one we are setting next.
         return active.ParameterHasValue(position, anchor.RelativeTo?.Id) ||
                Enum.GetNames<AnchorPosition>().Any(n => n != position && active.Contains(n));
     }
@@ -122,9 +119,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         CheckAndSetParameterWithValue("h", value, active, next);
 
     /// <summary>
-    /// Checks if a parameter with value is changing from the currently active
-    /// set of parameters to next set of parameters and sets the new value in
-    /// next set of parameters.
+    /// Checks if a parameter with value is changing from the currently active set of parameters to next set of parameters and
+    /// sets the new value in next set of parameters.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
     /// <param name="value">The new value of the parameter.</param>
@@ -138,9 +134,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Checks if a flag parameter is changing from the currently active set of
-    /// parameters to next set of parameters and sets the flag in the next set
-    /// of parameters according to the specified value.
+    /// Checks if a flag parameter is changing from the currently active set of parameters to next set of parameters and sets the
+    /// flag in the next set of parameters according to the specified value.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
     /// <param name="value">The new value of the parameter.</param>
@@ -154,16 +149,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Generates a dictionary of parameters based on the provided dock's state
-    /// and anchor properties. It also checks if any parameter has changed from
-    /// the currently active parameters.
+    /// Generates a dictionary of parameters based on the provided dock's state and anchor properties. It also checks if any
+    /// parameter has changed from the currently active parameters.
     /// </summary>
-    /// <param name="dock">The dock instance whose properties are to be used for
-    /// generating parameters.</param>
-    /// <param name="activeParams">The currently active parameters for
-    /// comparison. Default is null.</param>
-    /// <returns>A dictionary of parameters if any parameter has changed or
-    /// active parameters are null, otherwise null.</returns>
+    /// <param name="dock">The dock instance whose properties are to be used for generating parameters.</param>
+    /// <param name="activeParams">The currently active parameters for comparison. Default is null.</param>
+    /// <returns>A dictionary of parameters if any parameter has changed or active parameters are null, otherwise null.</returns>
     private static Parameters? Parameters(
         IDock dock,
         IDockable dockable,
@@ -183,7 +174,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
         }
 
-        // TODO: update this after dock with is supported
         string? width = dockable.PreferredWidth;
         if (width != null)
         {
@@ -264,7 +254,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private void Layout(IDockGroup group)
     {
-        // TODO: We still have problem sizing the docks properly when they are anchored relative to each other
         if (!group.ShouldShowGroup())
         {
             Debug.WriteLine($"Skipping {group}");
@@ -396,6 +385,15 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 dock is not null,
                 $"expecting a docked dockable, but dockable with id=`{dockable.Id}` has a null owner");
 
+            /*
+             * Our active route is the one for the dock workspace. For each
+             * dockable we have, there should be a corresponding child active
+             * route with the outlet name being the same as the dockable id. If
+             * no child active route with the same outlet than the dockable id
+             * is found, then a new one needs to be created for this dockable.
+             * Otherwise, we just need to update the existing one.
+             */
+
             var childRoute
                 = this.activeRoute.Children.FirstOrDefault(r => dockable.Id.Equals(r.Outlet, StringComparison.Ordinal));
             if (childRoute is null)
@@ -404,6 +402,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     dockable.ViewModel is not null,
                     $"expecting a dockable to have a ViewModel, but dockable with id=`{dockable.Id}` does not");
 
+                // A new active route needs to be added.
                 changes.Add(
                     new RouteChangeItem()
                     {
@@ -415,6 +414,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             }
             else
             {
+                // Just update the existing active route.
                 var parameters = Parameters(dock, dockable, childRoute.Params);
                 if (parameters != null)
                 {
@@ -429,6 +429,9 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             }
         }
 
+        // Once the change set is built, request a partial navigation using it.
+        // If the layout change reason is anything but Resize, we need to
+        // trigger a layout rebuild by setting the AdditionalInfo accordingly.
         this.router.Navigate(
             changes,
             new PartialNavigation()
