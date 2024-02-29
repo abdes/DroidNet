@@ -72,7 +72,7 @@ public abstract partial class Length
     /// <param name="length">the length to be converted to a string.</param>
     public static implicit operator string?(Length? length) => length?.value;
 
-    public override string ToString() => this.value ?? string.Empty;
+    public override string ToString() => this.value ?? "?";
 
     [GeneratedRegex(@"^(auto|(\d+(\.\d+)?)?\*?)$")]
     private static partial Regex GridLengthRegEx();

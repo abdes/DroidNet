@@ -8,8 +8,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    HorizontalContentAlignment="Center"
-    VerticalContentAlignment="Center"
+    HorizontalContentAlignment="Stretch"
+    VerticalContentAlignment="Stretch"
     mc:Ignorable="d">
 
     <ContentControl.Resources>
@@ -92,7 +92,9 @@
         <core:DataTriggerBehavior Binding="{x:Bind ViewModel.ApplicationContent, Mode=OneWay, Converter={StaticResource IsNullConverter}}" Value="False">
             <core:ChangePropertyAction PropertyName="Content">
                 <core:ChangePropertyAction.Value>
-                    <ContentPresenter Content="{x:Bind ViewModel.ApplicationContent}" />
+                    <Border BorderBrush="DarkMagenta" BorderThickness="1">
+                        <ContentPresenter Content="{x:Bind ViewModel.ApplicationContent}" />
+                    </Border>
                 </core:ChangePropertyAction.Value>
             </core:ChangePropertyAction>
         </core:DataTriggerBehavior>

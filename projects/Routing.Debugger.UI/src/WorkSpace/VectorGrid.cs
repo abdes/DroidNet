@@ -43,10 +43,13 @@ public class VectorGrid : Grid
         this.fixedSizeItems.Add(true);
     }
 
+    public override string? ToString() => $"{nameof(VectorGrid)} [{this.Name}]";
+
     private void DefineItem(GridLength length, double minLength)
     {
         if (this.Orientation == Orientation.Horizontal)
         {
+            Debug.WriteLine($"Adding column definition Width={length}");
             this.ColumnDefinitions.Add(
                 new ColumnDefinition()
                 {
@@ -56,6 +59,7 @@ public class VectorGrid : Grid
         }
         else
         {
+            Debug.WriteLine($"Adding row definition Height={length}");
             this.RowDefinitions.Add(
                 new RowDefinition()
                 {
@@ -86,7 +90,7 @@ public class VectorGrid : Grid
         var (row, column) = this.Orientation == Orientation.Horizontal
             ? (0, this.Children.Count)
             : (this.Children.Count, 0);
-        Debug.WriteLine($"Adding item {content} to VG at row={row}, col={column}");
+        Debug.WriteLine($"Adding item {content} at row={row}, col={column}");
         content.SetValue(RowProperty, row);
         content.SetValue(ColumnProperty, column);
         this.Children.Add(content);

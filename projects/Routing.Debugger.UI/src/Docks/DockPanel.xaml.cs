@@ -17,6 +17,8 @@ public sealed partial class DockPanel
 
     public DockPanel() => this.InitializeComponent();
 
+    public override string? ToString() => $"{nameof(DockPanel)} [{this.ViewModel.Title}]";
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _ = sender;

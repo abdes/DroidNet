@@ -47,14 +47,12 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
 
         if (newWidth != this.previousSize.Width)
         {
-            Debug.WriteLine($"DockPanel {dock.Id} my width changed: {newWidth}");
             this.previousSize.Width = newWidth;
             widthChanged = true;
         }
 
         if (newHeight != this.previousSize.Height)
         {
-            Debug.WriteLine($"DockPanel {dock.Id} my height changed: {newHeight}");
             this.previousSize.Height = newHeight;
             heightChanged = true;
         }

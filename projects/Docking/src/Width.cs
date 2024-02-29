@@ -17,7 +17,7 @@ public class Width : Length
     /// </summary>
     /// <inheritdoc/>
     public Width(string? value = null)
-: base(value)
+        : base(value)
     {
     }
 
