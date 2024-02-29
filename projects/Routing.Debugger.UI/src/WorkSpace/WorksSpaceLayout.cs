@@ -15,7 +15,6 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Dockable = DroidNet.Docking.Dockable;
 
 /// <summary>
 /// A layout strategy for the workspace.
@@ -340,7 +339,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         GridLength GetGridLengthForDock(IDock dock, Orientation gridOrientation)
         {
-            var activeDockable = dock.Dockables.FirstOrDefault(); // TODO: change this after active dockable is tracked
+            var activeDockable = dock.ActiveDockable;
             if (activeDockable == null)
             {
                 return new GridLength(300);

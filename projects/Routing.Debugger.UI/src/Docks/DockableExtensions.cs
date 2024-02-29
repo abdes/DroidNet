@@ -59,7 +59,7 @@ public static class DockableExtensions
     {
         if (string.IsNullOrEmpty(length))
         {
-            return GridLength.Auto;
+            return new GridLength(1, GridUnitType.Star);
         }
 
         double numericValue;

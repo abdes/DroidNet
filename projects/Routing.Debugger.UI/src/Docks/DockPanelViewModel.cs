@@ -26,7 +26,7 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
     {
         Debug.WriteLine($"DockPanel {dock.Id} size changed: {newSize}");
 
-        docker.ResizeDock(dock, new IDockable.Width(newSize.Width), new IDockable.Height(newSize.Height));
+        docker.ResizeDock(dock, new Width(newSize.Width), new Height(newSize.Height));
     }
 
     // TODO: combine CanMinimize and CanClose into a IsLocked flag where the dock is locked in place as Pinned
