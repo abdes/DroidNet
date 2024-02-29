@@ -53,8 +53,6 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
             // Any other name is interpreted as the dockable ID
             this.LoadDockable(viewModel, outletName);
         }
-
-        DumpGroup(this.docker.Root);
     }
 
     public void Dispose()
@@ -100,7 +98,6 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
     private static (AnchorPosition anchorPosition, string? anchorId) GetAnchorFromParams(IParameters parameters)
     {
         /*
-         * TODO(abdes): add support for relative docking
          * TODO(abdes): replace strings by directly using enum values from the AnchorPosition enum
          */
 
@@ -297,6 +294,10 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
         finally
         {
             this.dockingInfo.Clear();
+
+#if DEBUG
+            DumpGroup(this.docker.Root);
+#endif
         }
     }
 
