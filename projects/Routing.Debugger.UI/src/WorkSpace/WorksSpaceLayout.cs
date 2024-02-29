@@ -166,6 +166,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     /// active parameters are null, otherwise null.</returns>
     private static Parameters? Parameters(
         IDock dock,
+        IDockable dockable,
         IParameters? activeParams = null)
     {
         activeParams ??= ReadOnlyParameters.Empty;
@@ -183,13 +184,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         }
 
         // TODO: update this after dock with is supported
-        string? width = dock.Dockables.FirstOrDefault()?.PreferredWidth;
+        string? width = dockable.PreferredWidth;
         if (width != null)
         {
             changed = CheckAndSetWidth(width, activeParams, nextParams) || changed;
         }
 
-        string? height = dock.Dockables.FirstOrDefault()?.PreferredHeight;
+        string? height = dockable.PreferredHeight;
         if (height != null)
         {
             changed = CheckAndSetHeight(height, activeParams, nextParams) || changed;
@@ -409,12 +410,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         ChangeAction = RouteChangeAction.Add,
                         Outlet = dockable.Id,
                         ViewModelType = dockable.ViewModel?.GetType(),
-                        Parameters = Parameters(dock),
+                        Parameters = Parameters(dock, dockable),
                     });
             }
             else
             {
-                var parameters = Parameters(dock, childRoute.Params);
+                var parameters = Parameters(dock, dockable, childRoute.Params);
                 if (parameters != null)
                 {
                     changes.Add(
