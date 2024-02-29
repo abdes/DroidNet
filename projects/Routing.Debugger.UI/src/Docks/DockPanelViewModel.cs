@@ -19,7 +19,8 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
     [ObservableProperty]
     private string title = dock.ToString() ?? "EMPTY";
 
-    public ReadOnlyObservableCollection<IDockable> Dockables => dock.Dockables;
+    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
+        = new(new ObservableCollection<IDockable>(dock.Dockables));
 
     public void OnSizeChanged(Size newSize)
     {
@@ -54,7 +55,7 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
     private void Close() => docker.CloseDock(dock);
 
     [RelayCommand]
-    private void AddDockable(IDockable dockable) => dock.AddDockable(dockable);
+    private void AddDockable(Dockable dockable) => dock.AddDockable(dockable);
 
     private bool CanClose() => dock.CanClose;
 }

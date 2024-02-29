@@ -7,7 +7,6 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
-using DroidNet.Docking.Detail;
 using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.View;
@@ -16,6 +15,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Dockable = DroidNet.Docking.Dockable;
 
 /// <summary>
 /// A layout strategy for the workspace.
@@ -203,9 +203,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private VectorGrid UpdateContent()
     {
-        var orientation = this.docker.Root.Orientation == DockGroupOrientation.Vertical
-            ? Orientation.Vertical
-            : Orientation.Horizontal;
+        var orientation = this.docker.Root.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
         Debug.WriteLine($"Start a new {orientation} VG for the root dock");
         var grid = new VectorGrid(orientation);
         this.PushGrid(grid, "root");

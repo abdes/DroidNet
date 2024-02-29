@@ -15,49 +15,67 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory($"{nameof(Dock)}")]
 public class DockTests
 {
-    private readonly IDockable dockable1
-        = new MockDockable("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Dockable dockable1
+        = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
 
-    private readonly IDockable dockable2
-        = new MockDockable("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Dockable dockable2
+        = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+
+    [TestCleanup]
+    public void Dispose()
+    {
+        this.dockable1.Dispose();
+        this.dockable2.Dispose();
+    }
 
     [TestMethod]
-    public void AddDockable_WhenDockIsEmpty_ShouldAddDockableAndSetActive()
+    [DataRow(DockablePlacement.First)]
+    [DataRow(DockablePlacement.Last)]
+    [DataRow(DockablePlacement.AfterActiveItem)]
+    [DataRow(DockablePlacement.BeforeActiveItem)]
+    public void AddDockable_WhenDockIsEmpty(DockablePlacement placement)
     {
         // Arrange
-        var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
+        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
 
         // Act
-        dock.AddDockable(this.dockable1);
+        dock.AddDockable(this.dockable1, placement);
 
         // Assert
         _ = dock.Dockables.Should()
             .ContainSingle()
             .Which.Should()
             .Be(this.dockable1, "we added it to the dock");
-        _ = this.dockable1.IsActive.Should().BeTrue("it is the only dockable in the dock");
+        _ = dock.ActiveDockable.Should().Be(this.dockable1);
+        _ = this.dockable1.IsActive.Should().BeTrue("it has just been added to the dock");
     }
 
     [TestMethod]
-    public void AddDockable_WhenDockIsNotEmpty_ShouldAddDockableAndNotSetActive()
+    [DataRow(DockablePlacement.First, 0)]
+    [DataRow(DockablePlacement.Last, 1)]
+    [DataRow(DockablePlacement.AfterActiveItem, 1)]
+    [DataRow(DockablePlacement.BeforeActiveItem, 0)]
+    public void AddDockable_WhenDockIsNotEmpty(DockablePlacement placement, int expectedIndex)
     {
         // Arrange
-        var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
+        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
         dock.AddDockable(this.dockable1);
 
         // Act
-        dock.AddDockable(this.dockable2);
+        dock.AddDockable(this.dockable2, placement);
 
         // Assert
         _ = dock.Dockables.Should().Contain(this.dockable2, "we added it to the dock");
-        _ = this.dockable2.IsActive.Should().BeFalse("it is not the first dockable in the dock");
+        _ = dock.Dockables.IndexOf(this.dockable2).Should().Be(expectedIndex);
+        _ = dock.ActiveDockable.Should().Be(this.dockable2);
+        _ = this.dockable2.IsActive.Should().BeTrue("it has just been added to the dock");
     }
 
     [TestMethod]
     public void Dispose_ShouldDisposeAllDockablesAndClearDockables()
     {
         // Arrange
-        var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
+        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
         dock.AddDockable(this.dockable1);
         dock.AddDockable(this.dockable2);
 
@@ -72,7 +90,7 @@ public class DockTests
     public void ToString_ShouldReturnDockId()
     {
         // Arrange
-        var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
+        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
 
         // Act
         var dockIdString = dock.ToString();

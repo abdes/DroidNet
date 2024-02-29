@@ -5,11 +5,11 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
-using System.Diagnostics;
+using System.ComponentModel;
 using DroidNet.Docking;
 
 /// <summary>
-/// Represents a Dock , which holds a <see cref="Dockable" />, and must be
+/// Represents a Dock , which holds a <see cref="Docking.Dockable" />, and must be
 /// inside a <see cref="DockGroup" />.
 /// </summary>
 /// <remarks>
@@ -30,12 +30,34 @@ using DroidNet.Docking;
 /// </remarks>
 public abstract partial class Dock : IDock
 {
-    private readonly ObservableCollection<IDockable> dockables = [];
+    private readonly List<Dockable> dockables = [];
+
+    private bool disposed;
     private Anchor? anchor;
 
-    protected Dock() => this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
+    public ReadOnlyCollection<IDockable> Dockables => this.dockables.Cast<IDockable>().ToList().AsReadOnly();
 
-    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
+    public IDockable? ActiveDockable
+    {
+        get => this.Dockables.FirstOrDefault(d => d.IsActive);
+        set
+        {
+            var old = this.dockables.FirstOrDefault(d => d.IsActive);
+            if (old != null)
+            {
+                old.IsActive = false;
+            }
+
+            if (value == null)
+            {
+                return;
+            }
+
+            var activate = this.dockables.FirstOrDefault(d => d.Id == value.Id) ??
+                           throw new ArgumentException($"no such dock with ID `{value.Id}` in my collection");
+            activate.IsActive = true;
+        }
+    }
 
     public virtual bool CanMinimize => true;
 
@@ -46,11 +68,10 @@ public abstract partial class Dock : IDock
         get => this.anchor;
         internal set
         {
-            // Dispose if the old anchor if we had one
+            // Dispose of the old anchor if we had one
             this.anchor?.Dispose();
 
             this.anchor = value;
-            Debug.WriteLine($"++++++++++ Dock `{this}` got a new anchor `{this.anchor}`");
         }
     }
 
@@ -60,20 +81,45 @@ public abstract partial class Dock : IDock
 
     internal DockGroup? Group { get; set; }
 
-    public virtual void AddDockable(IDockable dockable)
+    public virtual void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First)
     {
-        // TODO: update active dockable and place dockable properly
         dockable.Owner = this;
-        if (this.Dockables.Count == 0)
+        int index;
+        switch (position)
         {
-            dockable.IsActive = true;
+            case DockablePlacement.First:
+                index = 0;
+                break;
+
+            case DockablePlacement.Last:
+                index = this.dockables.Count;
+                break;
+
+            case DockablePlacement.AfterActiveItem:
+            case DockablePlacement.BeforeActiveItem:
+                var activeIndex = this.dockables.FindIndex(d => d.IsActive);
+                index = activeIndex == -1
+                    ? 0
+                    : position == DockablePlacement.BeforeActiveItem
+                        ? activeIndex
+                        : activeIndex + 1;
+                break;
+
+            default:
+                throw new InvalidEnumArgumentException(nameof(position), (int)position, typeof(DockablePlacement));
         }
 
-        this.dockables.Add(dockable);
+        this.dockables.Insert(index, dockable);
+        this.ActiveDockable = dockable;
     }
 
     public void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         foreach (var dockable in this.dockables)
         {
             dockable.Dispose();
@@ -85,6 +131,8 @@ public abstract partial class Dock : IDock
         this.anchor = null;
 
         this.dockables.Clear();
+
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 

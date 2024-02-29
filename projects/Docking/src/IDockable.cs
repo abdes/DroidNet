@@ -12,11 +12,11 @@ public interface IDockable : IDisposable
 
     string Id { get; }
 
-    string Title { get; }
+    string Title { get; set; }
 
-    string MinimizedTitle { get; }
+    string MinimizedTitle { get; set; }
 
-    string TabbedTitle { get; }
+    string TabbedTitle { get; set; }
 
     Width PreferredWidth { get; set; }
 
@@ -24,9 +24,9 @@ public interface IDockable : IDisposable
 
     object? ViewModel { get; }
 
-    IDock? Owner { get; set; }
+    IDock? Owner { get; }
 
-    bool IsActive { get; set; }
+    bool IsActive { get; }
 
     public class Width : Length
     {

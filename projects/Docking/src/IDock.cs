@@ -8,9 +8,11 @@ using System.Collections.ObjectModel;
 
 public interface IDock : IDisposable
 {
-    public DockId Id { get; }
+    DockId Id { get; }
 
-    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
+    ReadOnlyCollection<IDockable> Dockables { get; }
+
+    IDockable? ActiveDockable { get; set; }
 
     DockingState State { get; }
 
@@ -18,7 +20,7 @@ public interface IDock : IDisposable
 
     bool CanClose { get; }
 
-    public Anchor? Anchor { get; }
+    Anchor? Anchor { get; }
 
-    void AddDockable(IDockable dockable);
+    void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First);
 }

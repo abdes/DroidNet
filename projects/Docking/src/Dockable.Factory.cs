@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
+namespace DroidNet.Docking;
 
 using System.Collections;
 using System.Collections.Concurrent;
@@ -15,6 +15,8 @@ using System.Diagnostics;
 /// </summary>
 public partial class Dockable
 {
+    private bool disposed;
+
     public event Action? OnDisposed;
 
     public static IEnumerable<IDockable> All => new AllDockables();
@@ -26,11 +28,18 @@ public partial class Dockable
 
     public void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         // First invoke any subscribers to the OnDisposed event, because they
         // may still need to use the dockable before it is disposed.
         this.OnDisposed?.Invoke();
 
         Factory.ReleaseDockable(this.Id);
+
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 

@@ -5,7 +5,6 @@
 namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Detail;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -109,7 +108,7 @@ public class DockableFactoryTests : TestSuiteWithAssertions
         }
 
         // Assert
-        _ = dockables.Should().Contain(dockable1!, "it was added to the dockables");
-        _ = dockables.Should().Contain(dockable2!, "it was added to the dockables");
+        _ = dockables.Should().Contain(dockable1, "it was added to the dockables");
+        _ = dockables.Should().Contain(dockable2, "it was added to the dockables");
     }
 }
