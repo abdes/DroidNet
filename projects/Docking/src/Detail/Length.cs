@@ -61,10 +61,18 @@ public abstract partial class Length
     protected Length(double pixels) => this.value = double.Round(pixels).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
+    /// Gets a value indicating whether the underlying value in this <see cref="Length"/> is <see langword="null"/> or is an empty
+    /// string.
+    /// </summary>
+    public bool IsNullOrEmpty => string.IsNullOrEmpty(this.value);
+
+    /// <summary>
     /// Implicitly convert the underlying value of a <see cref="Length"/> to a string.
     /// </summary>
     /// <param name="length">the length to be converted to a string.</param>
     public static implicit operator string?(Length? length) => length?.value;
+
+    public override string ToString() => this.value ?? string.Empty;
 
     [GeneratedRegex(@"^(auto|(\d+(\.\d+)?)?\*?)$")]
     private static partial Regex GridLengthRegEx();

@@ -2,56 +2,49 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Docks;
+namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Globalization;
 using DroidNet.Docking;
 using Microsoft.UI.Xaml;
 
-public static class DockableExtensions
+public static class DockExtensions
 {
     /// <summary>
-    /// Parses a dockable preferred width from its string value to a <see cref="GridLength" /> value.
+    /// Parses a dock width from its string value to a <see cref="GridLength" /> value.
     /// </summary>
-    /// <param name="dockable">The dockable for which the preferred width is to
-    /// be converted.</param>
+    /// <param name="dock">The dock for which the preferred width is to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
-    public static GridLength PreferredGridWidth(this IDockable dockable)
-        => GridLengthFromString(dockable.PreferredWidth);
+    public static GridLength GridWidth(this IDock dock)
+        => GridLengthFromString(dock.Width);
 
     /// <summary>
-    /// Parses a dockable preferred height from its string value to a <see cref="GridLength" /> value.
+    /// Parses a dock height from its string value to a <see cref="GridLength" /> value.
     /// </summary>
-    /// <param name="dockable">The dockable for which the preferred height is to
-    /// be converted.</param>
+    /// <param name="dock">The dock for which the preferred height is to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
-    public static GridLength PreferredGridHeight(this IDockable dockable)
-        => GridLengthFromString(dockable.PreferredHeight);
+    public static GridLength GridHeight(this IDock dock)
+        => GridLengthFromString(dock.Height);
 
     /// <summary>
-    /// Parses a dockable preferred length from its string value to a
-    /// <see cref="GridLength" /> value.
+    /// Parses a dock preferred length from its string value to a <see cref="GridLength" /> value.
     /// </summary>
     /// <param name="length">The length as a string.</param>
-    /// <returns>If the preferred length is null or empty, this method returns
-    /// <see cref="GridLength.Auto" />; otherwise if the parsing succeeds, it
-    /// returns a valid GridLength from the string value.</returns>
+    /// <returns>If the preferred length is null or empty, this method returns <see cref="GridLength.Auto" />; otherwise if the
+    /// parsing succeeds, it returns a valid GridLength from the string value.</returns>
     /// <exception cref="ArgumentException">if the string format is invalid.</exception>
     /// <remarks>
-    /// The format of the string should be consistent with how GridLength sizing
-    /// works:
+    /// The format of the string should be consistent with how GridLength sizing works:
     /// <list type="bullet">
     /// <item>
-    /// <term>Fixed Width</term><description> a numeric value that can be parsed
-    /// as a <see langword="double" /></description>
+    /// <term>Fixed Width</term><description> a numeric value that can be parsed as a <see langword="double" /></description>
     /// </item>
     /// <item>
-    /// <term>Star Sizing</term><description> a numeric value that can be parsed
-    /// as a <see langword="double" />, followed by a <c>*</c></description>
+    /// <term>Star Sizing</term><description> a numeric value that can be parsed as a <see langword="double" />, followed by a
+    /// <c>*</c></description>
     /// </item>
     /// <item>
-    /// <term>Auto Sizing</term><description> the word "auto". Case does not
-    /// matter.</description>
+    /// <term>Auto Sizing</term><description> the word "auto". Case does not matter.</description>
     /// </item>
     /// </list>
     /// </remarks>
@@ -82,7 +75,7 @@ public static class DockableExtensions
                 if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
                 {
                     throw new ArgumentException(
-                        $"the dockable preferred length `{length}` does not contain a valid numeric value",
+                        $"the length `{length}` does not contain a valid numeric value",
                         nameof(length));
                 }
             }
@@ -94,7 +87,7 @@ public static class DockableExtensions
             if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
             {
                 throw new ArgumentException(
-                    $"the dockable preferred length `{length}` is not a valid absolute length",
+                    $"the length `{length}` is not a valid absolute length",
                     nameof(length));
             }
 

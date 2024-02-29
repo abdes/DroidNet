@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using DroidNet.Docking;
 
 /// <summary>
@@ -34,6 +35,8 @@ public abstract partial class Dock : IDock
 
     private bool disposed;
     private Anchor? anchor;
+    private Width width = new();
+    private Height height = new();
 
     public ReadOnlyCollection<IDockable> Dockables => this.dockables.Cast<IDockable>().ToList().AsReadOnly();
 
@@ -79,6 +82,38 @@ public abstract partial class Dock : IDock
 
     public DockId Id { get; private set; }
 
+    public Width Width
+    {
+        get => this.width;
+        set
+        {
+            Debug.WriteLine($"Dock {this} my width has changed to: {value}");
+
+            // Set the width for the Dock, but also for its Active Dockable
+            this.width = value;
+            if (this.ActiveDockable != null)
+            {
+                this.ActiveDockable.PreferredWidth = value;
+            }
+        }
+    }
+
+    public Height Height
+    {
+        get => this.height;
+        set
+        {
+            Debug.WriteLine($"Dock {this} my height has changed to: {value}");
+
+            // Set the height for the Dock, but also for its Active Dockable
+            this.height = value;
+            if (this.ActiveDockable != null)
+            {
+                this.ActiveDockable.PreferredHeight = value;
+            }
+        }
+    }
+
     internal DockGroup? Group { get; set; }
 
     public virtual void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First)
@@ -111,6 +146,20 @@ public abstract partial class Dock : IDock
 
         this.dockables.Insert(index, dockable);
         this.ActiveDockable = dockable;
+
+        // If currently the values of Width or Height are null, the use the
+        // preferred values from the dockable just added.
+        if (this.width.IsNullOrEmpty && !dockable.PreferredWidth.IsNullOrEmpty)
+        {
+            Debug.WriteLine($"Dock {this} initializing my width from dockable {dockable.Id}: {dockable.PreferredWidth}");
+            this.width = dockable.PreferredWidth;
+        }
+
+        if (this.height.IsNullOrEmpty && !dockable.PreferredHeight.IsNullOrEmpty)
+        {
+            Debug.WriteLine($"Dock {this} initializing my height from dockable {dockable.Id}: {dockable.PreferredHeight}");
+            this.height = dockable.PreferredHeight;
+        }
     }
 
     public void Dispose()

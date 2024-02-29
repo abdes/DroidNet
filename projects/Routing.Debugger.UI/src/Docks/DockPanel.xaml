@@ -63,7 +63,7 @@
 
     <Grid Background="Transparent">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" MinHeight="32" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid

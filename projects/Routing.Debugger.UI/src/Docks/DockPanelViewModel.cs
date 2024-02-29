@@ -16,6 +16,9 @@ using Windows.Foundation;
 /// <param name="docker">The docker which can be used to manage the dock.</param>
 public partial class DockPanelViewModel(IDock dock, IDocker docker) : ObservableObject
 {
+    private bool initialSizeUpdate = true;
+    private Size previousSize;
+
     [ObservableProperty]
     private string title = dock.ToString() ?? "EMPTY";
 
@@ -24,9 +27,39 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
 
     public void OnSizeChanged(Size newSize)
     {
-        Debug.WriteLine($"DockPanel {dock.Id} size changed: {newSize}");
+        // Round the size to the nearest integer.
+        var newWidth = double.Round(newSize.Width);
+        var newHeight = double.Round(newSize.Height);
 
-        docker.ResizeDock(dock, new Width(newSize.Width), new Height(newSize.Height));
+        // If this is the initial size update, we memorize it but we do not
+        // trigger a resize of the dock. We only trigger the resize if the size
+        // changes after the initial update.
+        if (this.initialSizeUpdate)
+        {
+            Debug.WriteLine($"DockPanel {dock.Id} this is our initial size: Width={newWidth}, Height={newHeight}");
+            this.previousSize.Width = newWidth;
+            this.previousSize.Height = newHeight;
+            this.initialSizeUpdate = false;
+            return;
+        }
+
+        bool widthChanged = false, heightChanged = false;
+
+        if (newWidth != this.previousSize.Width)
+        {
+            Debug.WriteLine($"DockPanel {dock.Id} my width changed: {newWidth}");
+            this.previousSize.Width = newWidth;
+            widthChanged = true;
+        }
+
+        if (newHeight != this.previousSize.Height)
+        {
+            Debug.WriteLine($"DockPanel {dock.Id} my height changed: {newHeight}");
+            this.previousSize.Height = newHeight;
+            heightChanged = true;
+        }
+
+        docker.ResizeDock(dock, widthChanged ? new Width(newWidth) : null, heightChanged ? new Height(newHeight) : null);
     }
 
     // TODO: combine CanMinimize and CanClose into a IsLocked flag where the dock is locked in place as Pinned

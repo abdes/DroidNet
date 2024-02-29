@@ -24,5 +24,5 @@ public interface IDocker : IDisposable
 
     void PinDock(IDock dock);
 
-    void ResizeDock(IDock dock, Width width, Height height);
+    void ResizeDock(IDock dock, Width? width, Height? height);
 }
