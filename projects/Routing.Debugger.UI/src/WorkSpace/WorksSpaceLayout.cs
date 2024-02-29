@@ -186,13 +186,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         }
 
         // TODO: update this after dock with is supported
-        var width = dock.Dockables.FirstOrDefault()?.PreferredWidth.Value;
+        string? width = dock.Dockables.FirstOrDefault()?.PreferredWidth;
         if (width != null)
         {
             changed = CheckAndSetWidth(width, activeParams, nextParams) || changed;
         }
 
-        var height = dock.Dockables.FirstOrDefault()?.PreferredHeight.Value;
+        string? height = dock.Dockables.FirstOrDefault()?.PreferredHeight;
         if (height != null)
         {
             changed = CheckAndSetHeight(height, activeParams, nextParams) || changed;

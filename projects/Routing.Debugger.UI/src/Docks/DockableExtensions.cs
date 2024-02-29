@@ -17,7 +17,7 @@ public static class DockableExtensions
     /// be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
     public static GridLength PreferredGridWidth(this IDockable dockable)
-        => GridLengthFromString(dockable.PreferredWidth.Value);
+        => GridLengthFromString(dockable.PreferredWidth);
 
     /// <summary>
     /// Parses a dockable preferred height from its string value to a <see cref="GridLength" /> value.
@@ -26,7 +26,7 @@ public static class DockableExtensions
     /// be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
     public static GridLength PreferredGridHeight(this IDockable dockable)
-        => GridLengthFromString(dockable.PreferredHeight.Value);
+        => GridLengthFromString(dockable.PreferredHeight);
 
     /// <summary>
     /// Parses a dockable preferred length from its string value to a
