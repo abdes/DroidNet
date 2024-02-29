@@ -10,5 +10,5 @@ public readonly record struct DockId(uint Value)
 {
     public static implicit operator uint(DockId d) => d.Value;
 
-    public override string? ToString() => this.Value.ToString(CultureInfo.InvariantCulture);
+    public override string ToString() => this.Value.ToString(CultureInfo.InvariantCulture);
 }

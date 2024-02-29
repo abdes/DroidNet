@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
+namespace DroidNet.Docking;
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Docking.Detail;
 
 /// <summary>
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="DockGroup" />.

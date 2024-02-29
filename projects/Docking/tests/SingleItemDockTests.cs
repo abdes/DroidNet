@@ -5,7 +5,6 @@
 namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,11 +14,18 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory($"{nameof(SingleItemDock)}")]
 public class SingleItemDockTests
 {
-    private readonly IDockable dockable1
-        = new MockDockable("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Dockable dockable1
+        = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
 
-    private readonly IDockable dockable2
-        = new MockDockable("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Dockable dockable2
+        = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+
+    [TestCleanup]
+    public void Dispose()
+    {
+        this.dockable1.Dispose();
+        this.dockable2.Dispose();
+    }
 
     [TestMethod]
     public void AddDockable_WhenDockIsEmpty_ShouldAddDockable()
@@ -40,12 +46,16 @@ public class SingleItemDockTests
     [TestMethod]
     public void AddDockable_WhenDockIsNotEmpty_ShouldThrowInvalidOperationException()
     {
-        // Arrange
-        var dock = SingleItemDock.New() ?? throw new AssertionFailedException("could not allocate a new object");
-        dock.AddDockable(this.dockable1);
+        var act = () =>
+        {
+            // Arrange
+            using var dock = SingleItemDock.New() ??
+                             throw new AssertionFailedException("could not allocate a new object");
+            dock.AddDockable(this.dockable1);
 
-        // Act
-        var act = () => dock.AddDockable(this.dockable2);
+            // Act
+            dock.AddDockable(this.dockable2);
+        };
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();

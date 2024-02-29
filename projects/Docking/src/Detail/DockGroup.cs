@@ -478,6 +478,8 @@ internal abstract class DockGroupBase : IDockGroup
 {
     private static int nextId = 1;
 
+    private bool disposed;
+
     protected DockGroupBase() => this.DebugId = Interlocked.Increment(ref nextId);
 
     public abstract ReadOnlyObservableCollection<IDock> Docks { get; }
@@ -502,9 +504,15 @@ internal abstract class DockGroupBase : IDockGroup
 
     public virtual void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.First?.Dispose();
         this.Second?.Dispose();
 
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 }

@@ -120,17 +120,14 @@ public enum DockablePlacement
     Last,
 
     /// <summary>
-    /// Insert the new dockable after the currently selected item in the dock.
-    /// If no item is currently selected, behave similarly to
-    /// <see cref="First" />.
+    /// Insert the new dockable after the currently active item in the dock. If
+    /// no item is currently active, behave similarly to <see cref="First" />.
     /// </summary>
-    AfterSelectedItem,
+    AfterActiveItem,
 
     /// <summary>
-    /// Insert the new dockable before the currently selected item in the dock.
-    /// If no item is currently selected, behave similarly to <see cref="First" />.
+    /// Insert the new dockable before the currently active item in the dock. If
+    /// no item is currently active, behave similarly to <see cref="First" />.
     /// </summary>
-    BeforeSelectedItem,
+    BeforeActiveItem,
 }
-
-public class Constants;

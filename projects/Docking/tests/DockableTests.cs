@@ -5,7 +5,6 @@
 namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Detail;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -19,7 +18,7 @@ public class DockableTests
     public void Title_Setter_ShouldTriggerPropertyChange_ForMinimizedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
-        using var dockable = Dockable.New("testId")!;
+        using var dockable = Dockable.New("testId");
         var eventTriggered = false;
 
         dockable.PropertyChanged += (_, e) =>
@@ -53,10 +52,10 @@ public class DockableTests
     public void Title_Setter_ShouldTriggerPropertyChange_ForTabbedTitle_WhenCurrentValueIsNull()
     {
         // Arrange
-        using var dockable = Dockable.New("testId")!;
+        using var dockable = Dockable.New("testId");
         var eventTriggered = false;
 
-        dockable!.PropertyChanged += (_, e) =>
+        dockable.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(Dockable.TabbedTitle))
             {
@@ -87,7 +86,7 @@ public class DockableTests
     public void Title_Setter_ShouldNotTriggerPropertyChange_IfNotDifferentValue()
     {
         // Arrange
-        using var dockable = Dockable.New("testId")!;
+        using var dockable = Dockable.New("testId");
         dockable.Title = "Title";
         var eventTriggered = false;
 

@@ -5,7 +5,6 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -20,10 +19,10 @@ public partial class DockGroupTests
     public void AddDock_ToGroupWithChildren_DebugAssertFails()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var child = new EmptyDockGroup();
+        using var sut = new EmptyDockGroup();
+        using var child = new EmptyDockGroup();
         sut.SetFirst(child);
-        var newDock = DummyDock.New();
+        using var newDock = DummyDock.New();
 
         // Act
         sut.AddDock(newDock);
@@ -38,12 +37,15 @@ public partial class DockGroupTests
     [TestCategory($"{nameof(DockGroup)}.DockManagement")]
     public void AddDock_WithNoAnchor_CanOnlyBeUsedIfGroupIsEmpty()
     {
-        // Arrange
-        var sut = new NonEmptyDockGroup();
-        var newDock = DummyDock.New();
+        var action = () =>
+        {
+            // Arrange
+            using var sut = new NonEmptyDockGroup();
+            using var newDock = DummyDock.New();
 
-        // Act
-        var action = () => sut.AddDock(newDock);
+            // Act
+            sut.AddDock(newDock);
+        };
 
         // Assert
         _ = action.Should().Throw<InvalidOperationException>();
@@ -54,32 +56,34 @@ public partial class DockGroupTests
     public void AddDock_WithNoAnchor_EmptyGroup_AddsNewDock()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var newDock = DummyDock.New();
+        using var sut = new EmptyDockGroup();
+        using var newDock = DummyDock.New();
 
         // Act
         sut.AddDock(newDock);
 
         // Assert
-        _ = sut.Docks.Should().NotBeEmpty().And.OnlyContain(d => d == newDock);
+        _ = sut.Docks.Should().HaveCount(1).And.Contain(newDock);
     }
 
     [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.DockManagement")]
     public void AddDockWithAnchor_WhenAnchorIsNotAChild_Throws()
     {
-        // Arrange
-        var sut = new NonEmptyDockGroup();
-        var anchor = DummyDock.New();
-        var anchorDockable = new MockDockable("anchor");
-        anchor.AddDockable(anchorDockable);
-        var newDock = DummyDock.New();
+        var action = () =>
+        {
+            // Arrange
+            using var anchor = DummyDock.New();
+            using var sut = new NonEmptyDockGroup();
+            using var anchorDockable = Dockable.New("anchor");
+            anchor.AddDockable(anchorDockable);
+            using var newDock = DummyDock.New();
 
-        // Act
-        var action = () => sut.AddDock(newDock, new AnchorLeft(anchorDockable));
+            // Act
+            sut.AddDock(newDock, new AnchorLeft(anchorDockable));
+        };
 
         // Assert
-        _ = sut.Docks.Should().NotContain(d => d.Id.Equals(anchor.Id));
         _ = action.Should().Throw<ArgumentException>();
     }
 
@@ -90,10 +94,10 @@ public partial class DockGroupTests
     public void AddDockWithAnchor_SameOrientation(DockGroupOrientation orientation)
     {
         // Arrange
-        var sut = new NonEmptyDockGroup();
+        using var sut = new NonEmptyDockGroup();
         sut.SetOrientation(orientation);
         var anchor = sut.Docks.First();
-        var anchorDockable = new MockDockable("anchor");
+        using var anchorDockable = Dockable.New("anchor");
         anchor.AddDockable(anchorDockable);
         var before = DummyDock.New();
         var after = DummyDock.New();
@@ -129,13 +133,24 @@ public partial class DockGroupTests
             this.sut = new NonEmptyDockGroup();
             this.sut.SetOrientation(DockGroupOrientation.Horizontal);
             this.second = this.sut.Docks.First();
-            this.second.AddDockable(new MockDockable("second"));
+            this.second.AddDockable(Dockable.New("second"));
             this.first = DummyDock.New();
-            this.first.AddDockable(new MockDockable("first"));
+            this.first.AddDockable(Dockable.New("first"));
             this.third = DummyDock.New();
-            this.third.AddDockable(new MockDockable("third"));
+            this.third.AddDockable(Dockable.New("third"));
             this.sut.AddDock(this.first, new AnchorLeft(this.second.Dockables[0]));
             this.sut.AddDock(this.third, new AnchorRight(this.second.Dockables[0]));
+        }
+
+        [TestCleanup]
+        public void Dispose()
+        {
+            this.sut.Dispose();
+            this.first.Dispose();
+            this.second.Dispose();
+            this.third.Dispose();
+
+            GC.SuppressFinalize(this);
         }
 
         [TestMethod]
@@ -145,7 +160,7 @@ public partial class DockGroupTests
             // Arrange
             _ = this.sut.Docks.Should().HaveCount(3).And.ContainInOrder(this.first, this.second, this.third);
 
-            var newDock = DummyDock.New();
+            using var newDock = DummyDock.New();
 
             // Act
             this.sut.AddDock(newDock, new AnchorTop(this.first.Dockables[0]));
@@ -170,7 +185,7 @@ public partial class DockGroupTests
             // Arrange
             _ = this.sut.Docks.Should().HaveCount(3).And.ContainInOrder(this.first, this.second, this.third);
 
-            var newDock = DummyDock.New();
+            using var newDock = DummyDock.New();
 
             // Act
             this.sut.AddDock(newDock, new AnchorBottom(this.third.Dockables[0]));
@@ -195,7 +210,7 @@ public partial class DockGroupTests
             // Arrange
             _ = this.sut.Docks.Should().HaveCount(3).And.ContainInOrder(this.first, this.second, this.third);
 
-            var newDock = DummyDock.New();
+            using var newDock = DummyDock.New();
 
             // Act
             this.sut.AddDock(newDock, new AnchorTop(this.second.Dockables[0]));
@@ -226,7 +241,7 @@ public partial class DockGroupTests
             // Arrange
             _ = this.sut.Docks.Should().HaveCount(3).And.ContainInOrder(this.first, this.second, this.third);
 
-            var newDock = DummyDock.New();
+            using var newDock = DummyDock.New();
 
             // Act
             this.sut.AddDock(newDock, new AnchorBottom(this.second.Dockables[0]));
@@ -248,16 +263,6 @@ public partial class DockGroupTests
 
             _ = newNode.Second!.Orientation.Should().Be(DockGroupOrientation.Horizontal);
             _ = newNode.Second!.Docks.Should().ContainInOrder(this.third);
-        }
-
-        public void Dispose()
-        {
-            this.sut.Dispose();
-            this.first.Dispose();
-            this.second.Dispose();
-            this.third.Dispose();
-
-            GC.SuppressFinalize(this);
         }
     }
 }
