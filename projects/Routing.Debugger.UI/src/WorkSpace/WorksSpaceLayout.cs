@@ -171,7 +171,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         if (dock.Anchor != null)
         {
-            changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
+            // The active dockable will get the dock's anchor, but any other
+            // dockables will be anchored 'with' the active dockable.
+            var anchor = dockable.IsActive
+                ? dock.Anchor
+                : new Anchor(AnchorPosition.With, dock.ActiveDockable);
+            changed = CheckAndSetAnchor(anchor, activeParams, nextParams) || changed;
         }
 
         string? width = dockable.PreferredWidth;
