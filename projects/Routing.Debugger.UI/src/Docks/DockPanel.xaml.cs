@@ -26,6 +26,8 @@ public sealed partial class DockPanel
                 h => this.SizeChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(ResizeThrottleInMs))
             .Subscribe(evt => this.DispatcherQueue.TryEnqueue(() => this.OnSizeChanged(evt.EventArgs)));
+
+        this.ViewModel.OnSizeChanged(new Windows.Foundation.Size() { Width = this.ActualWidth, Height = this.ActualHeight });
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

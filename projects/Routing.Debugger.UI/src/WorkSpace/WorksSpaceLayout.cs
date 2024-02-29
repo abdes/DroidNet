@@ -200,11 +200,33 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         return changed ? nextParams : null;
     }
 
+    private static GridLength GetGridLengthForDockGroup(IDockGroup group, Orientation gridOrientation)
+    {
+        if (gridOrientation == Orientation.Vertical)
+        {
+            var firstDock = group.Docks.FirstOrDefault(d => !d.Width.IsNullOrEmpty);
+            if (firstDock != null)
+            {
+                return firstDock.GridWidth();
+            }
+        }
+        else
+        {
+            var firstDock = group.Docks.FirstOrDefault(d => !d.Height.IsNullOrEmpty);
+            if (firstDock != null)
+            {
+                return firstDock.GridHeight();
+            }
+        }
+
+        return GridLength.Auto;
+    }
+
     private VectorGrid UpdateContent()
     {
         var orientation = this.docker.Root.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
         Debug.WriteLine($"Start a new {orientation} VG for the root dock");
-        var grid = new VectorGrid(orientation);
+        var grid = new VectorGrid(orientation) { Name = "Workspace Root" };
         this.PushGrid(grid, "root");
         this.Layout(this.docker.Root);
         Debug.Assert(this.grids.Count == 1, "some pushes to the grids stack were not matched by a corresponding pop");
@@ -250,9 +272,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             return;
         }
 
-        var stretch = group.ShouldStretch();
+        Debug.WriteLine($"Layout started for Group {group}");
 
         var grid = this.grids.Peek();
+        Debug.WriteLine($"Current grid is {grid.Orientation}");
+
+        var stretch = group.ShouldStretch();
+        Debug.WriteLine($"Group should {(stretch ? string.Empty : "not ")}stretch");
 
         // For the sake of layout, if a group has Docks and only one of them is
         // pinned, we consider the group's orientation as Undetermined. That
@@ -260,6 +286,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         var groupOrientation = group.Orientation;
         if (!group.IsEmpty && group.Docks.Count(d => d.State == DockingState.Pinned) == 1)
         {
+            Debug.WriteLine($"Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
+
             groupOrientation = DockGroupOrientation.Undetermined;
         }
 
@@ -270,12 +298,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 : Orientation.Horizontal;
             if (grid.Orientation != orientation)
             {
-                var newGrid = new VectorGrid(orientation);
-                Debug.WriteLine($"Add new grid for group `{group} to VG");
-                Debug.WriteLine($"Group {group.First} should {(stretch ? string.Empty : " NOT")}stretch");
+                var newGrid = new VectorGrid(orientation) { Name = group.ToString() };
+                Debug.WriteLine($"New grid with {newGrid.Orientation} for group `{group} to VG");
+                Debug.WriteLine($"Group {group.First} should {(stretch ? string.Empty : "NOT ")}stretch");
                 grid.AddResizableItem(
                     newGrid,
-                    stretch ? new GridLength(1, GridUnitType.Star) : GridLength.Auto,
+                    stretch ? new GridLength(1, GridUnitType.Star) : GetGridLengthForDockGroup(group, newGrid.Orientation),
                     32);
                 grid = newGrid;
             }
@@ -286,7 +314,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             // A group with docks -> Layout the docks as items in the vector grid.
             foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
             {
-                Debug.WriteLine($"Add dock {dock} from group `{group} to VG");
+                Debug.WriteLine($"Add dock {dock} with Width {dock.Width} and Height {dock.Height} from group `{group} to VG");
+                var gridItemLength = GetGridLengthForDock(dock, grid.Orientation);
+                Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {grid.Orientation}");
+
                 grid.AddResizableItem(
                     new Border()
                     {
@@ -305,7 +336,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         BorderBrush = new SolidColorBrush(Colors.Red),
                         BorderThickness = new Thickness(0.5),
                     },
-                    stretch ? new GridLength(1, GridUnitType.Star) : GetGridLengthForDock(dock, grid.Orientation),
+                    gridItemLength,
                     32);
             }
 
@@ -339,15 +370,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         GridLength GetGridLengthForDock(IDock dock, Orientation gridOrientation)
         {
-            var activeDockable = dock.ActiveDockable;
-            if (activeDockable == null)
-            {
-                return new GridLength(300);
-            }
-
-            return gridOrientation == Orientation.Horizontal
-                ? activeDockable.PreferredGridWidth()
-                : activeDockable.PreferredGridHeight();
+            Debug.WriteLine($"GridLength for dock {dock} using {(gridOrientation == Orientation.Horizontal ? "width" : "height")}");
+            return gridOrientation == Orientation.Horizontal ? dock.GridWidth() : dock.GridHeight();
         }
     }
 
