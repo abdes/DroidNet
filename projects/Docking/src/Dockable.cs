@@ -71,4 +71,7 @@ public partial class Dockable : ObservableObject, IDockable
     public IDock? Owner { get; set; }
 
     public bool IsActive { get; set; }
+
+    /// <inheritdoc/>
+    public override string? ToString() => $"[{this.Id}] {(this.Owner == null ? string.Empty : $"Owner={this.Owner.Id} ")}";
 }
