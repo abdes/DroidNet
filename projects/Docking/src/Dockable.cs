@@ -13,6 +13,7 @@ using DroidNet.Docking.Detail;
 /// </summary>
 public partial class Dockable : INotifyPropertyChanged, IDockable
 {
+    private bool isActive;
     private string? title;
 
     private string? minimizedTitle;
@@ -73,7 +74,26 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
 
     public IDock? Owner { get; set; }
 
-    public bool IsActive { get; set; }
+    /// <summary>Gets or sets a value indicating whether this dockable is active.</summary>
+    /// <remarks>
+    /// It is only possible to mark a dockable as active or inactive when it has a valid <see cref="Owner" />. This is to ensure
+    /// that at any time, there is only one active dockable within a docker.
+    /// </remarks>
+    public bool IsActive
+    {
+        get => this.isActive;
+        set
+        {
+            if (this.Owner == null)
+            {
+                throw new InvalidOperationException(
+                    $"dockable {this} has no owner, and its active state cannot be changed");
+            }
+
+            // The owner will be notified of the property change and do the necessary to maintain a coherency.
+            _ = this.SetField(ref this.isActive, value);
+        }
+    }
 
     /// <inheritdoc />
     public override string ToString()

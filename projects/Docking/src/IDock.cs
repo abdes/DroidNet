@@ -12,7 +12,7 @@ public interface IDock : IDisposable
 
     ReadOnlyCollection<IDockable> Dockables { get; }
 
-    IDockable? ActiveDockable { get; set; }
+    IDockable? ActiveDockable { get; }
 
     DockingState State { get; }
 
