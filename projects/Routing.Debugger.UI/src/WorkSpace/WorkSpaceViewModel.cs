@@ -312,7 +312,12 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
         public bool IsMinimized { get; init; }
     }
 
-    // TODO(abdes): make all application exceptions derive from ApplicationException
+    /// <summary>
+    /// Internal exception used to report a failure in creating an instance of a factory-managed type, such as
+    /// <see cref="Dockable"/> or <see cref="Dock"/>. A more appropriate exception will be reported to the application, and this
+    /// one will be attached to it as the inner exception.
+    /// </summary>
+    /// <param name="type">The type of the object which creation failed.</param>
     private sealed class ObjectCreationException(Type type)
         : ApplicationException($"could not create an instance of {type.FullName}");
 }

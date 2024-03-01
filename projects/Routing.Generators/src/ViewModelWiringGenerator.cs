@@ -226,10 +226,24 @@ public class ViewModelWiringGenerator : ISourceGenerator
         }
     }
 
-    private sealed class MissingTemplateException(string path) : Exception($"Missing template '{path}'");
+    /// <summary>
+    /// Internal exception, thrown to terminate the generation when the template for the class to be generated could not be found.
+    /// </summary>
+    /// <param name="path">The specified path for the missing template.</param>
+    private sealed class MissingTemplateException(string path) : ApplicationException($"Missing template '{path}'");
 
-    private sealed class InvalidTemplateException(string path) : Exception($"Invalid template '{path}'");
+    /// <summary>
+    /// Internal exception, thrown to terminate the generation when the template for the class to be generated is invalid.
+    /// </summary>
+    /// <param name="path">The template path.</param>
+    private sealed class InvalidTemplateException(string path) : ApplicationException($"Invalid template '{path}'");
 
+    /// <summary>
+    /// Internal exception, thrown to terminate the generation when the template for the class to be generated was found but
+    /// could not be loaded.
+    /// </summary>
+    /// <param name="path">The template path.</param>
+    /// <param name="error">A description of the error encountered while trying to load the template.</param>
     private sealed class CouldNotLoadTemplateException(string path, string error) : Exception(
         $"Could not load template '{path}': {error}");
 }
