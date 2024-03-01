@@ -10,18 +10,14 @@ using System.Diagnostics;
 using DroidNet.Docking;
 
 /// <summary>
-/// Represents a Dock , which holds a <see cref="Docking.Dockable" />, and must be
-/// inside a <see cref="DockGroup" />.
+/// Represents a Dock , which holds a <see cref="Dockable" />, and must be inside a <see cref="DockGroup" />.
 /// </summary>
 /// <remarks>
-/// Dock is an abstract type. Instances of a concrete `Dock`, can only be
-/// created through its <see cref="Factory" />, to ensure that each one of them
-/// has a unique ID.
+/// Dock is an abstract type. Instances of a concrete `Dock`, can only be created through its <see cref="Factory" />, to ensure
+/// that each one of them has a unique ID.
 /// <para>
-/// The <c>Factory</c> itself is internal use only. However, each concrete
-/// `Dock` class will offer a simple and straightforward way to create instances
-/// of that specific type. Internally, the implementation will have to use the
-/// <c>Factory</c>.
+/// The <c>Factory</c> itself is internal use only. However, each concrete `Dock` class will offer a simple and straightforward
+/// way to create instances of that specific type. Internally, the implementation will have to use the <c>Factory</c>.
 /// <example>
 /// <code>
 /// var dock = ToolDock.New();
