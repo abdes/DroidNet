@@ -8,7 +8,6 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Events;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
@@ -43,7 +42,11 @@ public sealed partial class TopNavBar : IDisposable
         }
     }
 
-    public void Dispose() => this.routerEventsSub?.Dispose();
+    public void Dispose()
+    {
+        this.routerEventsSub?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private void UrlTextBox_KeyUp(object sender, KeyRoutedEventArgs e)
     {
@@ -51,15 +54,21 @@ public sealed partial class TopNavBar : IDisposable
 
         if (e.Key == VirtualKey.Enter)
         {
-            if (sender is TextBox control)
-            {
-                var text = control.Text;
-            }
-
             if (this.Url != null)
             {
                 this.Router.Navigate(this.Url, new FullNavigation());
             }
+        }
+    }
+
+    private void Reload(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        if (this.Url != null)
+        {
+            this.Router.Navigate(this.Url, new FullNavigation());
         }
     }
 }

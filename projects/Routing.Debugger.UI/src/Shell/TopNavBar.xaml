@@ -20,17 +20,17 @@
         </Grid.ColumnDefinitions>
 
         <styles:TopNavBarButtonRow Grid.Column="0">
-            <res:TopNavBarButton Tooltip="Navigate back">
+            <res:TopNavBarButton IsEnabled="False" Tooltip="Navigate back">
                 <Button.Content>
                     <FontIcon Glyph="&#xF0B0;" />
                 </Button.Content>
             </res:TopNavBarButton>
-            <res:TopNavBarButton Tooltip="Navigate forward">
+            <res:TopNavBarButton IsEnabled="False" Tooltip="Navigate forward">
                 <Button.Content>
                     <FontIcon Glyph="&#xF0AF;" />
                 </Button.Content>
             </res:TopNavBarButton>
-            <res:TopNavBarButton Tooltip="Rebuild the router state">
+            <res:TopNavBarButton Click="Reload" Tooltip="Rebuild the router state">
                 <Button.Content>
                     <FontIcon Glyph="&#xE72C;" />
                 </Button.Content>
@@ -47,7 +47,7 @@
         <!--  Spacer  -->
 
         <styles:TopNavBarButtonRow Grid.Column="4">
-            <res:TopNavBarButton Tooltip="Customize and control the debugger">
+            <res:TopNavBarButton IsEnabled="False" Tooltip="Customize and control the debugger">
                 <Button.Content>
                     <FontIcon Glyph="&#xE712;" />
                 </Button.Content>
