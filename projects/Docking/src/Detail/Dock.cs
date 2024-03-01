@@ -42,7 +42,18 @@ public abstract partial class Dock : IDock
 
     public IDockable? ActiveDockable
     {
-        get => this.Dockables.FirstOrDefault(d => d.IsActive);
+        get
+        {
+            if (this.Dockables.Count == 0)
+            {
+                return null;
+            }
+
+            var theActive = this.Dockables.FirstOrDefault(d => d.IsActive);
+            Debug.Assert(theActive != null, "if a dock is not empty, it should always have an IsActive dockable");
+            return theActive;
+        }
+
         set
         {
             var old = this.dockables.FirstOrDefault(d => d.IsActive);
