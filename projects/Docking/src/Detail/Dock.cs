@@ -28,6 +28,7 @@ using DroidNet.Docking;
 public abstract partial class Dock : IDock
 {
     private readonly List<Dockable> dockables = [];
+    private Dockable? activeDockable;
 
     private bool disposed;
     private Anchor? anchor;
@@ -36,38 +37,7 @@ public abstract partial class Dock : IDock
 
     public ReadOnlyCollection<IDockable> Dockables => this.dockables.Cast<IDockable>().ToList().AsReadOnly();
 
-    public IDockable? ActiveDockable
-    {
-        get
-        {
-            if (this.Dockables.Count == 0)
-            {
-                return null;
-            }
-
-            var theActive = this.Dockables.FirstOrDefault(d => d.IsActive);
-            Debug.Assert(theActive != null, "if a dock is not empty, it should always have an IsActive dockable");
-            return theActive;
-        }
-
-        set
-        {
-            var old = this.dockables.FirstOrDefault(d => d.IsActive);
-            if (old != null)
-            {
-                old.IsActive = false;
-            }
-
-            if (value == null)
-            {
-                return;
-            }
-
-            var activate = this.dockables.FirstOrDefault(d => d.Id == value.Id) ??
-                           throw new ArgumentException($"no such dock with ID `{value.Id}` in my collection");
-            activate.IsActive = true;
-        }
-    }
+    public IDockable? ActiveDockable => this.activeDockable;
 
     public virtual bool CanMinimize => true;
 
@@ -152,19 +122,25 @@ public abstract partial class Dock : IDock
         }
 
         this.dockables.Insert(index, dockable);
-        this.ActiveDockable = dockable;
+
+        // Subscribe to changes to the IsActive property of the dockable.
+        // Then set the dockable to active.
+        dockable.PropertyChanged += this.OnDockablePropertyChanged;
+        dockable.IsActive = true;
 
         // If currently the values of Width or Height are null, the use the
         // preferred values from the dockable just added.
         if (this.width.IsNullOrEmpty && !dockable.PreferredWidth.IsNullOrEmpty)
         {
-            Debug.WriteLine($"Dock {this} initializing my width from dockable {dockable.Id}: {dockable.PreferredWidth}");
+            Debug.WriteLine(
+                $"Dock {this} initializing my width from dockable {dockable.Id}: {dockable.PreferredWidth}");
             this.width = dockable.PreferredWidth;
         }
 
         if (this.height.IsNullOrEmpty && !dockable.PreferredHeight.IsNullOrEmpty)
         {
-            Debug.WriteLine($"Dock {this} initializing my height from dockable {dockable.Id}: {dockable.PreferredHeight}");
+            Debug.WriteLine(
+                $"Dock {this} initializing my height from dockable {dockable.Id}: {dockable.PreferredHeight}");
             this.height = dockable.PreferredHeight;
         }
     }
@@ -193,4 +169,48 @@ public abstract partial class Dock : IDock
     }
 
     public override string ToString() => $"{this.Id}";
+
+    private void OnDockablePropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(Dockable.IsActive))
+        {
+            return;
+        }
+
+        var dockable = (Dockable)sender!;
+
+        // We must always have an active dockable. If this is the only
+        // dockable we have, force it to stay active.
+        if (this.dockables.Count == 1)
+        {
+#if DEBUG
+            if (!dockable.IsActive)
+            {
+                Debug.WriteLine($"cannot set the only dockable `{dockable}` this.Id `{this}` have as inactive.");
+            }
+#endif
+            dockable.IsActive = true;
+            this.activeDockable = dockable;
+            return;
+        }
+
+        // If the dockable is becoming active, deactivate the current active dockable.
+        if (dockable.IsActive)
+        {
+            if (this.activeDockable != null)
+            {
+                this.activeDockable.IsActive = false;
+            }
+
+            this.activeDockable = dockable;
+        }
+
+        // If the active dockable is becoming inactive, activate another dockable.
+        else if (this.activeDockable == dockable)
+        {
+            var other = this.dockables.First(d => d != dockable);
+            other.IsActive = true;
+            this.activeDockable = other;
+        }
+    }
 }
