@@ -41,9 +41,12 @@ public class Docker : IDocker
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
-    // TODO(abdes): center dock is always pinned and cannot have any other state
     public void DockToCenter(IDock dock)
     {
+        // Sanity checks on the dock type used for the center dock
+        Debug.Assert(!dock.CanMinimize, "the center dock cannot be minimized");
+        Debug.Assert(!dock.CanClose, "the center dock cannot be closed");
+
         this.root.DockCenter(dock);
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
