@@ -4,13 +4,14 @@
 
 namespace DroidNet.Docking;
 
-using CommunityToolkit.Mvvm.ComponentModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using DroidNet.Docking.Detail;
 
 /// <summary>
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="DockGroup" />.
 /// </summary>
-public partial class Dockable : ObservableObject, IDockable
+public partial class Dockable : INotifyPropertyChanged, IDockable
 {
     private string? title;
 
@@ -24,12 +25,14 @@ public partial class Dockable : ObservableObject, IDockable
     /// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
     private Dockable(string id) => this.Id = id;
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public string Title
     {
         get => this.title ?? this.Id;
         set
         {
-            if (!this.SetProperty(ref this.title, value))
+            if (!this.SetField(ref this.title, value))
             {
                 return;
             }
@@ -72,6 +75,38 @@ public partial class Dockable : ObservableObject, IDockable
 
     public bool IsActive { get; set; }
 
-    /// <inheritdoc/>
-    public override string? ToString() => $"[{this.Id}] {(this.Owner == null ? string.Empty : $"Owner={this.Owner.Id} ")}";
+    /// <inheritdoc />
+    public override string ToString()
+        => $"[{this.Id}] {(this.Owner == null ? string.Empty : $"Owner={this.Owner.Id} ")}";
+
+    /// <summary>Raises the PropertyChanged event for the specified property.</summary>
+    /// <param name="propertyName">
+    /// The name of the property that changed. This optional parameter can be automatically populated by the compiler using the
+    /// CallerMemberName attribute.
+    /// </param>
+    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    /// <summary>
+    /// Sets the field to the given value and raises the PropertyChanged event if the new value is different from the old value.
+    /// </summary>
+    /// <typeparam name="T">The type of the field.</typeparam>
+    /// <param name="field">A reference to the field to set.</param>
+    /// <param name="value">The new value for the field.</param>
+    /// <param name="propertyName">
+    /// The name of the property that corresponds to the field. This optional parameter can be automatically populated by the
+    /// compiler using the CallerMemberName attribute.
+    /// </param>
+    /// <returns>True if the field was changed; false otherwise.</returns>
+    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return false;
+        }
+
+        field = value;
+        this.OnPropertyChanged(propertyName);
+        return true;
+    }
 }
