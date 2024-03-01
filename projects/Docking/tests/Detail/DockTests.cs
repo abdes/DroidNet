@@ -21,11 +21,15 @@ public class DockTests
     private readonly Dockable dockable2
         = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
 
+    private readonly SimpleDock dock = new SimpleDock() ??
+                                       throw new AssertionFailedException("could not allocate a new object");
+
     [TestCleanup]
     public void Dispose()
     {
         this.dockable1.Dispose();
         this.dockable2.Dispose();
+        this.dock.Dispose();
     }
 
     [TestMethod]
@@ -35,18 +39,15 @@ public class DockTests
     [DataRow(DockablePlacement.BeforeActiveItem)]
     public void AddDockable_WhenDockIsEmpty(DockablePlacement placement)
     {
-        // Arrange
-        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
-
         // Act
-        dock.AddDockable(this.dockable1, placement);
+        this.dock.AddDockable(this.dockable1, placement);
 
         // Assert
-        _ = dock.Dockables.Should()
+        _ = this.dock.Dockables.Should()
             .ContainSingle()
             .Which.Should()
             .Be(this.dockable1, "we added it to the dock");
-        _ = dock.ActiveDockable.Should().Be(this.dockable1);
+        _ = this.dock.ActiveDockable.Should().Be(this.dockable1);
         _ = this.dockable1.IsActive.Should().BeTrue("it has just been added to the dock");
     }
 
@@ -58,16 +59,15 @@ public class DockTests
     public void AddDockable_WhenDockIsNotEmpty(DockablePlacement placement, int expectedIndex)
     {
         // Arrange
-        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
-        dock.AddDockable(this.dockable1);
+        this.dock.AddDockable(this.dockable1);
 
         // Act
-        dock.AddDockable(this.dockable2, placement);
+        this.dock.AddDockable(this.dockable2, placement);
 
         // Assert
-        _ = dock.Dockables.Should().Contain(this.dockable2, "we added it to the dock");
-        _ = dock.Dockables.IndexOf(this.dockable2).Should().Be(expectedIndex);
-        _ = dock.ActiveDockable.Should().Be(this.dockable2);
+        _ = this.dock.Dockables.Should().Contain(this.dockable2, "we added it to the dock");
+        _ = this.dock.Dockables.IndexOf(this.dockable2).Should().Be(expectedIndex);
+        _ = this.dock.ActiveDockable.Should().Be(this.dockable2);
         _ = this.dockable2.IsActive.Should().BeTrue("it has just been added to the dock");
     }
 
@@ -75,27 +75,140 @@ public class DockTests
     public void Dispose_ShouldDisposeAllDockablesAndClearDockables()
     {
         // Arrange
-        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
-        dock.AddDockable(this.dockable1);
-        dock.AddDockable(this.dockable2);
+        this.dock.AddDockable(this.dockable1);
+        this.dock.AddDockable(this.dockable2);
 
         // Act
-        dock.Dispose();
+        this.dock.Dispose();
 
         // Assert
-        _ = dock.Dockables.Should().BeEmpty("all dockables should be disposed and removed from the dock");
+        _ = this.dock.Dockables.Should().BeEmpty("all dockables should be disposed and removed from the dock");
     }
 
     [TestMethod]
     public void ToString_ShouldReturnDockId()
     {
-        // Arrange
-        using var dock = new SimpleDock() ?? throw new AssertionFailedException("could not allocate a new object");
-
         // Act
-        var dockIdString = dock.ToString();
+        var dockIdString = this.dock.ToString();
 
         // Assert
-        _ = dockIdString.Should().Be(dock.Id.ToString(), "ToString should return the DockId");
+        _ = dockIdString.Should().Be(this.dock.Id.ToString(), "ToString should return the DockId");
+    }
+
+    [TestMethod]
+    public void Width_WhenSet_SetsActiveDockableWidth()
+    {
+        // Arrange
+        this.dockable1.PreferredWidth = new Width();
+        this.dock.AddDockable(this.dockable1);
+        _ = this.dockable1.IsActive.Should().BeTrue();
+        _ = this.dockable1.PreferredWidth.IsNullOrEmpty.Should().BeTrue();
+        var width = new Width(200);
+
+        // Act
+        this.dock.Width = width;
+
+        // Assert
+        _ = this.dock.Width.Should().Be(width);
+        _ = this.dockable1.PreferredWidth.Should().Be(width);
+    }
+
+    [TestMethod]
+    public void Height_WhenSet_SetsActiveDockableHeight()
+    {
+        // Arrange
+        this.dockable1.PreferredHeight = new Height();
+        this.dock.AddDockable(this.dockable1);
+        _ = this.dockable1.IsActive.Should().BeTrue();
+        _ = this.dockable1.PreferredHeight.IsNullOrEmpty.Should().BeTrue();
+        var height = new Height(200);
+
+        // Act
+        this.dock.Height = height;
+
+        // Assert
+        _ = this.dock.Height.Should().Be(height);
+        _ = this.dockable1.PreferredHeight.Should().Be(height);
+    }
+
+    [TestMethod]
+    public void AddDockable_WhenNoWidth_And_DockableHasPreferredWidth_TakesThePreferredWidth()
+    {
+        // Arrange
+        var width = new Width(200);
+        this.dockable1.PreferredWidth = width;
+
+        // Act
+        this.dock.AddDockable(this.dockable1);
+
+        // Assert
+        _ = this.dock.Width.Should().Be(width);
+    }
+
+    [TestMethod]
+    public void AddDockable_WhenNoHeight_And_DockableHasPreferredHeight_TakesThePreferredHeight()
+    {
+        // Arrange
+        var height = new Height(200);
+        this.dockable1.PreferredHeight = height;
+
+        // Act
+        this.dock.AddDockable(this.dockable1);
+
+        // Assert
+        _ = this.dock.Height.Should().Be(height);
+    }
+
+    [TestMethod]
+    public void ActiveDockable_WhenDockIsEmpty_ReturnsNull() =>
+
+        // Assert
+        _ = this.dock.ActiveDockable.Should().BeNull();
+
+    [TestMethod]
+    public void ActiveDockable_WhenDockIsNotEmpty_ReturnsActiveDockable()
+    {
+        // Setup
+        this.dock.AddDockable(this.dockable1);
+        this.dock.AddDockable(this.dockable2);
+        this.dockable1.IsActive = true;
+
+        // Assert
+        _ = this.dock.ActiveDockable.Should().Be(this.dockable1);
+    }
+
+    [TestMethod]
+    public void ActiveDockable_WhenDockIsNotEmpty_AlwaysHasAnActiveDockable()
+    {
+        // Setup
+        this.dock.AddDockable(this.dockable1);
+        this.dock.AddDockable(this.dockable2);
+        this.dockable1.IsActive = false;
+        this.dockable2.IsActive = false;
+
+        // Assert
+        _ = this.dock.ActiveDockable.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public void ActiveDockable_WhenDockHasONlyOneDockable_ItIsAlwaysActive()
+    {
+        // Setup
+        this.dock.AddDockable(this.dockable1);
+        this.dockable1.IsActive = false;
+
+        // Assert
+        _ = this.dock.ActiveDockable.Should().Be(this.dockable1);
+    }
+
+    [TestMethod]
+    public void Dock_OnlySubscribesToIsActiveChanges()
+    {
+        // Setup
+        this.dock.AddDockable(this.dockable1);
+        this.dockable1.Title = "Hello";
+
+        // Assert
+        _ = this.dock.ActiveDockable.Should().Be(this.dockable1);
     }
 }
