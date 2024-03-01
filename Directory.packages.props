@@ -7,7 +7,7 @@
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" Version="8.0.240109" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.4.240211001" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.5.240227000" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26031-preview" />
     <PackageVersion Include="Serilog.Expressions" Version="4.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="8.0.0" />
