@@ -5,6 +5,7 @@
 namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -164,5 +165,73 @@ public class DockableTests
 
         // Assert
         _ = invoked.Should().BeTrue();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
+    public void IsActive_Setter_ThrowsIfNoOwner()
+    {
+        var act = () =>
+        {
+            // Arrange
+            using var dockable = Dockable.New("1");
+
+            // Act
+            dockable.IsActive = true;
+        };
+
+        // Assert
+        _ = act.Should().Throw<InvalidOperationException>();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
+    public void IsActive_Setter_ShouldTriggerPropertyChange()
+    {
+        // Arrange
+        using var dockable = Dockable.New("testId");
+        using var owner = new SimpleDock();
+        dockable.Owner = owner;
+        var eventTriggered = false;
+
+        dockable.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Dockable.IsActive))
+            {
+                eventTriggered = true;
+            }
+        };
+
+        // Act
+        dockable.IsActive = true;
+
+        // Assert
+        _ = dockable.IsActive.Should().BeTrue();
+        _ = eventTriggered.Should().BeTrue();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(Dockable)}.Properties")]
+    public void IsActive_Setter_ShouldNotTriggerPropertyChange_IfNotDifferentValue()
+    {
+        // Arrange
+        using var dockable = Dockable.New("testId");
+        using var owner = new SimpleDock();
+        dockable.Owner = owner;
+        var eventTriggered = false;
+
+        dockable.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(Dockable.IsActive))
+            {
+                eventTriggered = true;
+            }
+        };
+
+        // Act
+        dockable.IsActive = false;
+
+        // Assert
+        _ = eventTriggered.Should().BeFalse();
     }
 }
