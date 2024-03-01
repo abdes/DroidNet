@@ -7,8 +7,4 @@
         <RootNamespace>$(RootNamespace).Docking</RootNamespace>
     </PropertyGroup>
 
-    <ItemGroup>
-      <PackageReference Include="CommunityToolkit.Mvvm" />
-    </ItemGroup>
-
 </Project>
