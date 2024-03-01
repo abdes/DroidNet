@@ -6,7 +6,6 @@ namespace DroidNet.Routing.Debugger.UI.Shell;
 
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Routing.Events;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,12 +18,11 @@ using Windows.System;
 [ObservableObject]
 public sealed partial class TopNavBar : IDisposable
 {
-    // TODO(abdes): avoid using Ioc.Default, set router in control
     private static readonly DependencyProperty RouterProperty = DependencyProperty.Register(
         nameof(Router),
         typeof(IRouter),
         typeof(TopNavBar),
-        new PropertyMetadata(Ioc.Default.GetRequiredService<IRouter>()));
+        new PropertyMetadata(default(IRouter)));
 
     [ObservableProperty]
     private string? url;
