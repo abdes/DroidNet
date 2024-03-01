@@ -18,7 +18,7 @@ public class ContentLoadingException(
     object? viewModel,
     string because,
     Exception? innerException = null)
-    : Exception(
+    : ApplicationException(
         $"could not load view model content `{viewModel}` into outlet `{outletName}` because: {because}",
         innerException)
 {
