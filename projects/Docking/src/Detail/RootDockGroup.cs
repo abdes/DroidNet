@@ -291,16 +291,13 @@ internal sealed class RootDockGroup : DockGroup
     /// <param name="group">The group to be prepended at the specified <paramref name="edge" />.</param>
     private void PrependToEdge(DockGroup edge, IDockGroup group)
     {
-        // In the root groups, we always want the center to be before any other
-        // groups with docks.
-        if (edge.First == this.center)
-        {
-            edge.AddGroupAfter(group, this.center, edge.Orientation);
-        }
-        else
-        {
-            edge.AddGroupFirst(group, edge.Orientation);
-        }
+        Debug.Assert(edge == this.right || edge == this.bottom, "only prepend to the right or bottom edge");
+
+        // When we are prepending to right or bottom, we are sure that the
+        // center is in a separate group before the edge group.
+        Debug.Assert(edge.Parent!.First!.IsCenter, "the center group must be the first sibling of right or bottom");
+
+        edge.AddGroupFirst(group, edge.Orientation);
     }
 
     /// <summary>
