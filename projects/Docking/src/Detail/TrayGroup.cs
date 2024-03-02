@@ -10,6 +10,7 @@ using DroidNet.Docking;
 internal sealed class TrayGroup : DockGroupBase, IDockTray
 {
     private readonly ObservableCollection<IDock> minimizedDocks = [];
+    private readonly AnchorPosition position;
     private readonly DockGroupOrientation orientation;
 
     public TrayGroup(AnchorPosition position)
@@ -18,6 +19,8 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
         {
             throw new ArgumentException($"cannot use {position} for a {nameof(TrayGroup)}", nameof(position));
         }
+
+        this.position = position;
 
         this.orientation
             = position is AnchorPosition.Left or AnchorPosition.Right
@@ -49,6 +52,10 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
         get => this.orientation;
         protected set => throw new InvalidOperationException();
     }
+
+    /// <inheritdoc />
+    public override string ToString()
+        => $"{this.Orientation.ToSymbol()} {this.DebugId} {this.position} TrayGroup ({this.MinimizedDocks.Count})";
 
     internal void AddMinimizedDock(IDock dock) => this.minimizedDocks.Add(dock);
 
