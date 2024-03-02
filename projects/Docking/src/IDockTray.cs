@@ -8,13 +8,9 @@ using System.Collections.ObjectModel;
 
 public interface IDockTray
 {
-    public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
+    public ReadOnlyObservableCollection<IDock> Docks { get; }
 
     bool IsEmpty { get; }
 
     bool IsVertical { get; }
-
-    bool IsHorizontal { get; }
-
-    DockGroupOrientation Orientation { get; }
 }

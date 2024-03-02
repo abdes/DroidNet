@@ -324,7 +324,7 @@ internal partial class DockGroup
     /// <exception cref="InvalidOperationException">
     /// If the group is not empty.
     /// </exception>
-    internal void AddDock(IDock dock)
+    internal virtual void AddDock(IDock dock)
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
@@ -340,7 +340,7 @@ internal partial class DockGroup
         this.docks.Add(dock);
     }
 
-    internal void AddDock(IDock dock, Anchor anchor)
+    internal virtual void AddDock(IDock dock, Anchor anchor)
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
@@ -387,7 +387,7 @@ internal partial class DockGroup
         hostGroup.docks.Insert(insertPosition, dock);
     }
 
-    internal void RemoveDock(IDock dock)
+    internal virtual void RemoveDock(IDock dock)
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
