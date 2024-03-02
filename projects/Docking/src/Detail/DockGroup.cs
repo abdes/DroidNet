@@ -5,7 +5,6 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
 
 /// <summary>
@@ -63,15 +62,7 @@ internal partial class DockGroup : DockGroupBase
             ? $" {{{string.Join(',', children)}}}"
             : string.Empty;
 
-        var orientation = this.IsCenter
-            ? "*"
-            : this.Orientation switch
-            {
-                DockGroupOrientation.Undetermined => "?",
-                DockGroupOrientation.Horizontal => "--",
-                DockGroupOrientation.Vertical => "|",
-                _ => throw new InvalidEnumArgumentException(),
-            };
+        var orientation = this.IsCenter ? "\u25cb" : this.Orientation.ToSymbol();
 
         return $"{orientation} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";
     }
