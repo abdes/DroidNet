@@ -36,7 +36,7 @@ internal sealed class RootDockGroup : DockGroup
             return;
         }
 
-        AppendToRoot(this.left, NewDockGroup(dock), DockGroupOrientation.Horizontal);
+        AppendToEdge(this.left, NewDockGroup(dock));
     }
 
     public void DockTop(IDock dock)
@@ -48,7 +48,7 @@ internal sealed class RootDockGroup : DockGroup
             return;
         }
 
-        AppendToRoot(this.top, NewDockGroup(dock), DockGroupOrientation.Vertical);
+        AppendToEdge(this.top, NewDockGroup(dock));
     }
 
     public void DockRight(IDock dock)
@@ -60,7 +60,7 @@ internal sealed class RootDockGroup : DockGroup
             return;
         }
 
-        this.PrependToRoot(this.right, NewDockGroup(dock), DockGroupOrientation.Horizontal);
+        this.PrependToEdge(this.right, NewDockGroup(dock));
     }
 
     public void DockBottom(IDock dock)
@@ -72,7 +72,7 @@ internal sealed class RootDockGroup : DockGroup
             return;
         }
 
-        this.PrependToRoot(this.bottom, NewDockGroup(dock), DockGroupOrientation.Vertical);
+        this.PrependToEdge(this.bottom, NewDockGroup(dock));
     }
 
     internal override void RemoveGroup(IDockGroup group)
@@ -120,9 +120,10 @@ internal sealed class RootDockGroup : DockGroup
     }
 
     private static void AppendToRoot(DockGroup root, IDockGroup group, DockGroupOrientation orientation)
+    private static void AppendToEdge(DockGroup edge, IDockGroup group)
     {
-        var parent = LastAvailableSlot(root).AsDockGroup();
-        parent.AddGroupLast(group, orientation);
+        var parent = LastAvailableSlot(edge).AsDockGroup();
+        parent.AddGroupLast(group, edge.Orientation);
     }
 
     private static IDockGroup LastAvailableSlot(IDockGroup root)
@@ -168,17 +169,18 @@ internal sealed class RootDockGroup : DockGroup
         DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
     }
 
-    private void PrependToRoot(DockGroup root, IDockGroup group, DockGroupOrientation orientation)
+    /// <summary>
+    private void PrependToEdge(DockGroup edge, IDockGroup group)
     {
         // In the root groups, we always want the center to be before any other
         // groups with docks.
-        if (root.First == this.center)
+        if (edge.First == this.center)
         {
-            root.AddGroupAfter(group, this.center, orientation);
+            edge.AddGroupAfter(group, this.center, edge.Orientation);
         }
         else
         {
-            root.AddGroupFirst(group, orientation);
+            edge.AddGroupFirst(group, edge.Orientation);
         }
     }
 
