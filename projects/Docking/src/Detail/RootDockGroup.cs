@@ -151,22 +151,6 @@ internal sealed class RootDockGroup : DockGroup
         this.PrependToEdge(this.bottom, NewDockGroup(dock));
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// The left, right, top, bottom and center groups, along with their tray groups are protected, and cannot be removed.
-    /// </remarks>
-    internal override void RemoveGroup(IDockGroup group)
-    {
-        // The root groups are protected and cannot be removed.
-        if (group == this.center || group == this.left || group == this.right || group == this.bottom ||
-            group == this.top || group is IDockTray)
-        {
-            return;
-        }
-
-        base.RemoveGroup(group);
-    }
-
     /// <summary>Creates a new DockGroup and adds the specified dock to it.</summary>
     /// <param name="dock">The dock to be added to the new DockGroup.</param>
     /// <returns>A new DockGroup containing the specified dock.</returns>

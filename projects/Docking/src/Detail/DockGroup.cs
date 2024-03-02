@@ -118,6 +118,12 @@ internal partial class DockGroup
 {
     internal virtual void RemoveGroup(IDockGroup group)
     {
+        if (group.IsCenter)
+        {
+            // We cannot remove the center group, so just return.
+            return;
+        }
+
         var mine = false;
         if (this.First == group)
         {
