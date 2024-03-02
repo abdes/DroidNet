@@ -1,0 +1,71 @@
+﻿{
+  IsEmpty: true,
+  First: {
+    IsEmpty: true,
+    First: {
+      IsEmpty: true,
+      Orientation: Horizontal,
+      IsCenter: false,
+      IsHorizontal: true,
+      IsVertical: false
+    },
+    Second: {
+      IsEmpty: true,
+      First: {
+        IsEmpty: false,
+        Docks: [
+          {
+            CanMinimize: true,
+            CanClose: true,
+            Width: {
+              IsNullOrEmpty: true
+            },
+            Height: {
+              IsNullOrEmpty: true
+            }
+          }
+        ],
+        IsCenter: false,
+        IsHorizontal: false,
+        IsVertical: true,
+        Orientation: Vertical
+      },
+      Second: {
+        IsEmpty: false,
+        Docks: [
+          {
+            CanMinimize: true,
+            CanClose: true,
+            Width: {
+              IsNullOrEmpty: true
+            },
+            Height: {
+              IsNullOrEmpty: true
+            }
+          }
+        ],
+        IsCenter: false,
+        IsHorizontal: false,
+        IsVertical: false
+      },
+      IsCenter: false,
+      IsHorizontal: false,
+      IsVertical: true,
+      Orientation: Vertical
+    },
+    IsCenter: false,
+    IsHorizontal: false,
+    IsVertical: true,
+    Orientation: Vertical
+  },
+  Second: {
+    IsEmpty: true,
+    IsCenter: true,
+    IsHorizontal: false,
+    IsVertical: false
+  },
+  IsCenter: false,
+  IsHorizontal: false,
+  IsVertical: true,
+  Orientation: Vertical
+}
