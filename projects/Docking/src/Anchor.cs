@@ -6,26 +6,50 @@ namespace DroidNet.Docking;
 
 using System.Diagnostics;
 
+/// <summary>
+/// Represents an anchor point for a dockable object in a workspace.
+/// </summary>
+/// <remarks>
+/// Dockables can be positioned relative to either the workspace root or other anchors. The workspace root offers five anchor
+/// locations: left, right, top, bottom, and center. Relative docking to other dockables can be done: left, right, top, and bottom
+/// of or with another dockable.
+/// <para>
+/// Anchors can be moved due to dockable re-positioning or due to the disposal of the relative dockable. In case of disposal, the
+/// anchor repositions itself to the disposed dockable’s relative dockable or defaults to the workspace’s left edge.
+/// </para>
+/// </remarks>
 public class Anchor : IDisposable
 {
     // Keep track of when this object was disposed of.
     private bool disposed;
 
+    // The dockable relative to which the anchor is positioned.
     private IDockable? dockable;
 
+    /// <summary>Initializes a new instance of the <see cref="Anchor" /> class.</summary>
+    /// <param name="position">The position of the anchor.</param>
+    /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
     public Anchor(AnchorPosition position, IDockable? relativeTo = null)
     {
         this.Position = position;
         this.RelativeTo = relativeTo;
     }
 
+    /// <summary>Gets the <see cref="AnchorPosition">position</see> of the anchor.</summary>
     public AnchorPosition Position { get; private set; }
 
+    /// <summary>Gets the dockable object to which this anchor is relative.</summary>
     public IDockable? RelativeTo
     {
         get => this.dockable;
         private set
         {
+            /*
+             * The anchor keeps track of its relative dockable, in case it gets disposed of. When that happens, the anchor must
+             * automatically choose a new anchor point, either as the anchor point of the disposed dockable, or as the workspace
+             * root.
+             */
+
             if (this.dockable != null)
             {
                 // Unsubscribe
@@ -42,6 +66,10 @@ public class Anchor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases all resources used by the <see cref="Anchor" /> object. Should be called as soon as the anchor object is no
+    /// longer needed.
+    /// </summary>
     public void Dispose()
     {
         if (this.disposed)
@@ -55,6 +83,11 @@ public class Anchor : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Handles the event when the dockable object to which this anchor is attached is disposed of. Automatically chooses a new
+    /// anchor point, either as the anchor point of the disposed dockable, if it had one, or at the left edge of the workspace
+    /// root.
+    /// </summary>
     private void OnDockableDisposed()
     {
         Debug.Assert(
@@ -78,10 +111,14 @@ public class Anchor : IDisposable
     }
 }
 
+/// <summary>Represents an anchor point on the left side of a dockable object or workspace.</summary>
 public class AnchorLeft(IDockable? relativeTo = null) : Anchor(AnchorPosition.Left, relativeTo);
 
+/// <summary>Represents an anchor point on the right side of a dockable object or workspace.</summary>
 public class AnchorRight(IDockable? relativeTo = null) : Anchor(AnchorPosition.Right, relativeTo);
 
+/// <summary>Represents an anchor point on the top side of a dockable object or workspace.</summary>
 public class AnchorTop(IDockable? relativeTo = null) : Anchor(AnchorPosition.Top, relativeTo);
 
+/// <summary>Represents an anchor point on the bottom side of a dockable object or workspace.</summary>
 public class AnchorBottom(IDockable? relativeTo = null) : Anchor(AnchorPosition.Bottom, relativeTo);
