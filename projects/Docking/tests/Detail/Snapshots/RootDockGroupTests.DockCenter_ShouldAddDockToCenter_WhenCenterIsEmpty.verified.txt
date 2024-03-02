@@ -1,0 +1,24 @@
+﻿{
+  IsEmpty: true,
+  First: {
+    IsEmpty: false,
+    Docks: [
+      {
+        CanMinimize: true,
+        CanClose: true,
+        Width: {
+          IsNullOrEmpty: true
+        },
+        Height: {
+          IsNullOrEmpty: true
+        }
+      }
+    ],
+    IsCenter: true,
+    IsHorizontal: false,
+    IsVertical: false
+  },
+  IsCenter: false,
+  IsHorizontal: false,
+  IsVertical: false
+}

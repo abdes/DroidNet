@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
 
 <Project Sdk="Microsoft.NET.Sdk">
 
@@ -12,8 +12,16 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Verify.DiffPlex" />
+        <PackageReference Include="Verify.MSTest" />
+        <PackageReference Include="Verify.SourceGenerators" />
+
         <ProjectReference Include="..\src\Docking.csproj" />
         <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Detail\Snapshots\" />
     </ItemGroup>
 
 </Project>
