@@ -8,6 +8,9 @@ using System.Diagnostics;
 
 public class Anchor : IDisposable
 {
+    // Keep track of when this object was disposed of.
+    private bool disposed;
+
     private IDockable? dockable;
 
     public Anchor(AnchorPosition position, IDockable? relativeTo = null)
@@ -41,7 +44,14 @@ public class Anchor : IDisposable
 
     public void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.RelativeTo = null;
+        this.disposed = true;
+
         GC.SuppressFinalize(this);
     }
 

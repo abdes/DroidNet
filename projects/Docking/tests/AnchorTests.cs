@@ -50,6 +50,10 @@ public class AnchorTests
 
         // Assert
         _ = mockDockable.HasSubscription().Should().BeFalse();
+
+        // Calling Dispose again is ok
+        var act = anchor.Dispose;
+        _ = act.Should().NotThrow();
     }
 
     [TestMethod]
