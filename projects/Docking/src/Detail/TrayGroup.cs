@@ -9,9 +9,9 @@ using DroidNet.Docking;
 
 internal sealed class TrayGroup : DockGroupBase, IDockTray
 {
-    private readonly ObservableCollection<IDock> minimizedDocks = [];
-    private readonly AnchorPosition position;
     private readonly DockGroupOrientation orientation;
+    private readonly AnchorPosition position;
+    private readonly ObservableCollection<IDock> docks = [];
 
     public TrayGroup(AnchorPosition position)
     {
@@ -26,27 +26,33 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
             = position is AnchorPosition.Left or AnchorPosition.Right
                 ? DockGroupOrientation.Vertical
                 : DockGroupOrientation.Horizontal;
-        this.MinimizedDocks = new ReadOnlyObservableCollection<IDock>(this.minimizedDocks);
+
+        this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
     }
 
-    public ReadOnlyObservableCollection<IDock> MinimizedDocks { get; }
+    public override bool IsEmpty => this.docks.Count == 0;
 
-    public override ReadOnlyObservableCollection<IDock> Docks { get; } = new([]);
-
-    public override bool IsEmpty => this.MinimizedDocks.Count == 0;
-
+    /// <inheritdoc />
+    /// <remarks>This property does not make sense for a TrayGroup and should not be used.</remarks>
     public override IDockGroup? First
     {
         get => null;
         protected set => throw new InvalidOperationException();
     }
 
+    /// <inheritdoc />
+    /// <remarks>This property does not make sense for a TrayGroup and should not be used.</remarks>
     public override IDockGroup? Second
     {
         get => null;
         protected set => throw new InvalidOperationException();
     }
 
+    public override ReadOnlyObservableCollection<IDock> Docks { get; }
+
+    /// <inheritdoc cref="DockGroup" />
+    /// <remarks>The orientation of a TrayGroup is determined from its position and should not be set afterward. Attempting to set
+    /// it will result in a <see cref="InvalidOperationException" /> to be thrown.</remarks>
     public override DockGroupOrientation Orientation
     {
         get => this.orientation;
@@ -55,9 +61,9 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
 
     /// <inheritdoc />
     public override string ToString()
-        => $"{this.Orientation.ToSymbol()} {this.DebugId} {this.position} TrayGroup ({this.MinimizedDocks.Count})";
+        => $"{this.Orientation.ToSymbol()} {this.DebugId} {this.position} TrayGroup ({this.Docks.Count})";
 
-    internal void AddMinimizedDock(IDock dock) => this.minimizedDocks.Add(dock);
+    internal void AddDock(IDock dock) => this.docks.Add(dock);
 
-    internal bool RemoveMinimizedDock(IDock dock) => this.minimizedDocks.Remove(dock);
+    internal bool RemoveDock(IDock dock) => this.docks.Remove(dock);
 }

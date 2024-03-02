@@ -27,7 +27,7 @@ public partial class DockTrayViewModel : ObservableObject
 
         this.Orientation = orientation;
         this.docker = docker;
-        this.docks = tray.MinimizedDocks;
+        this.docks = tray.Docks;
 
         // The tray is recreated every time it is needed. Therefore, we only
         // update the minimized dockables here. We do not need to track changes

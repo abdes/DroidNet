@@ -115,7 +115,7 @@ public class Docker : IDocker
 
         // Add the dock to the minimized docks list of the closest tray group.
         var tray = FindTryForDock(dock.AsDock());
-        tray.AddMinimizedDock(dock);
+        tray.AddDock(dock);
 
         dock.AsDock().State = DockingState.Minimized;
 
@@ -133,7 +133,7 @@ public class Docker : IDocker
         {
             // Remove the dock from the minimized docks list of the closest tray group.
             var tray = FindTryForDock(dock.AsDock());
-            var removed = tray.RemoveMinimizedDock(dock);
+            var removed = tray.RemoveDock(dock);
             Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
         }
 
@@ -173,7 +173,7 @@ public class Docker : IDocker
         {
             // Remove the dock from the minimized docks list of the closest tray group.
             var tray = FindTryForDock(dock.AsDock());
-            var removed = tray.RemoveMinimizedDock(dock);
+            var removed = tray.RemoveDock(dock);
             Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
         }
 
