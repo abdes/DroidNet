@@ -28,15 +28,35 @@ public partial class DockGroupTests
     }
 
     [TestMethod]
+    public void RemoveGroup_ShouldNotRemoveCenter()
+    {
+        // Arrange
+        using var sut = new MockDockGroup();
+        using var center = new MockDockGroup { IsCenter = true };
+        sut.SetFirst(center);
+        sut.SetSecond(center);
+
+        // Act
+        sut.RemoveGroup(center);
+
+        // Assert
+        sut.First.Should().Be(center);
+        sut.Second.Should().Be(center);
+    }
+
+    [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
     public void RemoveGroup_ThrowsOnNonChild()
     {
-        // Arrange
-        var sut = new MockDockGroup();
-        sut.SetFirst(new MockDockGroup());
+        var act = () =>
+        {
+            // Arrange
+            using var sut = new MockDockGroup();
+            sut.SetFirst(new MockDockGroup());
 
-        // Act
-        var act = () => sut.RemoveGroup(new MockDockGroup());
+            // Act
+            sut.RemoveGroup(new MockDockGroup());
+        };
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
