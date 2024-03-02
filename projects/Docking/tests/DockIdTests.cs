@@ -45,7 +45,7 @@ public class DockIdTests
     public void GetHashCode_GivenDockId_ShouldReturnItsValue()
     {
         // Arrange
-        var dockId = new DockId(1);
+        var dockId = new DockId { Value = 1 };
 
         // Act
         var hashCode = dockId.GetHashCode();
