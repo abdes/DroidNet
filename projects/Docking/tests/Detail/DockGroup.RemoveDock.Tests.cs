@@ -24,7 +24,7 @@ public partial class DockGroupTests
             using var newDock = DummyDock.New();
 
             // Act
-            sut.AddDock(newDock);
+            sut.RemoveDock(newDock);
         };
 
         // Assert
