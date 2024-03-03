@@ -116,7 +116,7 @@ public class Docker : IDocker
         }
 
         // Add the dock to the minimized docks list of the closest tray group.
-        var tray = FindTryForDock(dock.AsDock());
+        var tray = FindTrayForDock(dock.AsDock());
         tray.AddDock(dock);
 
         dock.AsDock().State = DockingState.Minimized;
@@ -134,7 +134,7 @@ public class Docker : IDocker
         if (dock.State is DockingState.Minimized or DockingState.Floating)
         {
             // Remove the dock from the minimized docks list of the closest tray group.
-            var tray = FindTryForDock(dock.AsDock());
+            var tray = FindTrayForDock(dock.AsDock());
             var removed = tray.RemoveDock(dock);
             Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
         }
@@ -174,7 +174,7 @@ public class Docker : IDocker
         if (dock.State is DockingState.Minimized or DockingState.Floating)
         {
             // Remove the dock from the minimized docks list of the closest tray group.
-            var tray = FindTryForDock(dock.AsDock());
+            var tray = FindTrayForDock(dock.AsDock());
             var removed = tray.RemoveDock(dock);
             Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
         }
@@ -218,7 +218,7 @@ public class Docker : IDocker
         GC.SuppressFinalize(this);
     }
 
-    private static TrayGroup FindTryForDock(Dock dock)
+    private static TrayGroup FindTrayForDock(Dock dock)
     {
         // Walk the docking tree up until we find a dock group which implements
         // the IDockTray interface. This would be one of the root edge groups.
@@ -238,7 +238,6 @@ public class Docker : IDocker
             group = group.Parent as DockGroup;
         }
 
-        throw new InvalidOperationException(
-            $"dock `{dock}` cannot be minimized. Most likely it is part of the root center dock, and in such case, you should not try to minimize it.");
+        throw new InvalidOperationException($"dock `{dock}` cannot be minimized. Could not find a tray in its branch.");
     }
 }
