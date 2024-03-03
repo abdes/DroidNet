@@ -119,9 +119,7 @@ public class Docker : IDocker
         // Add the dock to the minimized docks list of the closest tray group.
         var tray = FindTrayForDock(dock.AsDock());
         tray.AddDock(dock);
-
         dock.AsDock().State = DockingState.Minimized;
-
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
@@ -195,9 +193,14 @@ public class Docker : IDocker
 
     public void FloatDock(IDock dock)
     {
-        if (dock.State != DockingState.Minimized)
+        if (dock.State == DockingState.Floating)
         {
             return;
+        }
+
+        if (dock.State is not DockingState.Minimized)
+        {
+            throw new InvalidOperationException($"cannot float a dock {dock} / {dock.State} that is not minimized");
         }
 
         // TODO: implement floating show
