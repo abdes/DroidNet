@@ -57,7 +57,7 @@ public enum DockingState
     Undocked,
 
     /// <summary>
-    /// The dockable is minimized and should not bew presented. It may still be
+    /// The dockable is minimized and should not be presented. It may still be
     /// interacted with (not in its full form), to show it again or close it.
     /// </summary>
     Minimized,
