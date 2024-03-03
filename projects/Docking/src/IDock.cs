@@ -22,9 +22,9 @@ public interface IDock : IDisposable
 
     Anchor? Anchor { get; }
 
-    Width Width { get; set; }
+    Width Width { get; }
 
-    Height Height { get; set; }
+    Height Height { get; }
 
     void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First);
 }

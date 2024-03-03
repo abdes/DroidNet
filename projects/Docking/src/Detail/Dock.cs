@@ -59,10 +59,15 @@ public abstract partial class Dock : IDock
 
     public DockId Id { get; private set; }
 
+    /// <summary>Gets a value representing the width of the Dock.</summary>
+    /// <remarks>
+    /// Changing the width of a dock will also change its active dockable height.
+    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock" /> method.</para>
+    /// </remarks>
     public Width Width
     {
         get => this.width;
-        set
+        internal set
         {
             Debug.WriteLine($"Dock {this} my width has changed to: {value}");
 
@@ -75,10 +80,15 @@ public abstract partial class Dock : IDock
         }
     }
 
+    /// <summary>Gets a value representing the height of the Dock.</summary>
+    /// <remarks>
+    /// Changing the height of a dock will also change its active dockable height.
+    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock" /> method.</para>
+    /// </remarks>
     public Height Height
     {
         get => this.height;
-        set
+        internal set
         {
             Debug.WriteLine($"Dock {this} my height has changed to: {value}");
 
