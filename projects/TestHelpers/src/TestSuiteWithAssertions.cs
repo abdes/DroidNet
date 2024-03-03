@@ -5,16 +5,13 @@
 namespace DroidNet.TestHelpers;
 
 using System.Diagnostics;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
 /// A base class for test suites that have test cases checking for Debug
 /// assertions in the code. Use the <see cref="TraceListener" /> to check if
 /// assertions failed.
 /// </summary>
-/// <remarks>
-/// We do not use `TestInitialize` and `TestCleanup` methods. MSTest can work
-/// just fine with constructor and `Dispose`.
-/// </remarks>
 public abstract class TestSuiteWithAssertions : IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
@@ -35,15 +32,16 @@ public abstract class TestSuiteWithAssertions : IDisposable
     protected DebugAssertUnitTestTraceListener TraceListener { get; }
 
     /// <inheritdoc />
+    [TestCleanup]
     public void Dispose()
     {
-        GC.SuppressFinalize(this);
-
         this.TraceListener.Clear();
         Trace.Listeners.Clear();
         if (this.originalTraceListeners != null)
         {
             Trace.Listeners.AddRange(this.originalTraceListeners);
         }
+
+        GC.SuppressFinalize(this);
     }
 }
