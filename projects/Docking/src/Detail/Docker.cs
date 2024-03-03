@@ -145,17 +145,24 @@ public class Docker : IDocker
 
     public void ResizeDock(IDock dock, Width? width, Height? height)
     {
-        if (width != null)
+        var sizeChanged = false;
+
+        if (width != null && !dock.Width.Equals(width))
         {
-            dock.Width = width;
+            dock.AsDock().Width = width;
+            sizeChanged = true;
         }
 
-        if (height != null)
+        if (height != null && !dock.Height.Equals(height))
         {
-            dock.Height = height;
+            dock.AsDock().Height = height;
+            sizeChanged = true;
         }
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Resize);
+        if (sizeChanged && dock.State == DockingState.Pinned)
+        {
+            this.LayoutChanged?.Invoke(LayoutChangeReason.Resize);
+        }
     }
 
     public void CloseDock(IDock dock)
