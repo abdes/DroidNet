@@ -11,6 +11,8 @@ public class Docker : IDocker
 {
     private readonly RootDockGroup root = new();
 
+    private bool disposed;
+
     public event Action<LayoutChangeReason>? LayoutChanged;
 
     public IDockGroup Root => this.root;
@@ -205,7 +207,14 @@ public class Docker : IDocker
 
     public void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.root.Dispose();
+
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 
