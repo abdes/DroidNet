@@ -28,6 +28,7 @@ internal partial class DockGroup : DockGroupBase
 {
     private readonly ObservableCollection<IDock> docks = [];
 
+    private bool disposed;
     private DockGroupBase? first;
     private DockGroupBase? second;
 
@@ -69,11 +70,18 @@ internal partial class DockGroup : DockGroupBase
 
     public override void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         base.Dispose();
         this.first = null;
         this.second = null;
 
         this.ClearDocks();
+
+        this.disposed = true;
         GC.SuppressFinalize(this);
     }
 
