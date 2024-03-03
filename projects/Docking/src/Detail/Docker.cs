@@ -112,6 +112,7 @@ public class Docker : IDocker
         {
             // TODO: implement floating hide
             dock.AsDock().State = DockingState.Minimized;
+            this.LayoutChanged?.Invoke(LayoutChangeReason.Floating);
             return;
         }
 
