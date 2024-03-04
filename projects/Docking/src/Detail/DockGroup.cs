@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using DroidNet.Docking.Utils;
 
 /// <summary>
 /// Represents a grouping of other groups, or <see cref="Dockable" />s.
