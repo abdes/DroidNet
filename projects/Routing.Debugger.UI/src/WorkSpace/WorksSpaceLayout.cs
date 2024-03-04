@@ -30,7 +30,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         this.router = router;
         this.logger = logger;
 
-        var layout = new WorkSpaceGridLayout(docker, viewLocator, logger);
+        var layout = new GridWorkSpaceLayout(docker, viewLocator, logger);
 
         this.routerEventsSub = router.Events.Subscribe(
             @event =>

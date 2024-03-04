@@ -16,8 +16,8 @@ using FlowDirection = DroidNet.Docking.FlowDirection;
 
 #pragma warning restore IDE0001 // Simplify Names
 
-internal sealed class WorkSpaceGridLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
-    : WorkspaceLayoutBuilder(docker)
+internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
+    : LayoutEngine(docker)
 {
     private readonly IDocker docker = docker;
 

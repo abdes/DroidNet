@@ -7,7 +7,7 @@ namespace DroidNet.Docking;
 using System.Diagnostics;
 using DroidNet.Docking.Utils;
 
-public abstract class WorkspaceLayoutBuilder(IDocker docker)
+public abstract class LayoutEngine(IDocker docker)
 {
     private readonly Stack<LayoutState> states = new();
 

@@ -11,8 +11,8 @@ using DroidNet.Docking.Utils;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory(nameof(WorkspaceGridLayout))]
-public class WorkspaceLayoutBuilderTests : VerifyBase
+[TestCategory(nameof(VectorLayoutEngine))]
+public class LayoutEngineTests : VerifyBase
 {
     [TestMethod]
     public Task TestLayoutBuilder()
@@ -42,7 +42,7 @@ public class WorkspaceLayoutBuilderTests : VerifyBase
 
         docker.Root.DumpGroup();
 
-        var gridLayout = new WorkspaceGridLayout(docker);
+        var gridLayout = new VectorLayoutEngine(docker);
         var result = gridLayout.Build();
 
         gridLayout.DumpLayout();
@@ -50,7 +50,7 @@ public class WorkspaceLayoutBuilderTests : VerifyBase
         return this.Verify(result).UseDirectory("Snapshots");
     }
 
-    private sealed class WorkspaceGridLayout(IDocker docker) : WorkspaceLayoutBuilder(docker)
+    private sealed class VectorLayoutEngine(IDocker docker) : LayoutEngine(docker)
     {
         private new GridLayoutState CurrentState => (GridLayoutState)base.CurrentState;
 
