@@ -14,7 +14,6 @@
     <ItemGroup>
         <PackageReference Include="Verify.DiffPlex" />
         <PackageReference Include="Verify.MSTest" />
-        <PackageReference Include="Verify.SourceGenerators" />
 
         <ProjectReference Include="..\src\Docking.csproj" />
         <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
@@ -22,6 +21,7 @@
 
     <ItemGroup>
         <Folder Include="Detail\Snapshots\" />
+        <Folder Include="Snapshots\" />
     </ItemGroup>
 
 </Project>
