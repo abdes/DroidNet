@@ -22,8 +22,7 @@
       Orientation: Vertical,
       IsCenter: false,
       IsHorizontal: false,
-      IsVertical: true,
-      DebugId: 6
+      IsVertical: true
     },
     {
       Direction: TopToBottom,
@@ -369,8 +368,7 @@
           Orientation: Horizontal,
           IsCenter: false,
           IsHorizontal: true,
-          IsVertical: false,
-          DebugId: 17
+          IsVertical: false
         }
       ]
     }
