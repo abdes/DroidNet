@@ -83,6 +83,9 @@ public class Anchor : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    public override string ToString()
+        => $"{this.Position} {(this.dockable == null ? "Edge" : $"of `{this.dockable.Id}` in dock `{this.dockable.Owner}`")}";
+
     /// <summary>
     /// Handles the event when the dockable object to which this anchor is attached is disposed of. Automatically chooses a new
     /// anchor point, either as the anchor point of the disposed dockable, if it had one, or at the left edge of the workspace
