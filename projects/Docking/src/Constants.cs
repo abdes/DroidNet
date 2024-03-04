@@ -47,6 +47,31 @@ public enum DockGroupOrientation
     Vertical,
 }
 
+/// <summary>Defines constants that specify the flow direction of items in a
+/// workspace layout.</summary>
+/// <remarks>
+/// The flow direction of items in a workspace layout typically follow how the
+/// docking tree is constructed. Given that the docking tree is a binary tree
+/// with each item having two children where the `First` child always comes
+/// before the `Second` child in the layout order, the layout flow directions
+/// can only be from left to right or top to bottom.
+/// <para>
+/// There is also a systematic mapping between the flow direction and a docking
+/// group orientation. For a horizontal group, items should flow from left to
+/// right, while for a vertical one, items should flow from top to bottom. If
+/// the group's orientation is still undetermined, it is up to the layout engine
+/// to decide which flow direction to use.
+/// </para>
+/// </remarks>
+public enum FlowDirection
+{
+    /// <summary>Indicates that items should flow from left to right.</summary>
+    LeftToRight,
+
+    /// <summary>Indicates that items should flow from top to bottom.</summary>
+    TopToBottom,
+}
+
 /// <summary>Describes the docking state of a dockable view.</summary>
 public enum DockingState
 {
