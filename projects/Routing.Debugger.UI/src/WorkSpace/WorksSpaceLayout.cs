@@ -7,7 +7,6 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
-using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
@@ -17,11 +16,8 @@ using Microsoft.UI.Xaml.Controls;
 /// <summary>A layout strategy for the workspace.</summary>
 public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 {
-    private readonly Stack<VectorGrid> grids = new();
     private readonly IDisposable routerEventsSub;
     private readonly IRouter router;
-    private readonly IDocker docker;
-    private readonly IViewLocator viewLocator;
     private readonly ILogger logger;
 
     private IActiveRoute? activeRoute;
@@ -32,11 +28,11 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     public WorkSpaceLayout(IRouter router, IDocker docker, IViewLocator viewLocator, ILogger logger)
     {
         this.router = router;
-        this.docker = docker;
-        this.viewLocator = viewLocator;
         this.logger = logger;
 
-        this.routerEventsSub = this.router.Events.Subscribe(
+        var layout = new WorkSpaceGridLayout(docker, viewLocator, logger);
+
+        this.routerEventsSub = router.Events.Subscribe(
             @event =>
             {
                 switch (@event)
@@ -47,7 +43,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     // completes. So we mute the LayoutChanged event from the
                     // docker.
                     case NavigationStart:
-                        this.docker.LayoutChanged -= this.SyncWithRouter;
+                        docker.LayoutChanged -= this.SyncWithRouter;
                         break;
 
                     case ActivationComplete activationComplete:
@@ -63,7 +59,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         var options = ((NavigationEvent)@event).Options;
                         if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
                         {
-                            this.Content = this.UpdateContent();
+                            this.Content = layout.Build();
                         }
                         else
                         {
@@ -71,7 +67,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                                 $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
                         }
 
-                        this.docker.LayoutChanged += this.SyncWithRouter;
+                        docker.LayoutChanged += this.SyncWithRouter;
                         break;
 
                     default: // Ignore
@@ -194,171 +190,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         return changed ? nextParams : null;
     }
 
-    private static GridLength GetGridLengthForDockGroup(IDockGroup group, Orientation gridOrientation)
-    {
-        if (gridOrientation == Orientation.Vertical)
-        {
-            var firstDock = group.Docks.FirstOrDefault(d => !d.Width.IsNullOrEmpty);
-            if (firstDock != null)
-            {
-                return firstDock.GridWidth();
-            }
-        }
-        else
-        {
-            var firstDock = group.Docks.FirstOrDefault(d => !d.Height.IsNullOrEmpty);
-            if (firstDock != null)
-            {
-                return firstDock.GridHeight();
-            }
-        }
-
-        return GridLength.Auto;
-    }
-
-    private VectorGrid UpdateContent()
-    {
-        var orientation = this.docker.Root.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
-        Debug.WriteLine($"Start a new {orientation} VG for the root dock");
-        var grid = new VectorGrid(orientation) { Name = "Workspace Root" };
-        this.PushGrid(grid, "root");
-        this.Layout(this.docker.Root);
-        Debug.Assert(this.grids.Count == 1, "some pushes to the grids stack were not matched by a corresponding pop");
-        _ = this.grids.Pop();
-
-        return grid;
-    }
-
-    private void PushGrid(VectorGrid grid, string what)
-    {
-        Debug.WriteLine($"{(grid.Orientation == Orientation.Horizontal ? "---" : " | ")} Push grid {what}");
-        this.grids.Push(grid);
-    }
-
-    private void PopGrid(string? what)
-    {
-        _ = this.grids.Pop();
-        Debug.WriteLine($"{(this.grids.Peek().Orientation == Orientation.Horizontal ? "---" : " | ")} Pop grid {what}");
-    }
-
-    private void PlaceTray(IDockTray tray)
-    {
-        if (tray.IsEmpty)
-        {
-            return;
-        }
-
-        Debug.WriteLine($"Add tray {tray} to VG (fixed size)");
-        var grid = this.grids.Peek();
-
-        var trayOrientation = tray.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
-        var trayViewModel = new DockTrayViewModel(this.docker, tray, trayOrientation);
-        var trayControl = new DockTray() { ViewModel = trayViewModel };
-        grid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
-    }
-
-    private void Layout(IDockGroup group)
-    {
-        if (!group.ShouldShowGroup())
-        {
-            Debug.WriteLine($"Skipping {group}");
-            return;
-        }
-
-        Debug.WriteLine($"Layout started for Group {group}");
-
-        // For the sake of layout, if a group has Docks and only one of them is
-        // pinned, we consider the group's orientation as Undetermined. That
-        // way, we don't create a new grid for that group.
-        var groupOrientation = group.Orientation;
-        if (!group.IsEmpty && group.Docks.Count(d => d.State == DockingState.Pinned) == 1)
-        {
-            Debug.WriteLine($"Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
-
-            groupOrientation = DockGroupOrientation.Undetermined;
-        }
-
-        var grid = this.grids.Peek();
-        var stretch = group.ShouldStretch();
-
-        if (groupOrientation != DockGroupOrientation.Undetermined)
-        {
-            var orientation = groupOrientation == DockGroupOrientation.Vertical
-                ? Orientation.Vertical
-                : Orientation.Horizontal;
-            if (grid.Orientation != orientation)
-            {
-                var newGrid = new VectorGrid(orientation) { Name = group.ToString() };
-                Debug.WriteLine($"New grid for group `{group}");
-                grid.AddResizableItem(
-                    newGrid,
-                    stretch ? new GridLength(1, GridUnitType.Star) : GetGridLengthForDockGroup(group, newGrid.Orientation),
-                    32);
-                grid = newGrid;
-            }
-        }
-
-        if (!group.IsEmpty)
-        {
-            // A group with docks -> Layout the docks as items in the vector grid.
-            foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
-            {
-                Debug.WriteLine($"Add dock {dock} with Width={dock.Width} and Height={dock.Height} from group `{group} to VG");
-                var gridItemLength = GetGridLengthForDock(dock, grid.Orientation);
-                Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {grid.Orientation}");
-
-                grid.AddResizableItem(
-                    dock is ApplicationDock appDock
-                            ? new EmbeddedAppView()
-                            {
-                                ViewModel = new EmbeddedAppViewModel(
-                                    appDock.ApplicationViewModel,
-                                    this.viewLocator,
-                                    this.logger),
-                            }
-                            : new DockPanel()
-                            {
-                                ViewModel = new DockPanelViewModel(dock, this.docker),
-                            },
-                    gridItemLength,
-                    32);
-            }
-
-            return;
-        }
-
-        // Handle the children
-        this.PushGrid(grid, (grid == this.grids.Peek() ? "=same " : "!!new ") + group);
-        HandlePart(group.First);
-        HandlePart(group.Second);
-
-        this.PopGrid(group.ToString());
-        return;
-
-        void HandlePart(IDockGroup? part)
-        {
-            switch (part)
-            {
-                case null:
-                    return;
-
-                case IDockTray tray:
-                    this.PlaceTray(tray);
-                    break;
-
-                default:
-                    this.Layout(part);
-                    break;
-            }
-        }
-
-        GridLength GetGridLengthForDock(IDock dock, Orientation gridOrientation)
-        {
-            Debug.WriteLine($"GridLength for dock {dock} using {(gridOrientation == Orientation.Horizontal ? "width" : "height")}");
-            return gridOrientation == Orientation.Horizontal ? dock.GridWidth() : dock.GridHeight();
-        }
-    }
-
     private void SyncWithRouter(LayoutChangeReason layoutChangeReason)
     {
         Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
@@ -394,7 +225,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
              * Our active route is the one for the dock workspace. For each
              * dockable we have, there should be a corresponding child active
              * route with the outlet name being the same as the dockable id. If
-             * no child active route with the same outlet than the dockable id
+             * no child active route with the same outlet then the dockable id
              * is found, then a new one needs to be created for this dockable.
              * Otherwise, we just need to update the existing one.
              */
