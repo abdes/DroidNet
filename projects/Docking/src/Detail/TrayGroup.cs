@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
 using DroidNet.Docking;
+using DroidNet.Docking.Utils;
 
 internal sealed class TrayGroup : DockGroupBase, IDockTray
 {
