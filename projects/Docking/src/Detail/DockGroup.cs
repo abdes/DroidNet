@@ -63,9 +63,10 @@ internal partial class DockGroup : DockGroupBase
             ? $" {{{string.Join(',', children)}}}"
             : string.Empty;
 
-        var orientation = this.IsCenter ? "\u25cb" : this.Orientation.ToSymbol();
+        var orientation = this.Orientation.ToSymbol();
 
-        return $"{orientation} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";
+        return
+            $"{orientation}{(this.IsCenter ? " \u25cb" : string.Empty)} {this.DebugId} ({string.Join(',', this.Docks)}){childrenStr}";
     }
 
     public override void Dispose()
@@ -244,7 +245,7 @@ internal partial class DockGroup
         {
             First = newGroupFirst ? newGroup : this,
             Second = newGroupFirst ? this : newGroup,
-            Orientation = orientation,
+            Orientation = this.Orientation == DockGroupOrientation.Undetermined ? orientation : this.Orientation,
         };
         newGroup.AsDockGroup().Orientation = orientation;
 
@@ -258,6 +259,11 @@ internal partial class DockGroup
         this.MigrateDocksToGroup(migrate);
 
         migrate.Orientation = this.Orientation;
+        if (this.Parent != null)
+        {
+            this.Orientation = this.Parent.Orientation;
+        }
+
         return migrate;
     }
 
