@@ -17,14 +17,6 @@ public class RootDockGroupTests : VerifyBase, IDisposable
 {
     private readonly RootDockGroup sut = new();
 
-    [ClassInitialize]
-    public static void SetupVerify(TestContext context)
-    {
-        _ = context;
-
-        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(DockGroup.DebugId));
-    }
-
     [TestCleanup]
     public void Dispose()
     {
