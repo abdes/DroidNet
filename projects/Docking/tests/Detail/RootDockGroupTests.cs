@@ -308,7 +308,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
         _ = left?.Second.Should().NotBeNull();
 
         // Act
-        left?.RemoveGroup(left?.Second!);
+        left?.RemoveGroup(left.Second!);
 
         // Assert
         _ = left?.Second.Should().BeNull();
