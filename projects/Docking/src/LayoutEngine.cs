@@ -21,6 +21,7 @@ public abstract class LayoutEngine(IDocker docker)
         Debug.Assert(this.states.Count == 1, $"some pushes were not matched by pops");
         Debug.WriteLine($"=== Final state: {this.CurrentState}");
         this.EndLayout();
+        this.states.Clear();
         return state;
     }
 
