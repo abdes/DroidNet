@@ -218,9 +218,7 @@ public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IR
         {
             this.deferredDockables.Clear();
 
-#if DEBUG
             this.docker.Root.DumpGroup();
-#endif
         }
     }
 }
