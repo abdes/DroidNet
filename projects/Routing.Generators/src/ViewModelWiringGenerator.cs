@@ -9,13 +9,9 @@ using System.Reflection;
 using System.Text;
 using DroidNet.Routing.Generators.Templates;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 /*
- * TODO(abdes): migrate to Incremental Source Generator
- *
  * How to se tup source generator project
  * https://stackoverflow.com/questions/74915263/c-sharp-source-generator-filenotfoundexception-could-not-load-file-or-assembly
  *
@@ -24,32 +20,22 @@ using Microsoft.CodeAnalysis.Text;
  *
  * How to enable Syntax Visualizer:
  * https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/syntax-visualizer?tabs=csharp
+ *
+ * How to test:
+ * https://andrewlock.net/creating-a-source-generator-part-2-testing-an-incremental-generator-with-snapshot-testing/
  */
 
 /// <summary>
-/// A C# source generator that augments classes decorated with the
-/// <see cref="ViewModelAttribute" /> attribute.
+/// A C# source generator that augments classes decorated with the <see cref="ViewModelAttribute" /> attribute.
 /// </summary>
 /// <remarks>
-/// <para>
-/// A source generator is simply a class decorated with the
-/// <see cref="GeneratorAttribute" />
-/// which implements the <see cref="ISourceGenerator" /> interface.
-/// </para>
-/// <para>
-/// Our strategy for the generator is to use <see cref="ISyntaxReceiver" /> to
-/// analyze the stream of syntax nodes. We'll only get interested if the syntax
-/// node is a class declaration decorated with our target attribute.
-/// </para>
-/// <para>
-/// The generated source code use templates with manual substitution, simply
-/// because pulling an external dependency in source generator project just for
-/// such a simple task will introduce many issues with the tooling.
-/// </para>
+/// The generated source code use templates with manual substitution, simply because pulling an external dependency in
+/// source generator project just for such a simple task will introduce many issues with the tooling.
 /// </remarks>
-[Generator]
-public class ViewModelWiringGenerator : ISourceGenerator
+[Generator(LanguageNames.CSharp)]
+public sealed class ViewModelWiringGenerator : IIncrementalGenerator
 {
+    // !!! The template file in the project must be marked as "Embedded Resource".
     private const string ViewForTemplate = "ViewForTemplate.txt";
 
     private static readonly DiagnosticDescriptor TemplateLoadError = new(
@@ -64,110 +50,71 @@ public class ViewModelWiringGenerator : ISourceGenerator
     private static readonly DiagnosticDescriptor AttributeAnnotationError = new(
         "VMWGEN002",
         "Invalid attribute annotation",
-        $"Invalid attribute declaration. Use [{nameof(ViewModelAttribute)}(typeof(T)] where T is the Viewmodel class.",
+        $"Invalid attribute declaration. Use [ViewModel(typeof(T)] where T is the Viewmodel class.",
         "Usage",
         DiagnosticSeverity.Error,
         description: "View classes should be annotated with a valid `ViewModel` attribute with the ViewModel type.",
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor ViewModelNotFoundError = new(
-        "VMWGEN003",
-        "ViewModel not found",
-        "Could not find ViewModel symbol from identifier '{0}'",
-        "Usage",
-        DiagnosticSeverity.Error,
-        description: "The ViewModel type in the attribute annotation should be a valid type.",
-        isEnabledByDefault: true);
-
     /// <summary>
-    /// Called before generation occurs. This generator uses the
-    /// <paramref name="context" />
-    /// to register a callback that initializes an
-    /// <see cref="AttributeSyntaxReceiver{TAttribute}" />
-    /// for the <see cref="ViewModelAttribute" />.
+    /// Called by the host, before generation occurs, exactly once, regardless of the number of further compilations that may
+    /// occur. For instance a host with multiple loaded projects may share the same generator instance across multiple projects,
+    /// and will only call Initialize a single time for the lifetime of the host.
     /// </summary>
     /// <param name="context">
-    /// The <see cref="GeneratorInitializationContext" /> to
-    /// register callbacks on.
+    /// The context used by the generator to define a set of transformations that represent the execution pipeline. The defined
+    /// transformations are not executed directly at initialization, and instead are deferred until the data they are using
+    /// changes.
     /// </param>
-    public void Initialize(GeneratorInitializationContext context)
-        => context.RegisterForSyntaxNotifications(() => new AttributeSyntaxReceiver<ViewModelAttribute>());
-
-    /// <summary>
-    /// Called to perform source generation. A generator can use the
-    /// <paramref name="context" />
-    /// to add source files via the
-    /// <see cref="GeneratorExecutionContext.AddSource(string, SourceText)" />
-    /// method.
-    /// </summary>
-    /// <param name="context">
-    /// The <see cref="GeneratorExecutionContext" /> to add
-    /// source to.
-    /// </param>
-    public void Execute(GeneratorExecutionContext context)
+    public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        if (context.SyntaxReceiver is not AttributeSyntaxReceiver<ViewModelAttribute> syntaxReceiver)
+        var viewClasses = context.SyntaxProvider.ForAttributeWithMetadataName(
+            "DroidNet.Routing.Generators.ViewModelAttribute",
+            (_, _) => true,
+            (syntaxContext, _) => syntaxContext);
+
+        context.RegisterSourceOutput(viewClasses, GenerateViewModelWiring);
+    }
+
+    private static void GenerateViewModelWiring(SourceProductionContext context, GeneratorAttributeSyntaxContext syntax)
+    {
+        // If we are called, there must be a ViewModelAttribute in the attributes.
+        var attribute = syntax.Attributes.First();
+
+        var viewClassName = syntax.TargetSymbol.Name;
+        var viewNameSpace = syntax.TargetSymbol.ContainingNamespace.ToString();
+
+        if (attribute.ConstructorArguments.IsEmpty)
         {
+            context.ReportDiagnostic(Diagnostic.Create(AttributeAnnotationError, syntax.TargetNode.GetLocation()));
             return;
         }
 
-        foreach (var classSyntax in syntaxReceiver.Classes)
+        if (attribute.ConstructorArguments[0].Value is not INamedTypeSymbol viewModelType)
         {
-            // Converting the class to semantic model to access much more meaningful data.
-            var model = context.Compilation.GetSemanticModel(classSyntax.SyntaxTree);
+            context.ReportDiagnostic(Diagnostic.Create(AttributeAnnotationError, syntax.TargetNode.GetLocation()));
+            return;
+        }
 
-            // Parse to declared symbol, so you can access each part of code separately,
-            // such as interfaces, methods, members, constructor parameters etc.
-            var viewSymbol = model.GetDeclaredSymbol(classSyntax);
-            Debug.Assert(viewSymbol != null, nameof(viewSymbol) + " != null");
+        var viewModelClassName = viewModelType.OriginalDefinition.Name;
+        var viewModelNameSpace = viewModelType.ContainingNamespace.ToString();
 
-            // Finding my GenerateServiceAttribute over it. I'm sure this attribute is placed, because my syntax receiver already checked before.
-            // So, I can surely execute following query.
-            var attribute = classSyntax.AttributeLists.SelectMany(sm => sm.Attributes)
-                .First(
-                    x => x.Name.ToString()
-                        .EnsureEndsWith("Attribute")
-                        .Equals(nameof(ViewModelAttribute), StringComparison.Ordinal));
+        var templateParameters = new ViewForTemplateParameters(
+            viewClassName,
+            viewModelClassName,
+            viewNameSpace,
+            viewModelNameSpace);
 
-            // Getting constructor parameter of the attribute. It might be not presented.
-            var viewModelParameter = attribute.ArgumentList?.Arguments.FirstOrDefault();
-            Debug.Assert(viewModelParameter != null, nameof(viewModelParameter) + " != null");
-
-            // The parameter is of the form `typeof(ViewModelClass)`.
-            // We are just interested in the `ViewModelClass` identifier.
-            if (viewModelParameter!.Expression.DescendantNodes()
-                    .FirstOrDefault(x => x.IsKind(SyntaxKind.IdentifierName)) is not IdentifierNameSyntax identifier)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(AttributeAnnotationError, attribute.GetLocation()));
-                continue;
-            }
-
-            var viewModelSymbol = model.GetSymbolInfo(identifier).Symbol;
-            if (viewModelSymbol is null)
-            {
-                context.ReportDiagnostic(
-                    Diagnostic.Create(ViewModelNotFoundError, attribute.GetLocation(), identifier.ToString()));
-                continue;
-            }
-
-            var templateParameters = new ViewForTemplateParameters(
-                viewSymbol!.Name,
-                viewModelSymbol.Name,
-                GetNamespaceRecursively(viewSymbol.ContainingNamespace),
-                viewModelSymbol.ContainingNamespace.ToString());
-
-            try
-            {
-                var sourceCode = GetSourceCodeFor(templateParameters);
-                context.AddSource(
-                    $"{templateParameters.ViewClassName}.g.cs",
-                    SourceText.From(sourceCode, Encoding.UTF8));
-            }
-            catch (Exception ex)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(TemplateLoadError, attribute.GetLocation(), ex.Message));
-                return;
-            }
+        try
+        {
+            var sourceCode = GetSourceCodeFor(templateParameters);
+            context.AddSource(
+                $"{templateParameters.ViewClassName}.g.cs",
+                SourceText.From(sourceCode, Encoding.UTF8));
+        }
+        catch (Exception ex)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(TemplateLoadError, syntax.TargetNode.GetLocation(), ex.Message));
         }
     }
 
@@ -200,32 +147,6 @@ public class ViewModelWiringGenerator : ISourceGenerator
         return sourceCode ?? throw new InvalidTemplateException(ViewForTemplate);
     }
 
-    private static string GetNamespaceRecursively(ISymbol symbol) => symbol.ContainingNamespace == null
-        ? symbol.Name
-        : (GetNamespaceRecursively(symbol.ContainingNamespace) + "." + symbol.Name).Trim('.');
-
-    private sealed class AttributeSyntaxReceiver<TAttribute> : ISyntaxReceiver
-    {
-        /// <summary>
-        /// Gets the list of classes that need to be augmented (i.e. decorated
-        /// with the <typeparamref name="TAttribute" /> name="TAttribute" />).
-        /// </summary>
-        public List<ClassDeclarationSyntax> Classes { get; } = [];
-
-        public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
-        {
-            if (syntaxNode is ClassDeclarationSyntax { AttributeLists.Count: > 0 } classDeclarationSyntax &&
-                classDeclarationSyntax.AttributeLists.Any(
-                    al => al.Attributes.Any(
-                        a => a.Name.ToString()
-                            .EnsureEndsWith("Attribute")
-                            .Equals(typeof(TAttribute).Name, StringComparison.Ordinal))))
-            {
-                this.Classes.Add(classDeclarationSyntax);
-            }
-        }
-    }
-
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the template for the class to be generated could not be found.
     /// </summary>
@@ -246,22 +167,4 @@ public class ViewModelWiringGenerator : ISourceGenerator
     /// <param name="error">A description of the error encountered while trying to load the template.</param>
     private sealed class CouldNotLoadTemplateException(string path, string error) : Exception(
         $"Could not load template '{path}': {error}");
-}
-
-/// <summary>
-/// A simple extension method that will allow us to generically compare the
-/// attribute name token on the class declaration syntax node with our target
-/// attribute type.
-/// </summary>
-internal static class StringExtensions
-{
-    public static string EnsureEndsWith(this string source, string suffix)
-    {
-        if (source.EndsWith(suffix, StringComparison.InvariantCulture))
-        {
-            return source;
-        }
-
-        return source + suffix;
-    }
 }

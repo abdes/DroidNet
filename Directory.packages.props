@@ -52,5 +52,6 @@
     <PackageVersion Include="Verify.DiffPlex" Version="2.3.0" />
     <PackageVersion Include="Verify.MSTest" Version="23.2.2" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.5.0" />
   </ItemGroup>
 </Project>

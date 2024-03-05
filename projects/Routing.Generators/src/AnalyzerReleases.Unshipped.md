@@ -7,4 +7,3 @@ Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 VMWGEN001 | Package | Error | ViewModelWiringGenerator
 VMWGEN002 | Usage | Error | ViewModelWiringGenerator
-VMWGEN003 | Usage | Error | ViewModelWiringGenerator

@@ -24,16 +24,16 @@ public class ViewModelWiringGeneratorTests : VerifyBase
     public Task GenerateViewExtensionsCorrectly()
     {
         const string source = """
-                              namespace DroidNet.Routing.Generators;
+                              namespace Testing;
 
                               using DroidNet.Routing.Generators;
 
-                              public class TestViewModel;
-
                               [ViewModel(typeof(TestViewModel))]
-                              public sealed partial class TestView
+                              public partial class TestView
                               {
                               }
+
+                              public class TestViewModel;
                               """;
 
         // Use verify to snapshot test the source generator output!
@@ -51,40 +51,14 @@ public class ViewModelWiringGeneratorTests : VerifyBase
     public Task IssueDiagnosticWhenMalformedAttribute()
     {
         const string source = """
-                              namespace DroidNet.Routing.Generators;
+                              namespace Testing;
 
                               using DroidNet.Routing.Generators;
 
                               public class TestViewModel;
 
                               [ViewModel(12)]
-                              public sealed partial class TestView
-                              {
-                              }
-                              """;
-
-        // Use verify to snapshot test the source generator output!
-        var driver = TestHelper.GeneratorDriver(source);
-        var runResults = driver.GetRunResult();
-        return this.Verify(runResults).UseDirectory("Snapshots");
-    }
-
-    /// <summary>
-    /// Verifies that the generator will issue a specific diagnostic if the
-    /// ViewModel type in the attribute cannot be found.
-    /// </summary>
-    /// <returns>The asynchronous task for this test case.</returns>
-    [TestMethod]
-    public Task IssueDiagnosticWhenViewModelNotFound()
-    {
-        const string source = """
-                              namespace DroidNet.Routing.Generators;
-
-                              using DroidNet.Routing.Generators;
-
-                              public class TestViewModel;
-
-                              [ViewModel(typeof(ViewModel2)]
+                              [ExcludeFromCodeCoverage]
                               public sealed partial class TestView
                               {
                               }

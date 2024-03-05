@@ -6,6 +6,7 @@ namespace DroidNet.Routing.Generators.Demo;
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Generators;
+using DroidNet.Routing.Generators.ViewModels;
 using Microsoft.UI.Xaml;
 
 /// <summary>

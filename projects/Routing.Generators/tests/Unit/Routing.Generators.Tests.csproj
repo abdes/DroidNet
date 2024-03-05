@@ -12,6 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Basic.Reference.Assemblies.Net80" />
         <PackageReference Include="Verify.DiffPlex" />
         <PackageReference Include="Verify.MSTest" />
         <PackageReference Include="Verify.SourceGenerators" />
@@ -20,7 +21,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" />
         <ProjectReference Include="..\..\..\Routing.Generators\src\Routing.Generators.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Snapshots\" />
     </ItemGroup>
 
 </Project>
