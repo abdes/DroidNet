@@ -19,26 +19,26 @@ public class LayoutEngineTests : VerifyBase
     {
         using var docker = new Docker();
 
-        docker.DockToCenter(CenterDock.New()!);
+        docker.DockToCenter(CenterDock.New());
 
-        using var left1 = ToolDock.New()!;
+        using var left1 = ToolDock.New();
         left1.AddDockable(Dockable.New("left1"));
         docker.DockToRoot(left1, AnchorPosition.Left);
 
-        using var left2 = ToolDock.New()!;
+        using var left2 = ToolDock.New();
         left2.AddDockable(Dockable.New("left2"));
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
-        docker.DockToRoot(ToolDock.New()!, AnchorPosition.Left, true);
-        docker.DockToRoot(ToolDock.New()!, AnchorPosition.Left);
-        docker.DockToRoot(ToolDock.New()!, AnchorPosition.Top);
-        docker.DockToRoot(ToolDock.New()!, AnchorPosition.Bottom, true);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Left, true);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Left);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Top);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Bottom, true);
 
-        using var right1 = ToolDock.New()!;
+        using var right1 = ToolDock.New();
         right1.AddDockable(Dockable.New("right1"));
         docker.DockToRoot(right1, AnchorPosition.Right);
-        docker.Dock(ToolDock.New()!, new Anchor(AnchorPosition.Right, right1.Dockables[0]));
-        docker.Dock(ToolDock.New()!, new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
+        docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Right, right1.Dockables[0]));
+        docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
 
         docker.Root.DumpGroup();
 
@@ -157,6 +157,6 @@ public class LayoutEngineTests : VerifyBase
 
         public override bool CanClose => false;
 
-        public static CenterDock? New() => Factory.CreateDock(typeof(CenterDock)) as CenterDock;
+        public static CenterDock New() => (CenterDock)Factory.CreateDock(typeof(CenterDock));
     }
 }

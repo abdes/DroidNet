@@ -12,5 +12,5 @@ public class ToolDock : Dock
     {
     }
 
-    public static ToolDock? New() => Factory.CreateDock(typeof(ToolDock)) as ToolDock;
+    public static ToolDock New() => (ToolDock)Factory.CreateDock(typeof(ToolDock));
 }
