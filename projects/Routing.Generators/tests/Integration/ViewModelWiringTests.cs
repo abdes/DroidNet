@@ -7,6 +7,7 @@ namespace DroidNet.Routing.Generators;
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Routing.Generators.Demo;
+using DroidNet.Routing.Generators.ViewModels;
 using DroidNet.Routing.View;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;

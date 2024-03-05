@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Generators.Demo;
+namespace DroidNet.Routing.Generators.ViewModels;
+
+using DroidNet.Routing.Generators.Demo;
 
 /// <summary>
 /// A simple view model to be wired to the <see cref="DemoView" /> view.

@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing.Generators;
 
-using System.Diagnostics;
-
 /// <summary>
 /// An attribute that can be used to decorate a view class with metadata to
 /// wire it to a specific ViewModel class.
@@ -19,7 +17,6 @@ using System.Diagnostics;
 /// an expression of the form `typeof(T)` where `T` is the ViewModel class
 /// name.
 /// </param>
-[Conditional("NETFRAMEWORK")]
 [AttributeUsage(AttributeTargets.Class)]
 public class ViewModelAttribute(Type viewModelType) : Attribute
 {

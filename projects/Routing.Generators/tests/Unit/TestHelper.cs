@@ -24,8 +24,20 @@ public static class TestHelper
         // Parse the provided string into a C# syntax tree
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
 
+        // Create references for assemblies we require. All basic net80, plus
+        // the assembly containing the ViewModelAttribute class.
+        IEnumerable<PortableExecutableReference> references =
+        [
+            .. Basic.Reference.Assemblies.Net80.References.All,
+            MetadataReference.CreateFromFile(typeof(ViewModelAttribute).Assembly.Location),
+        ];
+
         // Create a Roslyn compilation for the syntax tree.
-        var compilation = CSharpCompilation.Create("Tests", new[] { syntaxTree });
+        var compilation = CSharpCompilation.Create(
+            "Tests",
+            new[] { syntaxTree },
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         // Create an instance of our EnumGenerator incremental source generator
         var generator = new ViewModelWiringGenerator();

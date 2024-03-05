@@ -3,10 +3,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Generators;
+namespace Testing;
 
-using DroidNet.Routing.Generators;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using Testing;
 using DroidNet.Routing.View;
 using Microsoft.UI.Xaml;
 
@@ -29,7 +28,6 @@ public partial class TestView : IViewFor<TestViewModel>
         typeof(TestViewModel),
         typeof(TestView),
         new PropertyMetadata(
-            // Ioc.Default.GetRequiredService<TestViewModel>(),
             null,
             (d, e) => ((TestView)d).ViewModelChanged?.Invoke((IViewFor)d, EventArgs.Empty)));
 
