@@ -16,7 +16,7 @@ public class SingleItemDock : Dock
     {
     }
 
-    public static SingleItemDock? New() => Factory.CreateDock(typeof(SingleItemDock)) as SingleItemDock;
+    public static SingleItemDock New() => (SingleItemDock)Factory.CreateDock(typeof(SingleItemDock));
 
     public override void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First)
     {
