@@ -15,13 +15,15 @@ public abstract class LayoutEngine(IDocker docker)
 
     protected object Build()
     {
+        // Always clear the layout state stack before a new Build to get rid of the previous state.
+        this.states.Clear();
+
         var state = this.StartLayout(docker.Root);
         this.SaveState(state);
         this.Layout(docker.Root);
         Debug.Assert(this.states.Count == 1, $"some pushes were not matched by pops");
         Debug.WriteLine($"=== Final state: {this.CurrentState}");
         this.EndLayout();
-        this.states.Clear();
         return state;
     }
 
