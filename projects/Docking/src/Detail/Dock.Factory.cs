@@ -24,27 +24,28 @@ public partial class Dock
         // The next value of DockId to use when creating a new dock.
         private static readonly AtomicCounter NextId = new();
 
-        public static IDock? CreateDock(Type dockType, params object[] args)
+        public static Dock CreateDock(Type type, params object[] args)
         {
             Debug.Assert(
-                dockType.IsAssignableTo(typeof(Dock)),
+                type.IsAssignableTo(typeof(Dock)),
                 "can only create instances of classes derived from me");
 
+            Dock? dock;
             try
             {
-                var dock = Activator.CreateInstance(
-                    dockType,
+                dock = Activator.CreateInstance(
+                    type,
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
                     null,
                     args,
                     null) as Dock;
-                return dock == null ? dock : Manage(dock);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Failed to create a new dock: {ex}");
-                return null;
+                throw new ObjectCreationException(type, ex);
             }
+
+            return Manage(dock ?? throw new ObjectCreationException(type));
         }
 
         public static bool TryGetDock(DockId id, out Dock? dock)

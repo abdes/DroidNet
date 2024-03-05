@@ -17,7 +17,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
     [TestMethod]
     public void CreateDock_NoArgumentConstructor_ReturnsInstance()
     {
-        var dock = Dock.Factory.CreateDock(typeof(CustomDock));
+        using var dock = Dock.Factory.CreateDock(typeof(CustomDock));
 
         _ = dock.Should()
             .NotBeNull()
@@ -34,7 +34,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
 
         for (var index = 0; index < 100; index++)
         {
-            var dock = Dock.Factory.CreateDock(typeof(CustomDock));
+            using var dock = Dock.Factory.CreateDock(typeof(CustomDock));
             _ = dock.Should().NotBeNull();
             var id = dock!.Id.Value;
             _ = ids.Contains(id).Should().BeFalse();
@@ -48,7 +48,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
         const int intArg = 100;
         const string strArg = "arg-value";
 
-        var dock = Dock.Factory.CreateDock(typeof(CustomDock), [intArg, strArg]);
+        using var dock = Dock.Factory.CreateDock(typeof(CustomDock), [intArg, strArg]);
 
         _ = dock.Should()
             .NotBeNull()
@@ -63,21 +63,26 @@ public class DockFactoryTests : TestSuiteWithAssertions
     [TestMethod]
     public void CreateDock_BadArgs_ReturnsNull()
     {
-        var dock = Dock.Factory.CreateDock(typeof(CustomDock), [1, 2, 3]);
+        var act = () =>
+        {
+            using var dock = Dock.Factory.CreateDock(typeof(CustomDock), [1, 2, 3]);
+        };
 
-        _ = dock.Should().BeNull();
+        _ = act.Should().Throw<ObjectCreationException>();
     }
 
     [TestMethod]
-    public void CreateDock_InvalidType_ReturnsNull()
+    public void CreateDock_InvalidType_Throws()
     {
-        var dock = Dock.Factory.CreateDock(typeof(string));
+        var act = () =>
+        {
+            using var dock = Dock.Factory.CreateDock(typeof(string));
+        };
 
+        _ = act.Should().Throw<ObjectCreationException>();
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
 #endif
-
-        _ = dock.Should().BeNull();
     }
 
     private sealed class CustomDock : Dock
