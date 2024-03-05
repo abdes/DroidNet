@@ -24,7 +24,7 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     /// Initializes a new instance of the <see cref="Dockable" /> class.
     /// </summary>
     /// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
-    private Dockable(string id) => this.Id = id;
+    protected Dockable(string id) => this.Id = id;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -104,7 +104,7 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     /// The name of the property that changed. This optional parameter can be automatically populated by the compiler using the
     /// CallerMemberName attribute.
     /// </param>
-    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     /// <summary>

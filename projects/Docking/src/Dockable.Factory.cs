@@ -7,6 +7,7 @@ namespace DroidNet.Docking;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection;
 
 /// <summary>
 /// Extension of the <see cref="Dockable" /> class, implementing a Factory that
@@ -24,7 +25,7 @@ public partial class Dockable
     public static Dockable? FromId(string id)
         => Factory.TryGetDockable(id, out var dockable) ? dockable : null;
 
-    public static Dockable New(string id) => Factory.CreateDockable(id);
+    public static Dockable New(string id) => Factory.CreateDockable(typeof(Dockable), id);
 
     public void Dispose()
     {
@@ -43,28 +44,41 @@ public partial class Dockable
         GC.SuppressFinalize(this);
     }
 
-    public class AllDockables : IEnumerable<IDockable>
-    {
-        public IEnumerator<IDockable> GetEnumerator() => new Factory.DockablesEnumerator();
-
-        IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
-    }
-
-    internal static class Factory
+    public static class Factory
     {
         private static readonly ConcurrentDictionary<string, Dockable> Dockables = [];
 
-        public static Dockable CreateDockable(string id)
+        public static Dockable CreateDockable(string id, params object[] args)
+            => CreateDockable(typeof(Dockable), id, args);
+
+        public static Dockable CreateDockable(Type type, string id, params object[] args)
         {
+            Debug.Assert(
+                type.IsAssignableTo(typeof(Dockable)),
+                "can only create instances of classes derived from me");
+
             if (Dockables.ContainsKey(id))
             {
                 throw new InvalidOperationException($"attempt to create a dockable with an already used ID: {id}");
             }
 
-            var dockable = new Dockable(id);
-            var added = Dockables.TryAdd(id, dockable);
-            Debug.Assert(added, "adding a dockable with a new id should always succeed");
-            return dockable;
+            Dockable? dockable;
+            try
+            {
+                args = [id, .. args];
+                dockable = Activator.CreateInstance(
+                    type,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    args,
+                    null) as Dockable;
+            }
+            catch (Exception ex)
+            {
+                throw new ObjectCreationException(type, ex);
+            }
+
+            return Manage(dockable ?? throw new ObjectCreationException(type));
         }
 
         public static bool TryGetDockable(string id, out Dockable? dockable)
@@ -76,6 +90,13 @@ public partial class Dockable
             Debug.Assert(
                 found,
                 $"unexpected call to {nameof(ReleaseDockable)} with an id `{id}` that is not currently managed");
+        }
+
+        private static Dockable Manage(Dockable dockable)
+        {
+            var added = Dockables.TryAdd(dockable.Id, dockable);
+            Debug.Assert(added, "adding a dockable with a new id should always succeed");
+            return dockable;
         }
 
         public class DockablesEnumerator : IEnumerator<IDockable>
@@ -96,5 +117,12 @@ public partial class Dockable
 
             public void Dispose() => GC.SuppressFinalize(this);
         }
+    }
+
+    public class AllDockables : IEnumerable<IDockable>
+    {
+        public IEnumerator<IDockable> GetEnumerator() => new Factory.DockablesEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
     }
 }

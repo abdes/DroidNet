@@ -32,13 +32,41 @@ public class DockableFactoryTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void CreateDockable_BadArgs_ReturnsNull()
+    {
+        var act = () =>
+        {
+            using var dockable = Dockable.Factory.CreateDockable("id", [1, 2, 3]);
+        };
+
+        _ = act.Should().Throw<ObjectCreationException>();
+    }
+
+    [TestMethod]
+    public void CreateDockable_InvalidType_Throws()
+    {
+        var act = () =>
+        {
+            using var dockable = Dockable.Factory.CreateDockable(typeof(string), "id");
+        };
+
+        _ = act.Should().Throw<ObjectCreationException>();
+#if DEBUG
+        _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
+#endif
+    }
+
+    [TestMethod]
     public void CreateDockable_GivenUsedId_ShouldThrowInvalidOperationException()
     {
         // Arrange
         using var dockable = Dockable.Factory.CreateDockable(DockableId1);
 
         // Act
-        Action act = () => Dockable.Factory.CreateDockable(DockableId1);
+        var act = () =>
+        {
+            using var bad = Dockable.Factory.CreateDockable(DockableId1);
+        };
 
         // Assert
         _ = act.Should()
@@ -64,7 +92,7 @@ public class DockableFactoryTests : TestSuiteWithAssertions
     public void TryGetDockable_GivenNonExistingId_ShouldNotReturnDockable()
     {
         // Arrange
-        var nonExistingId = "nonExistingId";
+        const string nonExistingId = "nonExistingId";
 
         // Act
         var isDockableFound = Dockable.Factory.TryGetDockable(nonExistingId, out var foundDockable);
@@ -110,5 +138,55 @@ public class DockableFactoryTests : TestSuiteWithAssertions
         // Assert
         _ = dockables.Should().Contain(dockable1, "it was added to the dockables");
         _ = dockables.Should().Contain(dockable2, "it was added to the dockables");
+    }
+
+    [TestMethod]
+    public void CreateCustomDockable_NoArgumentConstructor_ReturnsInstance()
+    {
+        using var dockable = Dockable.Factory.CreateDockable(typeof(CustomDockable), DockableId1);
+
+        _ = dockable.Should()
+            .NotBeNull()
+            .And.BeAssignableTo<CustomDockable>()
+            .And.BeEquivalentTo(
+                new CustomDockable(DockableId1),
+                options => options.Excluding(exc => exc.Id));
+    }
+
+    [TestMethod]
+    public void CreateCustomDockable_ConstructorWithArgs_ReturnsInstanceUsingArgs()
+    {
+        const int intArg = 100;
+        const string strArg = "arg-value";
+
+        using var dockable = Dockable.Factory.CreateDockable(typeof(CustomDockable), DockableId1, [intArg, strArg]);
+
+        _ = dockable.Should()
+            .NotBeNull()
+            .And.BeAssignableTo<CustomDockable>()
+            .And.BeEquivalentTo(
+                new CustomDockable(DockableId1, intArg, strArg),
+                options => options.Excluding(exc => exc.Id));
+        _ = ((CustomDockable)dockable).IntArg.Should().Be(intArg);
+        _ = ((CustomDockable)dockable).StrArg.Should().Be(strArg);
+    }
+
+    private sealed class CustomDockable : Dockable
+    {
+        public CustomDockable(string id)
+            : base(id)
+        {
+        }
+
+        public CustomDockable(string id, int intArg, string strArg)
+            : base(id)
+        {
+            this.IntArg = intArg;
+            this.StrArg = strArg;
+        }
+
+        public string StrArg { get; } = string.Empty;
+
+        public int IntArg { get; }
     }
 }
