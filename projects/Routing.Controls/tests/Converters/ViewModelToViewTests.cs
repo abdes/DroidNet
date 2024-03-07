@@ -14,6 +14,7 @@ using Moq;
 /// Contains test cases for the <see cref="ViewModelToView" /> class.
 /// </summary>
 [TestClass]
+[TestCategory("UITest")]
 [ExcludeFromCodeCoverage]
 public class ViewModelToViewTests
 {
