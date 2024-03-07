@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+
+        <RootNamespace>$(RootNamespace).Hosting.Generators</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Basic.Reference.Assemblies.Net80" />
+        <PackageReference Include="Verify.DiffPlex" />
+        <PackageReference Include="Verify.MSTest" />
+        <PackageReference Include="Verify.SourceGenerators" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" />
+        <ProjectReference Include="..\..\..\Hosting.Generators\src\Hosting.Generators.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Snapshots\" />
+    </ItemGroup>
+
+</Project>
