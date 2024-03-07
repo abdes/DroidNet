@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Profile 1": {
+      "commandName": "DebugRoslynComponent",
+      "targetProject": "..\\tests\\Integration\\Hosting.Generators.Integration.UI.Tests.csproj"
+    }
+  }
+}
