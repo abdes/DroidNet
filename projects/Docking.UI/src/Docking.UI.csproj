@@ -23,12 +23,11 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
         <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
-        <RootNamespace>$(RootNamespace).Routing.Debugger.UI</RootNamespace>
+        <RootNamespace>$(RootNamespace).Docking</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <None Remove="Docks\EmbeddedAppView.xaml" />
-        <None Remove="TreeView\ExpandingTreeControl.xaml" />
-        <None Remove="TreeView\Styles.xaml" />
+        <None Remove="Controls\DockPanel\DockPanel.xaml" />
+        <None Remove="Controls\DockPanel\Styles.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -44,7 +43,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Docking.UI\src\Docking.UI.csproj" />
         <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
         <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="..\..\Routing.Controls\src\Routing.Controls.csproj" />
@@ -62,20 +60,14 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="TreeView\ExpandingTreeControl.xaml">
+      <Page Update="Controls\DockPanel\Styles.xaml">
         <Generator>MSBuild:Compile</Generator>
       </Page>
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="TreeView\Styles.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Page Update="Docks\EmbeddedAppView.xaml">
-            <Generator>MSBuild:Compile</Generator>
+        <Page Update="Controls\DockPanel\DockPanel.xaml">
+            <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
         </Page>
     </ItemGroup>
 

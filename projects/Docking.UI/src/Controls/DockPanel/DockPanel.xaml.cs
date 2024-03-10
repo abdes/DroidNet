@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Docks;
+namespace DroidNet.Docking.Controls;
 
 using System.Reactive.Linq;
 using DroidNet.Routing.Generators;
@@ -17,7 +17,7 @@ public sealed partial class DockPanel
 
     public DockPanel() => this.InitializeComponent();
 
-    public override string? ToString() => $"{nameof(DockPanel)} [{this.ViewModel.Title}]";
+    public override string ToString() => $"{nameof(DockPanel)} [{this.ViewModel.Title}]";
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -29,7 +29,12 @@ public sealed partial class DockPanel
             .Throttle(TimeSpan.FromMilliseconds(ResizeThrottleInMs))
             .Subscribe(evt => this.DispatcherQueue.TryEnqueue(() => this.OnSizeChanged(evt.EventArgs)));
 
-        this.ViewModel.OnSizeChanged(new Windows.Foundation.Size() { Width = this.ActualWidth, Height = this.ActualHeight });
+        this.ViewModel.OnSizeChanged(
+            new Windows.Foundation.Size()
+            {
+                Width = double.Round(this.ActualWidth),
+                Height = double.Round(this.ActualHeight),
+            });
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

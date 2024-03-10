@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Docks;
+namespace DroidNet.Docking.Controls;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -27,40 +27,29 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
 
     public void OnSizeChanged(Size newSize)
     {
-        // Round the size to the nearest integer.
-        var newWidth = double.Round(newSize.Width);
-        var newHeight = double.Round(newSize.Height);
-
-        // If this is the initial size update, we memorize it but we do not
-        // trigger a resize of the dock. We only trigger the resize if the size
-        // changes after the initial update.
+        // If this is the initial size update, we memorize it, but we do not trigger a resize of the dock. We only
+        // trigger the resize if the size changes after the initial update.
         if (this.initialSizeUpdate)
         {
-            Debug.WriteLine($"DockPanel {dock.Id} this is our initial size: Width={newWidth}, Height={newHeight}");
-            this.previousSize.Width = newWidth;
-            this.previousSize.Height = newHeight;
+            Debug.WriteLine($"DockPanel {dock.Id} this is our initial size: {newSize}");
+            this.previousSize.Width = newSize.Width;
+            this.previousSize.Height = newSize.Height;
             this.initialSizeUpdate = false;
             return;
         }
 
-        bool widthChanged = false, heightChanged = false;
+        var (widthChanged, heightChanged) = this.SizeReallyChanged(newSize);
 
-        if (newWidth != this.previousSize.Width)
-        {
-            this.previousSize.Width = newWidth;
-            widthChanged = true;
-        }
-
-        if (newHeight != this.previousSize.Height)
-        {
-            this.previousSize.Height = newHeight;
-            heightChanged = true;
-        }
-
-        docker.ResizeDock(dock, widthChanged ? new Width(newWidth) : null, heightChanged ? new Height(newHeight) : null);
+        docker.ResizeDock(
+            dock,
+            widthChanged ? new Width(newSize.Width) : null,
+            heightChanged ? new Height(newSize.Height) : null);
     }
 
-    // TODO: combine CanMinimize and CanClose into a IsLocked flag where the dock is locked in place as Pinned
+    private (bool widthChanged, bool heightChanged) SizeReallyChanged(Size newSize)
+        => (Math.Abs(newSize.Width - this.previousSize.Width) > 0.5,
+            Math.Abs(newSize.Height - this.previousSize.Height) > 0.5);
+
     [RelayCommand]
     private void TogglePinned()
     {

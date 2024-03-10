@@ -6,6 +6,7 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Diagnostics;
 using DroidNet.Docking;
+using DroidNet.Docking.Controls;
 using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
