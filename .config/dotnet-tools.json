@@ -11,7 +11,7 @@
             "commands": ["xstyler"]
         },
         "microsoft.visualstudio.slngen.tool": {
-            "version": "11.2.3",
+            "version": "11.2.6",
             "commands": ["slngen"]
         },
         "nbgv": {
