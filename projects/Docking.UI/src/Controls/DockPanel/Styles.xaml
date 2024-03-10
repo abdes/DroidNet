@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Docking.Controls">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <ImageSource x:Key="RouteAdapter.Icon">/Assets/Route-Dark.png</ImageSource>
+            <ImageSource x:Key="UrlSegmentGroupAdapter.Icon">/Assets/OutletConnected-Dark.png</ImageSource>
+            <ImageSource x:Key="RouterStateAdapter.Icon">/Assets/Route-Dark.png</ImageSource>
+            <ImageSource x:Key="OutletIcon">/Assets/Outlet-Dark.png</ImageSource>
+            <ImageSource x:Key="OutletConnectedIcon">/Assets/OutletConnected-Dark.png</ImageSource>
+            <ImageSource x:Key="PrimaryOutletConnectedIcon">/Assets/PrimaryOutletConnected-Dark.png</ImageSource>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <ImageSource x:Key="RouteAdapter.Icon">/Assets/Route-Light.png</ImageSource>
+            <ImageSource x:Key="UrlSegmentGroupAdapter.Icon">/Assets/OutletConnected-Light.png</ImageSource>
+            <ImageSource x:Key="RouterStateAdapter.Icon">/Assets/Route-Light.png</ImageSource>
+            <ImageSource x:Key="OutletIcon">/Assets/Outlet-Light.png</ImageSource>
+            <ImageSource x:Key="OutletConnectedIcon">/Assets/OutletConnected-Light.png</ImageSource>
+            <ImageSource x:Key="PrimaryOutletConnectedIcon">/Assets/PrimaryOutletConnected-Light.png</ImageSource>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <Style x:Key="TopNavBarButtonRow" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="10" />
+    </Style>
+
+</ResourceDictionary>
