@@ -28,22 +28,22 @@ public partial class {{ViewClassName}} : IViewFor<{{ViewModelClassName}}>
         typeof({{ViewClassName}}),
         new PropertyMetadata(
             null,
-            (d, e) => (({{ViewClassName}})d).ViewModelChanged?.Invoke((IViewFor)d, EventArgs.Empty)));
+            (d, e) => (({{ViewClassName}})d).ViewModelChanged?.Invoke((IViewFor)d, new ViewModelChangedEventArgs<{{ViewModelClassName}}>(({{ViewModelClassName}})(e.OldValue)))));
 
     /// <inheritdoc />
-    public event EventHandler? ViewModelChanged;
+    public event EventHandler<ViewModelChangedEventArgs<{{ViewModelClassName}}>>? ViewModelChanged;
 
     /// <inheritdoc />
-    public {{ViewModelClassName}} ViewModel
+    public {{ViewModelClassName}}? ViewModel
     {
         get => ({{ViewModelClassName}})this.GetValue(ViewModelProperty);
         set => this.SetValue(ViewModelProperty, value);
     }
 
-    object IViewFor.ViewModel
+    object? IViewFor.ViewModel
     {
         get => this.ViewModel;
         set => this.SetValue(ViewModelProperty, value);
     }
 }
-#nullable disable
+#nullable restore
