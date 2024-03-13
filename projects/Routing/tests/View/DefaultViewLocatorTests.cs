@@ -195,9 +195,11 @@ public class DefaultViewLocatorTests
 
     private sealed class MyView(MyViewModel viewModel) : BaseView(viewModel), IViewFor<MyViewModel>
     {
-        public new MyViewModel ViewModel { get; set; } = viewModel;
+        public new event EventHandler<ViewModelChangedEventArgs<MyViewModel>>? ViewModelChanged;
 
-        object IViewFor.ViewModel { get; set; } = viewModel;
+        public new MyViewModel? ViewModel { get; set; } = viewModel;
+
+        object? IViewFor.ViewModel { get; set; } = viewModel;
     }
 #pragma warning restore SA1201 // Elements should appear in the correct order
 }
@@ -213,11 +215,11 @@ internal class BaseViewModel;
 internal class BaseView(IBaseViewModel viewModel) : IViewFor<IBaseViewModel>
 {
 #pragma warning disable CS0067 // Never used
-    public event EventHandler? ViewModelChanged;
+    public event EventHandler<ViewModelChangedEventArgs<IBaseViewModel>>? ViewModelChanged;
 #pragma warning restore CS0067 // Never used
 
-    public IBaseViewModel ViewModel { get; set; } = viewModel;
+    public IBaseViewModel? ViewModel { get; set; } = viewModel;
 
-    object IViewFor.ViewModel { get; set; } = viewModel;
+    object? IViewFor.ViewModel { get; set; } = viewModel;
 }
 #pragma warning restore SA1201 // Elements should appear in the correct order
