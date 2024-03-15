@@ -674,7 +674,7 @@ dotnet_style_allow_multiple_blank_lines_experimental = true:silent
 dotnet_style_allow_statement_immediately_after_block_experimental = true:silent
 
 [*.{received,verified}.{txt,xml,json}]
-charset = "utf-8-bom"
+charset = utf-8-bom
 end_of_line = lf
 indent_size = unset
 indent_style = unset
