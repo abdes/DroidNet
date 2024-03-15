@@ -8,9 +8,6 @@
           CanClose: true,
           Anchor: {},
           State: Minimized,
-          Id: {
-            Value: 4
-          },
           Width: {
             IsNullOrEmpty: true
           },
@@ -60,9 +57,6 @@
           CanClose: true,
           Anchor: {},
           State: Pinned,
-          Id: {
-            Value: 2
-          },
           Width: {
             IsNullOrEmpty: true
           },
@@ -120,9 +114,6 @@
                 CanClose: true,
                 Anchor: {},
                 State: Pinned,
-                Id: {
-                  Value: 2
-                },
                 Width: {
                   IsNullOrEmpty: true
                 },
@@ -134,9 +125,6 @@
             }
           },
           State: Pinned,
-          Id: {
-            Value: 3
-          },
           Width: {
             IsNullOrEmpty: true
           },
@@ -151,9 +139,6 @@
       CanClose: true,
       Anchor: {},
       State: Pinned,
-      Id: {
-        Value: 5
-      },
       Width: {
         IsNullOrEmpty: true
       },
@@ -171,9 +156,6 @@
             Position: Top
           },
           State: Pinned,
-          Id: {
-            Value: 6
-          },
           Width: {
             IsNullOrEmpty: true
           },
@@ -186,9 +168,6 @@
             {
               CanMinimize: false,
               CanClose: false,
-              Id: {
-                Value: 1
-              },
               Width: {
                 IsNullOrEmpty: true
               },
@@ -234,9 +213,6 @@
                     Position: Right
                   },
                   State: Pinned,
-                  Id: {
-                    Value: 8
-                  },
                   Width: {
                     IsNullOrEmpty: true
                   },
@@ -268,9 +244,6 @@
                           Position: Right
                         },
                         State: Pinned,
-                        Id: {
-                          Value: 8
-                        },
                         Width: {
                           IsNullOrEmpty: true
                         },
@@ -282,9 +255,6 @@
                     }
                   },
                   State: Pinned,
-                  Id: {
-                    Value: 10
-                  },
                   Width: {
                     IsNullOrEmpty: true
                   },
@@ -318,9 +288,6 @@
                       Position: Right
                     },
                     State: Pinned,
-                    Id: {
-                      Value: 8
-                    },
                     Width: {
                       IsNullOrEmpty: true
                     },
@@ -332,9 +299,6 @@
                 }
               },
               State: Pinned,
-              Id: {
-                Value: 9
-              },
               Width: {
                 IsNullOrEmpty: true
               },
@@ -354,9 +318,6 @@
                 Position: Bottom
               },
               State: Minimized,
-              Id: {
-                Value: 7
-              },
               Width: {
                 IsNullOrEmpty: true
               },
