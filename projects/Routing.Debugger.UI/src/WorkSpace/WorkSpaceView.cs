@@ -5,16 +5,14 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.ComponentModel;
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>
-/// A custom control to represent the entire docking tree. Each docking group is
-/// represented as a two-item grid, in a single row or column, based on the
-/// group's orientation.
+/// A custom control to represent the entire docking tree.
 /// </summary>
 [ViewModel(typeof(WorkSpaceViewModel))]
 public partial class WorkSpaceView : UserControl
@@ -26,17 +24,27 @@ public partial class WorkSpaceView : UserControl
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
         this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
-        this.ViewModelChanged += (_, _)
-            =>
+        this.ViewModelChanged += (_, args) =>
         {
+            if (args.OldValue is not null)
+            {
+                args.OldValue.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
+            }
+
             this.UpdateContent();
-            this.ViewModel.Layout.PropertyChanged += this.ViewModelPropertyChanged;
+
+            if (this.ViewModel is not null)
+            {
+                this.ViewModel.Layout.PropertyChanged += this.ViewModelPropertyChanged;
+            }
         };
 
         this.Unloaded += (_, _) =>
         {
-            this.ViewModel.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
-            this.ViewModel.Dispose();
+            if (this.ViewModel is not null)
+            {
+                this.ViewModel.Layout.PropertyChanged -= this.ViewModelPropertyChanged;
+            }
         };
     }
 
@@ -53,14 +61,12 @@ public partial class WorkSpaceView : UserControl
             return;
         }
 
-        LogUpdatingLayout(this.logger);
-        this.Content = this.ViewModel.Layout.Content;
+        this.UpdateContent();
     }
 
     private void UpdateContent()
     {
         LogUpdatingLayout(this.logger);
-        var layout = this.ViewModel.Layout;
-        this.Content = layout.Content;
+        this.Content = this.ViewModel?.Layout.Content;
     }
 }
