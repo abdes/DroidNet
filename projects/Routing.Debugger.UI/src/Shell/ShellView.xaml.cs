@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.Shell;
 
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 
 /// <summary>
 /// The view for the debugger shell.

@@ -4,8 +4,8 @@
 
 namespace DroidNet.Routing.Debugger.Welcome;
 
+using DroidNet.Mvvm.Generators;
 using DroidNet.Routing.Debugger.UI.Shell;
-using DroidNet.Routing.Generators;
 
 /// <summary>
 /// A simple welcome page used as a placeholder for the application main view

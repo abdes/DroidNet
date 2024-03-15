@@ -5,7 +5,7 @@
 namespace DroidNet.Routing.Converters;
 
 using System.Diagnostics;
-using DroidNet.Routing.View;
+using DroidNet.Mvvm;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>

@@ -23,6 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\Mvvm\src\Mvvm.csproj" />
         <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
     </ItemGroup>
 

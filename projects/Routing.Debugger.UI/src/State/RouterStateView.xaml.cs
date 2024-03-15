@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.State;
 
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>The view for the <see cref="RouterStateViewModel" />.</summary>

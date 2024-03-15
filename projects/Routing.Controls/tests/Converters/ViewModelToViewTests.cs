@@ -5,7 +5,7 @@
 namespace DroidNet.Routing.Converters;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Routing.View;
+using DroidNet.Mvvm;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;

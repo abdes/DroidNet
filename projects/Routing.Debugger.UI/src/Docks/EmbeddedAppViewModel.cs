@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.Docks;
 
-using DroidNet.Routing.View;
+using DroidNet.Mvvm;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 

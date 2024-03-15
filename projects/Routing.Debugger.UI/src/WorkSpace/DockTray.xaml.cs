@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
@@ -21,7 +21,7 @@ public sealed partial class DockTray
     private void ItemsView_OnItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
     {
         _ = sender;
-        this.ViewModel.ShowDockableCommand.Execute(args.InvokedItem);
+        this.ViewModel?.ShowDockableCommand.Execute(args.InvokedItem);
     }
 }
 

@@ -4,11 +4,11 @@
 
 namespace DroidNet.Routing.Debugger;
 
-using DroidNet.Routing.View;
+using DroidNet.Mvvm;
 
 /// <summary>
 /// Thrown when a View resolved for a certain ViewModel has a type that does not satisfy the requirements, such as not
-/// implementing the <see cref="IViewFor"/> or does not derive from a type that can be set as Content for an outlet.
+/// implementing the <see cref="IViewFor{T}" /> or does not derive from a type that can be set as Content for an outlet.
 /// </summary>
 /// <param name="viewType">The type of the View.</param>
 /// <param name="because">The reason why the View Type is not suitable.</param>

@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.TreeView;
 
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
