@@ -12,8 +12,6 @@ using DroidNet.Docking;
 using Windows.Foundation;
 
 /// <summary>The ViewModel for a dock panel.</summary>
-/// <param name="dock">The dock.</param>
-/// <param name="docker">The docker which can be used to manage the dock.</param>
 public partial class DockPanelViewModel(IDock dock, IDocker docker) : ObservableObject
 {
     private bool initialSizeUpdate = true;

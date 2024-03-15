@@ -6,99 +6,32 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:docking="using:DroidNet.Docking"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Name="{x:Bind ViewModel.Title}"
-    Loaded="OnLoaded"
-    Unloaded="OnUnloaded"
+    xmlns:s="using:DroidNet.Docking.Controls"
+    Name="{x:Bind ViewModel.Title, FallbackValue='--NULL--VIEWMODEL--'}"
     mc:Ignorable="d">
 
-
-    <UserControl.Resources>
-        <Style x:Name="PanelTitleIcon" TargetType="FontIcon">
-            <Style.Setters>
-                <Setter Property="FontSize" Value="10" />
-                <Setter Property="FontWeight" Value="Light" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondary}" />
-            </Style.Setters>
-        </Style>
-        <Style x:Name="PanelTitle" TargetType="TextBlock">
-            <Style.Setters>
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="FontWeight" Value="Light" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondary}" />
-            </Style.Setters>
-        </Style>
-
-        <Style x:Key="PanelButton" TargetType="Button">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Grid
-                            x:Name="RootGrid"
-                            Background="Transparent"
-                            CornerRadius="1">
-                            <ContentPresenter
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Content="{TemplateBinding Content}" />
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal" />
-                                    <VisualState x:Name="PointerOver">
-                                        <VisualState.Setters>
-                                            <Setter Target="RootGrid.Background" Value="{ThemeResource ButtonRevealBackgroundPointerOver}" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Pressed">
-                                        <VisualState.Setters>
-                                            <Setter Target="RootGrid.Background" Value="{ThemeResource ButtonRevealBackgroundPressed}" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </UserControl.Resources>
-
-    <Grid>
+    <Grid Name="PanelRoot">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" MinHeight="32" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Grid Grid.Row="0" Background="DimGray">
+        <Grid
+            Name="TitleBar"
+            Grid.Row="0"
+            Padding="4,2"
+            Background="{ThemeResource SystemControlHighlightAltBaseLowBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
                 Grid.Column="0"
-                Margin="5"
-                VerticalAlignment="Center"
                 Style="{StaticResource PanelTitle}"
                 Text="{x:Bind ViewModel.Title}" />
-            <Button
-                Grid.Column="1"
-                Command="{x:Bind ViewModel.TogglePinnedCommand}"
-                Style="{StaticResource PanelButton}">
-                <FontIcon
-                    Margin="5"
-                    VerticalAlignment="Center"
-                    Glyph="&#xE77A;"
-                    Style="{StaticResource PanelTitleIcon}" />
-            </Button>
-            <Button
-                Grid.Column="2"
-                Command="{x:Bind ViewModel.CloseCommand}"
-                Style="{StaticResource PanelButton}">
-                <FontIcon
-                    Margin="5"
-                    VerticalAlignment="Center"
-                    Glyph="&#xE8BB;"
-                    Style="{StaticResource PanelTitleIcon}" />
-            </Button>
+            <s:PanelButtonRow Grid.Column="1">
+                <s:PanelPinButton Command="{x:Bind ViewModel.TogglePinnedCommand}" />
+                <s:PanelCloseButton Command="{x:Bind ViewModel.CloseCommand}" />
+            </s:PanelButtonRow>
         </Grid>
         <!--  TODO(abdes): use a tabbed view  -->
         <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Dockables}">

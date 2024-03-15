@@ -4,28 +4,72 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:DroidNet.Docking.Controls">
 
-    <ResourceDictionary.ThemeDictionaries>
-        <ResourceDictionary x:Key="Dark">
-            <ImageSource x:Key="RouteAdapter.Icon">/Assets/Route-Dark.png</ImageSource>
-            <ImageSource x:Key="UrlSegmentGroupAdapter.Icon">/Assets/OutletConnected-Dark.png</ImageSource>
-            <ImageSource x:Key="RouterStateAdapter.Icon">/Assets/Route-Dark.png</ImageSource>
-            <ImageSource x:Key="OutletIcon">/Assets/Outlet-Dark.png</ImageSource>
-            <ImageSource x:Key="OutletConnectedIcon">/Assets/OutletConnected-Dark.png</ImageSource>
-            <ImageSource x:Key="PrimaryOutletConnectedIcon">/Assets/PrimaryOutletConnected-Dark.png</ImageSource>
-        </ResourceDictionary>
-        <ResourceDictionary x:Key="Light">
-            <ImageSource x:Key="RouteAdapter.Icon">/Assets/Route-Light.png</ImageSource>
-            <ImageSource x:Key="UrlSegmentGroupAdapter.Icon">/Assets/OutletConnected-Light.png</ImageSource>
-            <ImageSource x:Key="RouterStateAdapter.Icon">/Assets/Route-Light.png</ImageSource>
-            <ImageSource x:Key="OutletIcon">/Assets/Outlet-Light.png</ImageSource>
-            <ImageSource x:Key="OutletConnectedIcon">/Assets/OutletConnected-Light.png</ImageSource>
-            <ImageSource x:Key="PrimaryOutletConnectedIcon">/Assets/PrimaryOutletConnected-Light.png</ImageSource>
-        </ResourceDictionary>
-    </ResourceDictionary.ThemeDictionaries>
+    <Style x:Key="PanelButton" TargetType="local:PanelButton">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:PanelButton">
+                    <Grid
+                        x:Name="RootGrid"
+                        Background="Transparent"
+                        CornerRadius="1">
+                        <FontIcon
+                            Margin="4"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="Light"
+                            Foreground="{ThemeResource TextFillColorSecondary}"
+                            Glyph="{TemplateBinding Glyph}" />
+                        <!--<ContentPresenter
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding Content}" />-->
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource ButtonRevealBackgroundPointerOver}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource ButtonRevealBackgroundPressed}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
-    <Style x:Key="TopNavBarButtonRow" TargetType="StackPanel">
+    <Style x:Key="PanelTitle" TargetType="TextBlock">
+        <Style.Setters>
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Light" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondary}" />
+        </Style.Setters>
+    </Style>
+
+    <Style x:Key="PanelButtonRow" TargetType="StackPanel">
         <Setter Property="Orientation" Value="Horizontal" />
-        <Setter Property="Spacing" Value="10" />
+        <Setter Property="Spacing" Value="2" />
+    </Style>
+
+    <Style
+        x:Key="PanelCloseButton"
+        BasedOn="{StaticResource PanelButton}"
+        TargetType="local:PanelCloseButton">
+        <Setter Property="Glyph" Value="&#xE8BB;" />
+    </Style>
+    <Style
+        x:Key="PanelPinButton"
+        BasedOn="{StaticResource PanelButton}"
+        TargetType="local:PanelPinButton">
+        <Setter Property="Glyph" Value="&#xE77A;" />
     </Style>
 
 </ResourceDictionary>
