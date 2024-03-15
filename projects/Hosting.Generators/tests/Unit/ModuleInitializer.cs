@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Generators;
+namespace DroidNet.Hosting.Generators;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
