@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Debugger.UI.Docks;
 
-using DroidNet.Routing.Generators;
+using DroidNet.Mvvm.Generators;
 
 /// <summary>
 /// A simple content control that displays the embedded application content or

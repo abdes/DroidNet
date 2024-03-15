@@ -4,8 +4,8 @@
 
 namespace DroidNet.Routing.WinUI;
 
+using DroidNet.Mvvm;
 using DroidNet.Routing.Converters;
-using DroidNet.Routing.View;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 

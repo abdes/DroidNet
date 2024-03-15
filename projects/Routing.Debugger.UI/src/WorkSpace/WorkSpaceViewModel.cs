@@ -6,17 +6,16 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Diagnostics;
 using System.Reactive.Linq;
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Utils;
+using DroidNet.Mvvm;
 using DroidNet.Routing.Events;
-using DroidNet.Routing.View;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>The ViewModel for the docking workspace.</summary>
-public partial class WorkSpaceViewModel : ObservableObject, IOutletContainer, IRoutingAware, IDisposable
+public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisposable
 {
     private readonly ILogger logger;
     private readonly Docker docker = new();

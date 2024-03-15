@@ -60,14 +60,15 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\Docking.UI\src\Docking.UI.csproj" />
         <ProjectReference Include="..\..\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="..\..\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="..\..\Routing.Debugger.UI\src\Routing.Debugger.UI.csproj" />
 
-        <ProjectReference Include="..\..\Routing.Generators\src\Routing.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="..\..\Routing.Generators.Attributes\src\Routing.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <!--

@@ -1,0 +1,49 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace {{ViewNamespace}};
+
+using {{ViewModelNamespace}};
+using DroidNet.Mvvm;
+using Microsoft.UI.Xaml;
+
+#nullable enable
+/// <summary>
+/// An empty page that can be used on its own or navigated to within a Frame.
+/// </summary>
+public partial class {{ViewClassName}} : IViewFor<{{ViewModelClassName}}>
+{
+    /// <summary>
+    /// A dependency property for the `ViewModel` associated with this `View`.
+    /// </summary>
+    /// <remarks>
+    /// Its initial value comes from the DI service provider. It can subsequently
+    /// be set to a different value and you can listen on the <see cref="ViewModelChanged" />
+    /// event to be notified of such changes.
+    /// </remarks>
+    public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
+        nameof({{ViewModelClassName}}),
+        typeof({{ViewModelClassName}}),
+        typeof({{ViewClassName}}),
+        new PropertyMetadata(
+            null,
+            (d, e) => (({{ViewClassName}})d).ViewModelChanged?.Invoke((IViewFor)d, new ViewModelChangedEventArgs<{{ViewModelClassName}}>(({{ViewModelClassName}})(e.OldValue)))));
+
+    /// <inheritdoc />
+    public event EventHandler<ViewModelChangedEventArgs<{{ViewModelClassName}}>>? ViewModelChanged;
+
+    /// <inheritdoc />
+    public {{ViewModelClassName}}? ViewModel
+    {
+        get => ({{ViewModelClassName}})this.GetValue(ViewModelProperty);
+        set => this.SetValue(ViewModelProperty, value);
+    }
+
+    object? IViewFor.ViewModel
+    {
+        get => this.ViewModel;
+        set => this.SetValue(ViewModelProperty, value);
+    }
+}
+#nullable restore

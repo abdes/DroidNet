@@ -5,7 +5,7 @@
 namespace DroidNet.Routing.Debugger;
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing.View;
+using DroidNet.Mvvm;
 using Microsoft.UI.Xaml;
 
 /// <summary>
