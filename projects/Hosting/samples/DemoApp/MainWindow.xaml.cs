@@ -7,6 +7,8 @@
 namespace DroidNet.Hosting.Demo;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Hosting.Demo.Services;
+using DryIoc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -26,38 +28,29 @@ public sealed partial class MainWindow
     private readonly int intValue;
 
     private readonly IHostApplicationLifetime lifetime;
-    private readonly ILogger<MainWindow> logger;
+    private readonly ILogger logger;
     private readonly ExampleSettings? settings;
     private readonly string? stringValue;
+    private readonly IContainer container;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainWindow" />
-    /// class.
-    /// </summary>
+    /// <summary>Initializes a new instance of the <see cref="MainWindow" /> class.</summary>
     /// <remarks>
-    /// <para>
-    /// This window is created and activated when the <see cref="lifetime" /> is
-    /// Launched. This is preferred to the alternative of doing that in the
-    /// hosted service to keep the control of window creation and destruction
-    /// under the application itself. Not all applications have a single
-    /// window, and it is often not obvious which window is considered the main
-    /// window, which is important in determining when the UI lifetime ends.
-    /// </para>
+    /// This window is created and activated when the <see cref="lifetime" /> is Launched. This is preferred to the alternative of
+    /// doing that in the hosted service to keep the control of window creation and destruction under the application itself. Not
+    /// all applications have a single window, and it is often not obvious which window is considered the main window, which is
+    /// important in determining when the UI lifetime ends.
     /// </remarks>
-    /// <param name="lifetime">
-    /// The hosted application lifetime. Used to exit the application
-    /// programmatically.
-    /// </param>
-    /// is launched, using the Dependency Injector.
-    /// <param name="config">
-    /// Configuration settings, injected by the Dependency Injector.
-    /// </param>
-    /// <param name="logger">
-    /// The logger instance to be used by this
-    /// class.
-    /// </param>
-    public MainWindow(IHostApplicationLifetime lifetime, IConfiguration config, ILogger<MainWindow> logger)
+    /// <param name="container">The dependency injection container.</param>
+    /// <param name="lifetime">The hosted application lifetime. Used to exit the application programmatically.</param>
+    /// <param name="config">Configuration settings, injected by the Dependency Injector.</param>
+    /// <param name="logger">The logger instance to be used by this class.</param>
+    public MainWindow(
+        IContainer container,
+        IHostApplicationLifetime lifetime,
+        IConfiguration config,
+        ILogger<MainWindow> logger)
     {
+        this.container = container;
         this.lifetime = lifetime;
         this.logger = logger;
 
@@ -83,9 +76,14 @@ public sealed partial class MainWindow
         _ = sender;
         _ = args;
 
-        this.Something();
+        using var scopedContainer = this.container.OpenScope();
+
+        // Resolve with a wrapper that passes additional non-injected data to the service.
+        var test = scopedContainer.Resolve<Func<string, ITestInterface>>()(nameof(MainWindow));
+
+        this.Something(test.Message);
     }
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Warning, Message = "You asked for a log message...")]
-    partial void Something();
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Warning, Message = "{Message}")]
+    partial void Something(string message);
 }
