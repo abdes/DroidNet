@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.WorkSpace;
+namespace DroidNet.Docking.Layouts.GridFlow;
 
 using System.Diagnostics;
 using CommunityToolkit.WinUI.Controls;

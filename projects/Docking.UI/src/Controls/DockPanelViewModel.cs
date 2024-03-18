@@ -12,16 +12,29 @@ using DroidNet.Docking;
 using Windows.Foundation;
 
 /// <summary>The ViewModel for a dock panel.</summary>
-public partial class DockPanelViewModel(IDock dock, IDocker docker) : ObservableObject
+public partial class DockPanelViewModel : ObservableObject
 {
+    private readonly IDock dock;
+    private readonly IDocker docker;
+
     private bool initialSizeUpdate = true;
     private Size previousSize;
 
     [ObservableProperty]
-    private string title = dock.ToString() ?? "EMPTY";
+    private string title;
+
+    public DockPanelViewModel(IDock dock)
+    {
+        Debug.Assert(dock.Docker is not null, "expecting a docked dock to have a valid docker property");
+
+        this.dock = dock;
+        this.docker = dock.Docker;
+        this.title = dock.ToString() ?? "EMPTY";
+        this.Dockables
+            = new ReadOnlyObservableCollection<IDockable>(new ObservableCollection<IDockable>(dock.Dockables));
+    }
 
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
-        = new(new ObservableCollection<IDockable>(dock.Dockables));
 
     public void OnSizeChanged(Size newSize)
     {
@@ -29,7 +42,7 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
         // trigger the resize if the size changes after the initial update.
         if (this.initialSizeUpdate)
         {
-            Debug.WriteLine($"DockPanel {dock.Id} this is our initial size: {newSize}");
+            Debug.WriteLine($"DockPanel {this.dock.Id} this is our initial size: {newSize}");
             this.previousSize.Width = newSize.Width;
             this.previousSize.Height = newSize.Height;
             this.initialSizeUpdate = false;
@@ -38,8 +51,8 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
 
         var (widthChanged, heightChanged) = this.SizeReallyChanged(newSize);
 
-        docker.ResizeDock(
-            dock,
+        this.docker.ResizeDock(
+            this.dock,
             widthChanged ? new Width(newSize.Width) : null,
             heightChanged ? new Height(newSize.Height) : null);
     }
@@ -51,29 +64,29 @@ public partial class DockPanelViewModel(IDock dock, IDocker docker) : Observable
     [RelayCommand]
     private void TogglePinned()
     {
-        switch (dock.State)
+        switch (this.dock.State)
         {
             case DockingState.Minimized:
             case DockingState.Floating:
-                docker.PinDock(dock);
+                this.docker.PinDock(this.dock);
                 break;
 
             case DockingState.Pinned:
-                docker.MinimizeDock(dock);
+                this.docker.MinimizeDock(this.dock);
                 break;
 
             case DockingState.Undocked:
             default:
                 throw new InvalidOperationException(
-                    $"attempt to toggle pinned state of a dock while it is not in a valid state: {dock.State}");
+                    $"attempt to toggle pinned state of a dock while it is not in a valid state: {this.dock.State}");
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanClose))]
-    private void Close() => docker.CloseDock(dock);
+    private void Close() => this.docker.CloseDock(this.dock);
 
     [RelayCommand]
-    private void AddDockable(Dockable dockable) => dock.AddDockable(dockable);
+    private void AddDockable(Dockable dockable) => this.dock.AddDockable(dockable);
 
-    private bool CanClose() => dock.CanClose;
+    private bool CanClose() => this.dock.CanClose;
 }

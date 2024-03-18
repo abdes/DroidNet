@@ -55,16 +55,4 @@
         </Content>
     </ItemGroup>
 
-    <ItemGroup>
-        <Page Update="Controls\DockPanel\Styles.xaml">
-            <Generator>MSBuild:Compile</Generator>
-        </Page>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Page Update="Controls\DockPanel\DockPanel.xaml">
-            <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-        </Page>
-    </ItemGroup>
-
 </Project>
