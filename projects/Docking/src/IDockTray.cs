@@ -10,6 +10,8 @@ public interface IDockTray
 {
     public ReadOnlyObservableCollection<IDock> Docks { get; }
 
+    IDocker Docker { get; }
+
     bool IsEmpty { get; }
 
     bool IsVertical { get; }

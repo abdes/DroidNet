@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -19,8 +20,8 @@ public partial class DockGroupTests
     public void AddDock_ToGroupWithChildren_DebugAssertFails()
     {
         // Arrange
-        using var sut = new EmptyDockGroup();
-        using var child = new EmptyDockGroup();
+        using var sut = new EmptyDockGroup(this.docker);
+        using var child = new EmptyDockGroup(this.docker);
         sut.SetFirst(child);
         using var newDock = DummyDock.New();
 
@@ -40,7 +41,7 @@ public partial class DockGroupTests
         var action = () =>
         {
             // Arrange
-            using var sut = new NonEmptyDockGroup();
+            using var sut = new NonEmptyDockGroup(this.docker);
             using var newDock = DummyDock.New();
 
             // Act
@@ -56,7 +57,7 @@ public partial class DockGroupTests
     public void AddDock_WithNoAnchor_EmptyGroup_AddsNewDock()
     {
         // Arrange
-        using var sut = new EmptyDockGroup();
+        using var sut = new EmptyDockGroup(this.docker);
         using var newDock = DummyDock.New();
 
         // Act
@@ -74,7 +75,7 @@ public partial class DockGroupTests
         {
             // Arrange
             using var anchor = DummyDock.New();
-            using var sut = new NonEmptyDockGroup();
+            using var sut = new NonEmptyDockGroup(this.docker);
             using var anchorDockable = Dockable.New("anchor");
             anchor.AddDockable(anchorDockable);
             using var newDock = DummyDock.New();
@@ -94,7 +95,7 @@ public partial class DockGroupTests
     public void AddDockWithAnchor_SameOrientation(DockGroupOrientation orientation)
     {
         // Arrange
-        using var sut = new NonEmptyDockGroup();
+        using var sut = new NonEmptyDockGroup(this.docker);
         sut.SetOrientation(orientation);
         var anchor = sut.Docks.First();
         using var anchorDockable = Dockable.New("anchor");
@@ -123,6 +124,7 @@ public partial class DockGroupTests
     [ExcludeFromCodeCoverage]
     public class AddDockWithAnchorDifferentOrientation : IDisposable
     {
+        private readonly DummyDocker docker = new();
         private readonly NonEmptyDockGroup sut;
         private readonly IDock second;
         private readonly DummyDock first;
@@ -130,7 +132,7 @@ public partial class DockGroupTests
 
         public AddDockWithAnchorDifferentOrientation()
         {
-            this.sut = new NonEmptyDockGroup();
+            this.sut = new NonEmptyDockGroup(this.docker);
             this.sut.SetOrientation(DockGroupOrientation.Horizontal);
             this.second = this.sut.Docks.First();
             this.second.AddDockable(Dockable.New("second"));
@@ -149,6 +151,7 @@ public partial class DockGroupTests
             this.first.Dispose();
             this.second.Dispose();
             this.third.Dispose();
+            this.docker.Dispose();
 
             GC.SuppressFinalize(this);
         }

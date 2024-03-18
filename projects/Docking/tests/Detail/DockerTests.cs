@@ -29,7 +29,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void Dock_WhenStateIsNotUnDocked_Asserts()
     {
         // Setup
-        using var group = new DockGroup();
+        using var group = new DockGroup(this.sut);
         group.AddDock(new SimpleDock());
         group.Docks[0].AddDockable(Dockable.New("anchor"));
         using var anchor = new AnchorLeft(group.Docks[0].Dockables[0]);
@@ -70,7 +70,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void Dock_WhenDone(bool minimized, DockingState state)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var anchorDock = new SimpleDock();
         root.DockLeft(anchorDock);
         anchorDock.AddDockable(Dockable.New("anchor"));
@@ -188,7 +188,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void DockToRoot_WhenDone(AnchorPosition position, bool minimized, DockingState state)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
 
         // Act
@@ -197,7 +197,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         // Assert
         _ = dock.State.Should().Be(state);
         _ = dock.Group.Should().NotBeNull();
-        _ = dock.Anchor.Should().BeEquivalentTo(new Anchor(position, null));
+        _ = dock.Anchor.Should().BeEquivalentTo(new Anchor(position));
     }
 
     [TestMethod]
@@ -240,7 +240,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void MinimizeDock_MinimizesDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
 
@@ -280,7 +280,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void PinDock_PinsDockAndRemovesFromTray(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
         if (currentState is DockingState.Minimized or DockingState.Floating)
@@ -327,7 +327,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         bool changeSize)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
 
@@ -368,7 +368,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void ResizeDock_WhenSameSize_NoLayoutChange()
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
         dock.State = DockingState.Pinned;
@@ -410,7 +410,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void CloseDock_ClosesDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
         if (currentState is DockingState.Minimized or DockingState.Floating)
@@ -467,7 +467,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void FloatDock_FloatsDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup();
+        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
         root.DockLeft(dock);
         if (currentState is DockingState.Minimized or DockingState.Floating)

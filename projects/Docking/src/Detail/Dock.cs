@@ -59,6 +59,8 @@ public abstract partial class Dock : IDock
 
     public DockId Id { get; private set; }
 
+    public IDocker? Docker { get; internal set; }
+
     /// <summary>Gets a value representing the width of the Dock.</summary>
     /// <remarks>
     /// Changing the width of a dock will also change its active dockable height.
@@ -173,6 +175,8 @@ public abstract partial class Dock : IDock
         this.anchor = null;
 
         this.dockables.Clear();
+        this.Group = null;
+        this.Docker = null;
 
         this.disposed = true;
         GC.SuppressFinalize(this);

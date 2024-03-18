@@ -9,9 +9,11 @@ using System.Diagnostics;
 
 public class Docker : IDocker
 {
-    private readonly RootDockGroup root = new();
+    private readonly RootDockGroup root;
 
     private bool disposed;
+
+    public Docker() => this.root = new RootDockGroup(this);
 
     public event Action<LayoutChangeReason>? LayoutChanged;
 
@@ -30,6 +32,7 @@ public class Docker : IDocker
 
         group.AddDock(dock, anchor);
         dock.AsDock().Anchor = anchor;
+        dock.AsDock().Docker = this;
 
         if (minimized)
         {
@@ -50,6 +53,8 @@ public class Docker : IDocker
         Debug.Assert(!dock.CanClose, "the center dock cannot be closed");
 
         this.root.DockCenter(dock);
+        dock.AsDock().Docker = this;
+
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
 
@@ -58,6 +63,8 @@ public class Docker : IDocker
         Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
 
         dock.AsDock().Anchor = new Anchor(position);
+        dock.AsDock().Docker = this;
+
         switch (position)
         {
             case AnchorPosition.Left:
@@ -194,6 +201,8 @@ public class Docker : IDocker
         {
             resource.Dispose();
         }
+
+        dock.AsDock().Docker = null;
 
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }

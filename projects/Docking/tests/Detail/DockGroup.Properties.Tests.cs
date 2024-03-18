@@ -12,14 +12,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// <summary>
 /// Contains unit test cases for <see cref="DockGroup" /> properties.
 /// </summary>
-public partial class DockGroupTests
+public partial class DockGroupTests : IDisposable
 {
     [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.Properties")]
     public void IsHorizontal_ReturnsTrueForHorizontalOrientation()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
 
         // Act
         sut.SetOrientation(DockGroupOrientation.Horizontal);
@@ -37,7 +37,7 @@ public partial class DockGroupTests
     public void IsVertical_ReturnsTrueForVerticalOrientation()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
 
         // Act
         sut.SetOrientation(DockGroupOrientation.Vertical);
@@ -55,7 +55,7 @@ public partial class DockGroupTests
     public void IsLeaf_ReturnsTrueForGroupWithNoChildren()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
         sut.SetFirst(null);
         sut.SetSecond(null);
 
@@ -71,8 +71,8 @@ public partial class DockGroupTests
     public void IsLeaf_ReturnsFalseWithFirstChild()
     {
         // Arrange
-        var sut = new MockDockGroup();
-        sut.SetFirst(new MockDockGroup());
+        var sut = new MockDockGroup(this.docker);
+        sut.SetFirst(new MockDockGroup(this.docker));
 
         // Act
         var result = sut.IsLeaf;
@@ -86,8 +86,8 @@ public partial class DockGroupTests
     public void IsLeaf_ReturnsFalseWithSecondChild()
     {
         // Arrange
-        var sut = new MockDockGroup();
-        sut.SetSecond(new MockDockGroup());
+        var sut = new MockDockGroup(this.docker);
+        sut.SetSecond(new MockDockGroup(this.docker));
 
         // Act
         var result = sut.IsLeaf;
@@ -101,9 +101,9 @@ public partial class DockGroupTests
     public void IsLeaf_ReturnsFalseWithBothChildren()
     {
         // Arrange
-        var sut = new MockDockGroup();
-        sut.SetFirst(new MockDockGroup());
-        sut.SetSecond(new MockDockGroup());
+        var sut = new MockDockGroup(this.docker);
+        sut.SetFirst(new MockDockGroup(this.docker));
+        sut.SetSecond(new MockDockGroup(this.docker));
 
         // Act
         var result = sut.IsLeaf;
@@ -117,7 +117,7 @@ public partial class DockGroupTests
     public void SetFirst_WithNull_Works()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         sut.SetFirst(null);
@@ -131,7 +131,7 @@ public partial class DockGroupTests
     public void SetSecond_WithNull_Works()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         sut.SetSecond(null);
@@ -145,8 +145,8 @@ public partial class DockGroupTests
     public void SetSecond_Child_UpdatesChildParent()
     {
         // Arrange
-        var sut = new MockDockGroup();
-        var child = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
 
         // Act
         sut.SetSecond(child);
@@ -161,8 +161,8 @@ public partial class DockGroupTests
     public void SetFirst_Child_UpdatesChildParent()
     {
         // Arrange
-        var sut = new MockDockGroup();
-        var child = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
 
         // Act
         sut.SetFirst(child);
@@ -177,10 +177,10 @@ public partial class DockGroupTests
     public void SetFirst_ChildWithParent_UpdatesChildParent()
     {
         // Arrange
-        var otherParent = new MockDockGroup();
-        var child = new MockDockGroup();
+        var otherParent = new MockDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
         otherParent.SetFirst(child);
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         sut.SetFirst(child);
@@ -195,10 +195,10 @@ public partial class DockGroupTests
     public void SetSecond_ChildWithParent_UpdatesChildParent()
     {
         // Arrange
-        var otherParent = new MockDockGroup();
-        var child = new MockDockGroup();
+        var otherParent = new MockDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
         otherParent.SetFirst(child);
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         sut.SetSecond(child);
@@ -213,7 +213,7 @@ public partial class DockGroupTests
     public void SetFirst_ToSelf_Throws()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         var act = () => sut.SetFirst(sut);
@@ -227,7 +227,7 @@ public partial class DockGroupTests
     public void SetSecond_ToSelf_Throws()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
         var act = () => sut.SetSecond(sut);
@@ -241,8 +241,8 @@ public partial class DockGroupTests
     public void SetFirst_ThrowsIfNotEmptyAndChildIsNotNull()
     {
         // Arrange
-        var sut = new NonEmptyDockGroup();
-        var child = new MockDockGroup();
+        var sut = new NonEmptyDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
 
         // Act
         var act = () => sut.SetFirst(child);
@@ -256,8 +256,8 @@ public partial class DockGroupTests
     public void SetSecond_ThrowsIfNotEmptyAndChildIsNotNull()
     {
         // Arrange
-        var sut = new NonEmptyDockGroup();
-        var child = new MockDockGroup();
+        var sut = new NonEmptyDockGroup(this.docker);
+        var child = new MockDockGroup(this.docker);
 
         // Act
         var act = () => sut.SetSecond(child);
@@ -266,7 +266,7 @@ public partial class DockGroupTests
         _ = act.Should().Throw<InvalidOperationException>();
     }
 
-    private class MockDockGroup : DockGroup
+    private class MockDockGroup(IDocker docker) : DockGroup(docker)
     {
         public void SetOrientation(DockGroupOrientation orientation) => this.Orientation = orientation;
 
@@ -275,14 +275,15 @@ public partial class DockGroupTests
         public void SetSecond(IDockGroup? second) => this.Second = second;
     }
 
-    private sealed class EmptyDockGroup : MockDockGroup;
+    private sealed class EmptyDockGroup(IDocker docker) : MockDockGroup(docker);
 
     private sealed class NonEmptyDockGroup : MockDockGroup
     {
         private bool migrateCalled;
         private bool shouldMigrateBeCalled;
 
-        public NonEmptyDockGroup() => this.AddDock(DummyDock.New());
+        public NonEmptyDockGroup(IDocker docker)
+            : base(docker) => this.AddDock(DummyDock.New());
 
         public void ExpectMigrateToBeCalled() => this.shouldMigrateBeCalled = true;
 

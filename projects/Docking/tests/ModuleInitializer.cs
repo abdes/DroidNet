@@ -21,6 +21,8 @@ public static class ModuleInitializer
 
         // Ignore auto-incremented IDs that will make test output unpredictable
         VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(DockGroup.DebugId));
+        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(IDockGroup.Docker));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Id));
+        VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Docker));
     }
 }

@@ -20,7 +20,7 @@ public partial class DockGroupTests
         var action = () =>
         {
             // Arrange
-            using var sut = new NonEmptyDockGroup();
+            using var sut = new NonEmptyDockGroup(this.docker);
             using var newDock = DummyDock.New();
 
             // Act
@@ -36,7 +36,7 @@ public partial class DockGroupTests
     public void RemoveDock_AmongMany_JustRemovesIt()
     {
         // Arrange
-        using var sut = new NonEmptyDockGroup();
+        using var sut = new NonEmptyDockGroup(this.docker);
         using var first = sut.Docks.First();
         first.AddDockable(Dockable.New("first"));
         using var second = DummyDock.New();
@@ -58,10 +58,10 @@ public partial class DockGroupTests
     public void RemoveDock_LastDockInGroup_RemovesGroupFromParent()
     {
         // Arrange
-        using var parent = new EmptyDockGroup();
-        using var keep = new MockDockGroup();
+        using var parent = new EmptyDockGroup(this.docker);
+        using var keep = new MockDockGroup(this.docker);
         parent.AddGroupLast(keep, DockGroupOrientation.Horizontal);
-        using var sut = new NonEmptyDockGroup();
+        using var sut = new NonEmptyDockGroup(this.docker);
         parent.AddGroupFirst(sut, DockGroupOrientation.Horizontal);
         _ = parent.First.Should().Be(sut);
         using var first = sut.Docks.First();

@@ -26,5 +26,7 @@ public interface IDock : IDisposable
 
     Height Height { get; }
 
+    IDocker? Docker { get; }
+
     void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First);
 }

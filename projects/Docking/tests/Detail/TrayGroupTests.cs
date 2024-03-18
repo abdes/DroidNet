@@ -13,12 +13,16 @@ using FluentAssertions;
 [TestCategory(nameof(TrayGroup))]
 public class TrayGroupTests : IDisposable
 {
-    private readonly TrayGroup tray = new(AnchorPosition.Left);
+    private readonly DummyDocker docker = new();
+    private readonly TrayGroup tray;
+
+    public TrayGroupTests() => this.tray = new TrayGroup(AnchorPosition.Left, this.docker);
 
     [TestCleanup]
     public void Dispose()
     {
         this.tray.Dispose();
+        this.docker.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -26,7 +30,7 @@ public class TrayGroupTests : IDisposable
     public void Constructor_ShouldThrowException_WhenPositionIsWith()
     {
         // Act
-        var act = () => _ = new TrayGroup(AnchorPosition.With);
+        var act = () => _ = new TrayGroup(AnchorPosition.With, this.docker);
 
         // Assert
         _ = act.Should().Throw<ArgumentException>().WithMessage("cannot use With for a TrayGroup*");
@@ -40,7 +44,7 @@ public class TrayGroupTests : IDisposable
     public void Orientation_ShouldBeDeterminedFromPosition(AnchorPosition position, DockGroupOrientation orientation)
     {
         // Act
-        using var sut = new TrayGroup(position);
+        using var sut = new TrayGroup(position, new DummyDocker());
 
         // Assert
         _ = sut.Orientation.Should().Be(orientation);

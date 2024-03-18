@@ -33,7 +33,8 @@ internal partial class DockGroup : DockGroupBase
     private DockGroupBase? first;
     private DockGroupBase? second;
 
-    internal DockGroup() => this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
+    internal DockGroup(IDocker docker)
+        : base(docker) => this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
 
     public override bool IsEmpty => this.docks.Count == 0;
 
@@ -242,7 +243,7 @@ internal partial class DockGroup
     // it.
     private DockGroup ExpandToAdd(IDockGroup newGroup, DockGroupOrientation orientation, bool newGroupFirst)
     {
-        var expanded = new DockGroup
+        var expanded = new DockGroup(this.Docker)
         {
             First = newGroupFirst ? newGroup : this,
             Second = newGroupFirst ? this : newGroup,
@@ -255,7 +256,7 @@ internal partial class DockGroup
 
     private DockGroup MigrateDocksToNewGroup()
     {
-        var migrate = new DockGroup();
+        var migrate = new DockGroup(this.Docker);
 
         this.MigrateDocksToGroup(migrate);
 
@@ -435,11 +436,19 @@ internal partial class DockGroup
         var relativeItem = items[relativeToIndex];
         var after = items[(relativeToIndex + 1)..];
 
-        var hostGroup = new DockGroup() { Orientation = requiredOrientation };
+        var hostGroup = new DockGroup(this.Docker)
+        {
+            Orientation = requiredOrientation,
+        };
         relativeItem.AsDock().Group = hostGroup;
         hostGroup.docks.Add(relativeItem);
 
-        var beforeGroup = before.Count != 0 ? new DockGroup() { Orientation = this.Orientation } : null;
+        var beforeGroup = before.Count != 0
+            ? new DockGroup(this.Docker)
+            {
+                Orientation = this.Orientation,
+            }
+            : null;
         if (beforeGroup != null)
         {
             foreach (var item in before)
@@ -449,7 +458,12 @@ internal partial class DockGroup
             }
         }
 
-        var afterGroup = after.Count != 0 ? new DockGroup() { Orientation = this.Orientation } : null;
+        var afterGroup = after.Count != 0
+            ? new DockGroup(this.Docker)
+            {
+                Orientation = this.Orientation,
+            }
+            : null;
         if (afterGroup != null)
         {
             foreach (var item in after)
@@ -475,7 +489,7 @@ internal partial class DockGroup
             ? afterGroup
             : afterGroup is null
                 ? hostGroup
-                : new DockGroup()
+                : new DockGroup(this.Docker)
                 {
                     First = hostGroup,
                     Second = afterGroup,
@@ -486,15 +500,15 @@ internal partial class DockGroup
     }
 }
 
-internal abstract class DockGroupBase : IDockGroup
+internal abstract class DockGroupBase(IDocker docker) : IDockGroup
 {
     private static int nextId = 1;
 
     private bool disposed;
 
-    protected DockGroupBase() => this.DebugId = Interlocked.Increment(ref nextId);
-
     public abstract ReadOnlyObservableCollection<IDock> Docks { get; }
+
+    public IDocker Docker { get; } = docker;
 
     public bool IsCenter { get; protected internal init; }
 
@@ -510,7 +524,7 @@ internal abstract class DockGroupBase : IDockGroup
 
     public abstract IDockGroup? Second { get; protected set; }
 
-    public int DebugId { get; }
+    public int DebugId { get; } = Interlocked.Increment(ref nextId);
 
     internal DockGroupBase? Parent { get; set; }
 

@@ -19,8 +19,8 @@ public partial class DockGroupTests
     public void AddGroupLast_ToEmptyLeaf_UsesFirstSlot()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var newGroup = new MockDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
@@ -35,10 +35,10 @@ public partial class DockGroupTests
     public void AddGroupLast_ToNonEmptyGroup()
     {
         // Arrange
-        var sut = new NonEmptyDockGroup();
+        var sut = new NonEmptyDockGroup(this.docker);
         sut.ExpectMigrateToBeCalled();
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
@@ -54,11 +54,11 @@ public partial class DockGroupTests
     public void AddGroupLast_FirstPartOccupied_UsesSecondSlot()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldFirst = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldFirst = new EmptyDockGroup(this.docker);
         sut.SetFirst(oldFirst);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
@@ -73,11 +73,11 @@ public partial class DockGroupTests
     public void AddGroupLast_SecondPartOccupied_SwapsFirstAndSecond()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldSecond = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldSecond = new EmptyDockGroup(this.docker);
         sut.SetSecond(oldSecond);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
@@ -92,13 +92,13 @@ public partial class DockGroupTests
     public void AddGroupLast_BothPartsOccupied_ExpandsSecondToAdd()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldFirst = new EmptyDockGroup();
-        var oldSecond = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldFirst = new EmptyDockGroup(this.docker);
+        var oldSecond = new EmptyDockGroup(this.docker);
         sut.SetFirst(oldFirst);
         sut.SetSecond(oldSecond);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
@@ -115,8 +115,8 @@ public partial class DockGroupTests
     public void AddGroupFirst_ToEmptyLeaf_UsesFirstSlot()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var newGroup = new MockDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
@@ -131,10 +131,10 @@ public partial class DockGroupTests
     public void AddGroupFirst_ToNonEmptyGroup()
     {
         // Arrange
-        var sut = new NonEmptyDockGroup();
+        var sut = new NonEmptyDockGroup(this.docker);
         sut.ExpectMigrateToBeCalled();
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
@@ -150,11 +150,11 @@ public partial class DockGroupTests
     public void AddGroupFirst_FirstPartOccupied_SwapFirstAndSecond()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldFirst = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldFirst = new EmptyDockGroup(this.docker);
         sut.SetFirst(oldFirst);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
@@ -169,11 +169,11 @@ public partial class DockGroupTests
     public void AddGroupFirst_SecondPartOccupied_UseFirstSlot()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldSecond = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldSecond = new EmptyDockGroup(this.docker);
         sut.SetSecond(oldSecond);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
@@ -188,13 +188,13 @@ public partial class DockGroupTests
     public void AddGroupFirst_BothPartsOccupied_ExpandsFirstToAdd()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var oldFirst = new EmptyDockGroup();
-        var oldSecond = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var oldFirst = new EmptyDockGroup(this.docker);
+        var oldSecond = new EmptyDockGroup(this.docker);
         sut.SetFirst(oldFirst);
         sut.SetSecond(oldSecond);
 
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
