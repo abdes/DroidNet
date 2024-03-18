@@ -19,4 +19,7 @@ public sealed class InjectAsAttribute(ServiceLifetime lifetime) : Attribute
 
     /// <summary>Gets or sets the implementation type, if the target is an interface.</summary>
     public Type? ImplementationType { get; set; }
+
+    /// <summary>Gets or sets the type for which the service will be registered. If not provided, the target type will be used.</summary>
+    public Type? ContractType { get; set; }
 }
