@@ -7,20 +7,20 @@ namespace DroidNet.Docking;
 using System.Diagnostics;
 using DroidNet.Docking.Utils;
 
-public abstract class LayoutEngine(IDocker docker)
+public abstract class LayoutEngine()
 {
     private readonly Stack<LayoutState> states = new();
 
     protected LayoutState CurrentState => this.states.Peek();
 
-    protected object Build()
+    public virtual object Build(IDockGroup root)
     {
         // Always clear the layout state stack before a new Build to get rid of the previous state.
         this.states.Clear();
 
-        var state = this.StartLayout(docker.Root);
+        var state = this.StartLayout(root);
         this.SaveState(state);
-        this.Layout(docker.Root);
+        this.Layout(root);
         Debug.Assert(this.states.Count == 1, $"some pushes were not matched by pops");
         Debug.WriteLine($"=== Final state: {this.CurrentState}");
         this.EndLayout();
