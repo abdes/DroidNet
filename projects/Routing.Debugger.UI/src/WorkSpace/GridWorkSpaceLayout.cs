@@ -18,7 +18,7 @@ using FlowDirection = DroidNet.Docking.FlowDirection;
 #pragma warning restore IDE0001 // Simplify Names
 
 internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
-    : LayoutEngine(docker)
+    : LayoutEngine()
 {
     private readonly IDocker docker = docker;
 
@@ -26,7 +26,7 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
 
     private VectorGrid CurrentGrid => this.CurrentState.CurrentFlow;
 
-    public new VectorGrid Build() => ((GridLayoutState)base.Build()).CurrentFlow;
+    public new VectorGrid Build(IDockGroup root) => ((GridLayoutState)base.Build(root)).CurrentFlow;
 
     protected override LayoutState StartLayout(IDockGroup root)
         => new GridLayoutState
@@ -54,7 +54,7 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
                     }
                     : new DockPanel()
                     {
-                        ViewModel = new DockPanelViewModel(dock, this.docker),
+                        ViewModel = new DockPanelViewModel(dock),
                     },
                 gridItemLength,
                 32);
