@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Styles;
+namespace DroidNet.Docking.Controls;
 
 using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;

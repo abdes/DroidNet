@@ -29,7 +29,6 @@
     <!--  TODO(abdes): review this if the style application issue on SizerBase is resolved  -->
     <!--  https://github.com/CommunityToolkit/Windows/issues/273  -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="SizerBase.xaml" />
         <ResourceDictionary Source="../TreeView/Styles.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

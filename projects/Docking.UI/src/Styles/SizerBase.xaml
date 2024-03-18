@@ -2,7 +2,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:styles="using:DroidNet.Routing.Debugger.UI.Styles">
+    xmlns:controls="using:DroidNet.Docking.Controls">
 
     <!--  ReSharper disable Xaml.InvalidResourceType  -->
     <!--  ReSharper disable Xaml.StaticResourceNotResolved  -->
@@ -35,7 +35,7 @@
     <x:Double x:Key="SizerBaseThumbRadius">2</x:Double>
     <Thickness x:Key="SizerBasePadding">4</Thickness>
 
-    <Style x:Key="DockingSplitter" TargetType="styles:DockingSplitter">
+    <Style x:Key="DockingSplitter" TargetType="controls:DockingSplitter">
         <Setter Property="IsTabStop" Value="True" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -52,7 +52,7 @@
         <Setter Property="ManipulationMode" Value="TranslateX,TranslateY" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="styles:DockingSplitter">
+                <ControlTemplate TargetType="controls:DockingSplitter">
                     <Grid
                         x:Name="RootGrid"
                         Background="{TemplateBinding Background}"
