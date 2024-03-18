@@ -42,21 +42,21 @@ public class LayoutEngineTests : VerifyBase
 
         docker.Root.DumpGroup();
 
-        var gridLayout = new VectorLayoutEngine(docker);
-        var result = gridLayout.Build();
+        var gridLayout = new VectorLayoutEngine();
+        var result = gridLayout.Build(docker.Root);
 
         gridLayout.DumpLayout();
 
         return this.Verify(result).UseDirectory("Snapshots");
     }
 
-    private sealed class VectorLayoutEngine(IDocker docker) : LayoutEngine(docker)
+    private sealed class VectorLayoutEngine : LayoutEngine
     {
         private new GridLayoutState CurrentState => (GridLayoutState)base.CurrentState;
 
         private Vector CurrentVector => this.CurrentState.CurrentFlow;
 
-        public new Vector Build() => ((GridLayoutState)base.Build()).CurrentFlow;
+        public new Vector Build(IDockGroup root) => ((GridLayoutState)base.Build(root)).CurrentFlow;
 
         public void DumpLayout()
         {
