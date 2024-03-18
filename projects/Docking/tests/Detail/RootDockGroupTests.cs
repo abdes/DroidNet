@@ -15,12 +15,16 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory($"{nameof(RootDockGroup)}")]
 public class RootDockGroupTests : VerifyBase, IDisposable
 {
-    private readonly RootDockGroup sut = new();
+    private readonly DummyDocker docker = new();
+    private readonly RootDockGroup sut;
+
+    public RootDockGroupTests() => this.sut = new RootDockGroup(this.docker);
 
     [TestCleanup]
     public void Dispose()
     {
         this.sut.Dispose();
+        this.docker.Dispose();
         GC.SuppressFinalize(this);
     }
 

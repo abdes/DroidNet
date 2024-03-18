@@ -14,7 +14,8 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
     private readonly AnchorPosition position;
     private readonly ObservableCollection<IDock> docks = [];
 
-    public TrayGroup(AnchorPosition position)
+    public TrayGroup(AnchorPosition position, IDocker docker)
+        : base(docker)
     {
         if (position == AnchorPosition.With)
         {

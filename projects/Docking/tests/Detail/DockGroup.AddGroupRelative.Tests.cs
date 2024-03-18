@@ -19,9 +19,9 @@ public partial class DockGroupTests
     public void AddGroupRelative_ToNotChild_Throws()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var sibling = new EmptyDockGroup(); // not a child of sut
-        var newGroup = new MockDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var sibling = new EmptyDockGroup(this.docker); // not a child of sut
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         var before = () => sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
@@ -37,10 +37,10 @@ public partial class DockGroupTests
     public void AddGroupBefore_UsesFirstSlotWhenFree()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var sibling = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var sibling = new EmptyDockGroup(this.docker);
         sut.SetSecond(sibling);
-        var newGroup = new MockDockGroup();
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
@@ -55,10 +55,10 @@ public partial class DockGroupTests
     public void AddGroupAfter_UsesSecondSlotWhenFree()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var sibling = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var sibling = new EmptyDockGroup(this.docker);
         sut.SetFirst(sibling);
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupAfter(newGroup, sibling, DockGroupOrientation.Undetermined);
@@ -73,10 +73,10 @@ public partial class DockGroupTests
     public void AddGroupBefore_WhenOnlySecondIsFree_SwapsFirstAndSecond()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var sibling = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var sibling = new EmptyDockGroup(this.docker);
         sut.SetFirst(sibling);
-        var newGroup = new MockDockGroup();
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
@@ -91,10 +91,10 @@ public partial class DockGroupTests
     public void AddGroupAfter_WhenOnlyFirstIsFree_SwapsFirstAndSecond()
     {
         // Arrange
-        var sut = new EmptyDockGroup();
-        var sibling = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
+        var sibling = new EmptyDockGroup(this.docker);
         sut.SetFirst(sibling);
-        var newGroup = new MockDockGroup();
+        var newGroup = new MockDockGroup(this.docker);
 
         // Act
         sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
@@ -114,16 +114,16 @@ public partial class DockGroupTests
         const int second = 1;
 
         // Arrange
-        var sut = new EmptyDockGroup();
+        var sut = new EmptyDockGroup(this.docker);
         EmptyDockGroup[] siblings =
         [
-            new EmptyDockGroup(),
-            new EmptyDockGroup(),
+            new EmptyDockGroup(this.docker),
+            new EmptyDockGroup(this.docker),
         ];
         sut.SetFirst(siblings[first]);
         sut.SetSecond(siblings[second]);
         var sibling = siblings[siblingIndex];
-        var newGroup = new EmptyDockGroup();
+        var newGroup = new EmptyDockGroup(this.docker);
 
         // Act
         sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);

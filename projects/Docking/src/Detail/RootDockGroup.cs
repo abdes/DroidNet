@@ -49,14 +49,22 @@ using System.Diagnostics;
 /// </remarks>
 internal sealed class RootDockGroup : DockGroup
 {
-    private readonly DockGroup center = new() { IsCenter = true };
+    private readonly DockGroup center;
+
     private DockGroup? left;
     private DockGroup? top;
     private DockGroup? right;
     private DockGroup? bottom;
 
-    /// <summary>Initializes a new instance of the <see cref="RootDockGroup" /> class.</summary>
-    public RootDockGroup() => this.AddGroupFirst(this.center, DockGroupOrientation.Undetermined);
+    public RootDockGroup(IDocker docker)
+        : base(docker)
+    {
+        this.center = new DockGroup(docker)
+        {
+            IsCenter = true,
+        };
+        this.AddGroupFirst(this.center, DockGroupOrientation.Undetermined);
+    }
 
     /// <summary>Place a <see cref="IDock">dock</see> at the center of the workspace.</summary>
     /// <remarks>
@@ -86,12 +94,12 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.left == null)
         {
-            this.left = NewDockGroupWithTray(dock, AnchorPosition.Left);
+            this.left = this.NewDockGroupWithTray(dock, AnchorPosition.Left);
             this.AddBeforeCenter(this.left, DockGroupOrientation.Horizontal);
             return;
         }
 
-        AppendToEdge(this.left, NewDockGroup(dock));
+        AppendToEdge(this.left, this.NewDockGroup(dock));
     }
 
     /// <summary>Place a <see cref="IDock">dock</see> at the top side of the workspace.</summary>
@@ -105,12 +113,12 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.top == null)
         {
-            this.top = NewDockGroupWithTray(dock, AnchorPosition.Top);
+            this.top = this.NewDockGroupWithTray(dock, AnchorPosition.Top);
             this.AddBeforeCenter(this.top, DockGroupOrientation.Vertical);
             return;
         }
 
-        AppendToEdge(this.top, NewDockGroup(dock));
+        AppendToEdge(this.top, this.NewDockGroup(dock));
     }
 
     /// <summary>Place a <see cref="IDock">dock</see> on the right side of the workspace.</summary>
@@ -124,12 +132,12 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.right == null)
         {
-            this.right = NewDockGroupWithTray(dock, AnchorPosition.Right);
+            this.right = this.NewDockGroupWithTray(dock, AnchorPosition.Right);
             this.AddAfterCenter(this.right, DockGroupOrientation.Horizontal);
             return;
         }
 
-        this.PrependToEdge(this.right, NewDockGroup(dock));
+        this.PrependToEdge(this.right, this.NewDockGroup(dock));
     }
 
     /// <summary>Place a <see cref="IDock">dock</see> at the bottom side of the workspace.</summary>
@@ -143,53 +151,12 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.bottom == null)
         {
-            this.bottom = NewDockGroupWithTray(dock, AnchorPosition.Bottom);
+            this.bottom = this.NewDockGroupWithTray(dock, AnchorPosition.Bottom);
             this.AddAfterCenter(this.bottom, DockGroupOrientation.Vertical);
             return;
         }
 
-        this.PrependToEdge(this.bottom, NewDockGroup(dock));
-    }
-
-    /// <summary>Creates a new DockGroup and adds the specified dock to it.</summary>
-    /// <param name="dock">The dock to be added to the new DockGroup.</param>
-    /// <returns>A new DockGroup containing the specified dock.</returns>
-    private static DockGroup NewDockGroup(IDock dock)
-    {
-        var newGroup = new DockGroup();
-        newGroup.AddDock(dock);
-        return newGroup;
-    }
-
-    /// <summary>Creates a new DockGroup with a Tray, and adds the specified dock to it.</summary>
-    /// <param name="dock">The dock to be added to the new DockGroup.</param>
-    /// <param name="position">The position at which the specific dock is going to be anchored. This will determine the
-    /// orientation of the tray (vertical for left and right, horizontal otherwise), and where it will be placed relative to the
-    /// dock (before for left and top, after otherwise). </param>
-    /// <returns>A new DockGroup with a tray with the proper orientation and placement relative to the dock.</returns>
-    private static DockGroup NewDockGroupWithTray(IDock dock, AnchorPosition position)
-    {
-        var trayHolder = new DockGroup();
-        var newGroup = new DockGroup();
-        newGroup.AddDock(dock);
-
-        var orientation
-            = position is AnchorPosition.Left or AnchorPosition.Right
-                ? DockGroupOrientation.Horizontal
-                : DockGroupOrientation.Vertical;
-
-        if (position is AnchorPosition.Left or AnchorPosition.Top)
-        {
-            trayHolder.AddGroupFirst(new TrayGroup(position), orientation);
-            trayHolder.AddGroupLast(newGroup, orientation);
-        }
-        else
-        {
-            trayHolder.AddGroupFirst(newGroup, orientation);
-            trayHolder.AddGroupLast(new TrayGroup(position), orientation);
-        }
-
-        return trayHolder;
+        this.PrependToEdge(this.bottom, this.NewDockGroup(dock));
     }
 
     /// <summary>
@@ -262,6 +229,47 @@ internal sealed class RootDockGroup : DockGroup
 
         DepthFirstSearch(node.Second, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
         DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
+    }
+
+    /// <summary>Creates a new DockGroup with a Tray, and adds the specified dock to it.</summary>
+    /// <param name="dock">The dock to be added to the new DockGroup.</param>
+    /// <param name="position">The position at which the specific dock is going to be anchored. This will determine the
+    /// orientation of the tray (vertical for left and right, horizontal otherwise), and where it will be placed relative to the
+    /// dock (before for left and top, after otherwise). </param>
+    /// <returns>A new DockGroup with a tray with the proper orientation and placement relative to the dock.</returns>
+    private DockGroup NewDockGroupWithTray(IDock dock, AnchorPosition position)
+    {
+        var trayHolder = new DockGroup(this.Docker);
+        var newGroup = new DockGroup(this.Docker);
+        newGroup.AddDock(dock);
+
+        var orientation
+            = position is AnchorPosition.Left or AnchorPosition.Right
+                ? DockGroupOrientation.Horizontal
+                : DockGroupOrientation.Vertical;
+
+        if (position is AnchorPosition.Left or AnchorPosition.Top)
+        {
+            trayHolder.AddGroupFirst(new TrayGroup(position, this.Docker), orientation);
+            trayHolder.AddGroupLast(newGroup, orientation);
+        }
+        else
+        {
+            trayHolder.AddGroupFirst(newGroup, orientation);
+            trayHolder.AddGroupLast(new TrayGroup(position, this.Docker), orientation);
+        }
+
+        return trayHolder;
+    }
+
+    /// <summary>Creates a new DockGroup and adds the specified dock to it.</summary>
+    /// <param name="dock">The dock to be added to the new DockGroup.</param>
+    /// <returns>A new DockGroup containing the specified dock.</returns>
+    private DockGroup NewDockGroup(IDock dock)
+    {
+        var newGroup = new DockGroup(this.Docker);
+        newGroup.AddDock(dock);
+        return newGroup;
     }
 
     /// <summary>

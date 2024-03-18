@@ -18,10 +18,10 @@ public partial class DockGroupTests
     public void RemoveGroup_ThrowsOnLeaf()
     {
         // Arrange
-        var sut = new MockDockGroup();
+        var sut = new MockDockGroup(this.docker);
 
         // Act
-        var act = () => sut.RemoveGroup(new MockDockGroup());
+        var act = () => sut.RemoveGroup(new MockDockGroup(this.docker));
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -31,8 +31,8 @@ public partial class DockGroupTests
     public void RemoveGroup_ShouldNotRemoveCenter()
     {
         // Arrange
-        using var sut = new MockDockGroup();
-        using var center = new MockDockGroup { IsCenter = true };
+        using var sut = new MockDockGroup(this.docker);
+        using var center = new MockDockGroup(this.docker) { IsCenter = true };
         sut.SetFirst(center);
         sut.SetSecond(center);
 
@@ -51,11 +51,11 @@ public partial class DockGroupTests
         var act = () =>
         {
             // Arrange
-            using var sut = new MockDockGroup();
-            sut.SetFirst(new MockDockGroup());
+            using var sut = new MockDockGroup(this.docker);
+            sut.SetFirst(new MockDockGroup(this.docker));
 
             // Act
-            sut.RemoveGroup(new MockDockGroup());
+            sut.RemoveGroup(new MockDockGroup(this.docker));
         };
 
         // Assert
@@ -67,9 +67,9 @@ public partial class DockGroupTests
     public void RemoveGroup_First_IsChild_Works()
     {
         // Arrange
-        var first = new MockDockGroup();
-        var second = new MockDockGroup();
-        var sut = new MockDockGroup();
+        var first = new MockDockGroup(this.docker);
+        var second = new MockDockGroup(this.docker);
+        var sut = new MockDockGroup(this.docker);
         sut.SetFirst(first);
         sut.SetSecond(second);
 
@@ -86,9 +86,9 @@ public partial class DockGroupTests
     public void RemoveGroup_Second_IsChild_Works()
     {
         // Arrange
-        var first = new MockDockGroup();
-        var second = new MockDockGroup();
-        var sut = new MockDockGroup();
+        var first = new MockDockGroup(this.docker);
+        var second = new MockDockGroup(this.docker);
+        var sut = new MockDockGroup(this.docker);
         sut.SetFirst(first);
         sut.SetSecond(second);
 
@@ -105,13 +105,13 @@ public partial class DockGroupTests
     public void RemoveGroup_RemovesSelfFromParent_WhenLeftWithNoChildren()
     {
         // Arrange
-        var parent = new MockDockGroup();
-        var keep = new MockDockGroup();
-        var sut = new MockDockGroup();
+        var parent = new MockDockGroup(this.docker);
+        var keep = new MockDockGroup(this.docker);
+        var sut = new MockDockGroup(this.docker);
         parent.SetFirst(sut);
         parent.SetSecond(keep);
 
-        var first = new MockDockGroup();
+        var first = new MockDockGroup(this.docker);
         sut.SetFirst(first);
 
         // Act
