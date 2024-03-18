@@ -11,10 +11,10 @@ public static class AutoInjectExtensions
 {
     public static IServiceCollection UseAutoInject(this IServiceCollection services)
     {
-        _ = services.AddKeyedTransient<Testing.ITestInterface>("key1", (sp, _) => ActivatorUtilities.CreateInstance<Testing.TestClass1>(sp));
-        _ = services.AddKeyedTransient<Testing.ITestInterface>("key2", (sp, _) => ActivatorUtilities.CreateInstance<Testing.TestClass2>(sp));
-        _ = services.AddTransient(sp => ActivatorUtilities.CreateInstance<Testing.TestClass1>(sp));
-        _ = services.AddTransient(sp => ActivatorUtilities.CreateInstance<Testing.TestClass2>(sp));
+        _ = services.AddKeyedTransient<Testing.ITestInterface, Testing.TestClass1>("key1");
+        _ = services.AddKeyedTransient<Testing.ITestInterface, Testing.TestClass2>("key2");
+        _ = services.AddTransient<Testing.TestClass1>();
+        _ = services.AddTransient<Testing.TestClass2>();
 
         return services;
     }

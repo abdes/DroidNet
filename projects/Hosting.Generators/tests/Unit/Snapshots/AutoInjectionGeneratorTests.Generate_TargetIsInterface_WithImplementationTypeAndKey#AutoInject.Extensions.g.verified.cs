@@ -11,7 +11,7 @@ public static class AutoInjectExtensions
 {
     public static IServiceCollection UseAutoInject(this IServiceCollection services)
     {
-        _ = services.AddKeyedTransient<Testing.ITestInterface>("key", (sp, _) => ActivatorUtilities.CreateInstance<Testing.TestClass>(sp));
+        _ = services.AddKeyedTransient<Testing.ITestInterface, Testing.TestClass>("key");
 
         return services;
     }

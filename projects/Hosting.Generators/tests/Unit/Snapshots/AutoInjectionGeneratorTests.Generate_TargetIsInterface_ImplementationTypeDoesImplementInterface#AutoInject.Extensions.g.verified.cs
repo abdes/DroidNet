@@ -11,7 +11,7 @@ public static class AutoInjectExtensions
 {
     public static IServiceCollection UseAutoInject(this IServiceCollection services)
     {
-        _ = services.AddTransient(sp => ActivatorUtilities.CreateInstance<Testing.TestClass>(sp));
+        _ = services.AddTransient<Testing.TestClass>();
 
         return services;
     }
