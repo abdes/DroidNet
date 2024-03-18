@@ -119,28 +119,46 @@ public class AutoInjectGenerator : IIncrementalGenerator
         var methodName = GetMethodName(lifetime);
 
         var targetIsInterface = targetSymbol.TypeKind == TypeKind.Interface;
-        var serviceType = targetSymbol.ToDisplayString();
+        var contractTypeFullName = targetSymbol.ToDisplayString();
 
+        var contractTypeArg = attribute.NamedArguments
+            .FirstOrDefault(a => a.Key == nameof(InjectAsAttribute.ContractType))
+            .Value;
+        if (contractTypeArg is { IsNull: false, Value: ITypeSymbol contractTypeSymbol })
+        {
+            contractTypeFullName = contractTypeSymbol.ToDisplayString();
+        }
+
+        string? implTypeFullName = null;
         var implTypeArg = attribute.NamedArguments
             .FirstOrDefault(a => a.Key == nameof(InjectAsAttribute.ImplementationType))
             .Value;
-
-        string? implTypeFullName = null;
-        if (targetIsInterface)
+        if (!targetIsInterface)
+        {
+            if (implTypeArg.IsNull)
+            {
+                implTypeFullName = targetSymbol.ToDisplayString();
+            }
+            else if (implTypeArg.Value is ITypeSymbol implTypeSymbol)
+            {
+                implTypeFullName = implTypeSymbol.ToDisplayString();
+            }
+        }
+        else
         {
             if (implTypeArg.IsNull || implTypeArg.Value is not ITypeSymbol implTypeSymbol)
             {
                 throw new InvalidAnnotationException(
-                    $"annotation placed on a interface type `{serviceType}` without specifying an implementation type");
+                    $"annotation placed on a interface type `{contractTypeFullName}` without specifying an implementation type");
             }
 
-            if (!implTypeSymbol.ImplementsInterface(serviceType))
+            if (!implTypeSymbol.ImplementsInterface(contractTypeFullName))
             {
                 spc.ReportDiagnostic(
                     Diagnostic.Create(
                         AnnotationError,
                         injectionContext.TargetNode.GetLocation(),
-                        $"The implementation type `{implTypeSymbol}` does not implement the annotated interface `{serviceType}`."));
+                        $"The implementation type `{implTypeSymbol}` does not implement the annotated interface `{contractTypeFullName}`."));
                 return;
             }
 
@@ -157,15 +175,10 @@ public class AutoInjectGenerator : IIncrementalGenerator
             methodName = methodName.Replace("Add", "AddKeyed");
         }
 
-        var methodCallSegment = $"services.{methodName}{(targetIsInterface ? $"<{serviceType}>" : string.Empty)}";
-        var keyParamSegment = key is null ? string.Empty : $"\"{key}\", ";
-        var factorySegment
-            = $"sp => ActivatorUtilities.CreateInstance<{(targetIsInterface ? implTypeFullName : serviceType)}>(sp)";
-        var factorySegmentWithKey
-            = $"(sp, _) => ActivatorUtilities.CreateInstance<{(targetIsInterface ? implTypeFullName : serviceType)}>(sp)";
-
-        _ = source.AppendLine(
-            $"        _ = {methodCallSegment}({keyParamSegment}{(key is null ? factorySegment : factorySegmentWithKey)});");
+        var methodCallSegment
+            = $"services.{methodName}{(targetIsInterface || contractTypeFullName != implTypeFullName ? $"<{contractTypeFullName}, {implTypeFullName}>" : $"<{contractTypeFullName}>")}";
+        var keyParamSegment = key is null ? string.Empty : $"\"{key}\"";
+        _ = source.AppendLine($"        _ = {methodCallSegment}({keyParamSegment});");
     }
 
     /// <summary>Gets the method name for the dependency injection based on the specified service lifetime.</summary>

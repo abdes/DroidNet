@@ -34,34 +34,8 @@ public class AutoInjectionTests
             .NotBeNull()
             .And.BeOfType(typeof(MyInterfaceImplementation));
 
-        _ = sp.GetService<NonDefaultConstructor>().Should().NotBeNull();
-
-        /*
-        sc.AddSingleton<ITargetInterface>(sp => ActivatorUtilities.CreateInstance<MyImplementation>(sp));
-        sc.AddSingleton(sp => ActivatorUtilities.CreateInstance<MyBadImplementation>(sp));
-        sc.AddSingleton(sp => ActivatorUtilities.CreateInstance<RedundantImplementationType>(sp));
-        sc.AddSingleton(sp => ActivatorUtilities.CreateInstance<NonDefaultConstructor>(sp));
-        sc.AddKeyedSingleton(
-            "key",
-            (sp, _) => ActivatorUtilities.CreateInstance<NonDefaultConstructor>(sp));
-        */
-
-        /*
-        var view = Ioc.Default.GetService<IViewFor<DemoViewModel>>();
-        _ = view.Should()
-            .NotBeNull(
-                $"""
-                 the view class {nameof(DemoView)} should have been registered
-                 in the Ioc container as an `IViewFor<{nameof(DemoViewModel)}>`
-                 """);
-
-        var vm = view!.ViewModel;
-        _ = vm.Should()
-            .BeNull(
-                """
-                the initial value for the generated dependency property should
-                not be set
-                """);
-        */
+        var nonDefaultConstructor = sp.GetService<NonDefaultConstructor>();
+        _ = nonDefaultConstructor.Should().NotBeNull();
+        _ = nonDefaultConstructor!.Injected.Should().NotBeNull();
     }
 }

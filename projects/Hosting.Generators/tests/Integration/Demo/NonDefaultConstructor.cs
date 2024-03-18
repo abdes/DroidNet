@@ -9,8 +9,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 [ExcludeFromCodeCoverage]
 [InjectAs(ServiceLifetime.Transient)]
-[method: ActivatorUtilitiesConstructor]
-internal sealed class NonDefaultConstructor([FromKeyedServices("mine")] IMyInterface injected)
+internal sealed class NonDefaultConstructor
 {
-    public IMyInterface Injected { get; } = injected;
+    public NonDefaultConstructor()
+    {
+    }
+
+    // This constructor should be chosen when this type is resolved by the DI resolver.
+    public NonDefaultConstructor([FromKeyedServices("mine")] IMyInterface injected) => this.Injected = injected;
+
+    public IMyInterface? Injected { get; }
 }
