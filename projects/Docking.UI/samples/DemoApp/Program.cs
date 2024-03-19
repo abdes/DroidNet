@@ -15,7 +15,7 @@ using DroidNet.Docking.Controls;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
-using DroidNet.Routing.Converters;
+using DroidNet.Mvvm.Converters;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -97,6 +97,7 @@ public static partial class Program
                 .ConfigureContainer<DryIocServiceProvider>(
                     (_, sp) =>
                     {
+                        // TODO(abdes): refactor into extension method
                         // Set up the view model to view converters. We're using the standard
                         // converter, and a custom one with fall back if the view cannot be
                         // located.
@@ -105,6 +106,7 @@ public static partial class Program
                             Reuse.Singleton,
                             serviceKey: "VmToView");
 
+                        // TODO(abdes): refactor into extension method
                         sp.Container.Register<DockPanelViewModel>(Reuse.Transient);
                         sp.Container.Register<DockPanel>(Reuse.Transient);
                     })

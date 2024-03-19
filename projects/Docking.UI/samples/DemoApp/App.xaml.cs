@@ -1,6 +1,6 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT.
-// SPDX-License-Identifier: MIT
+// <copyright file="App.xaml.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace DroidNet.Docking.Demo;
 
@@ -14,6 +14,8 @@ using Microsoft.UI.Xaml.Data;
 [ExcludeFromCodeCoverage]
 public partial class App
 {
+    private const string VmToViewConverterResourceKey = "VmToViewConverter";
+
     private readonly IResolver resolver;
     private readonly IValueConverter vmToViewConverter;
     private Window? window;
@@ -22,10 +24,14 @@ public partial class App
     /// In this project architecture, the single instance of the application is created by the User Interface hosted service as
     /// part of the application host initialization. Its lifecycle is managed together with the rest of the services.
     /// <param name="resolver">The Dependency Injector's service provider.</param>
-    public App(IResolver resolver, [FromKeyedServices("VmToView")] IValueConverter converter)
+    /// <param name="vmToViewConverter">
+    /// The ViewModel to View converter. This will be made available as an application StaticResource with the key
+    /// <c>"VmToViewConverter"</c>.
+    /// </param>
+    public App(IResolver resolver, [FromKeyedServices("VmToView")] IValueConverter vmToViewConverter)
     {
         this.resolver = resolver;
-        this.vmToViewConverter = converter;
+        this.vmToViewConverter = vmToViewConverter;
 
         this.InitializeComponent();
     }
@@ -34,7 +40,7 @@ public partial class App
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
+        Current.Resources[VmToViewConverterResourceKey] = this.vmToViewConverter;
 
         // Create and activate the application main window.
         this.window = this.resolver.Resolve<MainWindow>();
