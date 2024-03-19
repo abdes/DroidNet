@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <EnablePreviewMsixTooling>true</EnablePreviewMsixTooling>
+        <UseWinUI>true</UseWinUI>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+
+        <RootNamespace>$(RootNamespace).Mvvm</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\LockScreenLogo.scale-200.png" />
+        <Content Include="Assets\SplashScreen.scale-200.png" />
+        <Content Include="Assets\Square150x150Logo.scale-200.png" />
+        <Content Include="Assets\Square44x44Logo.scale-200.png" />
+        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+        <Content Include="Assets\StoreLogo.png" />
+        <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Mvvm.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+</Project>
