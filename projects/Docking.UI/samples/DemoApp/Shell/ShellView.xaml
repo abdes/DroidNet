@@ -5,8 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:tkc="using:CommunityToolkit.WinUI.Controls"
-    xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -22,7 +20,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <tkc:Segmented SelectedIndex="0" SelectionMode="Single">
+        <!--<tkc:Segmented SelectedIndex="0" SelectionMode="Single">
             <tkc:SegmentedItem
                 Content="Day"
                 Icon="{ui:FontIcon Glyph=&#xE8BF;}"
@@ -31,7 +29,7 @@
                 Content="Month"
                 Icon="{ui:FontIcon Glyph=&#xE787;}"
                 ToolTipService.ToolTip="Month view" />
-        </tkc:Segmented>
+        </tkc:Segmented>-->
         <ContentPresenter Grid.Row="1" Content="{x:Bind ViewModel.Workspace, Converter={StaticResource VmToViewConverter}}" />
     </Grid>
 </UserControl>
