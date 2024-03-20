@@ -8,6 +8,6 @@
     mc:Ignorable="d">
 
     <Viewbox>
-        <Image Source="../Assets/DroidNet.png" />
+        <Image Opacity="0.1" Source="../Assets/DroidNet.png" />
     </Viewbox>
 </UserControl>
