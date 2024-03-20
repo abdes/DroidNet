@@ -12,33 +12,27 @@ using DroidNet.Docking.Layouts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public sealed class GridFlow(IDockViewFactory dockViewFactory)
-    : LayoutEngine()
+public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
-    private new GridLayoutState CurrentState => (GridLayoutState)base.CurrentState;
+    private VectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
-    private VectorGrid CurrentGrid => this.CurrentState.CurrentFlow;
+    public override VectorGrid Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
 
-    public override VectorGrid Build(IDockGroup root) => ((GridLayoutState)base.Build(root)).CurrentFlow;
-
-    protected override LayoutState StartLayout(IDockGroup root)
-        => new GridLayoutState
+    protected override Flow StartLayout(IDockGroup root)
+        => new GridFlow(root)
         {
             Description = $"Root Grid {root}",
-            CurrentFlow = new VectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
+            Grid = new VectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
         };
 
     protected override void PlaceDock(IDock dock)
     {
         Debug.WriteLine($"Place dock {dock} with Width={dock.Width} and Height={dock.Height}");
 
-        var gridItemLength = GetGridLengthForDock(dock, this.CurrentGrid.Orientation);
+        var gridItemLength = this.GetGridLengthForDock(dock);
         Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {this.CurrentGrid.Orientation}");
 
-        this.CurrentState.CurrentFlow.AddResizableItem(
-            dockViewFactory.CreateViewForDock(dock),
-            gridItemLength,
-            32);
+        this.CurrentGrid.AddResizableItem(dockViewFactory.CreateViewForDock(dock), gridItemLength, 32);
     }
 
     protected override void PlaceTray(IDockTray tray)
@@ -52,23 +46,23 @@ public sealed class GridFlow(IDockViewFactory dockViewFactory)
         this.CurrentGrid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
     }
 
-    protected override LayoutState StartFlow(IDockGroup group)
+    protected override Flow StartFlow(IDockGroup group)
     {
         Debug.WriteLine($"New Grid for: {group}");
 
-        var newFlow = new VectorGrid(ToGridOrientation(group.Orientation)) { Name = group.ToString() };
+        var newGrid = new VectorGrid(ToGridOrientation(group.Orientation)) { Name = group.ToString() };
 
         var stretch = group.ShouldStretch();
         var length = stretch
             ? new GridLength(1, GridUnitType.Star)
-            : GetGridLengthForDockGroup(group, newFlow.Orientation);
+            : GetGridLengthForDockGroup(group, newGrid.Orientation);
 
-        this.CurrentGrid.AddResizableItem(newFlow, length, 32);
+        this.CurrentGrid.AddResizableItem(newGrid, length, 32);
 
-        return new GridLayoutState()
+        return new GridFlow(group)
         {
             Description = $"Grid for {group}",
-            CurrentFlow = newFlow,
+            Grid = newGrid,
         };
     }
 
@@ -101,20 +95,14 @@ public sealed class GridFlow(IDockViewFactory dockViewFactory)
         return GridLength.Auto;
     }
 
-    private static GridLength GetGridLengthForDock(IDock dock, Orientation gridOrientation)
+    private GridLength GetGridLengthForDock(IDock dock)
     {
-        Debug.WriteLine(
-            $"GridLength for dock {dock} using {(gridOrientation == Orientation.Horizontal ? "width" : "height")}");
-        return gridOrientation == Orientation.Horizontal ? dock.GridWidth() : dock.GridHeight();
+        Debug.WriteLine($"GridLength for dock {dock} using {(this.CurrentFlow.IsHorizontal ? "width" : "height")}");
+        return this.CurrentFlow.IsHorizontal ? dock.GridWidth() : dock.GridHeight();
     }
 
-    private sealed class GridLayoutState : LayoutState
+    private sealed class GridFlow(IDockGroup group) : Flow(group)
     {
-        public required VectorGrid CurrentFlow { get; init; }
-
-        public override Docking.FlowDirection FlowDirection
-            => this.CurrentFlow.Orientation == Orientation.Horizontal
-                ? Docking.FlowDirection.LeftToRight
-                : Docking.FlowDirection.TopToBottom;
+        public required VectorGrid Grid { get; init; }
     }
 }

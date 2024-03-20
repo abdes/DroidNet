@@ -52,11 +52,9 @@ public class LayoutEngineTests : VerifyBase
 
     private sealed class VectorLayoutEngine : LayoutEngine
     {
-        private new GridLayoutState CurrentState => (GridLayoutState)base.CurrentState;
+        private Vector CurrentVector => ((GridFlow)this.CurrentFlow).Grid;
 
-        private Vector CurrentVector => this.CurrentState.CurrentFlow;
-
-        public new Vector Build(IDockGroup root) => ((GridLayoutState)base.Build(root)).CurrentFlow;
+        public new Vector Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
 
         public void DumpLayout()
         {
@@ -93,11 +91,11 @@ public class LayoutEngineTests : VerifyBase
             }
         }
 
-        protected override LayoutState StartLayout(IDockGroup root)
-            => new GridLayoutState
+        protected override Flow StartLayout(IDockGroup root)
+            => new GridFlow(root)
             {
                 Description = $"Root Grid {root}",
-                CurrentFlow = new Vector()
+                Grid = new Vector()
                 {
                     Direction = OrientationToFlowDirection(root.Orientation),
                 },
@@ -115,15 +113,15 @@ public class LayoutEngineTests : VerifyBase
             Debug.WriteLine($"Place Tray: {tray}");
         }
 
-        protected override LayoutState StartFlow(IDockGroup group)
+        protected override Flow StartFlow(IDockGroup group)
         {
             Debug.WriteLine($"New Grid for: {group}");
             var newFlow = new Vector { Direction = OrientationToFlowDirection(group.Orientation) };
             this.CurrentVector.Items.Add(newFlow);
-            return new GridLayoutState()
+            return new GridFlow(group)
             {
                 Description = $"Grid for {group}",
-                CurrentFlow = newFlow,
+                Grid = newFlow,
             };
         }
 
@@ -143,11 +141,9 @@ public class LayoutEngineTests : VerifyBase
             public List<object> Items { get; } = [];
         }
 
-        private sealed class GridLayoutState : LayoutState
+        private sealed class GridFlow(IDockGroup group) : Flow(group)
         {
-            public required Vector CurrentFlow { get; init; }
-
-            public override FlowDirection FlowDirection => this.CurrentFlow.Direction;
+            public required Vector Grid { get; init; }
         }
     }
 

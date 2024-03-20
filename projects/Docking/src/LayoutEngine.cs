@@ -7,33 +7,33 @@ namespace DroidNet.Docking;
 using System.Diagnostics;
 using DroidNet.Docking.Utils;
 
-public abstract class LayoutEngine()
+public abstract class LayoutEngine
 {
-    private readonly Stack<LayoutState> states = new();
+    private readonly Stack<Flow> flows = new();
 
-    protected LayoutState CurrentState => this.states.Peek();
+    protected Flow CurrentFlow => this.flows.Peek();
 
     public virtual object Build(IDockGroup root)
     {
         // Always clear the layout state stack before a new Build to get rid of the previous state.
-        this.states.Clear();
+        this.flows.Clear();
 
-        var state = this.StartLayout(root);
-        this.SaveState(state);
+        var rootFlow = this.StartLayout(root);
+        this.PushFlow(rootFlow);
         this.Layout(root);
-        Debug.Assert(this.states.Count == 1, $"some pushes were not matched by pops");
-        Debug.WriteLine($"=== Final state: {this.CurrentState}");
+        Debug.Assert(this.flows.Count == 1, $"some pushes were not matched by pops");
+        Debug.WriteLine($"=== Final state: {this.CurrentFlow}");
         this.EndLayout();
-        return state;
+        return rootFlow;
     }
 
-    protected abstract LayoutState StartLayout(IDockGroup root);
+    protected abstract Flow StartLayout(IDockGroup root);
 
     protected abstract void PlaceDock(IDock dock);
 
     protected abstract void PlaceTray(IDockTray tray);
 
-    protected abstract LayoutState StartFlow(IDockGroup group);
+    protected abstract Flow StartFlow(IDockGroup group);
 
     protected abstract void EndFlow();
 
@@ -59,16 +59,16 @@ public abstract class LayoutEngine()
             : group.Docks.Any(d => d.State != DockingState.Minimized),
     };
 
-    private void SaveState(LayoutState state)
+    private void PushFlow(Flow state)
     {
         Debug.WriteLine($"==> {state}");
-        this.states.Push(state);
+        this.flows.Push(state);
     }
 
-    private void RestoreState()
+    private void PopFlow()
     {
-        _ = this.states.Pop();
-        Debug.WriteLine($"<== {(this.states.Count != 0 ? this.states.Peek() : string.Empty)}");
+        _ = this.flows.Pop();
+        Debug.WriteLine($"<== {(this.flows.Count != 0 ? this.flows.Peek() : string.Empty)}");
     }
 
     private void Layout(IDockGroup group)
@@ -101,7 +101,7 @@ public abstract class LayoutEngine()
         if (restoreState)
         {
             this.EndFlow();
-            this.RestoreState();
+            this.PopFlow();
         }
 
         Debug.WriteLine($"Layout ended for Group {group}");
@@ -116,11 +116,9 @@ public abstract class LayoutEngine()
 
                 case IDockTray { IsEmpty: false } tray:
                     Debug.Assert(
-                        (tray.IsVertical &&
-                         this.CurrentState.FlowDirection == FlowDirection.LeftToRight) ||
-                        (!tray.IsVertical &&
-                         this.CurrentState.FlowDirection == FlowDirection.TopToBottom),
-                        $"expecting tray orientation {group.Orientation} to be orthogonal to flow direction {this.CurrentState.FlowDirection}");
+                        (tray.IsVertical && this.CurrentFlow.IsHorizontal) ||
+                        (!tray.IsVertical && this.CurrentFlow.IsVertical),
+                        $"expecting tray orientation {group.Orientation} to be orthogonal to flow direction {this.CurrentFlow.Direction}");
 
                     // Place the tray if it's not empty.
                     this.PlaceTray(tray);
@@ -145,22 +143,26 @@ public abstract class LayoutEngine()
             groupOrientation = DockGroupOrientation.Undetermined;
         }
 
-        var state = this.CurrentState;
+        var state = this.CurrentFlow;
         if (groupOrientation == DockGroupOrientation.Undetermined ||
-            state.FlowDirection == group.Orientation.ToFlowDirection())
+            state.Direction == group.Orientation.ToFlowDirection())
         {
             return false;
         }
 
-        this.SaveState(this.StartFlow(group));
+        this.PushFlow(this.StartFlow(group));
         return true;
     }
 
-    protected abstract class LayoutState
+    protected abstract class Flow(IDockGroup group)
     {
         public string Description { get; init; } = string.Empty;
 
-        public abstract FlowDirection FlowDirection { get; }
+        public FlowDirection Direction { get; } = group.Orientation.ToFlowDirection();
+
+        public bool IsHorizontal => this.Direction == FlowDirection.LeftToRight;
+
+        public bool IsVertical => this.Direction == FlowDirection.TopToBottom;
 
         public override string ToString() => this.Description;
     }
