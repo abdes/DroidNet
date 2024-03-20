@@ -12,27 +12,18 @@ using DroidNet.Routing.Debugger.UI.Docks;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-#pragma warning disable IDE0001 // Simplify Names - Conflicts with SA1135
-using FlowDirection = DroidNet.Docking.FlowDirection;
 
-#pragma warning restore IDE0001 // Simplify Names
-
-internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger)
-    : LayoutEngine()
+internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocator, ILogger logger) : LayoutEngine
 {
-    private readonly IDocker docker = docker;
+    private VectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
-    private new GridLayoutState CurrentState => (GridLayoutState)base.CurrentState;
+    public new VectorGrid Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
 
-    private VectorGrid CurrentGrid => this.CurrentState.CurrentFlow;
-
-    public new VectorGrid Build(IDockGroup root) => ((GridLayoutState)base.Build(root)).CurrentFlow;
-
-    protected override LayoutState StartLayout(IDockGroup root)
-        => new GridLayoutState
+    protected override Flow StartLayout(IDockGroup root)
+        => new GridFlow(root)
         {
             Description = $"Root Grid {root}",
-            CurrentFlow = new VectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
+            Grid = new VectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
         };
 
     protected override void PlaceDock(IDock dock)
@@ -42,22 +33,21 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
         var gridItemLength = GetGridLengthForDock(dock, this.CurrentGrid.Orientation);
         Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {this.CurrentGrid.Orientation}");
 
-        this.CurrentState
-            .CurrentFlow.AddResizableItem(
-                dock is ApplicationDock appDock
-                    ? new EmbeddedAppView()
-                    {
-                        ViewModel = new EmbeddedAppViewModel(
-                            appDock.ApplicationViewModel,
-                            viewLocator,
-                            logger),
-                    }
-                    : new DockPanel()
-                    {
-                        ViewModel = new DockPanelViewModel(dock),
-                    },
-                gridItemLength,
-                32);
+        this.CurrentGrid.AddResizableItem(
+            dock is ApplicationDock appDock
+                ? new EmbeddedAppView()
+                {
+                    ViewModel = new EmbeddedAppViewModel(
+                        appDock.ApplicationViewModel,
+                        viewLocator,
+                        logger),
+                }
+                : new DockPanel()
+                {
+                    ViewModel = new DockPanelViewModel(dock),
+                },
+            gridItemLength,
+            32);
     }
 
     protected override void PlaceTray(IDockTray tray)
@@ -66,12 +56,12 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
 
         Debug.WriteLine($"Place Tray: {tray}");
         var trayOrientation = tray.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
-        var trayViewModel = new DockTrayViewModel(this.docker, tray, trayOrientation);
+        var trayViewModel = new DockTrayViewModel(docker, tray, trayOrientation);
         var trayControl = new DockTray { ViewModel = trayViewModel };
         this.CurrentGrid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
     }
 
-    protected override LayoutState StartFlow(IDockGroup group)
+    protected override Flow StartFlow(IDockGroup group)
     {
         Debug.WriteLine($"New Grid for: {group}");
 
@@ -84,10 +74,10 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
 
         this.CurrentGrid.AddResizableItem(newFlow, length, 32);
 
-        return new GridLayoutState()
+        return new GridFlow(group)
         {
             Description = $"Grid for {group}",
-            CurrentFlow = newFlow,
+            Grid = newFlow,
         };
     }
 
@@ -127,13 +117,8 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
         return gridOrientation == Orientation.Horizontal ? dock.GridWidth() : dock.GridHeight();
     }
 
-    private sealed class GridLayoutState : LayoutState
+    private sealed class GridFlow(IDockGroup group) : Flow(group)
     {
-        public required VectorGrid CurrentFlow { get; init; }
-
-        public override FlowDirection FlowDirection
-            => this.CurrentFlow.Orientation == Orientation.Horizontal
-                ? FlowDirection.LeftToRight
-                : FlowDirection.TopToBottom;
+        public required VectorGrid Grid { get; init; }
     }
 }

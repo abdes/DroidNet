@@ -5,7 +5,6 @@
 namespace DroidNet.Docking.Demo.Workspace;
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Docking.Detail;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;

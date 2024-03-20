@@ -29,7 +29,7 @@ public partial class ShellViewModel : ObservableObject
     private WorkspaceViewModel CreateWorkspace(IDocker docker)
     {
         var dockViewFactory = this.resolver.Resolve<IDockViewFactory>();
-        var layout = new GridFlow(dockViewFactory);
+        var layout = new GridFlowLayout(dockViewFactory);
         var viewModel = this.resolver.Resolve<Func<IDocker, LayoutEngine, WorkspaceViewModel>>()(docker, layout);
         return viewModel;
     }
