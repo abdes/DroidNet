@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Demo.Workspace;
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Docking.Detail;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -21,7 +22,7 @@ public partial class WorkspaceViewModel : ObservableObject
 
         docker.LayoutChanged += reason =>
         {
-            if (reason is LayoutChangeReason.Docking or LayoutChangeReason.Resize)
+            if (reason is LayoutChangeReason.Docking)
             {
                 this.UpdateContent(docker, layout);
             }
