@@ -16,9 +16,6 @@
         -->
         <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
 
-        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
-        <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
-
         <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
         <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
@@ -62,15 +59,15 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="TreeView\ExpandingTreeControl.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
+        <Page Update="TreeView\ExpandingTreeControl.xaml">
+            <Generator>MSBuild:Compile</Generator>
+        </Page>
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="TreeView\Styles.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
+        <Page Update="TreeView\Styles.xaml">
+            <Generator>MSBuild:Compile</Generator>
+        </Page>
     </ItemGroup>
 
     <ItemGroup>

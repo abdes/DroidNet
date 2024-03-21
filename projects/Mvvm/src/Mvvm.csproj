@@ -10,6 +10,7 @@
         <UseWinUI>true</UseWinUI>
 
         <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
+        <!-- Project should not contain any XAML as disabling CoreMrtTooling will not produce a valid library layout when XAML is present -->
         <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
 
         <RootNamespace>$(RootNamespace).Mvvm</RootNamespace>
