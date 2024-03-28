@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using DroidNet.Docking;
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -136,5 +137,43 @@ public partial class DockGroupTests
 
         var other = siblingIndex == first ? sut.Second : sut.First;
         _ = other.Should().BeSameAs(siblings[siblingIndex == 0 ? 1 : 0]);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
+    public void AddGroupBefore_InvokesOptimizerIfImplemented()
+    {
+        // Arrange
+        var optimizingDocker = new DummyOptimizingDocker();
+        var sut = new EmptyDockGroup(optimizingDocker);
+        var sibling = new EmptyDockGroup(optimizingDocker);
+        sut.AddGroupFirst(sibling, DockGroupOrientation.Horizontal);
+        var newGroup = new MockDockGroup(optimizingDocker);
+
+        // Act
+        optimizingDocker.Reset();
+        sut.AddGroupBefore(newGroup, sibling, DockGroupOrientation.Undetermined);
+
+        // Assert
+        _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
+    public void AddGroupAfter_InvokesOptimizerIfImplemented()
+    {
+        // Arrange
+        var optimizingDocker = new DummyOptimizingDocker();
+        var sut = new EmptyDockGroup(optimizingDocker);
+        var sibling = new EmptyDockGroup(optimizingDocker);
+        sut.AddGroupFirst(sibling, DockGroupOrientation.Horizontal);
+        var newGroup = new MockDockGroup(optimizingDocker);
+
+        // Act
+        optimizingDocker.Reset();
+        sut.AddGroupAfter(newGroup, sibling, DockGroupOrientation.Undetermined);
+
+        // Assert
+        _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();
     }
 }

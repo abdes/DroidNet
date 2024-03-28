@@ -4,6 +4,7 @@
 
 namespace DroidNet.Docking.Detail;
 
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -55,22 +56,21 @@ public partial class DockGroupTests
 
     [TestMethod]
     [TestCategory($"{nameof(DockGroup)}.DockManagement")]
-    public void RemoveDock_LastDockInGroup_RemovesGroupFromParent()
+    public void RemoveDock_InvokesOptimizerIfImplemented()
     {
         // Arrange
-        using var parent = new EmptyDockGroup(this.docker);
-        using var keep = new MockDockGroup(this.docker);
-        parent.AddGroupLast(keep, DockGroupOrientation.Horizontal);
-        using var sut = new NonEmptyDockGroup(this.docker);
+        var optimizingDocker = new DummyOptimizingDocker();
+        using var parent = new DockGroup(optimizingDocker);
+
+        using var sut = new DockGroup(optimizingDocker);
+        sut.AddDock(new SimpleDock());
         parent.AddGroupFirst(sut, DockGroupOrientation.Horizontal);
-        _ = parent.First.Should().Be(sut);
-        using var first = sut.Docks.First();
 
         // Act
-        sut.RemoveDock(first);
+        optimizingDocker.Reset();
+        sut.RemoveDock(sut.Docks.First());
 
         // Assert
-        _ = sut.Docks.Should().BeEmpty();
-        _ = parent.First.Should().BeNull();
+        _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();
     }
 }

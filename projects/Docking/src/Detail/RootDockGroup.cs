@@ -94,7 +94,7 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.left == null)
         {
-            this.left = this.NewDockGroupWithTray(dock, AnchorPosition.Left);
+            this.left = this.NewEdgeGroup(dock, AnchorPosition.Left);
             this.AddBeforeCenter(this.left, DockGroupOrientation.Horizontal);
             return;
         }
@@ -113,7 +113,7 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.top == null)
         {
-            this.top = this.NewDockGroupWithTray(dock, AnchorPosition.Top);
+            this.top = this.NewEdgeGroup(dock, AnchorPosition.Top);
             this.AddBeforeCenter(this.top, DockGroupOrientation.Vertical);
             return;
         }
@@ -132,7 +132,7 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.right == null)
         {
-            this.right = this.NewDockGroupWithTray(dock, AnchorPosition.Right);
+            this.right = this.NewEdgeGroup(dock, AnchorPosition.Right);
             this.AddAfterCenter(this.right, DockGroupOrientation.Horizontal);
             return;
         }
@@ -151,7 +151,7 @@ internal sealed class RootDockGroup : DockGroup
     {
         if (this.bottom == null)
         {
-            this.bottom = this.NewDockGroupWithTray(dock, AnchorPosition.Bottom);
+            this.bottom = this.NewEdgeGroup(dock, AnchorPosition.Bottom);
             this.AddAfterCenter(this.bottom, DockGroupOrientation.Vertical);
             return;
         }
@@ -170,7 +170,7 @@ internal sealed class RootDockGroup : DockGroup
     /// <param name="group">The group to be appended at the specified <paramref name="edge" />.</param>
     private static void AppendToEdge(DockGroup edge, IDockGroup group)
     {
-        var parent = LastAvailableSlot(edge).AsDockGroup();
+        var parent = edge.Second is null ? edge : edge.Second.AsDockGroup();
         parent.AddGroupLast(group, edge.Orientation);
     }
 
@@ -227,8 +227,15 @@ internal sealed class RootDockGroup : DockGroup
             furthestDepth = depth;
         }
 
-        DepthFirstSearch(node.Second, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
-        DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
+        if (node.Second is not TrayGroup)
+        {
+            DepthFirstSearch(node.Second, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
+        }
+
+        if (node.First is not TrayGroup)
+        {
+            DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
+        }
     }
 
     /// <summary>Creates a new DockGroup with a Tray, and adds the specified dock to it.</summary>
@@ -237,9 +244,9 @@ internal sealed class RootDockGroup : DockGroup
     /// orientation of the tray (vertical for left and right, horizontal otherwise), and where it will be placed relative to the
     /// dock (before for left and top, after otherwise). </param>
     /// <returns>A new DockGroup with a tray with the proper orientation and placement relative to the dock.</returns>
-    private DockGroup NewDockGroupWithTray(IDock dock, AnchorPosition position)
+    private DockGroup NewEdgeGroup(IDock dock, AnchorPosition position)
     {
-        var trayHolder = new DockGroup(this.Docker);
+        var edgeGroup = new DockGroup(this.Docker) { IsEdge = true };
         var newGroup = new DockGroup(this.Docker);
         newGroup.AddDock(dock);
 
@@ -250,16 +257,16 @@ internal sealed class RootDockGroup : DockGroup
 
         if (position is AnchorPosition.Left or AnchorPosition.Top)
         {
-            trayHolder.AddGroupFirst(new TrayGroup(position, this.Docker), orientation);
-            trayHolder.AddGroupLast(newGroup, orientation);
+            edgeGroup.AddGroupFirst(new TrayGroup(position, this.Docker), orientation);
+            edgeGroup.AddGroupLast(newGroup, orientation);
         }
         else
         {
-            trayHolder.AddGroupFirst(newGroup, orientation);
-            trayHolder.AddGroupLast(new TrayGroup(position, this.Docker), orientation);
+            edgeGroup.AddGroupFirst(newGroup, orientation);
+            edgeGroup.AddGroupLast(new TrayGroup(position, this.Docker), orientation);
         }
 
-        return trayHolder;
+        return edgeGroup;
     }
 
     /// <summary>Creates a new DockGroup and adds the specified dock to it.</summary>
@@ -284,10 +291,6 @@ internal sealed class RootDockGroup : DockGroup
     private void PrependToEdge(DockGroup edge, IDockGroup group)
     {
         Debug.Assert(edge == this.right || edge == this.bottom, "only prepend to the right or bottom edge");
-
-        // When we are prepending to right or bottom, we are sure that the
-        // center is in a separate group before the edge group.
-        Debug.Assert(edge.Parent!.First!.IsCenter, "the center group must be the first sibling of right or bottom");
 
         edge.AddGroupFirst(group, edge.Orientation);
     }

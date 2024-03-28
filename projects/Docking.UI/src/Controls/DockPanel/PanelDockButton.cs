@@ -6,7 +6,7 @@ namespace DroidNet.Docking.Controls;
 
 using Microsoft.UI.Xaml;
 
-internal sealed class PanelPinButton : PanelButton
+internal sealed class PanelDockButton : PanelButton
 {
-    public PanelPinButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelPinButton)];
+    public PanelDockButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelDockButton)];
 }

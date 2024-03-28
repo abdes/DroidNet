@@ -31,7 +31,7 @@
     <PackageVersion Include="Handlebars.Net" Version="2.1.4" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <PackageVersion Include="CommunityToolkit.WinUI.Collections" Version="8.0.240109" />
-    <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.0.240109" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240327-build.1002" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.0.240109" />
     <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="7.1.2" />
   </ItemGroup>
@@ -45,8 +45,8 @@
   <!-- Testing -->
   <ItemGroup>
     <!-- Keep MSTest at 3.1.1 until https://github.com/microsoft/testfx/issues/2188 -->
-    <PackageVersion Include="MSTest.TestAdapter" Version="3.2.2" />
-    <PackageVersion Include="MSTest.TestFramework" Version="3.2.2" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="3.4.0-preview.24171.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="3.4.0-preview.24171.3" />
     <PackageVersion Include="MSTest.Analyzers" Version="3.2.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.9.0" />

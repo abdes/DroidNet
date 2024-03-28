@@ -102,6 +102,7 @@
                 <IsPackable>False</IsPackable>
             </PropertyGroup>
             <ItemGroup>
+                <ProjectCapability Include="TestContainer" />
                 <PackageReference Include="MSTest.TestAdapter" />
                 <PackageReference Include="MSTest.TestFramework" />
                 <PackageReference Include="MSTest.Analyzers" />

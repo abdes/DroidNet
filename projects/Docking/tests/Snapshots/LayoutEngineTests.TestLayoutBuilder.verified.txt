@@ -18,6 +18,7 @@
       ],
       Orientation: Vertical,
       IsCenter: false,
+      IsEdge: false,
       IsHorizontal: false,
       IsVertical: true
     },
@@ -75,7 +76,7 @@
                 IsNullOrEmpty: true
               },
               PreferredHeight: {
-                IsNullOrEmpty: true
+                IsNullOrEmpty: false
               },
               IsActive: true
             }
@@ -89,7 +90,7 @@
               IsNullOrEmpty: true
             },
             PreferredHeight: {
-              IsNullOrEmpty: true
+              IsNullOrEmpty: false
             },
             IsActive: true
           },
@@ -129,7 +130,7 @@
             IsNullOrEmpty: true
           },
           Height: {
-            IsNullOrEmpty: true
+            IsNullOrEmpty: false
           }
         }
       ]
@@ -259,7 +260,7 @@
                     IsNullOrEmpty: true
                   },
                   Height: {
-                    IsNullOrEmpty: true
+                    IsNullOrEmpty: false
                   }
                 }
               ]
@@ -300,7 +301,7 @@
               },
               State: Pinned,
               Width: {
-                IsNullOrEmpty: true
+                IsNullOrEmpty: false
               },
               Height: {
                 IsNullOrEmpty: true
@@ -328,6 +329,7 @@
           ],
           Orientation: Horizontal,
           IsCenter: false,
+          IsEdge: false,
           IsHorizontal: true,
           IsVertical: false
         }

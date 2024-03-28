@@ -13,6 +13,7 @@
                         Background="Transparent"
                         CornerRadius="1">
                         <FontIcon
+                            x:Name="Icon"
                             Margin="4"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -35,6 +36,11 @@
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
                                         <Setter Target="RootGrid.Background" Value="{ThemeResource ButtonRevealBackgroundPressed}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Icon.Foreground" Value="{ThemeResource ButtonDisabledForegroundThemeBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -60,16 +66,22 @@
     </Style>
 
     <Style
+        x:Key="PanelMinimizeButton"
+        BasedOn="{StaticResource PanelButton}"
+        TargetType="local:PanelMinimizeButton">
+        <Setter Property="Glyph" Value="&#xE921;" />
+    </Style>
+    <Style
         x:Key="PanelCloseButton"
         BasedOn="{StaticResource PanelButton}"
         TargetType="local:PanelCloseButton">
         <Setter Property="Glyph" Value="&#xE8BB;" />
     </Style>
     <Style
-        x:Key="PanelPinButton"
+        x:Key="PanelDockButton"
         BasedOn="{StaticResource PanelButton}"
-        TargetType="local:PanelPinButton">
-        <Setter Property="Glyph" Value="&#xE77A;" />
+        TargetType="local:PanelDockButton">
+        <Setter Property="Glyph" Value="&#xE90C;" />
     </Style>
 
 </ResourceDictionary>

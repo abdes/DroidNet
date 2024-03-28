@@ -3,6 +3,7 @@
   First: {
     IsEmpty: true,
     IsCenter: true,
+    IsEdge: false,
     IsHorizontal: false,
     IsVertical: false
   },
@@ -25,6 +26,7 @@
           }
         ],
         IsCenter: false,
+        IsEdge: false,
         IsHorizontal: true,
         IsVertical: false,
         Orientation: Horizontal
@@ -44,10 +46,12 @@
           }
         ],
         IsCenter: false,
+        IsEdge: false,
         IsHorizontal: false,
         IsVertical: false
       },
       IsCenter: false,
+      IsEdge: false,
       IsHorizontal: true,
       IsVertical: false,
       Orientation: Horizontal
@@ -56,15 +60,18 @@
       IsEmpty: true,
       Orientation: Vertical,
       IsCenter: false,
+      IsEdge: false,
       IsHorizontal: false,
       IsVertical: true
     },
     IsCenter: false,
+    IsEdge: true,
     IsHorizontal: true,
     IsVertical: false,
     Orientation: Horizontal
   },
   IsCenter: false,
+  IsEdge: false,
   IsHorizontal: true,
   IsVertical: false,
   Orientation: Horizontal

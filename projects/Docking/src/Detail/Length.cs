@@ -4,6 +4,7 @@
 
 namespace DroidNet.Docking.Detail;
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -73,6 +74,17 @@ public abstract partial class Length
     /// <param name="length">the length to be converted to a string.</param>
     public static implicit operator string?(Length? length) => length?.value;
 
+    public string? Half()
+    {
+        if (this.value is null)
+        {
+            return null;
+        }
+
+        var (numericValue, isStar) = NumericValue(this.value);
+        return $"{numericValue / 2}{(isStar ? "*" : string.Empty)}";
+    }
+
     /// <inheritdoc />
     public override string ToString() => this.value ?? "?";
 
@@ -93,4 +105,43 @@ public abstract partial class Length
 
     [GeneratedRegex(@"^(auto|(\d+(\.\d+)?)?\*?)$")]
     private static partial Regex GridLengthRegEx();
+
+    private static (double numericValue, bool isStar) NumericValue(string length)
+    {
+        Debug.Assert(length is not null, "cannot get numeric value of a length with a null value");
+
+        double numericValue;
+        var isStar = false;
+
+        if (length[^1] == '*')
+        {
+            length = length.Remove(length.Length - 1);
+            if (string.IsNullOrEmpty(length))
+            {
+                numericValue = 1;
+            }
+            else
+            {
+                if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
+                {
+                    throw new ArgumentException(
+                        $"the length `{length}` does not contain a valid numeric value",
+                        nameof(length));
+                }
+            }
+
+            isStar = true;
+        }
+        else
+        {
+            if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
+            {
+                throw new ArgumentException(
+                    $"the length `{length}` is not a valid absolute length",
+                    nameof(length));
+            }
+        }
+
+        return (numericValue, isStar);
+    }
 }

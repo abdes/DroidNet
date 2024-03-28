@@ -7,7 +7,9 @@ namespace DroidNet.Hosting.Generators;
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Testing.Platform.Builder;
 using Microsoft.UI.Xaml;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -31,7 +33,7 @@ public partial class App
     /// will be used such as when the application is launched to open a specific file.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var host = Host.CreateDefaultBuilder()
             .Build();
@@ -45,7 +47,29 @@ public partial class App
         window.Activate();
         UITestMethodAttribute.DispatcherQueue = window.DispatcherQueue;
 
+#if MSTEST_RUNNER
+
+        // Ideally we would want to reuse the generated main so we don't have to manually handle all dependencies
+        // but this type is generated too late in the build process so we fail before.
+        // You can build, inspect the generated type to copy its content if you want.
+        // await TestingPlatformEntryPoint.Main(Environment.GetCommandLineArgs().Skip(1).ToArray());
+        try
+        {
+            var cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
+            var builder = await TestApplication.CreateBuilderAsync(cliArgs);
+            Microsoft.Testing.Platform.MSBuild.TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
+            Microsoft.Testing.Extensions.Telemetry.TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
+            TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
+            using var app = await builder.BuildAsync();
+            await app.RunAsync();
+        }
+        finally
+        {
+            window.Close();
+        }
+#else
         // Replace back with e.Arguments when https://github.com/microsoft/microsoft-ui-xaml/issues/3368 is fixed
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.Run(Environment.CommandLine);
+#endif
     }
 }

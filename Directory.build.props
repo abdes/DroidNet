@@ -46,4 +46,11 @@
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
     </PropertyGroup>
 
+    <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <!-- Enable the MSTest runner, this is an opt-in feature -->
+        <EnableMSTestRunner>true</EnableMSTestRunner>
+        <!-- We need to produce an executable and not a DLL -->
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+
 </Project>
