@@ -36,6 +36,7 @@ internal partial class DockGroup : DockGroupBase
     internal DockGroup(IDocker docker)
         : base(docker) => this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
 
+    // TODO: rename this to something less confusing such as HasNoDocks
     public override bool IsEmpty => this.docks.Count == 0;
 
     public override ReadOnlyObservableCollection<IDock> Docks { get; }
@@ -51,6 +52,9 @@ internal partial class DockGroup : DockGroupBase
         get => this.second;
         protected set => this.SetPart((DockGroupBase?)value, out this.second);
     }
+
+    public IDockGroup? Sibling
+        => this.Parent is null ? null : this.Parent.First == this ? this.Parent.Second : this.Parent.First;
 
     internal bool IsLeaf => this is { First: null, Second: null };
 
@@ -86,6 +90,52 @@ internal partial class DockGroup : DockGroupBase
 
         this.disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    public void AssimilateChild(DockGroup child)
+    {
+        Debug.Assert(this.First is null || this.Second is null, "only a lone child can be assimilated by its parent");
+        Debug.Assert(child is { IsCenter: false, IsEdge: false }, "root groups cannot be assimilated");
+
+        if (child.IsLeaf)
+        {
+            child.MigrateDocksToGroup(this);
+            this.First = this.Second = null;
+        }
+        else
+        {
+            this.First = child.First;
+            this.Second = child.Second;
+        }
+
+        this.Orientation = child.Orientation;
+
+        child.Parent = null;
+    }
+
+    internal void MergeLeafParts()
+    {
+        var firstChild = this.First?.AsDockGroup();
+        var secondChild = this.Second?.AsDockGroup();
+
+        if (firstChild is null || secondChild is null)
+        {
+            throw new InvalidOperationException("cannot merge null parts");
+        }
+
+        if (!firstChild.IsLeaf || !secondChild.IsLeaf)
+        {
+            throw new InvalidOperationException("can only merge parts if both parts are leaves");
+        }
+
+        if (firstChild.IsCenter || secondChild.IsCenter)
+        {
+            throw new InvalidOperationException(
+                $"cannot merge parts when one of them is the center group: {(firstChild.IsCenter ? firstChild : secondChild)}");
+        }
+
+        secondChild.MigrateDocksToGroup(firstChild);
+        this.RemoveGroup(secondChild);
     }
 
     private void ClearDocks()
@@ -152,18 +202,7 @@ internal partial class DockGroup
             throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.DebugId}) children");
         }
 
-        // The group remains with only one part, so its orientation is flexible
-        // and should be set to Undetermined.
-        this.Orientation = DockGroupOrientation.Undetermined;
-
-        if (this.IsLeaf)
-        {
-            var parent = this.Parent as DockGroup;
-            Debug.Assert(
-                parent != null,
-                $"expecting {this.Parent} to be of a concrete implementation {nameof(DockGroup)}");
-            parent.RemoveGroup(this);
-        }
+        this.ConsolidateUp();
     }
 
     internal void AddGroupLast(IDockGroup group, DockGroupOrientation orientation)
@@ -200,42 +239,44 @@ internal partial class DockGroup
         if (!this.IsEmpty)
         {
             var migrated = this.MigrateDocksToNewGroup();
+            this.Orientation = orientation;
             this.First = isFirst ? group : migrated;
             this.Second = isFirst ? migrated : group;
-            return;
         }
-
-        // If the group is empty and both slots are free, just use the first
-        // slot.
-        if (this.first is null && this.second is null)
+        else if (this.first is null && this.second is null)
         {
+            // If the group is empty and both slots are free, just use the first
+            // slot.
             Debug.Assert(
                 this.Orientation == orientation,
                 "empty group with children, should not have an orientation on its own");
             this.First = group;
-            return;
-        }
-
-        // If only one of the slots is full, we may need to swap them so that we
-        // make the free one at the position we need to add to.
-        if ((this.First is not null && this.Second is null && isFirst) ||
-            (this.Second is not null && this.First is null && !isFirst))
-        {
-            this.SwapFirstAndSecond();
-        }
-
-        // At this point we either have the slot we need empty, and we can add
-        // in it immediately, or full, and we need to expand it.
-        if (isFirst)
-        {
-            var firstImpl = this.first as DockGroup;
-            this.First = firstImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
         }
         else
         {
-            var secondImpl = this.second as DockGroup;
-            this.Second = secondImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
+            // If only one of the slots is full, we may need to swap them so that we
+            // make the free one at the position we need to add to.
+            if ((this.First is not null && this.Second is null && isFirst) ||
+                (this.Second is not null && this.First is null && !isFirst))
+            {
+                this.SwapFirstAndSecond();
+            }
+
+            // At this point we either have the slot we need empty, and we can add
+            // in it immediately, or full, and we need to expand it.
+            if (isFirst)
+            {
+                var firstImpl = this.first as DockGroup;
+                this.First = firstImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
+            }
+            else
+            {
+                var secondImpl = this.second as DockGroup;
+                this.Second = secondImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
+            }
         }
+
+        this.ConsolidateUp();
     }
 
     // Expand the group by making a new group, replacing our second
@@ -259,12 +300,7 @@ internal partial class DockGroup
         var migrate = new DockGroup(this.Docker);
 
         this.MigrateDocksToGroup(migrate);
-
-        migrate.Orientation = this.Orientation;
-        if (this.Parent != null)
-        {
-            this.Orientation = this.Parent.Orientation;
-        }
+        migrate.Orientation = migrate.Docks.Count > 1 ? this.Orientation : DockGroupOrientation.Undetermined;
 
         return migrate;
     }
@@ -307,23 +343,25 @@ internal partial class DockGroup
                     $"expecting {this.first} to be of a concrete implementation {nameof(DockGroup)}");
                 this.Second = secondImpl.ExpandToAdd(group, orientation, !after);
             }
-
-            return;
         }
-
-        if ((this.first is null && after) || (this.second is null && !after))
+        else
         {
-            this.SwapFirstAndSecond();
+            if ((this.first is null && after) || (this.second is null && !after))
+            {
+                this.SwapFirstAndSecond();
+            }
+
+            if (this.first is null)
+            {
+                this.First = group;
+            }
+            else if (this.second is null)
+            {
+                this.Second = group;
+            }
         }
 
-        if (this.first is null)
-        {
-            this.First = group;
-        }
-        else if (this.second is null)
-        {
-            this.Second = group;
-        }
+        this.ConsolidateUp();
     }
 }
 
@@ -400,6 +438,17 @@ internal partial class DockGroup
                 : relativeToPosition + 1;
         }
 
+        if (hostGroup.IsVertical)
+        {
+            relativeTo.AsDock().Height = new Height(relativeTo.Height.Half());
+            dock.AsDock().Height = new Height("1*");
+        }
+        else
+        {
+            relativeTo.AsDock().Width = new Width(relativeTo.Width.Half());
+            dock.AsDock().Width = new Width("1*");
+        }
+
         hostGroup.docks.Insert(insertPosition, dock);
     }
 
@@ -414,13 +463,31 @@ internal partial class DockGroup
                 $"attempt to a remove dock with Id={dock.Id} from group Id={this}, but the dock was not there.");
         }
 
-        if (this.docks.Count == 0)
+        if (this.Docks.Count > 0)
         {
-            var parent = this.Parent as DockGroup;
-            Debug.Assert(
-                parent != null,
-                $"expecting {this.Parent} to be of a concrete implementation {nameof(DockGroup)}");
-            parent.RemoveGroup(this);
+            if (this.IsVertical)
+            {
+                this.Docks.Last().AsDock().Height = new Height("1*");
+            }
+            else
+            {
+                this.Docks.Last().AsDock().Width = new Width("1*");
+            }
+        }
+
+        if (this.docks.Count < 2)
+        {
+            this.Orientation = DockGroupOrientation.Undetermined;
+        }
+
+        this.ConsolidateUp();
+    }
+
+    private void ConsolidateUp()
+    {
+        if (this.Docker is IOptimizingDocker optimize)
+        {
+            optimize.ConsolidateUp(this);
         }
     }
 
@@ -511,6 +578,8 @@ internal abstract class DockGroupBase(IDocker docker) : IDockGroup
     public IDocker Docker { get; } = docker;
 
     public bool IsCenter { get; protected internal init; }
+
+    public bool IsEdge { get; protected internal init; }
 
     public bool IsHorizontal => this.Orientation == DockGroupOrientation.Horizontal;
 

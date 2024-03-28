@@ -26,22 +26,26 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     }
 
     [TestMethod]
-    public void Dock_WhenStateIsNotUnDocked_Asserts()
+    public void Dock_Works_WhenStateIsNotUnDocked()
     {
         // Setup
-        using var group = new DockGroup(this.sut);
-        group.AddDock(new SimpleDock());
-        group.Docks[0].AddDockable(Dockable.New("anchor"));
-        using var anchor = new AnchorLeft(group.Docks[0].Dockables[0]);
+        using var root = new RootDockGroup(this.sut);
+        using var anchorDock = new SimpleDock();
+        root.DockLeft(anchorDock);
+        anchorDock.AddDockable(Dockable.New("anchor"));
+        using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
 
+        using var group = new DockGroup(this.sut);
         using var dock = new SimpleDock();
+        group.AddDock(dock);
         dock.State = DockingState.Pinned;
 
         // Act
         this.sut.Dock(dock, anchor);
-#if DEBUG
-        _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
-#endif
+
+        // Assert
+        _ = dock.Group.Should().Be(anchorDock.Group);
+        _ = dock.Anchor.Should().Be(anchor);
     }
 
     [TestMethod]
@@ -145,17 +149,19 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     }
 
     [TestMethod]
-    public void DockToRoot_WhenStateIsNotUnDocked_Asserts()
+    public void DockToRoot_Works_WhenStateIsNotUnDocked()
     {
         // Setup
+        using var group = new DockGroup(this.sut);
         using var dock = new SimpleDock();
+        group.AddDock(dock);
         dock.State = DockingState.Pinned;
 
         // Act
         this.sut.DockToRoot(dock, AnchorPosition.Left);
-#if DEBUG
-        _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
-#endif
+
+        _ = dock.Group.Should().NotBeNull();
+        _ = dock.Anchor.Should().BeEquivalentTo(new Anchor(AnchorPosition.Left));
     }
 
     [TestMethod]

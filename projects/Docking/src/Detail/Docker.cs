@@ -6,11 +6,14 @@ namespace DroidNet.Docking.Detail;
 
 using System.ComponentModel;
 using System.Diagnostics;
+using DroidNet.Docking;
+using DroidNet.Docking.Utils;
 
-public class Docker : IDocker
+public class Docker : IDocker, IOptimizingDocker
 {
     private readonly RootDockGroup root;
 
+    private int isConsolidating;
     private bool disposed;
 
     public Docker() => this.root = new RootDockGroup(this);
@@ -21,7 +24,14 @@ public class Docker : IDocker
 
     public void Dock(IDock dock, Anchor anchor, bool minimized = false)
     {
-        Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
+        /*
+         * TODO: need to handle docking when the anchor is 'With'
+         */
+
+        if (dock.State != DockingState.Undocked)
+        {
+            Undock(dock);
+        }
 
         var anchorDock = anchor.RelativeTo?.Owner?.AsDock() ?? throw new ArgumentException(
             $"invalid anchor for relative docking: {anchor}",
@@ -52,6 +62,11 @@ public class Docker : IDocker
         Debug.Assert(!dock.CanMinimize, "the center dock cannot be minimized");
         Debug.Assert(!dock.CanClose, "the center dock cannot be closed");
 
+        if (dock.State != DockingState.Undocked)
+        {
+            Undock(dock);
+        }
+
         this.root.DockCenter(dock);
         dock.AsDock().Docker = this;
 
@@ -60,7 +75,10 @@ public class Docker : IDocker
 
     public void DockToRoot(IDock dock, AnchorPosition position, bool minimized = false)
     {
-        Debug.Assert(dock.State == DockingState.Undocked, $"dock is in the wrong state `{dock.State}` to be docked");
+        if (dock.State != DockingState.Undocked)
+        {
+            Undock(dock);
+        }
 
         dock.AsDock().Anchor = new Anchor(position);
         dock.AsDock().Docker = this;
@@ -174,35 +192,17 @@ public class Docker : IDocker
 
     public void CloseDock(IDock dock)
     {
-        if (dock.State == DockingState.Undocked)
-        {
-            return;
-        }
-
         if (!dock.CanClose)
         {
             throw new InvalidOperationException($"dock `{dock}` cannot be closed");
         }
 
-        if (dock.State is DockingState.Minimized or DockingState.Floating)
-        {
-            // Remove the dock from the minimized docks list of the closest tray group.
-            var tray = FindTrayForDock(dock.AsDock());
-            var removed = tray.RemoveDock(dock);
-            Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
-        }
+        Undock(dock);
 
-        // Remove the dock from its containing group
-        var dockImpl = dock.AsDock();
-        Debug.Assert(dockImpl.Group is not null, $"expecting an already docked dock `{dock}` to have a non-null group");
-        dockImpl.Group.RemoveDock(dock);
-        dock.AsDock().State = DockingState.Undocked;
         if (dock is IDisposable resource)
         {
             resource.Dispose();
         }
-
-        dock.AsDock().Docker = null;
 
         this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
     }
@@ -238,6 +238,30 @@ public class Docker : IDocker
         GC.SuppressFinalize(this);
     }
 
+    public void ConsolidateUp(IDockGroup startingGroup)
+    {
+        if (Interlocked.Exchange(ref this.isConsolidating, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = ConsolidateIfNeeded(
+                startingGroup as DockGroup ?? throw new ArgumentException(
+                    $"expecting a object of type {typeof(DockGroup)}",
+                    nameof(startingGroup)));
+            while (result is not null)
+            {
+                result = ConsolidateIfNeeded(result);
+            }
+        }
+        finally
+        {
+            _ = Interlocked.Exchange(ref this.isConsolidating, 0);
+        }
+    }
+
     private static TrayGroup FindTrayForDock(Dock dock)
     {
         // Walk the docking tree up until we find a dock group which implements
@@ -259,5 +283,99 @@ public class Docker : IDocker
         }
 
         throw new InvalidOperationException($"dock `{dock}` cannot be minimized. Could not find a tray in its branch.");
+    }
+
+    private static DockGroup? ConsolidateIfNeeded(DockGroup group)
+    {
+        // Center and edge groups cannot be optimized
+        if (group.IsCenter || group.IsEdge)
+        {
+            return null;
+        }
+
+        if (group.Parent is not DockGroup parent)
+        {
+            return null;
+        }
+
+        parent.DumpGroup();
+
+        try
+        {
+            if (group.IsLeaf)
+            {
+                if (group is { IsEmpty: true })
+                {
+                    parent.RemoveGroup(group);
+                    return parent;
+                }
+
+                // Potential for collapsing into parent or merger with sibling
+                return group.Sibling is null or DockGroup { IsLeaf: true } ? parent : null;
+            }
+
+            // Single child parent
+            if (group.First is null || group.Second is null)
+            {
+                var child = group.First == null ? group.Second!.AsDockGroup() : group.First.AsDockGroup();
+
+                // with compatible orientation => assimilate child into parent
+                if (child.Orientation == DockGroupOrientation.Undetermined || child.Orientation == group.Orientation)
+                {
+                    group.AssimilateChild(child);
+                    return group;
+                }
+            }
+            else
+            {
+                // Parent with two leaf children
+                if (group is { First: DockGroup { IsLeaf: true }, Second: DockGroup { IsLeaf: true } })
+                {
+                    // and compatible orientations => merge the children
+                    if ((group.First.Orientation == DockGroupOrientation.Undetermined ||
+                         group.First.Orientation == group.Orientation) &&
+                        (group.Second.Orientation == DockGroupOrientation.Undetermined ||
+                         group.Second.Orientation == group.Orientation))
+                    {
+                        group.MergeLeafParts();
+                        return group;
+                    }
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            parent.DumpGroup();
+        }
+    }
+
+    private static void Undock(IDock dock)
+    {
+        if (dock.State == DockingState.Undocked)
+        {
+            return;
+        }
+
+        if (dock.State is DockingState.Minimized or DockingState.Floating)
+        {
+            // Remove the dock from the minimized docks list of the closest tray group.
+            var tray = FindTrayForDock(dock.AsDock());
+            var removed = tray.RemoveDock(dock);
+            Debug.Assert(removed, $"was expecting the dock `{dock}` to be in the tray");
+        }
+
+        // Remove the dock from its containing group
+        var dockImpl = dock.AsDock();
+        Debug.Assert(dockImpl.Group is not null, $"expecting an already docked dock `{dock}` to have a non-null group");
+        dockImpl.Group.RemoveDock(dock);
+        dock.AsDock().State = DockingState.Undocked;
+        dock.AsDock().Group = null;
+
+        dock.AsDock().Docker = null;
+
+        // We do not trigger a LayoutChanged event because the undocking will always be followed by another operation,
+        // which, if needed, will trigger the vent.
     }
 }

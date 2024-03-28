@@ -5,26 +5,22 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <ApplicationManifest>app.manifest</ApplicationManifest>
-        <EnablePreviewMsixTooling>true</EnablePreviewMsixTooling>
+        <EnableMsixTooling>true</EnableMsixTooling>
+        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
         <UseWinUI>true</UseWinUI>
-        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+
+        <EnableMSTestRunner>false</EnableMSTestRunner>
+        <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
+        <WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
 
         <RootNamespace>$(RootNamespace).Hosting.Generators</RootNamespace>
     </PropertyGroup>
-
-    <ItemGroup>
-        <AppxManifest Include="Package.appxmanifest">
-            <SubType>Designer</SubType>
-        </AppxManifest>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Manifest Include="$(ApplicationManifest)" />
-    </ItemGroup>
 
     <ItemGroup>
         <Content Include="Assets\LockScreenLogo.scale-200.png" />
@@ -35,8 +31,13 @@
         <Content Include="Assets\StoreLogo.png" />
         <Content Include="Assets\Wide310x150Logo.scale-200.png" />
     </ItemGroup>
+    <ItemGroup>
+        <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
 
     <ItemGroup>
+        <ProjectCapability Include="TestContainer" />
+
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
@@ -61,5 +62,21 @@
 
         <ProjectReference Include="..\..\..\Hosting\src\Hosting.csproj" />
     </ItemGroup>
+
+    <!--
+      Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be activated for this
+      project even if the Windows App SDK Nuget package has not yet been restored.
+    -->
+    <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <ProjectCapability Include="Msix" />
+    </ItemGroup>
+
+    <!--
+      Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and Publish"
+      context menu entry to be enabled for this project even if the Windows App SDK Nuget package has not yet been restored.
+    -->
+    <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+    </PropertyGroup>
 
 </Project>

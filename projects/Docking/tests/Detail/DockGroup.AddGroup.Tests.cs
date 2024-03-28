@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Detail;
 
 using DroidNet.Docking;
+using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -204,5 +205,39 @@ public partial class DockGroupTests
         _ = sut.First.Should().NotBeNull();
         _ = sut.First!.First.Should().BeSameAs(newGroup);
         _ = sut.First!.Second.Should().BeSameAs(oldFirst);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
+    public void AddGroupLast_InvokesOptimizerIfImplemented()
+    {
+        // Arrange
+        var optimizingDocker = new DummyOptimizingDocker();
+        var sut = new EmptyDockGroup(optimizingDocker);
+        var newGroup = new MockDockGroup(optimizingDocker);
+
+        // Act
+        optimizingDocker.Reset();
+        sut.AddGroupLast(newGroup, DockGroupOrientation.Undetermined);
+
+        // Assert
+        _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DockGroup)}.GroupManagement")]
+    public void AddGroupFirst_InvokesOptimizerIfImplemented()
+    {
+        // Arrange
+        var optimizingDocker = new DummyOptimizingDocker();
+        var sut = new EmptyDockGroup(optimizingDocker);
+        var newGroup = new MockDockGroup(optimizingDocker);
+
+        // Act
+        optimizingDocker.Reset();
+        sut.AddGroupFirst(newGroup, DockGroupOrientation.Undetermined);
+
+        // Assert
+        _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();
     }
 }

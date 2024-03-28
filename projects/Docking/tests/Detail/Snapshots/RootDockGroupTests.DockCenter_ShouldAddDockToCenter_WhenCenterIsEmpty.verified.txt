@@ -15,10 +15,12 @@
       }
     ],
     IsCenter: true,
+    IsEdge: false,
     IsHorizontal: false,
     IsVertical: false
   },
   IsCenter: false,
+  IsEdge: false,
   IsHorizontal: false,
   IsVertical: false
 }
