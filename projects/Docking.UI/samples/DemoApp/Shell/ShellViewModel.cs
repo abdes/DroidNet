@@ -12,6 +12,7 @@ using DroidNet.Hosting.Generators;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 
+/// <summary>The ViewModel for the application main window shell.</summary>
 [InjectAs(ServiceLifetime.Singleton)]
 public partial class ShellViewModel : ObservableObject
 {
@@ -30,7 +31,6 @@ public partial class ShellViewModel : ObservableObject
     {
         var dockViewFactory = this.resolver.Resolve<IDockViewFactory>();
         var layout = new GridFlowLayout(dockViewFactory);
-        var viewModel = this.resolver.Resolve<Func<IDocker, LayoutEngine, WorkspaceViewModel>>()(docker, layout);
-        return viewModel;
+        return this.resolver.Resolve<Func<IDocker, LayoutEngine, WorkspaceViewModel>>()(docker, layout);
     }
 }

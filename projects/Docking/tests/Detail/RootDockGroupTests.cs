@@ -12,7 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(RootDockGroup)}")]
+[TestCategory(nameof(RootDockGroup))]
 public class RootDockGroupTests : VerifyBase, IDisposable
 {
     private readonly DummyDocker docker = new();
@@ -104,7 +104,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
     }
 
     [TestMethod]
-    public Task DockLeft_ShouldAddDockToLeft_InANewGroup()
+    public async Task DockLeft_ShouldAddDockToLeft_InANewGroup()
     {
         // Setup
         using var dock1 = new SimpleDock();
@@ -125,7 +125,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
 
         _ = dock1.Group.Should().NotBe(dock2.Group);
 
-        return this.Verify(this.sut).UseDirectory("Snapshots");
+        _ = await this.Verify(this.sut).UseDirectory("Snapshots");
     }
 
     [TestMethod]
@@ -163,7 +163,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
     }
 
     [TestMethod]
-    public Task DockTop_ShouldAddDockToTop_InANewGroup()
+    public async Task DockTop_ShouldAddDockToTop_InANewGroup()
     {
         // Setup
         using var dock1 = new SimpleDock();
@@ -184,7 +184,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
 
         _ = dock1.Group.Should().NotBe(dock2.Group);
 
-        return this.Verify(this.sut).UseDirectory("Snapshots");
+        _ = await this.Verify(this.sut).UseDirectory("Snapshots");
     }
 
     [TestMethod]
@@ -220,7 +220,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
     }
 
     [TestMethod]
-    public Task DockRight_ShouldAddDockToRight_InANewGroup()
+    public async Task DockRight_ShouldAddDockToRight_InANewGroup()
     {
         // Setup
         using var dock1 = new SimpleDock();
@@ -241,7 +241,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
 
         _ = dock1.Group.Should().NotBe(dock2.Group);
 
-        return this.Verify(this.sut).UseDirectory("Snapshots");
+        _ = await this.Verify(this.sut).UseDirectory("Snapshots");
     }
 
     [TestMethod]
@@ -278,7 +278,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
     }
 
     [TestMethod]
-    public Task DockBottom_ShouldAddDockToBottom_InANewGroup()
+    public async Task DockBottom_ShouldAddDockToBottom_InANewGroup()
     {
         // Setup
         using var dock1 = new SimpleDock();
@@ -299,7 +299,7 @@ public class RootDockGroupTests : VerifyBase, IDisposable
 
         _ = dock1.Group.Should().NotBe(dock2.Group);
 
-        return this.Verify(this.sut).UseDirectory("Snapshots");
+        _ = await this.Verify(this.sut).UseDirectory("Snapshots");
     }
 
     [TestMethod]

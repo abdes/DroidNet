@@ -17,7 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

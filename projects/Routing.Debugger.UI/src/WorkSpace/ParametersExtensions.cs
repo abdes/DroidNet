@@ -22,7 +22,7 @@ internal static class ParametersExtensions
     {
         if (value)
         {
-            parameters.AddOrUpdate(name, null);
+            parameters.AddOrUpdate(name, value: null);
         }
         else
         {
@@ -32,13 +32,13 @@ internal static class ParametersExtensions
 
     internal static bool ParameterHasValue(this IParameters parameters, string name, string? value)
         => parameters.TryGetValue(name, out var parameterValue) &&
-           parameterValue == value;
+           string.Equals(parameterValue, value, StringComparison.Ordinal);
 
     internal static Width WidthOrDefault(this IParameters parameters)
         => parameters.TryGetValue("w", out var value) ? new Width(value) : new Width();
 
     internal static Height HeightOrDefault(this IParameters parameters)
-        => parameters.TryGetValue("h", out var value) ? new Height(value!) : new Height();
+        => parameters.TryGetValue("h", out var value) ? new Height(value) : new Height();
 
     internal static (AnchorPosition anchorPosition, string? relativeDockableId) AnchorInfoOrDefault(
         this IParameters parameters)
@@ -51,7 +51,8 @@ internal static class ParametersExtensions
             }
 
             // Check that no other anchor position is specified in the parameters
-            foreach (var other in Enum.GetNames<AnchorPosition>().Where(n => n != anchor))
+            foreach (var other in Enum.GetNames<AnchorPosition>()
+                         .Where(n => !string.Equals(n, anchor, StringComparison.OrdinalIgnoreCase)))
             {
                 if (parameters.Contains(other))
                 {

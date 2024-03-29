@@ -68,15 +68,14 @@ public class UserInterfaceThread(
         _ =>
         {
             this.HostingContext.Dispatcher = DispatcherQueue.GetForCurrentThread();
-            DispatcherQueueSynchronizationContext context = new(this.HostingContext.Dispatcher);
-            SynchronizationContext.SetSynchronizationContext(context);
+            DispatcherQueueSynchronizationContext synchronizationContext = new(this.HostingContext.Dispatcher);
+            SynchronizationContext.SetSynchronizationContext(synchronizationContext);
 
             this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
 
             /*
-             * TODO: here we can add code that initializes the UI before the
-             * main window is created and activated For example: unhandled
-             * exception handlers, maybe instancing, activation, etc...
+             * Here we can add code that initializes the UI before the main window is created and activated For example:
+             * unhandled exception handlers, maybe instancing, activation, etc...
              */
 
             // NOTE: First window creation is to be handled in Application.OnLaunched()

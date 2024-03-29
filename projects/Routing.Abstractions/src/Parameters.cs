@@ -11,7 +11,7 @@ using System.Collections;
 /// </summary>
 public class Parameters : IParameters
 {
-    // Parameter names are case-insensitive.
+    /// <summary>Parameter names are case-insensitive.</summary>
     private readonly Dictionary<string, string?> parameters = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets the number of parameters in the collection.</summary>

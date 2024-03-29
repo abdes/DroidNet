@@ -110,7 +110,7 @@ public class Route : IRoute
                 // Parameters match any segment
                 posParams[part[1..]] = segment;
             }
-            else if (part != segment.Path)
+            else if (!string.Equals(part, segment.Path, StringComparison.Ordinal))
             {
                 return new NoMatch()
                 {
@@ -132,7 +132,7 @@ public class Route : IRoute
     /// </summary>
     /// <remarks>
     /// Instances of this class will always have their <see cref="IsMatch" />
-    /// property be <c>true</c>, and will always have a non-empty collection of
+    /// property be <see langword="true" />, and will always have a non-empty collection of
     /// <see cref="Consumed" /> segments.
     /// </remarks>
     /// <seealso cref="IRoute.PathMatcher" />
@@ -146,11 +146,11 @@ public class Route : IRoute
         /// All segments in the list have been successfully matched to a
         /// <see cref="UrlSegment" /> in the <see cref="UrlSegmentGroup" />.
         /// </remarks>
-        public required List<IUrlSegment> Consumed { get; init; } = [];
+        public required IList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
         public IDictionary<string, IUrlSegment> PositionalParams { get; init; }
-            = new Dictionary<string, IUrlSegment>();
+            = new Dictionary<string, IUrlSegment>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public class Route : IRoute
     /// </summary>
     /// <remarks>
     /// Instances of this class will always have their <see cref="IsMatch" />
-    /// property be <c>false</c>, and will always have an empty collection of
+    /// property be <see langword="false" />, and will always have an empty collection of
     /// <see cref="PositionalParams" />. They may have segments in the
     /// <see cref="Consumed" /> collection, representing route segments that have
     /// been successfully matched up to until the overall match was deemed a
@@ -177,7 +177,7 @@ public class Route : IRoute
         /// been successfully matched to a <see cref="UrlSegment" /> in the
         /// <see cref="UrlSegmentGroup" />, up to until the match failed.
         /// </remarks>
-        public List<IUrlSegment> Consumed { get; init; } = [];
+        public IList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
         /// <remarks>

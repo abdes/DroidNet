@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="DroidNet.Docking.Controls.DockTray.DockTray"
+    x:Class="DroidNet.Docking.Controls.DockTray"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Docking.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:docking="using:DroidNet.Docking"
-    xmlns:local="using:DroidNet.Docking.Controls.DockTray"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:tkc="using:CommunityToolkit.WinUI.Controls"
     mc:Ignorable="d">
@@ -40,9 +40,9 @@
             </ItemContainer>
         </DataTemplate>
 
-        <local:OrientationToLayoutConverter x:Key="OrientationToLayoutConverter" />
+        <controls:OrientationToLayoutConverter x:Key="OrientationToLayoutConverter" />
 
-        <local:OrientationTemplateSelector
+        <controls:OrientationTemplateSelector
             x:Key="OrientationTemplateSelector"
             DockTrayOrientation="{x:Bind ViewModel.Orientation}"
             HorizontalTemplate="{StaticResource HorizontalTemplate}"

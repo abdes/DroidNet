@@ -11,7 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(AnchorTests)}")]
+[TestCategory(nameof(AnchorTests))]
 public class AnchorTests
 {
     [TestMethod]
@@ -115,7 +115,7 @@ public class AnchorTests
             this.Owner = owner;
         }
 
-        public event Action? OnDisposed;
+        public event EventHandler<EventArgs>? OnDisposed;
 
         public string Id { get; }
 
@@ -135,8 +135,8 @@ public class AnchorTests
 
         public bool IsActive => false;
 
-        public void Dispose() => this.OnDisposed?.Invoke();
+        public void Dispose() => this.OnDisposed?.Invoke(this, EventArgs.Empty);
 
-        public bool HasSubscription() => this.OnDisposed != null && this.OnDisposed.GetInvocationList().Length > 0;
+        public bool HasSubscription() => this.OnDisposed?.GetInvocationList().Length > 0;
     }
 }

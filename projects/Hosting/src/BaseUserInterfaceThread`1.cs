@@ -21,12 +21,14 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
 {
     private readonly IHostApplicationLifetime hostApplicationLifetime;
     private readonly ILogger logger;
-    private readonly ManualResetEvent serviceManualResetEvent = new(false);
+    private readonly ManualResetEvent serviceManualResetEvent = new(initialState: false);
 
-    // This manual reset event is signaled when the UI thread completes. It is
-    // primarily used in testing environment to ensure that the thread execution
-    // completes before the test results are verified.
-    private readonly ManualResetEvent uiThreadCompletion = new(false);
+    /// <summary>
+    /// This manual reset event is signaled when the UI thread completes. It is
+    /// primarily used in testing environment to ensure that the thread execution
+    /// completes before the test results are verified.
+    /// </summary>
+    private readonly ManualResetEvent uiThreadCompletion = new(initialState: false);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BaseUserInterfaceThread{T}" /> class.
@@ -81,7 +83,7 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
     /// Gets the hosting context for the user interface service.
     /// </summary>
     /// <value>
-    /// Although never <c>null</c>, the different fields of the hosting context
+    /// Although never <see langword="null" />, the different fields of the hosting context
     /// may or may not contain valid values depending on the current state of
     /// the User Interface thread. Refer to the concrete class documentation.
     /// </value>

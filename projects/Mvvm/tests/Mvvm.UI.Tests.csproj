@@ -14,6 +14,9 @@
 
         <RootNamespace>$(RootNamespace).Mvvm</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+        <Page Remove="App.xaml" />
+    </ItemGroup>
 
     <ItemGroup>
         <Manifest Include="$(ApplicationManifest)" />

@@ -64,10 +64,10 @@ public sealed partial class MainWindow
         var left2 = MakeDockWithVerticalDockable("left2");
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
-        docker.DockToRoot(MakeDockWithVerticalDockable("left3"), AnchorPosition.Left, true);
+        docker.DockToRoot(MakeDockWithVerticalDockable("left3"), AnchorPosition.Left, minimized: true);
         docker.DockToRoot(MakeDockWithVerticalDockable("left4"), AnchorPosition.Left);
         docker.DockToRoot(MakeDockWithHorizontalDockable("top1"), AnchorPosition.Top);
-        docker.DockToRoot(MakeDockWithHorizontalDockable("bottom1"), AnchorPosition.Bottom, true);
+        docker.DockToRoot(MakeDockWithHorizontalDockable("bottom1"), AnchorPosition.Bottom, minimized: true);
 
         var right1 = MakeDockWithVerticalDockable("right1");
         docker.DockToRoot(right1, AnchorPosition.Right);

@@ -103,7 +103,11 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
                 root = root.Parent;
             }
 
-            throw new NoRouteForSegmentsException(segments, root);
+            throw new NoRouteForSegmentsException
+            {
+                Segments = segments,
+                UrlTreeRoot = root,
+            };
         }
 
         Debug.Assert(
@@ -132,16 +136,18 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
     }
 
     /// <summary>
-    /// Determines which routes in the config match the given segments and
-    /// constructs the active route hierarchy accordingly.
+    /// Determines which routes in the config match the given segments and constructs the active route hierarchy accordingly.
     /// </summary>
+    /// <param name="state">The router state.</param>
+    /// <param name="config">The routes' configuration.</param>
+    /// <param name="segmentGroup">The segment group to which the segments being matched belong.</param>
+    /// <param name="segments">The segments to match to routes.</param>
+    /// <param name="outlet">The outlet name of route being parsed.</param>
     /// <remarks>
-    /// Any time the URL changes, the router derives a new set of parameters
-    /// from it: the router takes the positional parameters (e.g., ‘:id’) of
-    /// the matched URL segments and the matrix parameters of the last matched
-    /// URL segment and combines those. This operation is pure: the URL has to
-    /// change for the parameters to change. Or in other words, the same URL
-    /// will always result in the same set of parameters.
+    /// Any time the URL changes, the router derives a new set of parameters from it: the router takes the positional parameters
+    /// (e.g., ‘:id’) of the matched URL segments and the matrix parameters of the last matched URL segment and combines those.
+    /// This operation is pure: the URL has to change for the parameters to change. Or in other words, the same URL will always
+    /// result in the same set of parameters.
     /// </remarks>
     private static IExtendedMatchResult MatchSegments(
         IActiveRoute state,
@@ -216,7 +222,7 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
                     lastActiveRoute = childMatchResult.LastActiveRoute;
 
                     // Merge the consumed segments and positional parameters from the parent and child match results
-                    matchResult.Consumed.AddRange(childMatchResult.Consumed);
+                    AddChildConsumedTokens(matchResult.Consumed, childMatchResult.Consumed);
                     foreach (var param in childMatchResult.PositionalParams)
                     {
                         matchResult.PositionalParams[param.Key] = param.Value;
@@ -247,12 +253,26 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
         return new NoMatch();
     }
 
-    private class Match : Route.Match, IExtendedMatchResult
+    private static void AddChildConsumedTokens(IList<IUrlSegment> consumed, IEnumerable<IUrlSegment> additionalSegments)
+    {
+        if (consumed is List<IUrlSegment> parentAsList)
+        {
+            parentAsList.AddRange(additionalSegments);
+            return;
+        }
+
+        foreach (var item in additionalSegments)
+        {
+            consumed.Add(item);
+        }
+    }
+
+    private sealed class Match : Route.Match, IExtendedMatchResult
     {
         public required IActiveRoute LastActiveRoute { get; init; }
     }
 
-    private class NoMatch : Route.NoMatch, IExtendedMatchResult
+    private sealed class NoMatch : Route.NoMatch, IExtendedMatchResult
     {
         public IActiveRoute? LastActiveRoute => null;
     }

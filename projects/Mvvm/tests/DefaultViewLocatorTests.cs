@@ -24,7 +24,7 @@ public class DefaultViewLocatorTests
     public void Initialize()
     {
         this.serviceLocatorMock = new Mock<IServiceProvider>();
-        this.viewLocator = new DefaultViewLocator(this.serviceLocatorMock!.Object, null);
+        this.viewLocator = new DefaultViewLocator(this.serviceLocatorMock!.Object, loggerFactory: null);
 
         this.view = new MyView(new MyViewModel());
     }
@@ -188,6 +188,7 @@ public class DefaultViewLocatorTests
 }
 
 #pragma warning disable SA1201 // Elements should appear in the correct order
+#pragma warning disable MA0048 // File name must match type name
 internal interface IBaseViewModel;
 
 internal interface IBaseView;
@@ -205,4 +206,5 @@ internal class BaseView(IBaseViewModel viewModel) : IViewFor<IBaseViewModel>
 
     object? IViewFor.ViewModel { get; set; } = viewModel;
 }
+#pragma warning restore MA0048 // File name must match type name
 #pragma warning restore SA1201 // Elements should appear in the correct order

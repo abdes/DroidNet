@@ -8,6 +8,4 @@ using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 
 [InjectAs(ServiceLifetime.Transient)]
-public class WelcomeViewModel(IDock dock)
-{
-}
+public class WelcomeViewModel;

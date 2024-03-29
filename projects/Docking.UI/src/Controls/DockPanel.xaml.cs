@@ -32,50 +32,12 @@ public sealed partial class DockPanel
     {
         this.InitializeComponent();
 
-        var dockingModePropertyChangeHandler = new PropertyChangedEventHandler(
-            (sender, args) =>
-            {
-                if (sender is not DockPanelViewModel vm ||
-                    args.PropertyName != nameof(DockPanelViewModel.IsInDockingMode))
-                {
-                    return;
-                }
-
-                if (vm.IsInDockingMode)
-                {
-                    this.EnterDockingMode();
-                }
-                else
-                {
-                    this.LeaveDockingMode();
-                }
-            });
-
-        var beingDockedPropertyChangeHandler = new PropertyChangedEventHandler(
-            (sender, args) =>
-            {
-                if (sender is not DockPanelViewModel vm ||
-                    args.PropertyName != nameof(DockPanelViewModel.IsBeingDocked))
-                {
-                    return;
-                }
-
-                if (vm.IsBeingDocked)
-                {
-                    this.AnimatedBorderStoryBoard.Begin();
-                }
-                else
-                {
-                    this.AnimatedBorderStoryBoard.Stop();
-                }
-            });
-
         this.ViewModelChanged += (_, args) =>
         {
             if (args.OldValue is not null)
             {
-                args.OldValue.PropertyChanged -= dockingModePropertyChangeHandler;
-                args.OldValue.PropertyChanged -= beingDockedPropertyChangeHandler;
+                args.OldValue.PropertyChanged -= this.OnIsInDockingModePropertyChanged;
+                args.OldValue.PropertyChanged -= this.OnIsBeingDockedPropertyChanged;
                 args.OldValue.IsActive = false;
             }
 
@@ -84,33 +46,13 @@ public sealed partial class DockPanel
                 return;
             }
 
-            this.ViewModel.PropertyChanged += dockingModePropertyChangeHandler;
-            this.ViewModel.PropertyChanged += beingDockedPropertyChangeHandler;
+            this.ViewModel.PropertyChanged += this.OnIsInDockingModePropertyChanged;
+            this.ViewModel.PropertyChanged += this.OnIsBeingDockedPropertyChanged;
             this.ViewModel.IsActive = true;
         };
 
-        this.Loaded += (_, _) =>
-        {
-            // Register for size changes, but we don't want to trigger the effect on every change when a dock is being
-            // continuously resized. So, we throttle the events and only react after a stable size is reached.
-            this.sizeChangedSubscription = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
-                    h => this.SizeChanged += h,
-                    h => this.SizeChanged -= h)
-                .Throttle(TimeSpan.FromMilliseconds(ResizeThrottleInMs))
-                .Subscribe(
-                    evt => this.DispatcherQueue.TryEnqueue(() => this.ViewModel?.OnSizeChanged(evt.EventArgs.NewSize)));
-
-            // We should always set the initial size in the view model after the view is loaded, and everytime the view
-            // model changes.
-            this.ViewModel?.OnSizeChanged(this.GetActualSize());
-            this.ViewModelChanged += (_, _) => this.ViewModel?.OnSizeChanged(this.GetActualSize());
-        };
-
-        this.Unloaded += (_, _) =>
-        {
-            this.sizeChangedSubscription?.Dispose();
-            this.ViewModel = null;
-        };
+        this.Loaded += this.OnLoaded;
+        this.Unloaded += this.OnUnloaded;
 
         this.pointerEnterEventHandler = (_, _) => this.ShowOverlay();
         this.pointerExitEventHandler = (_, _) => this.HideOverlay();
@@ -118,11 +60,74 @@ public sealed partial class DockPanel
 
     public override string ToString() => $"{nameof(DockPanel)} [{this.ViewModel?.Title ?? string.Empty}]";
 
+    private void OnLoaded(object o, RoutedEventArgs routedEventArgs)
+    {
+        // Register for size changes, but we don't want to trigger the effect on every change when a dock is being
+        // continuously resized. So, we throttle the events and only react after a stable size is reached.
+        this.sizeChangedSubscription = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
+                h => this.SizeChanged += h,
+                h => this.SizeChanged -= h)
+            .Throttle(TimeSpan.FromMilliseconds(ResizeThrottleInMs))
+            .Subscribe(
+                evt => this.DispatcherQueue.TryEnqueue(() => this.ViewModel?.OnSizeChanged(evt.EventArgs.NewSize)));
+
+        // We should always set the initial size in the view model after the view is loaded, and everytime the view
+        // model changes.
+        this.ViewModel?.OnSizeChanged(this.GetActualSize());
+        this.ViewModelChanged += (_, _) => this.ViewModel?.OnSizeChanged(this.GetActualSize());
+    }
+
+    private void OnUnloaded(object o, RoutedEventArgs routedEventArgs)
+    {
+        this.sizeChangedSubscription?.Dispose();
+        this.ViewModel = null;
+    }
+
+    private void OnIsBeingDockedPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (sender is not DockPanelViewModel vm || !string.Equals(
+                args.PropertyName,
+                nameof(DockPanelViewModel.IsBeingDocked),
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (vm.IsBeingDocked)
+        {
+            this.AnimatedBorderStoryBoard.Begin();
+        }
+        else
+        {
+            this.AnimatedBorderStoryBoard.Stop();
+        }
+    }
+
+    private void OnIsInDockingModePropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (sender is not DockPanelViewModel vm || !string.Equals(
+                args.PropertyName,
+                nameof(DockPanelViewModel.IsInDockingMode),
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (vm.IsInDockingMode)
+        {
+            this.EnterDockingMode();
+        }
+        else
+        {
+            this.LeaveDockingMode();
+        }
+    }
+
     private void ShowOverlay()
     {
         Debug.Assert(this.ViewModel is not null, "expecting the ViewModel to be not null");
 
-        if (this.ViewModel.IsInDockingMode is false)
+        if (!this.ViewModel.IsInDockingMode)
         {
             return;
         }
@@ -160,7 +165,7 @@ public sealed partial class DockPanel
     {
         Debug.Assert(this.ViewModel is not null, "expecting the ViewModel to be not null");
 
-        if (this.ViewModel.IsBeingDocked is true)
+        if (this.ViewModel.IsBeingDocked)
         {
             this.ShowOverlay();
         }

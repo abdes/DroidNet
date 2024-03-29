@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Detail;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using DroidNet.Docking.Utils;
 
 /// <summary>
@@ -54,7 +55,17 @@ internal partial class DockGroup : DockGroupBase
     }
 
     public IDockGroup? Sibling
-        => this.Parent is null ? null : this.Parent.First == this ? this.Parent.Second : this.Parent.First;
+    {
+        get
+        {
+            if (this.Parent is null)
+            {
+                return null;
+            }
+
+            return this.Parent.First == this ? this.Parent.Second : this.Parent.First;
+        }
+    }
 
     internal bool IsLeaf => this is { First: null, Second: null };
 
@@ -199,23 +210,24 @@ internal partial class DockGroup
 
         if (!mine)
         {
-            throw new InvalidOperationException($"group with Id={group} is not one of my(Id={this.DebugId}) children");
+            throw new InvalidOperationException(
+                $"group with Id={group} is not one of my(Id={this.DebugId.ToString(CultureInfo.InvariantCulture)}) children");
         }
 
         this.ConsolidateUp();
     }
 
     internal void AddGroupLast(IDockGroup group, DockGroupOrientation orientation)
-        => this.AddGroup(group, false, orientation);
+        => this.AddGroup(group, isFirst: false, orientation);
 
     internal void AddGroupFirst(IDockGroup group, DockGroupOrientation orientation)
-        => this.AddGroup(group, true, orientation);
+        => this.AddGroup(group, isFirst: true, orientation);
 
     internal void AddGroupAfter(IDockGroup group, IDockGroup sibling, DockGroupOrientation orientation)
-        => this.AddGroupRelativeTo(group, sibling, true, orientation);
+        => this.AddGroupRelativeTo(group, sibling, after: true, orientation);
 
     internal void AddGroupBefore(IDockGroup group, IDockGroup sibling, DockGroupOrientation orientation)
-        => this.AddGroupRelativeTo(group, sibling, false, orientation);
+        => this.AddGroupRelativeTo(group, sibling, after: false, orientation);
 
     protected virtual void MigrateDocksToGroup(DockGroup group)
     {
@@ -279,9 +291,14 @@ internal partial class DockGroup
         this.ConsolidateUp();
     }
 
-    // Expand the group by making a new group, replacing our second
-    // part with it, and move our second part and the group to add to
-    // it.
+    /// <summary>
+    /// Expand the group by making a new group, replacing our second part with it, and move our second part and the group to add
+    /// to it.
+    /// </summary>
+    /// <param name="newGroup">The group to be added.</param>
+    /// <param name="orientation">The desired orientation.</param>
+    /// <param name="newGroupFirst">Whether to place the new group first or second.</param>
+    /// <returns>The newly created expansion group.</returns>
     private DockGroup ExpandToAdd(IDockGroup newGroup, DockGroupOrientation orientation, bool newGroupFirst)
     {
         var expanded = new DockGroup(this.Docker)
@@ -467,11 +484,11 @@ internal partial class DockGroup
         {
             if (this.IsVertical)
             {
-                this.Docks.Last().AsDock().Height = new Height("1*");
+                this.Docks[^1].AsDock().Height = new Height("1*");
             }
             else
             {
-                this.Docks.Last().AsDock().Width = new Width("1*");
+                this.Docks[^1].AsDock().Width = new Width("1*");
             }
         }
 
@@ -552,15 +569,22 @@ internal partial class DockGroup
         this.docks.Clear();
 
         this.First = beforeGroup ?? hostGroup;
-        this.Second = beforeGroup is null
-            ? afterGroup
-            : afterGroup is null
-                ? hostGroup
-                : new DockGroup(this.Docker)
-                {
-                    First = hostGroup,
-                    Second = afterGroup,
-                };
+        if (beforeGroup is null)
+        {
+            this.Second = afterGroup;
+        }
+        else if (afterGroup is null)
+        {
+            this.Second = hostGroup;
+        }
+        else
+        {
+            this.Second = new DockGroup(this.Docker)
+            {
+                First = hostGroup,
+                Second = afterGroup,
+            };
+        }
 
         Debug.Assert(hostGroup.IsLeaf, "re-partitioning will always return a host group which can host docks");
         return hostGroup;

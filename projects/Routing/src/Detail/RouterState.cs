@@ -14,7 +14,7 @@ namespace DroidNet.Routing.Detail;
 /// The parsed <see cref="UrlTree" /> corresponding to the <paramref name="url" />.
 /// </param>
 /// <param name="root">The root <see cref="IActiveRoute" /> of the state.</param>
-internal class RouterState(string url, IUrlTree urlTree, IActiveRoute root) : IRouterState
+internal sealed class RouterState(string url, IUrlTree urlTree, IActiveRoute root) : IRouterState
 {
     public string Url { get; set; } = url;
 

@@ -29,12 +29,3 @@ public interface IViewFor<T> : IViewFor
     /// <inheritdoc cref="IViewFor.ViewModel" />
     new T? ViewModel { get; set; }
 }
-
-/// <summary>Represents the data provided with the <see cref="IViewFor{T}.ViewModelChanged" /> event.</summary>
-/// <typeparam name="T">The ViewModel type.</typeparam>
-/// <param name="oldValue">The old value of the <see cref="IViewFor{T}.ViewModel" /> property.</param>
-public class ViewModelChangedEventArgs<T>(T? oldValue) : EventArgs
-    where T : class
-{
-    public T? OldValue { get; } = oldValue;
-}

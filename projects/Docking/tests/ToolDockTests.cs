@@ -8,7 +8,7 @@ using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
-[TestCategory($"{nameof(ToolDock)}")]
+[TestCategory(nameof(ToolDock))]
 public class ToolDockTests
 {
     [TestMethod]

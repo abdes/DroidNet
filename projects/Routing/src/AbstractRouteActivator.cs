@@ -10,14 +10,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
-/// Abstract route activator to just provide an implementation for
-/// <see cref="IRouteActivator.ActivateRoutesRecursive" /> using the
-/// <see cref="IRouteActivator.ActivateRoute" /> method.
+/// Abstract route activator to just provide an implementation for <see cref="IRouteActivator.ActivateRoutesRecursive" /> using
+/// the <see cref="IRouteActivator.ActivateRoute" /> method.
 /// </summary>
+/// <param name="serviceProvider">The dependency injector's service provider.</param>
 /// <param name="loggerFactory">
-/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
-/// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
-/// from the Dependency Injector.
+/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a
+/// <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
 public abstract partial class AbstractRouteActivator(
     IServiceProvider serviceProvider,
@@ -109,6 +108,6 @@ public abstract partial class AbstractRouteActivator(
     private object ResolveViewModel(Type viewModelType)
     {
         var viewModel = serviceProvider.GetService(viewModelType);
-        return viewModel ?? throw new MissingViewModelException(viewModelType);
+        return viewModel ?? throw new MissingViewModelException { ViewModelType = viewModelType };
     }
 }

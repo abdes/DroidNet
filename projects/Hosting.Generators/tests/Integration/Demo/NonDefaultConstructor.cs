@@ -15,7 +15,6 @@ internal sealed class NonDefaultConstructor
     {
     }
 
-    // This constructor should be chosen when this type is resolved by the DI resolver.
     public NonDefaultConstructor([FromKeyedServices("mine")] IMyInterface injected) => this.Injected = injected;
 
     public IMyInterface? Injected { get; }

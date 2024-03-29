@@ -74,7 +74,7 @@ https://github.com/amis92/csharp-source-generators
         <ProjectReference Include="..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" PrivateAssets="all" />
     </ItemGroup>
     <ItemGroup>
-      <Folder Include="Utils\" />
+        <Folder Include="Utils\" />
     </ItemGroup>
     <PropertyGroup>
         <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>

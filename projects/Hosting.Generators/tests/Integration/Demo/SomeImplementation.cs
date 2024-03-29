@@ -7,7 +7,9 @@ namespace DroidNet.Hosting.Generators.Demo;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
-// Does not implement ITargetInterface
+/// <summary>
+/// Does not implement ITargetInterface.
+/// </summary>
 [ExcludeFromCodeCoverage]
 [InjectAs(ServiceLifetime.Scoped)]
 internal sealed class SomeImplementation;

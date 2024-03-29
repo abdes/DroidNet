@@ -21,7 +21,7 @@ public sealed partial class ExpandingTreeControl : UserControl
         nameof(HeaderTemplate),
         typeof(DataTemplate),
         typeof(TreeItemControl),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     /// <summary>
     /// Identifies the <see cref="BodyTemplate" /> dependency property.
@@ -30,7 +30,7 @@ public sealed partial class ExpandingTreeControl : UserControl
         nameof(BodyTemplate),
         typeof(DataTemplate),
         typeof(TreeItemControl),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     public ExpandingTreeControl()
     {

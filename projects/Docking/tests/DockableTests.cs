@@ -24,7 +24,7 @@ public class DockableTests
 
         dockable.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Dockable.MinimizedTitle))
+            if (string.Equals(e.PropertyName, nameof(Dockable.MinimizedTitle), StringComparison.Ordinal))
             {
                 eventTriggered = true;
             }
@@ -58,7 +58,7 @@ public class DockableTests
 
         dockable.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Dockable.TabbedTitle))
+            if (string.Equals(e.PropertyName, nameof(Dockable.TabbedTitle), StringComparison.Ordinal))
             {
                 eventTriggered = true;
             }
@@ -153,7 +153,7 @@ public class DockableTests
         // Arrange
         var dockable = Dockable.New("1");
         var invoked = false;
-        dockable.OnDisposed += () =>
+        dockable.OnDisposed += (_, _) =>
         {
             invoked = true;
             var fromId = Dockable.FromId("1");
@@ -196,7 +196,7 @@ public class DockableTests
 
         dockable.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(Dockable.IsActive))
+            if (string.Equals(e.PropertyName, nameof(Dockable.IsActive), StringComparison.Ordinal))
             {
                 eventTriggered = true;
             }

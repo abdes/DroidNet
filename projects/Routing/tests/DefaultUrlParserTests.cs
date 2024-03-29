@@ -284,7 +284,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
 
         var remaining = url.AsSpan();
-        var result = parser.ParseSegment(ref remaining, false);
+        var result = parser.ParseSegment(ref remaining, allowDots: false);
 
         result.Path.Should().Be(string.Empty);
     }
@@ -319,7 +319,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
 
         var remaining = url.AsSpan();
-        var result = parser.ParseSegment(ref remaining, true);
+        var result = parser.ParseSegment(ref remaining, allowDots: true);
 
         _ = result.Path.Should().Be("..");
     }
@@ -334,7 +334,7 @@ public class DefaultUrlParserTests
         var action = () =>
         {
             var remaining = url.AsSpan();
-            return parser.ParseSegment(ref remaining, false);
+            return parser.ParseSegment(ref remaining, allowDots: false);
         };
 
         _ = action.Should().Throw<UriFormatException>();
@@ -348,7 +348,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
 
         var remaining = url.AsSpan();
-        var result = parser.ParseSegment(ref remaining, false);
+        var result = parser.ParseSegment(ref remaining, allowDots: false);
 
         _ = result.Path.Should().Be(string.Empty);
 
@@ -365,7 +365,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
 
         var remaining = url.AsSpan();
-        var result = parser.ParseSegment(ref remaining, false);
+        var result = parser.ParseSegment(ref remaining, allowDots: false);
 
         _ = result.Path.Should().Be("path");
         _ = result.Parameters.Should()
@@ -381,7 +381,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
         var remaining = url.AsSpan();
 
-        var result = parser.ParseSegment(ref remaining, false);
+        var result = parser.ParseSegment(ref remaining, allowDots: false);
 
         _ = result.Path.Should().Be("test");
         _ = result.Parameters.Should().BeEmpty();
@@ -395,7 +395,7 @@ public class DefaultUrlParserTests
         var parser = new DefaultUrlParser();
         var remaining = url.AsSpan();
 
-        var result = parser.ParseSegment(ref remaining, false);
+        var result = parser.ParseSegment(ref remaining, allowDots: false);
 
         _ = result.Path.Should().Be("test");
         _ = result.Parameters.Should()

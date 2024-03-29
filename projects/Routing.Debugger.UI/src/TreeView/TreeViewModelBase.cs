@@ -95,18 +95,17 @@ public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
     {
         var insertIndex = this.ShownItems.IndexOf(itemAdapter);
         Debug.Assert(insertIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
-        RestoreExpandedChildrenRecursive(itemAdapter);
-        return;
+        this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex);
+    }
 
-        void RestoreExpandedChildrenRecursive(ITreeItem parent)
+    private void RestoreExpandedChildrenRecursive(ITreeItem parent, int insertIndex)
+    {
+        foreach (var child in parent.Children)
         {
-            foreach (var child in parent.Children)
+            this.ShownItems.Insert(++insertIndex, child);
+            if (child.IsExpanded)
             {
-                this.ShownItems.Insert(++insertIndex, child);
-                if (child.IsExpanded)
-                {
-                    RestoreExpandedChildrenRecursive(child);
-                }
+                this.RestoreExpandedChildrenRecursive(child, insertIndex);
             }
         }
     }
@@ -116,18 +115,17 @@ public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
         var removeIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
-        HideChildrenRecursive(itemAdapter);
-        return;
+        this.HideChildrenRecursive(itemAdapter, removeIndex);
+    }
 
-        void HideChildrenRecursive(ITreeItem parent)
+    private void HideChildrenRecursive(ITreeItem parent, int removeIndex)
+    {
+        foreach (var child in parent.Children)
         {
-            foreach (var child in parent.Children)
+            this.ShownItems.RemoveAt(removeIndex);
+            if (child.IsExpanded)
             {
-                this.ShownItems.RemoveAt(removeIndex);
-                if (child.IsExpanded)
-                {
-                    HideChildrenRecursive(child);
-                }
+                this.HideChildrenRecursive(child, removeIndex);
             }
         }
     }

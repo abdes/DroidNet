@@ -9,22 +9,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Routing.Detail;
 
-/// <summary>Represents the type of parameter in a URL.</summary>
-internal enum ParamType
-{
-    /// <summary>
-    /// Represents a matrix parameter in a URL. Matrix parameters appear in the
-    /// URL path segment and are separated by semicolons.
-    /// </summary>
-    Matrix,
-
-    /// <summary>
-    /// Represents a query parameter in a URL. Query parameters appear after the
-    /// question mark in a URL and are separated by ampersands.
-    /// </summary>
-    Query,
-}
-
 /// <summary>
 /// The default implementation of routes URL parsing, heavily inspired by the
 /// way <see href="https://angular.dev/guide/routing">Angular Routing</see>
@@ -70,7 +54,7 @@ public class DefaultUrlParser : IUrlParser
     /// are allowed in URLs or not.
     /// </summary>
     /// <value>
-    /// When set to <c>true</c>, multiple occurrences of the same query
+    /// When set to <see langword="true" />, multiple occurrences of the same query
     /// parameter key in the query parameters will get appended to existing
     /// values, separated by <c>','</c>. Otherwise, multiple occurrences will
     /// be considered as a malformed URL.
@@ -164,6 +148,7 @@ public class DefaultUrlParser : IUrlParser
     /// recursively parses the root segment group as well as child segment
     /// groups (inside parenthesis).
     /// </remarks>
+    /// <exception cref="UriFormatException">If the remaining part of the URL is malformed.</exception>
     internal UrlSegmentGroup ParseChild(ref ReadOnlySpan<char> remaining, bool absolute = false)
     {
         Debug.Assert(remaining.Length > 0, $"don't call {nameof(this.ParseChild)} if nothing is left in remaining");
@@ -188,7 +173,7 @@ public class DefaultUrlParser : IUrlParser
 
             var segment = this.ParseSegment(ref remaining, allowDots);
             segments.Add(segment);
-            allowDots = segment.Path == "..";
+            allowDots = string.Equals(segment.Path, "..", StringComparison.Ordinal);
         }
 
         while (remaining.Length > 0 && remaining[0] == '/' &&
@@ -197,7 +182,7 @@ public class DefaultUrlParser : IUrlParser
             remaining = remaining[1..]; // Skip the '/'
             var segment = this.ParseSegment(ref remaining, allowDots);
             segments.Add(segment);
-            allowDots = segment.Path == "..";
+            allowDots = string.Equals(segment.Path, "..", StringComparison.Ordinal);
         }
 
         Debug.Assert(segments.Count != 0, "we should have at least one segment with empty path");
@@ -212,7 +197,7 @@ public class DefaultUrlParser : IUrlParser
 
         if (remaining.PeekStartsWith("("))
         {
-            if (segments.Last().Path == string.Empty)
+            if (segments[^1].Path.Length == 0)
             {
                 allowPrimary = true;
             }
@@ -306,15 +291,20 @@ public class DefaultUrlParser : IUrlParser
     {
         var position = remaining.Length == 0 ? url.Length : url.IndexOf(remaining.ToString(), StringComparison.Ordinal);
         var indent = new string(' ', position);
-        Debug.WriteLine(
-            $"""
-             An error occured while parsing url at position ({position})
-             {url}
-             {indent}^
-             {indent}{exception.Message}.
 
-             {exception.StackTrace}
-             """);
+#if DEBUG
+
+        // TODO: use a logger and log a message
+        FormattableString str = $"""
+                                 An error occurred while parsing url at position ({position})
+                                 {url}
+                                 {indent}^
+                                 {indent}{exception.Message}.
+
+                                 {exception.StackTrace}
+                                 """;
+        Debug.WriteLine(str);
+#endif
     }
 
     private void AddParameter(Parameters parameters, string key, string? value)
@@ -367,9 +357,7 @@ public class DefaultUrlParser : IUrlParser
                 throw new UriFormatException("not expecting a primary outlet child and did not find an outlet name");
             }
 
-            var child = this.ParseChild(ref remaining);
-
-            segmentGroups[outletName] = child;
+            segmentGroups[outletName] = this.ParseChild(ref remaining);
 
             if (remaining.Length == 0)
             {
@@ -412,7 +400,7 @@ public class DefaultUrlParser : IUrlParser
         {
             ParamType.Matrix => remaining.MatchMatrixParamKey(),
             ParamType.Query => remaining.MatchQueryParamKey(),
-            _ => throw new InvalidEnumArgumentException(),
+            _ => throw new InvalidEnumArgumentException(nameof(paramType), (int)paramType, typeof(ParamType)),
         };
 
         if (key.Length == 0)
@@ -429,7 +417,7 @@ public class DefaultUrlParser : IUrlParser
             {
                 ParamType.Matrix => remaining.MatchMatrixParamValue(),
                 ParamType.Query => remaining.MatchQueryParamValue(),
-                _ => throw new InvalidEnumArgumentException(),
+                _ => throw new InvalidEnumArgumentException(nameof(paramType), (int)paramType, typeof(ParamType)),
             };
             if (valueMatch.Length != 0)
             {

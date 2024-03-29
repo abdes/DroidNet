@@ -20,8 +20,8 @@ public interface IUrlTree
     /// (i.e. starts with a double dot path).
     /// </summary>
     /// <value>
-    /// <c>true</c> if the first segment of the first child of the tree root is
-    /// a double dot. <c>false</c> otherwise.
+    /// <see langword="true"/> if the first segment of the first child of the tree root is
+    /// a double dot. <see langword="false"/> otherwise.
     /// </value>
     bool IsRelative { get; }
 }

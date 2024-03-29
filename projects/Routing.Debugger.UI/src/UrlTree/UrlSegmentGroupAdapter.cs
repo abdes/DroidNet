@@ -8,10 +8,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
-/// <summary>
-/// Adapter for a <see cref="IUrlSegmentGroup" /> so it can be used inside the
-/// <see cref="UrlTreeView" /> control.
-/// </summary>
+/// <summary>Adapter for a <see cref="IUrlSegmentGroup" /> to be used inside a <see cref="UrlTreeView" /> control.</summary>
+/// <param name="item">The item to wrap.</param>
 public class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAdapterBase, ITreeItem<IUrlSegmentGroup>
 {
     private readonly OutletName outlet;
@@ -36,7 +34,7 @@ public class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAdapterBase
             var fullPath = this.Item.Parent is null
                 ? " / "
                 : string.Join('/', this.Item.Segments.Select(i => i.Path).ToList());
-            return fullPath == string.Empty ? "-empty-" : fullPath;
+            return fullPath.Length == 0 ? "-empty-" : fullPath;
         }
     }
 

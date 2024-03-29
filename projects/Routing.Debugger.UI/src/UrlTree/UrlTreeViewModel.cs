@@ -36,7 +36,7 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
         .Subscribe(
             state =>
             {
-                if (state.Url == this.url)
+                if (string.Equals(state.Url, this.url, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }

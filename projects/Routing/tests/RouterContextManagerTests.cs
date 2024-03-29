@@ -38,7 +38,7 @@ public class RouterContextManagerTests : IDisposable
 
     /// <summary>
     /// Tests that calling <see cref="RouterContextManager.GetContextForTarget" /> with
-    /// <c>null</c> or <see cref="Target.Self" />, while the current
+    /// <see langword="null"/> or <see cref="Target.Self" />, while the current
     /// context is <c>not null</c>, should return the current context.
     /// </summary>
     /// <param name="target">
@@ -58,8 +58,8 @@ public class RouterContextManagerTests : IDisposable
 
     /// <summary>
     /// Tests that calling <see cref="RouterContextManager.GetContextForTarget" /> with
-    /// <c>null</c> or <see cref="Target.Self" />, while  the current
-    /// context is <c>null</c>, should return the main context.
+    /// <see langword="null"/> or <see cref="Target.Self" />, while  the current
+    /// context is <see langword="null"/>, should return the main context.
     /// </summary>
     /// <param name="target">
     /// The target name for which to get a context.
@@ -69,7 +69,7 @@ public class RouterContextManagerTests : IDisposable
     [DataRow("_self")]
     public void GetContextForTarget_NullTargetOrSelf_CurrentContextNull_ReturnsMainContext(string target)
     {
-        _ = this.SetCurrentContext(null);
+        _ = this.SetCurrentContext(context: null);
 
         var actualContext = this.contextManager.GetContextForTarget(target);
 
@@ -83,7 +83,7 @@ public class RouterContextManagerTests : IDisposable
     [TestMethod]
     public void GetContextForTarget_Main_ReturnsMainContext()
     {
-        _ = this.SetCurrentContext(null);
+        _ = this.SetCurrentContext(context: null);
 
         var actualContext = this.contextManager.GetContextForTarget(Target.Main);
 

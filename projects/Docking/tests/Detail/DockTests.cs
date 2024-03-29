@@ -12,8 +12,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(Dock)}")]
-public class DockTests
+[TestCategory(nameof(Dock))]
+public class DockTests : IDisposable
 {
     private readonly Dockable dockable1
         = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
@@ -21,8 +21,7 @@ public class DockTests
     private readonly Dockable dockable2
         = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
 
-    private readonly SimpleDock dock = new SimpleDock() ??
-                                       throw new AssertionFailedException("could not allocate a new object");
+    private readonly SimpleDock dock = new();
 
     [TestCleanup]
     public void Dispose()
@@ -30,6 +29,8 @@ public class DockTests
         this.dockable1.Dispose();
         this.dockable2.Dispose();
         this.dock.Dispose();
+
+        GC.SuppressFinalize(this);
     }
 
     [TestMethod]

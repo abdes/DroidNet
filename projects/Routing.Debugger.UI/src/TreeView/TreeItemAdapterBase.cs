@@ -9,13 +9,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// <summary>A base class for implementing tree item adapters.</summary>
 public abstract partial class TreeItemAdapterBase : ObservableObject, ITreeItem
 {
-    private readonly Lazy<List<TreeItemAdapterBase>> children;
+    private readonly Lazy<IList<TreeItemAdapterBase>> children;
 
     [ObservableProperty]
     private bool isExpanded;
 
     protected TreeItemAdapterBase()
-        => this.children = new Lazy<List<TreeItemAdapterBase>>(this.PopulateChildren);
+        => this.children = new Lazy<IList<TreeItemAdapterBase>>(this.PopulateChildren);
 
     public abstract bool IsRoot { get; }
 
@@ -27,5 +27,5 @@ public abstract partial class TreeItemAdapterBase : ObservableObject, ITreeItem
 
     public required int Level { get; init; }
 
-    protected abstract List<TreeItemAdapterBase> PopulateChildren();
+    protected abstract IList<TreeItemAdapterBase> PopulateChildren();
 }

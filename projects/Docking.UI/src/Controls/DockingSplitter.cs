@@ -11,5 +11,5 @@ public class DockingSplitter : GridSplitter
 {
     public DockingSplitter() => this.Style = (Style)Application.Current.Resources[nameof(DockingSplitter)];
 
-    public override string? ToString() => $"{nameof(DockingSplitter)}";
+    public override string? ToString() => nameof(DockingSplitter);
 }

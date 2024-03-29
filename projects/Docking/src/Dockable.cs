@@ -79,6 +79,7 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     /// It is only possible to mark a dockable as active or inactive when it has a valid <see cref="Owner" />. This is to ensure
     /// that at any time, there is only one active dockable within a docker.
     /// </remarks>
+    /// <exception cref="InvalidOperationException">If the dock does not have an owner.</exception>
     public bool IsActive
     {
         get => this.isActive;

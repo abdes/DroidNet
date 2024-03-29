@@ -21,7 +21,7 @@ public partial class Dock
     {
         private static readonly ConcurrentDictionary<DockId, Dock> Docks = [];
 
-        // The next value of DockId to use when creating a new dock.
+        /// <summary>The next value of DockId to use when creating a new dock.</summary>
         private static readonly AtomicCounter NextId = new();
 
         public static Dock CreateDock(Type type, params object[] args)
@@ -36,16 +36,16 @@ public partial class Dock
                 dock = Activator.CreateInstance(
                     type,
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
+                    binder: null,
                     args,
-                    null) as Dock;
+                    culture: null) as Dock;
             }
             catch (Exception ex)
             {
-                throw new ObjectCreationException(type, ex);
+                throw new ObjectCreationException(message: null, ex) { ObjectType = type };
             }
 
-            return Manage(dock ?? throw new ObjectCreationException(type));
+            return Manage(dock ?? throw new ObjectCreationException { ObjectType = type });
         }
 
         public static bool TryGetDock(DockId id, out Dock? dock)

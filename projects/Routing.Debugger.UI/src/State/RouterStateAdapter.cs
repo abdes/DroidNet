@@ -11,6 +11,7 @@ using DroidNet.Routing.Debugger.UI.TreeView;
 /// Adapter for <see cref="IActiveRoute" /> so it can be used inside the
 /// <see cref="RouterStateView" /> control.
 /// </summary>
+/// <param name="item">The item to be adapted.</param>
 public class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase, ITreeItem<IActiveRoute>
 {
     public override bool IsRoot => this.Item.Parent == null;
@@ -30,7 +31,7 @@ public class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase, ITreeI
             var fullPath = this.Item.Parent is null
                 ? " / "
                 : string.Join('/', this.Item.UrlSegments.Select(i => i.Path).ToList());
-            return fullPath == string.Empty ? "-empty-" : fullPath;
+            return fullPath.Length == 0 ? "-empty-" : fullPath;
         }
     }
 

@@ -4,13 +4,25 @@
 
 namespace DroidNet.Routing;
 
-/// <summary>
-/// Exception thrown when a <see cref="IRouter">router</see> navigation fails.
-/// </summary>
-/// <param name="because">A descriptive message of the raison of the failure.</param>
-/// <param name="innerException">An optional exception at the origin of this one.</param>
-public class NavigationFailedException(string because, Exception? innerException = null)
-    : ApplicationException($"navigation failed because: {because}", innerException)
+// TODO(abdes): add extra information to this exception
+
+/// <summary>Exception thrown when a <see cref="IRouter">router</see> navigation fails.</summary>
+public class NavigationFailedException : Exception
 {
-    // TODO(abdes): add extra information to this exception
+    private const string DefaultMessage = "navigation failed";
+
+    public NavigationFailedException()
+        : this(DefaultMessage)
+    {
+    }
+
+    public NavigationFailedException(string? message)
+        : base(message)
+    {
+    }
+
+    public NavigationFailedException(string? message, Exception? innerException)
+        : base(message, innerException)
+    {
+    }
 }

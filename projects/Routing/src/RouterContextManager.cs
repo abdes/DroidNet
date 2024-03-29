@@ -21,7 +21,7 @@ public class RouterContextManager : IDisposable
 {
     private readonly Lazy<RouterContext> lazyMainContext;
     private readonly IContextProvider contextProvider;
-    private readonly EventHandler<RouterContext?> onContextChanged;
+    private readonly EventHandler<ContextEventArgs> onContextChanged;
 
     /// <summary>
     /// Gets a value representing the current routing context.
@@ -46,14 +46,14 @@ public class RouterContextManager : IDisposable
 
         // Register for context change notification and update the current
         // context accordingly.
-        this.onContextChanged = (_, context) =>
+        this.onContextChanged = (_, args) =>
         {
-            if (context == this.currentContext)
+            if (args.Context == this.currentContext)
             {
                 return;
             }
 
-            this.currentContext = context;
+            this.currentContext = args.Context;
         };
         this.contextProvider.ContextChanged += this.onContextChanged;
 
@@ -79,14 +79,14 @@ public class RouterContextManager : IDisposable
     /// </summary>
     /// <param name="target">
     /// The target for which to get the router context. This can be
-    /// <c>null</c>, <see cref="Target.Self" />, <see cref="Target.Main" />, or
+    /// <see langword="null" />, <see cref="Target.Self" />, <see cref="Target.Main" />, or
     /// any other application specific target name.
     /// </param>
     /// <returns>
     /// The <see cref="RouterContext" /> for the specified target.
     /// </returns>
     /// <remarks>
-    /// If the target is <c>null</c> or <see cref="Target.Self" />, the method
+    /// If the target is <see langword="null" /> or <see cref="Target.Self" />, the method
     /// returns the current active context, or the special main context if
     /// there is no active context yet.
     /// <para>
@@ -98,7 +98,7 @@ public class RouterContextManager : IDisposable
     /// </remarks>
     public RouterContext GetContextForTarget(Target? target)
     {
-        if (target is null || target.IsSelf)
+        if (target?.IsSelf != false)
         {
             // If target is not specified or is Target.Self, then we should
             // use the current active context, unless there is no active
@@ -106,13 +106,7 @@ public class RouterContextManager : IDisposable
             return this.currentContext ?? this.MainContext;
         }
 
-        if (target.IsMain)
-        {
-            return this.MainContext;
-        }
-
-        var newContext = this.contextProvider.ContextForTarget(target, this.currentContext);
-        return newContext;
+        return target.IsMain ? this.MainContext : this.contextProvider.ContextForTarget(target, this.currentContext);
     }
 
     /// <inheritdoc />

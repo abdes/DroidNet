@@ -16,7 +16,7 @@ public class DebugAssertionTests : TestSuiteWithAssertions
     [TestMethod]
     public void AssertionFailures_WhenTheyHappen()
     {
-        MethodWithAssert(false);
+        MethodWithAssert(truth: false);
 
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
@@ -28,7 +28,7 @@ public class DebugAssertionTests : TestSuiteWithAssertions
     [TestMethod]
     public void NoRecords_WhenTheyNoAssertionFailures()
     {
-        MethodWithAssert(true);
+        MethodWithAssert(truth: true);
 
         _ = this.TraceListener.RecordedMessages.Should().BeEmpty();
     }

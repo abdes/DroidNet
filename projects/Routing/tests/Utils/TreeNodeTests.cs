@@ -124,7 +124,7 @@ public class TreeNodeTests
 
     /// <summary>
     /// Verifies that the <see cref="TreeNode.RemoveChild" /> returns
-    /// <c>false</c> when the child does not exist.
+    /// <see langword="false"/> when the child does not exist.
     /// </summary>
     [TestMethod]
     public void RemoveChild_WhenChildDoesNotExist_ReturnsFalse()
@@ -196,7 +196,7 @@ public class TreeNodeTests
 
     /// <summary>
     /// Verifies that the <see cref="TreeNode.RemoveSibling" /> returns
-    /// <c>false</c> when the node has no parent.
+    /// <see langword="false"/> when the node has no parent.
     /// </summary>
     [TestMethod]
     public void RemoveSibling_WhenNodeHasNoParent_ReturnsFalse()

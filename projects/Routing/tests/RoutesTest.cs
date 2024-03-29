@@ -57,7 +57,7 @@ public class RoutesTest
         var route = new Route() { Path = "test" };
 
         _ = this.validator.Setup(v => v.ValidateRoute(It.IsAny<Routes>(), It.IsAny<Route>()))
-            .Throws(() => new RoutesConfigurationException(string.Empty, route));
+            .Throws(() => new RoutesConfigurationException { FailedRoute = route });
 
         var action = () => this.routes.Add(route);
 
@@ -96,7 +96,7 @@ public class RoutesTest
         var invalidRoute = new Route() { Path = "invalid" };
         _ = this.validator.Setup(v => v.ValidateRoute(It.IsAny<Routes>(), validRoute));
         _ = this.validator.Setup(v => v.ValidateRoute(It.IsAny<Routes>(), validRoute))
-            .Throws(new RoutesConfigurationException("invalid", invalidRoute));
+            .Throws(new RoutesConfigurationException("invalid") { FailedRoute = invalidRoute });
 
         var action = () => this.routes.AddRange([validRoute, invalidRoute]);
 

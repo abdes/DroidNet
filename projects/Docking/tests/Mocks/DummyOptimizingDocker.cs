@@ -4,11 +4,13 @@
 
 namespace DroidNet.Docking.Mocks;
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 
+[ExcludeFromCodeCoverage]
 public class DummyOptimizingDocker : DummyDocker, IOptimizingDocker
 {
-    public bool ConsolidateUpCalled { get; set; }
+    public bool ConsolidateUpCalled { get; private set; }
 
     public void ConsolidateUp(IDockGroup startingGroup) => this.ConsolidateUpCalled = true;
 

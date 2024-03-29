@@ -70,14 +70,11 @@ internal static class DockExtensions
             {
                 numericValue = 1;
             }
-            else
+            else if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
             {
-                if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
-                {
-                    throw new ArgumentException(
-                        $"the length `{length}` does not contain a valid numeric value",
-                        nameof(length));
-                }
+                throw new ArgumentException(
+                    $"the length `{length}` does not contain a valid numeric value",
+                    nameof(length));
             }
 
             type = GridUnitType.Star;

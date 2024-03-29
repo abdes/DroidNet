@@ -33,7 +33,7 @@ public class UserInterfaceHostedServiceTests
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
-        var sut = new UserInterfaceHostedService(null, mockThread.Object, mockContext.Object);
+        var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
 
         var cancellationToken = new CancellationToken(cancellation);
         await sut.StartAsync(cancellationToken);
@@ -56,7 +56,7 @@ public class UserInterfaceHostedServiceTests
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
-        var sut = new UserInterfaceHostedService(null, mockThread.Object, mockContext.Object);
+        var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
 
         await sut.StartAsync(CancellationToken.None);
 

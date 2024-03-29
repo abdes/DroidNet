@@ -19,21 +19,18 @@ public static class DebugUtils
     /// <param name="indentChar">The character used to indent children relative to their parent. Default is <c>' '</c>.</param>
     /// <param name="indentSize">The number of indent characters to use per indentation level. Default is <c>3</c>.</param>
     public static void DumpGroup(this IDockGroup group, char indentChar = ' ', int indentSize = 3)
+        => DumpGroupRecursive(group, 0, indentChar, indentSize);
+
+    private static void DumpGroupRecursive(IDockGroup? item, int indentLevel, char indentChar, int indentSize)
     {
-        DumpGroupRecursive(group, 0);
-        return;
-
-        void DumpGroupRecursive(IDockGroup? item, int indentLevel)
+        if (item is null)
         {
-            if (item is null)
-            {
-                return;
-            }
-
-            var indent = new string(indentChar, indentLevel * indentSize); // 2 spaces per indent level
-            Debug.WriteLine($"{indent}{item}");
-            DumpGroupRecursive(item.First, indentLevel + 1);
-            DumpGroupRecursive(item.Second, indentLevel + 1);
+            return;
         }
+
+        var indent = new string(indentChar, indentLevel * indentSize); // 2 spaces per indent level
+        Debug.WriteLine($"{indent}{item}");
+        DumpGroupRecursive(item.First, indentLevel + 1, indentChar, indentSize);
+        DumpGroupRecursive(item.Second, indentLevel + 1, indentChar, indentSize);
     }
 }

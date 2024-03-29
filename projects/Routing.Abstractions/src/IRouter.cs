@@ -7,22 +7,6 @@ namespace DroidNet.Routing;
 using DroidNet.Routing.Events;
 
 /// <summary>
-/// Specifies the different actions that can be done in a change set for
-/// manipulating the router state.
-/// </summary>
-public enum RouteChangeAction
-{
-    /// <summary>Add a new active route to the router state.</summary>
-    Add,
-
-    /// <summary>Update an existing active route in the router state.</summary>
-    Update,
-
-    /// <summary>Delete an active route from the router state.</summary>
-    Delete,
-}
-
-/// <summary>
 /// The central building block of router based navigation in the application.
 /// </summary>
 /// <remarks>
@@ -100,7 +84,7 @@ public interface IRouter
     /// </summary>
     /// <param name="url">The URL to navigate to.</param>
     /// <param name="options">
-    /// The navigation options. When <c>null</c>, <see cref="NavigationOptions">defaults</see> are used.
+    /// The navigation options. When <see langword="null" />, <see cref="NavigationOptions">defaults</see> are used.
     /// </param>
     /// <remarks>
     /// TODO(abdes): describe the details of the navigation process.
@@ -123,16 +107,5 @@ public interface IRouter
     /// state.</param>
     /// <param name="options">The navigation options, which must contain least
     /// the relative route, at which the changes are to be applied.</param>
-    void Navigate(List<RouteChangeItem> changes, PartialNavigation options);
-}
-
-public class RouteChangeItem
-{
-    public required OutletName Outlet { get; init; }
-
-    public required RouteChangeAction ChangeAction { get; init; }
-
-    public IParameters? Parameters { get; init; }
-
-    public Type? ViewModelType { get; init; }
+    void Navigate(IList<RouteChangeItem> changes, PartialNavigation options);
 }

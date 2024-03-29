@@ -38,7 +38,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
-        if (outletName is null || outletName.IsPrimary)
+        if (outletName?.IsPrimary != false)
         {
             throw new InvalidOperationException(
                 $"illegal outlet name {outletName} used for a dockable; cannot be null or `{OutletName.Primary}`.");
@@ -66,13 +66,13 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Application outlet populated with ViewModel: {Viewmodel}")]
+        Message = "Application outlet populated with ViewModel: {ViewModel}")]
     private static partial void LogAppLoaded(ILogger logger, object viewModel);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Dockable outlet `{Outlet}` populated with ViewModel: {Viewmodel}")]
+        Message = "Dockable outlet `{Outlet}` populated with ViewModel: {ViewModel}")]
     private static partial void LogDockableLoaded(ILogger logger, OutletName outlet, object viewModel);
 
     [LoggerMessage(
@@ -84,16 +84,20 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private void LoadApp(object viewModel)
     {
         this.centerDock = ApplicationDock.New() ?? throw new ContentLoadingException(
-            DebuggerConstants.AppOutletName,
-            viewModel,
-            "could not create a dock");
+            $"could not create a dock to load content for route `{this.ActiveRoute!.RouteConfig.Path}`")
+        {
+            OutletName = DebuggerConstants.AppOutletName,
+            ViewModel = viewModel,
+        };
 
         // Dock at the center
         var dockable = Dockable.New(DebuggerConstants.AppOutletName) ??
                        throw new ContentLoadingException(
-                           DebuggerConstants.AppOutletName,
-                           viewModel,
-                           "failed to create a dockable object");
+                           $"could not create a dockable object while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`")
+                       {
+                           OutletName = DebuggerConstants.AppOutletName,
+                           ViewModel = viewModel,
+                       };
         dockable.ViewModel = viewModel;
         this.centerDock.AddDockable(dockable);
 
@@ -104,10 +108,6 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
     private void LoadDockable(object viewModel, string dockableId)
     {
-        Debug.Assert(
-            this.ActiveRoute is not null,
-            $"when `{nameof(this.LoadContent)}`() is called, an {nameof(IActiveRoute)} should have been injected into my `{nameof(this.ActiveRoute)}` property.");
-
         try
         {
             /*
@@ -115,14 +115,20 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
              * will be deferred, as we can only do the docking once all dockables have been loaded.
              */
 
-            var dockableActiveRoute = this.ActiveRoute.Children.First(c => c.Outlet == dockableId);
+            var dockableActiveRoute = this.ActiveRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
 
             this.deferredDockables.Add(dockable);
         }
         catch (Exception ex)
         {
-            throw new ContentLoadingException(dockableId, viewModel, ex.Message, ex);
+            throw new ContentLoadingException(
+                $"an exception occured while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`",
+                ex)
+            {
+                OutletName = dockableId,
+                ViewModel = viewModel,
+            };
         }
     }
 
@@ -141,9 +147,20 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         // guarantees that all, docks are created before we start encountering
         // any relative docking cases.
         this.deferredDockables.Sort(
-            (left, right)
-                => left.DeferredDockingInfo.AnchorId == null && right.DeferredDockingInfo.AnchorId == null ? 0 :
-                left.DeferredDockingInfo.AnchorId == null ? -1 : 1);
+            (left, right) =>
+            {
+                if (left.DeferredDockingInfo.AnchorId == null)
+                {
+                    if (right.DeferredDockingInfo.AnchorId == null)
+                    {
+                        return 0;
+                    }
+
+                    return -1;
+                }
+
+                return 1;
+            });
 
         try
         {
@@ -174,10 +191,11 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                             // Dock to root as left, minimized.
                             var dock = ToolDock.New();
                             dock.AddDockable(dockable);
-                            this.docker.DockToRoot(dock, AnchorPosition.Left, true);
+                            this.docker.DockToRoot(dock, AnchorPosition.Left, minimized: true);
                         }
                         else
                         {
+                            // Check position
                             if (dockingInfo.Position == AnchorPosition.Center)
                             {
                                 this.centerDock?.AddDockable(dockable);
@@ -207,7 +225,13 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                 catch (Exception ex)
                 {
                     // TODO: be more resilient to error, Log an error, but continue loading the other docks.
-                    throw new ContentLoadingException(dockable.Id, dockable.ViewModel, ex.Message, ex);
+                    throw new ContentLoadingException(
+                        $"an exception occured while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`",
+                        ex)
+                    {
+                        OutletName = dockable.Id,
+                        ViewModel = dockable.ViewModel,
+                    };
                 }
 
                 LogDockableLoaded(this.logger, dockable.Id, dockable.ViewModel!);

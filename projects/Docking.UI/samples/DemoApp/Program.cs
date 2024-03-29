@@ -94,30 +94,7 @@ public static partial class Program
                 .ConfigureLogging()
                 .ConfigureWinUI<App>()
                 .ConfigureAutoInjected()
-                .ConfigureContainer<DryIocServiceProvider>(
-                    (_, sp) =>
-                    {
-                        // TODO(abdes): refactor into extension method
-                        // Set up the view model to view converters. We're using the standard
-                        // converter, and a custom one with fall back if the view cannot be
-                        // located.
-                        sp.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-                        sp.Container.Register<IValueConverter, ViewModelToView>(
-                            Reuse.Singleton,
-                            serviceKey: "VmToView");
-
-                        // TODO(abdes): refactor into extension method
-                        sp.Container.Register<DockPanelViewModel>(Reuse.Transient);
-                        sp.Container.Register<DockPanel>(Reuse.Transient);
-                    })
-                /*
-                .ConfigureServices(
-                    (_, services) => services
-                        .AddSingleton<ShellViewModel>()
-                        .AddTransient<GridFlow>()
-                        .AddTransient<WorkspaceViewModel>()
-                        .AddSingleton<IDockViewFactory, DockViewFactory>())
-                */
+                .ConfigureContainer<DryIocServiceProvider>(ConfigureAdditionalServices)
                 .Build();
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
@@ -132,5 +109,23 @@ public static partial class Program
         {
             Log.CloseAndFlush();
         }
+    }
+
+    private static void ConfigureAdditionalServices(
+        HostBuilderContext hostBuilderContext,
+        DryIocServiceProvider serviceProvider)
+    {
+        // TODO(abdes): refactor into extension method
+        // Set up the view model to view converters. We're using the standard
+        // converter, and a custom one with fall back if the view cannot be
+        // located.
+        serviceProvider.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+        serviceProvider.Container.Register<IValueConverter, ViewModelToView>(
+            Reuse.Singleton,
+            serviceKey: "VmToView");
+
+        // TODO(abdes): refactor into extension method
+        serviceProvider.Container.Register<DockPanelViewModel>(Reuse.Transient);
+        serviceProvider.Container.Register<DockPanel>(Reuse.Transient);
     }
 }

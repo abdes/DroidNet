@@ -8,20 +8,24 @@ using System.ComponentModel;
 
 public static class DockGroupOrientationExtensions
 {
-    public static string ToSymbol(this DockGroupOrientation variable)
-        => variable switch
+    public static string ToSymbol(this DockGroupOrientation orientation)
+        => orientation switch
         {
             DockGroupOrientation.Undetermined => "?",
             DockGroupOrientation.Horizontal => "\u2194",
             DockGroupOrientation.Vertical => "\u2195",
-            _ => throw new InvalidEnumArgumentException(),
+            _ => throw new InvalidEnumArgumentException(
+                nameof(orientation),
+                (int)orientation,
+                typeof(DockGroupOrientation)),
         };
 
     public static FlowDirection ToFlowDirection(this DockGroupOrientation orientation)
         => orientation switch
         {
             DockGroupOrientation.Undetermined => throw new ArgumentException(
-                $"when orientation is {orientation}, there is no automatic mapping to a {nameof(FlowDirection)}"),
+                $"when orientation is {orientation}, there is no automatic mapping to a {nameof(FlowDirection)}",
+                nameof(orientation)),
             DockGroupOrientation.Horizontal => FlowDirection.LeftToRight,
             DockGroupOrientation.Vertical => FlowDirection.TopToBottom,
             _ => throw new InvalidEnumArgumentException(

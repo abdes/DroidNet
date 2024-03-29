@@ -2,19 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
+namespace DroidNet.Mvvm;
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 
 /// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 [ExcludeFromCodeCoverage]
-public partial class TestApp
+public partial class App
 {
-    /// <summary>Initializes a new instance of the <see cref="TestApp" /> class.</summary>
-    public TestApp() => this.InitializeComponent();
+    /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
+    public App() => this.InitializeComponent();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.CreateDefaultUI();

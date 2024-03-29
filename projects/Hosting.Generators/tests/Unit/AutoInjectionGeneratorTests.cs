@@ -20,15 +20,15 @@ public class AutoInjectionGeneratorTests : VerifyBase
     [TestMethod]
     public Task Generate_TargetIsClass_JustLifetime()
     {
-        const string source = $"""
-                               namespace Testing;
+        const string source = """
+                              namespace Testing;
 
-                               using Microsoft.Extensions.DependencyInjection;
-                               using DroidNet.Hosting.Generators;
+                              using Microsoft.Extensions.DependencyInjection;
+                              using DroidNet.Hosting.Generators;
 
-                               [InjectAs(ServiceLifetime.Singleton)]
-                               public class TestClass;
-                               """;
+                              [InjectAs(ServiceLifetime.Singleton)]
+                              public class TestClass;
+                              """;
 
         // Use verify to snapshot test the source generator output!
         var driver = TestHelper.GeneratorDriver(source);

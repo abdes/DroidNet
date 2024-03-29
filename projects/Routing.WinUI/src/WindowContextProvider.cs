@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml;
 /// A router context provider (<see cref="IContextProvider" />), that binds
 /// contexts to <see cref="Window" /> instances.
 /// </summary>
+/// <param name="provider">The dependency injector's service provider.</param>
 /// <remarks>
 /// THe window instantiation behavior is specified when the window type is
 /// registered with the Dependency Injector. If the window type is registered
@@ -28,13 +29,13 @@ using Microsoft.UI.Xaml;
 internal sealed class WindowContextProvider(IServiceProvider provider) : IContextProvider
 {
     /// <inheritdoc />
-    public event EventHandler<RouterContext?>? ContextChanged;
+    public event EventHandler<ContextEventArgs>? ContextChanged;
 
     /// <inheritdoc />
-    public event EventHandler<RouterContext>? ContextCreated;
+    public event EventHandler<ContextEventArgs>? ContextCreated;
 
     /// <inheritdoc />
-    public event EventHandler<RouterContext>? ContextDestroyed;
+    public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
     /// <inheritdoc />
     public RouterContext ContextForTarget(Target target, RouterContext? currentContext = null)
@@ -54,16 +55,16 @@ internal sealed class WindowContextProvider(IServiceProvider provider) : IContex
         }
 
         var context = new WindowRouterContext(target, window);
-        this.ContextCreated?.Invoke(this, context);
+        this.ContextCreated?.Invoke(this, new ContextEventArgs(context));
         window.Activated += (_, args) =>
         {
             Debug.WriteLine(
                 $"Window for context '{context}' {args.WindowActivationState} -> notifying subscribers to {nameof(this.ContextChanged)}");
             this.ContextChanged?.Invoke(
                 this,
-                args.WindowActivationState == WindowActivationState.Deactivated ? null : context);
+                new ContextEventArgs(args.WindowActivationState == WindowActivationState.Deactivated ? null : context));
         };
-        window.Closed += (_, _) => this.ContextDestroyed?.Invoke(this, context);
+        window.Closed += (_, _) => this.ContextDestroyed?.Invoke(this, new ContextEventArgs(context));
 
         return context;
     }

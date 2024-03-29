@@ -57,9 +57,7 @@ public class ViewModelWiringTests
 
         var eventTriggered = false;
         view.ViewModelChanged += (_, _) => eventTriggered = true;
-        var vm = new DemoViewModel();
-
-        view.ViewModel = vm;
+        view.ViewModel = new DemoViewModel();
 
         _ = eventTriggered.Should()
             .BeTrue(

@@ -93,7 +93,7 @@ public class ParameterTests
     public void ToString_Should_Return_Name_Only_When_Value_Is_Null()
     {
         // Arrange
-        var parameter = new Parameter("param1", null);
+        var parameter = new Parameter("param1", Value: null);
 
         // Act
         var result = parameter.ToString();

@@ -160,7 +160,7 @@ public class UrlSegment : IUrlSegment
     /// The serialized string representation of the <see cref="UrlSegment" />.
     /// </returns>
     public override string ToString()
-        => $"{SerializePath(this.Path)}{SerializeMatrixParams(this.parameters)}";
+        => SerializePath(this.Path) + SerializeMatrixParams(this.parameters);
 
     /// <summary>Replace the segment parameters with the given ones.</summary>
     /// <param name="newParameters">The new parameters.</param>

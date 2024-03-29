@@ -21,7 +21,7 @@ public class DockViewFactory(IResolver container) : IDockViewFactory
     public UIElement CreateViewForDock(IDock dock) => dock is CenterDock
         ? new WelcomeView()
         {
-            ViewModel = container.Resolve<Func<IDock, WelcomeViewModel>>()(dock),
+            ViewModel = container.Resolve<WelcomeViewModel>(),
         }
         : new Border()
         {

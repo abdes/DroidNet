@@ -257,7 +257,6 @@ public class UrlSegmentGroupTests
         _ = result.Should().Be("main(left:foo//right:bar)");
     }
 
-    // Create a mock UrlSegment with a given value
     private static IUrlSegment MockUrlSegment(string value)
     {
         var mock = new Mock<IUrlSegment>();

@@ -5,40 +5,64 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Exception that can be used to report failure to load the content from the
-/// ViewModel <paramref name="viewModel" /> into the outlet with the name
-/// <paramref name="outletName" />.
+/// Exception thrown to report a failure to load the content for a ViewModel into a router outlet targeted by a route.
 /// </summary>
-/// <param name="outletName">The name of the outlet in which content was being loaded.</param>
-/// <param name="viewModel">The ViewModel of the content.</param>
-/// <param name="because">Explanatory message describing the reason for the failure.</param>
-/// <param name="innerException">Optional exception at the origin of the failure.</param>
-public class ContentLoadingException(
-    string outletName,
-    object? viewModel,
-    string because,
-    Exception? innerException = null)
-    : ApplicationException(
-        $"could not load view model content `{viewModel}` into outlet `{outletName}` because: {because}",
-        innerException)
+public class ContentLoadingException : Exception
 {
-    /// <summary>
-    /// Gets the name of the outlet in which content was being loaded.
-    /// </summary>
-    /// <value>
-    /// The name of the outlet in which content was being loaded. This is
-    /// usually the value used in the <see cref="IRoute.Outlet">outlet</see>
-    /// property of the route.
-    /// </value>
-    public string OutletName { get; } = outletName;
+    private const string DefaultMessage = "could not load content for a route";
+
+    private readonly Lazy<string> extendedMessage;
+
+    public ContentLoadingException()
+        : this(DefaultMessage)
+    {
+    }
+
+    public ContentLoadingException(string message)
+        : base(message)
+        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
+
+    public ContentLoadingException(string message, Exception innerException)
+        : base(message, innerException)
+        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
 
     /// <summary>
-    /// Gets the ViewModel of the content.
+    /// Gets the name of the outlet, if already known, in which content was being loaded. This is usually the value used in the
+    /// <see cref="IRoute.Outlet">outlet</see> property of the route.
     /// </summary>
-    /// <value>
-    /// The ViewModel of the content. This is usually an instance of type
-    /// specified in the <see cref="IRoute.ViewModelType">ViewModel</see>
-    /// property of the route.
-    /// </value>
-    public object? ViewModel { get; } = viewModel;
+    public string? OutletName { get; init; }
+
+    /// <summary>
+    /// Gets the ViewModel of the content. This is usually an instance of the type specified in the
+    /// <see cref="IRoute.ViewModelType" /> property of the route.
+    /// </summary>
+    public object? ViewModel { get; init; }
+
+    public override string Message => this.extendedMessage.Value;
+
+    private string FormatMessage()
+    {
+        var message = base.Message;
+
+        if (this.OutletName is null && this.ViewModel is null)
+        {
+            return message;
+        }
+
+        message += " (";
+
+        if (this.OutletName is not null)
+        {
+            message += $"OutletName={this.OutletName}, ";
+        }
+
+        if (this.ViewModel is not null)
+        {
+            message += $"ViewModel={this.ViewModel.GetType().FullName}";
+        }
+
+        message += ")";
+
+        return message;
+    }
 }

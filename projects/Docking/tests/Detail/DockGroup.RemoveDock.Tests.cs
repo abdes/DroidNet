@@ -38,7 +38,7 @@ public partial class DockGroupTests
     {
         // Arrange
         using var sut = new NonEmptyDockGroup(this.docker);
-        using var first = sut.Docks.First();
+        using var first = sut.Docks[0];
         first.AddDockable(Dockable.New("first"));
         using var second = DummyDock.New();
         second.AddDockable(Dockable.New("second"));
@@ -68,7 +68,7 @@ public partial class DockGroupTests
 
         // Act
         optimizingDocker.Reset();
-        sut.RemoveDock(sut.Docks.First());
+        sut.RemoveDock(sut.Docks[0]);
 
         // Assert
         _ = optimizingDocker.ConsolidateUpCalled.Should().BeTrue();

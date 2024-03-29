@@ -12,10 +12,13 @@ using Microsoft.UI.Xaml;
 /// </summary>
 internal sealed class WindowRouterContext : RouterContext
 {
-    // Used for debugging. We want to keep track of the last known window title
-    // because when the window is closed, we cannot get its Title property
-    // anymore.
+    /// <summary>
+    /// Used for debugging. We want to keep track of the last known window title
+    /// because when the window is closed, we cannot get its Title property
+    /// anymore.
+    /// </summary>
     private string windowTitle;
+
     private bool windowClosed;
 
     /// <summary>

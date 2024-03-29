@@ -145,7 +145,7 @@ public class UrlSegmentTests
     [TestMethod]
     public void Constructor_WithValidPathAndNoParameters()
     {
-        var path = "home";
+        const string path = "home";
 
         var segment = new UrlSegment(path);
 

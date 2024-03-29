@@ -6,6 +6,7 @@ namespace DroidNet.Hosting.Generators;
 
 using System;
 using System.Collections.Immutable;
+using System.ComponentModel;
 using System.Text;
 using DroidNet.Hosting.Generators.Utils;
 using Microsoft.CodeAnalysis;
@@ -27,7 +28,7 @@ public class AutoInjectGenerator : IIncrementalGenerator
         "Code generation for InjectAs annotation failed. {0}.",
         "Usage",
         DiagnosticSeverity.Error,
-        true);
+        isEnabledByDefault: true);
 
     /// <summary>
     /// Initializes the generator by setting up the incremental pipeline.
@@ -72,7 +73,7 @@ public class AutoInjectGenerator : IIncrementalGenerator
         foreach (var injectionContext in injectionContexts)
         {
             var injections = injectionContext.TargetSymbol.GetAttributes()
-                .Where(a => a.AttributeClass?.Name == nameof(InjectAsAttribute));
+                .Where(a => string.Equals(a.AttributeClass?.Name, nameof(InjectAsAttribute), StringComparison.Ordinal));
             foreach (var attribute in injections)
             {
                 try
@@ -122,7 +123,7 @@ public class AutoInjectGenerator : IIncrementalGenerator
         var contractTypeFullName = targetSymbol.ToDisplayString();
 
         var contractTypeArg = attribute.NamedArguments
-            .FirstOrDefault(a => a.Key == nameof(InjectAsAttribute.ContractType))
+            .FirstOrDefault(a => string.Equals(a.Key, nameof(InjectAsAttribute.ContractType), StringComparison.Ordinal))
             .Value;
         if (contractTypeArg is { IsNull: false, Value: ITypeSymbol contractTypeSymbol })
         {
@@ -131,7 +132,8 @@ public class AutoInjectGenerator : IIncrementalGenerator
 
         string? implTypeFullName = null;
         var implTypeArg = attribute.NamedArguments
-            .FirstOrDefault(a => a.Key == nameof(InjectAsAttribute.ImplementationType))
+            .FirstOrDefault(
+                a => string.Equals(a.Key, nameof(InjectAsAttribute.ImplementationType), StringComparison.Ordinal))
             .Value;
         if (!targetIsInterface)
         {
@@ -167,7 +169,7 @@ public class AutoInjectGenerator : IIncrementalGenerator
 
         string? key = null;
         var keyArg = attribute.NamedArguments
-            .FirstOrDefault(a => a.Key == nameof(InjectAsAttribute.Key))
+            .FirstOrDefault(a => string.Equals(a.Key, nameof(InjectAsAttribute.Key), StringComparison.Ordinal))
             .Value;
         if (keyArg is { IsNull: false, Value: not null })
         {
@@ -176,29 +178,44 @@ public class AutoInjectGenerator : IIncrementalGenerator
         }
 
         var methodCallSegment
-            = $"services.{methodName}{(targetIsInterface || contractTypeFullName != implTypeFullName ? $"<{contractTypeFullName}, {implTypeFullName}>" : $"<{contractTypeFullName}>")}";
+            = $"services.{methodName}{(targetIsInterface || !string.Equals(contractTypeFullName, implTypeFullName, StringComparison.Ordinal) ? $"<{contractTypeFullName}, {implTypeFullName}>" : $"<{contractTypeFullName}>")}";
         var keyParamSegment = key is null ? string.Empty : $"\"{key}\"";
-        _ = source.AppendLine($"        _ = {methodCallSegment}({keyParamSegment});");
+        _ = source.Append("        _ = ")
+            .Append(methodCallSegment)
+            .Append('(')
+            .Append(keyParamSegment)
+            .AppendLine(");");
     }
 
     /// <summary>Gets the method name for the dependency injection based on the specified service lifetime.</summary>
     /// <param name="lifetime">The service lifetime.</param>
     /// <returns>The method name for the dependency injection.</returns>
-    private static string GetMethodName(ServiceLifetime? lifetime)
+    /// <exception cref="InvalidEnumArgumentException">If the <paramref name="lifetime" /> value is not a recognized enum value.</exception>
+    private static string GetMethodName(ServiceLifetime lifetime) => lifetime switch
     {
-        var baseMethodName = lifetime switch
-        {
-            ServiceLifetime.Singleton => "AddSingleton",
-            ServiceLifetime.Transient => "AddTransient",
-            ServiceLifetime.Scoped => "AddScoped",
-            _ => throw new ArgumentOutOfRangeException(nameof(lifetime), lifetime, "unknown lifetime value"),
-        };
-        return baseMethodName;
-    }
+        ServiceLifetime.Singleton => "AddSingleton",
+        ServiceLifetime.Transient => "AddTransient",
+        ServiceLifetime.Scoped => "AddScoped",
+        _ => throw new InvalidEnumArgumentException(nameof(lifetime), (int)lifetime, typeof(ServiceLifetime)),
+    };
 
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the InjectAs annotation is not valid.
     /// </summary>
-    /// <param name="message">Details about why the annotation was not valid.</param>
-    private sealed class InvalidAnnotationException(string message) : ApplicationException(message);
+    private sealed class InvalidAnnotationException : Exception
+    {
+        public InvalidAnnotationException()
+        {
+        }
+
+        public InvalidAnnotationException(string message)
+            : base(message)
+        {
+        }
+
+        public InvalidAnnotationException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
 }

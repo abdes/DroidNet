@@ -65,7 +65,9 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         };
 
         // Act
-        _ = act.Should().Throw<ArgumentException>().Which.Message.Contains("does not belong to a group");
+        _ = act.Should()
+            .Throw<ArgumentException>()
+            .Which.Message.Contains("does not belong to a group", StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -83,10 +85,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -134,10 +136,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -254,10 +256,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -298,10 +300,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -346,10 +348,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -382,7 +384,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         dock.Height = new Height(700);
 
         var layoutChangedCalled = false;
-        this.sut.LayoutChanged += _ => layoutChangedCalled = true;
+        this.sut.LayoutChanged += (_, _) => layoutChangedCalled = true;
 
         // Act
         this.sut.ResizeDock(dock, new Width(200), new Height(700));
@@ -428,10 +430,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act
@@ -485,10 +487,10 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         var layoutChangedCalled = false;
         LayoutChangeReason? layoutChangeReason = null;
-        this.sut.LayoutChanged += (reason) =>
+        this.sut.LayoutChanged += (_, args) =>
         {
             layoutChangedCalled = true;
-            layoutChangeReason = reason;
+            layoutChangeReason = args.Reason;
         };
 
         // Act

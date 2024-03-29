@@ -68,18 +68,18 @@ public partial class Router : IRouter, IDisposable
         this.Config = config;
 
         this.Events = Observable.Merge(
-            Observable.FromEventPattern<EventHandler<RouterContext>, RouterContext>(
+            Observable.FromEventPattern<EventHandler<ContextEventArgs>, ContextEventArgs>(
                     h => this.contextProvider.ContextCreated += h,
                     h => this.contextProvider.ContextCreated -= h)
-                .Select(e => new ContextCreated(e.EventArgs)),
-            Observable.FromEventPattern<EventHandler<RouterContext>, RouterContext>(
+                .Select(e => new ContextCreated(e.EventArgs.Context!)),
+            Observable.FromEventPattern<EventHandler<ContextEventArgs>, ContextEventArgs>(
                     h => this.contextProvider.ContextDestroyed += h,
                     h => this.contextProvider.ContextDestroyed -= h)
-                .Select(e => new ContextDestroyed(e.EventArgs)),
-            Observable.FromEventPattern<EventHandler<RouterContext?>, RouterContext?>(
+                .Select(e => new ContextDestroyed(e.EventArgs.Context!)),
+            Observable.FromEventPattern<EventHandler<ContextEventArgs>, ContextEventArgs>(
                     h => this.contextProvider.ContextChanged += h,
                     h => this.contextProvider.ContextChanged -= h)
-                .Select(e => new ContextChanged(e.EventArgs)),
+                .Select(e => new ContextChanged(e.EventArgs.Context)),
             this.eventSource);
 
         _ = this.Events.Subscribe(e => LogRouterEvent(this.logger, e));
@@ -99,7 +99,7 @@ public partial class Router : IRouter, IDisposable
         => this.Navigate(this.urlSerializer.Parse(url), options);
 
     /// <inheritdoc />
-    public void Navigate(List<RouteChangeItem> changes, PartialNavigation options)
+    public void Navigate(IList<RouteChangeItem> changes, PartialNavigation options)
     {
         try
         {
@@ -158,7 +158,7 @@ public partial class Router : IRouter, IDisposable
     }
 
     private static void ApplyChangesToRouterState(
-        List<RouteChangeItem> changes,
+        IList<RouteChangeItem> changes,
         ActiveRoute activeRoute)
     {
         foreach (var change in changes)
@@ -166,7 +166,6 @@ public partial class Router : IRouter, IDisposable
             switch (change.ChangeAction)
             {
                 case RouteChangeAction.Add:
-                {
                     // Compute the path based on the view model type and the active route config
                     Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
                     var config = MatchViewModelType(activeRoute.RouteConfig, change);
@@ -191,7 +190,6 @@ public partial class Router : IRouter, IDisposable
                         });
 
                     break;
-                }
 
                 case RouteChangeAction.Delete:
                 {
@@ -237,7 +235,7 @@ public partial class Router : IRouter, IDisposable
     }
 
     private static void ApplyChangesToUrlTree(
-        List<RouteChangeItem> changes,
+        IList<RouteChangeItem> changes,
         UrlSegmentGroup urlTree,
         ActiveRoute activeRoute)
     {
@@ -246,7 +244,6 @@ public partial class Router : IRouter, IDisposable
             switch (change.ChangeAction)
             {
                 case RouteChangeAction.Add:
-                {
                     // Compute the path based on the view model type and the active route config
                     Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
                     var config = MatchViewModelType(activeRoute.RouteConfig, change);
@@ -259,19 +256,15 @@ public partial class Router : IRouter, IDisposable
                     urlTree.AddChild(change.Outlet, urlSegmentGroup);
 
                     break;
-                }
 
                 case RouteChangeAction.Delete:
-                {
                     var removed = urlTree.RemoveChild(change.Outlet);
                     Debug.Assert(
                         removed,
                         $"expecting to find a child in the url tree with the outlet name `{change.Outlet}`");
                     break;
-                }
 
                 case RouteChangeAction.Update:
-                {
                     if (change.Parameters is null)
                     {
                         break;
@@ -289,13 +282,12 @@ public partial class Router : IRouter, IDisposable
 
                     if (mySegmentGroup.Segments.Count != 0)
                     {
-                        var lastSegment = mySegmentGroup.Segments.Last() as UrlSegment;
-                        Debug.Assert(lastSegment is not null, $"was expecting a UrlSegment");
+                        var lastSegment = mySegmentGroup.Segments[^1] as UrlSegment;
+                        Debug.Assert(lastSegment is not null, "was expecting a UrlSegment");
                         lastSegment.UpdateParameters(change.Parameters);
                     }
 
                     break;
-                }
 
                 default:
                     throw new ArgumentOutOfRangeException(
