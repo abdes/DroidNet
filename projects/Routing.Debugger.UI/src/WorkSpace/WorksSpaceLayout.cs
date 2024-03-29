@@ -84,12 +84,17 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         Message = "Syncing docker workspace layout with the router...")]
     private static partial void LogSyncWithRouter(ILogger logger);
 
-    private static IActiveRoute? FindWorkSpaceActiveRoute(IActiveRoute? node) =>
-        node is null
-            ? null
-            : node.Outlet == DebuggerConstants.DockOutletName
-                ? node
-                : node.Children.Select(FindWorkSpaceActiveRoute).FirstOrDefault();
+    private static IActiveRoute? FindWorkSpaceActiveRoute(IActiveRoute? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        return node.Outlet == DebuggerConstants.DockOutletName
+            ? node
+            : node.Children.Select(FindWorkSpaceActiveRoute).FirstOrDefault();
+    }
 
     private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
     {
@@ -105,7 +110,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         // Trigger a change if the active parameters have the same anchor key as the one we are setting next with a different
         // value, or if it has any other anchor key than the one we are setting next.
         return active.ParameterHasValue(position, anchor.RelativeTo?.Id) ||
-               Enum.GetNames<AnchorPosition>().Any(n => n != position && active.Contains(n));
+               Enum.GetNames<AnchorPosition>().Any(n => !string.Equals(n, position, StringComparison.OrdinalIgnoreCase) && active.Contains(n));
     }
 
     private static bool CheckAndSetWidth(string value, IParameters active, Parameters next) =>
@@ -149,6 +154,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     /// parameter has changed from the currently active parameters.
     /// </summary>
     /// <param name="dock">The dock instance whose properties are to be used for generating parameters.</param>
+    /// <param name="dockable">The dockable for which parameters are to be generated.</param>
     /// <param name="activeParams">The currently active parameters for comparison. Default is null.</param>
     /// <returns>A dictionary of parameters if any parameter has changed or active parameters are null, otherwise null.</returns>
     private static Parameters? Parameters(
@@ -190,7 +196,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         return changed ? nextParams : null;
     }
 
-    private void SyncWithRouter(LayoutChangeReason layoutChangeReason)
+    private void SyncWithRouter(object? sender, LayoutChangedEventArgs args)
     {
         Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
 
@@ -273,7 +279,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             new PartialNavigation()
             {
                 RelativeTo = this.activeRoute,
-                AdditionalInfo = new AdditionalInfo(layoutChangeReason != LayoutChangeReason.Resize),
+                AdditionalInfo = new AdditionalInfo(args.Reason != LayoutChangeReason.Resize),
             });
     }
 

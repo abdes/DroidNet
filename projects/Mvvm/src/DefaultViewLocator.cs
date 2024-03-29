@@ -117,7 +117,7 @@ public partial class DefaultViewLocator(
     /// view name.
     /// </value>
     private Func<string, string> ViewModelToViewFunc { get; }
-        = viewModelToViewFunc ?? (vm => vm.Replace("ViewModel", "View"));
+        = viewModelToViewFunc ?? (vm => vm.Replace("ViewModel", "View", StringComparison.OrdinalIgnoreCase));
 
     /// <inheritdoc />
     public object? ResolveView(object viewModel)
@@ -134,14 +134,14 @@ public partial class DefaultViewLocator(
         view = this.AttemptViewResolutionFor(viewModelType);
         if (view is not null)
         {
-            LogResolutionSuccess($"using the view type");
+            LogResolutionSuccess("using the view type");
             return view;
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(viewModelType));
         if (view is not null)
         {
-            LogResolutionSuccess($"using view type with toggle");
+            LogResolutionSuccess("using view type with toggle");
             return view;
         }
 
@@ -169,14 +169,14 @@ public partial class DefaultViewLocator(
         view = this.AttemptViewResolutionFor(typeof(T));
         if (view is not null)
         {
-            LogResolutionSuccess($"using the view type");
+            LogResolutionSuccess("using the view type");
             return (IViewFor<T>?)view;
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(typeof(T)));
         if (view is not null)
         {
-            LogResolutionSuccess($"using the view type with toggle");
+            LogResolutionSuccess("using the view type with toggle");
             return (IViewFor<T>?)view;
         }
 
@@ -238,7 +238,7 @@ public partial class DefaultViewLocator(
             }
         }
 
-        return Type.GetType(toggledTypeName, false);
+        return Type.GetType(toggledTypeName, throwOnError: false);
     }
 
     [LoggerMessage(
@@ -287,7 +287,7 @@ public partial class DefaultViewLocator(
     {
         try
         {
-            var viewType = Type.GetType(viewTypeName, false);
+            var viewType = Type.GetType(viewTypeName, throwOnError: false);
             if (viewType is null)
             {
                 return null;

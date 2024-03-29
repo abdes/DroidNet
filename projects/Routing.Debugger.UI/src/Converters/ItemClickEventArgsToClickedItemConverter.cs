@@ -13,7 +13,8 @@ public class ItemClickEventArgsToClickedItemConverter : IValueConverter
         => value is ItemClickEventArgs args
             ? args.ClickedItem
             : throw new ArgumentException(
-                $"{nameof(ItemClickEventArgsToClickedItemConverter)} can only convert {nameof(ItemClickEventArgs)} values");
+                $"{nameof(ItemClickEventArgsToClickedItemConverter)} can only convert {nameof(ItemClickEventArgs)} values",
+                nameof(value));
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new InvalidOperationException();

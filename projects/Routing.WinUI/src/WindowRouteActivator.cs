@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// parent. In such case, the content is loaded into the context's window,
 /// provided that window implements <see cref="IOutletContainer" />.
 /// </remarks>
+/// <param name="provider">The dependency injector's service provider.</param>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
 /// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />

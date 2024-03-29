@@ -7,7 +7,7 @@ namespace DroidNet.Docking.Detail;
 using FluentAssertions;
 
 [TestClass]
-[TestCategory($"{nameof(Length)}")]
+[TestCategory(nameof(Length))]
 public class LengthTests
 {
     [TestMethod]

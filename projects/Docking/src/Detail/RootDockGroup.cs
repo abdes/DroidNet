@@ -72,6 +72,7 @@ internal sealed class RootDockGroup : DockGroup
     /// additional docks around it if needed.
     /// </remarks>
     /// <param name="dock">The dock to be placed.</param>
+    /// <exception cref="InvalidOperationException">If the center group already has a dock.</exception>
     public void DockCenter(IDock dock)
     {
         if (!this.center.IsEmpty)
@@ -172,70 +173,6 @@ internal sealed class RootDockGroup : DockGroup
     {
         var parent = edge.Second is null ? edge : edge.Second.AsDockGroup();
         parent.AddGroupLast(group, edge.Orientation);
-    }
-
-    /// <summary>
-    /// Finds the last available slot in the docking tree branch starting at the specified <paramref name="root" />.
-    /// </summary>
-    /// <param name="root">The root dock group to start the search from.</param>
-    /// <returns>The last available slot in the branch starting at <paramref name="root" />.</returns>
-    private static IDockGroup LastAvailableSlot(IDockGroup root)
-    {
-        IDockGroup? result = null;
-        IDockGroup? furthestNode = null;
-        var maxDepth = -1;
-        var furthestDepth = -1;
-
-        DepthFirstSearch(root, 0, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
-
-        result ??= furthestNode;
-        Debug.Assert(result is not null, "we always have a node to add to");
-        return result;
-    }
-
-    /// <summary>
-    /// Performs a depth-first search on a docking tree branch, looking for the furthest node with a free slot (First or Second).
-    /// </summary>
-    /// <param name="node">The starting node in the tree structure.</param>
-    /// <param name="depth">The current depth in the tree structure.</param>
-    /// <param name="result">The deepest node with either a free slot (First or Second child is null).</param>
-    /// <param name="maxDepth">The maximum depth reached in the tree structure with a node that has a free slot.</param>
-    /// <param name="furthestNode">The deepest node reached in the tree structure.</param>
-    /// <param name="furthestDepth">The maximum depth reached in the tree structure.</param>
-    private static void DepthFirstSearch(
-        IDockGroup? node,
-        int depth,
-        ref IDockGroup? result,
-        ref int maxDepth,
-        ref IDockGroup? furthestNode,
-        ref int furthestDepth)
-    {
-        if (node == null)
-        {
-            return;
-        }
-
-        if ((node.First == null || node.Second == null) && depth > maxDepth)
-        {
-            result = node;
-            maxDepth = depth;
-        }
-
-        if (depth > furthestDepth)
-        {
-            furthestNode = node;
-            furthestDepth = depth;
-        }
-
-        if (node.Second is not TrayGroup)
-        {
-            DepthFirstSearch(node.Second, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
-        }
-
-        if (node.First is not TrayGroup)
-        {
-            DepthFirstSearch(node.First, depth + 1, ref result, ref maxDepth, ref furthestNode, ref furthestDepth);
-        }
     }
 
     /// <summary>Creates a new DockGroup with a Tray, and adds the specified dock to it.</summary>

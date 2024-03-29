@@ -22,7 +22,7 @@ public interface IRouteActivator
     /// will be loaded into.
     /// </param>
     /// <returns>
-    /// <c>true</c> if the activation was successful; <c>false</c> otherwise.
+    /// <see langword="true"/> if the activation was successful; <see langword="false"/> otherwise.
     /// </returns>
     bool ActivateRoute(IActiveRoute route, RouterContext context);
 
@@ -37,8 +37,8 @@ public interface IRouteActivator
     /// will be loaded into.
     /// </param>
     /// <returns>
-    /// <c>false</c> if any of the child routes activation was successful;
-    /// <c>true</c> otherwise.
+    /// <see langword="false"/> if any of the child routes activation was successful;
+    /// <see langword="true"/> otherwise.
     /// </returns>
     bool ActivateRoutesRecursive(IActiveRoute root, RouterContext context);
 }

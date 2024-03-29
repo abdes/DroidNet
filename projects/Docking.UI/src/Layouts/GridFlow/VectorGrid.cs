@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Layouts.GridFlow;
 
 using System.Diagnostics;
+using System.Globalization;
 using CommunityToolkit.WinUI.Controls;
 using DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
@@ -90,7 +91,8 @@ public class VectorGrid : Grid
         var (row, column) = this.Orientation == Orientation.Horizontal
             ? (0, this.Children.Count)
             : (this.Children.Count, 0);
-        Debug.WriteLine($"Adding item {content} at row={row}, col={column}");
+        Debug.WriteLine(
+            $"Adding item {content} at row={row.ToString(CultureInfo.InvariantCulture)}, col={column.ToString(CultureInfo.InvariantCulture)}");
         content.SetValue(RowProperty, row);
         content.SetValue(ColumnProperty, column);
         this.Children.Add(content);

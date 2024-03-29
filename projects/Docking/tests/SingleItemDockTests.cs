@@ -11,7 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(SingleItemDock)}")]
+[TestCategory(nameof(SingleItemDock))]
 public class SingleItemDockTests
 {
     private readonly Dockable dockable1

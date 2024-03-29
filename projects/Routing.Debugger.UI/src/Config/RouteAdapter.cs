@@ -4,20 +4,20 @@
 
 namespace DroidNet.Routing.Debugger.UI.Config;
 
+using System.Globalization;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
-/// <summary>
-/// Adapter for a <see cref="IRoute" /> so it can be used inside the <see cref="RoutesView" /> control.
-/// </summary>
+/// <summary>Adapter for a <see cref="IRoute" /> so it can be used inside the <see cref="RoutesView" /> control.</summary>
+/// <param name="item">The route item to wrap.</param>
 public class RouteAdapter(IRoute item) : TreeItemAdapterBase, ITreeItem<IRoute>
 {
     public const string RootPath = "__root";
 
-    public override bool IsRoot => this.Item.Path == RootPath;
+    public override bool IsRoot => string.Equals(this.Item.Path, RootPath, StringComparison.Ordinal);
 
     public override string Label
         => this.IsRoot
-            ? $"Config Root ({this.CountRoutesRecursive()})"
+            ? $"Config Root ({this.CountRoutesRecursive().ToString(CultureInfo.InvariantCulture)})"
             : $"{this.Item.Path ?? "(Matcher)"}";
 
     public IRoute Item => item;

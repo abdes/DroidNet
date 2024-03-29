@@ -4,25 +4,26 @@
 
 namespace DroidNet.Docking;
 
+#pragma warning disable MA0048 // File name must match type name
 public enum AnchorPosition
 {
     /// <summary>Dock on the left side of the anchor.</summary>
-    Left,
+    Left = 0,
 
     /// <summary>Dock at the top of the anchor.</summary>
-    Top,
+    Top = 1,
 
     /// <summary>Dock on the right side of the anchor.</summary>
-    Right,
+    Right = 2,
 
     /// <summary>Dock at the bottom of the anchor.</summary>
-    Bottom,
+    Bottom = 3,
 
     /// <summary>Dock together with the anchor.</summary>
-    With,
+    With = 4,
 
     /// <summary>Add to the center dock.</summary>
-    Center,
+    Center = 5,
 }
 
 public enum DockGroupOrientation
@@ -32,19 +33,19 @@ public enum DockGroupOrientation
     /// still become `Horizontal` or `Vertical`. So, it is `Undetermined` for
     /// now.
     /// </summary>
-    Undetermined,
+    Undetermined = 0,
 
     /// <summary>
     /// `Horizontal` orientation; can only add without expansion if the requested
     /// orientation is also `Horizontal`.
     /// </summary>
-    Horizontal,
+    Horizontal = 1,
 
     /// <summary>
     /// `Vertical` orientation; can only add without expansion if the requested
     /// orientation is also `Vertical`.
     /// </summary>
-    Vertical,
+    Vertical = 2,
 }
 
 /// <summary>Defines constants that specify the flow direction of items in a
@@ -66,10 +67,10 @@ public enum DockGroupOrientation
 public enum FlowDirection
 {
     /// <summary>Indicates that items should flow from left to right.</summary>
-    LeftToRight,
+    LeftToRight = 0,
 
     /// <summary>Indicates that items should flow from top to bottom.</summary>
-    TopToBottom,
+    TopToBottom = 1,
 }
 
 /// <summary>Describes the docking state of a dockable view.</summary>
@@ -79,19 +80,19 @@ public enum DockingState
     /// The dockable has just been created or closed, and is currently not
     /// docked.
     /// </summary>
-    Undocked,
+    Undocked = 0,
 
     /// <summary>
     /// The dockable is minimized and should not be presented. It may still be
     /// interacted with (not in its full form), to show it again or close it.
     /// </summary>
-    Minimized,
+    Minimized = 1,
 
     /// <summary>
     /// The dockable is presented and will always be until it is closed or
     /// minimized.
     /// </summary>
-    Pinned,
+    Pinned = 2,
 
     /// <summary>
     /// The dockable is presented inside a floating dock. In contrast with
@@ -99,7 +100,7 @@ public enum DockingState
     /// permanent one. It is most useful when the dockable needs to be
     /// temporarily presented and then minimized/pinned/closed.
     /// </summary>
-    Floating,
+    Floating = 3,
 }
 
 /// <summary>
@@ -113,19 +114,19 @@ public enum LayoutChangeReason
     /// Indicates that the layout change is only because of docks being resized,
     /// which does not require the existing layout to be rebuilt.
     /// </summary>
-    Resize,
+    Resize = 0,
 
     /// <summary>
     /// Indicates that the layout change is due to operations on docks that
     /// would require the layout to be rebuilt.
     /// </summary>
-    Docking,
+    Docking = 1,
 
     /// <summary>
     /// Indicates that the layout change due to a dock being floated, which may
     /// not require the existing layout to be rebuilt.
     /// </summary>
-    Floating,
+    Floating = 2,
 }
 
 /// <summary>
@@ -137,22 +138,23 @@ public enum DockablePlacement
     /// <summary>
     /// Insert the new dockable at the first position in the dock.
     /// </summary>
-    First,
+    First = 0,
 
     /// <summary>
     /// Insert the new dockable at the last position in the dock.
     /// </summary>
-    Last,
+    Last = 1,
 
     /// <summary>
     /// Insert the new dockable after the currently active item in the dock. If
     /// no item is currently active, behave similarly to <see cref="First" />.
     /// </summary>
-    AfterActiveItem,
+    AfterActiveItem = 2,
 
     /// <summary>
     /// Insert the new dockable before the currently active item in the dock. If
     /// no item is currently active, behave similarly to <see cref="First" />.
     /// </summary>
-    BeforeActiveItem,
+    BeforeActiveItem = 3,
 }
+#pragma warning restore MA0048 // File name must match type name

@@ -12,10 +12,16 @@ public class ExpanderIconConverter : IValueConverter
     private const string GlyphChevronUp = "\uE70E";
 
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is bool
-            ? value is false ? GlyphChevronDown : GlyphChevronUp
-            : throw new ArgumentException(
-                $"{nameof(ExpanderIconConverter)} can only convert bool values specifying whether the item is expanded or not");
+    {
+        if (value is bool)
+        {
+            return value is false ? GlyphChevronDown : GlyphChevronUp;
+        }
+
+        throw new ArgumentException(
+            $"{nameof(ExpanderIconConverter)} can only convert bool values specifying whether the item is expanded or not",
+            nameof(value));
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new InvalidOperationException();

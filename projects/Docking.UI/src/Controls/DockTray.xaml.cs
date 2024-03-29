@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls.DockTray;
+namespace DroidNet.Docking.Controls;
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
@@ -13,7 +13,7 @@ using Microsoft.UI.Xaml.Data;
 /// A custom control to display the collection of dockables in minimized docks
 /// as in a side tray.
 /// </summary>
-[ViewModel(typeof(Controls.DockTrayViewModel))]
+[ViewModel(typeof(DockTrayViewModel))]
 public sealed partial class DockTray
 {
     public DockTray() => this.InitializeComponent();

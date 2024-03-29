@@ -20,10 +20,10 @@ using System.Diagnostics;
 /// </remarks>
 public class Anchor : IDisposable
 {
-    // Keep track of when this object was disposed of.
+    /// <summary>Keep track of when this object was disposed of.</summary>
     private bool disposed;
 
-    // The dockable relative to which the anchor is positioned.
+    /// <summary>The dockable relative to which the anchor is positioned.</summary>
     private IDockable? dockable;
 
     /// <summary>Initializes a new instance of the <see cref="Anchor" /> class.</summary>
@@ -91,7 +91,9 @@ public class Anchor : IDisposable
     /// anchor point, either as the anchor point of the disposed dockable, if it had one, or at the left edge of the workspace
     /// root.
     /// </summary>
-    private void OnDockableDisposed()
+    /// <param name="sender">The origin of the event.</param>
+    /// <param name="args">The event arguments (unused).</param>
+    private void OnDockableDisposed(object? sender, EventArgs? args)
     {
         Debug.Assert(
             this.RelativeTo != null,
@@ -100,14 +102,14 @@ public class Anchor : IDisposable
         if (newAnchor != null)
         {
             Debug.WriteLine(
-                $"My anchor dockable was disposed of, anchoring myself {newAnchor.Position} relative to {(newAnchor.RelativeTo == null ? "root" : newAnchor.RelativeTo)}");
+                $"My anchor dockable was disposed of, anchoring myself {newAnchor.Position} relative to {newAnchor.RelativeTo?.ToString() ?? "root"}");
             this.Position = newAnchor.Position;
             this.RelativeTo = newAnchor.RelativeTo;
         }
         else
         {
             Debug.WriteLine(
-                $"My anchor dockable was disposed of, new anchor is null! Anchoring myself {AnchorPosition.Left} relative to root");
+                $"My anchor dockable was disposed of, new anchor is null! Anchoring myself {nameof(AnchorPosition.Left)} relative to root");
             this.Position = AnchorPosition.Left;
             this.RelativeTo = null;
         }
@@ -115,13 +117,17 @@ public class Anchor : IDisposable
 }
 
 /// <summary>Represents an anchor point on the left side of a dockable object or workspace.</summary>
+/// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public class AnchorLeft(IDockable? relativeTo = null) : Anchor(AnchorPosition.Left, relativeTo);
 
 /// <summary>Represents an anchor point on the right side of a dockable object or workspace.</summary>
+/// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public class AnchorRight(IDockable? relativeTo = null) : Anchor(AnchorPosition.Right, relativeTo);
 
 /// <summary>Represents an anchor point on the top side of a dockable object or workspace.</summary>
+/// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public class AnchorTop(IDockable? relativeTo = null) : Anchor(AnchorPosition.Top, relativeTo);
 
 /// <summary>Represents an anchor point on the bottom side of a dockable object or workspace.</summary>
+/// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public class AnchorBottom(IDockable? relativeTo = null) : Anchor(AnchorPosition.Bottom, relativeTo);

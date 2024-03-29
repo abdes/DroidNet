@@ -18,7 +18,7 @@ public partial class Dockable
 {
     private bool disposed;
 
-    public event Action? OnDisposed;
+    public event EventHandler<EventArgs>? OnDisposed;
 
     public static IEnumerable<IDockable> All => new AllDockables();
 
@@ -36,7 +36,7 @@ public partial class Dockable
 
         // First invoke any subscribers to the OnDisposed event, because they
         // may still need to use the dockable before it is disposed.
-        this.OnDisposed?.Invoke();
+        this.OnDisposed?.Invoke(this, EventArgs.Empty);
 
         Factory.ReleaseDockable(this.Id);
 
@@ -69,16 +69,16 @@ public partial class Dockable
                 dockable = Activator.CreateInstance(
                     type,
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
+                    binder: null,
                     args,
-                    null) as Dockable;
+                    culture: null) as Dockable;
             }
             catch (Exception ex)
             {
-                throw new ObjectCreationException(type, ex);
+                throw new ObjectCreationException(message: null, ex) { ObjectType = type };
             }
 
-            return Manage(dockable ?? throw new ObjectCreationException(type));
+            return Manage(dockable ?? throw new ObjectCreationException { ObjectType = type });
         }
 
         public static bool TryGetDockable(string id, out Dockable? dockable)

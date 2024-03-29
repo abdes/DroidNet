@@ -82,7 +82,7 @@ public abstract partial class Length
         }
 
         var (numericValue, isStar) = NumericValue(this.value);
-        return $"{numericValue / 2}{(isStar ? "*" : string.Empty)}";
+        return (numericValue / 2).ToString(CultureInfo.InvariantCulture) + (isStar ? "*" : string.Empty);
     }
 
     /// <inheritdoc />
@@ -97,13 +97,13 @@ public abstract partial class Length
         }
 
         var other = (Length)obj;
-        return this.value == other.value;
+        return string.Equals(this.value, other.value, StringComparison.Ordinal);
     }
 
     /// <inheritdoc />
-    public override int GetHashCode() => this.value != null ? this.value.GetHashCode() : 0;
+    public override int GetHashCode() => this.value?.GetHashCode(StringComparison.Ordinal) ?? 0;
 
-    [GeneratedRegex(@"^(auto|(\d+(\.\d+)?)?\*?)$")]
+    [GeneratedRegex(@"^(auto|(\d+(\.\d+)?)?\*?)$", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex GridLengthRegEx();
 
     private static (double numericValue, bool isStar) NumericValue(string length)
@@ -120,26 +120,20 @@ public abstract partial class Length
             {
                 numericValue = 1;
             }
-            else
+            else if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
             {
-                if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
-                {
-                    throw new ArgumentException(
-                        $"the length `{length}` does not contain a valid numeric value",
-                        nameof(length));
-                }
+                throw new ArgumentException(
+                    $"the length `{length}` does not contain a valid numeric value",
+                    nameof(length));
             }
 
             isStar = true;
         }
-        else
+        else if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
         {
-            if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
-            {
-                throw new ArgumentException(
-                    $"the length `{length}` is not a valid absolute length",
-                    nameof(length));
-            }
+            throw new ArgumentException(
+                $"the length `{length}` is not a valid absolute length",
+                nameof(length));
         }
 
         return (numericValue, isStar);

@@ -9,6 +9,7 @@ using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
+/// <summary>The ViewModel for the docking workspace.</summary>
 [InjectAs(ServiceLifetime.Transient)]
 public partial class WorkspaceViewModel : ObservableObject
 {
@@ -19,9 +20,9 @@ public partial class WorkspaceViewModel : ObservableObject
     {
         this.UpdateContent(docker, layout);
 
-        docker.LayoutChanged += reason =>
+        docker.LayoutChanged += (_, args) =>
         {
-            if (reason is LayoutChangeReason.Docking)
+            if (args.Reason is LayoutChangeReason.Docking)
             {
                 this.UpdateContent(docker, layout);
             }

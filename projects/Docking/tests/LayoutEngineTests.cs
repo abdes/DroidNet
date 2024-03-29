@@ -15,7 +15,7 @@ using DroidNet.Docking.Utils;
 public class LayoutEngineTests : VerifyBase
 {
     [TestMethod]
-    public Task TestLayoutBuilder()
+    public async Task TestLayoutBuilder()
     {
         using var docker = new Docker();
 
@@ -29,10 +29,10 @@ public class LayoutEngineTests : VerifyBase
         left2.AddDockable(Dockable.New("left2"));
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
-        docker.DockToRoot(ToolDock.New(), AnchorPosition.Left, true);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Left, minimized: true);
         docker.DockToRoot(ToolDock.New(), AnchorPosition.Left);
         docker.DockToRoot(ToolDock.New(), AnchorPosition.Top);
-        docker.DockToRoot(ToolDock.New(), AnchorPosition.Bottom, true);
+        docker.DockToRoot(ToolDock.New(), AnchorPosition.Bottom, minimized: true);
 
         using var right1 = ToolDock.New();
         right1.AddDockable(Dockable.New("right1"));
@@ -47,7 +47,7 @@ public class LayoutEngineTests : VerifyBase
 
         gridLayout.DumpLayout();
 
-        return this.Verify(result).UseDirectory("Snapshots");
+        _ = await this.Verify(result).UseDirectory("Snapshots");
     }
 
     private sealed class VectorLayoutEngine : LayoutEngine
@@ -56,40 +56,7 @@ public class LayoutEngineTests : VerifyBase
 
         public new Vector Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
 
-        public void DumpLayout()
-        {
-            DumpLayoutItemRecursive(this.CurrentVector, 0);
-
-            return;
-
-            static void DumpLayoutItemRecursive(object? item, int indentLevel)
-            {
-                var indent = new string(' ', indentLevel * 2); // 2 spaces per indent level
-
-                switch (item)
-                {
-                    case null:
-                        return;
-
-                    case IDockTray tray:
-                        Debug.WriteLine($"{indent}{tray}");
-                        break;
-
-                    case IDock dock:
-                        Debug.WriteLine($"{indent}Dock {dock}, {dock.Anchor}");
-                        break;
-
-                    case Vector vector:
-                        Debug.WriteLine($"{indent}Vector flow: {vector.Direction} {{");
-                        vector.Items.ForEach(child => DumpLayoutItemRecursive(child, indentLevel + 1));
-                        Debug.WriteLine($"{indent}}}");
-                        break;
-
-                    default:
-                        throw new ArgumentException($"unexpected item type {item.GetType()}", nameof(item));
-                }
-            }
-        }
+        public void DumpLayout() => DumpLayoutItemRecursive(this.CurrentVector, 0);
 
         protected override Flow StartLayout(IDockGroup root)
             => new GridFlow(root)
@@ -127,7 +94,35 @@ public class LayoutEngineTests : VerifyBase
 
         protected override void EndFlow() => Debug.WriteLine($"Close flow {this.CurrentVector}");
 
-        protected override void EndLayout() => Debug.WriteLine($"Layout ended");
+        protected override void EndLayout() => Debug.WriteLine("Layout ended");
+
+        private static void DumpLayoutItemRecursive(object? item, int indentLevel)
+        {
+            var indent = new string(' ', indentLevel * 2); // 2 spaces per indent level
+
+            switch (item)
+            {
+                case null:
+                    return;
+
+                case IDockTray tray:
+                    Debug.WriteLine($"{indent}{tray}");
+                    break;
+
+                case IDock dock:
+                    Debug.WriteLine($"{indent}Dock {dock}, {dock.Anchor}");
+                    break;
+
+                case Vector vector:
+                    Debug.WriteLine($"{indent}Vector flow: {vector.Direction} {{");
+                    vector.Items.ForEach(child => DumpLayoutItemRecursive(child, indentLevel + 1));
+                    Debug.WriteLine($"{indent}}}");
+                    break;
+
+                default:
+                    throw new ArgumentException($"unexpected item type {item.GetType()}", nameof(item));
+            }
+        }
 
         private static FlowDirection OrientationToFlowDirection(DockGroupOrientation orientation)
             => orientation == DockGroupOrientation.Undetermined
@@ -139,6 +134,13 @@ public class LayoutEngineTests : VerifyBase
             public required FlowDirection Direction { get; init; }
 
             public List<object> Items { get; } = [];
+
+            public override string? ToString()
+            {
+                var direction = this.Direction == FlowDirection.LeftToRight ? "\u2b95" : "\u2b07";
+
+                return $"{direction} Vector({this.Items.Count})";
+            }
         }
 
         private sealed class GridFlow(IDockGroup group) : Flow(group)

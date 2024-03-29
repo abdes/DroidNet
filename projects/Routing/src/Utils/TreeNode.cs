@@ -61,7 +61,7 @@ internal class TreeNode
         this.Parent.AddChild(node);
     }
 
-    protected bool RemoveSibling(TreeNode node) => this.Parent is not null && this.Parent.RemoveChild(node);
+    protected bool RemoveSibling(TreeNode node) => this.Parent?.RemoveChild(node) == true;
 
     protected void MoveTo(TreeNode newParent)
     {

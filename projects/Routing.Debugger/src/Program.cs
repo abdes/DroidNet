@@ -154,63 +154,6 @@ public static partial class Program
             ViewModelType = typeof(ShellViewModel),
             Children = new Routes(
             [
-                /*new Route
-                {
-                    Path = "Home",
-                    ViewModelType = typeof(HomeViewModel),
-                    Children = new Routes(
-                    [
-                        new Route
-                        {
-                            Path = string.Empty,
-                            Children = new Routes(
-                            [
-                                new Route
-                                {
-                                    Path = "Blank",
-                                    ViewModelType = typeof(BlankViewModel),
-                                },
-                                new Route
-                                {
-                                    Path = "Deep",
-                                    ViewModelType = typeof(BlankViewModel),
-                                    Children = new Routes(
-                                    [
-                                        new Route
-                                        {
-                                            Path = "Route",
-                                            ViewModelType = typeof(BlankViewModel),
-                                        },
-                                    ]),
-                                },
-
-                                new Route
-                                {
-                                    Outlet = "config",
-                                    Path = "Config",
-                                    ViewModelType = typeof(ConfigViewModel),
-                                },
-                                new Route
-                                {
-                                    Outlet = "urlTree",
-                                    Path = "UrlTree",
-                                    ViewModelType = typeof(UrlTreeViewModel),
-                                },
-                                new Route
-                                {
-                                    Outlet = "state",
-                                    Path = "State",
-                                    ViewModelType = typeof(RouterStateViewModel),
-                                },
-                            ]),
-                        },
-                    ]),
-                },
-                new Route
-                {
-                    Path = "DockTest",
-                    ViewModelType = typeof(DockTestViewModel),
-                },*/
                 new Route
                 {
                     Outlet = "dock",

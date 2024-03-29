@@ -40,7 +40,7 @@ public class ViewModelToViewTests
     [TestMethod]
     public void Convert_WhenValueIsNull_ShouldReturnNull()
     {
-        var result = this.converter.Convert(null, typeof(object), null, null);
+        var result = this.converter.Convert(value: null, typeof(object), parameter: null, language: null);
 
         _ = result.Should().BeNull();
     }
@@ -57,7 +57,7 @@ public class ViewModelToViewTests
 
         _ = this.viewLocatorMock.Setup(v => v.ResolveView(viewModel)).Returns(view);
 
-        var result = this.converter.Convert(viewModel, view.GetType(), null, null);
+        var result = this.converter.Convert(viewModel, view.GetType(), parameter: null, language: null);
 
         _ = result.Should().Be(view);
     }
@@ -68,11 +68,13 @@ public class ViewModelToViewTests
     [TestMethod]
     public void ConvertBack_ShouldThrowNotImplementedException()
     {
-        var action = () => this.converter.ConvertBack(null, null, null, null);
+        var action = () => this.converter.ConvertBack(value: null, targetType: null, parameter: null, language: null);
 
         _ = action.Should().Throw<InvalidOperationException>();
     }
 }
 
+#pragma warning disable MA0048 // File name must match type name
 /// <summary>A test view model.</summary>
 public class TestViewModel;
+#pragma warning restore MA0048 // File name must match type name

@@ -18,7 +18,7 @@ public class Docker : IDocker, IOptimizingDocker
 
     public Docker() => this.root = new RootDockGroup(this);
 
-    public event Action<LayoutChangeReason>? LayoutChanged;
+    public event EventHandler<LayoutChangedEventArgs>? LayoutChanged;
 
     public IDockGroup Root => this.root;
 
@@ -53,7 +53,7 @@ public class Docker : IDocker, IOptimizingDocker
             this.PinDock(dock);
         }
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void DockToCenter(IDock dock)
@@ -70,7 +70,7 @@ public class Docker : IDocker, IOptimizingDocker
         this.root.DockCenter(dock);
         dock.AsDock().Docker = this;
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void DockToRoot(IDock dock, AnchorPosition position, bool minimized = false)
@@ -118,7 +118,7 @@ public class Docker : IDocker, IOptimizingDocker
             this.PinDock(dock);
         }
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void MinimizeDock(IDock dock)
@@ -137,7 +137,7 @@ public class Docker : IDocker, IOptimizingDocker
         {
             // TODO: implement floating hide
             dock.AsDock().State = DockingState.Minimized;
-            this.LayoutChanged?.Invoke(LayoutChangeReason.Floating);
+            this.FireLayoutChangedEvent(LayoutChangeReason.Floating);
             return;
         }
 
@@ -145,7 +145,7 @@ public class Docker : IDocker, IOptimizingDocker
         var tray = FindTrayForDock(dock.AsDock());
         tray.AddDock(dock);
         dock.AsDock().State = DockingState.Minimized;
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void PinDock(IDock dock)
@@ -165,7 +165,7 @@ public class Docker : IDocker, IOptimizingDocker
 
         dock.AsDock().State = DockingState.Pinned;
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void ResizeDock(IDock dock, Width? width, Height? height)
@@ -186,7 +186,7 @@ public class Docker : IDocker, IOptimizingDocker
 
         if (sizeChanged && dock.State == DockingState.Pinned)
         {
-            this.LayoutChanged?.Invoke(LayoutChangeReason.Resize);
+            this.FireLayoutChangedEvent(LayoutChangeReason.Resize);
         }
     }
 
@@ -204,7 +204,7 @@ public class Docker : IDocker, IOptimizingDocker
             resource.Dispose();
         }
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Docking);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
     public void FloatDock(IDock dock)
@@ -222,7 +222,7 @@ public class Docker : IDocker, IOptimizingDocker
         // TODO: implement floating show
         dock.AsDock().State = DockingState.Floating;
 
-        this.LayoutChanged?.Invoke(LayoutChangeReason.Floating);
+        this.FireLayoutChangedEvent(LayoutChangeReason.Floating);
     }
 
     public void Dispose()
@@ -378,4 +378,7 @@ public class Docker : IDocker, IOptimizingDocker
         // We do not trigger a LayoutChanged event because the undocking will always be followed by another operation,
         // which, if needed, will trigger the vent.
     }
+
+    private void FireLayoutChangedEvent(LayoutChangeReason reason)
+        => this.LayoutChanged?.Invoke(this, new LayoutChangedEventArgs(reason));
 }

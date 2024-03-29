@@ -68,7 +68,7 @@ public sealed partial class MainWindow : IOutletContainer
         }
 
         var view = this.viewLocator.ResolveView(viewModel) ??
-                   throw new MissingViewException(viewModel.GetType());
+                   throw new MissingViewException { ViewModelType = viewModel.GetType() };
 
         // Set the ViewModel property of the view here, so that we don't lose
         // the view model instance we just created and which is the one that
@@ -82,12 +82,12 @@ public sealed partial class MainWindow : IOutletContainer
         }
         else
         {
-            throw new ViewTypeException(view.GetType(), $"view is not an {nameof(IViewFor)}");
+            throw new ViewTypeException($"invalid view type; not an {nameof(IViewFor)}") { ViewType = view.GetType() };
         }
 
         if (!view.GetType().IsAssignableTo(typeof(UIElement)))
         {
-            throw new ViewTypeException(view.GetType(), $"view is not a {nameof(UIElement)}");
+            throw new ViewTypeException($"invalid view type; not a {nameof(UIElement)}") { ViewType = view.GetType() };
         }
 
         this.ShellView = (UIElement)view;

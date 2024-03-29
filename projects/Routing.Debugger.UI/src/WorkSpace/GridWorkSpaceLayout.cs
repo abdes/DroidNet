@@ -83,7 +83,7 @@ internal sealed class GridWorkSpaceLayout(IDocker docker, IViewLocator viewLocat
 
     protected override void EndFlow() => Debug.WriteLine($"Close flow {this.CurrentGrid}");
 
-    protected override void EndLayout() => Debug.WriteLine($"Layout ended");
+    protected override void EndLayout() => Debug.WriteLine("Layout ended");
 
     private static Orientation ToGridOrientation(DockGroupOrientation orientation)
         => orientation == DockGroupOrientation.Vertical ? Orientation.Vertical : Orientation.Horizontal;

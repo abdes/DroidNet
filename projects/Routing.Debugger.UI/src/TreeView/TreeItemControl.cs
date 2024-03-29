@@ -19,7 +19,7 @@ public class TreeItemControl : Control
         nameof(ItemAdapter),
         typeof(ITreeItem),
         typeof(TreeItemControl),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     /// <summary>
     /// Defines the <see cref="HeaderTemplate" /> dependency property.
@@ -28,7 +28,7 @@ public class TreeItemControl : Control
         nameof(HeaderTemplate),
         typeof(DataTemplate),
         typeof(TreeItemControl),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     /// <summary>
     /// Defines the <see cref="BodyTemplate" /> dependency property.
@@ -37,7 +37,7 @@ public class TreeItemControl : Control
         nameof(BodyTemplate),
         typeof(DataTemplate),
         typeof(TreeItemControl),
-        new PropertyMetadata(null));
+        new PropertyMetadata(defaultValue: null));
 
     public TreeItemControl() => this.Style = (Style)Application.Current.Resources[nameof(TreeItemControl)];
 

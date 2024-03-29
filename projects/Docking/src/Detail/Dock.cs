@@ -122,11 +122,19 @@ public abstract partial class Dock : IDock
             case DockablePlacement.AfterActiveItem:
             case DockablePlacement.BeforeActiveItem:
                 var activeIndex = this.dockables.FindIndex(d => d.IsActive);
-                index = activeIndex == -1
-                    ? 0
-                    : position == DockablePlacement.BeforeActiveItem
-                        ? activeIndex
-                        : activeIndex + 1;
+                if (activeIndex == -1)
+                {
+                    index = 0;
+                }
+                else if (position == DockablePlacement.BeforeActiveItem)
+                {
+                    index = activeIndex;
+                }
+                else
+                {
+                    index = activeIndex + 1;
+                }
+
                 break;
 
             default:
@@ -186,7 +194,7 @@ public abstract partial class Dock : IDock
 
     private void OnDockablePropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName != nameof(Dockable.IsActive))
+        if (!string.Equals(args.PropertyName, nameof(Dockable.IsActive), StringComparison.Ordinal))
         {
             return;
         }

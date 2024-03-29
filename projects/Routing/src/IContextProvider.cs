@@ -16,19 +16,19 @@ public interface IContextProvider
     /// An event that can be used to get notified when the current context has
     /// changed due to an action outside the router.
     /// </summary>
-    public event EventHandler<RouterContext?>? ContextChanged;
+    public event EventHandler<ContextEventArgs>? ContextChanged;
 
     /// <summary>
     /// An event that can be used to get notified when a new context is
     /// created.
     /// </summary>
-    public event EventHandler<RouterContext>? ContextCreated;
+    public event EventHandler<ContextEventArgs>? ContextCreated;
 
     /// <summary>
     /// An event that can be used to get notified when a context is destroyed
     /// and should no longer usable.
     /// </summary>
-    public event EventHandler<RouterContext>? ContextDestroyed;
+    public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
     /// <summary>
     /// Get the <see cref="RouterContext" /> for the given <paramref name="target" />.
@@ -38,7 +38,7 @@ public interface IContextProvider
     /// </param>
     /// <param name="currentContext">
     /// The current context being used by the router, provided for
-    /// optimization, but may be <c>null</c>.
+    /// optimization, but may be <see langword="null" />.
     /// </param>
     /// <returns>
     /// A <see cref="RouterContext" /> instance that can be used to navigate for the

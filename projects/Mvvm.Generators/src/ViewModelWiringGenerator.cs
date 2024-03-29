@@ -35,7 +35,8 @@ using Microsoft.CodeAnalysis.Text;
 [Generator(LanguageNames.CSharp)]
 public sealed class ViewModelWiringGenerator : IIncrementalGenerator
 {
-    // !!! The template file in the project must be marked as "Embedded Resource".
+    /// <summary>The name of the template file.</summary>
+    /// <remarks>!!! The template file in the project must be marked as "Embedded Resource".</remarks>
     private const string ViewForTemplate = "ViewForTemplate.txt";
 
     private static readonly DiagnosticDescriptor TemplateLoadError = new(
@@ -44,17 +45,17 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
         "Code generation failed. {0}.",
         "Package",
         DiagnosticSeverity.Error,
-        description: "The generator package should include templates as embedded resources.",
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        description: "The generator package should include templates as embedded resources.");
 
     private static readonly DiagnosticDescriptor AttributeAnnotationError = new(
         "VMWGEN002",
         "Invalid attribute annotation",
-        $"Invalid attribute declaration. Use [ViewModel(typeof(T)] where T is the Viewmodel class.",
+        "Invalid attribute declaration. Use [ViewModel(typeof(T)] where T is the Viewmodel class.",
         "Usage",
         DiagnosticSeverity.Error,
-        description: "View classes should be annotated with a valid `ViewModel` attribute with the ViewModel type.",
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        description: "View classes should be annotated with a valid `ViewModel` attribute with the ViewModel type.");
 
     /// <summary>
     /// Called by the host, before generation occurs, exactly once, regardless of the number of further compilations that may
@@ -79,7 +80,7 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
     private static void GenerateViewModelWiring(SourceProductionContext context, GeneratorAttributeSyntaxContext syntax)
     {
         // If we are called, there must be a ViewModelAttribute in the attributes.
-        var attribute = syntax.Attributes.First();
+        var attribute = syntax.Attributes[0];
 
         var viewClassName = syntax.TargetSymbol.Name;
         var viewNameSpace = syntax.TargetSymbol.ContainingNamespace.ToString();
@@ -123,8 +124,8 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
         var assembly = Assembly.GetExecutingAssembly();
         List<string> resourceNames = [.. assembly.GetManifestResourceNames()];
 
-        var dotPath = path.Replace("/", ".");
-        dotPath = resourceNames.FirstOrDefault(r => r.Contains(dotPath)) ?? throw new MissingTemplateException(path);
+        var dotPath = path.Replace('/', '.');
+        dotPath = resourceNames.Find(r => r.Contains(dotPath)) ?? throw new MissingTemplateException(path);
 
         try
         {
@@ -147,17 +148,20 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
         return sourceCode ?? throw new InvalidTemplateException(ViewForTemplate);
     }
 
+    // These are internal exceptions only with their custom constructors, so that we have a common code block for diagnostics.
+#pragma warning disable RCS1194 // Implement exception constructors
+
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the template for the class to be generated could not be found.
     /// </summary>
     /// <param name="path">The specified path for the missing template.</param>
-    private sealed class MissingTemplateException(string path) : ApplicationException($"Missing template '{path}'");
+    private sealed class MissingTemplateException(string path) : Exception($"Missing template '{path}'");
 
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the template for the class to be generated is invalid.
     /// </summary>
     /// <param name="path">The template path.</param>
-    private sealed class InvalidTemplateException(string path) : ApplicationException($"Invalid template '{path}'");
+    private sealed class InvalidTemplateException(string path) : Exception($"Invalid template '{path}'");
 
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the template for the class to be generated was found but
@@ -167,4 +171,6 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
     /// <param name="error">A description of the error encountered while trying to load the template.</param>
     private sealed class CouldNotLoadTemplateException(string path, string error) : Exception(
         $"Could not load template '{path}': {error}");
+
+#pragma warning restore RCS1194 // Implement exception constructors
 }

@@ -15,7 +15,6 @@ internal static class DockGroupExtensions
             return true;
         }
 
-        return (group.First != null && group.First.ShouldStretch()) ||
-               (group.Second != null && group.Second.ShouldStretch());
+        return group.First?.ShouldStretch() == true || group.Second?.ShouldStretch() == true;
     }
 }

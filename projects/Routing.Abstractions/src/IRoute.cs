@@ -6,39 +6,6 @@ namespace DroidNet.Routing;
 
 using System.Collections.ObjectModel;
 
-/// <summary>
-/// Enum representing different types of matching for routes.
-/// </summary>
-public enum PathMatch
-{
-    /// <summary>
-    /// Default matching strategy when the <see cref="IRoute.MatchMethod" /> property
-    /// was not explicitly set. Equivalent to <see cref="Prefix" />.
-    /// </summary>
-    Default,
-
-    /// <summary>
-    /// Matches when the path starts with the route path.
-    /// </summary>
-    Prefix,
-
-    /// <summary>
-    /// Matches when the path starts with the route path, but fails if the
-    /// current segment group does not exactly match the route.
-    /// </summary>
-    /// <remarks>
-    /// This is particularly useful for wide matching routes such as <c>""</c>,
-    /// which may also require that no segments in the current segment group
-    /// should remain after the match.
-    /// </remarks>
-    StrictPrefix,
-
-    /// <summary>
-    /// Matches when the path is exactly equal to the route path.
-    /// </summary>
-    Full,
-}
-
 public interface IRoute
 {
     /// <summary>
@@ -107,43 +74,4 @@ public interface IRoute
     /// <summary>Gets a collection of child routes, if any.</summary>
     /// <value>A collection of child routes, if any.</value>
     IRoutes? Children { get; }
-}
-
-/// <summary>
-/// Interface representing the result of matching a route <see cref="Path" /> with
-/// segments (<see cref="IUrlSegment" />) from a <see cref="IUrlSegmentGroup" />.
-/// </summary>
-/// <seealso cref="IRoute.PathMatcher" />
-public interface IMatchResult
-{
-    /// <summary>
-    /// Gets a value indicating whether the match was successful.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the match was successful.; <c>false</c> otherwise.
-    /// </value>
-    public bool IsMatch { get; }
-
-    /// <summary>
-    /// Gets the list of segments, from the <see cref="IUrlSegmentGroup" />,
-    /// consumed during the match.
-    /// </summary>
-    /// <value>The list of segments consumed during the match.</value>
-    public List<IUrlSegment> Consumed { get; }
-
-    /// <summary>
-    /// Gets a dictionary of the positional parameters found during the
-    /// matching of a route's path to the segments in a <see cref="IUrlSegmentGroup" />.
-    /// </summary>
-    /// <remarks>
-    /// Positional parameters are specified in the route's <see cref="Path" />,
-    /// and correspond to a path segment prefixed with the ':' character
-    /// (example: in the path "/User/:id", ":id" represents a positional
-    /// parameter with the name "id").
-    /// </remarks>
-    /// <value>
-    /// A dictionary of positional parameters, where keys are the parameter
-    /// names and values are the matching <see cref="IUrlSegment" />.
-    /// </value>
-    public IDictionary<string, IUrlSegment> PositionalParams { get; }
 }

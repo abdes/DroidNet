@@ -40,7 +40,7 @@ public record Target
     /// target.
     /// </summary>
     /// <value>
-    /// When <c>true</c>, the target refers to the <see cref="Self" /> target.
+    /// When <see langword="true"/>, the target refers to the <see cref="Self" /> target.
     /// </value>
     public bool IsSelf => this.Name.Equals(Self.Name, StringComparison.Ordinal);
 
@@ -49,7 +49,7 @@ public record Target
     /// target.
     /// </summary>
     /// <value>
-    /// When <c>true</c>, the target refers to the <see cref="Main" /> target.
+    /// When <see langword="true"/>, the target refers to the <see cref="Main" /> target.
     /// </value>
     public bool IsMain => this.Name.Equals(Main.Name, StringComparison.Ordinal);
 

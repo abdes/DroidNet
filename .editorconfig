@@ -667,6 +667,20 @@ dotnet_diagnostic.SA1651.severity = warning
 dotnet_diagnostic.SX1101.severity = none
 dotnet_diagnostic.SX1309.severity = none
 dotnet_diagnostic.SX1309S.severity = none
+
+#
+# Meziantou.Analyzer rules with default action
+#
+[*.{cs,csx,cake,vb,vbx}]
+# MA0136: Raw String contains an implicit end of line character
+dotnet_diagnostic.MA0136.severity = silent
+# MA0041 - Make property static (deprecated, use CA1822 instead)
+dotnet_diagnostic.MA0041.severity = none
+# MA0038 - Make method static (deprecated, use CA1822 instead)
+dotnet_diagnostic.MA0038.severity = none
+# MA0048 - File name must match type name (use StyleCop)
+dotnet_diagnostic.MA0048.severity = none
+
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
 tab_width = 4
 indent_size = 4

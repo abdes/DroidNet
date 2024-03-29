@@ -21,7 +21,7 @@ public abstract class LayoutEngine
         var rootFlow = this.StartLayout(root);
         this.PushFlow(rootFlow);
         this.Layout(root);
-        Debug.Assert(this.flows.Count == 1, $"some pushes were not matched by pops");
+        Debug.Assert(this.flows.Count == 1, "some pushes were not matched by pops");
         Debug.WriteLine($"=== Final state: {this.CurrentFlow}");
         this.EndLayout();
         return rootFlow;
@@ -94,8 +94,8 @@ public abstract class LayoutEngine
         }
         else
         {
-            HandlePart(group.First);
-            HandlePart(group.Second);
+            this.HandlePart(group.First);
+            this.HandlePart(group.Second);
         }
 
         if (restoreState)
@@ -105,29 +105,28 @@ public abstract class LayoutEngine
         }
 
         Debug.WriteLine($"Layout ended for Group {group}");
-        return;
+    }
 
-        void HandlePart(IDockGroup? part)
+    private void HandlePart(IDockGroup? part)
+    {
+        switch (part)
         {
-            switch (part)
-            {
-                case null:
-                    return;
+            case null:
+                return;
 
-                case IDockTray { IsEmpty: false } tray:
-                    Debug.Assert(
-                        (tray.IsVertical && this.CurrentFlow.IsHorizontal) ||
-                        (!tray.IsVertical && this.CurrentFlow.IsVertical),
-                        $"expecting tray orientation {group.Orientation} to be orthogonal to flow direction {this.CurrentFlow.Direction}");
+            case IDockTray { IsEmpty: false } tray:
+                Debug.Assert(
+                    (tray.IsVertical && this.CurrentFlow.IsHorizontal) ||
+                    (!tray.IsVertical && this.CurrentFlow.IsVertical),
+                    $"expecting tray orientation {part.Orientation} to be orthogonal to flow direction {this.CurrentFlow.Direction}");
 
-                    // Place the tray if it's not empty.
-                    this.PlaceTray(tray);
-                    break;
+                // Place the tray if it's not empty.
+                this.PlaceTray(tray);
+                break;
 
-                default:
-                    this.Layout(part);
-                    break;
-            }
+            default:
+                this.Layout(part);
+                break;
         }
     }
 
@@ -137,9 +136,9 @@ public abstract class LayoutEngine
         // pinned, we consider the group's orientation as Undetermined. That
         // way, we don't create a new grid for that group.
         var groupOrientation = group.Orientation;
-        if (!group.IsEmpty && group.Docks.Count(d => d.State == DockingState.Pinned) == 1)
+        if (!group.IsEmpty && group.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
         {
-            Debug.WriteLine($"Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
+            Debug.WriteLine("Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
             groupOrientation = DockGroupOrientation.Undetermined;
         }
 

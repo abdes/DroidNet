@@ -56,7 +56,7 @@ public partial class WorkSpaceView : UserControl
 
     private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName != nameof(this.ViewModel.Layout.Content))
+        if (!string.Equals(args.PropertyName, nameof(this.ViewModel.Layout.Content), StringComparison.Ordinal))
         {
             return;
         }

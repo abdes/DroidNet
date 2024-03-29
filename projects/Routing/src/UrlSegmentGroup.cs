@@ -102,8 +102,8 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// starts with a double dot path).
     /// </summary>
     /// <value>
-    /// <c>true</c> if the first segment in the group in a double dot.
-    /// <c>false</c> otherwise.
+    /// <see langword="true"/> if the first segment in the group in a double dot.
+    /// <see langword="false"/> otherwise.
     /// </value>
     public bool IsRelative => this.segments.Count > 0 && this.segments[0].Path is "..";
 

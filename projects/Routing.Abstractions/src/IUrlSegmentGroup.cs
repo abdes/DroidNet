@@ -39,8 +39,8 @@ public interface IUrlSegmentGroup
     /// starts with a double dot path).
     /// </summary>
     /// <value>
-    /// <c>true</c> if the first segment in the group in a double dot.
-    /// <c>false</c> otherwise.
+    /// <see langword="true"/> if the first segment in the group in a double dot.
+    /// <see langword="false"/> otherwise.
     /// </value>
     bool IsRelative { get; }
 }

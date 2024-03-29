@@ -14,7 +14,7 @@ using DroidNet.Routing.Utils;
 /// "activated", the associated ViewModel is loaded into the corresponding
 /// outlet to update the visual state of the application.
 /// </summary>
-internal partial class ActiveRoute : TreeNode, IActiveRoute
+internal sealed partial class ActiveRoute : TreeNode, IActiveRoute
 {
     public required IRoute RouteConfig { get; init; }
 
@@ -90,7 +90,7 @@ internal partial class ActiveRoute
     {
         if (route is not TreeNode node)
         {
-            throw new ArgumentException("only objects implementing ITreeNode are accepted");
+            throw new ArgumentException("only objects implementing ITreeNode are accepted", nameof(route));
         }
 
         baseImpl(node);
@@ -115,7 +115,7 @@ internal partial class ActiveRoute
     {
         if (route is not TreeNode node)
         {
-            throw new ArgumentException("only objects implementing ITreeNode are accepted");
+            throw new ArgumentException("only objects implementing ITreeNode are accepted", nameof(route));
         }
 
         return baseImpl(node);

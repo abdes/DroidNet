@@ -10,10 +10,28 @@ using DroidNet.Mvvm;
 /// Thrown when a View resolved for a certain ViewModel has a type that does not satisfy the requirements, such as not
 /// implementing the <see cref="IViewFor{T}" /> or does not derive from a type that can be set as Content for an outlet.
 /// </summary>
-/// <param name="viewType">The type of the View.</param>
-/// <param name="because">The reason why the View Type is not suitable.</param>
-public class ViewTypeException(Type viewType, string because)
-    : ApplicationException($"The view which type is '{viewType}' is not suitable: {because}")
+public class ViewTypeException : Exception
 {
-    public Type ViewType => viewType;
+    private const string DefaultMessage = "view type not suitable to be used as Content type";
+
+    private readonly Lazy<string> extendedMessage;
+
+    public ViewTypeException()
+        : this(DefaultMessage)
+    {
+    }
+
+    public ViewTypeException(string? message)
+        : base(message)
+        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
+
+    public ViewTypeException(string? message, Exception? innerException)
+        : base(message, innerException)
+        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
+
+    public required Type ViewType { get; init; }
+
+    public override string Message => this.extendedMessage.Value;
+
+    private string FormatMessage() => base.Message + $" (ViewType={this.ViewType}";
 }

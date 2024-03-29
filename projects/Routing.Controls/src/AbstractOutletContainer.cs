@@ -24,8 +24,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// </summary>
 public abstract class AbstractOutletContainer : ObservableObject, IOutletContainer, IDisposable
 {
-    protected Dictionary<OutletName, (string propertyName, object? viewModel)> Outlets { get; }
-        = new(OutletName.EqualityComparer.IgnoreCase);
+    protected IDictionary<OutletName, (string propertyName, object? viewModel)> Outlets { get; }
+        = new Dictionary<OutletName, (string propertyName, object? viewModel)>(OutletName.EqualityComparer.IgnoreCase);
 
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)

@@ -52,12 +52,9 @@ public sealed partial class TopNavBar : IDisposable
     {
         _ = sender;
 
-        if (e.Key == VirtualKey.Enter)
+        if (e.Key == VirtualKey.Enter && this.Url != null)
         {
-            if (this.Url != null)
-            {
-                this.Router.Navigate(this.Url, new FullNavigation());
-            }
+            this.Router.Navigate(this.Url, new FullNavigation());
         }
     }
 

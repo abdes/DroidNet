@@ -127,5 +127,4 @@ public class HostingExtensionsTests
     }
 }
 
-// ReSharper disable once ClassNeverInstantiated.Global
 internal sealed class MyApp : Application;

@@ -7,7 +7,6 @@ namespace DroidNet.Docking.Layouts.GridFlow;
 using System.Diagnostics;
 using DroidNet.Docking;
 using DroidNet.Docking.Controls;
-using DroidNet.Docking.Controls.DockTray;
 using DroidNet.Docking.Layouts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -68,7 +67,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     protected override void EndFlow() => Debug.WriteLine($"Close flow {this.CurrentGrid}");
 
-    protected override void EndLayout() => Debug.WriteLine($"Layout ended");
+    protected override void EndLayout() => Debug.WriteLine("Layout ended");
 
     private static Orientation ToGridOrientation(DockGroupOrientation orientation)
         => orientation == DockGroupOrientation.Vertical ? Orientation.Vertical : Orientation.Horizontal;

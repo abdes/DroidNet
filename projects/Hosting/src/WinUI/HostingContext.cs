@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml;
 /// Encapsulates the information needed to manage the hosting of a WinUI based
 /// User Interface service and associated thread.
 /// </summary>
+/// <param name="lifeTimeLinked">Specifies whether the application lifetime and the UI lifetime are linked.</param>
 public class HostingContext(bool lifeTimeLinked = true) : BaseHostingContext(lifeTimeLinked)
 {
     /// <summary>Gets or sets the WinUI dispatcher queue.</summary>

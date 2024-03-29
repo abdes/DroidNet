@@ -56,8 +56,8 @@ public partial class DockGroupTests : IDisposable
     {
         // Arrange
         var sut = new MockDockGroup(this.docker);
-        sut.SetFirst(null);
-        sut.SetSecond(null);
+        sut.SetFirst(first: null);
+        sut.SetSecond(second: null);
 
         // Act
         var result = sut.IsLeaf;
@@ -120,7 +120,7 @@ public partial class DockGroupTests : IDisposable
         var sut = new MockDockGroup(this.docker);
 
         // Act
-        sut.SetFirst(null);
+        sut.SetFirst(first: null);
 
         // Assert
         _ = sut.First.Should().BeNull();
@@ -134,7 +134,7 @@ public partial class DockGroupTests : IDisposable
         var sut = new MockDockGroup(this.docker);
 
         // Act
-        sut.SetSecond(null);
+        sut.SetSecond(second: null);
 
         // Assert
         _ = sut.Second.Should().BeNull();

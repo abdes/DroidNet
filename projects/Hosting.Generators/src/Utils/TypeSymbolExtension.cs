@@ -17,5 +17,5 @@ internal static class TypeSymbolExtension
     /// Whether <paramref name="typeSymbol" /> implements the interface with the specified full <paramref name="name" />.
     /// </returns>
     public static bool ImplementsInterface(this ITypeSymbol typeSymbol, string name)
-        => typeSymbol.Interfaces.Any(x => x.ToDisplayString() == name);
+        => typeSymbol.Interfaces.Any(x => string.Equals(x.ToDisplayString(), name, StringComparison.Ordinal));
 }

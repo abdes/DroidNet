@@ -27,7 +27,7 @@ public record OutletName
     /// Gets a value indicating whether the outlet name is for a primary outlet.
     /// </summary>
     /// <value>
-    /// When <c>true</c>, the outlet name refers to a primary outlet.
+    /// When <see langword="true" />, the outlet name refers to a primary outlet.
     /// </value>
     public bool IsPrimary => this.Name.Equals(Primary.Name, StringComparison.Ordinal);
 
@@ -36,7 +36,7 @@ public record OutletName
     /// primary outlet.
     /// </summary>
     /// <value>
-    /// When <c>true</c>, the outlet name refers to a non-primary outlet.
+    /// When <see langword="true" />, the outlet name refers to a non-primary outlet.
     /// </value>
     public bool IsNotPrimary => !this.IsPrimary;
 
@@ -60,8 +60,8 @@ public record OutletName
     /// needed via the <paramref name="ignoreCase" /> flag.
     /// </remarks>
     /// <param name="ignoreCase">
-    /// when <c>true</c>, ignore the case of the outlet names being compared.
-    /// Default is <c>true</c>.
+    /// when <see langword="true" />, ignore the case of the outlet names being compared.
+    /// Default is <see langword="true" />.
     /// </param>
     public class EqualityComparer(bool ignoreCase = true) : EqualityComparer<OutletName>
     {
@@ -88,6 +88,6 @@ public record OutletName
         }
 
         /// <inheritdoc />
-        public override int GetHashCode(OutletName obj) => obj.Name.GetHashCode();
+        public override int GetHashCode(OutletName obj) => obj.Name.GetHashCode(StringComparison.Ordinal);
     }
 }
