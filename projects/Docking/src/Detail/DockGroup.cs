@@ -457,13 +457,15 @@ internal partial class DockGroup
 
         if (hostGroup.IsVertical)
         {
-            relativeTo.AsDock().Height = new Height(relativeTo.Height.Half());
-            dock.AsDock().Height = new Height("1*");
+            var height = new Height(relativeTo.Height.Half());
+            relativeTo.AsDock().Height = height;
+            dock.AsDock().Height = height;
         }
         else
         {
-            relativeTo.AsDock().Width = new Width(relativeTo.Width.Half());
-            dock.AsDock().Width = new Width("1*");
+            var width = new Width(relativeTo.Width.Half());
+            relativeTo.AsDock().Width = width;
+            dock.AsDock().Width = width;
         }
 
         hostGroup.docks.Insert(insertPosition, dock);

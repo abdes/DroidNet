@@ -83,7 +83,7 @@ public sealed partial class MainWindow
     {
         var dock = ToolDock.New();
         var dockable = Dockable.New(dockableId);
-        dockable.PreferredWidth = new Width(200);
+        dockable.PreferredWidth = new Width(300);
         dock.AddDockable(dockable);
         return dock;
     }
