@@ -187,7 +187,7 @@
                 Name="TitleBar"
                 Grid.Row="0"
                 Padding="4,2"
-                Background="{ThemeResource SystemControlTransparentRevealBackgroundBrush}">
+                Background="{ThemeResource SystemControlBackgroundChromeMediumLowBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
