@@ -24,7 +24,6 @@
                     <TextBlock
                         Padding="10"
                         FontWeight="ExtraLight"
-                        Foreground="White"
                         Text="{x:Bind MinimizedTitle}" />
                 </tkc:LayoutTransformControl>
             </ItemContainer>
@@ -35,7 +34,6 @@
                 <TextBlock
                     Padding="10"
                     FontWeight="ExtraLight"
-                    Foreground="White"
                     Text="{x:Bind MinimizedTitle}" />
             </ItemContainer>
         </DataTemplate>
@@ -49,7 +47,7 @@
             VerticalTemplate="{StaticResource VerticalTemplate}" />
     </UserControl.Resources>
 
-    <Border BorderBrush="Green" BorderThickness="1">
+    <Border Background="{ThemeResource SystemControlBackgroundChromeMediumBrush}">
         <ItemsView
             IsItemInvokedEnabled="True"
             ItemInvoked="ItemsView_OnItemInvoked"
