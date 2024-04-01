@@ -119,7 +119,6 @@ public class AutoInjectGenerator : IIncrementalGenerator
 
         var methodName = GetMethodName(lifetime);
 
-        var targetIsInterface = targetSymbol.TypeKind == TypeKind.Interface;
         var contractTypeFullName = targetSymbol.ToDisplayString();
 
         var contractTypeArg = attribute.NamedArguments
@@ -130,12 +129,75 @@ public class AutoInjectGenerator : IIncrementalGenerator
             contractTypeFullName = contractTypeSymbol.ToDisplayString();
         }
 
-        string? implTypeFullName = null;
         var implTypeArg = attribute.NamedArguments
             .FirstOrDefault(
-                a => string.Equals(a.Key, nameof(InjectAsAttribute.ImplementationType), StringComparison.Ordinal))
+                namedArgument => string.Equals(
+                    namedArgument.Key,
+                    nameof(InjectAsAttribute.ImplementationType),
+                    StringComparison.Ordinal))
             .Value;
-        if (!targetIsInterface)
+
+        var implTypeFullName = GetImplementationTypeFullName(
+            spc,
+            injectionContext,
+            targetSymbol,
+            implTypeArg,
+            contractTypeFullName);
+
+        var keyParamSegment = GetKeyParameter(attribute);
+        if (keyParamSegment.Length != 0)
+        {
+            methodName = methodName.Replace("Add", "AddKeyed");
+        }
+
+        var genericTypeParams = GetGenericTypeParams(targetSymbol, contractTypeFullName, implTypeFullName);
+
+        var methodCallSegment = $"services.{methodName}{genericTypeParams}";
+
+        _ = source.Append("        _ = ")
+            .Append(methodCallSegment)
+            .Append('(')
+            .Append(keyParamSegment)
+            .AppendLine(");");
+    }
+
+    private static string GetGenericTypeParams(
+        ITypeSymbol targetSymbol,
+        string contractTypeFullName,
+        string? implTypeFullName)
+    {
+        var isInterface = targetSymbol.TypeKind == TypeKind.Interface;
+        var implTypeIsContractType = string.Equals(contractTypeFullName, implTypeFullName, StringComparison.Ordinal);
+
+        return isInterface || !implTypeIsContractType
+            ? $"<{contractTypeFullName}, {implTypeFullName}>"
+            : $"<{contractTypeFullName}>";
+    }
+
+    private static string GetKeyParameter(AttributeData attribute)
+    {
+        string? key = null;
+        var keyArg = attribute.NamedArguments
+            .FirstOrDefault(a => string.Equals(a.Key, nameof(InjectAsAttribute.Key), StringComparison.Ordinal))
+            .Value;
+        if (keyArg is { IsNull: false, Value: not null })
+        {
+            key = keyArg.Value.ToString();
+        }
+
+        return key is null ? string.Empty : $"\"{key}\"";
+    }
+
+    private static string? GetImplementationTypeFullName(
+        SourceProductionContext spc,
+        GeneratorAttributeSyntaxContext injectionContext,
+        ITypeSymbol targetSymbol,
+        TypedConstant implTypeArg,
+        string contractTypeFullName)
+    {
+        string? implTypeFullName = null;
+
+        if (targetSymbol.TypeKind != TypeKind.Interface)
         {
             if (implTypeArg.IsNull)
             {
@@ -161,30 +223,13 @@ public class AutoInjectGenerator : IIncrementalGenerator
                         AnnotationError,
                         injectionContext.TargetNode.GetLocation(),
                         $"The implementation type `{implTypeSymbol}` does not implement the annotated interface `{contractTypeFullName}`."));
-                return;
+                return implTypeFullName;
             }
 
             implTypeFullName = implTypeSymbol.ToDisplayString();
         }
 
-        string? key = null;
-        var keyArg = attribute.NamedArguments
-            .FirstOrDefault(a => string.Equals(a.Key, nameof(InjectAsAttribute.Key), StringComparison.Ordinal))
-            .Value;
-        if (keyArg is { IsNull: false, Value: not null })
-        {
-            key = keyArg.Value.ToString();
-            methodName = methodName.Replace("Add", "AddKeyed");
-        }
-
-        var methodCallSegment
-            = $"services.{methodName}{(targetIsInterface || !string.Equals(contractTypeFullName, implTypeFullName, StringComparison.Ordinal) ? $"<{contractTypeFullName}, {implTypeFullName}>" : $"<{contractTypeFullName}>")}";
-        var keyParamSegment = key is null ? string.Empty : $"\"{key}\"";
-        _ = source.Append("        _ = ")
-            .Append(methodCallSegment)
-            .Append('(')
-            .Append(keyParamSegment)
-            .AppendLine(");");
+        return implTypeFullName;
     }
 
     /// <summary>Gets the method name for the dependency injection based on the specified service lifetime.</summary>
