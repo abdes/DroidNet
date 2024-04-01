@@ -38,7 +38,7 @@ public class RouterContextManagerTests : IDisposable
 
     /// <summary>
     /// Tests that calling <see cref="RouterContextManager.GetContextForTarget" /> with
-    /// <see langword="null"/> or <see cref="Target.Self" />, while the current
+    /// <see langword="null" /> or <see cref="Target.Self" />, while the current
     /// context is <c>not null</c>, should return the current context.
     /// </summary>
     /// <param name="target">
@@ -58,8 +58,8 @@ public class RouterContextManagerTests : IDisposable
 
     /// <summary>
     /// Tests that calling <see cref="RouterContextManager.GetContextForTarget" /> with
-    /// <see langword="null"/> or <see cref="Target.Self" />, while  the current
-    /// context is <see langword="null"/>, should return the main context.
+    /// <see langword="null" /> or <see cref="Target.Self" />, while  the current
+    /// context is <see langword="null" />, should return the main context.
     /// </summary>
     /// <param name="target">
     /// The target name for which to get a context.
@@ -117,7 +117,10 @@ public class RouterContextManagerTests : IDisposable
     private RouterContext? SetCurrentContext(RouterContext? context)
     {
         // Trigger ContextChanged event to set currentContext
-        this.contextProviderMock.Raise(a => a.ContextChanged += null, this.contextProviderMock.Object, context!);
+        this.contextProviderMock.Raise(
+            a => a.ContextChanged += null,
+            this.contextProviderMock.Object,
+            new ContextEventArgs(context));
         return context;
     }
 }
