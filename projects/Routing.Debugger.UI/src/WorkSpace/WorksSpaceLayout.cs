@@ -7,7 +7,8 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
-using DroidNet.Mvvm;
+using DroidNet.Docking.Layouts;
+using DroidNet.Docking.Layouts.GridFlow;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -25,12 +26,12 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     [ObservableProperty]
     private UIElement content = new Grid();
 
-    public WorkSpaceLayout(IRouter router, IDocker docker, IViewLocator viewLocator, ILogger logger)
+    public WorkSpaceLayout(IRouter router, IDocker docker, IDockViewFactory dockViewFactory, ILogger logger)
     {
         this.router = router;
         this.logger = logger;
 
-        var layout = new GridWorkSpaceLayout(docker, viewLocator, logger);
+        var layout = new GridFlowLayout(dockViewFactory);
 
         this.routerEventsSub = router.Events.Subscribe(
             @event =>
@@ -110,7 +111,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         // Trigger a change if the active parameters have the same anchor key as the one we are setting next with a different
         // value, or if it has any other anchor key than the one we are setting next.
         return active.ParameterHasValue(position, anchor.RelativeTo?.Id) ||
-               Enum.GetNames<AnchorPosition>().Any(n => !string.Equals(n, position, StringComparison.OrdinalIgnoreCase) && active.Contains(n));
+               Enum.GetNames<AnchorPosition>()
+                   .Any(n => !string.Equals(n, position, StringComparison.OrdinalIgnoreCase) && active.Contains(n));
     }
 
     private static bool CheckAndSetWidth(string value, IParameters active, Parameters next) =>

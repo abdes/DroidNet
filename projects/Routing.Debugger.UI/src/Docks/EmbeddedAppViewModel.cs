@@ -4,7 +4,9 @@
 
 namespace DroidNet.Routing.Debugger.UI.Docks;
 
+using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
@@ -12,6 +14,7 @@ using Microsoft.UI.Xaml;
 /// <param name="appViewModel">The embedded application ViewModel.</param>
 /// <param name="viewLocator">The view locator to be used to resolve the application view model into a view.</param>
 /// <param name="logger">A logger to be used by this class.</param>
+[InjectAs(ServiceLifetime.Transient)]
 public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator viewLocator, ILogger logger)
 {
     private UIElement? appView;

@@ -8,8 +8,8 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Docking;
 using DroidNet.Docking.Detail;
+using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Utils;
-using DroidNet.Mvvm;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,10 +23,10 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private readonly List<RoutedDockable> deferredDockables = [];
     private ApplicationDock? centerDock;
 
-    public WorkSpaceViewModel(IRouter router, IViewLocator viewLocator, ILoggerFactory? loggerFactory)
+    public WorkSpaceViewModel(IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
-        this.Layout = new WorkSpaceLayout(router, this.docker, viewLocator, this.logger);
+        this.Layout = new WorkSpaceLayout(router, this.docker, dockViewFactory, this.logger);
 
         this.routerEventsSub = router.Events.OfType<ActivationComplete>()
             .Subscribe(@event => this.PlaceDocks(@event.Options));
