@@ -240,6 +240,9 @@ public class Docker : IDocker, IOptimizingDocker
 
     public void ConsolidateUp(IDockGroup startingGroup)
     {
+        // If a consolidation is ongoing, some manipulations of the docking tree may trigger consolidation again. This
+        // method should not be re-entrant. Instead, we just ignore the new request and continue the ongoing
+        // consolidation.
         if (Interlocked.Exchange(ref this.isConsolidating, 1) == 1)
         {
             return;
@@ -247,6 +250,8 @@ public class Docker : IDocker, IOptimizingDocker
 
         try
         {
+            Debug.WriteLine("Consolidating the docking tree...");
+
             var result = ConsolidateIfNeeded(
                 startingGroup as DockGroup ?? throw new ArgumentException(
                     $"expecting a object of type {typeof(DockGroup)}",
@@ -287,68 +292,51 @@ public class Docker : IDocker, IOptimizingDocker
 
     private static DockGroup? ConsolidateIfNeeded(DockGroup group)
     {
-        // Center and edge groups cannot be optimized
-        if (group.IsCenter || group.IsEdge)
+        // Center and edge groups cannot be optimized; and we can only optimize groups of our own type.
+        if (group.IsCenter || group.IsEdge || group.Parent is not DockGroup parent)
         {
             return null;
         }
 
-        if (group.Parent is not DockGroup parent)
+        if (group.IsLeaf)
         {
-            return null;
-        }
-
-        parent.DumpGroup();
-
-        try
-        {
-            if (group.IsLeaf)
+            if (group is { IsEmpty: true })
             {
-                if (group is { IsEmpty: true })
-                {
-                    parent.RemoveGroup(group);
-                    return parent;
-                }
-
-                // Potential for collapsing into parent or merger with sibling
-                return group.Sibling is null or DockGroup { IsLeaf: true } ? parent : null;
+                return new RemoveGroupFromParent(group: group, parent: parent).Execute();
             }
 
-            // Single child parent
-            if (group.First is null || group.Second is null)
-            {
-                var child = group.First == null ? group.Second!.AsDockGroup() : group.First.AsDockGroup();
-
-                // with compatible orientation => assimilate child into parent
-                if (child.Orientation == DockGroupOrientation.Undetermined || child.Orientation == group.Orientation)
-                {
-                    group.AssimilateChild(child);
-                    return group;
-                }
-            }
-            else
-            {
-                // Parent with two leaf children
-                if (group is { First: DockGroup { IsLeaf: true }, Second: DockGroup { IsLeaf: true } })
-                {
-                    // and compatible orientations => merge the children
-                    if ((group.First.Orientation == DockGroupOrientation.Undetermined ||
-                         group.First.Orientation == group.Orientation) &&
-                        (group.Second.Orientation == DockGroupOrientation.Undetermined ||
-                         group.Second.Orientation == group.Orientation))
-                    {
-                        group.MergeLeafParts();
-                        return group;
-                    }
-                }
-            }
-
-            return null;
+            // Potential for collapsing into parent or merger with sibling
+            return group.Sibling is null or DockGroup { IsLeaf: true } ? parent : null;
         }
-        finally
+
+        // Single child parent
+        if (group.First is null || group.Second is null)
         {
-            parent.DumpGroup();
+            var child = group.First == null ? group.Second!.AsDockGroup() : group.First.AsDockGroup();
+
+            // with compatible orientation => assimilate child into parent
+            if (child.Orientation == DockGroupOrientation.Undetermined || child.Orientation == group.Orientation)
+            {
+                return new AssimilateChild(child: child, parent: group).Execute();
+            }
         }
+        else
+        {
+            // Parent with two leaf children
+            if (group is { First: DockGroup { IsLeaf: true }, Second: DockGroup { IsLeaf: true } })
+            {
+                // and compatible orientations => merge the children
+                if ((group.First.Orientation == DockGroupOrientation.Undetermined ||
+                     group.First.Orientation == group.Orientation) &&
+                    (group.Second.Orientation == DockGroupOrientation.Undetermined ||
+                     group.Second.Orientation == group.Orientation))
+                {
+                    return new MergeLeafParts(group).Execute();
+                }
+            }
+        }
+
+        return null;
     }
 
     private static void Undock(IDock dock)
@@ -381,4 +369,67 @@ public class Docker : IDocker, IOptimizingDocker
 
     private void FireLayoutChangedEvent(LayoutChangeReason reason)
         => this.LayoutChanged?.Invoke(this, new LayoutChangedEventArgs(reason));
+
+    private abstract class DockingTreeOptimization
+    {
+        protected abstract string Description { get; }
+
+        public DockGroup Execute()
+        {
+#if DEBUG
+            Debug.WriteLine($"Optimize: {this.Description}");
+            Debug.WriteLine("  <<<< BEFORE");
+            this.DumpImpactedSubTree();
+#endif
+            var result = this.DoExecute();
+#if DEBUG
+            Debug.WriteLine("  >>>> AFTER");
+            this.DumpImpactedSubTree();
+#endif
+            return result;
+        }
+
+        protected abstract DockGroup DoExecute();
+
+        protected abstract void DumpImpactedSubTree();
+    }
+
+    private sealed class RemoveGroupFromParent(DockGroup group, DockGroup parent) : DockingTreeOptimization
+    {
+        protected override string Description => "remove empty group from parent";
+
+        protected override DockGroup DoExecute()
+        {
+            parent.RemoveGroup(group);
+            return parent;
+        }
+
+        protected override void DumpImpactedSubTree() => parent.DumpGroup(initialIndentLevel: 1);
+    }
+
+    private sealed class AssimilateChild(DockGroup child, DockGroup parent) : DockingTreeOptimization
+    {
+        protected override string Description => "assimilate child";
+
+        protected override DockGroup DoExecute()
+        {
+            parent.AssimilateChild(child);
+            return parent;
+        }
+
+        protected override void DumpImpactedSubTree() => parent.DumpGroup(initialIndentLevel: 1);
+    }
+
+    private sealed class MergeLeafParts(DockGroup group) : DockingTreeOptimization
+    {
+        protected override string Description => "merge leaf parts";
+
+        protected override DockGroup DoExecute()
+        {
+            group.MergeLeafParts();
+            return group;
+        }
+
+        protected override void DumpImpactedSubTree() => group.DumpGroup(initialIndentLevel: 1);
+    }
 }

@@ -18,8 +18,13 @@ public static class DebugUtils
     /// <param name="group">The starting group of the tree to dump.</param>
     /// <param name="indentChar">The character used to indent children relative to their parent. Default is <c>' '</c>.</param>
     /// <param name="indentSize">The number of indent characters to use per indentation level. Default is <c>3</c>.</param>
-    public static void DumpGroup(this IDockGroup group, char indentChar = ' ', int indentSize = 3)
-        => DumpGroupRecursive(group, 0, indentChar, indentSize);
+    /// <param name="initialIndentLevel">Can be used to specify an initial indentation for the dumped info.</param>
+    public static void DumpGroup(
+        this IDockGroup group,
+        char indentChar = ' ',
+        int indentSize = 3,
+        int initialIndentLevel = 0)
+        => DumpGroupRecursive(group, initialIndentLevel, indentChar, indentSize);
 
     private static void DumpGroupRecursive(IDockGroup? item, int indentLevel, char indentChar, int indentSize)
     {
