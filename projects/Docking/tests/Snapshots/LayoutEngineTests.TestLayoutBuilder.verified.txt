@@ -1,7 +1,7 @@
 ﻿{
   Items: [
     {
-      IsEmpty: false,
+      HasNoDocks: false,
       Docks: [
         {
           CanMinimize: true,
@@ -310,7 +310,7 @@
           ]
         },
         {
-          IsEmpty: false,
+          HasNoDocks: false,
           Docks: [
             {
               CanMinimize: true,

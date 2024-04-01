@@ -1,9 +1,9 @@
 ﻿{
-  IsEmpty: true,
+  HasNoDocks: true,
   First: {
-    IsEmpty: true,
+    HasNoDocks: true,
     First: {
-      IsEmpty: true,
+      HasNoDocks: true,
       Orientation: Vertical,
       IsCenter: false,
       IsEdge: false,
@@ -11,9 +11,9 @@
       IsVertical: true
     },
     Second: {
-      IsEmpty: true,
+      HasNoDocks: true,
       First: {
-        IsEmpty: false,
+        HasNoDocks: false,
         Docks: [
           {
             CanMinimize: true,
@@ -32,7 +32,7 @@
         IsVertical: false
       },
       Second: {
-        IsEmpty: false,
+        HasNoDocks: false,
         Docks: [
           {
             CanMinimize: true,
@@ -63,7 +63,7 @@
     Orientation: Horizontal
   },
   Second: {
-    IsEmpty: true,
+    HasNoDocks: true,
     IsCenter: true,
     IsEdge: false,
     IsHorizontal: false,
