@@ -292,8 +292,6 @@ public class DefaultUrlParser : IUrlParser
         var position = remaining.Length == 0 ? url.Length : url.IndexOf(remaining.ToString(), StringComparison.Ordinal);
         var indent = new string(' ', position);
 
-#if DEBUG
-
         // TODO: use a logger and log a message
         FormattableString str = $"""
                                  An error occurred while parsing url at position ({position})
@@ -304,7 +302,6 @@ public class DefaultUrlParser : IUrlParser
                                  {exception.StackTrace}
                                  """;
         Debug.WriteLine(str);
-#endif
     }
 
     private void AddParameter(Parameters parameters, string key, string? value)

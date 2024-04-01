@@ -47,25 +47,7 @@ internal sealed partial class WindowRouteActivator(
 
         if (route.Parent.IsRoot)
         {
-            var window = (context as WindowRouterContext)?.Window;
-            Debug.Assert(
-                window is not null,
-                "expecting the window in the router context to be created by me");
-
-            if (window is IOutletContainer container)
-            {
-                container.LoadContent(route.ViewModel, route.Outlet);
-            }
-            else
-            {
-                LogContentLoadingError(
-                    this.Logger,
-                    route.Outlet,
-                    $"because {window.GetType()} is not an {nameof(IOutletContainer)}");
-
-                throw new InvalidOperationException(
-                    $"target window of type '{window.GetType()} is not a {nameof(IOutletContainer)}");
-            }
+            this.DoActivateRootRoute(route, context);
         }
         else
         {
@@ -102,4 +84,28 @@ internal sealed partial class WindowRouteActivator(
         Level = LogLevel.Error,
         Message = "Cannot load content into {Outlet} {Because}")]
     private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
+
+    private void DoActivateRootRoute(IActiveRoute route, RouterContext context)
+    {
+        Debug.Assert(route.ViewModel is not null, "expecting the view model not to be null");
+        var window = (context as WindowRouterContext)?.Window;
+        Debug.Assert(
+            window is not null,
+            "expecting the window in the router context to be created by me");
+
+        if (window is IOutletContainer container)
+        {
+            container.LoadContent(route.ViewModel, route.Outlet);
+        }
+        else
+        {
+            LogContentLoadingError(
+                this.Logger,
+                route.Outlet,
+                $"because {window.GetType()} is not an {nameof(IOutletContainer)}");
+
+            throw new InvalidOperationException(
+                $"target window of type '{window.GetType()} is not a {nameof(IOutletContainer)}");
+        }
+    }
 }

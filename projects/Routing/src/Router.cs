@@ -166,65 +166,16 @@ public partial class Router : IRouter, IDisposable
             switch (change.ChangeAction)
             {
                 case RouteChangeAction.Add:
-                    // Compute the path based on the view model type and the active route config
-                    Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
-                    var config = MatchViewModelType(activeRoute.RouteConfig, change);
-
-                    var urlSegmentGroup = new UrlSegmentGroup(
-                        config.Path?
-                            .Split('/')
-                            .Select(s => new UrlSegment(s)) ?? []);
-
-                    Debug.Assert(
-                        change.Parameters != null,
-                        "change.Parameters != null when adding a new route");
-                    activeRoute.AddChild(
-                        new ActiveRoute()
-                        {
-                            RouteConfig = config,
-                            Params = change.Parameters,
-                            Outlet = change.Outlet,
-                            QueryParams = activeRoute.QueryParams,
-                            UrlSegmentGroup = urlSegmentGroup,
-                            UrlSegments = urlSegmentGroup.Segments,
-                        });
-
+                    ApplyAddChange(activeRoute, change);
                     break;
 
                 case RouteChangeAction.Delete:
-                {
-                    var route = activeRoute.Children.FirstOrDefault(
-                        r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
-                    Debug.Assert(
-                        route is not null,
-                        $"expecting to find an active route with the outlet name `{change.Outlet}`");
-                    _ = activeRoute.RemoveChild(route);
+                    ApplyDeleteChange(activeRoute, change);
                     break;
-                }
 
                 case RouteChangeAction.Update:
-                {
-                    if (change.Parameters is null)
-                    {
-                        break;
-                    }
-
-                    Debug.Assert(
-                        change.Parameters != null,
-                        "change.Parameters != null when updating an existing route");
-                    var route = activeRoute.Children.FirstOrDefault(
-                        r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
-                    if (route is ActiveRoute myRoute)
-                    {
-                        myRoute.Params = change.Parameters;
-                    }
-                    else
-                    {
-                        Debug.Fail($"expecting to find an active route with the outlet name `{change.Outlet}`");
-                    }
-
+                    ApplyUpdateChange(activeRoute, change);
                     break;
-                }
 
                 default:
                     throw new ArgumentOutOfRangeException(
@@ -232,6 +183,64 @@ public partial class Router : IRouter, IDisposable
                         nameof(change));
             }
         }
+    }
+
+    private static void ApplyUpdateChange(ActiveRoute activeRoute, RouteChangeItem change)
+    {
+        if (change.Parameters is null)
+        {
+            return;
+        }
+
+        Debug.Assert(
+            change.Parameters != null,
+            "change.Parameters != null when updating an existing route");
+        var route = activeRoute.Children.FirstOrDefault(
+            r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
+        if (route is ActiveRoute myRoute)
+        {
+            myRoute.Params = change.Parameters;
+        }
+        else
+        {
+            Debug.Fail($"expecting to find an active route with the outlet name `{change.Outlet}`");
+        }
+    }
+
+    private static void ApplyDeleteChange(ActiveRoute activeRoute, RouteChangeItem change)
+    {
+        var route = activeRoute.Children.FirstOrDefault(
+            r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
+        Debug.Assert(
+            route is not null,
+            $"expecting to find an active route with the outlet name `{change.Outlet}`");
+        _ = activeRoute.RemoveChild(route);
+    }
+
+    private static void ApplyAddChange(ActiveRoute activeRoute, RouteChangeItem change)
+    {
+        // Compute the path based on the view model type and the active route config
+        Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
+        var config = MatchViewModelType(activeRoute.RouteConfig, change);
+
+        var urlSegmentGroup = new UrlSegmentGroup(
+            config.Path?
+                .Split('/')
+                .Select(s => new UrlSegment(s)) ?? []);
+
+        Debug.Assert(
+            change.Parameters != null,
+            "change.Parameters != null when adding a new route");
+        activeRoute.AddChild(
+            new ActiveRoute()
+            {
+                RouteConfig = config,
+                Params = change.Parameters,
+                Outlet = change.Outlet,
+                QueryParams = activeRoute.QueryParams,
+                UrlSegmentGroup = urlSegmentGroup,
+                UrlSegments = urlSegmentGroup.Segments,
+            });
     }
 
     private static void ApplyChangesToUrlTree(
