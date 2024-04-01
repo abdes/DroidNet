@@ -18,7 +18,7 @@ public interface IDockGroup : IDisposable
 
     bool IsVertical { get; }
 
-    bool IsEmpty { get; }
+    bool HasNoDocks { get; }
 
     DockGroupOrientation Orientation { get; }
 

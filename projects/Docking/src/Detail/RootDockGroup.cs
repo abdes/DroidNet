@@ -75,7 +75,7 @@ internal sealed class RootDockGroup : DockGroup
     /// <exception cref="InvalidOperationException">If the center group already has a dock.</exception>
     public void DockCenter(IDock dock)
     {
-        if (!this.center.IsEmpty)
+        if (!this.center.HasNoDocks)
         {
             throw new InvalidOperationException(
                 "the root center group is already populated, dock relative to its content");

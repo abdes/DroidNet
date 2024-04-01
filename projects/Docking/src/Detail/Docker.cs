@@ -300,7 +300,7 @@ public class Docker : IDocker, IOptimizingDocker
 
         if (group.IsLeaf)
         {
-            if (group is { IsEmpty: true })
+            if (group is { HasNoDocks: true })
             {
                 return new RemoveGroupFromParent(group: group, parent: parent).Execute();
             }

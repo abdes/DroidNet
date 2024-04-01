@@ -32,7 +32,7 @@ internal sealed class TrayGroup : DockGroupBase, IDockTray
         this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
     }
 
-    public override bool IsEmpty => this.docks.Count == 0;
+    public override bool HasNoDocks => this.docks.Count == 0;
 
     /// <inheritdoc />
     /// <remarks>This property does not make sense for a TrayGroup and should not be used.</remarks>

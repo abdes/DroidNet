@@ -51,7 +51,7 @@ public class TrayGroupTests : IDisposable
     }
 
     [TestMethod]
-    public void IsEmpty_ShouldReturnTrue_WhenNoDocks() => this.tray.IsEmpty.Should().BeTrue();
+    public void IsEmpty_ShouldReturnTrue_WhenNoDocks() => this.tray.HasNoDocks.Should().BeTrue();
 
     [TestMethod]
     public void First_ShouldAlwaysReturnNull() => this.tray.First.Should().BeNull();
