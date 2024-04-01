@@ -149,6 +149,10 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
     /// This operation is pure: the URL has to change for the parameters to change. Or in other words, the same URL will always
     /// result in the same set of parameters.
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "MA0051:Method is too long",
+        Justification = "many parameters in method calls occupy too many lines")]
     private static IExtendedMatchResult MatchSegments(
         IActiveRoute state,
         IRoutes config,
@@ -166,28 +170,10 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
                 continue;
             }
 
-            // Merge the positional parameters with the matrix parameters of
-            // the last segment (only the last segment) into the activated
-            // route parameters.
-            var parameters = new Parameters();
-            foreach (var pair in matchResult.PositionalParams)
-            {
-                parameters.AddOrUpdate(pair.Key, pair.Value.Path);
-            }
-
-            if (segments.Count != 0)
-            {
-                var lastSegment = segments[^1];
-                foreach (var parameter in lastSegment.Parameters)
-                {
-                    parameters.AddOrUpdate(parameter.Name, parameter.Value);
-                }
-            }
-
             IActiveRoute lastActiveRoute = new ActiveRoute()
             {
                 Outlet = outlet,
-                Params = parameters,
+                Params = MergeParameters(segments, matchResult),
                 QueryParams = state.QueryParams,
                 RouteConfig = route,
                 UrlSegments = new List<IUrlSegment>(matchResult.Consumed).AsReadOnly(),
@@ -251,6 +237,30 @@ public class RouterStateManager(IRoutes routerConfig) : IRouterStateManager
 
         // If no routes matched, return null
         return new NoMatch();
+    }
+
+    private static Parameters MergeParameters(ReadOnlyCollection<IUrlSegment> segments, IMatchResult matchResult)
+    {
+        // Merge the positional parameters with the matrix parameters of the last segment (only the last segment)
+        // into the activated route parameters.
+        var parameters = new Parameters();
+        foreach (var pair in matchResult.PositionalParams)
+        {
+            parameters.AddOrUpdate(pair.Key, pair.Value.Path);
+        }
+
+        if (segments.Count == 0)
+        {
+            return parameters;
+        }
+
+        var lastSegment = segments[^1];
+        foreach (var parameter in lastSegment.Parameters)
+        {
+            parameters.AddOrUpdate(parameter.Name, parameter.Value);
+        }
+
+        return parameters;
     }
 
     private static void AddChildConsumedTokens(IList<IUrlSegment> consumed, IEnumerable<IUrlSegment> additionalSegments)

@@ -186,9 +186,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         finally
         {
             this.deferredDockables.Clear();
-#if DEBUG
             this.docker.Root.DumpGroup();
-#endif
         }
     }
 
