@@ -1,0 +1,40 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace DroidNet.Routing.Debugger;
+
+using DroidNet.Hosting.Generators;
+using DryIoc;
+using DryIoc.Microsoft.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Extensions.Logging;
+
+public static class HostingExtensions
+{
+    public static IHostBuilder ConfigureLogging(this IHostBuilder builder) =>
+        builder.ConfigureContainer<DryIocServiceProvider>(
+            (_, serviceProvider) =>
+            {
+                var container = serviceProvider.Container;
+                container.RegisterInstance<ILoggerFactory>(new SerilogLoggerFactory(Log.Logger));
+
+                container.Register(
+                    Made.Of(
+                        _ => ServiceInfo.Of<ILoggerFactory>(),
+                        f => f.CreateLogger(null!)),
+                    setup: Setup.With(condition: r => r.Parent.ImplementationType == null));
+
+                container.Register(
+                    Made.Of(
+                        _ => ServiceInfo.Of<ILoggerFactory>(),
+                        f => f.CreateLogger(Arg.Index<Type>(0)),
+                        r => r.Parent.ImplementationType),
+                    setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
+            });
+
+    public static IHostBuilder ConfigureAutoInjected(this IHostBuilder builder) =>
+        builder.ConfigureServices((_, services) => services.UseAutoInject());
+}
