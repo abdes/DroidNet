@@ -53,8 +53,8 @@ public abstract class LayoutEngine
     private static bool CheckShowGroupRecursive(IDockGroup? group) => group switch
     {
         null => false,
-        IDockTray tray => !tray.IsEmpty,
-        _ => group.IsEmpty
+        IDockTray tray => !tray.HasNoDocks,
+        _ => group.HasNoDocks
             ? CheckShowGroupRecursive(group.First) || CheckShowGroupRecursive(group.Second)
             : group.Docks.Any(d => d.State != DockingState.Minimized),
     };
@@ -84,7 +84,7 @@ public abstract class LayoutEngine
 
         var restoreState = this.ReorientFlowIfNeeded(group);
 
-        if (!group.IsEmpty)
+        if (!group.HasNoDocks)
         {
             // A group with docks -> Layout the docks as items in the vector grid.
             foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
@@ -114,7 +114,7 @@ public abstract class LayoutEngine
             case null:
                 return;
 
-            case IDockTray { IsEmpty: false } tray:
+            case IDockTray { HasNoDocks: false } tray:
                 Debug.Assert(
                     (tray.IsVertical && this.CurrentFlow.IsHorizontal) ||
                     (!tray.IsVertical && this.CurrentFlow.IsVertical),
@@ -136,7 +136,7 @@ public abstract class LayoutEngine
         // pinned, we consider the group's orientation as Undetermined. That
         // way, we don't create a new grid for that group.
         var groupOrientation = group.Orientation;
-        if (!group.IsEmpty && group.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
+        if (!group.HasNoDocks && group.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
         {
             Debug.WriteLine("Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
             groupOrientation = DockGroupOrientation.Undetermined;

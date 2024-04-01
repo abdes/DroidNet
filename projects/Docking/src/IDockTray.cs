@@ -12,7 +12,7 @@ public interface IDockTray
 
     IDocker Docker { get; }
 
-    bool IsEmpty { get; }
+    bool HasNoDocks { get; }
 
     bool IsVertical { get; }
 }

@@ -37,8 +37,7 @@ internal partial class DockGroup : DockGroupBase
     internal DockGroup(IDocker docker)
         : base(docker) => this.Docks = new ReadOnlyObservableCollection<IDock>(this.docks);
 
-    // TODO: rename this to something less confusing such as HasNoDocks
-    public override bool IsEmpty => this.docks.Count == 0;
+    public override bool HasNoDocks => this.docks.Count == 0;
 
     public override ReadOnlyObservableCollection<IDock> Docks { get; }
 
@@ -170,7 +169,7 @@ internal partial class DockGroup : DockGroupBase
             throw new InvalidOperationException("cannot add self as a part");
         }
 
-        if (value != null && !this.IsEmpty)
+        if (value != null && !this.HasNoDocks)
         {
             throw new InvalidOperationException("cannot add parts to a non-empty group");
         }
@@ -248,7 +247,7 @@ internal partial class DockGroup
             this.Orientation = orientation;
         }
 
-        if (!this.IsEmpty)
+        if (!this.HasNoDocks)
         {
             var migrated = this.MigrateDocksToNewGroup();
             this.Orientation = orientation;
@@ -333,7 +332,7 @@ internal partial class DockGroup
 
         // If the group has a part already that matches the relative sibling,
         // then it must be empty.
-        Debug.Assert(this.IsEmpty, "a group with parts can only be empty");
+        Debug.Assert(this.HasNoDocks, "a group with parts can only be empty");
 
         if (this.Orientation == DockGroupOrientation.Undetermined)
         {
@@ -399,7 +398,7 @@ internal partial class DockGroup
     {
         Debug.Assert(this.IsLeaf, "only leaf nodes in the docking tree can have docks");
 
-        if (!this.IsEmpty)
+        if (!this.HasNoDocks)
         {
             throw new InvalidOperationException(
                 $"method {nameof(this.AddDock)} with no anchor should only be used when the group is empty");
@@ -447,7 +446,7 @@ internal partial class DockGroup
         dock.AsDock().Group = hostGroup;
 
         var insertPosition = 0;
-        if (!hostGroup.IsEmpty)
+        if (!hostGroup.HasNoDocks)
         {
             var relativeToPosition = hostGroup.Docks.IndexOf(relativeTo);
             insertPosition = anchor.Position is AnchorPosition.Left or AnchorPosition.Top
@@ -621,7 +620,7 @@ internal abstract class DockGroupBase(IDocker docker) : IDockGroup
 
     public virtual DockGroupOrientation Orientation { get; protected set; }
 
-    public abstract bool IsEmpty { get; }
+    public abstract bool HasNoDocks { get; }
 
     public abstract IDockGroup? First { get; protected set; }
 

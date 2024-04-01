@@ -15,7 +15,7 @@ internal static class DockGroupExtensions
             return false;
         }
 
-        if (!group.IsEmpty)
+        if (!group.HasNoDocks)
         {
             return group is IDockTray || group.Docks.Any(d => d.State != DockingState.Minimized);
         }

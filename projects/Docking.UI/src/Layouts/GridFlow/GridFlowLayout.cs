@@ -36,7 +36,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     protected override void PlaceTray(IDockTray tray)
     {
-        Debug.Assert(!tray.IsEmpty, "don't place a tray if it is empty");
+        Debug.Assert(!tray.HasNoDocks, "don't place a tray if it is empty");
 
         Debug.WriteLine($"Place Tray: {tray}");
         var trayOrientation = tray.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
