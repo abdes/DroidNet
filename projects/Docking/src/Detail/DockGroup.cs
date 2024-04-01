@@ -512,6 +512,44 @@ internal partial class DockGroup
 
     private DockGroup Repartition(IDock? relativeTo, DockGroupOrientation requiredOrientation)
     {
+        var (beforeGroup, hostGroup, afterGroup) = this.Split(relativeTo, requiredOrientation);
+
+        /*
+         * Clear the current docks and set up the new parts.
+         *
+         * We need a new partition if there docks before the relative dock.The new partition will contain the host group
+         * because it's orientation is different, and a group for the docks after the relative dock.
+         */
+
+        // Do not dispose of the docks here as we are moving them around
+        this.docks.Clear();
+
+        this.First = beforeGroup ?? hostGroup;
+        if (beforeGroup is null)
+        {
+            this.Second = afterGroup;
+        }
+        else if (afterGroup is null)
+        {
+            this.Second = hostGroup;
+        }
+        else
+        {
+            this.Second = new DockGroup(this.Docker)
+            {
+                First = hostGroup,
+                Second = afterGroup,
+            };
+        }
+
+        Debug.Assert(hostGroup.IsLeaf, "re-partitioning will always return a host group which can host docks");
+        return hostGroup;
+    }
+
+    private (DockGroup? beforeGroup, DockGroup hostGroup, DockGroup? afterGroup) Split(
+        IDock? relativeTo,
+        DockGroupOrientation requiredOrientation)
+    {
         var items = this.docks.ToList();
         var relativeToIndex = relativeTo is null ? 0 : this.docks.IndexOf(relativeTo);
         Debug.Assert(
@@ -559,37 +597,7 @@ internal partial class DockGroup
             }
         }
 
-        /*
-         * Clear the current docks and set up the new parts.
-         *
-         * We need a new partition if there docks before the relative dock.The
-         * new partition will contain the host group because it's orientation
-         * is different,and a group for the docks after the relative dock.
-         */
-
-        // Do not dispose of the docks here as we are moving them around
-        this.docks.Clear();
-
-        this.First = beforeGroup ?? hostGroup;
-        if (beforeGroup is null)
-        {
-            this.Second = afterGroup;
-        }
-        else if (afterGroup is null)
-        {
-            this.Second = hostGroup;
-        }
-        else
-        {
-            this.Second = new DockGroup(this.Docker)
-            {
-                First = hostGroup,
-                Second = afterGroup,
-            };
-        }
-
-        Debug.Assert(hostGroup.IsLeaf, "re-partitioning will always return a host group which can host docks");
-        return hostGroup;
+        return (beforeGroup, hostGroup, afterGroup);
     }
 }
 
