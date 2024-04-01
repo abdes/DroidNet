@@ -5,6 +5,7 @@
 namespace DroidNet.Hosting.Generators;
 
 using System.Diagnostics.CodeAnalysis;
+using FluentAssertions;
 
 /// <summary>Snapshot tests for the <see cref="AutoInjectGenerator" />.</summary>
 [TestClass]
@@ -229,6 +230,7 @@ public class AutoInjectionGeneratorTests : VerifyBase
         // Use verify to snapshot test the source generator output!
         var driver = TestHelper.GeneratorDriver(source);
         var runResults = driver.GetRunResult();
+        runResults.Diagnostics.Length.Should().Be(1);
         return this.Verify(runResults).UseDirectory("Snapshots");
     }
 }

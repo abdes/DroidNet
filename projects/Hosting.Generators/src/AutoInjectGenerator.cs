@@ -167,7 +167,10 @@ public class AutoInjectGenerator : IIncrementalGenerator
         string? implTypeFullName)
     {
         var isInterface = targetSymbol.TypeKind == TypeKind.Interface;
-        var implTypeIsContractType = string.Equals(contractTypeFullName, implTypeFullName, StringComparison.Ordinal);
+        var implTypeIsContractType = implTypeFullName is not null && string.Equals(
+            contractTypeFullName,
+            implTypeFullName,
+            StringComparison.Ordinal);
 
         return isInterface || !implTypeIsContractType
             ? $"<{contractTypeFullName}, {implTypeFullName}>"
@@ -223,7 +226,6 @@ public class AutoInjectGenerator : IIncrementalGenerator
                         AnnotationError,
                         injectionContext.TargetNode.GetLocation(),
                         $"The implementation type `{implTypeSymbol}` does not implement the annotated interface `{contractTypeFullName}`."));
-                return implTypeFullName;
             }
 
             implTypeFullName = implTypeSymbol.ToDisplayString();
