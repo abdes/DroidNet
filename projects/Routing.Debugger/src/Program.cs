@@ -21,13 +21,15 @@ using DroidNet.Routing.Debugger.UI.UrlTree;
 using DroidNet.Routing.Debugger.UI.WorkSpace;
 using DroidNet.Routing.Debugger.Welcome;
 using DroidNet.Routing.WinUI;
-using Microsoft.Extensions.DependencyInjection;
+using DryIoc;
+using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
+using Container = DryIoc.Container;
 
 /// <summary>
 /// The Main entry of the application.
@@ -64,75 +66,36 @@ public static partial class Program
                     new CultureInfo("en-US")))
             /* .WriteTo.Seq("http://localhost:5341/") */
             .CreateLogger();
+
+        Log.Information("Setting up the host");
+
         try
         {
-            Log.Information("Starting host");
-
-            // Use a default application host builder, which comes with logging,
-            // configuration providers for environment variables, command line,
-            // appsettings.json and secrets.
+            // Use a default application host builder, which comes with logging, configuration providers for environment
+            // variables, command line, 'appsettings.json' and secrets.
             var builder = Host.CreateDefaultBuilder(args);
 
-            // You can further customize and enhance the builder with additional
-            // configuration sources, logging providers, etc.
-            _ = builder.UseSerilog();
+            // Use DryIoc instead of the built-in service provider.
+            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
 
-            // Setup and provision the hosting context for the User Interface
-            // service.
+            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
+            // while you continue setting up other services not required for the UI.
             builder.Properties.Add(
-                HostingExtensions.HostingContextKey,
+                Hosting.WinUI.HostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
-
-            // Add the WinUI User Interface hosted service as early as possible to
-            // allow the UI to start showing up while you continue setting up other
-            // services not required for the UI.
-            _ = builder.ConfigureWinUI<App>().ConfigureRouter(MakeRoutes());
-
-            // TODO(abdes): Add Support for Docking.
-            // _ = builder.ConfigureDocking();
-
-            // Set up the view model to view converters. We're using the standard
-            // converter, and a custom one with fall back if the view cannot be
-            // located.
-            _ = builder.ConfigureServices(
-                services => services.AddKeyedSingleton<IValueConverter, ViewModelToView>("VmToView"));
-            /*
-             * Configure the Application's Windows. Each window represents a target
-             * in which to open the requested url. The target name is the key used
-             * when registering the window type.
-             *
-             * There should always be a Window registered for the special target
-             * <c>_main</c>.
-             */
-
-            // The Main Window is a singleton and its content can be re-assigned as
-            // needed. It is registered with a key that corresponding to name of the
-            // special target <see cref="Target.Main" />.
-            _ = builder.ConfigureServices(services => services.AddKeyedSingleton<Window, MainWindow>(Target.Main));
-
-            _ = builder.ConfigureServices(
-                services => services
-                    .AddSingleton<ShellViewModel>()
-                    .AddSingleton<ShellView>()
-                    .AddTransient<WelcomeViewModel>()
-                    .AddTransient<WelcomeView>()
-                    .AddTransient<WorkSpaceViewModel>()
-                    .AddTransient<WorkSpaceView>()
-                    .AddSingleton<RoutesViewModel>()
-                    .AddTransient<RoutesView>()
-                    .AddSingleton<UrlTreeViewModel>()
-                    .AddTransient<UrlTreeView>()
-                    .AddSingleton<RouterStateViewModel>()
-                    .AddTransient<RouterStateView>());
-
-            var host = builder.Build();
+            var host = builder
+                .ConfigureLogging()
+                .ConfigureWinUI<App>()
+                .ConfigureRouter(MakeRoutes())
+                .ConfigureAutoInjected()
+                .ConfigureContainer<DryIocServiceProvider>(ConfigureAdditionalServices)
+                .Build();
 
             // Set up the MVVM Ioc using the host built services.
             Ioc.Default.ConfigureServices(host.Services);
 
-            // Finally start the host. This will block until the application
-            // lifetime is terminated through CTRL+C, closing the UI windows or
-            // programmatically.
+            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
+            // closing the UI windows or programmatically.
             host.Run();
         }
         catch (Exception ex)
@@ -143,6 +106,41 @@ public static partial class Program
         {
             Log.CloseAndFlush();
         }
+    }
+
+    private static void ConfigureAdditionalServices(
+        HostBuilderContext hostBuilderContext,
+        DryIocServiceProvider serviceProvider)
+    {
+        // TODO(abdes): refactor into extension method
+        // Set up the view model to view converters. We're using the standard
+        // converter, and a custom one with fall back if the view cannot be
+        // located.
+        serviceProvider.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
+
+        /*
+         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
+         * target name is the key used when registering the window type.
+         *
+         * There should always be a Window registered for the special target <c>_main</c>.
+         */
+
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        serviceProvider.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+
+        serviceProvider.Container.Register<ShellViewModel>(Reuse.Singleton);
+        serviceProvider.Container.Register<ShellView>(Reuse.Singleton);
+        serviceProvider.Container.Register<WelcomeViewModel>(Reuse.Transient);
+        serviceProvider.Container.Register<WelcomeView>(Reuse.Transient);
+        serviceProvider.Container.Register<WorkSpaceViewModel>(Reuse.Transient);
+        serviceProvider.Container.Register<WorkSpaceView>(Reuse.Transient);
+        serviceProvider.Container.Register<RoutesViewModel>(Reuse.Singleton);
+        serviceProvider.Container.Register<RoutesView>(Reuse.Transient);
+        serviceProvider.Container.Register<UrlTreeViewModel>(Reuse.Singleton);
+        serviceProvider.Container.Register<UrlTreeView>(Reuse.Transient);
+        serviceProvider.Container.Register<RouterStateViewModel>(Reuse.Singleton);
+        serviceProvider.Container.Register<RouterStateView>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(
