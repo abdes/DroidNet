@@ -1,7 +1,7 @@
 ﻿{
-  IsEmpty: true,
+  HasNoDocks: true,
   First: {
-    IsEmpty: false,
+    HasNoDocks: false,
     Docks: [
       {
         CanMinimize: true,
