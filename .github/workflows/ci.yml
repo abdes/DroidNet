@@ -20,6 +20,7 @@ jobs:
               experimental: [false]
               include:
                 - configuration: Release
+                  platform: x64
                   experimental: true
 
         runs-on:
