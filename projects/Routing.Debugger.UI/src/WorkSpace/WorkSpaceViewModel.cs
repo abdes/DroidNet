@@ -81,6 +81,27 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         Message = "Dockable with ID `{DockableId}` trying to dock relative to unknown ID `{RelativeToId}`")]
     private static partial void LogInvalidRelativeDocking(ILogger logger, string dockableId, string relativeToId);
 
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "An error occured while loading content for route `{Path}`: {ErrorMessage}")]
+    private static partial void LogDockablePlacementError(ILogger logger, string? path, string errorMessage);
+
+    private static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right)
+    {
+        if (left.DeferredDockingInfo.AnchorId != null)
+        {
+            return 1;
+        }
+
+        if (right.DeferredDockingInfo.AnchorId == null)
+        {
+            return 0;
+        }
+
+        return -1;
+    }
+
     private void LoadApp(object viewModel)
     {
         this.centerDock = ApplicationDock.New() ?? throw new ContentLoadingException(
@@ -134,33 +155,17 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
     private void PlaceDocks(NavigationOptions options)
     {
-        // Called when activation is complete. If the navigation is partial, the
-        // docking tree is already built. Only changes will be applied.
-        // if the navigation mode is Full, all dockables and docks are created
-        // but no docks have been created yet and no docking took place.
+        // Called when activation is complete. If the navigation is partial, the docking tree is already built. Only
+        // changes will be applied. if the navigation mode is Full, all dockables and docks are created but no docks
+        // have been created yet and no docking took place.
         if (options is not FullNavigation)
         {
             return;
         }
 
-        // Sort the dockables collection to put root-anchored docks first. This
-        // guarantees that all, docks are created before we start encountering
-        // any relative docking cases.
-        this.deferredDockables.Sort(
-            (left, right) =>
-            {
-                if (left.DeferredDockingInfo.AnchorId == null)
-                {
-                    if (right.DeferredDockingInfo.AnchorId == null)
-                    {
-                        return 0;
-                    }
-
-                    return -1;
-                }
-
-                return 1;
-            });
+        // Sort the dockables collection to put root-anchored docks first. This guarantees that all, docks are created
+        // before we start encountering any relative docking cases.
+        this.deferredDockables.Sort(PutRootDockablesFirst);
 
         try
         {
@@ -168,80 +173,81 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
             {
                 try
                 {
-                    var dockingInfo = dockable.DeferredDockingInfo;
-
-                    if (dockingInfo.AnchorId == null)
-                    {
-                        // Dock to root
-                        var dock = ToolDock.New();
-                        dock.AddDockable(dockable);
-                        this.docker.DockToRoot(dock, dockingInfo.Position, dockingInfo.IsMinimized);
-                    }
-                    else
-                    {
-                        // Find the relative dock, it must have been already
-                        // created above, or the ID used for the anchor is
-                        // invalid.
-                        var relativeDockable = Dockable.FromId(dockingInfo.AnchorId);
-                        if (relativeDockable == null)
-                        {
-                            // Log an error
-                            LogInvalidRelativeDocking(this.logger, dockable.Id, dockingInfo.AnchorId);
-
-                            // Dock to root as left, minimized.
-                            var dock = ToolDock.New();
-                            dock.AddDockable(dockable);
-                            this.docker.DockToRoot(dock, AnchorPosition.Left, minimized: true);
-                        }
-                        else
-                        {
-                            // Check position
-                            if (dockingInfo.Position == AnchorPosition.Center)
-                            {
-                                this.centerDock?.AddDockable(dockable);
-                            }
-                            else if (dockingInfo.Position == AnchorPosition.With)
-                            {
-                                var dock = relativeDockable.Owner;
-                                Debug.Assert(
-                                    dock is not null,
-                                    "the dockable should have been added to the dock when it was created");
-                                dock.AddDockable(dockable);
-                                if (dockingInfo.IsMinimized)
-                                {
-                                    this.docker.MinimizeDock(dock);
-                                }
-                            }
-                            else
-                            {
-                                var anchor = new Anchor(dockingInfo.Position, relativeDockable);
-                                var dock = ToolDock.New();
-                                dock.AddDockable(dockable);
-                                this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
-                            }
-                        }
-                    }
+                    this.PlaceDockable(dockable);
+                    LogDockableLoaded(this.logger, dockable.Id, dockable.ViewModel!);
                 }
                 catch (Exception ex)
                 {
-                    // TODO: be more resilient to error, Log an error, but continue loading the other docks.
-                    throw new ContentLoadingException(
-                        $"an exception occured while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`",
-                        ex)
-                    {
-                        OutletName = dockable.Id,
-                        ViewModel = dockable.ViewModel,
-                    };
+                    // Log an error and continue with the other docks
+                    LogDockablePlacementError(this.logger, this.ActiveRoute!.RouteConfig.Path, ex.Message);
                 }
-
-                LogDockableLoaded(this.logger, dockable.Id, dockable.ViewModel!);
             }
         }
         finally
         {
             this.deferredDockables.Clear();
-
+#if DEBUG
             this.docker.Root.DumpGroup();
+#endif
+        }
+    }
+
+    private void PlaceDockable(RoutedDockable dockable)
+    {
+        var dockingInfo = dockable.DeferredDockingInfo;
+
+        if (dockingInfo.AnchorId == null)
+        {
+            this.DockToRoot(dockable, dockingInfo);
+            return;
+        }
+
+        // Find the relative dock, it must have been already created above, or the ID used for the
+        // anchor is invalid.
+        var relativeDockable = Dockable.FromId(dockingInfo.AnchorId);
+        if (relativeDockable == null)
+        {
+            // Log an error
+            LogInvalidRelativeDocking(this.logger, dockable.Id, dockingInfo.AnchorId);
+
+            this.DockToRoot(dockable, dockingInfo);
+            return;
+        }
+
+        this.DockRelativeTo(dockable, dockingInfo, relativeDockable);
+    }
+
+    private void DockToRoot(Dockable dockable, RoutedDockable.DockingInfo dockingInfo)
+    {
+        var dock = ToolDock.New();
+        dock.AddDockable(dockable);
+        this.docker.DockToRoot(dock, dockingInfo.Position, dockingInfo.IsMinimized);
+    }
+
+    private void DockRelativeTo(Dockable dockable, RoutedDockable.DockingInfo dockingInfo, IDockable relativeDockable)
+    {
+        if (dockingInfo.Position == AnchorPosition.Center)
+        {
+            this.centerDock?.AddDockable(dockable);
+        }
+        else if (dockingInfo.Position == AnchorPosition.With)
+        {
+            var dock = relativeDockable.Owner;
+            Debug.Assert(
+                dock is not null,
+                "the dockable should have been added to the dock when it was created");
+            dock.AddDockable(dockable);
+            if (dockingInfo.IsMinimized)
+            {
+                this.docker.MinimizeDock(dock);
+            }
+        }
+        else
+        {
+            var anchor = new Anchor(dockingInfo.Position, relativeDockable);
+            var dock = ToolDock.New();
+            dock.AddDockable(dockable);
+            this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
         }
     }
 }
