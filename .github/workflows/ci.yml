@@ -11,10 +11,16 @@ on:
 
 jobs:
     build:
+        continue-on-error: ${{ matrix.experimental }}
         strategy:
-            matrix:
-                configuration: [Debug, Release]
-                platform: [x64]
+          fail-fast: true
+          matrix:
+              configuration: [Debug]
+              platform: [x64]
+              experimental: [false]
+              include:
+                - configuration: Release
+                  experimental: true
 
         runs-on:
             windows-latest # For a list of available runner types, refer to
