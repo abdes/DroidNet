@@ -680,6 +680,8 @@ dotnet_diagnostic.MA0041.severity = none
 dotnet_diagnostic.MA0038.severity = none
 # MA0048 - File name must match type name (use StyleCop)
 dotnet_diagnostic.MA0048.severity = none
+# MA0026 - Fix TODO comment
+dotnet_diagnostic.MA0026.severity = silent
 
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
 tab_width = 4
