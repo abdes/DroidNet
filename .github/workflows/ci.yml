@@ -54,7 +54,7 @@ jobs:
               run: ./GenerateAllSolution
 
             - name: Build projects
-              run: msbuild .\AllProjects.sln -restore -t:build -v:m p:DN_PreCommitHooks=false -p:Platform=${{ matrix.platform }} -p:Configuration=${{ matrix.configuration }}
+              run: msbuild .\AllProjects.sln -restore -t:build -v:m -p:DN_PreCommitHooks=false -p:Platform=${{ matrix.platform }} -p:Configuration=${{ matrix.configuration }}
 
             - name: Execute Unit Tests
               run: dotnet test --no-build /p:Platform=${{ matrix.platform }} -c ${{ matrix.configuration }} --filter "TestCategory!=UITest"
