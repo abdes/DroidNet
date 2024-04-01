@@ -4,18 +4,22 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
         <IsPackable>false</IsPackable>
 
+        <AssemblyName>Hosting.Demo</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <EnableMsixTooling>true</EnableMsixTooling>
         <PublishReadyToRun>true</PublishReadyToRun>
         <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+        <WindowsPackageType>None</WindowsPackageType>
+
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
 
