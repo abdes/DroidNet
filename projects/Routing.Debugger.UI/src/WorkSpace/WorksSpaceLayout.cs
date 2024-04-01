@@ -200,28 +200,32 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private void SyncWithRouter(object? sender, LayoutChangedEventArgs args)
     {
-        Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
-
         LogSyncWithRouter(this.logger);
 
         // Build a change set to manipulate the URL tree for our active route
         var changes = new List<RouteChangeItem>();
 
         // Delete closed docks
-        foreach (var dockableRoute in this.activeRoute.Children)
-        {
-            if (Dockable.FromId(dockableRoute.Outlet) == null)
-            {
-                changes.Add(
-                    new RouteChangeItem()
-                    {
-                        ChangeAction = RouteChangeAction.Delete,
-                        Outlet = dockableRoute.Outlet,
-                    });
-            }
-        }
+        this.TrackClosedDocks(changes);
 
         // Add and Update dockables from the managed dockables collection
+        this.TrackChangedAndAddedDocks(changes);
+
+        // Once the change set is built, request a partial navigation using it. If the layout change reason is anything but
+        // Resize, we need to trigger a layout rebuild by setting the AdditionalInfo accordingly.
+        this.router.Navigate(
+            changes,
+            new PartialNavigation()
+            {
+                RelativeTo = this.activeRoute,
+                AdditionalInfo = new AdditionalInfo(args.Reason != LayoutChangeReason.Resize),
+            });
+    }
+
+    private void TrackChangedAndAddedDocks(List<RouteChangeItem> changes)
+    {
+        Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
+
         foreach (var dockable in Dockable.All)
         {
             var dock = dockable.Owner;
@@ -230,12 +234,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 $"expecting a docked dockable, but dockable with id=`{dockable.Id}` has a null owner");
 
             /*
-             * Our active route is the one for the dock workspace. For each
-             * dockable we have, there should be a corresponding child active
-             * route with the outlet name being the same as the dockable id. If
-             * no child active route with the same outlet then the dockable id
-             * is found, then a new one needs to be created for this dockable.
-             * Otherwise, we just need to update the existing one.
+             * Our active route is the one for the dock workspace. For each dockable we have, there should be a
+             * corresponding child active route with the outlet name being the same as the dockable id. If no child
+             * active route with the same outlet then the dockable id is found, then a new one needs to be created for
+             * this dockable. Otherwise, we just need to update the existing one.
              */
 
             var childRoute
@@ -272,16 +274,19 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 }
             }
         }
+    }
 
-        // Once the change set is built, request a partial navigation using it.
-        // If the layout change reason is anything but Resize, we need to
-        // trigger a layout rebuild by setting the AdditionalInfo accordingly.
-        this.router.Navigate(
-            changes,
-            new PartialNavigation()
+    private void TrackClosedDocks(List<RouteChangeItem> changes)
+    {
+        Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
+
+        changes.AddRange(
+            from dockableRoute in this.activeRoute.Children
+            where Dockable.FromId(dockableRoute.Outlet) == null
+            select new RouteChangeItem()
             {
-                RelativeTo = this.activeRoute,
-                AdditionalInfo = new AdditionalInfo(args.Reason != LayoutChangeReason.Resize),
+                ChangeAction = RouteChangeAction.Delete,
+                Outlet = dockableRoute.Outlet,
             });
     }
 
