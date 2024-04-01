@@ -38,6 +38,7 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
         <PackageReference Include="System.Reactive" />
+        <PackageReference Include="DryIoc.dll" />
     </ItemGroup>
 
     <ItemGroup>
@@ -50,6 +51,9 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+
+        <ProjectReference Include="..\..\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <ItemGroup>

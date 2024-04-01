@@ -11,7 +11,10 @@ namespace DroidNet.Routing.Debugger;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Docking.Controls;
+using DroidNet.Docking.Layouts;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
@@ -116,7 +119,12 @@ public static partial class Program
         // Set up the view model to view converters. We're using the standard
         // converter, and a custom one with fall back if the view cannot be
         // located.
+        serviceProvider.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         serviceProvider.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
+
+        // TODO(abdes): refactor into extension method
+        serviceProvider.Container.Register<DockPanelViewModel>(Reuse.Transient);
+        serviceProvider.Container.Register<DockPanel>(Reuse.Transient);
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
@@ -141,6 +149,7 @@ public static partial class Program
         serviceProvider.Container.Register<UrlTreeView>(Reuse.Transient);
         serviceProvider.Container.Register<RouterStateViewModel>(Reuse.Singleton);
         serviceProvider.Container.Register<RouterStateView>(Reuse.Transient);
+        serviceProvider.Container.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
     }
 
     private static Routes MakeRoutes() => new(
