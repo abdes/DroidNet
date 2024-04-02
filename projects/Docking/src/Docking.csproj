@@ -22,13 +22,6 @@
 
         <RootNamespace>$(RootNamespace).Docking</RootNamespace>
     </PropertyGroup>
-    <ItemGroup>
-      <None Remove="Controls\DockPanel.xaml" />
-      <None Remove="Controls\DockPanel\Styles.xaml" />
-      <None Remove="Controls\DockTray.xaml" />
-      <None Remove="Styles\SizerBase.xaml" />
-      <None Remove="Styles\Styles.xaml" />
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
@@ -49,31 +42,6 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Update="Assets\**\*.*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Page Update="Controls\DockPanel.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      </Page>
-      <Page Update="Controls\DockPanel\Styles.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-        <SubType>Designer</SubType>
-      </Page>
-      <Page Update="Controls\DockTray.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      </Page>
-      <Page Update="Styles\SizerBase.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      </Page>
-      <Page Update="Styles\Styles.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      </Page>
     </ItemGroup>
 
 </Project>
