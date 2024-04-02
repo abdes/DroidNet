@@ -34,5 +34,5 @@ public class Width : Length
     /// Implicitly convert the underlying value of a <see cref="Width" /> to a string.
     /// </summary>
     /// <param name="length">the length to be converted to a string.</param>
-    public static implicit operator string?(Width? length) => (string?)(Length?)length;
+    public static implicit operator string?(Width? length) => (Length?)length;
 }

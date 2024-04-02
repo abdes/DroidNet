@@ -34,5 +34,5 @@ public class Height : Length
     /// Implicitly convert the underlying value of a <see cref="Height" /> to a string.
     /// </summary>
     /// <param name="length">the length to be converted to a string.</param>
-    public static implicit operator string?(Height? length) => (string?)(Length?)length;
+    public static implicit operator string?(Height? length) => (Length?)length;
 }

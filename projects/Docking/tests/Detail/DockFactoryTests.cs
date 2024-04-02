@@ -36,7 +36,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
         {
             using var dock = Dock.Factory.CreateDock(typeof(CustomDock));
             _ = dock.Should().NotBeNull();
-            var id = dock!.Id.Value;
+            var id = dock.Id.Value;
             _ = ids.Contains(id).Should().BeFalse();
             ids.Add(id);
         }
@@ -56,7 +56,7 @@ public class DockFactoryTests : TestSuiteWithAssertions
             .And.BeEquivalentTo(
                 new CustomDock(intArg, strArg),
                 options => options.Excluding(exc => exc.Id));
-        _ = ((CustomDock)dock!).IntArg.Should().Be(intArg);
+        _ = ((CustomDock)dock).IntArg.Should().Be(intArg);
         _ = ((CustomDock)dock).StrArg.Should().Be(strArg);
     }
 

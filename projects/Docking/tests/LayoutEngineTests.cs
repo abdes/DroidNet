@@ -135,7 +135,7 @@ public class LayoutEngineTests : VerifyBase
 
             public List<object> Items { get; } = [];
 
-            public override string? ToString()
+            public override string ToString()
             {
                 var direction = this.Direction == FlowDirection.LeftToRight ? "\u2b95" : "\u2b07";
 

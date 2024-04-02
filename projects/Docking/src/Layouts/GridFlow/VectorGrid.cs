@@ -44,7 +44,7 @@ public class VectorGrid : Grid
         this.fixedSizeItems.Add(true);
     }
 
-    public override string? ToString() => $"{nameof(VectorGrid)} [{this.Name}]";
+    public override string ToString() => $"{nameof(VectorGrid)} [{this.Name}]";
 
     private void DefineItem(GridLength length, double minLength)
     {

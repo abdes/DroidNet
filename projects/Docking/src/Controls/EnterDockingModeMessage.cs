@@ -8,4 +8,4 @@ using CommunityToolkit.Mvvm.Messaging.Messages;
 
 public class EnterDockingModeMessage(IDock value) : ValueChangedMessage<IDock>(value);
 
-public class LeaveDockingModeMessage();
+public class LeaveDockingModeMessage;
