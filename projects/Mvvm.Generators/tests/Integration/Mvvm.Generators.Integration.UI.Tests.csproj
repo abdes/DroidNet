@@ -19,6 +19,8 @@
         <!-- Disable for now, until https://github.com/microsoft/testfx/issues/2620 is fixed -->
         <EnableMSTestRunner>false</EnableMSTestRunner>
         <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
+        <!-- Use this to have dotnet test use MSTest runner. Disable for now until we have WinUI working in the test runner. -->
+        <!--<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>-->
 
         <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
     </PropertyGroup>
