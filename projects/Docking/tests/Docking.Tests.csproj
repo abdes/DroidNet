@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <EnableMsixTooling>true</EnableMsixTooling>
 
-        <IsPackable>false</IsPackable>
-        <IsTestProject>true</IsTestProject>
+        <!--
+        Visual Studio can show the generated source files in the dependencies
+        under the generator package. The below setting may be useful if not
+        using Visual Studio.
+        -->
+        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
+
+        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
         <RootNamespace>$(RootNamespace).Docking</RootNamespace>
     </PropertyGroup>

@@ -15,7 +15,7 @@
                 <!--  Other resources  -->
                 <!--  ReSharper disable once Xaml.PathError  -->
                 <ResourceDictionary Source="ms-appx:///DroidNet.Routing.Debugger.UI/Styles/Styles.xaml" />
-                <ResourceDictionary Source="ms-appx:///DroidNet.Docking.UI/Styles/Styles.xaml" />
+                <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Styles/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary x:Key="VmToViewConverter" />
         </ResourceDictionary>

@@ -63,7 +63,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Docking.UI\src\Docking.UI.csproj" />
+        <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
         <ProjectReference Include="..\..\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="..\..\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="..\..\Routing.Debugger.UI\src\Routing.Debugger.UI.csproj" />
