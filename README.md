@@ -42,11 +42,37 @@ any developer working with WinUI and WinAppSDK. Happy coding!
   seamlessly with WinUI and WinAppSDK, allowing developers to leverage the
   latest technologies in Windows app development.
 
+### Docking framework for WinUI 3
+
+The [Docking](projects/Docking/) project contains a flexible docking frameowrk
+for WinUI. Dockable views can be embedded in Docks, which are managed in a tree
+structure by a Docker. Combined with a pluggable layout engine, the docking tree
+can be rendered into dock panels which can be attached to the workspace edges or
+relative to other docks.
+
+![Example docking workspace](media/routing-debugger.png "Docking Workspace")
+
+### MVVM ViewModel first router
+
+Similar to what Angular does in a web application, the [Router](projects/Routing/)
+provides a routing frameowrk to navigate within the WinUI application using URIs.
+With the provided source generators, it is easy to declare views, view models, and
+wire them together. The routing configuration is completely declarative and follows
+the same principles than Angular.
+
+### Application host and Dependency Container
+
+The [Hosting](projects/Hosting/) project offers an integration with .Net Host and
+the DryIoc container. The source generators automate the injection of services and
+view models and a view locator service makes it intuitive to locate a view for a
+particular view model.
+
 ## Getting Started
 
 To get started with "DroidNet", you'll need to have Visual Studio installed on
 your machine. You can then clone the repository and open the solution in Visual
-Studio to start developing.
+Studio to start developing. Simply use the `open.cmd` script in any of the folders
+to generate the solution file and open it in Visual Studio.
 
 ## Contributions
 
