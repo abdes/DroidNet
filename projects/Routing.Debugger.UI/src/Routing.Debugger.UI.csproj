@@ -42,7 +42,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Docking.UI\src\Docking.UI.csproj" />
+        <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
         <ProjectReference Include="..\..\Docking\src\Docking.csproj" />
         <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="..\..\Routing.Controls\src\Routing.Controls.csproj" />
