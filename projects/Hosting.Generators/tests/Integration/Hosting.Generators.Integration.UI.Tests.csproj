@@ -6,18 +6,19 @@
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <ApplicationManifest>app.manifest</ApplicationManifest>
-        <EnableMsixTooling>true</EnableMsixTooling>
-        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+
         <UseWinUI>true</UseWinUI>
+        <EnableMsixTooling>true</EnableMsixTooling>
+        <WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
+        <WindowsAppContainer>true</WindowsAppContainer>
 
         <EnableMSTestRunner>false</EnableMSTestRunner>
         <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
-        <WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
 
         <RootNamespace>$(RootNamespace).Hosting.Generators</RootNamespace>
     </PropertyGroup>

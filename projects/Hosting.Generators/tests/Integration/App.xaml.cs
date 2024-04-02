@@ -7,6 +7,7 @@ namespace DroidNet.Hosting.Generators;
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
@@ -40,10 +41,13 @@ public partial class App
 
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.CreateDefaultUI();
 
-        // Ensure the current window is active
+        // Create a main window for UI tests that use controls.
+        /*
         var window = new MainWindow();
         window.Activate();
-        UITestMethodAttribute.DispatcherQueue = window.DispatcherQueue;
+        */
+
+        UITestMethodAttribute.DispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
 #if MSTEST_RUNNER
         // Ideally we would want to reuse the generated main, so we don't have to manually handle all dependencies but
