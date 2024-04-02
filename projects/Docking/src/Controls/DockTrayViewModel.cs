@@ -36,7 +36,7 @@ public partial class DockTrayViewModel : ObservableObject
         this.UpdateDockables();
     }
 
-    public Orientation Orientation { get; set; }
+    public Orientation Orientation { get; }
 
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
