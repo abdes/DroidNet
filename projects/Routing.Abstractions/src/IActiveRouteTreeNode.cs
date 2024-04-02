@@ -50,8 +50,8 @@ public interface IActiveRouteTreeNode
     /// Gets a value indicating whether this route is the root route.
     /// </summary>
     /// <value>
-    /// <see langword="true"/> if this route is the root route (i.e. its parent is <see langword="null"/>);
-    /// otherwise, <see langword="false"/>.
+    /// <see langword="true" /> if this route is the root route (i.e. its parent is <see langword="null" />);
+    /// otherwise, <see langword="false" />.
     /// </value>
     bool IsRoot => this.Parent is null;
 
@@ -70,8 +70,8 @@ public interface IActiveRouteTreeNode
     /// </summary>
     /// <param name="route">The child route to be removed.</param>
     /// <returns>
-    /// <see langword="true"/> if <paramref name="route" /> was successfully removed;
-    /// otherwise, <see langword="false"/>. This method also returns false if item was not
+    /// <see langword="true" /> if <paramref name="route" /> was successfully removed;
+    /// otherwise, <see langword="false" />. This method also returns false if item was not
     /// found in the collection of children.
     /// </returns>
     bool RemoveChild(IActiveRoute route);
@@ -91,8 +91,8 @@ public interface IActiveRouteTreeNode
     /// </summary>
     /// <param name="route">The sibling route to be removed.</param>
     /// <returns>
-    /// <see langword="true"/> if <paramref name="route" /> was successfully removed;
-    /// otherwise, <see langword="false"/>. This method also returns false if the route
+    /// <see langword="true" /> if <paramref name="route" /> was successfully removed;
+    /// otherwise, <see langword="false" />. This method also returns false if the route
     /// has no parent or if the <paramref name="route" /> was not found in the
     /// collection of siblings.
     /// </returns>
