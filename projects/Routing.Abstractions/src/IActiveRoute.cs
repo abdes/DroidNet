@@ -66,7 +66,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
 
     /// <summary>Gets The ViewModel of the route.</summary>
     /// <value>
-    /// The ViewModel of the route; <see langword="null"/> until the route has been
+    /// The ViewModel of the route; <see langword="null" /> until the route has been
     /// activated.
     /// </value>
     object? ViewModel { get; }
