@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Layouts;
+namespace DroidNet.Docking.Layouts.GridFlow;
 
 using DroidNet.Docking;
 

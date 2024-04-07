@@ -79,7 +79,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             var firstDock = group.Docks.FirstOrDefault(d => !d.Width.IsNullOrEmpty);
             if (firstDock != null)
             {
-                return firstDock.GridWidth();
+                return firstDock.Width.ToGridLength();
             }
         }
         else
@@ -87,7 +87,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             var firstDock = group.Docks.FirstOrDefault(d => !d.Height.IsNullOrEmpty);
             if (firstDock != null)
             {
-                return firstDock.GridHeight();
+                return firstDock.Height.ToGridLength();
             }
         }
 
@@ -97,7 +97,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
     private GridLength GetGridLengthForDock(IDock dock)
     {
         Debug.WriteLine($"GridLength for dock {dock} using {(this.CurrentFlow.IsHorizontal ? "width" : "height")}");
-        return this.CurrentFlow.IsHorizontal ? dock.GridWidth() : dock.GridHeight();
+        return this.CurrentFlow.IsHorizontal ? dock.Width.ToGridLength() : dock.Height.ToGridLength();
     }
 
     private sealed class GridFlow(IDockGroup group) : Flow(group)

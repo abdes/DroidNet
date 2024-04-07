@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,27 +8,25 @@ using System.Globalization;
 using DroidNet.Docking;
 using Microsoft.UI.Xaml;
 
-internal static class DockExtensions
+internal static class LengthExtensions
 {
-    /// <summary>Parses a dock width from its string value to a <see cref="GridLength" /> value.</summary>
-    /// <param name="dock">The dock for which the preferred width is to be converted.</param>
+    /// <summary>Translates a UI independent <see cref="Width" /> into a <see cref="GridLength" /> value.</summary>
+    /// <param name="width">The width to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
-    public static GridLength GridWidth(this IDock dock)
-        => GridLengthFromString(dock.Width);
+    public static GridLength ToGridLength(this Width width) => GridLengthFromString(width);
 
-    /// <summary>Parses a dock height from its string value to a <see cref="GridLength" /> value.</summary>
-    /// <param name="dock">The dock for which the preferred height is to be converted.</param>
+    /// <summary>Translates a UI independent <see cref="Height" /> into a <see cref="GridLength" /> value.</summary>
+    /// <param name="height">The height to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
-    public static GridLength GridHeight(this IDock dock)
-        => GridLengthFromString(dock.Height);
+    public static GridLength ToGridLength(this Height height) => GridLengthFromString(height);
 
     /// <summary>Parses a dock preferred length from its string value to a <see cref="GridLength" /> value.</summary>
     /// <param name="length">The length as a string.</param>
-    /// <returns>If the preferred length is null or empty, this method returns <see cref="GridLength.Auto" />; otherwise if the
-    /// parsing succeeds, it returns a valid GridLength from the string value.</returns>
+    /// <returns>If the length to be converted is null or empty, this method returns <see cref="GridLength.Auto" />; otherwise if
+    /// is contains a properly formatted string value, it returns a valid GridLength corresponding to that value.</returns>
     /// <exception cref="ArgumentException">if the string format is invalid.</exception>
     /// <remarks>
-    /// The format of the string should be consistent with how GridLength sizing works:
+    /// Valid formats for the string value should be consistent with how GridLength sizing works, and include:
     /// <list type="bullet">
     /// <item>
     /// <term>Fixed Width</term><description> a numeric value that can be parsed as a <see langword="double" /></description>
