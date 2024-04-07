@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Layouts;
+namespace DroidNet.Docking.Layouts.GridFlow;
 
 using System.Globalization;
 using DroidNet.Docking;
@@ -10,25 +10,19 @@ using Microsoft.UI.Xaml;
 
 internal static class DockExtensions
 {
-    /// <summary>
-    /// Parses a dock width from its string value to a <see cref="GridLength" /> value.
-    /// </summary>
+    /// <summary>Parses a dock width from its string value to a <see cref="GridLength" /> value.</summary>
     /// <param name="dock">The dock for which the preferred width is to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
     public static GridLength GridWidth(this IDock dock)
         => GridLengthFromString(dock.Width);
 
-    /// <summary>
-    /// Parses a dock height from its string value to a <see cref="GridLength" /> value.
-    /// </summary>
+    /// <summary>Parses a dock height from its string value to a <see cref="GridLength" /> value.</summary>
     /// <param name="dock">The dock for which the preferred height is to be converted.</param>
     /// <inheritdoc cref="GridLengthFromString" />
     public static GridLength GridHeight(this IDock dock)
         => GridLengthFromString(dock.Height);
 
-    /// <summary>
-    /// Parses a dock preferred length from its string value to a <see cref="GridLength" /> value.
-    /// </summary>
+    /// <summary>Parses a dock preferred length from its string value to a <see cref="GridLength" /> value.</summary>
     /// <param name="length">The length as a string.</param>
     /// <returns>If the preferred length is null or empty, this method returns <see cref="GridLength.Auto" />; otherwise if the
     /// parsing succeeds, it returns a valid GridLength from the string value.</returns>

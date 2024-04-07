@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Layouts.GridFlow;
+namespace DroidNet.Docking.Layouts;
 
 using System.Diagnostics;
 using System.Globalization;
@@ -11,11 +11,11 @@ using DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class VectorGrid : Grid
+public class ResizableVectorGrid : Grid
 {
     private readonly List<bool> fixedSizeItems = [];
 
-    public VectorGrid(Orientation orientation)
+    public ResizableVectorGrid(Orientation orientation)
     {
         this.Orientation = orientation;
 
@@ -44,7 +44,7 @@ public class VectorGrid : Grid
         this.fixedSizeItems.Add(true);
     }
 
-    public override string ToString() => $"{nameof(VectorGrid)} [{this.Name}]";
+    public override string ToString() => $"{nameof(ResizableVectorGrid)} [{this.Name}]";
 
     private void DefineItem(GridLength length, double minLength)
     {
