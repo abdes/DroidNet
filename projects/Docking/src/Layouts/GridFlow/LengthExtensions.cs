@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -23,7 +23,7 @@ internal static class LengthExtensions
     /// <summary>Parses a dock preferred length from its string value to a <see cref="GridLength" /> value.</summary>
     /// <param name="length">The length as a string.</param>
     /// <returns>If the length to be converted is null or empty, this method returns <see cref="GridLength.Auto" />; otherwise if
-    /// is contains a properly formatted string value, it returns a valid GridLength corresponding to that value.</returns>
+    /// it contains a properly formatted string value, it returns a valid GridLength corresponding to that value.</returns>
     /// <exception cref="ArgumentException">if the string format is invalid.</exception>
     /// <remarks>
     /// Valid formats for the string value should be consistent with how GridLength sizing works, and include:
