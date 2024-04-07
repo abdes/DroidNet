@@ -15,18 +15,29 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory(nameof(Dock))]
 public class DockTests : IDisposable
 {
+    private readonly SimpleDock dock = new();
+
     private readonly Dockable dockable1
         = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
 
     private readonly Dockable dockable2
         = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
 
-    private readonly SimpleDock dock = new();
+    private bool dockable1Disposed;
+    private bool dockable2Disposed;
+
+    public DockTests()
+    {
+        this.dockable1.PropertyChanged += this.OnDockableDisposed;
+        this.dockable2.PropertyChanged += this.OnDockableDisposed;
+    }
 
     [TestCleanup]
     public void Dispose()
     {
+        this.dockable1.PropertyChanged -= this.OnDockableDisposed;
         this.dockable1.Dispose();
+        this.dockable2.PropertyChanged -= this.OnDockableDisposed;
         this.dockable2.Dispose();
         this.dock.Dispose();
 
@@ -84,6 +95,8 @@ public class DockTests : IDisposable
 
         // Assert
         _ = this.dock.Dockables.Should().BeEmpty("all dockables should be disposed and removed from the dock");
+        _ = this.dockable1Disposed.Should().BeTrue();
+        _ = this.dockable2Disposed.Should().BeTrue();
     }
 
     [TestMethod]
@@ -211,5 +224,17 @@ public class DockTests : IDisposable
 
         // Assert
         _ = this.dock.ActiveDockable.Should().Be(this.dockable1);
+    }
+
+    private void OnDockableDisposed(object? sender, EventArgs args)
+    {
+        if (sender == this.dockable1)
+        {
+            this.dockable1Disposed = true;
+        }
+        else if (sender == this.dockable2)
+        {
+            this.dockable2Disposed = true;
+        }
     }
 }
