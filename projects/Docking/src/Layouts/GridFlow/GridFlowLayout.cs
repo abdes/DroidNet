@@ -13,15 +13,15 @@ using Microsoft.UI.Xaml.Controls;
 
 public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
-    private VectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
+    private ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
-    public override VectorGrid Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
+    public override ResizableVectorGrid Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
 
     protected override Flow StartLayout(IDockGroup root)
         => new GridFlow(root)
         {
             Description = $"Root Grid {root}",
-            Grid = new VectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
+            Grid = new ResizableVectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
         };
 
     protected override void PlaceDock(IDock dock)
@@ -49,7 +49,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
     {
         Debug.WriteLine($"New Grid for: {group}");
 
-        var newGrid = new VectorGrid(ToGridOrientation(group.Orientation)) { Name = group.ToString() };
+        var newGrid = new ResizableVectorGrid(ToGridOrientation(group.Orientation)) { Name = group.ToString() };
 
         var stretch = group.ShouldStretch();
         var length = stretch
@@ -102,6 +102,6 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     private sealed class GridFlow(IDockGroup group) : Flow(group)
     {
-        public required VectorGrid Grid { get; init; }
+        public required ResizableVectorGrid Grid { get; init; }
     }
 }
