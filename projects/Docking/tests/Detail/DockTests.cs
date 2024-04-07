@@ -52,7 +52,7 @@ public class DockTests : IDisposable
     public void AddDockable_WhenDockIsEmpty(DockablePlacement placement)
     {
         // Act
-        this.dock.AddDockable(this.dockable1, placement);
+        this.dock.AdoptDockable(this.dockable1, placement);
 
         // Assert
         _ = this.dock.Dockables.Should()
@@ -71,10 +71,10 @@ public class DockTests : IDisposable
     public void AddDockable_WhenDockIsNotEmpty(DockablePlacement placement, int expectedIndex)
     {
         // Arrange
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
 
         // Act
-        this.dock.AddDockable(this.dockable2, placement);
+        this.dock.AdoptDockable(this.dockable2, placement);
 
         // Assert
         _ = this.dock.Dockables.Should().Contain(this.dockable2, "we added it to the dock");
@@ -87,8 +87,8 @@ public class DockTests : IDisposable
     public void Dispose_ShouldDisposeAllDockablesAndClearDockables()
     {
         // Arrange
-        this.dock.AddDockable(this.dockable1);
-        this.dock.AddDockable(this.dockable2);
+        this.dock.AdoptDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable2);
 
         // Act
         this.dock.Dispose();
@@ -114,7 +114,7 @@ public class DockTests : IDisposable
     {
         // Arrange
         this.dockable1.PreferredWidth = new Width();
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
         _ = this.dockable1.IsActive.Should().BeTrue();
         _ = this.dockable1.PreferredWidth.IsNullOrEmpty.Should().BeTrue();
         var width = new Width(200);
@@ -132,7 +132,7 @@ public class DockTests : IDisposable
     {
         // Arrange
         this.dockable1.PreferredHeight = new Height();
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
         _ = this.dockable1.IsActive.Should().BeTrue();
         _ = this.dockable1.PreferredHeight.IsNullOrEmpty.Should().BeTrue();
         var height = new Height(200);
@@ -153,7 +153,7 @@ public class DockTests : IDisposable
         this.dockable1.PreferredWidth = width;
 
         // Act
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
 
         // Assert
         _ = this.dock.Width.Should().Be(width);
@@ -167,7 +167,7 @@ public class DockTests : IDisposable
         this.dockable1.PreferredHeight = height;
 
         // Act
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
 
         // Assert
         _ = this.dock.Height.Should().Be(height);
@@ -183,8 +183,8 @@ public class DockTests : IDisposable
     public void ActiveDockable_WhenDockIsNotEmpty_ReturnsActiveDockable()
     {
         // Setup
-        this.dock.AddDockable(this.dockable1);
-        this.dock.AddDockable(this.dockable2);
+        this.dock.AdoptDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable2);
         this.dockable1.IsActive = true;
 
         // Assert
@@ -195,8 +195,8 @@ public class DockTests : IDisposable
     public void ActiveDockable_WhenDockIsNotEmpty_AlwaysHasAnActiveDockable()
     {
         // Setup
-        this.dock.AddDockable(this.dockable1);
-        this.dock.AddDockable(this.dockable2);
+        this.dock.AdoptDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable2);
         this.dockable1.IsActive = false;
         this.dockable2.IsActive = false;
 
@@ -208,7 +208,7 @@ public class DockTests : IDisposable
     public void ActiveDockable_WhenDockHasONlyOneDockable_ItIsAlwaysActive()
     {
         // Setup
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
         this.dockable1.IsActive = false;
 
         // Assert
@@ -219,7 +219,7 @@ public class DockTests : IDisposable
     public void Dock_OnlySubscribesToIsActiveChanges()
     {
         // Setup
-        this.dock.AddDockable(this.dockable1);
+        this.dock.AdoptDockable(this.dockable1);
         this.dockable1.Title = "Hello";
 
         // Assert

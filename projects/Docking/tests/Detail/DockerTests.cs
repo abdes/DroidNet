@@ -32,7 +32,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         using var root = new RootDockGroup(this.sut);
         using var anchorDock = new SimpleDock();
         root.DockLeft(anchorDock);
-        anchorDock.AddDockable(Dockable.New("anchor"));
+        anchorDock.AdoptDockable(Dockable.New("anchor"));
         using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
 
         using var group = new DockGroup(this.sut);
@@ -55,7 +55,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         {
             // Setup
             using var anchorDock = new SimpleDock();
-            anchorDock.AddDockable(Dockable.New("anchor"));
+            anchorDock.AdoptDockable(Dockable.New("anchor"));
             using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
 
             using var dock = new SimpleDock();
@@ -79,7 +79,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         using var root = new RootDockGroup(this.sut);
         using var anchorDock = new SimpleDock();
         root.DockLeft(anchorDock);
-        anchorDock.AddDockable(Dockable.New("anchor"));
+        anchorDock.AdoptDockable(Dockable.New("anchor"));
         using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
         using var dock = new SimpleDock();
 

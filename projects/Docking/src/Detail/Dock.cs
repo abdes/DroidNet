@@ -105,9 +105,11 @@ public abstract partial class Dock : IDock
 
     internal DockGroup? Group { get; set; }
 
-    public virtual void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First)
+    public virtual void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last)
     {
-        dockable.Owner = this;
+        var dockableImpl = dockable.AsDockable();
+
+        dockableImpl.Owner = this;
         int index;
         switch (position)
         {
@@ -141,28 +143,58 @@ public abstract partial class Dock : IDock
                 throw new InvalidEnumArgumentException(nameof(position), (int)position, typeof(DockablePlacement));
         }
 
-        this.dockables.Insert(index, dockable);
+        this.dockables.Insert(index, dockableImpl);
 
         // Subscribe to changes to the IsActive property of the dockable.
         // Then set the dockable to active.
-        dockable.PropertyChanged += this.OnDockablePropertyChanged;
-        dockable.IsActive = true;
+        dockableImpl.PropertyChanged += this.OnDockablePropertyChanged;
+        dockableImpl.IsActive = true;
 
         // If currently the values of Width or Height are null, the use the
         // preferred values from the dockable just added.
-        if (this.width.IsNullOrEmpty && !dockable.PreferredWidth.IsNullOrEmpty)
+        if (this.width.IsNullOrEmpty && !dockableImpl.PreferredWidth.IsNullOrEmpty)
         {
             Debug.WriteLine(
-                $"Dock {this} initializing my width from dockable {dockable.Id}: {dockable.PreferredWidth}");
-            this.width = dockable.PreferredWidth;
+                $"Dock {this} initializing my width from dockable {dockableImpl.Id}: {dockableImpl.PreferredWidth}");
+            this.width = dockableImpl.PreferredWidth;
         }
 
-        if (this.height.IsNullOrEmpty && !dockable.PreferredHeight.IsNullOrEmpty)
+        if (this.height.IsNullOrEmpty && !dockableImpl.PreferredHeight.IsNullOrEmpty)
         {
             Debug.WriteLine(
-                $"Dock {this} initializing my height from dockable {dockable.Id}: {dockable.PreferredHeight}");
-            this.height = dockable.PreferredHeight;
+                $"Dock {this} initializing my height from dockable {dockableImpl.Id}: {dockableImpl.PreferredHeight}");
+            this.height = dockableImpl.PreferredHeight;
         }
+    }
+
+    public void DestroyDockable(IDockable dockable)
+    {
+        var dockableImpl = dockable.AsDockable();
+
+        var found = this.dockables.Remove(dockableImpl);
+        Debug.Assert(found, $"dockable to be disowned ({dockableImpl}) should be managed by me ({this})");
+
+        dockableImpl.PropertyChanged -= this.OnDockablePropertyChanged;
+        dockableImpl.Dispose();
+    }
+
+    public void DisownDockable(IDockable dockable)
+    {
+        var dockableImpl = dockable.AsDockable();
+
+        var found = this.dockables.Remove(dockableImpl);
+        Debug.Assert(found, $"dockable to be disowned ({dockableImpl}) should be managed by me ({this})");
+    }
+
+    public void MigrateDockables(IDock destinationDock)
+    {
+        foreach (var dockable in this.dockables)
+        {
+            dockable.PropertyChanged -= this.OnDockablePropertyChanged;
+            destinationDock.AdoptDockable(dockable);
+        }
+
+        this.dockables.Clear();
     }
 
     public void Dispose()

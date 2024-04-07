@@ -6,6 +6,11 @@ namespace DroidNet.Docking.Detail;
 
 internal static class InternalImplExtensions
 {
+    internal static Dockable AsDockable(this IDockable dockable)
+        => dockable as Dockable ?? throw new ArgumentException(
+            $"expecting an object that I created, i.e. `{typeof(Dockable)}`, but got an object of type `{dockable.GetType()}`",
+            nameof(dockable));
+
     internal static Dock AsDock(this IDock dock)
         => dock as Dock ?? throw new ArgumentException(
             $"expecting an object that I created, i.e. `{typeof(Dock)}`, but got an object of type `{dock.GetType()}`",

@@ -120,7 +120,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                            ViewModel = viewModel,
                        };
         dockable.ViewModel = viewModel;
-        this.centerDock.AddDockable(dockable);
+        this.centerDock.AdoptDockable(dockable);
 
         this.docker.DockToCenter(this.centerDock);
 
@@ -218,7 +218,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private void DockToRoot(Dockable dockable, RoutedDockable.DockingInfo dockingInfo)
     {
         var dock = ToolDock.New();
-        dock.AddDockable(dockable);
+        dock.AdoptDockable(dockable);
         this.docker.DockToRoot(dock, dockingInfo.Position, dockingInfo.IsMinimized);
     }
 
@@ -226,7 +226,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     {
         if (dockingInfo.Position == AnchorPosition.Center)
         {
-            this.centerDock?.AddDockable(dockable);
+            this.centerDock?.AdoptDockable(dockable);
         }
         else if (dockingInfo.Position == AnchorPosition.With)
         {
@@ -234,7 +234,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
             Debug.Assert(
                 dock is not null,
                 "the dockable should have been added to the dock when it was created");
-            dock.AddDockable(dockable);
+            dock.AdoptDockable(dockable);
             if (dockingInfo.IsMinimized)
             {
                 this.docker.MinimizeDock(dock);
@@ -244,7 +244,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         {
             var anchor = new Anchor(dockingInfo.Position, relativeDockable);
             var dock = ToolDock.New();
-            dock.AddDockable(dockable);
+            dock.AdoptDockable(dockable);
             this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
         }
     }

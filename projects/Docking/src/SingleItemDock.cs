@@ -18,7 +18,7 @@ public class SingleItemDock : Dock
 
     public static SingleItemDock New() => (SingleItemDock)Factory.CreateDock(typeof(SingleItemDock));
 
-    public override void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First)
+    public override void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last)
     {
         if (this.Dockables.Count != 0)
         {
@@ -26,6 +26,6 @@ public class SingleItemDock : Dock
                 $"attempt to add a dockable to a single item dock which already has one ({this.Dockables[0].ViewModel})");
         }
 
-        base.AddDockable(dockable, position);
+        base.AdoptDockable(dockable, position);
     }
 }
