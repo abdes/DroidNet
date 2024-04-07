@@ -28,5 +28,11 @@ public interface IDock : IDisposable
 
     IDocker? Docker { get; }
 
-    void AddDockable(Dockable dockable, DockablePlacement position = DockablePlacement.First);
+    void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last);
+
+    void DisownDockable(IDockable dockable);
+
+    void DestroyDockable(IDockable dockable);
+
+    void MigrateDockables(IDock destinationDock);
 }

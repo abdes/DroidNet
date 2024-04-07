@@ -24,10 +24,6 @@ public class Docker : IDocker, IOptimizingDocker
 
     public void Dock(IDock dock, Anchor anchor, bool minimized = false)
     {
-        /*
-         * TODO: need to handle docking when the anchor is 'With'
-         */
-
         if (dock.State != DockingState.Undocked)
         {
             Undock(dock);
@@ -36,21 +32,36 @@ public class Docker : IDocker, IOptimizingDocker
         var anchorDock = anchor.RelativeTo?.Owner?.AsDock() ?? throw new ArgumentException(
             $"invalid anchor for relative docking: {anchor}",
             nameof(anchor));
-        var group = anchorDock.Group ?? throw new ArgumentException(
-            $"dock `{dock}` does not belong to a group and cannot be used as an anchor",
-            nameof(anchor));
 
-        group.AddDock(dock, anchor);
-        dock.AsDock().Anchor = anchor;
-        dock.AsDock().Docker = this;
-
-        if (minimized)
+        if (anchor.Position == AnchorPosition.With)
         {
-            this.MinimizeDock(dock);
+            if (!dock.CanClose)
+            {
+                throw new InvalidOperationException(
+                    $"dock `{dock}` cannot be closed and therefore cannot be anchored `with`");
+            }
+
+            dock.MigrateDockables(anchorDock);
+            dock.Dispose();
         }
         else
         {
-            this.PinDock(dock);
+            var group = anchorDock.Group ?? throw new ArgumentException(
+                $"dock `{dock}` does not belong to a group and cannot be used as an anchor",
+                nameof(anchor));
+
+            group.AddDock(dock, anchor);
+            dock.AsDock().Anchor = anchor;
+            dock.AsDock().Docker = this;
+
+            if (minimized)
+            {
+                this.MinimizeDock(dock);
+            }
+            else
+            {
+                this.PinDock(dock);
+            }
         }
 
         this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
@@ -198,11 +209,7 @@ public class Docker : IDocker, IOptimizingDocker
         }
 
         Undock(dock);
-
-        if (dock is IDisposable resource)
-        {
-            resource.Dispose();
-        }
+        dock.Dispose();
 
         this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }

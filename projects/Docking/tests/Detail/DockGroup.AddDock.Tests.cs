@@ -77,7 +77,7 @@ public partial class DockGroupTests
             using var anchor = DummyDock.New();
             using var sut = new NonEmptyDockGroup(this.docker);
             using var anchorDockable = Dockable.New("anchor");
-            anchor.AddDockable(anchorDockable);
+            anchor.AdoptDockable(anchorDockable);
             using var newDock = DummyDock.New();
 
             // Act
@@ -99,7 +99,7 @@ public partial class DockGroupTests
         sut.SetOrientation(orientation);
         var anchor = sut.Docks[0];
         using var anchorDockable = Dockable.New("anchor");
-        anchor.AddDockable(anchorDockable);
+        anchor.AdoptDockable(anchorDockable);
         var before = DummyDock.New();
         var after = DummyDock.New();
 
@@ -135,11 +135,11 @@ public partial class DockGroupTests
             this.sut = new NonEmptyDockGroup(this.docker);
             this.sut.SetOrientation(DockGroupOrientation.Horizontal);
             this.second = this.sut.Docks[0];
-            this.second.AddDockable(Dockable.New("second"));
+            this.second.AdoptDockable(Dockable.New("second"));
             this.first = DummyDock.New();
-            this.first.AddDockable(Dockable.New("first"));
+            this.first.AdoptDockable(Dockable.New("first"));
             this.third = DummyDock.New();
-            this.third.AddDockable(Dockable.New("third"));
+            this.third.AdoptDockable(Dockable.New("third"));
             this.sut.AddDock(this.first, new AnchorLeft(this.second.Dockables[0]));
             this.sut.AddDock(this.third, new AnchorRight(this.second.Dockables[0]));
         }

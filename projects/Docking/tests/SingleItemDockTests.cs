@@ -34,7 +34,7 @@ public class SingleItemDockTests
         var dock = SingleItemDock.New() ?? throw new AssertionFailedException("could not allocate a new object");
 
         // Act
-        dock.AddDockable(this.dockable1);
+        dock.AdoptDockable(this.dockable1);
 
         // Assert
         _ = dock.Dockables.Should()
@@ -51,10 +51,10 @@ public class SingleItemDockTests
             // Arrange
             using var dock = SingleItemDock.New() ??
                              throw new AssertionFailedException("could not allocate a new object");
-            dock.AddDockable(this.dockable1);
+            dock.AdoptDockable(this.dockable1);
 
             // Act
-            dock.AddDockable(this.dockable2);
+            dock.AdoptDockable(this.dockable2);
         };
 
         // Assert

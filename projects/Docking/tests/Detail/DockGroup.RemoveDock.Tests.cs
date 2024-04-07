@@ -39,9 +39,9 @@ public partial class DockGroupTests
         // Arrange
         using var sut = new NonEmptyDockGroup(this.docker);
         using var first = sut.Docks[0];
-        first.AddDockable(Dockable.New("first"));
+        first.AdoptDockable(Dockable.New("first"));
         using var second = DummyDock.New();
-        second.AddDockable(Dockable.New("second"));
+        second.AdoptDockable(Dockable.New("second"));
         sut.AddDock(second, new AnchorRight(first.Dockables[0]));
         using var third = DummyDock.New();
         sut.AddDock(third, new AnchorRight(second.Dockables[0]));

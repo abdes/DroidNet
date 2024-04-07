@@ -22,11 +22,11 @@ public class LayoutEngineTests : VerifyBase
         docker.DockToCenter(CenterDock.New());
 
         using var left1 = ToolDock.New();
-        left1.AddDockable(Dockable.New("left1"));
+        left1.AdoptDockable(Dockable.New("left1"));
         docker.DockToRoot(left1, AnchorPosition.Left);
 
         using var left2 = ToolDock.New();
-        left2.AddDockable(Dockable.New("left2"));
+        left2.AdoptDockable(Dockable.New("left2"));
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
         docker.DockToRoot(ToolDock.New(), AnchorPosition.Left, minimized: true);
@@ -35,7 +35,7 @@ public class LayoutEngineTests : VerifyBase
         docker.DockToRoot(ToolDock.New(), AnchorPosition.Bottom, minimized: true);
 
         using var right1 = ToolDock.New();
-        right1.AddDockable(Dockable.New("right1"));
+        right1.AdoptDockable(Dockable.New("right1"));
         docker.DockToRoot(right1, AnchorPosition.Right);
         docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Right, right1.Dockables[0]));
         docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
