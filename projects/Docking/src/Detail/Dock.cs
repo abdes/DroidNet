@@ -174,6 +174,7 @@ public abstract partial class Dock : IDock
 
         foreach (var dockable in this.dockables)
         {
+            dockable.PropertyChanged -= this.OnDockablePropertyChanged;
             dockable.Dispose();
         }
 
