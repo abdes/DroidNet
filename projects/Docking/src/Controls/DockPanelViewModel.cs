@@ -192,7 +192,4 @@ public partial class DockPanelViewModel : ObservableRecipient
     }
 
     private bool CanClose() => !this.IsInDockingMode && this.dock.CanClose;
-
-    [RelayCommand]
-    private void AddDockable(Dockable dockable) => this.dock.AddDockable(dockable);
 }
