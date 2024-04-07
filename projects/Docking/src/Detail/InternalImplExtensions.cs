@@ -20,9 +20,4 @@ internal static class InternalImplExtensions
         => group as DockGroup ?? throw new ArgumentException(
             $"expecting an object that I created, i.e. `{typeof(DockGroup)}`, but got an object of type `{group.GetType()}`",
             nameof(group));
-
-    internal static Docker AsDocker(this IDocker docker)
-        => docker as Docker ?? throw new ArgumentException(
-            $"expecting an object that I created, i.e. `{typeof(Docker)}`, but got an object of type `{docker.GetType()}`",
-            nameof(docker));
 }
