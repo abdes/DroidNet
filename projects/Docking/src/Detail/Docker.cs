@@ -247,18 +247,19 @@ public class Docker : IDocker, IOptimizingDocker
 
     public void ConsolidateUp(IDockGroup startingGroup)
     {
+        Debug.WriteLine($"Consolidating the docking tree up, starting from {startingGroup}");
+
         // If a consolidation is ongoing, some manipulations of the docking tree may trigger consolidation again. This
         // method should not be re-entrant. Instead, we just ignore the new request and continue the ongoing
         // consolidation.
         if (Interlocked.Exchange(ref this.isConsolidating, 1) == 1)
         {
+            Debug.WriteLine("Already consolidating...");
             return;
         }
 
         try
         {
-            Debug.WriteLine("Consolidating the docking tree...");
-
             var result = ConsolidateIfNeeded(
                 startingGroup as DockGroup ?? throw new ArgumentException(
                     $"expecting a object of type {typeof(DockGroup)}",
@@ -322,7 +323,8 @@ public class Docker : IDocker, IOptimizingDocker
             var child = group.First == null ? group.Second!.AsDockGroup() : group.First.AsDockGroup();
 
             // with compatible orientation => assimilate child into parent
-            if (child.Orientation == DockGroupOrientation.Undetermined || child.Orientation == group.Orientation)
+            if (child.Orientation == DockGroupOrientation.Undetermined ||
+                group.Orientation == DockGroupOrientation.Undetermined || child.Orientation == group.Orientation)
             {
                 return new AssimilateChild(child: child, parent: group).Execute();
             }
