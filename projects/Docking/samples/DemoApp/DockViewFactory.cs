@@ -5,7 +5,7 @@
 namespace DroidNet.Docking.Demo;
 
 using DroidNet.Docking.Controls;
-using DroidNet.Docking.Demo.Welcome;
+using DroidNet.Docking.Demo.Controls;
 using DroidNet.Docking.Layouts;
 using DroidNet.Hosting.Generators;
 using DryIoc;

@@ -2,16 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Demo.Welcome;
+namespace DroidNet.Docking.Demo.Controls;
 
 using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.DependencyInjection;
 
-/// <summary>A simple welcome page used as a placeholder for the main application content inside the docking workspace.</summary>
-[ViewModel(typeof(WelcomeViewModel))]
+/// <summary>An information card used as a placeholder for a docked dockable.</summary>
+[ViewModel(typeof(DockableInfoViewModel))]
 [InjectAs(ServiceLifetime.Transient)]
-public sealed partial class WelcomeView
+public sealed partial class DockableInfoView
 {
-    public WelcomeView() => this.InitializeComponent();
+    public DockableInfoView() => this.InitializeComponent();
 }

@@ -8,6 +8,7 @@ namespace DroidNet.Docking.Demo;
 
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Docking.Demo.Controls;
 using DroidNet.Docking.Demo.Shell;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Utils;
@@ -45,7 +46,7 @@ public sealed partial class MainWindow
         this.InitializeComponent();
 
         // Initialize the docking tree for the demo.
-        var docker = InitializeDockingDemo();
+        var docker = InitializeDockingDemo(resolver);
 
         // Initialize the shell for this window.
         var wrapper = resolver.Resolve<Func<Docker, ShellViewModel>>();
@@ -53,45 +54,53 @@ public sealed partial class MainWindow
         this.Shell = new ShellView { ViewModel = shellViewModel };
     }
 
-    private static Docker InitializeDockingDemo()
+    private static Docker InitializeDockingDemo(IResolver resolver)
     {
         var docker = new Docker();
         docker.DockToCenter(CenterDock.New());
 
-        var left1 = MakeDockWithVerticalDockable("left1");
+        var left1 = MakeDockWithVerticalDockable(resolver, "left1");
         docker.DockToRoot(left1, AnchorPosition.Left);
 
-        var left2 = MakeDockWithVerticalDockable("left2");
+        var left2 = MakeDockWithVerticalDockable(resolver, "left2");
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
-        docker.DockToRoot(MakeDockWithVerticalDockable("left3"), AnchorPosition.Left, minimized: true);
-        docker.DockToRoot(MakeDockWithVerticalDockable("left4"), AnchorPosition.Left);
-        docker.DockToRoot(MakeDockWithHorizontalDockable("top1"), AnchorPosition.Top);
-        docker.DockToRoot(MakeDockWithHorizontalDockable("bottom1"), AnchorPosition.Bottom, minimized: true);
+        docker.DockToRoot(MakeDockWithVerticalDockable(resolver, "left3"), AnchorPosition.Left, minimized: true);
+        docker.Root.DumpGroup();
+        docker.DockToRoot(MakeDockWithVerticalDockable(resolver, "left4"), AnchorPosition.Left);
+        docker.Root.DumpGroup();
+        docker.DockToRoot(MakeDockWithHorizontalDockable(resolver, "top1"), AnchorPosition.Top);
+        docker.DockToRoot(MakeDockWithHorizontalDockable(resolver, "bottom1"), AnchorPosition.Bottom, minimized: true);
 
-        var right1 = MakeDockWithVerticalDockable("right1");
+        var right1 = MakeDockWithVerticalDockable(resolver, "right1");
         docker.DockToRoot(right1, AnchorPosition.Right);
-        docker.Dock(MakeDockWithVerticalDockable("right2"), new Anchor(AnchorPosition.Right, right1.Dockables[0]));
-        docker.Dock(MakeDockWithVerticalDockable("right3"), new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
+        docker.Dock(
+            MakeDockWithVerticalDockable(resolver, "right2"),
+            new Anchor(AnchorPosition.Right, right1.Dockables[0]));
+        docker.Dock(
+            MakeDockWithVerticalDockable(resolver, "right3"),
+            new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
 
         docker.Root.DumpGroup();
 
         return docker;
     }
 
-    private static ToolDock MakeDockWithVerticalDockable(string dockableId)
+    private static ToolDock MakeDockWithVerticalDockable(IResolver resolver, string dockableId)
     {
         var dock = ToolDock.New();
         var dockable = Dockable.New(dockableId);
+        dockable.ViewModel = resolver.Resolve<Func<IDockable, DockableInfoViewModel>>()(dockable);
         dockable.PreferredWidth = new Width(300);
         dock.AdoptDockable(dockable);
         return dock;
     }
 
-    private static ToolDock MakeDockWithHorizontalDockable(string dockableId)
+    private static ToolDock MakeDockWithHorizontalDockable(IResolver resolver, string dockableId)
     {
         var dock = ToolDock.New();
         var dockable = Dockable.New(dockableId);
+        dockable.ViewModel = resolver.Resolve<Func<IDockable, DockableInfoViewModel>>()(dockable);
         dockable.PreferredHeight = new Height(200);
         dock.AdoptDockable(dockable);
         return dock;

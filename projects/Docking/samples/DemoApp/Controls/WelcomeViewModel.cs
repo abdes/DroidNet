@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Demo.Welcome;
+namespace DroidNet.Docking.Demo.Controls;
 
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;

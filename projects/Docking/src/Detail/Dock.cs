@@ -103,6 +103,8 @@ public abstract partial class Dock : IDock
         }
     }
 
+    public string GroupInfo => this.Group?.ToString() ?? string.Empty;
+
     internal DockGroup? Group { get; set; }
 
     public virtual void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last)
