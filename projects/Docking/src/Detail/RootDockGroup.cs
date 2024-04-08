@@ -169,11 +169,8 @@ internal sealed class RootDockGroup : DockGroup
     /// appended.
     /// </param>
     /// <param name="group">The group to be appended at the specified <paramref name="edge" />.</param>
-    private static void AppendToEdge(DockGroup edge, IDockGroup group)
-    {
-        var parent = edge.Second is null ? edge : edge.Second.AsDockGroup();
-        parent.AddGroupLast(group, edge.Orientation);
-    }
+    private static void AppendToEdge(DockGroup edge, IDockGroup group) =>
+        edge.AddGroupLast(group, edge.Orientation);
 
     /// <summary>Creates a new DockGroup with a Tray, and adds the specified dock to it.</summary>
     /// <param name="dock">The dock to be added to the new DockGroup.</param>
