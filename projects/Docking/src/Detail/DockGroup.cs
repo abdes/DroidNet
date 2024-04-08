@@ -118,7 +118,10 @@ internal partial class DockGroup : DockGroupBase
             this.Second = child.Second;
         }
 
-        this.Orientation = child.Orientation;
+        if (child.Orientation != DockGroupOrientation.Undetermined)
+        {
+            this.Orientation = child.Orientation;
+        }
 
         child.Parent = null;
     }
@@ -145,6 +148,7 @@ internal partial class DockGroup : DockGroupBase
         }
 
         secondChild.MigrateDocksToGroup(firstChild);
+        firstChild.Orientation = firstChild.Parent!.Orientation;
         this.RemoveGroup(secondChild);
     }
 
@@ -213,6 +217,11 @@ internal partial class DockGroup
                 $"group with Id={group} is not one of my(Id={this.DebugId.ToString(CultureInfo.InvariantCulture)}) children");
         }
 
+        if (!this.IsEdge)
+        {
+            this.Orientation = DockGroupOrientation.Undetermined;
+        }
+
         this.ConsolidateUp();
     }
 
@@ -253,6 +262,7 @@ internal partial class DockGroup
             this.Orientation = orientation;
             this.First = isFirst ? group : migrated;
             this.Second = isFirst ? migrated : group;
+            this.ConsolidateUp();
         }
         else if (this.first is null && this.second is null)
         {
@@ -277,17 +287,33 @@ internal partial class DockGroup
             // in it immediately, or full, and we need to expand it.
             if (isFirst)
             {
-                var firstImpl = this.first as DockGroup;
-                this.First = firstImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
+                if (this.First is null)
+                {
+                    this.First = group;
+                    this.ConsolidateUp();
+                }
+                else
+                {
+                    var expanded = this.First.AsDockGroup().ExpandToAdd(group, orientation, isFirst);
+                    this.First = expanded;
+                    expanded.ConsolidateUp();
+                }
+
+                return;
+            }
+
+            if (this.Second is null)
+            {
+                this.Second = group;
+                this.ConsolidateUp();
             }
             else
             {
-                var secondImpl = this.second as DockGroup;
-                this.Second = secondImpl?.ExpandToAdd(group, orientation, isFirst) ?? group;
+                var expanded = this.Second.AsDockGroup().ExpandToAdd(group, orientation, isFirst);
+                this.Second = expanded;
+                expanded.ConsolidateUp();
             }
         }
-
-        this.ConsolidateUp();
     }
 
     /// <summary>
@@ -304,7 +330,7 @@ internal partial class DockGroup
         {
             First = newGroupFirst ? newGroup : this,
             Second = newGroupFirst ? this : newGroup,
-            Orientation = this.Orientation == DockGroupOrientation.Undetermined ? orientation : this.Orientation,
+            Orientation = orientation == DockGroupOrientation.Undetermined ? this.Orientation : orientation,
         };
         newGroup.AsDockGroup().Orientation = orientation;
 
@@ -350,6 +376,7 @@ internal partial class DockGroup
                     firstImpl != null,
                     $"expecting {this.first} to be of a concrete implementation {nameof(DockGroup)}");
                 this.First = firstImpl.ExpandToAdd(group, orientation, !after);
+                this.First.AsDockGroup().ConsolidateUp();
             }
             else if (this.second == sibling)
             {
@@ -358,6 +385,7 @@ internal partial class DockGroup
                     secondImpl != null,
                     $"expecting {this.first} to be of a concrete implementation {nameof(DockGroup)}");
                 this.Second = secondImpl.ExpandToAdd(group, orientation, !after);
+                this.Second.AsDockGroup().ConsolidateUp();
             }
         }
         else
@@ -375,9 +403,9 @@ internal partial class DockGroup
             {
                 this.Second = group;
             }
-        }
 
-        this.ConsolidateUp();
+            this.ConsolidateUp();
+        }
     }
 }
 
@@ -538,6 +566,7 @@ internal partial class DockGroup
             {
                 First = hostGroup,
                 Second = afterGroup,
+                Orientation = this.Orientation,
             };
         }
 
