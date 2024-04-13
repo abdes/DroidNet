@@ -9,6 +9,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
+using DroidNet.Docking.Workspace;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>
@@ -21,11 +22,12 @@ public partial class DockTrayViewModel : ObservableObject
     private readonly ReadOnlyObservableCollection<IDock> docks;
     private readonly IDocker docker;
 
-    public DockTrayViewModel(IDockTray tray, Orientation orientation)
+    public DockTrayViewModel(TrayGroup tray, Orientation orientation)
     {
         this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
 
         this.Orientation = orientation;
+
         this.docker = tray.Docker;
         this.docks = tray.Docks;
 

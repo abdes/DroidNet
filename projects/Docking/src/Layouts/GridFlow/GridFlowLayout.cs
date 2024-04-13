@@ -8,23 +8,22 @@ using System.Diagnostics;
 using DroidNet.Docking;
 using DroidNet.Docking.Controls;
 using DroidNet.Docking.Layouts;
+using DroidNet.Docking.Workspace;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
-    private ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
+    public ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
-    public override ResizableVectorGrid Build(IDockGroup root) => ((GridFlow)base.Build(root)).Grid;
-
-    protected override Flow StartLayout(IDockGroup root)
-        => new GridFlow(root)
+    public override Flow StartLayout(ILayoutSegment segment)
+        => new GridFlow(segment)
         {
-            Description = $"Root Grid {root}",
-            Grid = new ResizableVectorGrid(ToGridOrientation(root.Orientation)) { Name = "Workspace Root" },
+            Description = $"Root Grid {segment}",
+            Grid = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = "Workspace Root" },
         };
 
-    protected override void PlaceDock(IDock dock)
+    public override void PlaceDock(IDock dock)
     {
         Debug.WriteLine($"Place dock {dock} with Width={dock.Width} and Height={dock.Height}");
 
@@ -34,60 +33,64 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         this.CurrentGrid.AddResizableItem(dockViewFactory.CreateViewForDock(dock), gridItemLength, 32);
     }
 
-    protected override void PlaceTray(IDockTray tray)
+    public override void PlaceTray(TrayGroup tray)
     {
-        Debug.Assert(!tray.HasNoDocks, "don't place a tray if it is empty");
+        Debug.Assert(tray.Docks.Count != 0, "don't place a tray if it is empty");
 
         Debug.WriteLine($"Place Tray: {tray}");
-        var trayOrientation = tray.IsVertical ? Orientation.Vertical : Orientation.Horizontal;
+        var trayOrientation = tray.Orientation == DockGroupOrientation.Vertical
+            ? Orientation.Vertical
+            : Orientation.Horizontal;
         var trayViewModel = new DockTrayViewModel(tray, trayOrientation);
         var trayControl = new DockTray { ViewModel = trayViewModel };
         this.CurrentGrid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
     }
 
-    protected override Flow StartFlow(IDockGroup group)
+    public override Flow StartFlow(ILayoutSegment segment)
     {
-        Debug.WriteLine($"New Grid for: {group}");
+        Debug.WriteLine($"New Grid for: {segment}");
 
-        var newGrid = new ResizableVectorGrid(ToGridOrientation(group.Orientation)) { Name = group.ToString() };
+        var newGrid = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = segment.ToString() };
 
-        var stretch = group.ShouldStretch();
-        var length = stretch
+        var length = segment.StretchToFill
             ? new GridLength(1, GridUnitType.Star)
-            : GetGridLengthForDockGroup(group, newGrid.Orientation);
+            : GetGridLengthForSegment(segment, newGrid.Orientation);
 
         this.CurrentGrid.AddResizableItem(newGrid, length, 32);
 
-        return new GridFlow(group)
+        return new GridFlow(segment)
         {
-            Description = $"Grid for {group}",
+            Description = $"Grid for {segment}",
             Grid = newGrid,
         };
     }
 
-    protected override void EndFlow() => Debug.WriteLine($"Close flow {this.CurrentGrid}");
+    public override void EndFlow() => Debug.WriteLine($"Close flow {this.CurrentGrid}");
 
-    protected override void EndLayout() => Debug.WriteLine("Layout ended");
+    public override void EndLayout() => Debug.WriteLine("Layout ended");
 
     private static Orientation ToGridOrientation(DockGroupOrientation orientation)
         => orientation == DockGroupOrientation.Vertical ? Orientation.Vertical : Orientation.Horizontal;
 
-    private static GridLength GetGridLengthForDockGroup(IDockGroup group, Orientation gridOrientation)
+    private static GridLength GetGridLengthForSegment(ILayoutSegment segment, Orientation gridOrientation)
     {
-        if (gridOrientation == Orientation.Vertical)
+        if (segment is LayoutDockGroup group)
         {
-            var firstDock = group.Docks.FirstOrDefault(d => !d.Width.IsNullOrEmpty);
-            if (firstDock != null)
+            if (gridOrientation == Orientation.Vertical)
             {
-                return firstDock.Width.ToGridLength();
+                var firstDock = group.Docks.FirstOrDefault(d => !d.Width.IsNullOrEmpty);
+                if (firstDock != null)
+                {
+                    return firstDock.Width.ToGridLength();
+                }
             }
-        }
-        else
-        {
-            var firstDock = group.Docks.FirstOrDefault(d => !d.Height.IsNullOrEmpty);
-            if (firstDock != null)
+            else
             {
-                return firstDock.Height.ToGridLength();
+                var firstDock = group.Docks.FirstOrDefault(d => !d.Height.IsNullOrEmpty);
+                if (firstDock != null)
+                {
+                    return firstDock.Height.ToGridLength();
+                }
             }
         }
 
@@ -100,7 +103,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         return this.CurrentFlow.IsHorizontal ? dock.Width.ToGridLength() : dock.Height.ToGridLength();
     }
 
-    private sealed class GridFlow(IDockGroup group) : Flow(group)
+    private sealed class GridFlow(ILayoutSegment segment) : Flow(segment)
     {
         public required ResizableVectorGrid Grid { get; init; }
     }

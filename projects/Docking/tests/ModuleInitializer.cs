@@ -6,7 +6,7 @@ namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using DroidNet.Docking.Detail;
+using DroidNet.Docking.Workspace;
 using VerifyTests.DiffPlex;
 
 /// <summary>Module level initialization code for the test frameworks.</summary>
@@ -20,9 +20,8 @@ public static class ModuleInitializer
         VerifyDiffPlex.Initialize(OutputType.Compact);
 
         // Ignore auto-incremented IDs that will make test output unpredictable
-        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(DockGroup.DebugId));
+        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(LayoutDockGroup.DebugId));
         VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(IDockGroup.Docker));
-        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(DockGroup.Sibling));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Id));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Docker));
     }

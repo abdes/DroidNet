@@ -5,6 +5,7 @@
 namespace DroidNet.Docking.Demo.Workspace;
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Docking.Layouts.GridFlow;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -16,7 +17,7 @@ public partial class WorkspaceViewModel : ObservableObject
     [ObservableProperty]
     private UIElement? workspaceContent;
 
-    public WorkspaceViewModel(IDocker docker, LayoutEngine layout)
+    public WorkspaceViewModel(IDocker docker, GridFlowLayout layout)
     {
         this.UpdateContent(docker, layout);
 
@@ -29,9 +30,10 @@ public partial class WorkspaceViewModel : ObservableObject
         };
     }
 
-    private void UpdateContent(IDocker docker, LayoutEngine layout)
+    private void UpdateContent(IDocker docker, GridFlowLayout layout)
     {
-        var content = layout.Build(docker.Root);
+        docker.Layout(layout);
+        var content = layout.CurrentGrid;
         this.WorkspaceContent = content as UIElement ??
                                 throw new InvalidOperationException(
                                     "the provided layout engine does not produce a UIElement");

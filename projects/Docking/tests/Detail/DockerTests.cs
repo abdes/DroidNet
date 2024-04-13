@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Detail;
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Workspace;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 
@@ -29,16 +30,13 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void Dock_Works_WhenStateIsNotUnDocked()
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var anchorDock = new SimpleDock();
-        root.DockLeft(anchorDock);
+        this.sut.Dock(anchorDock, new AnchorLeft());
         anchorDock.AdoptDockable(Dockable.New("anchor"));
         using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
 
-        using var group = new DockGroup(this.sut);
         using var dock = new SimpleDock();
-        group.AddDock(dock);
-        dock.State = DockingState.Pinned;
+        this.sut.Dock(anchorDock, new AnchorRight());
 
         // Act
         this.sut.Dock(dock, anchor);
@@ -66,7 +64,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         // Act
         _ = act.Should()
-            .Throw<ArgumentException>()
+            .Throw<InvalidOperationException>()
             .Which.Message.Contains("does not belong to a group", StringComparison.Ordinal);
     }
 
@@ -76,9 +74,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void Dock_WhenDone(bool minimized, DockingState state)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var anchorDock = new SimpleDock();
-        root.DockLeft(anchorDock);
+        this.sut.Dock(anchorDock, new AnchorLeft());
         anchorDock.AdoptDockable(Dockable.New("anchor"));
         using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
         using var dock = new SimpleDock();
@@ -109,7 +106,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         using var dock = new NoCloseDock();
 
         // Act
-        this.sut.DockToCenter(dock);
+        this.sut.Dock(dock, new Anchor(AnchorPosition.Center));
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
 #endif
@@ -122,7 +119,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         using var dock = new NoMinimizeDock();
 
         // Act
-        this.sut.DockToCenter(dock);
+        this.sut.Dock(dock, new Anchor(AnchorPosition.Center));
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
 #endif
@@ -143,7 +140,7 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         };
 
         // Act
-        this.sut.DockToCenter(dock);
+        this.sut.Dock(dock, new Anchor(AnchorPosition.Center));
 
         // Assert
         _ = layoutChangedCalled.Should().BeTrue();
@@ -154,34 +151,15 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void DockToRoot_Works_WhenStateIsNotUnDocked()
     {
         // Setup
-        using var group = new DockGroup(this.sut);
         using var dock = new SimpleDock();
-        group.AddDock(dock);
-        dock.State = DockingState.Pinned;
+        this.sut.Dock(dock, new AnchorLeft());
+        _ = dock.State.Should().NotBe(DockingState.Undocked);
 
         // Act
-        this.sut.DockToRoot(dock, AnchorPosition.Left);
+        this.sut.Dock(dock, new AnchorLeft());
 
         _ = dock.Group.Should().NotBeNull();
         _ = dock.Anchor.Should().BeEquivalentTo(new Anchor(AnchorPosition.Left));
-    }
-
-    [TestMethod]
-    [DataRow(AnchorPosition.With)]
-    [DataRow(AnchorPosition.Center)]
-    public void DockToRoot_InvalidPosition_Throws(AnchorPosition position)
-    {
-        var act = () =>
-        {
-            // Setup
-            using var dock = new SimpleDock();
-
-            // Act
-            this.sut.DockToRoot(dock, position);
-        };
-
-        // Assert
-        _ = act.Should().Throw<InvalidOperationException>("it's an invalid position for root edge docking");
     }
 
     [TestMethod]
@@ -193,14 +171,14 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     [DataRow(AnchorPosition.Right, false, DockingState.Pinned)]
     [DataRow(AnchorPosition.Top, false, DockingState.Pinned)]
     [DataRow(AnchorPosition.Bottom, false, DockingState.Pinned)]
+    [DataRow(AnchorPosition.Center, false, DockingState.Pinned)]
     public void DockToRoot_WhenDone(AnchorPosition position, bool minimized, DockingState state)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
 
         // Act
-        this.sut.DockToRoot(dock, position, minimized);
+        this.sut.Dock(dock, new Anchor(position), minimized);
 
         // Assert
         _ = dock.State.Should().Be(state);
@@ -248,9 +226,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void MinimizeDock_MinimizesDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
 
         dock.State = currentState;
 
@@ -288,9 +265,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void PinDock_PinsDockAndRemovesFromTray(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
         if (currentState is DockingState.Minimized or DockingState.Floating)
         {
             this.sut.MinimizeDock(dock);
@@ -335,9 +311,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
         bool changeSize)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
 
         if (currentState is DockingState.Minimized or DockingState.Floating)
         {
@@ -376,9 +351,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void ResizeDock_WhenSameSize_NoLayoutChange()
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
         dock.State = DockingState.Pinned;
         dock.Width = new Width(200);
         dock.Height = new Height(700);
@@ -418,9 +392,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void CloseDock_ClosesDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
         if (currentState is DockingState.Minimized or DockingState.Floating)
         {
             this.sut.MinimizeDock(dock);
@@ -475,9 +448,8 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void FloatDock_FloatsDock(DockingState currentState)
     {
         // Setup
-        using var root = new RootDockGroup(this.sut);
         using var dock = new SimpleDock();
-        root.DockLeft(dock);
+        this.sut.Dock(dock, new AnchorLeft());
         if (currentState is DockingState.Minimized or DockingState.Floating)
         {
             this.sut.MinimizeDock(dock);

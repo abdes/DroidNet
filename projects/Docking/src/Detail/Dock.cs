@@ -8,9 +8,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Docking;
+using DroidNet.Docking.Workspace;
 
 /// <summary>
-/// Represents a Dock , which holds a <see cref="Dockable" />, and must be inside a <see cref="DockGroup" />.
+/// Represents a Dock , which holds a <see cref="Dockable" />, and must be inside a <see cref="LayoutDockGroup" />.
 /// </summary>
 /// <remarks>
 /// Dock is an abstract type. Instances of a concrete `Dock`, can only be created through its <see cref="Factory" />, to ensure

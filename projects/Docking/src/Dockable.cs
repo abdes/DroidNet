@@ -6,10 +6,9 @@ namespace DroidNet.Docking;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using DroidNet.Docking.Detail;
 
 /// <summary>
-/// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="DockGroup" />.
+/// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="IDock">dock</see>.
 /// </summary>
 public partial class Dockable : INotifyPropertyChanged, IDockable
 {
