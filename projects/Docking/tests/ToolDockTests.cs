@@ -4,11 +4,13 @@
 
 namespace DroidNet.Docking;
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [TestCategory(nameof(ToolDock))]
+[ExcludeFromCodeCoverage]
 public class ToolDockTests
 {
     [TestMethod]

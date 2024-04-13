@@ -4,10 +4,12 @@
 
 namespace DroidNet.Docking.Detail;
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 
 [TestClass]
 [TestCategory(nameof(Length))]
+[ExcludeFromCodeCoverage]
 public class LengthTests
 {
     [TestMethod]
