@@ -10,7 +10,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Docking;
-using DroidNet.Docking.Utils;
 using Windows.Foundation;
 
 /// <summary>The ViewModel for a dock panel.</summary>
@@ -73,56 +72,56 @@ public partial class DockPanelViewModel : ObservableRecipient
 
     public void DockToRootLeft()
     {
-        this.docker.DockToRoot(this.dock, AnchorPosition.Left);
-        this.docker.Root.DumpGroup();
+        this.docker.Dock(this.dock, new AnchorLeft());
+        this.docker.DumpWorkspace();
     }
 
     public void DockToRootTop()
     {
-        this.docker.DockToRoot(this.dock, AnchorPosition.Top);
-        this.docker.Root.DumpGroup();
+        this.docker.Dock(this.dock, new AnchorTop());
+        this.docker.DumpWorkspace();
     }
 
     public void DockToRootRight()
     {
-        this.docker.DockToRoot(this.dock, AnchorPosition.Right);
-        this.docker.Root.DumpGroup();
+        this.docker.Dock(this.dock, new AnchorRight());
+        this.docker.DumpWorkspace();
     }
 
     public void DockToRootBottom()
     {
-        this.docker.DockToRoot(this.dock, AnchorPosition.Bottom);
-        this.docker.Root.DumpGroup();
+        this.docker.Dock(this.dock, new AnchorBottom());
+        this.docker.DumpWorkspace();
     }
 
     public void AcceptDockBeingDockedLeft()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Left, this.dock.ActiveDockable));
-        this.docker.Root.DumpGroup();
+        this.docker.DumpWorkspace();
     }
 
     public void AcceptDockBeingDockedTop()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Top, this.dock.ActiveDockable));
-        this.docker.Root.DumpGroup();
+        this.docker.DumpWorkspace();
     }
 
     public void AcceptDockBeingDockedRight()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Right, this.dock.ActiveDockable));
-        this.docker.Root.DumpGroup();
+        this.docker.DumpWorkspace();
     }
 
     public void AcceptDockBeingDockedBottom()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Bottom, this.dock.ActiveDockable));
-        this.docker.Root.DumpGroup();
+        this.docker.DumpWorkspace();
     }
 
     public void AcceptDockBeingDocked()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.With, this.dock.ActiveDockable));
-        this.docker.Root.DumpGroup();
+        this.docker.DumpWorkspace();
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleDockingMode))]

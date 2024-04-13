@@ -2,17 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
+namespace DroidNet.Docking.Workspace;
 
 using System.Collections.ObjectModel;
 
-public interface IDockTray
+public interface IDockGroup : ILayoutSegment
 {
     public ReadOnlyObservableCollection<IDock> Docks { get; }
-
-    IDocker Docker { get; }
-
-    bool HasNoDocks { get; }
-
-    bool IsVertical { get; }
 }

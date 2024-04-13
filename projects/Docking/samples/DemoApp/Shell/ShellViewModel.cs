@@ -31,6 +31,6 @@ public partial class ShellViewModel : ObservableObject
     {
         var dockViewFactory = this.resolver.Resolve<IDockViewFactory>();
         var layout = new GridFlowLayout(dockViewFactory);
-        return this.resolver.Resolve<Func<IDocker, LayoutEngine, WorkspaceViewModel>>()(docker, layout);
+        return this.resolver.Resolve<Func<IDocker, GridFlowLayout, WorkspaceViewModel>>()(docker, layout);
     }
 }

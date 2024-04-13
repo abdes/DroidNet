@@ -7,9 +7,8 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Docking;
-using DroidNet.Docking.Detail;
 using DroidNet.Docking.Layouts;
-using DroidNet.Docking.Utils;
+using DroidNet.Docking.Workspace;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -122,7 +121,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         dockable.ViewModel = viewModel;
         this.centerDock.AdoptDockable(dockable);
 
-        this.docker.DockToCenter(this.centerDock);
+        this.docker.Dock(this.centerDock, new Anchor(AnchorPosition.Center));
 
         LogAppLoaded(this.logger, viewModel);
     }
@@ -186,7 +185,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         finally
         {
             this.deferredDockables.Clear();
-            this.docker.Root.DumpGroup();
+            this.docker.DumpWorkspace();
         }
     }
 
@@ -219,7 +218,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     {
         var dock = ToolDock.New();
         dock.AdoptDockable(dockable);
-        this.docker.DockToRoot(dock, dockingInfo.Position, dockingInfo.IsMinimized);
+        this.docker.Dock(dock, new Anchor(dockingInfo.Position), dockingInfo.IsMinimized);
     }
 
     private void DockRelativeTo(Dockable dockable, RoutedDockable.DockingInfo dockingInfo, IDockable relativeDockable)

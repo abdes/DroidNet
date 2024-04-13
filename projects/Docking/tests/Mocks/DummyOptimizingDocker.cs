@@ -6,6 +6,7 @@ namespace DroidNet.Docking.Mocks;
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
+using DroidNet.Docking.Workspace;
 
 [ExcludeFromCodeCoverage]
 public class DummyOptimizingDocker : DummyDocker, IOptimizingDocker

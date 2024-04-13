@@ -4,6 +4,8 @@
 
 namespace DroidNet.Docking.Detail;
 
+using DroidNet.Docking.Workspace;
+
 internal static class InternalImplExtensions
 {
     internal static Dockable AsDockable(this IDockable dockable)
@@ -16,8 +18,8 @@ internal static class InternalImplExtensions
             $"expecting an object that I created, i.e. `{typeof(Dock)}`, but got an object of type `{dock.GetType()}`",
             nameof(dock));
 
-    internal static DockGroup AsDockGroup(this IDockGroup group)
-        => group as DockGroup ?? throw new ArgumentException(
-            $"expecting an object that I created, i.e. `{typeof(DockGroup)}`, but got an object of type `{group.GetType()}`",
+    internal static LayoutDockGroup AsDockGroup(this IDockGroup group)
+        => group as LayoutDockGroup ?? throw new ArgumentException(
+            $"expecting an object that I created, i.e. `{typeof(LayoutDockGroup)}`, but got an object of type `{group.GetType()}`",
             nameof(group));
 }

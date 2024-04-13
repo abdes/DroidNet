@@ -5,7 +5,9 @@
 namespace DroidNet.Docking.Detail;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking;
 using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Workspace;
 using FluentAssertions;
 
 [TestClass]
@@ -16,12 +18,11 @@ public class TrayGroupTests : IDisposable
     private readonly DummyDocker docker = new();
     private readonly TrayGroup tray;
 
-    public TrayGroupTests() => this.tray = new TrayGroup(AnchorPosition.Left, this.docker);
+    public TrayGroupTests() => this.tray = new TrayGroup(this.docker, AnchorPosition.Left);
 
     [TestCleanup]
     public void Dispose()
     {
-        this.tray.Dispose();
         this.docker.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -30,7 +31,7 @@ public class TrayGroupTests : IDisposable
     public void Constructor_ShouldThrowException_WhenPositionIsWith()
     {
         // Act
-        var act = () => _ = new TrayGroup(AnchorPosition.With, this.docker);
+        var act = () => _ = new TrayGroup(this.docker, AnchorPosition.With);
 
         // Assert
         _ = act.Should().Throw<ArgumentException>().WithMessage("cannot use With for a TrayGroup*");
@@ -44,20 +45,11 @@ public class TrayGroupTests : IDisposable
     public void Orientation_ShouldBeDeterminedFromPosition(AnchorPosition position, DockGroupOrientation orientation)
     {
         // Act
-        using var sut = new TrayGroup(position, new DummyDocker());
+        var sut = new TrayGroup(new DummyDocker(), position);
 
         // Assert
         _ = sut.Orientation.Should().Be(orientation);
     }
-
-    [TestMethod]
-    public void IsEmpty_ShouldReturnTrue_WhenNoDocks() => this.tray.HasNoDocks.Should().BeTrue();
-
-    [TestMethod]
-    public void First_ShouldAlwaysReturnNull() => this.tray.First.Should().BeNull();
-
-    [TestMethod]
-    public void Second_ShouldAlwaysReturnNull() => this.tray.Second.Should().BeNull();
 
     [TestMethod]
     public void AddDock_ShouldAddDockToDocks()

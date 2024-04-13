@@ -1,33 +1,47 @@
 ﻿{
-  Items: [
-    {
-      HasNoDocks: false,
-      Docks: [
-        {
-          CanMinimize: true,
-          CanClose: true,
-          Anchor: {},
-          State: Minimized,
-          Width: {
-            IsNullOrEmpty: true
-          },
-          Height: {
-            IsNullOrEmpty: true
+  Grid: {
+    Items: [
+      {
+        Orientation: Vertical,
+        Docks: [
+          {
+            CanMinimize: true,
+            CanClose: true,
+            Anchor: {},
+            State: Minimized,
+            Width: {
+              IsNullOrEmpty: true
+            },
+            Height: {
+              IsNullOrEmpty: true
+            },
+            GroupInfo: ? 7 (4)
           }
-        }
-      ],
-      Orientation: Vertical,
-      IsCenter: false,
-      IsEdge: false,
-      IsHorizontal: false,
-      IsVertical: true
-    },
-    {
-      Direction: TopToBottom,
-      Items: [
-        {
-          Dockables: [
-            {
+        ],
+        StretchToFill: false,
+        Docker: {},
+        DebugId: 5
+      },
+      {
+        Direction: TopToBottom,
+        Items: [
+          {
+            Dockables: [
+              {
+                Title: left1,
+                Id: left1,
+                MinimizedTitle: left1,
+                TabbedTitle: left1,
+                PreferredWidth: {
+                  IsNullOrEmpty: true
+                },
+                PreferredHeight: {
+                  IsNullOrEmpty: true
+                },
+                IsActive: true
+              }
+            ],
+            ActiveDockable: {
               Title: left1,
               Id: left1,
               MinimizedTitle: left1,
@@ -39,35 +53,36 @@
                 IsNullOrEmpty: true
               },
               IsActive: true
-            }
-          ],
-          ActiveDockable: {
-            Title: left1,
-            Id: left1,
-            MinimizedTitle: left1,
-            TabbedTitle: left1,
-            PreferredWidth: {
+            },
+            CanMinimize: true,
+            CanClose: true,
+            Anchor: {},
+            State: Pinned,
+            Width: {
               IsNullOrEmpty: true
             },
-            PreferredHeight: {
+            Height: {
               IsNullOrEmpty: true
             },
-            IsActive: true
+            GroupInfo: ↕ 6 (2,3)
           },
-          CanMinimize: true,
-          CanClose: true,
-          Anchor: {},
-          State: Pinned,
-          Width: {
-            IsNullOrEmpty: true
-          },
-          Height: {
-            IsNullOrEmpty: true
-          }
-        },
-        {
-          Dockables: [
-            {
+          {
+            Dockables: [
+              {
+                Title: left2,
+                Id: left2,
+                MinimizedTitle: left2,
+                TabbedTitle: left2,
+                PreferredWidth: {
+                  IsNullOrEmpty: true
+                },
+                PreferredHeight: {
+                  IsNullOrEmpty: true
+                },
+                IsActive: true
+              }
+            ],
+            ActiveDockable: {
               Title: left2,
               Id: left2,
               MinimizedTitle: left2,
@@ -79,154 +94,118 @@
                 IsNullOrEmpty: true
               },
               IsActive: true
-            }
-          ],
-          ActiveDockable: {
-            Title: left2,
-            Id: left2,
-            MinimizedTitle: left2,
-            TabbedTitle: left2,
-            PreferredWidth: {
+            },
+            CanMinimize: true,
+            CanClose: true,
+            Anchor: {
+              Position: Bottom,
+              RelativeTo: {
+                Title: left1,
+                Id: left1,
+                MinimizedTitle: left1,
+                TabbedTitle: left1,
+                PreferredWidth: {
+                  IsNullOrEmpty: true
+                },
+                PreferredHeight: {
+                  IsNullOrEmpty: true
+                },
+                Owner: {
+                  Dockables: [],
+                  CanMinimize: true,
+                  CanClose: true,
+                  Anchor: {},
+                  State: Pinned,
+                  Width: {
+                    IsNullOrEmpty: true
+                  },
+                  Height: {
+                    IsNullOrEmpty: true
+                  },
+                  GroupInfo: ↕ 6 (2,3)
+                },
+                IsActive: true
+              }
+            },
+            State: Pinned,
+            Width: {
               IsNullOrEmpty: true
             },
-            PreferredHeight: {
+            Height: {
               IsNullOrEmpty: true
             },
-            IsActive: true
+            GroupInfo: ↕ 6 (2,3)
+          }
+        ]
+      },
+      {
+        CanMinimize: true,
+        CanClose: true,
+        Anchor: {},
+        State: Pinned,
+        Width: {
+          IsNullOrEmpty: true
+        },
+        Height: {
+          IsNullOrEmpty: true
+        },
+        GroupInfo: ? 9 (5)
+      },
+      {
+        Direction: TopToBottom,
+        Items: [
+          {
+            CanMinimize: true,
+            CanClose: true,
+            Anchor: {
+              Position: Top
+            },
+            State: Pinned,
+            Width: {
+              IsNullOrEmpty: true
+            },
+            Height: {
+              IsNullOrEmpty: true
+            },
+            GroupInfo: ? 14 (6)
           },
-          CanMinimize: true,
-          CanClose: true,
-          Anchor: {
-            Position: Bottom,
-            RelativeTo: {
-              Title: left1,
-              Id: left1,
-              MinimizedTitle: left1,
-              TabbedTitle: left1,
-              PreferredWidth: {
-                IsNullOrEmpty: true
-              },
-              PreferredHeight: {
-                IsNullOrEmpty: true
-              },
-              Owner: {
-                Dockables: [],
-                CanMinimize: true,
-                CanClose: true,
-                Anchor: {},
+          {
+            Items: [
+              {
+                CanMinimize: false,
+                CanClose: false,
+                Anchor: {
+                  Position: Center
+                },
                 State: Pinned,
                 Width: {
                   IsNullOrEmpty: true
                 },
                 Height: {
                   IsNullOrEmpty: true
-                }
-              },
-              IsActive: true
-            }
-          },
-          State: Pinned,
-          Width: {
-            IsNullOrEmpty: true
-          },
-          Height: {
-            IsNullOrEmpty: true
-          }
-        }
-      ]
-    },
-    {
-      CanMinimize: true,
-      CanClose: true,
-      Anchor: {},
-      State: Pinned,
-      Width: {
-        IsNullOrEmpty: true
-      },
-      Height: {
-        IsNullOrEmpty: true
-      }
-    },
-    {
-      Direction: TopToBottom,
-      Items: [
-        {
-          CanMinimize: true,
-          CanClose: true,
-          Anchor: {
-            Position: Top
-          },
-          State: Pinned,
-          Width: {
-            IsNullOrEmpty: true
-          },
-          Height: {
-            IsNullOrEmpty: true
-          }
-        },
-        {
-          Items: [
-            {
-              CanMinimize: false,
-              CanClose: false,
-              Width: {
-                IsNullOrEmpty: true
-              },
-              Height: {
-                IsNullOrEmpty: true
-              }
-            },
-            {
-              Direction: TopToBottom,
-              Items: [
-                {
-                  Dockables: [
-                    {
-                      Title: right1,
-                      Id: right1,
-                      MinimizedTitle: right1,
-                      TabbedTitle: right1,
-                      PreferredWidth: {
-                        IsNullOrEmpty: true
-                      },
-                      PreferredHeight: {
-                        IsNullOrEmpty: true
-                      },
-                      IsActive: true
-                    }
-                  ],
-                  ActiveDockable: {
-                    Title: right1,
-                    Id: right1,
-                    MinimizedTitle: right1,
-                    TabbedTitle: right1,
-                    PreferredWidth: {
-                      IsNullOrEmpty: true
-                    },
-                    PreferredHeight: {
-                      IsNullOrEmpty: true
-                    },
-                    IsActive: true
-                  },
-                  CanMinimize: true,
-                  CanClose: true,
-                  Anchor: {
-                    Position: Right
-                  },
-                  State: Pinned,
-                  Width: {
-                    IsNullOrEmpty: true
-                  },
-                  Height: {
-                    IsNullOrEmpty: true
-                  }
                 },
-                {
-                  CanMinimize: true,
-                  CanClose: true,
-                  Anchor: {
-                    Position: Bottom,
-                    RelativeTo: {
+                GroupInfo: ○ ↔ * 3 (1)
+              },
+              {
+                Direction: TopToBottom,
+                Items: [
+                  {
+                    Dockables: [
+                      {
+                        Title: right1,
+                        Id: right1,
+                        MinimizedTitle: right1,
+                        TabbedTitle: right1,
+                        PreferredWidth: {
+                          IsNullOrEmpty: true
+                        },
+                        PreferredHeight: {
+                          IsNullOrEmpty: true
+                        },
+                        IsActive: true
+                      }
+                    ],
+                    ActiveDockable: {
                       Title: right1,
                       Id: right1,
                       MinimizedTitle: right1,
@@ -237,52 +216,8 @@
                       PreferredHeight: {
                         IsNullOrEmpty: true
                       },
-                      Owner: {
-                        Dockables: [],
-                        CanMinimize: true,
-                        CanClose: true,
-                        Anchor: {
-                          Position: Right
-                        },
-                        State: Pinned,
-                        Width: {
-                          IsNullOrEmpty: true
-                        },
-                        Height: {
-                          IsNullOrEmpty: true
-                        }
-                      },
                       IsActive: true
-                    }
-                  },
-                  State: Pinned,
-                  Width: {
-                    IsNullOrEmpty: true
-                  },
-                  Height: {
-                    IsNullOrEmpty: true
-                  }
-                }
-              ]
-            },
-            {
-              CanMinimize: true,
-              CanClose: true,
-              Anchor: {
-                Position: Right,
-                RelativeTo: {
-                  Title: right1,
-                  Id: right1,
-                  MinimizedTitle: right1,
-                  TabbedTitle: right1,
-                  PreferredWidth: {
-                    IsNullOrEmpty: true
-                  },
-                  PreferredHeight: {
-                    IsNullOrEmpty: true
-                  },
-                  Owner: {
-                    Dockables: [],
+                    },
                     CanMinimize: true,
                     CanClose: true,
                     Anchor: {
@@ -294,46 +229,129 @@
                     },
                     Height: {
                       IsNullOrEmpty: true
-                    }
+                    },
+                    GroupInfo: ↕ 23 (8,10)
                   },
-                  IsActive: true
-                }
+                  {
+                    CanMinimize: true,
+                    CanClose: true,
+                    Anchor: {
+                      Position: Bottom,
+                      RelativeTo: {
+                        Title: right1,
+                        Id: right1,
+                        MinimizedTitle: right1,
+                        TabbedTitle: right1,
+                        PreferredWidth: {
+                          IsNullOrEmpty: true
+                        },
+                        PreferredHeight: {
+                          IsNullOrEmpty: true
+                        },
+                        Owner: {
+                          Dockables: [],
+                          CanMinimize: true,
+                          CanClose: true,
+                          Anchor: {
+                            Position: Right
+                          },
+                          State: Pinned,
+                          Width: {
+                            IsNullOrEmpty: true
+                          },
+                          Height: {
+                            IsNullOrEmpty: true
+                          },
+                          GroupInfo: ↕ 23 (8,10)
+                        },
+                        IsActive: true
+                      }
+                    },
+                    State: Pinned,
+                    Width: {
+                      IsNullOrEmpty: true
+                    },
+                    Height: {
+                      IsNullOrEmpty: true
+                    },
+                    GroupInfo: ↕ 23 (8,10)
+                  }
+                ]
               },
-              State: Pinned,
-              Width: {
-                IsNullOrEmpty: true
-              },
-              Height: {
-                IsNullOrEmpty: true
+              {
+                CanMinimize: true,
+                CanClose: true,
+                Anchor: {
+                  Position: Right,
+                  RelativeTo: {
+                    Title: right1,
+                    Id: right1,
+                    MinimizedTitle: right1,
+                    TabbedTitle: right1,
+                    PreferredWidth: {
+                      IsNullOrEmpty: true
+                    },
+                    PreferredHeight: {
+                      IsNullOrEmpty: true
+                    },
+                    Owner: {
+                      Dockables: [],
+                      CanMinimize: true,
+                      CanClose: true,
+                      Anchor: {
+                        Position: Right
+                      },
+                      State: Pinned,
+                      Width: {
+                        IsNullOrEmpty: true
+                      },
+                      Height: {
+                        IsNullOrEmpty: true
+                      },
+                      GroupInfo: ↕ 23 (8,10)
+                    },
+                    IsActive: true
+                  }
+                },
+                State: Pinned,
+                Width: {
+                  IsNullOrEmpty: true
+                },
+                Height: {
+                  IsNullOrEmpty: true
+                },
+                GroupInfo: ↔ 24 (9)
               }
-            }
-          ]
-        },
-        {
-          HasNoDocks: false,
-          Docks: [
-            {
-              CanMinimize: true,
-              CanClose: true,
-              Anchor: {
-                Position: Bottom
-              },
-              State: Minimized,
-              Width: {
-                IsNullOrEmpty: true
-              },
-              Height: {
-                IsNullOrEmpty: true
+            ]
+          },
+          {
+            Orientation: Horizontal,
+            Docks: [
+              {
+                CanMinimize: true,
+                CanClose: true,
+                Anchor: {
+                  Position: Bottom
+                },
+                State: Minimized,
+                Width: {
+                  IsNullOrEmpty: true
+                },
+                Height: {
+                  IsNullOrEmpty: true
+                },
+                GroupInfo: ? 18 (7)
               }
-            }
-          ],
-          Orientation: Horizontal,
-          IsCenter: false,
-          IsEdge: false,
-          IsHorizontal: true,
-          IsVertical: false
-        }
-      ]
-    }
-  ]
+            ],
+            StretchToFill: false,
+            Docker: {},
+            DebugId: 16
+          }
+        ]
+      }
+    ]
+  },
+  Description: Root Grid ↔ * 2,
+  IsHorizontal: true,
+  IsVertical: false
 }

@@ -60,7 +60,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                         var options = ((NavigationEvent)@event).Options;
                         if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
                         {
-                            this.Content = layout.Build(docker.Root);
+                            docker.Layout(layout);
+                            this.Content = layout.CurrentGrid;
                         }
                         else
                         {

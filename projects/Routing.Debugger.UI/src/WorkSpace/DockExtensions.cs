@@ -55,42 +55,19 @@ public static class DockExtensions
             return new GridLength(1, GridUnitType.Star);
         }
 
-        double numericValue;
-        GridUnitType type;
-
         if (length.Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
-            numericValue = 1;
-            type = GridUnitType.Auto;
+            return new GridLength(1, GridUnitType.Auto);
         }
-        else if (length[^1] == '*')
+
+        var isStar = length[^1] == '*';
+        var numericPart = isStar ? length[..^1] : length;
+        if (double.TryParse(numericPart, NumberStyles.Any, CultureInfo.InvariantCulture, out var numericValue))
         {
-            length = length.Remove(length.Length - 1);
-            if (string.IsNullOrEmpty(length))
-            {
-                numericValue = 1;
-            }
-            else if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
-            {
-                throw new ArgumentException(
-                    $"the length `{length}` does not contain a valid numeric value",
-                    nameof(length));
-            }
-
-            type = GridUnitType.Star;
-        }
-        else
-        {
-            if (!double.TryParse(length, NumberStyles.Any, CultureInfo.InvariantCulture, out numericValue))
-            {
-                throw new ArgumentException(
-                    $"the length `{length}` is not a valid absolute length",
-                    nameof(length));
-            }
-
-            type = GridUnitType.Pixel;
+            var type = isStar ? GridUnitType.Star : GridUnitType.Pixel;
+            return new GridLength(numericValue, type);
         }
 
-        return new GridLength(numericValue, type);
+        throw new ArgumentException($"The length `{length}` does contain a valid numeric value", nameof(length));
     }
 }

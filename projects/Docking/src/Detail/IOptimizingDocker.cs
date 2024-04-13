@@ -4,6 +4,8 @@
 
 namespace DroidNet.Docking.Detail;
 
+using DroidNet.Docking.Workspace;
+
 internal interface IOptimizingDocker
 {
     void ConsolidateUp(IDockGroup startingGroup);

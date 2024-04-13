@@ -12,7 +12,7 @@
     Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>AppFwkDep.Core.Tests</DisplayName>
+    <DisplayName>Mvvm.UI.Tests</DisplayName>
     <PublisherDisplayName>abdes</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
