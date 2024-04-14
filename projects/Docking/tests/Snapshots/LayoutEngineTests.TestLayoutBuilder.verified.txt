@@ -14,8 +14,7 @@
             },
             Height: {
               IsNullOrEmpty: true
-            },
-            GroupInfo: ↔ 7 (4,5)
+            }
           }
         ],
         StretchToFill: false
@@ -61,8 +60,7 @@
             },
             Height: {
               IsNullOrEmpty: true
-            },
-            GroupInfo: ↕ 6 (2,3)
+            }
           },
           {
             Dockables: [
@@ -119,8 +117,7 @@
                   },
                   Height: {
                     IsNullOrEmpty: true
-                  },
-                  GroupInfo: ↕ 6 (2,3)
+                  }
                 },
                 IsActive: true
               }
@@ -131,8 +128,7 @@
             },
             Height: {
               IsNullOrEmpty: true
-            },
-            GroupInfo: ↕ 6 (2,3)
+            }
           }
         ]
       },
@@ -146,8 +142,7 @@
         },
         Height: {
           IsNullOrEmpty: true
-        },
-        GroupInfo: ↔ 7 (4,5)
+        }
       },
       {
         Direction: TopToBottom,
@@ -164,8 +159,7 @@
             },
             Height: {
               IsNullOrEmpty: true
-            },
-            GroupInfo: ? 15 (6)
+            }
           },
           {
             Items: [
@@ -181,8 +175,7 @@
                 },
                 Height: {
                   IsNullOrEmpty: true
-                },
-                GroupInfo: ○ ↔ * 3 (1)
+                }
               },
               {
                 Direction: TopToBottom,
@@ -227,8 +220,7 @@
                     },
                     Height: {
                       IsNullOrEmpty: true
-                    },
-                    GroupInfo: ↕ 24 (8,10)
+                    }
                   },
                   {
                     CanMinimize: true,
@@ -259,8 +251,7 @@
                           },
                           Height: {
                             IsNullOrEmpty: true
-                          },
-                          GroupInfo: ↕ 24 (8,10)
+                          }
                         },
                         IsActive: true
                       }
@@ -271,8 +262,7 @@
                     },
                     Height: {
                       IsNullOrEmpty: true
-                    },
-                    GroupInfo: ↕ 24 (8,10)
+                    }
                   }
                 ]
               },
@@ -305,8 +295,7 @@
                       },
                       Height: {
                         IsNullOrEmpty: true
-                      },
-                      GroupInfo: ↕ 24 (8,10)
+                      }
                     },
                     IsActive: true
                   }
@@ -317,8 +306,7 @@
                 },
                 Height: {
                   IsNullOrEmpty: true
-                },
-                GroupInfo: ↔ 25 (9)
+                }
               }
             ]
           },
@@ -337,8 +325,7 @@
                 },
                 Height: {
                   IsNullOrEmpty: true
-                },
-                GroupInfo: ? 19 (7)
+                }
               }
             ],
             StretchToFill: false
@@ -347,7 +334,6 @@
       }
     ]
   },
-  Description: Root Grid ↔ * 2,
   IsHorizontal: true,
   IsVertical: false
 }

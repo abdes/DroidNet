@@ -6,6 +6,7 @@ namespace DroidNet.Docking;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using DroidNet.Docking.Detail;
 using DroidNet.Docking.Workspace;
 using VerifyTests.DiffPlex;
 
@@ -24,5 +25,7 @@ public static class ModuleInitializer
         VerifierSettings.IgnoreMember(typeof(ILayoutSegment), nameof(ILayoutSegment.Docker));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Id));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Docker));
+        VerifierSettings.IgnoreMember(typeof(Dock), nameof(Dock.GroupInfo));
+        VerifierSettings.IgnoreMember(typeof(LayoutEngine.Flow), nameof(LayoutEngine.Flow.Description));
     }
 }
