@@ -6,13 +6,12 @@ namespace DroidNet.Docking;
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Detail;
 using DroidNet.Docking.Utils;
 using DroidNet.Docking.Workspace;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory(nameof(VectorLayoutEngine))]
+[TestCategory(nameof(LayoutEngine))]
 public class LayoutEngineTests : VerifyBase
 {
     [TestMethod]
@@ -147,14 +146,5 @@ public class LayoutEngineTests : VerifyBase
         {
             public required Vector Grid { get; init; }
         }
-    }
-
-    private sealed class CenterDock : Dock
-    {
-        public override bool CanMinimize => false;
-
-        public override bool CanClose => false;
-
-        public static CenterDock New() => (CenterDock)Factory.CreateDock(typeof(CenterDock));
     }
 }

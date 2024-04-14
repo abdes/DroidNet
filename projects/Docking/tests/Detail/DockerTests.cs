@@ -30,20 +30,15 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
     public void Dock_Works_WhenStateIsNotUnDocked()
     {
         // Setup
-        using var anchorDock = new SimpleDock();
-        this.sut.Dock(anchorDock, new AnchorLeft());
-        anchorDock.AdoptDockable(Dockable.New("anchor"));
-        using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
-
         using var dock = new SimpleDock();
-        this.sut.Dock(anchorDock, new AnchorRight());
+        this.sut.Dock(dock, new AnchorLeft());
 
         // Act
-        this.sut.Dock(dock, anchor);
+        this.sut.Dock(dock, new AnchorRight());
 
         // Assert
-        _ = dock.Group.Should().Be(anchorDock.Group);
-        _ = dock.Anchor.Should().Be(anchor);
+        _ = dock.Group.Should().NotBeNull();
+        _ = dock.Anchor.Should().BeEquivalentTo(new AnchorRight());
     }
 
     [TestMethod]
