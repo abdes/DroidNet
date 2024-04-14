@@ -25,7 +25,9 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
     /// the left side of other segment in the node's sub-tree.
     /// </summary>
     /// <param name="node">The child node to add.</param>
-    public void AddChildLeft(DockingTreeNode node)
+    /// <param name="orientation">The desired orientation of the segment after the node is added. Will be applied only if the
+    /// segment has more than one child.</param>
+    public void AddChildLeft(DockingTreeNode node, DockGroupOrientation orientation)
     {
         // Ensure that this node can take a children or resturcture it to make it so.
         this.EnsureInternalNode();
@@ -34,6 +36,13 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
         {
             // Use the left slot.
             this.Left = node;
+
+            // Apply the desired orientation, but only if the segment has more than one child.
+            if (this.Value is not EdgeGroup && this.Right != null)
+            {
+                this.Value.Orientation = orientation;
+            }
+
             return;
         }
 
@@ -42,11 +51,18 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
             // Add to right then swap the left and right slots.
             this.Right = node;
             this.SwapLeftAndRight();
+
+            // Apply the desired orientation.
+            if (this.Value is not EdgeGroup)
+            {
+                this.Value.Orientation = orientation;
+            }
+
             return;
         }
 
         // Add to the left child.
-        this.Left.AddChildLeft(node);
+        this.Left.AddChildLeft(node, orientation);
     }
 
     /// <summary>
@@ -54,7 +70,9 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
     /// the right side of other segment in the node's sub-tree.
     /// </summary>
     /// <param name="node">The child node to add.</param>
-    public void AddChildRight(DockingTreeNode node)
+    /// <param name="orientation">The desired orientation of the segment after the node is added. Will be applied only if the
+    /// segment has more than one child.</param>
+    public void AddChildRight(DockingTreeNode node, DockGroupOrientation orientation)
     {
         // Ensure that this node can take a children or resturcture it to make it so.
         this.EnsureInternalNode();
@@ -63,6 +81,13 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
         {
             // Use the right slot.
             this.Right = node;
+
+            // Apply the desired orientation, but only if the segment has more than one child.
+            if (this.Value is not EdgeGroup && this.Right != null)
+            {
+                this.Value.Orientation = orientation;
+            }
+
             return;
         }
 
@@ -71,11 +96,18 @@ internal sealed class DockingTreeNode(IDocker docker, LayoutSegment segment) : B
             // Add to left then swap the left and right slots.
             this.Left = node;
             this.SwapLeftAndRight();
+
+            // Apply the desired orientation.
+            if (this.Value is not EdgeGroup)
+            {
+                this.Value.Orientation = orientation;
+            }
+
             return;
         }
 
         // Add to the right child.
-        this.Right.AddChildRight(node);
+        this.Right.AddChildRight(node, orientation);
     }
 
     /// <summary>
