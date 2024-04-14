@@ -32,14 +32,14 @@ public partial class Docker
 
         try
         {
-            var startingNode = this.FindNode((node) => node.Item == startingSegment);
+            var startingNode = this.FindNode(startingSegment);
             Debug.Assert(
                 startingNode != null,
                 $"request to start consolidation with a segment that is not in a node: {startingSegment}");
-            var result = ConsolidateIfNeeded(startingNode);
+            var result = this.ConsolidateIfNeeded(startingNode);
             while (result is not null)
             {
-                result = ConsolidateIfNeeded(result);
+                result = this.ConsolidateIfNeeded(result);
             }
         }
         finally
@@ -48,17 +48,30 @@ public partial class Docker
         }
     }
 
-    private static DockingTreeNode? ConsolidateIfNeeded(DockingTreeNode node)
+    private DockingTreeNode? ConsolidateIfNeeded(DockingTreeNode node)
     {
-        // Center and edge groups cannot be optimized
-        if (node.Item is CenterGroup or EdgeGroup)
+        // Center group cannot be optimized.
+        if (node.Value is CenterGroup)
         {
             return null;
         }
 
+        if ((node.Value is EdgeGroup && node.Left is null && node.Right?.Value is TrayGroup) ||
+            (node.Right is null && node.Left?.Value is TrayGroup))
+        {
+            Debug.Assert(node.Parent is not null, $"unexpected edge node {node} without a parent");
+
+            // Clear the edge node from the edges table.
+            var edgeEntry = this.edges.First(entry => entry.Value == node.Value);
+            this.edges[edgeEntry.Key] = null;
+
+            // Remove the edge node from the docking tree.
+            return new RemovenodeFromParent(node, node.Parent).Execute();
+        }
+
         if (node.IsLeaf)
         {
-            if (node.Item is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
+            if (node.Value is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
             {
                 return new RemovenodeFromParent(node, node.Parent).Execute();
             }
@@ -74,11 +87,14 @@ public partial class Docker
             Debug.Assert(child is not null, "leaf case should be handled before");
 
             // with compatible orientation => assimilate child into parent
-            if (child.Item.Orientation == DockGroupOrientation.Undetermined ||
-                node.Item.Orientation == DockGroupOrientation.Undetermined ||
-                child.Item.Orientation == node.Item.Orientation)
+            if (child.Value.Orientation == DockGroupOrientation.Undetermined ||
+                node.Value.Orientation == DockGroupOrientation.Undetermined ||
+                child.Value.Orientation == node.Value.Orientation)
             {
-                return new AssimilateChild(child: child, parent: node).Execute();
+                // Assimilate child, unless it is the center group node.
+                return child.Value is CenterGroup
+                    ? null
+                    : new AssimilateChild(child: child, parent: node).Execute();
             }
         }
         else
@@ -87,10 +103,10 @@ public partial class Docker
             if (node is { Left: DockingTreeNode { IsLeaf: true }, Right: DockingTreeNode { IsLeaf: true } })
             {
                 // and compatible orientations => merge the children
-                if ((node.Left.Item.Orientation is DockGroupOrientation.Undetermined ||
-                     node.Left.Item.Orientation == node.Item.Orientation) &&
-                    (node.Right.Item.Orientation == DockGroupOrientation.Undetermined ||
-                     node.Right.Item.Orientation == node.Item.Orientation))
+                if ((node.Left.Value.Orientation is DockGroupOrientation.Undetermined ||
+                     node.Left.Value.Orientation == node.Value.Orientation) &&
+                    (node.Right.Value.Orientation == DockGroupOrientation.Undetermined ||
+                     node.Right.Value.Orientation == node.Value.Orientation))
                 {
                     return new MergeLeafParts(node).Execute();
                 }

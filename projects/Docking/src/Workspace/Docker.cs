@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Utils;
+using static TreeTraversal;
 
 /// <summary>The main interface to the docking workspace. Manages the docks and the workspace layout.</summary>
 public partial class Docker : IDocker
@@ -89,10 +90,10 @@ public partial class Docker
             // the relativeTo dock. Otherwise, we just add the new dock to the group's dock list.
             if (group.Orientation != DockGroupOrientation.Undetermined && group.Orientation != requiredOrientation)
             {
-                var groupNode = this.FindNode((node) => node.Item == group) ?? throw new ArgumentException(
+                var groupNode = this.FindNode(group) ?? throw new ArgumentException(
                     $"anchor dock is in a group ({group}) that cannot be found in the docking tree",
                     nameof(anchor));
-                group = groupNode.Repartition(group, anchorDock, requiredOrientation);
+                group = groupNode.Repartition(anchorDock, requiredOrientation);
             }
 
             group.AddDock(dock, anchor);
@@ -242,7 +243,7 @@ public partial class Docker
     private void AddToEdge(DockingTreeNode edge, LayoutDockGroup group, DockGroupOrientation orientation)
     {
         var newNode = new DockingTreeNode(this, group);
-        if (edge.Left?.Item is TrayGroup)
+        if (edge.Left?.Value is TrayGroup)
         {
             edge.AddChildRight(newNode);
         }
@@ -255,7 +256,7 @@ public partial class Docker
         var node = newNode.Parent;
         while (node is not null && node != edge)
         {
-            node.Item.Orientation = orientation;
+            node.Value.Orientation = orientation;
             node = node.Parent;
         }
     }
@@ -294,18 +295,18 @@ public partial class Docker
     {
         Debug.Assert(dock.Group is not null, "cannot minimize a dock that does not belong to a group.");
 
-        var node = this.FindNode((node) => node.Item == dock.Group)!;
+        var node = this.FindNode(dock.Group)!;
 
         // Walk the docking tree up until we find a dock group which implements
         // the IDockTray interface. This would be one of the root edge groups.
         while (node is not null)
         {
-            if (node.Left?.Item is TrayGroup leftAsTray)
+            if (node.Left?.Value is TrayGroup leftAsTray)
             {
                 return leftAsTray;
             }
 
-            if (node.Right?.Item is TrayGroup rightAsTray)
+            if (node.Right?.Value is TrayGroup rightAsTray)
             {
                 return rightAsTray;
             }
@@ -389,16 +390,15 @@ public partial class Docker
         DockingTreeNode edgeNode;
 
         var edgeSegment = this.edges[position];
-        if (this.edges[position] is null)
+        if (edgeSegment is null)
         {
             edgeNode = this.MakeEdgeNode(position);
-            this.edges[position] = edgeNode.Item;
-            edgeSegment = edgeNode.Item;
+            this.edges[position] = edgeNode.Value;
         }
         else
         {
             // We must always find an edge node if there is a non null edge segment corresponding to it.
-            edgeNode = this.FindNode((node) => node.Item == edgeSegment)!;
+            edgeNode = this.FindNode(edgeSegment)!;
         }
 
         return edgeNode;
@@ -436,7 +436,7 @@ public partial class Docker
 
     private DockingTreeNode FindCenterNode()
     {
-        var centerNode = this.FindNode((node) => node.Item == this.center);
+        var centerNode = this.FindNode(this.center);
         Debug.Assert(centerNode is not null, "center node should be initialized before it is accessed");
         return centerNode;
     }
@@ -451,42 +451,26 @@ public partial class Docker
         return newGroup;
     }
 
-    private DockingTreeNode? FindNode(Func<DockingTreeNode, bool> predicate)
+    private DockingTreeNode? FindNode(LayoutSegment segment)
     {
-        /*
-         * We're using an in-order traversal of the tree without recursion by tracking the recently traversed nodes to
-         * identify the next one.
-         */
-        var currentNode = this.root;
-        DockingTreeNode? previousNode = null;
-        while (currentNode != null)
+        DockingTreeNode? result = null;
+
+        bool Visitor(BinaryTreeNode<LayoutSegment>? node)
         {
-            DockingTreeNode? nextNode;
-            if (currentNode.Right != null && previousNode == currentNode.Right)
+            if (node is not null && node.Value == segment)
             {
-                nextNode = currentNode.Parent;
-            }
-            else if (currentNode.Left == null || previousNode == currentNode.Left)
-            {
-                // Visit the current node
-                Debug.WriteLine($"Visiting {currentNode}");
-                if (predicate(currentNode))
-                {
-                    return currentNode;
-                }
+                result = (DockingTreeNode?)node;
 
-                nextNode = currentNode.Right ?? currentNode.Parent;
-            }
-            else
-            {
-                nextNode = currentNode.Left;
+                // Stop traversal
+                return false;
             }
 
-            previousNode = currentNode;
-            currentNode = nextNode;
+            // Continue traversal
+            return true;
         }
 
-        return null;
+        DepthFirstInOrder(this.root, Visitor);
+        return result;
     }
 
     private void AddBeforeCenter(DockingTreeNode node, DockGroupOrientation orientation)
@@ -509,7 +493,7 @@ public partial class Docker
 {
     public void Layout(LayoutEngine layoutEngine)
     {
-        var flow = layoutEngine.StartLayout(this.root.Item);
+        var flow = layoutEngine.StartLayout(this.root.Value);
         layoutEngine.PushFlow(flow);
         Layout(this.root, layoutEngine);
         Debug.WriteLine($"=== Final state: {layoutEngine.CurrentFlow}");
@@ -530,14 +514,14 @@ public partial class Docker
                 return false;
             }
 
-            if (node.Item is DockGroup dockGroup)
+            if (node.Value is DockGroup dockGroup)
             {
-                return node.Item is TrayGroup tray
+                return node.Value is TrayGroup tray
                     ? tray.Docks.Count != 0
                     : dockGroup.Docks.Any(d => d.State != DockingState.Minimized);
             }
 
-            if (node.Item is LayoutGroup layoutGroup)
+            if (node.Value is LayoutGroup layoutGroup)
             {
                 return ShouldShowNodeRecursive(node.Left) || ShouldShowNodeRecursive(node.Right);
             }
@@ -570,12 +554,12 @@ public partial class Docker
                 return;
             }
 
-            if (child.Item is TrayGroup tray && tray.Docks.Count != 0)
+            if (child.Value is TrayGroup tray && tray.Docks.Count != 0)
             {
                 Debug.Assert(
                     (tray.Orientation == DockGroupOrientation.Vertical && layoutEngine.CurrentFlow.IsHorizontal) ||
                     (tray.Orientation == DockGroupOrientation.Horizontal && layoutEngine.CurrentFlow.IsVertical),
-                    $"expecting tray orientation {child.Item.Orientation} to be orthogonal to flow direction {layoutEngine.CurrentFlow.Direction}");
+                    $"expecting tray orientation {child.Value.Orientation} to be orthogonal to flow direction {layoutEngine.CurrentFlow.Direction}");
 
                 // Place the tray if it's not empty.
                 layoutEngine.PlaceTray(tray);
@@ -587,20 +571,20 @@ public partial class Docker
 
         if (!ShouldShowNodeRecursive(node))
         {
-            Debug.WriteLine($"Skipping {node.Item}");
+            Debug.WriteLine($"Skipping {node.Value}");
             return;
         }
 
-        Debug.WriteLine($"Layout started for item {node.Item}");
+        Debug.WriteLine($"Layout started for item {node.Value}");
 
-        var reoriented = ReorientFlowIfNeeded(node.Item, layoutEngine);
+        var reoriented = ReorientFlowIfNeeded(node.Value, layoutEngine);
         if (reoriented)
         {
-            var flow = layoutEngine.StartFlow(node.Item);
+            var flow = layoutEngine.StartFlow(node.Value);
             layoutEngine.PushFlow(flow);
         }
 
-        if (node.Item is DockGroup group && group.Docks.Count != 0)
+        if (node.Value is DockGroup group && group.Docks.Count != 0)
         {
             // A group with docks -> Layout the docks as items in the vector grid.
             foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
@@ -641,7 +625,7 @@ public partial class Docker
         var node = this.FindCenterNode().Parent;
         while (node is not null)
         {
-            node.Item.StretchToFill = true;
+            node.Value.StretchToFill = true;
             node = node.Parent;
         }
     }

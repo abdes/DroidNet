@@ -20,8 +20,8 @@ public static class ModuleInitializer
         VerifyDiffPlex.Initialize(OutputType.Compact);
 
         // Ignore auto-incremented IDs that will make test output unpredictable
-        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(LayoutDockGroup.DebugId));
-        VerifierSettings.IgnoreMember(typeof(IDockGroup), nameof(IDockGroup.Docker));
+        VerifierSettings.IgnoreMember(typeof(LayoutSegment), nameof(LayoutSegment.DebugId));
+        VerifierSettings.IgnoreMember(typeof(ILayoutSegment), nameof(ILayoutSegment.Docker));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Id));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Docker));
     }

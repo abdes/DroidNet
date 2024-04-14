@@ -15,12 +15,10 @@
             Height: {
               IsNullOrEmpty: true
             },
-            GroupInfo: ? 7 (4)
+            GroupInfo: ↔ 7 (4,5)
           }
         ],
-        StretchToFill: false,
-        Docker: {},
-        DebugId: 5
+        StretchToFill: false
       },
       {
         Direction: TopToBottom,
@@ -149,7 +147,7 @@
         Height: {
           IsNullOrEmpty: true
         },
-        GroupInfo: ? 9 (5)
+        GroupInfo: ↔ 7 (4,5)
       },
       {
         Direction: TopToBottom,
@@ -167,7 +165,7 @@
             Height: {
               IsNullOrEmpty: true
             },
-            GroupInfo: ? 14 (6)
+            GroupInfo: ? 15 (6)
           },
           {
             Items: [
@@ -230,7 +228,7 @@
                     Height: {
                       IsNullOrEmpty: true
                     },
-                    GroupInfo: ↕ 23 (8,10)
+                    GroupInfo: ↕ 24 (8,10)
                   },
                   {
                     CanMinimize: true,
@@ -262,7 +260,7 @@
                           Height: {
                             IsNullOrEmpty: true
                           },
-                          GroupInfo: ↕ 23 (8,10)
+                          GroupInfo: ↕ 24 (8,10)
                         },
                         IsActive: true
                       }
@@ -274,7 +272,7 @@
                     Height: {
                       IsNullOrEmpty: true
                     },
-                    GroupInfo: ↕ 23 (8,10)
+                    GroupInfo: ↕ 24 (8,10)
                   }
                 ]
               },
@@ -308,7 +306,7 @@
                       Height: {
                         IsNullOrEmpty: true
                       },
-                      GroupInfo: ↕ 23 (8,10)
+                      GroupInfo: ↕ 24 (8,10)
                     },
                     IsActive: true
                   }
@@ -320,7 +318,7 @@
                 Height: {
                   IsNullOrEmpty: true
                 },
-                GroupInfo: ↔ 24 (9)
+                GroupInfo: ↔ 25 (9)
               }
             ]
           },
@@ -340,12 +338,10 @@
                 Height: {
                   IsNullOrEmpty: true
                 },
-                GroupInfo: ? 18 (7)
+                GroupInfo: ? 19 (7)
               }
             ],
-            StretchToFill: false,
-            Docker: {},
-            DebugId: 16
+            StretchToFill: false
           }
         ]
       }
