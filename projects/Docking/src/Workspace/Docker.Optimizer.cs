@@ -48,38 +48,24 @@ public partial class Docker
         }
     }
 
-    private DockingTreeNode? ConsolidateIfNeeded(DockingTreeNode node)
+    private static DockingTreeNode? CheckCollapsibleLeafNode(DockingTreeNode node)
     {
-        // Center group cannot be optimized.
-        if (node.Value is CenterGroup)
+        if (!node.IsLeaf)
         {
             return null;
         }
 
-        if ((node.Value is EdgeGroup && node.Left is null && node.Right?.Value is TrayGroup) ||
-            (node.Right is null && node.Left?.Value is TrayGroup))
+        if (node.Value is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
         {
-            Debug.Assert(node.Parent is not null, $"unexpected edge node {node} without a parent");
-
-            // Clear the edge node from the edges table.
-            var edgeEntry = this.edges.First(entry => entry.Value == node.Value);
-            this.edges[edgeEntry.Key] = null;
-
-            // Remove the edge node from the docking tree.
             return new RemovenodeFromParent(node, node.Parent).Execute();
         }
 
-        if (node.IsLeaf)
-        {
-            if (node.Value is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
-            {
-                return new RemovenodeFromParent(node, node.Parent).Execute();
-            }
+        // Potential for collapsing into parent or merger with sibling
+        return node.Sibling is null or DockingTreeNode { IsLeaf: true } ? node.Parent : null;
+    }
 
-            // Potential for collapsing into parent or merger with sibling
-            return node.Sibling is null or DockingTreeNode { IsLeaf: true } ? node.Parent : null;
-        }
-
+    private static DockingTreeNode? SimplifyChildren(DockingTreeNode node)
+    {
         // Single child parent
         if (node.Left is null || node.Right is null)
         {
@@ -114,6 +100,37 @@ public partial class Docker
         }
 
         return null;
+    }
+
+    private DockingTreeNode? OptimizedEmptyEdge(DockingTreeNode node)
+    {
+        if ((node.Value is EdgeGroup && node.Left is null && node.Right?.Value is TrayGroup) ||
+            (node.Right is null && node.Left?.Value is TrayGroup))
+        {
+            // Clear the edge node from the edges table.
+            var edgeEntry = this.edges.First(entry => entry.Value == node.Value);
+            this.edges[edgeEntry.Key] = null;
+
+            // Remove the edge node from the docking tree.
+            Debug.Assert(node.Parent is not null, $"unexpected edge node {node} without a parent");
+            return new RemovenodeFromParent(node, node.Parent).Execute();
+        }
+
+        return null;
+    }
+
+    private DockingTreeNode? ConsolidateIfNeeded(DockingTreeNode node)
+    {
+        // Center group cannot be optimized.
+        if (node.Value is CenterGroup)
+        {
+            return null;
+        }
+
+        // Chain call optimization until one of them returns the next node to be optimized.
+        return this.OptimizedEmptyEdge(node)
+               ?? CheckCollapsibleLeafNode(node)
+               ?? SimplifyChildren(node);
     }
 
     private abstract class DockingTreeOptimization
