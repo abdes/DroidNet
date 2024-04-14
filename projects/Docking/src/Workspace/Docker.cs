@@ -23,7 +23,7 @@ public partial class Docker : IDocker
     {
         this.root = new DockingTreeNode(this, new LayoutGroup(this));
         this.center = new CenterGroup(this);
-        this.root.AddChildLeft(new DockingTreeNode(this, this.center));
+        this.root.AddChildLeft(new DockingTreeNode(this, this.center), DockGroupOrientation.Horizontal);
 
         this.edges.Add(AnchorPosition.Left, default);
         this.edges.Add(AnchorPosition.Right, default);
@@ -245,19 +245,11 @@ public partial class Docker
         var newNode = new DockingTreeNode(this, group);
         if (edge.Left?.Value is TrayGroup)
         {
-            edge.AddChildRight(newNode);
+            edge.AddChildRight(newNode, orientation);
         }
         else
         {
-            edge.AddChildLeft(newNode);
-        }
-
-        // Consistently set the orientation for the nodes created to accomodate the newly added node.
-        var node = newNode.Parent;
-        while (node is not null && node != edge)
-        {
-            node.Value.Orientation = orientation;
-            node = node.Parent;
+            edge.AddChildLeft(newNode, orientation);
         }
     }
 
@@ -422,12 +414,12 @@ public partial class Docker
 
         if (position is AnchorPosition.Left || position is AnchorPosition.Top)
         {
-            edgeNode.AddChildLeft(trayNode);
+            edgeNode.AddChildLeft(trayNode, orientation);
             this.AddBeforeCenter(edgeNode, orientation);
         }
         else
         {
-            edgeNode.AddChildRight(trayNode);
+            edgeNode.AddChildRight(trayNode, orientation);
             this.AddAfterCenter(edgeNode, orientation);
         }
 
