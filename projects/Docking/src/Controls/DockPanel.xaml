@@ -26,7 +26,7 @@
             </DoubleAnimationUsingKeyFrames>
         </Storyboard>
 
-        <DataTemplate x:Key="RootDockingOverlay" x:DataType="s:DockPanelViewModel">
+        <DataTemplate x:Key="RootDockingOverlayTemplate" x:DataType="s:DockPanelViewModel">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -39,12 +39,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Button
-                    x:Name="DockTopButton"
                     Grid.Row="0"
                     Grid.Column="0"
                     Grid.ColumnSpan="3"
                     HorizontalAlignment="Center"
-                    Click="{x:Bind DockToRootTop}">
+                    Command="{x:Bind DockToRootCommand}"
+                    CommandParameter="Left">
                     <FontIcon Glyph="&#xF0AD;" />
                 </Button>
                 <Button
@@ -52,7 +52,8 @@
                     Grid.RowSpan="3"
                     Grid.Column="0"
                     VerticalAlignment="Center"
-                    Click="{x:Bind DockToRootLeft}">
+                    Command="{x:Bind DockToRootCommand}"
+                    CommandParameter="Left">
                     <FontIcon Glyph="&#xF0B0;" />
                 </Button>
                 <Button
@@ -60,7 +61,8 @@
                     Grid.RowSpan="3"
                     Grid.Column="2"
                     VerticalAlignment="Center"
-                    Click="{x:Bind DockToRootRight}">
+                    Command="{x:Bind DockToRootCommand}"
+                    CommandParameter="Right">
                     <FontIcon Glyph="&#xF0AF;" />
                 </Button>
                 <Button
@@ -68,35 +70,36 @@
                     Grid.Column="0"
                     Grid.ColumnSpan="3"
                     HorizontalAlignment="Center"
-                    Click="{x:Bind DockToRootBottom}">
+                    Command="{x:Bind DockToRootCommand}"
+                    CommandParameter="Bottom">
                     <FontIcon Glyph="&#xF0AE;" />
                 </Button>
                 <Grid.KeyboardAccelerators>
                     <KeyboardAccelerator
                         Key="Escape"
-                        Invoked="{x:Bind ToggleDockingMode}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="h"
-                        Invoked="{x:Bind DockToRootLeft}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="j"
-                        Invoked="{x:Bind DockToRootBottom}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="k"
-                        Invoked="{x:Bind DockToRootTop}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="l"
-                        Invoked="{x:Bind DockToRootRight}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                 </Grid.KeyboardAccelerators>
             </Grid>
         </DataTemplate>
 
-        <DataTemplate x:Key="RelativeDockingOverlay" x:DataType="s:DockPanelViewModel">
+        <DataTemplate x:Key="RelativeDockingOverlayTemplate" x:DataType="s:DockPanelViewModel">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
@@ -115,57 +118,62 @@
                 <Button
                     Grid.Row="1"
                     Grid.Column="2"
-                    Click="{x:Bind AcceptDockBeingDockedTop}">
+                    Command="{x:Bind AcceptDockBeingDockedCommand}"
+                    CommandParameter="Top">
                     <FontIcon Glyph="&#xF0AD;" />
                 </Button>
                 <Button
                     Grid.Row="2"
                     Grid.Column="1"
-                    Click="{x:Bind AcceptDockBeingDockedLeft}">
+                    Command="{x:Bind AcceptDockBeingDockedCommand}"
+                    CommandParameter="Left">
                     <FontIcon Glyph="&#xF0B0;" />
                 </Button>
                 <Button
                     Grid.Row="2"
                     Grid.Column="3"
-                    Click="{x:Bind AcceptDockBeingDockedRight}">
+                    Command="{x:Bind AcceptDockBeingDockedCommand}"
+                    CommandParameter="Right">
                     <FontIcon Glyph="&#xF0AF;" />
                 </Button>
                 <Button
                     Grid.Row="3"
                     Grid.Column="2"
-                    Click="{x:Bind AcceptDockBeingDockedBottom}">
+                    Command="{x:Bind AcceptDockBeingDockedCommand}"
+                    CommandParameter="Bottom">
                     <FontIcon Glyph="&#xF0AE;" />
                 </Button>
                 <Button
                     Grid.Row="2"
                     Grid.Column="2"
-                    Click="{x:Bind AcceptDockBeingDocked}">
+                    Command="{x:Bind AcceptDockBeingDockedCommand}"
+                    CommandParameter="Center">
                     <FontIcon Glyph="&#xEA3A;" />
                 </Button>
                 <Grid.KeyboardAccelerators>
                     <KeyboardAccelerator
                         Key="Escape"
-                        Invoked="{x:Bind ToggleDockingMode}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="h"
-                        Invoked="{x:Bind AcceptDockBeingDockedLeft}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="j"
-                        Invoked="{x:Bind AcceptDockBeingDockedBottom}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="k"
-                        Invoked="{x:Bind AcceptDockBeingDockedTop}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="l"
-                        Invoked="{x:Bind AcceptDockBeingDockedRight}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                     <KeyboardAccelerator
                         Key="o"
-                        Invoked="{x:Bind AcceptDockBeingDocked}"
+                        Invoked="OnAcceleratorInvoked"
                         Modifiers="None" />
                 </Grid.KeyboardAccelerators>
             </Grid>
