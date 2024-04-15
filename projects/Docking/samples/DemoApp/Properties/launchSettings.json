@@ -1,11 +1,11 @@
 {
   "profiles": {
     "DemoApp (Package)": {
-      "commandName": "MsixPackage",
-      "commandLineArgs": "--int-value=125 --string-value=\"just a string from the command line\" --boolean-flag=true"
+      "commandName": "MsixPackage"
     },
     "DemoApp (Unpackaged)": {
-      "commandName": "Project"
+        "commandName": "Project",
+        "nativeDebugging": false
     }
   }
 }
