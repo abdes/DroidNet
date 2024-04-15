@@ -13,6 +13,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
+using Windows.System;
 
 /// <summary>A decorated panel that represents a dock.</summary>
 [ViewModel(typeof(DockPanelViewModel))]
@@ -77,7 +78,7 @@ public sealed partial class DockPanel
     }
 
     private void UpdateViewModelWithInitialSize(
-        object? o,
+        object? sender,
         ViewModelChangedEventArgs<DockPanelViewModel> viewModelChangedEventArgs)
         => this.ViewModel?.OnSizeChanged(this.GetActualSize());
 
@@ -153,12 +154,12 @@ public sealed partial class DockPanel
         if (this.ViewModel.IsBeingDocked)
         {
             this.AnimatedBorderStoryBoard.Begin();
-            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RootDockingOverlay"];
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RootDockingOverlayTemplate"];
             this.ShowOverlay();
         }
         else
         {
-            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RelativeDockingOverlay"];
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RelativeDockingOverlayTemplate"];
         }
 
         this.PointerEntered += this.pointerEnterEventHandler;
@@ -170,4 +171,90 @@ public sealed partial class DockPanel
         Width = double.Round(this.ActualWidth),
         Height = double.Round(this.ActualHeight),
     };
+
+    private void OnAcceleratorInvoked(KeyboardAccelerator accelerator, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = args;
+
+        if (this.ViewModel!.IsBeingDocked)
+        {
+            this.HandleRootDockingAccelerator(accelerator);
+        }
+        else
+        {
+            this.HandleRelativeDockingAccelerator(accelerator);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Style",
+        "IDE0010:Add missing cases",
+        Justification = "We're only interested in the keys we manage")]
+    private void HandleRelativeDockingAccelerator(KeyboardAccelerator accelerator)
+    {
+        switch (accelerator.Key)
+        {
+            case VirtualKey.Escape:
+                this.ViewModel?.ToggleDockingModeCommand.Execute(this);
+                break;
+
+            case VirtualKey.H:
+                this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.Left));
+                break;
+
+            case VirtualKey.J:
+                this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.Bottom));
+                break;
+
+            case VirtualKey.K:
+                this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.Top));
+                break;
+
+            case VirtualKey.L:
+                this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.Right));
+                break;
+
+            case VirtualKey.O:
+                this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.With));
+                break;
+
+            default:
+                /* Do nothing */
+                break;
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Style",
+        "IDE0010:Add missing cases",
+        Justification = "We're only interested in the keys we manage")]
+    private void HandleRootDockingAccelerator(KeyboardAccelerator accelerator)
+    {
+        switch (accelerator.Key)
+        {
+            case VirtualKey.Escape:
+                this.ViewModel?.ToggleDockingModeCommand.Execute(this);
+                break;
+
+            case VirtualKey.H:
+                this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Left));
+                break;
+
+            case VirtualKey.J:
+                this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Bottom));
+                break;
+
+            case VirtualKey.K:
+                this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Top));
+                break;
+
+            case VirtualKey.L:
+                this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Right));
+                break;
+
+            default:
+                /* Do nothing */
+                break;
+        }
+    }
 }

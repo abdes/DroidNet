@@ -69,71 +69,33 @@ public partial class DockPanelViewModel : ObservableRecipient
             heightChanged ? new Height(newSize.Height) : null);
     }
 
-    public void DockToRootLeft()
+    protected override void OnActivated()
     {
-        this.docker.Dock(this.dock, new AnchorLeft());
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
+        base.OnActivated();
+
+        // Listen for the docking mode messages to participate during a docking manoeuvre.
+        StrongReferenceMessenger.Default.Register<EnterDockingModeMessage>(
+            this,
+            (_, message) => this.EnterDockingMode(message.Value));
+        StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
     }
 
-    public void DockToRootTop()
-    {
-        this.docker.Dock(this.dock, new AnchorTop());
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void DockToRootRight()
-    {
-        this.docker.Dock(this.dock, new AnchorRight());
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void DockToRootBottom()
-    {
-        this.docker.Dock(this.dock, new AnchorBottom());
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void AcceptDockBeingDockedLeft()
-    {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Left, this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void AcceptDockBeingDockedTop()
-    {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Top, this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void AcceptDockBeingDockedRight()
-    {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Right, this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void AcceptDockBeingDockedBottom()
-    {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Bottom, this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
-
-    public void AcceptDockBeingDocked()
-    {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.With, this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
-        this.ToggleDockingMode();
-    }
+    private static AnchorPosition AnchorPositionFromString(string anchorPosition)
+        => anchorPosition.ToLowerInvariant() switch
+        {
+            "left" => AnchorPosition.Left,
+            "right" => AnchorPosition.Right,
+            "top" => AnchorPosition.Top,
+            "bottom" => AnchorPosition.Bottom,
+            "with" => AnchorPosition.With,
+            "center" => AnchorPosition.Center,
+            _ => throw new ArgumentException(
+                $"invalid anchor position for root docking `{anchorPosition}`",
+                anchorPosition),
+        };
 
     [RelayCommand(CanExecute = nameof(CanToggleDockingMode))]
-    public void ToggleDockingMode()
+    private void ToggleDockingMode()
     {
         if (this.IsInDockingMode)
         {
@@ -145,15 +107,23 @@ public partial class DockPanelViewModel : ObservableRecipient
         }
     }
 
-    protected override void OnActivated()
+    [RelayCommand]
+    private void AcceptDockBeingDocked(string anchorPosition)
     {
-        base.OnActivated();
+        this.AnchorDockBeingDockedAt(new Anchor(AnchorPositionFromString(anchorPosition), this.dock.ActiveDockable));
+        this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
+    }
 
-        // Listen for the docking mode messages to participate during a docking manoeuvre.
-        StrongReferenceMessenger.Default.Register<EnterDockingModeMessage>(
-            this,
-            (_, message) => this.EnterDockingMode(message.Value));
-        StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
+    [RelayCommand]
+    private void DockToRoot(string anchorPosition)
+    {
+        var anchor = new Anchor(AnchorPositionFromString(anchorPosition));
+
+        this.docker.Dock(this.dock, anchor);
+        this.ToggleDockingMode();
+
+        this.docker.DumpWorkspace();
     }
 
     private void AnchorDockBeingDockedAt(Anchor anchor)
