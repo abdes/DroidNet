@@ -14,6 +14,8 @@ using Microsoft.UI.Xaml.Controls;
 
 public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
+    private readonly Dictionary<DockId, CachedView> cachedViews = [];
+
     public ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
     public override Flow StartLayout(ILayoutSegment segment)
@@ -30,7 +32,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         var gridItemLength = this.GetGridLengthForDock(dock);
         Debug.WriteLine($"GridLength for dock {dock}: {gridItemLength} (orientation is {this.CurrentGrid.Orientation}");
 
-        this.CurrentGrid.AddResizableItem(dockViewFactory.CreateViewForDock(dock), gridItemLength, 32);
+        this.CurrentGrid.AddResizableItem(this.GetViewForDock(dock), gridItemLength, 32);
     }
 
     public override void PlaceTray(TrayGroup tray)
@@ -97,6 +99,30 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         return GridLength.Auto;
     }
 
+    private UIElement GetViewForDock(IDock dock)
+    {
+        if (this.cachedViews.TryGetValue(dock.Id, out var cachedView))
+        {
+            if (cachedView.ParentGrid.Children.Remove(cachedView.View))
+            {
+                cachedView.ParentGrid = this.CurrentGrid;
+                return cachedView.View;
+            }
+
+            Debug.WriteLine($"failed to remove cached view from owner grid for dock {dock}");
+        }
+
+        var newView = dockViewFactory.CreateViewForDock(dock);
+        this.cachedViews.Add(
+            dock.Id,
+            new CachedView()
+            {
+                ParentGrid = this.CurrentGrid,
+                View = newView,
+            });
+        return newView;
+    }
+
     private GridLength GetGridLengthForDock(IDock dock)
     {
         Debug.WriteLine($"GridLength for dock {dock} using {(this.CurrentFlow.IsHorizontal ? "width" : "height")}");
@@ -106,5 +132,12 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
     private sealed class GridFlow(ILayoutSegment segment) : Flow(segment)
     {
         public required ResizableVectorGrid Grid { get; init; }
+    }
+
+    private sealed class CachedView
+    {
+        public required ResizableVectorGrid ParentGrid { get; set; }
+
+        public required UIElement View { get; init; }
     }
 }

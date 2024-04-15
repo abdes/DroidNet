@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="DroidNet.Docking.Controls.DockPanel"
@@ -218,16 +218,7 @@
                 Canvas.ZIndex="10"
                 Opacity="0.8"
                 Visibility="{x:Bind OverlayVisibility, Mode=OneWay}">
-                <ContentPresenter Content="{x:Bind ViewModel}" ContentTemplate="{StaticResource RelativeDockingOverlay}">
-                    <interactivity:Interaction.Behaviors>
-                        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.IsBeingDocked, Mode=OneWay}" Value="True">
-                            <core:ChangePropertyAction PropertyName="ContentTemplate" Value="{StaticResource RootDockingOverlay}" />
-                        </core:DataTriggerBehavior>
-                        <core:DataTriggerBehavior Binding="{x:Bind ViewModel.IsBeingDocked, Mode=OneWay}" Value="False">
-                            <core:ChangePropertyAction PropertyName="ContentTemplate" Value="{StaticResource RelativeDockingOverlay}" />
-                        </core:DataTriggerBehavior>
-                    </interactivity:Interaction.Behaviors>
-                </ContentPresenter>
+                <ContentPresenter x:Name="Overlay" Content="{x:Bind ViewModel}" />
             </Border>
         </Grid>
     </Grid>
