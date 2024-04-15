@@ -177,7 +177,8 @@
         <Border
             x:Name="AnimatedBorder"
             BorderBrush="Red"
-            BorderThickness="1"
+            BorderThickness="3"
+            Canvas.ZIndex="100"
             Opacity="0" />
         <Grid Name="PanelRoot">
             <Grid.RowDefinitions>

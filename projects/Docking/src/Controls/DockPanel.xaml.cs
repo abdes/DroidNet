@@ -38,7 +38,6 @@ public sealed partial class DockPanel
             if (args.OldValue is not null)
             {
                 args.OldValue.PropertyChanged -= this.OnIsInDockingModePropertyChanged;
-                args.OldValue.PropertyChanged -= this.OnIsBeingDockedPropertyChanged;
                 args.OldValue.IsActive = false;
             }
 
@@ -48,7 +47,6 @@ public sealed partial class DockPanel
             }
 
             this.ViewModel.PropertyChanged += this.OnIsInDockingModePropertyChanged;
-            this.ViewModel.PropertyChanged += this.OnIsBeingDockedPropertyChanged;
             this.ViewModel.IsActive = true;
         };
 
@@ -87,28 +85,6 @@ public sealed partial class DockPanel
     {
         this.ViewModelChanged -= this.UpdateViewModelWithInitialSize;
         this.sizeChangedSubscription?.Dispose();
-    }
-
-    private void OnIsBeingDockedPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (sender is not DockPanelViewModel vm || !string.Equals(
-                args.PropertyName,
-                nameof(DockPanelViewModel.IsBeingDocked),
-                StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (vm.IsBeingDocked)
-        {
-            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RootDockingOverlay"];
-            this.AnimatedBorderStoryBoard.Begin();
-        }
-        else
-        {
-            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RelativeDockingOverlay"];
-            this.AnimatedBorderStoryBoard.Stop();
-        }
     }
 
     private void OnIsInDockingModePropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -163,6 +139,7 @@ public sealed partial class DockPanel
     {
         Debug.Assert(this.ViewModel is not null, "expecting the ViewModel to be not null");
 
+        this.AnimatedBorderStoryBoard.Stop();
         this.HideOverlay();
 
         this.PointerEntered -= this.pointerEnterEventHandler;
@@ -175,7 +152,13 @@ public sealed partial class DockPanel
 
         if (this.ViewModel.IsBeingDocked)
         {
+            this.AnimatedBorderStoryBoard.Begin();
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RootDockingOverlay"];
             this.ShowOverlay();
+        }
+        else
+        {
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RelativeDockingOverlay"];
         }
 
         this.PointerEntered += this.pointerEnterEventHandler;
