@@ -10,7 +10,7 @@ public interface IDock : IDisposable
 {
     DockId Id { get; }
 
-    ReadOnlyCollection<IDockable> Dockables { get; }
+    ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     IDockable? ActiveDockable { get; }
 
