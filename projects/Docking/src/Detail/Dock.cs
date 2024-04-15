@@ -28,17 +28,17 @@ using DroidNet.Docking.Workspace;
 /// </remarks>
 public abstract partial class Dock : IDock
 {
-    private readonly List<Dockable> dockables = [];
-    private Dockable? activeDockable;
-
+    private readonly ObservableCollection<IDockable> dockables = [];
     private bool disposed;
     private Anchor? anchor;
     private Width width = new();
     private Height height = new();
 
-    public ReadOnlyCollection<IDockable> Dockables => this.dockables.Cast<IDockable>().ToList().AsReadOnly();
+    protected Dock() => this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
 
-    public IDockable? ActiveDockable => this.activeDockable;
+    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
+
+    public IDockable? ActiveDockable { get; private set; }
 
     public virtual bool CanMinimize => true;
 
@@ -126,18 +126,14 @@ public abstract partial class Dock : IDock
 
             case DockablePlacement.AfterActiveItem:
             case DockablePlacement.BeforeActiveItem:
-                var activeIndex = this.dockables.FindIndex(d => d.IsActive);
-                if (activeIndex == -1)
+                index = 0;
+                for (var activeIndex = 0; activeIndex < this.dockables.Count; activeIndex++)
                 {
-                    index = 0;
-                }
-                else if (position == DockablePlacement.BeforeActiveItem)
-                {
-                    index = activeIndex;
-                }
-                else
-                {
-                    index = activeIndex + 1;
+                    if (this.Dockables[activeIndex].IsActive)
+                    {
+                        index = position == DockablePlacement.BeforeActiveItem ? activeIndex : activeIndex + 1;
+                        break;
+                    }
                 }
 
                 break;
@@ -193,7 +189,7 @@ public abstract partial class Dock : IDock
     {
         foreach (var dockable in this.dockables)
         {
-            dockable.PropertyChanged -= this.OnDockablePropertyChanged;
+            dockable.AsDockable().PropertyChanged -= this.OnDockablePropertyChanged;
             destinationDock.AdoptDockable(dockable);
         }
 
@@ -209,7 +205,7 @@ public abstract partial class Dock : IDock
 
         foreach (var dockable in this.dockables)
         {
-            dockable.PropertyChanged -= this.OnDockablePropertyChanged;
+            dockable.AsDockable().PropertyChanged -= this.OnDockablePropertyChanged;
             dockable.Dispose();
         }
 
@@ -248,27 +244,27 @@ public abstract partial class Dock : IDock
             }
 #endif
             dockable.IsActive = true;
-            this.activeDockable = dockable;
+            this.ActiveDockable = dockable;
             return;
         }
 
         // If the dockable is becoming active, deactivate the current active dockable.
         if (dockable.IsActive)
         {
-            if (this.activeDockable != null)
+            if (this.ActiveDockable != null)
             {
-                this.activeDockable.IsActive = false;
+                this.ActiveDockable.AsDockable().IsActive = false;
             }
 
-            this.activeDockable = dockable;
+            this.ActiveDockable = dockable;
         }
 
         // If the active dockable is becoming inactive, activate another dockable.
-        else if (this.activeDockable == dockable)
+        else if (this.ActiveDockable == dockable)
         {
             var other = this.dockables.First(d => d != dockable);
-            other.IsActive = true;
-            this.activeDockable = other;
+            other.AsDockable().IsActive = true;
+            this.ActiveDockable = other;
         }
     }
 }
