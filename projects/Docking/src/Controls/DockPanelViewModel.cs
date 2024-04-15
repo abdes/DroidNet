@@ -43,8 +43,7 @@ public partial class DockPanelViewModel : ObservableRecipient
         this.dock = dock;
         this.docker = dock.Docker;
         this.title = dock.ToString() ?? "EMPTY";
-        this.Dockables
-            = new ReadOnlyObservableCollection<IDockable>(new ObservableCollection<IDockable>(dock.Dockables));
+        this.Dockables = dock.Dockables;
     }
 
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
@@ -74,54 +73,63 @@ public partial class DockPanelViewModel : ObservableRecipient
     {
         this.docker.Dock(this.dock, new AnchorLeft());
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void DockToRootTop()
     {
         this.docker.Dock(this.dock, new AnchorTop());
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void DockToRootRight()
     {
         this.docker.Dock(this.dock, new AnchorRight());
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void DockToRootBottom()
     {
         this.docker.Dock(this.dock, new AnchorBottom());
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void AcceptDockBeingDockedLeft()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Left, this.dock.ActiveDockable));
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void AcceptDockBeingDockedTop()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Top, this.dock.ActiveDockable));
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void AcceptDockBeingDockedRight()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Right, this.dock.ActiveDockable));
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void AcceptDockBeingDockedBottom()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.Bottom, this.dock.ActiveDockable));
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     public void AcceptDockBeingDocked()
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPosition.With, this.dock.ActiveDockable));
         this.docker.DumpWorkspace();
+        this.ToggleDockingMode();
     }
 
     [RelayCommand(CanExecute = nameof(CanToggleDockingMode))]
@@ -129,11 +137,11 @@ public partial class DockPanelViewModel : ObservableRecipient
     {
         if (this.IsInDockingMode)
         {
-            _ = WeakReferenceMessenger.Default.Send(new LeaveDockingModeMessage());
+            _ = StrongReferenceMessenger.Default.Send(new LeaveDockingModeMessage());
         }
         else
         {
-            _ = WeakReferenceMessenger.Default.Send(new EnterDockingModeMessage(this.dock));
+            _ = StrongReferenceMessenger.Default.Send(new EnterDockingModeMessage(this.dock));
         }
     }
 
@@ -142,10 +150,10 @@ public partial class DockPanelViewModel : ObservableRecipient
         base.OnActivated();
 
         // Listen for the docking mode messages to participate during a docking manoeuvre.
-        WeakReferenceMessenger.Default.Register<EnterDockingModeMessage>(
+        StrongReferenceMessenger.Default.Register<EnterDockingModeMessage>(
             this,
             (_, message) => this.EnterDockingMode(message.Value));
-        WeakReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
+        StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
     }
 
     private void AnchorDockBeingDockedAt(Anchor anchor)
@@ -186,7 +194,7 @@ public partial class DockPanelViewModel : ObservableRecipient
     [RelayCommand(CanExecute = nameof(CanClose))]
     private void Close()
     {
-        WeakReferenceMessenger.Default.UnregisterAll(this);
+        StrongReferenceMessenger.Default.UnregisterAll(this);
         this.docker.CloseDock(this.dock);
     }
 

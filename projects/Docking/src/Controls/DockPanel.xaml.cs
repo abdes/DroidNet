@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
@@ -74,13 +75,18 @@ public sealed partial class DockPanel
         // We should always set the initial size in the view model after the view is loaded, and everytime the view
         // model changes.
         this.ViewModel?.OnSizeChanged(this.GetActualSize());
-        this.ViewModelChanged += (_, _) => this.ViewModel?.OnSizeChanged(this.GetActualSize());
+        this.ViewModelChanged += this.UpdateViewModelWithInitialSize;
     }
+
+    private void UpdateViewModelWithInitialSize(
+        object? o,
+        ViewModelChangedEventArgs<DockPanelViewModel> viewModelChangedEventArgs)
+        => this.ViewModel?.OnSizeChanged(this.GetActualSize());
 
     private void OnUnloaded(object o, RoutedEventArgs routedEventArgs)
     {
+        this.ViewModelChanged -= this.UpdateViewModelWithInitialSize;
         this.sizeChangedSubscription?.Dispose();
-        this.ViewModel = null;
     }
 
     private void OnIsBeingDockedPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -95,10 +101,12 @@ public sealed partial class DockPanel
 
         if (vm.IsBeingDocked)
         {
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RootDockingOverlay"];
             this.AnimatedBorderStoryBoard.Begin();
         }
         else
         {
+            this.Overlay.ContentTemplate = (DataTemplate)this.Resources["RelativeDockingOverlay"];
             this.AnimatedBorderStoryBoard.Stop();
         }
     }
