@@ -83,7 +83,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
             this.Right = node;
 
             // Apply the desired orientation, but only if the segment has more than one child.
-            if (this.Value is not EdgeGroup && this.Right != null)
+            if (this.Value is not EdgeGroup && this.Left != null)
             {
                 this.Value.Orientation = orientation;
             }
