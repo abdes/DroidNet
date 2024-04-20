@@ -12,9 +12,25 @@ using DroidNet.Docking;
 /// <param name="segment">The value stored in the node; corresponds to a layout segment in the workspace layout.</param>
 internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTreeNode<LayoutSegment>(segment)
 {
-    public new DockingTreeNode? Left { get => (DockingTreeNode?)base.Left; protected set => base.Left = value; }
+    /// <summary>Gets or sets the left child node.</summary>
+    /// <remarks>
+    /// Redefined to allow for setting the property in derived classes (greatly simplifies unit testing).
+    /// </remarks>
+    public new virtual DockingTreeNode? Left
+    {
+        get => (DockingTreeNode?)base.Left;
+        protected set => base.Left = value;
+    }
 
-    public new DockingTreeNode? Right { get => (DockingTreeNode?)base.Right; protected set => base.Right = value; }
+    /// <summary>Gets or sets the right child node.</summary>
+    /// <remarks>
+    /// Redefined to allow for setting the property in derived classes (greatly simplifies unit testing).
+    /// </remarks>
+    public new virtual DockingTreeNode? Right
+    {
+        get => (DockingTreeNode?)base.Right;
+        protected set => base.Right = value;
+    }
 
     public new DockingTreeNode? Parent => (DockingTreeNode?)base.Parent;
 
