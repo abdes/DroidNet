@@ -117,8 +117,7 @@ public sealed partial class DockPanel
             return;
         }
 
-        Debug.WriteLine(
-            $"{this} : Show Overlay {(this.ViewModel.IsBeingDocked ? "and I am being docked" : string.Empty)}");
+        // $"{this} : Show Overlay {(this.ViewModel.IsBeingDocked ? "and I am being docked" : string.Empty)}"
         this.OverlayVisibility = Visibility.Visible;
     }
 
@@ -131,8 +130,7 @@ public sealed partial class DockPanel
             return;
         }
 
-        Debug.WriteLine(
-            $"{this} : Hide Overlay {(this.ViewModel.IsBeingDocked ? "and I am being docked" : string.Empty)}");
+        // "{this} : Hide Overlay {(this.ViewModel.IsBeingDocked ? "and I am being docked" : string.Empty)}"
         this.OverlayVisibility = Visibility.Collapsed;
     }
 

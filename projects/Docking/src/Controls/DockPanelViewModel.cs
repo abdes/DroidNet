@@ -54,7 +54,7 @@ public partial class DockPanelViewModel : ObservableRecipient
         // trigger the resize if the size changes after the initial update.
         if (this.initialSizeUpdate)
         {
-            Debug.WriteLine($"DockPanel {this.dock.Id} this is our initial size: {newSize}");
+            // $"DockPanel {this.dock.Id} this is our initial size: {newSize}"
             this.previousSize.Width = newSize.Width;
             this.previousSize.Height = newSize.Height;
             this.initialSizeUpdate = false;
@@ -111,7 +111,6 @@ public partial class DockPanelViewModel : ObservableRecipient
     private void AcceptDockBeingDocked(string anchorPosition)
     {
         this.AnchorDockBeingDockedAt(new Anchor(AnchorPositionFromString(anchorPosition), this.dock.ActiveDockable));
-        this.docker.DumpWorkspace();
         this.ToggleDockingMode();
     }
 
@@ -122,8 +121,6 @@ public partial class DockPanelViewModel : ObservableRecipient
 
         this.docker.Dock(this.dock, anchor);
         this.ToggleDockingMode();
-
-        this.docker.DumpWorkspace();
     }
 
     private void AnchorDockBeingDockedAt(Anchor anchor)

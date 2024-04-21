@@ -4,8 +4,6 @@
 
 namespace DroidNet.Docking.Workspace;
 
-using System.Diagnostics;
-
 /// <summary>Docking tree traversal algorithms.</summary>
 internal static class TreeTraversal
 {
@@ -48,7 +46,6 @@ internal static class TreeTraversal
             else if (currentNode.Left == null || previousNode == currentNode.Left)
             {
                 // Visit the current node
-                Debug.WriteLine($"Visiting {currentNode}");
                 var continueTraversal = visit(currentNode);
                 if (!continueTraversal)
                 {

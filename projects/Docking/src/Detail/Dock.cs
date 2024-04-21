@@ -72,7 +72,7 @@ public abstract partial class Dock : IDock
         get => this.width;
         internal set
         {
-            Debug.WriteLine($"Dock {this} my width has changed to: {value}");
+            // $"Dock {this} my width has changed to: {value}"
 
             // Set the width for the Dock, but also for its Active Dockable
             this.width = value;
@@ -93,7 +93,7 @@ public abstract partial class Dock : IDock
         get => this.height;
         internal set
         {
-            Debug.WriteLine($"Dock {this} my height has changed to: {value}");
+            // $"Dock {this} my height has changed to: {value}"
 
             // Set the height for the Dock, but also for its Active Dockable
             this.height = value;
@@ -153,15 +153,13 @@ public abstract partial class Dock : IDock
         // preferred values from the dockable just added.
         if (this.width.IsNullOrEmpty && !dockableImpl.PreferredWidth.IsNullOrEmpty)
         {
-            Debug.WriteLine(
-                $"Dock {this} initializing my width from dockable {dockableImpl.Id}: {dockableImpl.PreferredWidth}");
+            // $"Dock {this} initializing my width from dockable {dockableImpl.Id}: {dockableImpl.PreferredWidth}"
             this.width = dockableImpl.PreferredWidth;
         }
 
         if (this.height.IsNullOrEmpty && !dockableImpl.PreferredHeight.IsNullOrEmpty)
         {
-            Debug.WriteLine(
-                $"Dock {this} initializing my height from dockable {dockableImpl.Id}: {dockableImpl.PreferredHeight}");
+            // $"Dock {this} initializing my height from dockable {dockableImpl.Id}: {dockableImpl.PreferredHeight}"
             this.height = dockableImpl.PreferredHeight;
         }
     }
@@ -236,12 +234,6 @@ public abstract partial class Dock : IDock
         // dockable we have, force it to stay active.
         if (this.dockables.Count == 1)
         {
-#if DEBUG
-            if (!dockable.IsActive)
-            {
-                Debug.WriteLine($"cannot set the only dockable `{dockable}` this.Id `{this}` have as inactive.");
-            }
-#endif
             dockable.IsActive = true;
             this.ActiveDockable = dockable;
             return;

@@ -57,35 +57,28 @@ public sealed partial class MainWindow
     {
         var docker = new Docker();
         docker.Dock(CenterDock.New(), new Anchor(AnchorPosition.Center));
-        docker.DumpWorkspace();
 
         var left1 = MakeDockWithVerticalDockable(resolver, "left1");
         docker.Dock(left1, new AnchorLeft());
-        docker.DumpWorkspace();
 
         var left2 = MakeDockWithVerticalDockable(resolver, "left2");
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
-        docker.DumpWorkspace();
         docker.Dock(MakeDockWithVerticalDockable(resolver, "left3"), new AnchorLeft(), minimized: true);
-        docker.DumpWorkspace();
         docker.Dock(MakeDockWithVerticalDockable(resolver, "left4"), new AnchorLeft());
-        docker.DumpWorkspace();
 
         docker.Dock(MakeDockWithHorizontalDockable(resolver, "top1"), new AnchorTop());
-        docker.DumpWorkspace();
 
         docker.Dock(MakeDockWithHorizontalDockable(resolver, "bottom1"), new AnchorBottom(), minimized: true);
 
         var right1 = MakeDockWithVerticalDockable(resolver, "right1");
         docker.Dock(right1, new AnchorRight());
-        docker.DumpWorkspace();
         docker.Dock(
             MakeDockWithVerticalDockable(resolver, "right2"),
             new Anchor(AnchorPosition.Right, right1.Dockables[0]));
-        docker.DumpWorkspace();
         docker.Dock(
             MakeDockWithVerticalDockable(resolver, "right3"),
             new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
+
         docker.DumpWorkspace();
 
         return docker;
