@@ -11,7 +11,9 @@ using Microsoft.UI.Xaml.Controls;
 
 public class ResizableVectorGrid : Grid
 {
-    private readonly List<bool> fixedSizeItems = [];
+    private readonly List<bool> resizableItems = [];
+
+    private bool hasStrectToFillItem;
 
     public ResizableVectorGrid(Orientation orientation)
     {
@@ -27,22 +29,74 @@ public class ResizableVectorGrid : Grid
     {
         this.DefineItem(length, minLength);
         this.AddItem(content);
-        this.fixedSizeItems.Add(false);
+        this.resizableItems.Add(false);
     }
 
     public void AddResizableItem(UIElement content, GridLength length, double minLength)
     {
-        if (this.Children.Count > 0 && this.fixedSizeItems[this.Children.Count - 1])
+        if (length.IsStar)
+        {
+            this.hasStrectToFillItem = true;
+        }
+
+        if (this.Children.Count > 0 && this.resizableItems[this.Children.Count - 1])
         {
             this.AddSplitter();
         }
 
         this.DefineItem(length, minLength);
         this.AddItem(content);
-        this.fixedSizeItems.Add(true);
+        this.resizableItems.Add(true);
     }
 
     public override string ToString() => $"{nameof(ResizableVectorGrid)} [{this.Name}]";
+
+    public void AdjustSizes()
+    {
+        if (this.hasStrectToFillItem)
+        {
+            return;
+        }
+
+        if (this.Orientation == Orientation.Horizontal)
+        {
+            this.AdjustColumnWidths();
+        }
+        else
+        {
+            this.AdjustRowHeights();
+        }
+    }
+
+    private void AdjustRowHeights()
+    {
+        for (var index = 0; index < this.RowDefinitions.Count; index++)
+        {
+            if (this.resizableItems[index])
+            {
+                var row = this.RowDefinitions[index];
+                if (row.Height.IsAbsolute)
+                {
+                    row.Height = new GridLength(row.Height.Value, GridUnitType.Star);
+                }
+            }
+        }
+    }
+
+    private void AdjustColumnWidths()
+    {
+        for (var index = 0; index < this.ColumnDefinitions.Count; index++)
+        {
+            if (this.resizableItems[index])
+            {
+                var column = this.ColumnDefinitions[index];
+                if (column.Width.IsAbsolute)
+                {
+                    column.Width = new GridLength(column.Width.Value, GridUnitType.Star);
+                }
+            }
+        }
+    }
 
     private void DefineItem(GridLength length, double minLength)
     {
@@ -81,7 +135,7 @@ public class ResizableVectorGrid : Grid
         };
         this.DefineItem(GridLength.Auto, 6);
         this.AddItem(splitter);
-        this.fixedSizeItems.Add(false);
+        this.resizableItems.Add(false);
     }
 
     private void AddItem(UIElement content)
