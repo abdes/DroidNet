@@ -177,9 +177,12 @@ internal partial class LayoutDockGroup
     {
         var items = this.Docks.ToList();
         var relativeToIndex = relativeTo is null ? 0 : this.Docks.IndexOf(relativeTo);
-        Debug.Assert(
-            relativeToIndex != -1,
-            $"Relative dock `{relativeTo}` does not belong to this dock group Id=`{this}`");
+        if (relativeToIndex == -1)
+        {
+            throw new ArgumentException(
+                $"Relative dock `{relativeTo}` does not belong to this dock group Id=`{this}`",
+                nameof(relativeTo));
+        }
 
         var before = items[..relativeToIndex];
         var relativeItem = items[relativeToIndex];
@@ -189,7 +192,7 @@ internal partial class LayoutDockGroup
         hostGroup.AddDock(relativeItem);
 
         var beforeGroup = before.Count != 0
-            ? new LayoutDockGroup(this.Docker, this.Orientation)
+            ? new LayoutDockGroup(this.Docker, before.Count > 1 ? this.Orientation : DockGroupOrientation.Undetermined)
             : null;
         if (beforeGroup != null)
         {
@@ -201,7 +204,7 @@ internal partial class LayoutDockGroup
         }
 
         var afterGroup = after.Count != 0
-            ? new LayoutDockGroup(this.Docker, this.Orientation)
+            ? new LayoutDockGroup(this.Docker, after.Count > 1 ? this.Orientation : DockGroupOrientation.Undetermined)
             : null;
         if (afterGroup != null)
         {
