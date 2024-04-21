@@ -147,7 +147,7 @@
                     Grid.Row="2"
                     Grid.Column="2"
                     Command="{x:Bind AcceptDockBeingDockedCommand}"
-                    CommandParameter="Center">
+                    CommandParameter="With">
                     <FontIcon Glyph="&#xEA3A;" />
                 </Button>
                 <Grid.KeyboardAccelerators>
