@@ -19,14 +19,14 @@ public partial class Docker
             return;
         }
 
-        Debug.WriteLine($"Consolidating the docking tree up, starting from {startingSegment}");
+        // $"Consolidating the docking tree up, starting from {startingSegment}"
 
         // If a consolidation is ongoing, some manipulations of the docking tree may trigger consolidation again. This
         // method should not be re-entrant. Instead, we just ignore the new request and continue the ongoing
         // consolidation.
         if (Interlocked.Exchange(ref this.isConsolidating, 1) == 1)
         {
-            Debug.WriteLine("Already consolidating...");
+            // "Already consolidating..."
             return;
         }
 

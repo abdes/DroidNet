@@ -488,8 +488,9 @@ public partial class Docker
         var flow = layoutEngine.StartLayout(this.root.Value);
         layoutEngine.PushFlow(flow);
         Layout(this.root, layoutEngine);
-        Debug.WriteLine($"=== Final state: {layoutEngine.CurrentFlow}");
         Debug.Assert(flow == layoutEngine.CurrentFlow, "some pushes were not matched by pops");
+
+        // $"=== Final state: {layoutEngine.CurrentFlow}"
         layoutEngine.EndLayout();
     }
 
@@ -530,7 +531,7 @@ public partial class Docker
             if (segment is DockGroup group &&
                 group.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
             {
-                Debug.WriteLine("Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined");
+                // "Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined"
                 orientation = DockGroupOrientation.Undetermined;
             }
 
@@ -563,12 +564,11 @@ public partial class Docker
 
         if (!ShouldShowNodeRecursive(node))
         {
-            Debug.WriteLine($"Skipping {node.Value}");
+            // $"Skipping {node.Value}"
             return;
         }
 
-        Debug.WriteLine($"Layout started for item {node.Value}");
-
+        // $"Layout started for item {node.Value}"
         var reoriented = ReorientFlowIfNeeded(node.Value, layoutEngine);
         if (reoriented)
         {
@@ -596,7 +596,7 @@ public partial class Docker
             layoutEngine.PopFlow();
         }
 
-        Debug.WriteLine($"Layout ended for Group {node}");
+        // $"Layout ended for Group {node}"
     }
 
     private void FireLayoutChangedEvent(LayoutChangeReason reason)

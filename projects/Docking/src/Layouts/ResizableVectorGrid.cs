@@ -4,8 +4,6 @@
 
 namespace DroidNet.Docking.Layouts;
 
-using System.Diagnostics;
-using System.Globalization;
 using CommunityToolkit.WinUI.Controls;
 using DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
@@ -50,7 +48,7 @@ public class ResizableVectorGrid : Grid
     {
         if (this.Orientation == Orientation.Horizontal)
         {
-            Debug.WriteLine($"Adding column definition Width={length}");
+            // $"Adding column definition Width={length}"
             this.ColumnDefinitions.Add(
                 new ColumnDefinition()
                 {
@@ -60,7 +58,7 @@ public class ResizableVectorGrid : Grid
         }
         else
         {
-            Debug.WriteLine($"Adding row definition Height={length}");
+            // $"Adding row definition Height={length}"
             this.RowDefinitions.Add(
                 new RowDefinition()
                 {
@@ -91,8 +89,8 @@ public class ResizableVectorGrid : Grid
         var (row, column) = this.Orientation == Orientation.Horizontal
             ? (0, this.Children.Count)
             : (this.Children.Count, 0);
-        Debug.WriteLine(
-            $"Adding item {content} at row={row.ToString(CultureInfo.InvariantCulture)}, col={column.ToString(CultureInfo.InvariantCulture)}");
+
+        // $"Adding item {content} at row={row.ToString(CultureInfo.InvariantCulture)}, col={column.ToString(CultureInfo.InvariantCulture)}"
         content.SetValue(RowProperty, row);
         content.SetValue(ColumnProperty, column);
         this.Children.Add(content);

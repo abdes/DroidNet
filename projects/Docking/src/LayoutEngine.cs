@@ -4,7 +4,6 @@
 
 namespace DroidNet.Docking;
 
-using System.Diagnostics;
 using DroidNet.Docking.Utils;
 using DroidNet.Docking.Workspace;
 
@@ -26,17 +25,10 @@ public abstract class LayoutEngine
 
     public abstract void EndLayout();
 
-    internal void PushFlow(Flow state)
-    {
-        Debug.WriteLine($"==> {state}");
-        this.flows.Push(state);
-    }
+    internal void PushFlow(Flow state) => this.flows.Push(state); /* $"==> {state}"*/
 
     internal void PopFlow()
-    {
-        _ = this.flows.Pop();
-        Debug.WriteLine($"<== {(this.flows.Count != 0 ? this.flows.Peek() : string.Empty)}");
-    }
+        => _ = this.flows.Pop(); /* $"<== {(this.flows.Count != 0 ? this.flows.Peek() : string.Empty)}" */
 
     public abstract class Flow(ILayoutSegment segment)
     {

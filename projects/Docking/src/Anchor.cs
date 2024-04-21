@@ -101,15 +101,13 @@ public class Anchor : IDisposable
         var newAnchor = this.RelativeTo.Owner?.Anchor;
         if (newAnchor != null)
         {
-            Debug.WriteLine(
-                $"My anchor dockable was disposed of, anchoring myself {newAnchor.Position} relative to {newAnchor.RelativeTo?.ToString() ?? "root"}");
+            // $"My anchor dockable was disposed of, anchoring myself {newAnchor.Position} relative to {newAnchor.RelativeTo?.ToString() ?? "root"}"
             this.Position = newAnchor.Position;
             this.RelativeTo = newAnchor.RelativeTo;
         }
         else
         {
-            Debug.WriteLine(
-                $"My anchor dockable was disposed of, new anchor is null! Anchoring myself {nameof(AnchorPosition.Left)} relative to root");
+            // $"My anchor dockable was disposed of, new anchor is null! Anchoring myself {nameof(AnchorPosition.Left)} relative to root"
             this.Position = AnchorPosition.Left;
             this.RelativeTo = null;
         }
