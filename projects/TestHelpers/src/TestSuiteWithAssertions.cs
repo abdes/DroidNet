@@ -16,6 +16,8 @@ public abstract class TestSuiteWithAssertions : IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
 
+    private bool disposed;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TestSuiteWithAssertions" /> class.
     /// </summary>
@@ -33,8 +35,13 @@ public abstract class TestSuiteWithAssertions : IDisposable
 
     /// <inheritdoc />
     [TestCleanup]
-    public void Dispose()
+    public virtual void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.TraceListener.Clear();
         Trace.Listeners.Clear();
         if (this.originalTraceListeners != null)
@@ -43,5 +50,6 @@ public abstract class TestSuiteWithAssertions : IDisposable
         }
 
         GC.SuppressFinalize(this);
+        this.disposed = true;
     }
 }
