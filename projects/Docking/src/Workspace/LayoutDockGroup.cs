@@ -148,18 +148,6 @@ internal partial class LayoutDockGroup
                 $"attempt to a remove dock with Id={dock.Id} from group Id={this}, but the dock was not there.");
         }
 
-        if (this.Docks.Count > 0)
-        {
-            if (this.Orientation == DockGroupOrientation.Vertical)
-            {
-                this.Docks[^1].AsDock().Height = new Height("1*");
-            }
-            else
-            {
-                this.Docks[^1].AsDock().Width = new Width("1*");
-            }
-        }
-
         if (this.Docks.Count < 2)
         {
             this.Orientation = DockGroupOrientation.Undetermined;
