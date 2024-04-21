@@ -149,14 +149,6 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
             throw new InvalidOperationException($"relative node ({sibling}) is not managed by me ({this})");
         }
 
-        // If the group has a part already that matches the relative sibling, then it must be a layout node.
-        Debug.Assert(this.Value is LayoutGroup, "a node with children must be a layout node");
-
-        if (this.Value.Orientation == DockGroupOrientation.Undetermined)
-        {
-            this.Value.Orientation = orientation;
-        }
-
         if (this.Left != null && this.Right != null)
         {
             if (this.Left == sibling)
@@ -179,7 +171,10 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         }
 
         this.Right = node;
-        this.Value.Orientation = orientation;
+        if (this.Value is not EdgeGroup)
+        {
+            this.Value.Orientation = orientation;
+        }
     }
 
     /// <summary>
@@ -205,14 +200,6 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
             throw new InvalidOperationException($"relative node ({sibling}) is not managed by me ({this})");
         }
 
-        // If the group has a part already that matches the relative sibling, then it must be a layout node.
-        Debug.Assert(this.Value is LayoutGroup, "a node with children must be a layout node");
-
-        if (this.Value.Orientation == DockGroupOrientation.Undetermined)
-        {
-            this.Value.Orientation = orientation;
-        }
-
         if (this.Left != null && this.Right != null)
         {
             if (this.Left == sibling)
@@ -235,12 +222,19 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         }
 
         this.Left = node;
-        this.Value.Orientation = orientation;
+        if (this.Value is not EdgeGroup)
+        {
+            this.Value.Orientation = orientation;
+        }
     }
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">If the node to be removed holds the <see cref="CenterGroup" />
     /// segment.</exception>
+    /// <remarks>
+    /// After the child is successfully removed, the node is left with at most one child, and its orientation is set to
+    /// <see cref="DockGroupOrientation.Undetermined" /> (this does not apply to edge segments, which orientation never changes).
+    /// </remarks>
     public override void RemoveChild(BinaryTreeNode<LayoutSegment> node)
     {
         if (node.Value is CenterGroup)
@@ -259,35 +253,8 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         }
     }
 
-    /// <summary>Migrate then remove the specified child into this node then remove the child from the node.</summary>
-    /// <param name="child">The child to be assimilated.</param>
-    /// <remarks>
-    /// This operation is useful when the child is not needed to ensure the expected layout (typically, a single child with a
-    /// compatible orientation with its parent orientation). The resulting tree after this operation will be simpler.
-    /// </remarks>
-    public void AssimilateChild(DockingTreeNode child)
-    {
-        Debug.Assert(this.Left is null || this.Right is null, "only a lone child can be assimilated by its parent");
-        Debug.Assert(child.Value is not CenterGroup or EdgeGroup, "root groups cannot be assimilated");
-        Debug.Assert(this.Value is LayoutGroup, $"only nodes with a {nameof(LayoutGroup)} item can assimilate a child");
-
-        if (child.IsLeaf)
-        {
-            this.Left = this.Right = null;
-            this.MigrateDocks(from: child, to: this);
-        }
-        else
-        {
-            Debug.Assert(this.Value is LayoutGroup, $"internal node must have an item with type{nameof(LayoutGroup)}");
-            this.Left = child.Left;
-            this.Right = child.Right;
-        }
-
-        if (child.Value.Orientation != DockGroupOrientation.Undetermined)
-        {
-            this.Value.Orientation = child.Value.Orientation;
-        }
-    }
+    /// <inheritdoc />
+    public override string ToString() => $"{base.ToString()} \u2191 {this.Parent?.Value.DebugId}";
 
     /// <summary>Merge two leaf children with compatible orientations together, leaving a single child as a result.</summary>
     /// <exception cref="InvalidOperationException">When one of the children is <see langword="null" />, or is a leaf node, or
@@ -316,18 +283,23 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         }
 
         this.MigrateDocks(from: this.Right, to: this.Left);
-        this.Left.Value.Orientation = this.Left.Parent!.Value.Orientation;
+        if (this.Left.Value is LayoutDockGroup segment)
+        {
+            segment.Orientation = segment.Docks.Count > 1 ? this.Value.Orientation : DockGroupOrientation.Undetermined;
+        }
+
         this.RemoveChild(this.Right);
     }
 
     /// <summary>Restructure the docks in this node's segment to partition them into theree groups. The first group will hold any
-    /// docks before the <paramref name="relativeTo" /> dock, the second will hold the <paramref name="relativeTo" /> dock, and the
-    /// third will hold the docks after the <paramref name="relativeTo" /> dock.</summary>
+    /// docks before the <paramref name="relativeTo" /> dock, the second will hold the <paramref name="relativeTo" /> dock, and
+    /// the third will hold the docks after the <paramref name="relativeTo" /> dock.</summary>
     /// <param name="relativeTo">The dock relative to which the partitioning will happen.</param>
     /// <param name="orientation">The desired orientation of the resulting sub-tree root.</param>
     /// <returns>The segment containing the <paramref name="relativeTo" />.</returns>
-    /// <exception cref="InvalidOperationException">If this not does not hold a <see cref="LayoutDockGroup" /> segment.</exception>
-    public LayoutDockGroup Repartition(IDock? relativeTo, DockGroupOrientation orientation)
+    /// <exception cref="InvalidOperationException">If this node does not hold a <see cref="LayoutDockGroup" /> segment or if the
+    /// <paramref name="relativeTo" /> does not belong to this node's segment.</exception>
+    internal LayoutDockGroup Repartition(IDock? relativeTo, DockGroupOrientation orientation)
     {
         if (this.Value is not LayoutDockGroup group)
         {
@@ -365,8 +337,49 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         return hostGroup;
     }
 
-    /// <inheritdoc />
-    public override string ToString() => $"{base.ToString()} \u2191 {this.Parent?.Value.DebugId}";
+    /// <summary>Migrate the content of a lone child into this node then remove the child from the node.</summary>
+    /// <param name="child">The child to be assimilated.</param>
+    /// <exception cref="InvalidOperationException">
+    /// When the <paramref name="child" /> has a sibling, or ishold a root group (<see cref="CenterGroup" /> or
+    /// <see cref="EdgeGroup" />), or the specified child is not a child of this node.
+    /// </exception>
+    /// <remarks>
+    /// This operation is useful when the child is not needed to ensure the expected layout (typically, a single child with a
+    /// compatible orientation with its parent orientation). The resulting tree after this operation will be simpler.
+    /// </remarks>
+    internal void AssimilateChild(DockingTreeNode child)
+    {
+        if (child.Sibling is not null)
+        {
+            throw new InvalidOperationException("only a lone child can be assimilated by its parent");
+        }
+
+        if (child.Value is CenterGroup or EdgeGroup)
+        {
+            throw new InvalidOperationException("root groups cannot be assimilated");
+        }
+
+        if (this.Left != child && this.Right != child)
+        {
+            throw new InvalidOperationException($"node ({child}) is not managed by me ({this})");
+        }
+
+        if (child.IsLeaf)
+        {
+            this.Left = this.Right = null;
+            this.MigrateDocks(from: child, to: this);
+        }
+        else
+        {
+            this.Left = child.Left;
+            this.Right = child.Right;
+        }
+
+        if (child.Value.Orientation != DockGroupOrientation.Undetermined)
+        {
+            this.Value.Orientation = child.Value.Orientation;
+        }
+    }
 
     /// <summary>Migrates docks from one node to another.</summary>
     /// <param name="from">The source docking node.</param>
