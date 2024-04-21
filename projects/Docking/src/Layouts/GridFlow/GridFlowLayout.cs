@@ -65,10 +65,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         };
     }
 
-    public override void EndFlow()
-    {
-        // $"Close flow {this.CurrentGrid}"
-    }
+    public override void EndFlow() => this.CurrentGrid.AdjustSizes(); /* $"Close flow {this.CurrentGrid}" */
 
     public override void EndLayout()
     {
@@ -133,6 +130,8 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     private sealed class GridFlow(ILayoutSegment segment) : Flow(segment)
     {
+        public ILayoutSegment Segment { get; } = segment;
+
         public required ResizableVectorGrid Grid { get; init; }
     }
 
