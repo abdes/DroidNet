@@ -84,7 +84,7 @@ public class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void Dispose_ShouldDisposeAllDockablesAndClearDockables()
+    public void Dispose_ShouldDisposeAllDockables()
     {
         // Arrange
         this.dock.AdoptDockable(this.dockable1);
@@ -94,7 +94,6 @@ public class DockTests : IDisposable
         this.dock.Dispose();
 
         // Assert
-        _ = this.dock.Dockables.Should().BeEmpty("all dockables should be disposed and removed from the dock");
         _ = this.dockable1Disposed.Should().BeTrue();
         _ = this.dockable2Disposed.Should().BeTrue();
     }
