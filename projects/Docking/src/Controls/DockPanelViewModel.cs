@@ -58,6 +58,8 @@ public partial class DockPanelViewModel : ObservableRecipient
             this.previousSize.Width = newSize.Width;
             this.previousSize.Height = newSize.Height;
             this.initialSizeUpdate = false;
+
+            this.docker.ResizeDock(this.dock, new Width(newSize.Width), new Height(newSize.Height));
             return;
         }
 
