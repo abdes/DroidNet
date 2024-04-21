@@ -214,7 +214,6 @@ public abstract partial class Dock : IDock
         // dockables.
         this.anchor = null;
 
-        this.dockables.Clear();
         this.Group = null;
         this.Docker = null;
 
