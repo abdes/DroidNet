@@ -20,7 +20,7 @@ public class BinaryTreeNodeTests : IDisposable
 
     public void Dispose()
     {
-        if (!this.disposed)
+        if (this.disposed)
         {
             return;
         }
