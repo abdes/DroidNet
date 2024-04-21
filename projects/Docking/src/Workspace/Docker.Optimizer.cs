@@ -66,24 +66,13 @@ public partial class Docker
 
     private static DockingTreeNode? SimplifyChildren(DockingTreeNode node)
     {
-        // Single child parent
-        if (node.Left is null || node.Right is null)
+        if (node.Left is null && node.Right is null)
         {
-            var child = node.Left ?? node.Right;
-            Debug.Assert(child is not null, "leaf case should be handled before");
-
-            // with compatible orientation => assimilate child into parent
-            if (child.Value.Orientation == DockGroupOrientation.Undetermined ||
-                node.Value.Orientation == DockGroupOrientation.Undetermined ||
-                child.Value.Orientation == node.Value.Orientation)
-            {
-                // Assimilate child, unless it is the center group node.
-                return child.Value is CenterGroup
-                    ? null
-                    : new AssimilateChild(child: child, parent: node).Execute();
-            }
+            return node.Parent;
         }
-        else
+
+        // Single child parent
+        if (node.Left is not null && node.Right is not null)
         {
             // Parent with two leaf children
             if (node is { Left: DockingTreeNode { IsLeaf: true }, Right: DockingTreeNode { IsLeaf: true } })
@@ -96,6 +85,22 @@ public partial class Docker
                 {
                     return new MergeLeafParts(node).Execute();
                 }
+            }
+        }
+        else
+        {
+            var child = node.Left ?? node.Right;
+            Debug.Assert(child is not null, "at least left or right should not be null");
+
+            // with compatible orientation => assimilate child into parent
+            if (child.Value.Orientation == DockGroupOrientation.Undetermined ||
+                node.Value.Orientation == DockGroupOrientation.Undetermined ||
+                child.Value.Orientation == node.Value.Orientation)
+            {
+                // Assimilate child, unless it is the center group node.
+                return child.Value is CenterGroup
+                    ? null
+                    : new AssimilateChild(child: child, parent: node).Execute();
             }
         }
 
