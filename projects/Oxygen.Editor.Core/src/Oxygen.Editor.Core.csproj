@@ -23,7 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="TestableIO.System.IO.Abstractions" />
+        <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
 
 </Project>
