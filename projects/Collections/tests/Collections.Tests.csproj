@@ -13,8 +13,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="..\src\Collections.csproj" />
-        <ProjectReference Include="Testably.Abstractions.Testing" />
+        <ProjectReference Include="..\src\Collections.csproj" />
     </ItemGroup>
 
 </Project>
