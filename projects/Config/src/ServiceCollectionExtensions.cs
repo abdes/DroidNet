@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config.Persistence;
+namespace DroidNet.Config;
 
 using System.IO.Abstractions;
-using DroidNet.Config;
+using DroidNet.Config.Detail;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -17,6 +17,8 @@ using Microsoft.Extensions.Options;
 /// <see cref="IWritableOptions{T}" />
 public static class ServiceCollectionExtensions
 {
+    /* TODO(abdes): Make it explicit that the serialization uses JSON, or support a more open API */
+
     public static IServiceCollection ConfigureWritable<T>(
         this IServiceCollection services,
         IConfigurationSection section,

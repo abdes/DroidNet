@@ -2,18 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config.Persistence;
+namespace DroidNet.Config.Detail;
 
 using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using DroidNet.Config;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
-public class WritableOptions<T>(
+internal sealed class WritableOptions<T>(
     IOptionsMonitor<T> options,
     IConfigurationRoot configuration,
     string section,
@@ -44,7 +43,7 @@ public class WritableOptions<T>(
         try
         {
             var jObject = this.fs.File.Exists(this.filePath)
-                ? JsonSerializer.Deserialize<JsonObject>(File.ReadAllText(this.filePath)) ?? new JsonObject()
+                ? JsonSerializer.Deserialize<JsonObject>(this.fs.File.ReadAllText(this.filePath)) ?? new JsonObject()
                 : new JsonObject();
             var sectionObject = jObject.TryGetPropertyValue(this.sectionName, out var section)
                 ? JsonSerializer.Deserialize<T>(section!.ToString(), jsonSerializerOptions)
@@ -53,7 +52,8 @@ public class WritableOptions<T>(
             applyChanges(sectionObject!);
 
             jObject[this.sectionName] = JsonNode.Parse(JsonSerializer.Serialize(sectionObject, jsonSerializerOptions));
-            this.fs.File.WriteAllText(this.filePath, JsonSerializer.Serialize(jObject, jsonSerializerOptions));
+            var configText = JsonSerializer.Serialize(jObject, jsonSerializerOptions);
+            this.fs.File.WriteAllText(this.filePath, configText);
         }
         catch (Exception ex)
         {

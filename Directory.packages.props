@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
@@ -17,6 +17,7 @@
     <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageVersion Include="Serilog.Sinks.Debug" Version="2.0.0" />
     <PackageVersion Include="Serilog.Sinks.Seq" Version="7.0.0" />
+    <PackageVersion Include="Testably.Abstractions" Version="3.2.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="System.Reactive" Version="6.0.0" />
@@ -26,6 +27,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Xaml.Behaviors.WinUI.Managed" Version="2.0.9" />
@@ -65,6 +67,6 @@
     <PackageVersion Include="Verify.MSTest" Version="24.1.0" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.6.0" />
-    <PackageVersion Include="TestableIO.System.IO.Abstractions" Version="21.0.2" />
+    <PackageVersion Include="Testably.Abstractions.Testing" Version="3.2.0" />
   </ItemGroup>
 </Project>
