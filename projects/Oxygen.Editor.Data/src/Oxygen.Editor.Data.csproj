@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Platforms>x86;x64;arm64</Platforms>
+
+        <Title>Oxygen Editor Data Layer</Title>
+        <Description>Contains the data model and APIs for projects and templates used by the editor.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;editor;projects;data;persistence</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <RootNamespace>Oxygen.Editor.Data</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    </ItemGroup>
+
+</Project>

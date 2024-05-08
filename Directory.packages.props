@@ -39,6 +39,10 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="7.1.2" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
   </ItemGroup>
   <!-- Tooling -->
   <ItemGroup>
