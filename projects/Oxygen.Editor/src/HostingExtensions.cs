@@ -4,6 +4,7 @@
 
 namespace Oxygen.Editor;
 
+using DroidNet.Hosting.Generators;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -33,4 +34,7 @@ public static class HostingExtensions
                         r => r.Parent.ImplementationType),
                     setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
             });
+
+    public static IHostBuilder ConfigureAutoInjected(this IHostBuilder builder) =>
+        builder.ConfigureServices((_, services) => services.UseAutoInject());
 }
