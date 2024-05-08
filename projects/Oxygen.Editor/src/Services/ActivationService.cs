@@ -1,5 +1,5 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.Services;
@@ -45,9 +45,9 @@ public class ActivationService : IActivationService, IDisposable
 
     public async void Activate(object activationData)
     {
-        await this.beforeActivation();
+        await this.beforeActivation().ConfigureAwait(false);
         this.subject.OnNext(activationData);
-        await this.afterActivation(activationData);
+        await this.afterActivation(activationData).ConfigureAwait(false);
     }
 
     public void Dispose()

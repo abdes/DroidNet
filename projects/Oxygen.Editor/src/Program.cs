@@ -4,18 +4,20 @@
 
 namespace Oxygen.Editor;
 
-using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Config;
+using DroidNet.Hosting.WinUI;
+using DryIoc;
+using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
@@ -31,13 +33,30 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage.Native;
 using Oxygen.Editor.ViewModels;
 using Oxygen.Editor.Views;
+using Serilog;
+using Serilog.Events;
+using Serilog.Templates;
 using Testably.Abstractions;
-using UnhandledExceptionEventArgs = System.UnhandledExceptionEventArgs;
 
-/// <summary>The Main entry of the application.</summary>
-/// Overrides the usual WinUI XAML entry point in order to be able to control
-/// the `HostBuilder` for the `EntityFramework` to work properly and generate
-/// migrations for the project.
+/// <summary>
+/// The Main entry of the application.
+/// <para>
+/// Overrides the usual WinUI XAML entry point in order to be able to control what exactly happens at the entry point of the
+/// application. Customized here to build an application <see cref="Host" /> and populate it with the default services (such as
+/// Configuration, Logging, etc...) and a specialized <see cref="IHostedService" /> for running the User Interface thread.
+/// </para>
+/// </summary>
+/// <remarks>
+/// <para>
+/// Convenience hosting extension methods are used to simplify the setup of services needed for the User Interface, logging, etc.
+/// </para>
+/// <para>
+/// The WinUI service configuration supports customization, through a <see cref="HostingContext" /> object placed in the <see cref="IHostApplicationBuilder.Properties" /> of the host builder. Currently, the IsLifetimeLinked property allows to specify
+/// if the User Interface thread lifetime is linked to the application lifetime or not. When the two lifetimes are linked,
+/// terminating either of them will result in terminating the other.
+/// </para>
+/// </remarks>
+[ExcludeFromCodeCoverage]
 public static partial class Program
 {
     /// <summary>
@@ -47,201 +66,125 @@ public static partial class Program
     [LibraryImport("Microsoft.ui.xaml.dll")]
     private static partial void XamlCheckProcessRequirements();
 
-    private static HostApplicationBuilder CreateBuilder(string[] args)
-    {
-        var builder = new HostApplicationBuilder(args);
-
-        var finder = new DevelopmentPathFinder(new RealFileSystem());
-
-        _ = builder.Configuration
-            /* Additional configuration sources */
-            .SetBasePath(finder.LocalAppData)
-            .AddJsonFile("LocalSettings.json", true)
-            .SetBasePath(finder.ProgramData)
-            .AddJsonFile(
-                $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}/Config/ProjectBrowser.config.json");
-
-        _ = builder.Services
-            /* Core services */
-            .AddSingleton<IFileSystem, RealFileSystem>()
-            .AddSingleton<NativeStorageProvider>()
-            .AddSingleton<IPathFinder, DevelopmentPathFinder>()
-            .AddSingleton<IThemeSelectorService, ThemeSelectorService>()
-            .AddSingleton<INavigationService, NavigationService>()
-            .AddSingleton<IAppNotificationService, AppNotificationService>()
-            .AddSingleton<IPageService, PageService>()
-            .AddSingleton<IActivationService, ActivationService>()
-
-            // Injected access to LocalSettings configuration
-            .Configure<ProjectBrowserSettings>(
-                builder.Configuration.GetSection(ProjectBrowserSettings.ConfigSectionName))
-            .ConfigureWritable<ThemeSettings>(
-                builder.Configuration.GetSection(nameof(ThemeSettings)),
-                Path.Combine(finder.LocalAppData, "LocalSettings.json"));
-
-        _ = builder.Services
-            /* View related services */
-            .AddSingleton<IKnownLocationsService, KnownLocationsService>()
-            .AddSingleton<LocalTemplatesSource>()
-            .AddSingleton<ITemplatesSource, TemplatesSource>()
-            .AddSingleton<ITemplatesService, TemplatesService>()
-            .AddSingleton<LocalProjectsSource>()
-            .AddSingleton<IProjectSource, UniversalProjectSource>()
-            .AddSingleton<IProjectsService, ProjectsService>();
-
-        _ = builder.Services
-            /* Views and ViewModels */
-            .AddTransient<ShellViewModel>()
-            .AddTransient<SettingsViewModel>()
-            .AddSingleton<StartHomeViewModel>()
-            .AddTransient<StartNewViewModel>()
-            .AddSingleton<StartOpenViewModel>()
-            .AddSingleton<StartViewModel>()
-            .AddTransient<MainViewModel>()
-            .AddTransient<SettingsPage>()
-            .AddTransient<ShellPage>()
-            .AddTransient<MainPage>();
-
-        // Persistent state DB context
-        var localStateFolder = finder.LocalAppState;
-        var dbPath = Path.Combine(localStateFolder, "state.db");
-        _ = builder.Services
-            /* Use Sqlite */
-            .AddSqlite<PersistentState>($"Data Source={dbPath}; Mode=ReadWriteCreate");
-
-        return builder;
-    }
-
     [STAThread]
     private static void Main(string[] args)
     {
-        var builder = CreateBuilder(args);
-
-        var host = builder.Build();
-
-        using (var scope = host.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
-            db.Database.Migrate();
-        }
-
-        Ioc.Default.ConfigureServices(host.Services);
-
-        host.StartAsync()
-            .GetAwaiter()
-            .GetResult();
-
         XamlCheckProcessRequirements();
-        WinRT.ComWrappersSupport.InitializeComWrappers();
 
-        Application.Start(
-            _ =>
-            {
-                try
-                {
-                    var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                    SynchronizationContext.SetSynchronizationContext(context);
-                    var app = new App();
+        // Use Serilog, but decouple the logging clients from the implementation by using the generic
+        // Microsoft.Extensions.Logging.ILogger instead of Serilog's ILogger.
+        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .Enrich.FromLogContext()
+            .WriteTo.Debug(
+                new ExpressionTemplate(
+                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
+                    new CultureInfo("en-US")))
+            /* .WriteTo.Seq("http://localhost:5341/") */
+            .CreateLogger();
 
-                    app.UnhandledException += OnAppUnhandledException;
-                    AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error application start callback: {ex.Message}.");
-                }
-            });
-    }
+        Log.Information("Setting up the host");
 
-    private static void OnAppUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
-        => OnUnhandledException(e.Exception, true);
-
-    private static void OnCurrentDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
-        => OnUnhandledException((e.ExceptionObject as Exception)!, true);
-
-    private static void OnUnhandledException(Exception ex, bool shouldShowNotification)
-    {
-        /*
-         * TODO: Log and handle exceptions as appropriate.
-         * https://docs.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.application.unhandledexception.
-         */
-
-        var stackTrace = ex.StackTrace is not null ? $"\n--- STACKTRACE ---\n{ex.StackTrace}" : string.Empty;
-        var source = ex.Source is not null ? $"\n--- SOURCE ---\n{ex.Source}" : string.Empty;
-        var innerException = ex.InnerException is not null ? $"\n--- INNER ---\n{ex.InnerException}" : string.Empty;
-        var message = $"""
-                       --------- UNHANDLED EXCEPTION ---------
-                       >>>> HRESULT: {ex.HResult}
-                       --- MESSAGE ---
-                       {ex.Message}{stackTrace}{source}{innerException}
-                       ---------------------------------------
-                       """;
-        Debug.WriteLine(message);
-
-        //App.Logger.LogError(ex, ex.Message);
-
-        if ( /*!ShowErrorNotification ||*/!shouldShowNotification)
+        try
         {
-            return;
+            var fs = new RealFileSystem();
+            var finder = new DevelopmentPathFinder(fs);
+
+            // Use a default application host builder, which comes with logging, configuration providers for environment
+            // variables, command line, 'appsettings.json' and secrets.
+            var builder = Host.CreateDefaultBuilder(args);
+
+            // Use DryIoc instead of the built-in service provider.
+            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
+
+            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
+            // while you continue setting up other services not required for the UI.
+            builder.Properties.Add(
+                DroidNet.Hosting.WinUI.HostingExtensions.HostingContextKey,
+                new HostingContext() { IsLifetimeLinked = true });
+
+            var host = builder
+                .ConfigureLogging()
+                .ConfigureWinUI<App>()
+                .ConfigureAppConfiguration(
+                    (_, config) =>
+                    {
+                        var localSettingsPath = Path.GetFullPath("LocalSettings.json", finder.LocalAppData);
+                        var projectBrowserConfigPath = Path.GetFullPath(
+                            $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}/Config/ProjectBrowser.config.json",
+                            finder.ProgramData);
+                        config
+                            .AddJsonFile(localSettingsPath, optional: true)
+                            .AddJsonFile(projectBrowserConfigPath);
+                    })
+                .ConfigureServices(
+                    (context, sc) =>
+                    {
+                        // Injected access to LocalSettings configuration
+                        _ = sc.Configure<ProjectBrowserSettings>(
+                            context.Configuration.GetSection(ProjectBrowserSettings.ConfigSectionName));
+                        _ = sc.ConfigureWritable<ThemeSettings>(
+                            context.Configuration.GetSection(nameof(ThemeSettings)),
+                            Path.Combine(finder.LocalAppData, "LocalSettings.json"));
+
+                        _ = sc.AddSingleton<IFileSystem, RealFileSystem>()
+                            .AddSingleton<NativeStorageProvider>()
+                            .AddSingleton<IPathFinder, DevelopmentPathFinder>()
+                            .AddSingleton<IThemeSelectorService, ThemeSelectorService>()
+                            .AddSingleton<INavigationService, NavigationService>()
+                            .AddSingleton<IAppNotificationService, AppNotificationService>()
+                            .AddSingleton<IPageService, PageService>()
+                            .AddSingleton<IActivationService, ActivationService>();
+
+                        /* View related services */
+                        _ = sc.AddSingleton<IKnownLocationsService, KnownLocationsService>()
+                            .AddSingleton<LocalTemplatesSource>()
+                            .AddSingleton<ITemplatesSource, TemplatesSource>()
+                            .AddSingleton<ITemplatesService, TemplatesService>()
+                            .AddSingleton<LocalProjectsSource>()
+                            .AddSingleton<IProjectSource, UniversalProjectSource>()
+                            .AddSingleton<IProjectsService, ProjectsService>();
+
+                        /* Views and ViewModels */
+                        _ = sc.AddTransient<ShellViewModel>()
+                            .AddTransient<SettingsViewModel>()
+                            .AddSingleton<StartHomeViewModel>()
+                            .AddTransient<StartNewViewModel>()
+                            .AddSingleton<StartOpenViewModel>()
+                            .AddSingleton<StartViewModel>()
+                            .AddTransient<MainViewModel>()
+                            .AddTransient<SettingsPage>()
+                            .AddTransient<ShellPage>()
+                            .AddTransient<MainPage>();
+
+                        // Persistent state DB context
+                        var localStateFolder = finder.LocalAppState;
+                        var dbPath = Path.Combine(localStateFolder, "state.db");
+                        _ = sc.AddSqlite<PersistentState>($"Data Source={dbPath}; Mode=ReadWriteCreate");
+                    })
+                .Build();
+
+            using (var scope = host.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
+                db.Database.Migrate();
+            }
+
+            Ioc.Default.ConfigureServices(host.Services);
+
+            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
+            // closing the UI windows or programmatically.
+            host.Run();
         }
-
-        /*
-        var toastContent = new ToastContent()
+        catch (Exception ex)
         {
-            Visual = new()
-            {
-                BindingGeneric = new ToastBindingGeneric()
-                {
-                    Children =
-                    {
-                        new AdaptiveText()
-                        {
-                            Text = "ExceptionNotificationHeader".GetLocalizedResource()
-                        },
-                        new AdaptiveText()
-                        {
-                            Text = "ExceptionNotificationBody".GetLocalizedResource()
-                        }
-                    },
-                    AppLogoOverride = new()
-                    {
-                        Source = "ms-appx:///Assets/error.png"
-                    }
-                }
-            },
-            Actions = new ToastActionsCustom()
-            {
-                Buttons =
-                {
-                    new ToastButton("ExceptionNotificationReportButton".GetLocalizedResource(), Constants.GitHub.BugReportUrl)
-                    {
-                        ActivationType = ToastActivationType.Protocol
-                    }
-                }
-            },
-            ActivationType = ToastActivationType.Protocol
-        };
-
-        var toastNotif = new ToastNotification(toastContent.GetXml());
-
-        // And send the notification
-        ToastNotificationManager.CreateToastNotifier().Show(toastNotif);
-        */
-
-        _ = Ioc.Default.GetService<IAppNotificationService>()
-            ?.Show(
-                $"""
-                         <toast>
-                             <visual>
-                                 <binding template="ToastGeneric">
-                                     <text>Unhandled Exception</text>
-                                     <text>{ex.Message}</text>
-                                 </binding>
-                             </visual>
-                         </toast>
-                 """);
-
-        Process.GetCurrentProcess()
-            .Kill();
+            Log.Fatal(ex, "Host terminated unexpectedly");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 }

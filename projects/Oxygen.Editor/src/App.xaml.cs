@@ -1,10 +1,11 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor;
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -14,10 +15,7 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.Views;
 using WinUIEx;
 
-/// <summary>The application class.</summary>
-/// Learn more about WinUI 3
-/// <see href="https://docs.microsoft.com/windows/apps/winui/winui3/" />
-/// .
+/// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 public partial class App
 {
     /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
@@ -30,6 +28,9 @@ public partial class App
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         base.OnLaunched(args);
+
+        this.UnhandledException += OnAppUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
 
         Ioc.Default.GetRequiredService<IAppNotificationService>()
             .Initialize();
@@ -49,20 +50,12 @@ public partial class App
 
         /* TODO(abdes) add subscriptions for other supported activations */
 
-        // TODO(abdes) temporary for testing
-        /*
-        GetService<IAppNotificationService>().Show(
-            string.Format(
-                CultureInfo.InvariantCulture,
-                "AppNotificationSamplePayload".GetLocalized(),
-                AppContext.BaseDirectory));
-        */
-
         MainWindow.Content = Ioc.Default.GetRequiredService<ShellPage>();
 
         var activationArgs = AppInstance.GetCurrent()
             .GetActivatedEventArgs();
 #pragma warning disable IDE0072 // Add missing cases
+
         // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
         var activationData = activationArgs.Kind switch
         {
@@ -86,5 +79,50 @@ public partial class App
 
         // Activate the MainWindow.
         MainWindow.Activate();
+    }
+
+    private static void OnAppUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        => OnUnhandledException(e.Exception, shouldShowNotification: true);
+
+    private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+        => OnUnhandledException((Exception)e.ExceptionObject, shouldShowNotification: true);
+
+    private static void OnUnhandledException(Exception ex, bool shouldShowNotification)
+    {
+        /*
+         * TODO: Log and handle exceptions as appropriate.
+         * https://docs.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.application.unhandledexception.
+         */
+
+        var stackTrace = ex.StackTrace is not null ? $"\n--- STACKTRACE ---\n{ex.StackTrace}" : string.Empty;
+        var source = ex.Source is not null ? $"\n--- SOURCE ---\n{ex.Source}" : string.Empty;
+        var innerException = ex.InnerException is not null ? $"\n--- INNER ---\n{ex.InnerException}" : string.Empty;
+        var message = $"""
+                       --------- UNHANDLED EXCEPTION ---------
+                       >>>> HRESULT: {ex.HResult.ToString(CultureInfo.InvariantCulture)}
+                       --- MESSAGE ---
+                       {ex.Message}{stackTrace}{source}{innerException}
+                       ---------------------------------------
+                       """;
+        Debug.WriteLine(message);
+
+        if (shouldShowNotification)
+        {
+            _ = Ioc.Default.GetService<IAppNotificationService>()
+                ?.Show(
+                    $"""
+                     <toast>
+                         <visual>
+                             <binding template="ToastGeneric">
+                                 <text>Unhandled Exception</text>
+                                 <text>{ex.Message}</text>
+                             </binding>
+                         </visual>
+                     </toast>
+                     """);
+        }
+
+        Process.GetCurrentProcess()
+            .Kill();
     }
 }

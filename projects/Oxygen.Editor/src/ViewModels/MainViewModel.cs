@@ -18,7 +18,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IKnownLocationsService knownLocationsService;
 
     [ObservableProperty]
-    private Dictionary<string, KnownLocation?> locations = new();
+    private Dictionary<string, KnownLocation?> locations = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TemplateFullName))]
@@ -49,13 +49,12 @@ public partial class MainViewModel : ObservableObject
 
         foreach (var locationKey in Enum.GetValues<KnownLocations>())
         {
-            var location = await this.knownLocationsService.ForKeyAsync(locationKey);
-            this.Locations[locationKey.ToString()] = location;
+            this.Locations[locationKey.ToString()]
+                = await this.knownLocationsService.ForKeyAsync(locationKey).ConfigureAwait(false);
         }
 
         this.OnPropertyChanged(nameof(this.Locations));
 
-        this.SelectedLocation = this.Locations.First()
-            .Value ?? null;
+        this.SelectedLocation = this.Locations.First().Value;
     }
 }
