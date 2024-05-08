@@ -9,7 +9,7 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.1.240328-rc" />
     <PackageVersion Include="DryIoc.dll" Version="6.0.0-preview-07" />
     <PackageVersion Include="DryIoc.Microsoft.DependencyInjection" Version="8.0.0-preview-02" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.5.240404000" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.5.240428000" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26031-preview" />
     <PackageVersion Include="Serilog.Expressions" Version="4.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="8.0.0" />
@@ -21,6 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="System.Reactive" Version="6.0.0" />
+    <PackageVersion Include="DynamicData" Version="8.4.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
@@ -38,11 +39,13 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Collections" Version="8.0.240109" />
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.1.240328-rc" />
-    <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="7.1.2" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="8.0.240109" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.4" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.4" />
+    <PackageVersion Include="WinUIEx" Version="2.3.4" />
   </ItemGroup>
   <!-- Tooling -->
   <ItemGroup>
@@ -51,10 +54,10 @@
     <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.2.6" />
     <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.9.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.1" />
-    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.1" />
-    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.149" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.2" />
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.2" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.2" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.150" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
