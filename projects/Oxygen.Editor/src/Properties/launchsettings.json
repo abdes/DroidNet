@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "OxygenEditor (Package)": {
+      "commandName": "MsixPackage",
+      "commandLineArgs": "--environment Development"
+    },
+    "OxygenEditor (Unpackaged)": {
+      "commandName": "Project",
+      "commandLineArgs": "--environment Development"
+    }
+  }
+}

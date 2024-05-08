@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <UseWinUI>true</UseWinUI>
+
+        <IsPackable>false</IsPackable>
+
+        <AssemblyName>Routing.Debugger</AssemblyName>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+        <EnableMsixTooling>true</EnableMsixTooling>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+        <WindowsPackageType>None</WindowsPackageType>
+
+    <!--<MSBuildCopyContentTransitively>true</MSBuildCopyContentTransitively>-->
+    <DisableXbfLineInfo>False</DisableXbfLineInfo>
+    <GenerateRuntimeConfigurationFiles>True</GenerateRuntimeConfigurationFiles>
+
+        <!-- For the debug symbols package -->
+        <DebugType>portable</DebugType>
+
+        <RootNamespace>Oxygen.Editor</RootNamespace>
+
+        <!-- Use our own Main entry point so we can control the HostBuilder -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+        <StartupObject>$(RootNamespace).Program</StartupObject>
+
+        <UserSecretsId>916e565c-62a3-4c25-9a26-3637faacd34b</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Behaviors" />
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
+        <PackageReference Include="System.Reactive" />
+        <PackageReference Include="Testably.Abstractions" />
+        <PackageReference Include="WinUIEx" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Oxygen.Editor.ProjectBrowser\src\Oxygen.Editor.ProjectBrowser.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
+        <ProjectReference Include="..\..\Config\src\Config.csproj" />
+
+        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <!-- We DO reference the attributes dll -->
+        <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="appsettings.json">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+  <!-- Copy assets from `ProjectBrowser` project-->
+  <!--
+  <ItemGroup>
+    <Content Include="..\ProjectBrowser\Assets\**">
+      <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  -->
+
+    <!--
+        Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+        Tools extension to be activated for this project even if the Windows App SDK Nuget
+        package has not yet been restored.
+    -->
+    <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <ProjectCapability Include="Msix" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Update="Meziantou.Analyzer">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Update="Roslynator.Analyzers">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Update="Roslynator.CodeAnalysis.Analyzers">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Update="Roslynator.Formatting.Analyzers">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+    </ItemGroup>
+
+    <!--
+        Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+        Explorer "Package and Publish" context menu entry to be enabled for this project even if
+        the Windows App SDK Nuget package has not yet been restored.
+    -->
+    <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+    </PropertyGroup>
+
+</Project>
