@@ -1,0 +1,9 @@
+{
+  "Name": "PB_Template_Games_FirstPerson_Name",
+  "Description": "PB_Template_Games_FirstPerson_Description",
+  "Icon": "Media/Icon.png",
+  "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+  "PreviewImages": [
+    "Media/Preview.png"
+  ]
+}

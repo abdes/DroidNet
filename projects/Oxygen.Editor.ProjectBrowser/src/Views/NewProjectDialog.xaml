@@ -1,0 +1,115 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<ContentDialog
+    x:Class="Oxygen.Editor.ProjectBrowser.Views.NewProjectDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
+    xmlns:viewModels="using:Oxygen.Editor.ProjectBrowser.ViewModels"
+    Title="Configure your new project"
+    d:DataContext="{d:DesignInstance Type=viewModels:NewProjectDialogViewModel}"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.IsProjectNameValid, Mode=OneWay}"
+    PrimaryButtonText="Create"
+    mc:Ignorable="d">
+
+    <ContentDialog.Resources>
+        <DataTemplate x:Key="PinnedLocationListItem" x:DataType="projects:QuickSaveLocation">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="50" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Viewbox Grid.Column="0" Margin="0,10,5,10">
+                    <FontIcon Glyph="&#xE8B7;" />
+                </Viewbox>
+                <Grid Grid.Column="1" Margin="20,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1*" />
+                        <RowDefinition Height="1*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        Grid.Row="0"
+                        VerticalAlignment="Bottom"
+                        Text="{x:Bind Name}" />
+                    <TextBlock
+                        Grid.Row="1"
+                        VerticalAlignment="Top"
+                        Foreground="{ThemeResource SystemColorGrayTextColor}"
+                        Text="{x:Bind Path}" />
+                </Grid>
+            </Grid>
+        </DataTemplate>
+    </ContentDialog.Resources>
+
+    <Grid Width="500">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBox
+            x:Name="ProjectNameTextBox"
+            Grid.Row="0"
+            Margin="0,20,0,0"
+            Header="Project name"
+            PlaceholderText="Name"
+            Text="{Binding Path=ProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <TextBlock
+            Grid.Row="1"
+            Margin="0,20,0,10"
+            Text="Location" />
+
+        <Expander
+            x:Name="LocationExpander"
+            Grid.Row="2"
+            HorizontalAlignment="Stretch">
+            <Expander.Header>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Viewbox Grid.Column="0" Margin="0,10,0,10">
+                        <FontIcon Glyph="&#xE8B7;" />
+                    </Viewbox>
+                    <Grid Grid.Column="1" Margin="20,0,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="1*" />
+                            <RowDefinition Height="1*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            Grid.Row="0"
+                            VerticalAlignment="Bottom"
+                            Text="{x:Bind ViewModel.SelectedLocation.Name, Mode=TwoWay}" />
+                        <TextBlock
+                            Grid.Row="1"
+                            VerticalAlignment="Top"
+                            Foreground="{ThemeResource SystemColorGrayTextColor}"
+                            Text="{x:Bind ViewModel.SelectedLocation.Path, Mode=TwoWay}" />
+                    </Grid>
+                </Grid>
+            </Expander.Header>
+            <Expander.Content>
+                <StackPanel>
+                    <ListView
+                        MinWidth="500"
+                        MaxHeight="300"
+                        BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="0"
+                        IsItemClickEnabled="True"
+                        ItemClick="OnLocationItemClick"
+                        ItemTemplate="{StaticResource PinnedLocationListItem}"
+                        ItemsSource="{x:Bind ViewModel.PinnedLocations}" />
+                    <HyperlinkButton HorizontalAlignment="Right" Content="Browse..." />
+                </StackPanel>
+            </Expander.Content>
+        </Expander>
+
+    </Grid>
+</ContentDialog>

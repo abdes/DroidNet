@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<UserControl
+    x:Class="Oxygen.Editor.ProjectBrowser.Controls.ProjectTemplatesGrid"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.ProjectBrowser.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Templates"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!--  Icon + Props tile  -->
+        <DataTemplate x:Key="ImageTextTemplate" x:DataType="pb:ITemplateInfo">
+            <Grid
+                Width="220"
+                Margin="{x:Bind local:ProjectTemplatesGrid.ItemMargin}"
+                AutomationProperties.Name="{x:Bind Name}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border CornerRadius="5">
+                    <Image
+                        Height="{x:Bind local:ProjectTemplatesGrid.IconHeight}"
+                        VerticalAlignment="Top"
+                        Source="{x:Bind Icon}"
+                        Stretch="Fill" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="8,0,0,8">
+                    <TextBlock
+                        Margin="0,0,0,8"
+                        Style="{ThemeResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind Name}" />
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind Category.Name, FallbackValue=''}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <GridView
+        AllowDrop="False"
+        CanDragItems="False"
+        CanReorderItems="False"
+        IsItemClickEnabled="True"
+        ItemClick="OnGridItemClick"
+        ItemTemplate="{StaticResource ImageTextTemplate}"
+        ItemsSource="{x:Bind ProjectTemplates}"
+        SelectedItem="{x:Bind SelectedItem, Mode=TwoWay}"
+        ShowsScrollingPlaceholders="False" />
+
+</UserControl>
