@@ -19,7 +19,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
     {
         try
         {
-            var normalized = this.fs.Path.GetFullPath($@"{path}");
+            var normalized = this.fs.Path.GetFullPath($"{path}");
             if (!this.fs.Directory.Exists(normalized))
             {
                 Debug.WriteLine($"Folder at path [{normalized}] does not exist");
@@ -53,16 +53,36 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         [EnumeratorCancellation]
         CancellationToken cancellationToken = default)
     {
-        // Normalize the path
         path = Path.GetFullPath(path);
 
-        // Always enumerate folders first
+        await foreach (var folderItem in this.EnumerateFoldersAsync(path, kind, cancellationToken).ConfigureAwait(true))
+        {
+            yield return folderItem;
+        }
+
+        await foreach (var fileItem in this.EnumerateFilesAsync(path, kind, cancellationToken).ConfigureAwait(true))
+        {
+            yield return fileItem;
+        }
+    }
+
+    private async IAsyncEnumerable<IStorageItem> EnumerateFoldersAsync(
+        string path,
+        ProjectItemKind kind,
+        [EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
         if ((kind & ProjectItemKind.Folder) == ProjectItemKind.Folder)
         {
             Debug.WriteLine($"Enumerating folders under `{path}`");
 
             foreach (var item in this.fs.Directory.EnumerateDirectories(path))
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
                 var itemPath = this.fs.Path.Combine(path, item);
                 var info = this.fs.DirectoryInfo.New(itemPath);
                 var dateModified = info.LastAccessTime;
@@ -70,6 +90,15 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
             }
         }
 
+        await Task.CompletedTask.ConfigureAwait(true);
+    }
+
+    private async IAsyncEnumerable<IStorageItem> EnumerateFilesAsync(
+        string path,
+        ProjectItemKind kind,
+        [EnumeratorCancellation]
+        CancellationToken cancellationToken)
+    {
         if ((kind & ProjectItemKind.File) == ProjectItemKind.File)
         {
             var extensions = new List<string>();
@@ -78,7 +107,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
                 extensions.Add("oxy");
             }
 
-            var pattern = @"^.*";
+            var pattern = "^.*";
             if (extensions.Count > 0)
             {
                 pattern += @"\.(";
@@ -111,6 +140,11 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
 
             foreach (var item in this.fs.Directory.EnumerateFiles(path))
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
                 if (!regex.IsMatch(item.ToLowerInvariant()))
                 {
                     continue;

@@ -72,7 +72,7 @@ public class NativeStorageProviderTests
     [DataRow("folder.xyz", @"c:\folder.xyz")]
     [DataRow("folder.xyz", @"c:\folder.xyz\")]
     [DataRow(@"c:\", @"c:\folder/..")]
-    [DataRow(@"sub_folder_1", @"c:\folder\sub_folder_1")]
+    [DataRow("sub_folder_1", @"c:\folder\sub_folder_1")]
     public async Task GoodFolderFromGoodPath(string name, string path)
     {
         var folder = await this.nsp.GetFolderFromPathAsync(path);
