@@ -1,0 +1,125 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<Page
+    x:Class="Oxygen.Editor.ProjectBrowser.Views.StartHomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
+    xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
+    mc:Ignorable="d">
+
+    <!--  ViewModel will never be null under standard operation conditions  -->
+
+    <Page.Resources>
+        <!--  Recent project Item Template  -->
+        <DataTemplate x:Key="RecentProjectTemplate" x:DataType="projects:IProjectInfo">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+                <Ellipse
+                    x:Name="Ellipse"
+                    Grid.Column="0"
+                    Width="32"
+                    Height="32"
+                    Margin="6"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Fill="{ThemeResource SystemControlBackgroundBaseMediumBrush}" />
+                <TextBlock
+                    Grid.Column="1"
+                    Margin="12,6,0,0"
+                    x:Phase="1"
+                    Style="{ThemeResource BaseTextBlockStyle}"
+                    Text="{x:Bind Name}" />
+                <TextBlock
+                    Grid.Column="2"
+                    Margin="12,0,0,6"
+                    x:Phase="2"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="{x:Bind LastUsedOn}" />
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <Grid Margin="32,4,32,4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--  Title  -->
+            <TextBlock
+                Grid.Row="0"
+                Margin="0,0,0,20"
+                Style="{ThemeResource TitleTextBlockStyle}">
+                Hello!
+            </TextBlock>
+
+            <!--  Project Templates Area  -->
+            <Border
+                Grid.Row="1"
+                BorderBrush="{ThemeResource ControlStrokeColorDefault}"
+                BorderThickness="0,0,0,1">
+                <pb:ProjectTemplatesGrid
+                    Height="{x:Bind pb:ProjectTemplatesGrid.ItemHeight}"
+                    VerticalAlignment="Top"
+                    ItemClick="OnTemplateClick"
+                    ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}" />
+
+                <!--  Bottom Border Only  -->
+            </Border>
+
+            <!--  More Templates Button  -->
+            <StackPanel
+                Grid.Row="2"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal">
+                <HyperlinkButton Command="{x:Bind ViewModel.NavigationViewModel.ShowNewPageCommand, FallbackValue={}}">
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <TextBlock Margin="0,0,20,0" Text="More Templates" />
+                        <SymbolIcon Symbol="Forward" />
+                    </StackPanel>
+                </HyperlinkButton>
+            </StackPanel>
+            <!--  End of Project Templates Area  -->
+
+
+            <!--  Recent projects Area  -->
+            <Border
+                Grid.Row="3"
+                BorderBrush="{ThemeResource ControlStrokeColorDefault}"
+                BorderThickness="0,0,0,1">
+                <pb:RecentProjectsList
+                    VerticalAlignment="Top"
+                    ItemClick="OnProjectClick"
+                    RecentProjects="{x:Bind ViewModel.RecentProjects, FallbackValue={}}" />
+
+                <!--  Bottom Border Only  -->
+            </Border>
+
+            <!--  More Templates Button  -->
+            <StackPanel
+                Grid.Row="4"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal">
+                <HyperlinkButton Command="{x:Bind ViewModel.NavigationViewModel.ShowOpenPageCommand, FallbackValue={}}">
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <TextBlock Margin="0,0,20,0" Text="More Projects" />
+                        <SymbolIcon Symbol="Forward" />
+                    </StackPanel>
+                </HyperlinkButton>
+            </StackPanel>
+            <!--  End of Project Templates Area  -->
+
+        </Grid>
+    </ScrollViewer>
+</Page>

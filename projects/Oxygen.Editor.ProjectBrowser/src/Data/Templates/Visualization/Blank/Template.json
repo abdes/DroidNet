@@ -1,0 +1,11 @@
+{
+  "Name": "PB_Template_Visualization_Blank_Name",
+  "Description": "PB_Template_Visualization_Blank_Description",
+  "Icon": "Media/Icon.png",
+  "Category": "D88D97B6-9F2A-4EF5-8137-CD6709CA1233",
+  "PreviewImages": [
+    "Media/Preview-1.png",
+    "Media/Preview-2.png",
+    "Media/Preview-3.png"
+  ]
+}

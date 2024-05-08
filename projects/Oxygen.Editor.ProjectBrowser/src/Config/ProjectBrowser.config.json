@@ -1,0 +1,26 @@
+{
+  "ProjectBrowserSettings": {
+    "Categories": [
+      {
+        "Id": "C44E7604-B265-40D8-9442-11A01ECE334C",
+        "Name": "PB_Category_Games",
+        "Description": "PB_Category_Games_Description"
+      },
+      {
+        "Id": "D88D97B6-9F2A-4EF5-8137-CD6709CA1233",
+        "Name": "PB_Category_Visualization",
+        "Description": "PB_Category_Visualization_Description"
+      },
+      {
+        "Id": "892D3C51-72C0-47DD-AF32-65CA63EEDDFE",
+        "Name": "PB_Category_Misc",
+        "Description": "PB_Category_Misc_Description"
+      }
+    ],
+    "BuiltinTemplates": [
+      "Games/Blank/Template.json",
+      "Games/First Person/Template.json",
+      "Visualization/Blank/Template.json"
+    ]
+  }
+}
