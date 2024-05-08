@@ -1,5 +1,5 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.Helpers;
@@ -62,11 +62,10 @@ public static class SettingsStorageExtensions
             .AsTask()
             .ConfigureAwait(false);
 
-        if (item != null && item.IsOfType(StorageItemTypes.File))
+        if (item?.IsOfType(StorageItemTypes.File) == true)
         {
             var storageFile = await folder.GetFileAsync(fileName);
-            var content = await storageFile.ReadBytesAsync();
-            return content;
+            return await storageFile.ReadBytesAsync().ConfigureAwait(false);
         }
 
         return null;

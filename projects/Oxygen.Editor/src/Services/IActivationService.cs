@@ -1,13 +1,12 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.Services;
 
 /// <summary>Handle the activation.</summary>
 /// Only the following 4 activation types are supported as of now (
-/// <see
-///     href="https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/applifecycle/applifecycle-rich-activation#activation-details-for-unpackaged-apps">
+/// <see href="https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/applifecycle/applifecycle-rich-activation#activation-details-for-unpackaged-apps">
 /// Activation
 /// details for unpackaged apps.
 /// </see>

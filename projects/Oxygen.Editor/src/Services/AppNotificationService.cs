@@ -1,5 +1,5 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.Services;
@@ -19,12 +19,6 @@ public class AppNotificationService : IAppNotificationService
     /// <param name="navigationService"></param>
     public AppNotificationService(INavigationService navigationService)
         => this.navigationService = navigationService;
-
-    /// <summary>
-    /// Finalizes an instance of the <see cref="AppNotificationService" />
-    /// class.
-    /// </summary>
-    ~AppNotificationService() => this.Unregister();
 
     public void Initialize()
     {
@@ -48,6 +42,7 @@ public class AppNotificationService : IAppNotificationService
     public void Unregister() => AppNotificationManager.Default.Unregister();
 
     public void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
+
         // TODO: Handle notification invocations when your app is already running.
         //// // Navigate to a specific page based on the notification arguments.
         //// if (ParseArguments(args.Argument)["action"] == "Settings")
@@ -66,4 +61,10 @@ public class AppNotificationService : IAppNotificationService
 
                 App.MainWindow.BringToFront();
             });
+
+    /// <summary>
+    /// Finalizes an instance of the <see cref="AppNotificationService" />
+    /// class.
+    /// </summary>
+    ~AppNotificationService() => this.Unregister();
 }

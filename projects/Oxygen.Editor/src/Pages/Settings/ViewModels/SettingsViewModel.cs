@@ -1,5 +1,5 @@
 // Distributed under the MIT License. See accompanying file LICENSE or copy
-// at https://opensource.org/licenses/MIT).
+// at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 namespace Oxygen.Editor.Pages.Settings.ViewModels;
@@ -40,7 +40,7 @@ public partial class SettingsViewModel : ObservableRecipient
                 if (this.ElementTheme != param)
                 {
                     this.ElementTheme = param;
-                    await this.themeSelectorService.SetThemeAsync(param);
+                    await this.themeSelectorService.SetThemeAsync(param).ConfigureAwait(false);
                 }
             });
     }
