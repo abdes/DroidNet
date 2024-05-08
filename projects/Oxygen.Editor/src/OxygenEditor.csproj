@@ -20,10 +20,6 @@
         <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
         <WindowsPackageType>None</WindowsPackageType>
 
-    <!--<MSBuildCopyContentTransitively>true</MSBuildCopyContentTransitively>-->
-    <DisableXbfLineInfo>False</DisableXbfLineInfo>
-    <GenerateRuntimeConfigurationFiles>True</GenerateRuntimeConfigurationFiles>
-
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
 
@@ -81,15 +77,15 @@
         </None>
     </ItemGroup>
 
-  <!-- Copy assets from `ProjectBrowser` project-->
-  <!--
-  <ItemGroup>
-    <Content Include="..\ProjectBrowser\Assets\**">
-      <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  -->
+    <!-- Copy assets from `ProjectBrowser` project-->
+    <!--
+    <ItemGroup>
+        <Content Include="..\ProjectBrowser\Assets\**">
+            <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+    -->
 
     <!--
         Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
@@ -98,24 +94,6 @@
     -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
-    </ItemGroup>
-    <ItemGroup>
-      <PackageReference Update="Meziantou.Analyzer">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.CodeAnalysis.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.Formatting.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
     </ItemGroup>
 
     <!--
