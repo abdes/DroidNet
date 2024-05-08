@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Oxygen.Editor.ProjectBrowser.Projects;
+using static Oxygen.Editor.ProjectBrowser.Controls.ProjectItemWithThumbnail;
 using SortDescription = CommunityToolkit.WinUI.Collections.SortDescription;
 using SortDirection = CommunityToolkit.WinUI.Collections.SortDirection;
 
@@ -37,7 +38,7 @@ public sealed partial class RecentProjectsList
     {
         this.InitializeComponent();
 
-        this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, true);
+        this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
     }
 
     [Browsable(true)]
@@ -74,7 +75,7 @@ public sealed partial class RecentProjectsList
                     })
                 .Bind(out this.projectItems);
 
-            this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, true);
+            this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
 
             this.oldListSubscription = x.Subscribe();
         }
@@ -87,12 +88,14 @@ public sealed partial class RecentProjectsList
     private static string DefaultProjectThumbnail { get; }
         = $"ms-appx:///{typeof(LocalProjectsSource).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
 
-    private static IComparer SortByLastUsedOn() => new ProjectItemWithThumbnail.SortByLastUsedOn();
+    private static SortByLastUsedOn SortByLastUsedOn() => new();
 
-    private static IComparer SortByName() => new ProjectItemWithThumbnail.SortByName();
+    private static SortByName SortByName() => new();
 
     private void OnProjectItemClick(object sender, ItemClickEventArgs e)
     {
+        _ = sender;
+
         Debug.WriteLine("Item clicked");
         this.ItemClick?.Invoke(this, ((ProjectItemWithThumbnail)e.ClickedItem).ProjectInfo);
     }

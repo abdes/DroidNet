@@ -7,20 +7,20 @@ namespace Oxygen.Editor.ProjectBrowser.Storage;
 public enum KnownLocations
 {
     /// <summary>A location which children are the recently used projects.</summary>
-    RecentProjects,
+    RecentProjects = 0,
 
     /// <summary>A location which children are the local drives on this computer.</summary>
-    ThisComputer,
+    ThisComputer = 1,
 
     /// <summary>Root of the OneDrive online storage if the user has one.</summary>
-    OneDrive,
+    OneDrive = 2,
 
     /// <summary>The user Downloads  folder.</summary>
-    Downloads,
+    Downloads = 3,
 
     /// <summary>The user documents local folder.</summary>
-    Documents,
+    Documents = 4,
 
     /// <summary>The user Desktop folder.</summary>
-    Desktop,
+    Desktop = 5,
 }

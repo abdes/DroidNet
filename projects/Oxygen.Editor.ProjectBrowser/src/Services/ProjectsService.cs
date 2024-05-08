@@ -50,7 +50,8 @@ public class ProjectsService : IProjectsService
         try
         {
             // Create project folder
-            projectFolder = await this.projectsSource.CreateNewProjectFolder(projectName, atLocationPath);
+            projectFolder = await this.projectsSource.CreateNewProjectFolder(projectName, atLocationPath)
+                .ConfigureAwait(true);
             if (projectFolder == null)
             {
                 return false;
@@ -60,33 +61,35 @@ public class ProjectsService : IProjectsService
             _ = Parallel.ForEach(
                 templateDirInfo.GetDirectories("*", SearchOption.AllDirectories),
                 srcInfo => Directory.CreateDirectory(
-                    $"{projectFolder.Location}{srcInfo.FullName[templateDirInfo.FullName.Length..]}"));
+                    projectFolder.Location + srcInfo.FullName[templateDirInfo.FullName.Length..]));
 
             _ = Parallel.ForEach(
                 templateDirInfo.GetFiles("*", SearchOption.AllDirectories),
                 srcInfo =>
                 {
-                    if (srcInfo.Name != "Template.json")
+                    if (!string.Equals(srcInfo.Name, "Template.json", StringComparison.Ordinal))
                     {
                         File.Copy(
                             srcInfo.FullName,
-                            $"{projectFolder.Location}{srcInfo.FullName[templateDirInfo.FullName.Length..]}",
-                            true);
+                            projectFolder.Location + srcInfo.FullName[templateDirInfo.FullName.Length..],
+                            overwrite: true);
                     }
                 });
 
             // Load the project info, update it, and save it
-            var projectInfo = await this.projectsSource.LoadProjectInfoAsync(projectFolder.Location);
+            var projectInfo
+                = await this.projectsSource.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(true);
             if (projectInfo != null)
             {
                 projectInfo.Name = projectName;
-                if (await this.projectsSource.SaveProjectInfoAsync(projectInfo))
+                if (await this.projectsSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
                 {
                     // Update the recently used project entry for the project being saved
-                    await TryUpdateRecentUsageAsync(projectInfo.Location!);
+                    await TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(true);
 
                     // Update the last save location
-                    await TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName);
+                    await TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName)
+                        .ConfigureAwait(true);
 
                     return true;
                 }
@@ -109,7 +112,7 @@ public class ProjectsService : IProjectsService
 
             try
             {
-                Directory.Delete(storageLocation.Location, true);
+                Directory.Delete(storageLocation.Location, recursive: true);
             }
             catch (Exception deleteError)
             {
@@ -124,13 +127,13 @@ public class ProjectsService : IProjectsService
 
     public async Task<bool> LoadProjectAsync(string location)
     {
-        await TryUpdateRecentUsageAsync(location);
+        await TryUpdateRecentUsageAsync(location).ConfigureAwait(true);
 
         // TODO(abdes) load the project
         return true;
     }
 
-    public List<QuickSaveLocation> GetQuickSaveLocations()
+    public IList<QuickSaveLocation> GetQuickSaveLocations()
     {
         var locations = new List<QuickSaveLocation>();
 
@@ -152,37 +155,40 @@ public class ProjectsService : IProjectsService
     public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await using var state = Ioc.Default.CreateScope()
+        var state = Ioc.Default.CreateAsyncScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
-        foreach (var item in state.RecentlyUsedProjects)
+        await using (state.ConfigureAwait(true))
         {
-            var projectInfo = await this.projectsSource.LoadProjectInfoAsync(item.Location!);
-            if (projectInfo != null)
+            foreach (var item in state.RecentlyUsedProjects)
             {
-                projectInfo.LastUsedOn = item.LastUsedOn;
-                yield return projectInfo;
-            }
-            else
-            {
-                try
+                var projectInfo = await this.projectsSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(true);
+                if (projectInfo != null)
                 {
-                    _ = state.RecentlyUsedProjects!.Remove(item);
+                    projectInfo.LastUsedOn = item.LastUsedOn;
+                    yield return projectInfo;
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.WriteLine($"Failed to remove entry from the most recently used projects: {ex.Message}");
+                    try
+                    {
+                        _ = state.RecentlyUsedProjects!.Remove(item);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to remove entry from the most recently used projects: {ex.Message}");
+                    }
                 }
             }
-        }
 
-        _ = await state.SaveChangesAsync(cancellationToken);
+            _ = await state.SaveChangesAsync(cancellationToken).ConfigureAwait(true);
+        }
     }
 
     private static async Task TryUpdateRecentUsageAsync(string location)
     {
         try
         {
-            await UpdateRecentUsageAsync(location);
+            await UpdateRecentUsageAsync(location).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -192,29 +198,33 @@ public class ProjectsService : IProjectsService
 
     private static async Task UpdateRecentUsageAsync(string location)
     {
-        await using var state = Ioc.Default.CreateScope()
+        var state = Ioc.Default.CreateAsyncScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
-
-        var recentProjectEntry = state.RecentlyUsedProjects.ToList()
-            .SingleOrDefault(p => p.Location == location, new RecentlyUsedProject(0, location));
-        if (recentProjectEntry.Id != 0)
+        await using (state.ConfigureAwait(true))
         {
-            recentProjectEntry.LastUsedOn = DateTime.Now;
-            _ = state.RecentlyUsedProjects!.Update(recentProjectEntry);
-        }
-        else
-        {
-            state.ProjectBrowserState.RecentProjects.Add(recentProjectEntry);
-        }
+            var recentProjectEntry = state.RecentlyUsedProjects.ToList()
+                .SingleOrDefault(
+                    p => string.Equals(p.Location, location, StringComparison.Ordinal),
+                    new RecentlyUsedProject(0, location));
+            if (recentProjectEntry.Id != 0)
+            {
+                recentProjectEntry.LastUsedOn = DateTime.Now;
+                _ = state.RecentlyUsedProjects!.Update(recentProjectEntry);
+            }
+            else
+            {
+                state.ProjectBrowserState.RecentProjects.Add(recentProjectEntry);
+            }
 
-        _ = await state.SaveChangesAsync();
+            _ = await state.SaveChangesAsync().ConfigureAwait(true);
+        }
     }
 
     private static async Task TryUpdateLastSaveLocation(string location)
     {
         try
         {
-            await UpdateLastSaveLocation(location);
+            await UpdateLastSaveLocation(location).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -224,11 +234,13 @@ public class ProjectsService : IProjectsService
 
     private static async Task UpdateLastSaveLocation(string location)
     {
-        await using var state = Ioc.Default.CreateScope()
+        var state = Ioc.Default.CreateAsyncScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
+        await using (state.ConfigureAwait(true))
+        {
+            state.ProjectBrowserState.LastSaveLocation = location;
 
-        state.ProjectBrowserState.LastSaveLocation = location;
-
-        _ = await state.SaveChangesAsync();
+            _ = await state.SaveChangesAsync().ConfigureAwait(true);
+        }
     }
 }

@@ -51,10 +51,9 @@ public class KnownLocation
     private async IAsyncEnumerable<IStorageItem> GetLocalDrivesAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var drives = this.localStorage.GetLogicalDrives();
-        foreach (var drive in drives)
+        foreach (var drive in this.localStorage.GetLogicalDrives())
         {
-            var folder = await this.localStorage.GetFolderFromPathAsync(drive, cancellationToken);
+            var folder = await this.localStorage.GetFolderFromPathAsync(drive, cancellationToken).ConfigureAwait(true);
             Debug.Assert(folder != null, nameof(folder) + $" for logical drive [{drive}] != null");
             yield return folder;
         }
@@ -63,15 +62,17 @@ public class KnownLocation
     private async IAsyncEnumerable<IStorageItem> GetRecentProjectsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync(cancellationToken))
+        await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync(cancellationToken)
+                           .ConfigureAwait(true))
         {
             if (project.Location == null)
             {
                 continue;
             }
 
-            var folder = await this.localStorage.GetFolderFromPathAsync(project.Location, cancellationToken);
-            yield return folder;
+            yield return await this.localStorage
+                .GetFolderFromPathAsync(project.Location, cancellationToken)
+                .ConfigureAwait(true);
         }
     }
 }

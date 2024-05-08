@@ -37,14 +37,11 @@ public partial class LocalProjectsSource : IProjectSource
         this.localStorage = localStorage;
         this.logger = logger;
 
-        this.CommonProjectLocations = new[]
-        {
-            // Typically a Projects folder in the local app data folder
-            pathFinder.PersonalProjects,
-
-            // The user's My Documents folder
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        };
+        this.CommonProjectLocations =
+        [
+            pathFinder.PersonalProjects, // Typically a Projects folder in the local app data folder
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), // The user's My Documents folder
+        ];
 
         this.jsonSerializerOptions = new JsonSerializerOptions
         {
@@ -64,8 +61,7 @@ public partial class LocalProjectsSource : IProjectSource
             var projectFolder = await StorageFolder.GetFolderFromPathAsync(fullPath);
             var infoFile = await projectFolder.GetFileAsync(ProjectFileName);
             var json = await FileIO.ReadTextAsync(infoFile);
-            var projectInfo = JsonSerializer.Deserialize<ProjectInfo>(json, this.jsonSerializerOptions);
-            return projectInfo;
+            return JsonSerializer.Deserialize<ProjectInfo>(json, this.jsonSerializerOptions);
         }
         catch (FileNotFoundException)
         {
@@ -82,7 +78,7 @@ public partial class LocalProjectsSource : IProjectSource
     public async Task<bool> MakeProjectAvailable(IProjectInfo projectInfo)
     {
         // Local projects do not need anything to be available.
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(true);
         return true;
     }
 
@@ -100,7 +96,7 @@ public partial class LocalProjectsSource : IProjectSource
                 return null;
             }
 
-            return await this.localStorage.GetFolderFromPathAsync(projectFolder.Path);
+            return await this.localStorage.GetFolderFromPathAsync(projectFolder.Path).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -130,7 +126,8 @@ public partial class LocalProjectsSource : IProjectSource
         try
         {
             var json = JsonSerializer.Serialize(projectInfo, this.jsonSerializerOptions);
-            await File.WriteAllTextAsync(Path.Combine(projectInfo.Location!, ProjectFileName), json);
+            await File.WriteAllTextAsync(Path.Combine(projectInfo.Location!, ProjectFileName), json)
+                .ConfigureAwait(true);
             return true;
         }
         catch (Exception error)

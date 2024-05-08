@@ -44,22 +44,26 @@ public class KnownLocationsService : IKnownLocationsService
                 this.localStorage,
                 this.projectsService),
             KnownLocations.OneDrive => await this.FromLocalFolderPathAsync(
-                key,
-                SHGetKnownFolderPath(new Guid("A52BBA46-E9E1-435f-B3D9-28DAA648C0F6"), 0),
-                cancellationToken),
+                    key,
+                    SHGetKnownFolderPath(new Guid("A52BBA46-E9E1-435f-B3D9-28DAA648C0F6"), 0),
+                    cancellationToken)
+                .ConfigureAwait(true),
             KnownLocations.Downloads => await this.FromLocalFolderPathAsync(
-                key,
-                SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0),
-                cancellationToken),
+                    key,
+                    SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0),
+                    cancellationToken)
+                .ConfigureAwait(true),
             KnownLocations.Documents => await this.FromLocalFolderPathAsync(
-                key,
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                cancellationToken),
+                    key,
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    cancellationToken)
+                .ConfigureAwait(true),
             KnownLocations.Desktop => await this.FromLocalFolderPathAsync(
-                key,
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                cancellationToken),
-            _ => throw new ArgumentOutOfRangeException(nameof(key), key, null),
+                    key,
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    cancellationToken)
+                .ConfigureAwait(true),
+            _ => throw new ArgumentOutOfRangeException(nameof(key), key, message: null),
         };
 
         if (location == null)
@@ -86,7 +90,7 @@ public class KnownLocationsService : IKnownLocationsService
         string path,
         CancellationToken cancellationToken)
     {
-        var folder = await this.localStorage.GetFolderFromPathAsync(path, cancellationToken);
+        var folder = await this.localStorage.GetFolderFromPathAsync(path, cancellationToken).ConfigureAwait(true);
         return folder != null
             ? new KnownLocation(key, folder.Name, folder.Location, this.localStorage, this.projectsService)
             : null;

@@ -15,7 +15,9 @@ using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Storage;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
 
+/// <summary>ViewModel for the page used to open an existing project in the project browser.</summary>
 public partial class StartOpenViewModel : ObservableObject
 {
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
@@ -24,7 +26,9 @@ public partial class StartOpenViewModel : ObservableObject
     private readonly IKnownLocationsService knownLocationsService;
     private readonly IProjectsService projectsService;
 
+#pragma warning disable CA1859 // Use concrete types when possible for improved performance
     private readonly IStorageProvider storageProvider;
+#pragma warning restore CA1859 // Use concrete types when possible for improved performance
 
     private SortDescription? byDateSortDescription;
     private SortDescription? byNameSortDescription;
@@ -37,7 +41,7 @@ public partial class StartOpenViewModel : ObservableObject
     private string filterText = string.Empty;
 
     [ObservableProperty]
-    private Dictionary<string, KnownLocation?> locations = new();
+    private Dictionary<string, KnownLocation?> locations = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentFolder))]
@@ -54,7 +58,7 @@ public partial class StartOpenViewModel : ObservableObject
 
         BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
-        this.AdvancedFileList = new AdvancedCollectionView(this.FileList, true);
+        this.AdvancedFileList = new AdvancedCollectionView(this.FileList, isLiveShaping: true);
 
         this.AdvancedFileList.SortDescriptions.Add(
             new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
@@ -69,14 +73,15 @@ public partial class StartOpenViewModel : ObservableObject
     {
         this.SelectedLocation = location;
         this.FileList.Clear();
-        await foreach (var item in location.GetItemsAsync())
+        await foreach (var item in location.GetItemsAsync().ConfigureAwait(true))
         {
             this.FileList.Add(item);
         }
 
         if (location.Location != string.Empty)
         {
-            this.CurrentFolder = await this.storageProvider.GetFolderFromPathAsync(location.Location);
+            this.CurrentFolder
+                = await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
         }
     }
 
@@ -86,8 +91,8 @@ public partial class StartOpenViewModel : ObservableObject
 
         foreach (var locationKey in Enum.GetValues<KnownLocations>())
         {
-            var location = await this.knownLocationsService.ForKeyAsync(locationKey);
-            this.Locations[locationKey.ToString()] = location;
+            this.Locations[locationKey.ToString()]
+                = await this.knownLocationsService.ForKeyAsync(locationKey).ConfigureAwait(true);
         }
 
         this.OnPropertyChanged(nameof(this.Locations));
@@ -102,22 +107,23 @@ public partial class StartOpenViewModel : ObservableObject
 
     public async void ChangeFolder(string path)
     {
-        this.CurrentFolder = await this.storageProvider.GetFolderFromPathAsync(path);
+        this.CurrentFolder = await this.storageProvider.GetFolderFromPathAsync(path).ConfigureAwait(true);
         this.FileList.Clear();
         await Task.Run(
-            async () =>
-            {
-                await foreach (var item in this.CurrentFolder.GetItemsAsync())
+                async () =>
                 {
-                    lock (this.fileListLock)
+                    await foreach (var item in this.CurrentFolder.GetItemsAsync().ConfigureAwait(true))
                     {
-                        this.FileList.Add(item);
+                        lock (this.fileListLock)
+                        {
+                            this.FileList.Add(item);
+                        }
                     }
-                }
-            });
+                })
+            .ConfigureAwait(true);
     }
 
-    public void OpenProjectFile(string location) => this.projectsService.LoadProjectAsync(location);
+    public void OpenProjectFile(string location) => this.projectsService.LoadProjectAsync(location).Wait();
 
     public void ApplyFilter(string pattern)
         => this.AdvancedFileList.Filter = x => ((IStorageItem)x).Name.Contains(

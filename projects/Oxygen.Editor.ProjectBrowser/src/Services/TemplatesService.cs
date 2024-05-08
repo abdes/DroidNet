@@ -36,7 +36,7 @@ public partial class TemplatesService : ITemplatesService
     {
         try
         {
-            await ClearRecentUsageAsync(template);
+            await ClearRecentUsageAsync(template).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -46,10 +46,13 @@ public partial class TemplatesService : ITemplatesService
 
     public static async Task ClearRecentUsageAsync(RecentlyUsedTemplate template)
     {
-        await using var state = Ioc.Default.CreateScope()
+        var state = Ioc.Default.CreateAsyncScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
-        _ = state.RecentlyUsedTemplates!.Remove(template);
-        _ = await state.SaveChangesAsync();
+        await using (state.ConfigureAwait(true))
+        {
+            _ = state.RecentlyUsedTemplates!.Remove(template);
+            _ = await state.SaveChangesAsync().ConfigureAwait(true);
+        }
     }
 
     public IList<ProjectCategory> GetProjectCategories()
@@ -67,7 +70,8 @@ public partial class TemplatesService : ITemplatesService
                 {
                     try
                     {
-                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(template);
+                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(template)
+                            .ConfigureAwait(true);
 
                         // Update template last used time
                         templateInfo.LastUsedOn = LoadUsageData()
@@ -88,7 +92,7 @@ public partial class TemplatesService : ITemplatesService
     {
         using var state = Ioc.Default.CreateScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
-        return state.RecentlyUsedTemplates != null && state.RecentlyUsedTemplates.Any();
+        return state.RecentlyUsedTemplates?.Any() == true;
     }
 
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates()
@@ -102,7 +106,8 @@ public partial class TemplatesService : ITemplatesService
                     try
                     {
                         var templateDescriptor = Path.Combine(template.Key, "Template.json");
-                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(templateDescriptor);
+                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(templateDescriptor)
+                            .ConfigureAwait(true);
 
                         templateInfo.LastUsedOn = template.Value.LastUsedOn;
                         observer.OnNext(templateInfo);
@@ -110,21 +115,21 @@ public partial class TemplatesService : ITemplatesService
                     catch (Exception ex)
                     {
                         this.CouldNotLoadTemplate(template.Key, ex.Message);
-                        await TryClearRecentUsageAsync(template.Value);
+                        await TryClearRecentUsageAsync(template.Value).ConfigureAwait(true);
                     }
                 }
             });
 
-    private static IDictionary<string, RecentlyUsedTemplate> LoadUsageData()
+    private static Dictionary<string, RecentlyUsedTemplate> LoadUsageData()
     {
         using var state = Ioc.Default.CreateScope()
             .ServiceProvider.GetRequiredService<PersistentState>();
-        if (state.RecentlyUsedProjects != null && state.RecentlyUsedProjects.Any())
+        if (state.RecentlyUsedProjects?.Any() == true)
         {
-            return state.RecentlyUsedTemplates!.ToDictionary(t => t.Location!);
+            return state.RecentlyUsedTemplates!.ToDictionary(t => t.Location!, StringComparer.Ordinal);
         }
 
-        return new Dictionary<string, RecentlyUsedTemplate>();
+        return new Dictionary<string, RecentlyUsedTemplate>(StringComparer.Ordinal);
     }
 
     [LoggerMessage(

@@ -18,7 +18,7 @@ public class SelectedLocationConverter : IValueConverter
             return false;
         }
 
-        if (!Enum.TryParse(typeof(KnownLocations), parameter.ToString(), true, out var locationKey))
+        if (!Enum.TryParse(typeof(KnownLocations), parameter.ToString(), ignoreCase: true, out var locationKey))
         {
             return false;
         }

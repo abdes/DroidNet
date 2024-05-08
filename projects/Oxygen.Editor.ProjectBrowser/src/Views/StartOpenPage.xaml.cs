@@ -35,29 +35,40 @@ public sealed partial class StartOpenPage
     {
         Debug.WriteLine("Navigation to StartOpenPage.");
 
-        await this.ViewModel.Initialize();
+        await this.ViewModel.Initialize().ConfigureAwait(true);
     }
 
-    private void KnownLocationButton_OnClick(object? unused, KnownLocation e)
-        => this.ViewModel.SelectLocation(e);
-
-    private void ListView_OnItemClick(object unused, ItemClickEventArgs e)
+    private void KnownLocationButton_OnClick(object? sender, KnownLocation e)
     {
+        _ = sender;
+
+        this.ViewModel.SelectLocation(e);
+    }
+
+    private void ListView_OnItemClick(object sender, ItemClickEventArgs e)
+    {
+        _ = sender;
+
         var item = e.ClickedItem.As<IStorageItem>();
-        Debug.WriteLine($"Item {item.Location} clicked");
+        Debug.WriteLine($"Item {item.Location} clicked", StringComparer.Ordinal);
 
         if (item is IFolder)
         {
             this.ViewModel.ChangeFolder(item.Location);
         }
-        else if (item.Name.EndsWith(".oxy", true, CultureInfo.InvariantCulture))
+        else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
             this.ViewModel.OpenProjectFile((item as INestedItem)!.ParentPath);
         }
     }
 
-    private void FilterBox_OnTextChanged(object unused, TextChangedEventArgs e)
-        => this.ViewModel.ApplyFilter(this.FilterBox.Text);
+    private void FilterBox_OnTextChanged(object sender, TextChangedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        this.ViewModel.ApplyFilter(this.FilterBox.Text);
+    }
 }
 
 internal sealed class FileListDataTemplateSelector : DataTemplateSelector
@@ -73,7 +84,7 @@ internal sealed class FileListDataTemplateSelector : DataTemplateSelector
 #pragma warning restore CS8618
 
     protected override DataTemplate SelectTemplateCore(object item)
-        => this.SelectTemplateCore(item, null);
+        => this.SelectTemplateCore(item, container: null);
 
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject? container)
         => item is IFolder ? this.FolderTemplate : this.FileTemplate;

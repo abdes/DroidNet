@@ -21,15 +21,15 @@ public class ProjectBrowserSettings
     /// </summary>
     public static readonly string ConfigSectionName = "ProjectBrowserSettings";
 
-    private readonly Dictionary<string, ProjectCategory> categories = new();
-    private List<string> templates = new();
+    private readonly Dictionary<string, ProjectCategory> categories = [];
+    private List<string> templates = [];
 
     /// <summary>
     /// Gets or sets (only during the DI injection) the list of supported template
     /// categories.
     /// </summary>
     /// <value>The list of supported template categories.</value>
-    public List<ProjectCategory> Categories
+    public IList<ProjectCategory> Categories
     {
         get => this.categories.Values.ToList();
         set
@@ -54,10 +54,10 @@ public class ProjectBrowserSettings
     /// relative to the application's built-in templates root folder obtained from the
     /// <see cref="IPathFinder" />.
     /// </value>
-    public List<string> BuiltinTemplates
+    public IList<string> BuiltinTemplates
     {
         get => this.templates;
-        set => this.templates = new HashSet<string>(value).ToList();
+        set => this.templates = new HashSet<string>(value, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Get the project category with the given ID.</summary>

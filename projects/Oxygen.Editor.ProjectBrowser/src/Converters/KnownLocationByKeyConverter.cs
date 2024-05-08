@@ -11,6 +11,4 @@ using Oxygen.Editor.ProjectBrowser.Projects;
 /// A specialized <see cref="DictionaryValueConverter{T}" /> converter for
 /// <see cref="KnownLocation" />.
 /// </summary>
-public class KnownLocationByKeyConverter : DictionaryValueConverter<KnownLocation>
-{
-}
+public class KnownLocationByKeyConverter : DictionaryValueConverter<KnownLocation>;

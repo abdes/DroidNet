@@ -41,7 +41,7 @@ public partial class StartNewViewModel : ObservableObject
                 {
                     // Ignore and continue
                 },
-                () => this.SelectedItem = this.Templates.First());
+                () => this.SelectedItem = this.Templates[0]);
     }
 
     [RelayCommand]
@@ -52,6 +52,6 @@ public partial class StartNewViewModel : ObservableObject
         Debug.WriteLine(
             $"New project from template: {template.Category!.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await this.projectsService.NewProjectFromTemplate(template, projectName, location);
+        return await this.projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }
 }

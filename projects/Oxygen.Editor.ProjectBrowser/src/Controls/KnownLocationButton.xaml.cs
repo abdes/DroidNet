@@ -114,8 +114,11 @@ public sealed partial class KnownLocationButton
         }
     }
 
-    private void OnClick(object unused, RoutedEventArgs e)
+    private void OnClick(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         Debug.WriteLine("Location button clicked");
         var documentLocation = this.Location;
         if (documentLocation != null)

@@ -12,6 +12,7 @@ using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
+/// <summary>ViewModel for the initial page displaying when starting the project browser.</summary>
 public partial class StartHomeViewModel
 {
     private readonly IProjectsService projectsService;
@@ -36,9 +37,9 @@ public partial class StartHomeViewModel
     [RelayCommand]
     public void LoadTemplates()
     {
-        Debug.WriteLine($"StartHomeViewModel Clear Templates");
+        Debug.WriteLine("StartHomeViewModel Clear Templates");
         this.Templates.Clear();
-        Debug.WriteLine($"StartHomeViewModel Load Templates");
+        Debug.WriteLine("StartHomeViewModel Load Templates");
 
         if (this.templateService.HasRecentlyUsedTemplates())
         {
@@ -59,11 +60,11 @@ public partial class StartHomeViewModel
     [RelayCommand]
     public async Task LoadRecentProjects()
     {
-        Debug.WriteLine($"StartHomeViewModel Clear Recent Projects");
+        Debug.WriteLine("StartHomeViewModel Clear Recent Projects");
         this.RecentProjects.Clear();
-        Debug.WriteLine($"StartHomeViewModel Load Recent Projects");
+        Debug.WriteLine("StartHomeViewModel Load Recent Projects");
 
-        await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync())
+        await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
             this.RecentProjects.InsertInPlace(project, x => x.LastUsedOn, new DateTimeComparerDescending());
         }
@@ -74,12 +75,13 @@ public partial class StartHomeViewModel
         Debug.WriteLine(
             $"New project from template: {template.Category!.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await this.projectsService.NewProjectFromTemplate(template, projectName, location);
+        return await this.projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }
 
-    public void OpenProject(IProjectInfo projectInfo) => this.projectsService.LoadProjectAsync(projectInfo.Location!);
+    public void OpenProject(IProjectInfo projectInfo)
+        => this.projectsService.LoadProjectAsync(projectInfo.Location!).Wait();
 
-    private class DateTimeComparerDescending : Comparer<DateTime>
+    private sealed class DateTimeComparerDescending : Comparer<DateTime>
     {
         public override int Compare(DateTime x, DateTime y) => y.CompareTo(x);
     }

@@ -21,7 +21,7 @@ public class UniversalProjectSource : IProjectSource
 
     public async Task<IProjectInfo?> LoadProjectInfoAsync(string fullPath)
     {
-        var projectInfo = await this.localSource.LoadProjectInfoAsync(fullPath);
+        var projectInfo = await this.localSource.LoadProjectInfoAsync(fullPath).ConfigureAwait(true);
         if (projectInfo != null)
         {
             projectInfo.Location = fullPath;
@@ -31,10 +31,10 @@ public class UniversalProjectSource : IProjectSource
     }
 
     public async Task<bool> MakeProjectAvailable(IProjectInfo projectInfo)
-        => await this.localSource.MakeProjectAvailable(projectInfo);
+        => await this.localSource.MakeProjectAvailable(projectInfo).ConfigureAwait(true);
 
     public async Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath)
-        => await this.localSource.CreateNewProjectFolder(projectName, atLocationPath);
+        => await this.localSource.CreateNewProjectFolder(projectName, atLocationPath).ConfigureAwait(true);
 
     public bool CanCreateProject(string projectName, string atLocationPath)
         => this.localSource.CanCreateProject(projectName, atLocationPath);
