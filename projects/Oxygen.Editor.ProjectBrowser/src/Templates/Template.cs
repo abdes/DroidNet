@@ -29,7 +29,7 @@ public class Template : ITemplateInfo
 
     public string? Icon { get; set; }
 
-    public List<string> PreviewImages { get; set; } = new();
+    public IList<string> PreviewImages { get; set; } = new List<string>();
 
     public DateTime? LastUsedOn { get; set; }
 }

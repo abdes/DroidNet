@@ -17,5 +17,5 @@ public interface IProjectsService
 
     Task<bool> LoadProjectAsync(string location);
 
-    List<QuickSaveLocation> GetQuickSaveLocations();
+    IList<QuickSaveLocation> GetQuickSaveLocations();
 }

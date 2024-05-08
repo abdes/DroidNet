@@ -72,28 +72,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Update="Meziantou.Analyzer">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.CodeAnalysis.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Update="Roslynator.Formatting.Analyzers">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PRIResource Update="en-US\Strings.resw">
-        <Generator></Generator>
-        </PRIResource>
+        <PRIResource Update="en-US\Strings.resw" />
     </ItemGroup>
 
 </Project>

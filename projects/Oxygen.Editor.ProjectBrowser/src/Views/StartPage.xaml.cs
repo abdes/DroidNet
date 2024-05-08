@@ -51,14 +51,14 @@ public sealed partial class StartPage
         // Trigger navigation to the ViewModel's current state
         this.NavigateToViewModel(this.ViewModel.CurrentNavigation);
 
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(true);
     }
 
     protected override async void OnNavigatedFrom(NavigationEventArgs e)
     {
         Debug.WriteLine("Navigation away from StartPage.");
         this.ViewModel.PropertyChanged -= this.OnCurrentNavigationChanged;
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(true);
     }
 
     private static Type PageForViewModel(Type viewModelType)
@@ -71,7 +71,6 @@ public sealed partial class StartPage
         throw new ArgumentException($"View type `{viewModelType}` is not mapped to any page", nameof(viewModelType));
     }
 
-    // event handler
     private void OnCurrentNavigationChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!string.Equals(args.PropertyName, nameof(this.ViewModel.CurrentNavigation), StringComparison.Ordinal))
@@ -105,6 +104,8 @@ public sealed partial class StartPage
 
     private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
+        _ = sender;
+
         Debug.Assert(
             !args.IsSettingsSelected,
             "Do not enable settings in this navigation view. Use the top level navigation for settings.");

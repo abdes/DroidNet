@@ -31,9 +31,8 @@ public partial class StartViewModel : ObservableObject
     /// <summary>Initializes a new instance of the <see cref="StartViewModel" /> class.</summary>
     public StartViewModel()
     {
-        this.SelectedItem = this.navigationItems.First();
-        this.CurrentNavigation = this.navigationItems.First()
-            .TargetViewModel;
+        this.SelectedItem = this.navigationItems[0];
+        this.CurrentNavigation = this.navigationItems[0].TargetViewModel;
     }
 
     [RelayCommand]

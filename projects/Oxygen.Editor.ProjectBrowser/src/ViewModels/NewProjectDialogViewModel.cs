@@ -11,10 +11,11 @@ using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
+/// <summary>ViewModel for the dialog used to create a new project.</summary>
 public partial class NewProjectDialogViewModel : ObservableObject
 {
     [ObservableProperty]
-    private List<QuickSaveLocation> pinnedLocations;
+    private IList<QuickSaveLocation> pinnedLocations;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProjectNameValid))]
@@ -32,7 +33,7 @@ public partial class NewProjectDialogViewModel : ObservableObject
 
         var projectsService = Ioc.Default.GetRequiredService<IProjectsService>();
         this.PinnedLocations = projectsService.GetQuickSaveLocations();
-        this.SelectedLocation = this.PinnedLocations.First();
+        this.SelectedLocation = this.PinnedLocations[0];
 
         this.ProjectName = string.Empty;
     }

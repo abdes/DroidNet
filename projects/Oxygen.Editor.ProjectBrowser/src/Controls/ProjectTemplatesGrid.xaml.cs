@@ -27,18 +27,18 @@ public sealed partial class ProjectTemplatesGrid
         nameof(SelectedItem),
         typeof(ITemplateInfo),
         typeof(ProjectTemplatesGrid),
-        new PropertyMetadata(null, OnSelectedItemChanged));
+        new PropertyMetadata(defaultValue: null, OnSelectedItemChanged));
 
     public ProjectTemplatesGrid() => this.InitializeComponent();
 
+    /// <summary>Event fired when an item in the project templates collection is clicked.</summary>
     [Browsable(true)]
     [Category("Action")]
     [Description("Invoked when user clicks a project template tile")]
     public event EventHandler<ITemplateInfo>? ItemClick;
 
-    public ObservableCollection<ITemplateInfo> ProjectTemplates { get; set; } = new();
+    public ObservableCollection<ITemplateInfo> ProjectTemplates { get; set; } = [];
 
-    // Declare a read-write property wrapper.
     public ITemplateInfo? SelectedItem
     {
         get => (ITemplateInfo)this.GetValue(SelectedItemProperty);
@@ -50,6 +50,8 @@ public sealed partial class ProjectTemplatesGrid
 
     private void OnGridItemClick(object sender, ItemClickEventArgs e)
     {
+        _ = sender;
+
         Debug.WriteLine("Item clicked");
         this.ItemClick?.Invoke(this, (ITemplateInfo)e.ClickedItem);
     }

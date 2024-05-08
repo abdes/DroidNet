@@ -29,6 +29,8 @@ public sealed partial class NewProjectDialog
 
     private void OnLocationItemClick(object sender, ItemClickEventArgs e)
     {
+        _ = sender;
+
         this.ViewModel.SetLocationCommand.Execute(e.ClickedItem);
         this.LocationExpander.IsExpanded = false;
     }

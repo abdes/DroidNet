@@ -29,14 +29,20 @@ public sealed partial class StartHomePage
         Debug.WriteLine("Navigation to StartHomePage.");
 
         this.ViewModel.LoadTemplates();
-        await this.ViewModel.LoadRecentProjects();
+        await this.ViewModel.LoadRecentProjects().ConfigureAwait(true);
     }
 
     private void OnProjectClick(object sender, IProjectInfo e)
-        => this.ViewModel.OpenProject(e);
+    {
+        _ = sender;
+
+        this.ViewModel.OpenProject(e);
+    }
 
     private async void OnTemplateClick(object? sender, ITemplateInfo template)
     {
+        _ = sender;
+
         var dialog = new NewProjectDialog(template) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
@@ -44,9 +50,10 @@ public sealed partial class StartHomePage
         if (result == ContentDialogResult.Primary)
         {
             var success = await this.ViewModel.NewProjectFromTemplate(
-                template,
-                dialog.ViewModel.ProjectName,
-                dialog.ViewModel.SelectedLocation.Path);
+                    template,
+                    dialog.ViewModel.ProjectName,
+                    dialog.ViewModel.SelectedLocation.Path)
+                .ConfigureAwait(true);
 
             if (success)
             {

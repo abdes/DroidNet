@@ -16,7 +16,7 @@ public interface ITemplateInfo
 
     string? Icon { get; set; }
 
-    List<string> PreviewImages { get; set; }
+    IList<string> PreviewImages { get; set; }
 
     DateTime? LastUsedOn { get; set; }
 }
