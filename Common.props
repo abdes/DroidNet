@@ -21,6 +21,11 @@
         -->
     </PropertyGroup>
 
+    <!-- Repo option -->
+    <PropertyGroup>
+        <ProjectsRoot>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))projects</ProjectsRoot>
+    </PropertyGroup>
+
     <!-- Language Options -->
     <PropertyGroup>
         <Features>Strict</Features>
