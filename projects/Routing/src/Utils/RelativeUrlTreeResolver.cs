@@ -78,6 +78,6 @@ internal static class RelativeUrlTreeResolver
         root.AddChild(
             OutletName.Primary,
             new UrlSegmentGroup(resolvedSegments, primary.Children.ToDictionary()));
-        return new UrlTree(root, urlTree.QueryParams);
+        return new UrlTree(root, urlTree.QueryParams) { IsRelative = false };
     }
 }

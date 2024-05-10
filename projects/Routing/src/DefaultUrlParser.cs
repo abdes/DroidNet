@@ -72,7 +72,10 @@ public class DefaultUrlParser : IUrlParser
         var remaining = url.AsSpan();
         try
         {
-            var tree = new UrlTree(this.ParseRootSegment(ref remaining), this.ParseQueryParams(ref remaining));
+            var tree = new UrlTree(this.ParseRootSegment(ref remaining), this.ParseQueryParams(ref remaining))
+            {
+                IsRelative = !url.StartsWith('/'),
+            };
 
             if (!remaining.IsEmpty)
             {
@@ -157,13 +160,10 @@ public class DefaultUrlParser : IUrlParser
             ;
 
         var allowPrimary = false;
-        /*
-         * Parse normal segments. At this point, we don't want to see a '/'
-         * at the beginning of the path anymore. Even the url was absolute,
-         * just remove the leading '/'.
-         */
-
         var allowDots = !absolute;
+
+        // Parse normal segments. At this point, we don't want to see a '/' at the beginning of the path anymore. Even
+        // the url was absolute, just remove the leading '/'.
         if (!absolute)
         {
             if (remaining.PeekStartsWith('/'))
@@ -176,8 +176,7 @@ public class DefaultUrlParser : IUrlParser
             allowDots = string.Equals(segment.Path, "..", StringComparison.Ordinal);
         }
 
-        while (remaining.Length > 0 && remaining[0] == '/' &&
-               !(remaining.Length > 1 && remaining[1] == '/'))
+        while (remaining.PeekStartsWith('/') && !remaining.PeekStartsWith("~~"))
         {
             remaining = remaining[1..]; // Skip the '/'
             var segment = this.ParseSegment(ref remaining, allowDots);
@@ -186,15 +185,9 @@ public class DefaultUrlParser : IUrlParser
         }
 
         Debug.Assert(segments.Count != 0, "we should have at least one segment with empty path");
-        Debug.Assert(
-            segments[0].Path != string.Empty || segments.Count == 1,
-            "if we have a segment with an empty path at start, then it should be the only one.");
-        Debug.Assert(
-            !remaining.PeekStartsWith('/') || remaining.PeekStartsWith("//"),
-            "all '/' characters should have been consumed");
 
+        // Eventually parse children inside (...)
         var children = new Dictionary<OutletName, IUrlSegmentGroup>();
-
         if (remaining.PeekStartsWith("("))
         {
             if (segments[^1].Path.Length == 0)
@@ -362,15 +355,16 @@ public class DefaultUrlParser : IUrlParser
             }
 
             var next = remaining[0];
-            if (next is not '/' and not ')' and not ';' and not '(')
+            if (next is not '/' and not ')' and not ';' and not '(' and not '~')
             {
-                throw new UriFormatException($"Expecting one of '/', ')', ';', '(' after a segment but got '{next}'");
+                throw new UriFormatException(
+                    $"Expecting one of '/', ')', ';', '(', '~' after a segment but got '{next}'");
             }
 
             closed = remaining.ConsumeOptional(')');
             if (!closed)
             {
-                _ = remaining.ConsumeOptional("//");
+                _ = remaining.ConsumeOptional("~~");
             }
         }
 

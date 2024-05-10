@@ -172,7 +172,7 @@ public class UrlSegmentGroupTests
         var result = group.ToString();
 
         // Assert
-        _ = result.Should().Be("foo/bar(baz:qux//corge:grault/garply)");
+        _ = result.Should().Be("foo/bar(baz:qux~~corge:grault/garply)");
         _ = result.Should().Be(group.ToString());
     }
 
@@ -232,7 +232,7 @@ public class UrlSegmentGroupTests
         var result = group.ToString();
 
         // Assert
-        _ = result.Should().Be("(left:foo//right:bar)");
+        _ = result.Should().Be("(left:foo~~right:bar)");
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public class UrlSegmentGroupTests
         var result = group.ToString();
 
         // Assert
-        _ = result.Should().Be("main(left:foo//right:bar)");
+        _ = result.Should().Be("main(left:foo~~right:bar)");
     }
 
     private static IUrlSegment MockUrlSegment(string value)

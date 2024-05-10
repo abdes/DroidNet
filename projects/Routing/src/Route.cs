@@ -74,6 +74,16 @@ public class Route : IRoute
             route.Path is not null,
             "when the default matcher is being used, a route must have a non-null path");
 
+        // Empty path route with Prefix match method matches anything but does
+        // not consume the segment unless it is the empty path.
+        if (route.Path.Length == 0 && route.MatchMethod == PathMatch.StrictPrefix)
+        {
+            return new Match()
+            {
+                Consumed = segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
+            };
+        }
+
         var parts = route.Path.Split('/');
 
         if (parts.Length > segments.Count)

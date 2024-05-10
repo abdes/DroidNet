@@ -14,6 +14,10 @@ internal static class UrlParserHelpers
     public static bool PeekStartsWith(this ref ReadOnlySpan<char> remaining, string prefix)
         => remaining.Length >= prefix.Length && remaining[..prefix.Length].SequenceEqual(prefix.AsSpan());
 
+    public static bool PeekContains(this ref ReadOnlySpan<char> remaining, int index, string prefix)
+        => remaining.Length >= index + prefix.Length &&
+           remaining[index..(index + prefix.Length)].SequenceEqual(prefix.AsSpan());
+
     public static bool ConsumeOptional(this ref ReadOnlySpan<char> remaining, string str)
     {
         var initialLength = remaining.Length;
@@ -73,8 +77,10 @@ internal static class UrlParserHelpers
     public static string MatchSegment(this ref ReadOnlySpan<char> remaining)
     {
         var index = 0;
-        while (index < remaining.Length && remaining[index] != '/' && remaining[index] != '(' &&
-               remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';' && remaining[index] != '#')
+        while (index < remaining.Length
+               && remaining[index] != '/' && !remaining.PeekContains(index, "~~") && remaining[index] != '('
+               && remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';'
+               && remaining[index] != '#')
         {
             index++;
         }
@@ -85,9 +91,10 @@ internal static class UrlParserHelpers
     public static string MatchMatrixParamKey(this ref ReadOnlySpan<char> remaining)
     {
         var index = 0;
-        while (index < remaining.Length && remaining[index] != '/' && remaining[index] != '(' &&
-               remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';' &&
-               remaining[index] != '=' && remaining[index] != '#')
+        while (index < remaining.Length
+               && remaining[index] != '/' && !remaining.PeekContains(index, "~~") && remaining[index] != '('
+               && remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';'
+               && remaining[index] != '=' && remaining[index] != '#')
         {
             index++;
         }
@@ -100,7 +107,8 @@ internal static class UrlParserHelpers
     public static string MatchQueryParamKey(this ref ReadOnlySpan<char> remaining)
     {
         var index = 0;
-        while (index < remaining.Length && remaining[index] != '=' && remaining[index] != '?' &&
+        while (index < remaining.Length
+               && !remaining.PeekContains(index, "~~") && remaining[index] != '=' && remaining[index] != '?' &&
                remaining[index] != '&' && remaining[index] != '#')
         {
             index++;
@@ -112,7 +120,8 @@ internal static class UrlParserHelpers
     public static string MatchQueryParamValue(this ref ReadOnlySpan<char> remaining)
     {
         var index = 0;
-        while (index < remaining.Length && remaining[index] != '&' && remaining[index] != '#')
+        while (index < remaining.Length && !remaining.PeekContains(index, "~~") && remaining[index] != '&' &&
+               remaining[index] != '#')
         {
             index++;
         }

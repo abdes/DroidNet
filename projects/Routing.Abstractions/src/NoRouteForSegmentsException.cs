@@ -36,7 +36,7 @@ public class NoRouteForSegmentsException : Exception
         get => this.segments!;
         init
         {
-            if (value is IEnumerable<string> segmentsCollection)
+            if (value is IEnumerable<object> segmentsCollection)
             {
                 this.segments = string.Join('/', segmentsCollection);
             }
@@ -54,5 +54,5 @@ public class NoRouteForSegmentsException : Exception
 
     public override string Message => this.extendedMessage.Value;
 
-    private string FormatMessage() => base.Message + $" (Segments={this.Segments}";
+    private string FormatMessage() => base.Message + $" '{this.Segments}'";
 }

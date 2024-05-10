@@ -45,17 +45,8 @@ public class UrlTree : IUrlTree
     /// <inheritdoc />
     public IParameters QueryParams { get; }
 
-    /// <summary>
-    /// Gets a value indicating whether this tree represents a relative URL
-    /// (i.e. starts with a double dot path).
-    /// </summary>
-    /// <value>
-    /// <see langword="true"/> if the first segment of the first child of the tree root is
-    /// a double dot. <see langword="false"/> otherwise.
-    /// </value>
-    public bool IsRelative
-        => this.Root.Children.Count > 0 &&
-           this.Root.Children.TryGetValue(OutletName.Primary, out var primary) && primary.IsRelative;
+    /// <summary>Gets a value indicating whether this tree represents a relative URL.</summary>
+    public bool IsRelative { get; init; }
 
     /// <summary>
     /// Serializes the <see cref="UrlTree" /> into a string, using
