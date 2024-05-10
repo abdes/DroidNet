@@ -16,6 +16,7 @@ using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Relative Url Resolver")]
 public class RelativeUrlTreeResolverTests
 {
     private readonly DefaultUrlParser parser;

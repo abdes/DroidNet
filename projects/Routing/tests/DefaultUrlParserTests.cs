@@ -31,25 +31,25 @@ public class DefaultUrlParserTests
     [DataRow("/a/")]
     [DataRow("/a/b/")]
     [DataRow("/teams")]
-    [DataRow("/home(left:teams//right:../projects)")]
+    [DataRow("/home(left:teams~~right:../projects)")]
     [DataRow("/team/33")]
     [DataRow("/team/33(right:member)")]
-    [DataRow("/team/33(right:projects/(13//popup:new))")]
+    [DataRow("/team/33(right:projects/(13~~popup:new))")]
     [DataRow("/team/33/members")]
-    [DataRow("/team/33/members/12/(details(popup:new)//manager:../10)")]
+    [DataRow("/team/33/members/12/(details(popup:new)~~manager:../10)")]
     [DataRow("/(a:b)")]
     [DataRow("/(primary)", "//primary")]
     [DataRow("/primary(left:a)")]
     [DataRow("/primary(left:a/b)")]
-    [DataRow("/(primary//left:a)")]
+    [DataRow("/(primary~~left:a)")]
     [DataRow("/primary(left:a(sub:b))")]
-    [DataRow("/primary(left:../(a//sub:b))")]
-    [DataRow("/primary(left:a/(b//sub:b))", "/primary(left:a/(b//sub:b))")]
-    [DataRow("/primary(left:a//right:b)")]
+    [DataRow("/primary(left:../(a~~sub:b))")]
+    [DataRow("/primary(left:a/(b~~sub:b))", "/primary(left:a/(b~~sub:b))")]
+    [DataRow("/primary(left:a~~right:b)")]
     [DataRow("/primary/(left:a)")]
-    [DataRow("/primary/(left:a//right:b)")]
-    [DataRow("/primary/(more//left:a//right:b)")]
-    [DataRow("/(app:Home/Welcome//dock:left(1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
+    [DataRow("/primary/(left:a~~right:b)")]
+    [DataRow("/primary/(more~~left:a~~right:b)")]
+    [DataRow("/(app:Home/Welcome~~dock:left(1:One;pinned~~2:Two;below=1~~3:Three;pinned;above=2~~4:Four))")]
     public void TwoWaySerialization(string url, string? canonical = null)
     {
         var parser = new DefaultUrlParser() { AllowMultiValueParams = true };
@@ -290,8 +290,7 @@ public class DefaultUrlParserTests
     }
 
     /// <summary>
-    /// Tests that '.' segments are always rejected no matter whether
-    /// <paramref name="allowDots" /> is true or false.
+    /// Tests that '.' segments are always rejected no matter whether <paramref name="allowDots" /> is true or false.
     /// </summary>
     /// <param name="allowDots">Whether to allow dot segments or not.</param>
     [TestMethod]
@@ -417,14 +416,11 @@ public class DefaultUrlParserTests
         _ = result.Children.Should().BeEmpty();
     }
 
-    /// <summary>
-    /// Test that parsing a malformed URL would throw an exception.
-    /// </summary>
+    /// <summary>Test that parsing a malformed URL would throw an exception.</summary>
     /// <param name="url">The url string to parse.</param>
     [TestMethod]
     [DataRow("/../a")]
     [DataRow("/a/../a")]
-    [DataRow(".")]
     [DataRow("/./a")]
     [DataRow("/b/./a")]
     [DataRow("/xxx(")]

@@ -98,16 +98,6 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     public ReadOnlyCollection<IUrlSegment> Segments => this.segments.AsReadOnly();
 
     /// <summary>
-    /// Gets a value indicating whether this segment group is relative (i.e.
-    /// starts with a double dot path).
-    /// </summary>
-    /// <value>
-    /// <see langword="true"/> if the first segment in the group in a double dot.
-    /// <see langword="false"/> otherwise.
-    /// </value>
-    public bool IsRelative => this.segments.Count > 0 && this.segments[0].Path is "..";
-
-    /// <summary>
     /// Adds a child <see cref="UrlSegmentGroup" /> to the current
     /// <see cref="UrlSegmentGroup" />.
     /// </summary>
@@ -163,7 +153,7 @@ public class UrlSegmentGroup : IUrlSegmentGroup
             return string.Concat(this.SerializeSegments(), '/', childrenAsString[0]);
         }
 
-        return string.Concat(this.SerializeSegments(), '(', string.Join("//", childrenAsString), ')');
+        return string.Concat(this.SerializeSegments(), '(', string.Join("~~", childrenAsString), ')');
     }
 
     private string SerializeAsRoot()
@@ -177,7 +167,7 @@ public class UrlSegmentGroup : IUrlSegmentGroup
             : string.Empty;
 
         var nonPrimary = string.Join(
-            "//",
+            "~~",
             this.children.Where(pair => pair.Key.IsNotPrimary)
                 .Select(pair => string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString())));
 
