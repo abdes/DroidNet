@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "App (Package)": {
+      "commandName": "MsixPackage",
+      "commandLineArgs": "--environment Development"
+    },
+    "App (Unpackaged)": {
+      "commandName": "Project",
+      "commandLineArgs": "--environment Development"
+    }
+  }
+}
