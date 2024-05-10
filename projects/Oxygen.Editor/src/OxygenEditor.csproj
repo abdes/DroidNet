@@ -12,7 +12,7 @@
 
         <IsPackable>false</IsPackable>
 
-        <AssemblyName>Routing.Debugger</AssemblyName>
+        <AssemblyName>Oxygen.Editor</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <EnableMsixTooling>true</EnableMsixTooling>
