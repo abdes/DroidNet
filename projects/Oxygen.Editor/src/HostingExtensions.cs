@@ -4,9 +4,10 @@
 
 namespace Oxygen.Editor;
 
-using DroidNet.Hosting.Generators;
+using System.Reflection;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -35,6 +36,35 @@ public static class HostingExtensions
                     setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
             });
 
-    public static IHostBuilder ConfigureAutoInjected(this IHostBuilder builder) =>
-        builder.ConfigureServices((_, services) => services.UseAutoInject());
+    public static IHostBuilder ConfigureAutoInjected(this IHostBuilder builder) => builder.ConfigureServices(
+        (context, services) =>
+        {
+            _ = context; // unused
+
+            // Get all loaded assemblies
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                // Look for the AutoInjectExtensions class
+                var autoInjectType = assembly.GetTypes()
+                    .FirstOrDefault(
+                        t => t.IsClass && t.IsSealed && t.IsAbstract && string.Equals(
+                            t.Name,
+                            "AutoInjectExtensions",
+                            StringComparison.Ordinal));
+
+                if (autoInjectType != null)
+                {
+                    // Look for the UseAutoInject method
+                    var useAutoInjectMethod = autoInjectType.GetMethod(
+                        "UseAutoInject",
+                        BindingFlags.Public | BindingFlags.Static,
+                        binder: null,
+                        [typeof(IServiceCollection)],
+                        modifiers: null);
+
+                    // Invoke the UseAutoInject method on the given services
+                    _ = useAutoInjectMethod?.Invoke(null, [services]);
+                }
+            }
+        });
 }

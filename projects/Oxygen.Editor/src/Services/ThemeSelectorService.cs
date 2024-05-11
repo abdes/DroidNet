@@ -6,7 +6,6 @@ namespace Oxygen.Editor.Services;
 
 using DroidNet.Config;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.Helpers;
 using Oxygen.Editor.Models;
 
 public class ThemeSelectorService : IThemeSelectorService
@@ -34,20 +33,19 @@ public class ThemeSelectorService : IThemeSelectorService
 
         this.ApplyTheme();
 
-        this.settings.Update(
-            opt =>
-            {
-                opt.AppBackgroundRequestedTheme = theme;
-            });
+        this.settings.Update(opt => opt.AppBackgroundRequestedTheme = theme);
         return Task.CompletedTask;
     }
 
     public void ApplyTheme()
     {
+        // TODO: apply theme to currently active windows
+        /*
         if (App.MainWindow.Content is FrameworkElement rootElement)
         {
             rootElement.RequestedTheme = this.Theme;
             TitleBarHelper.UpdateTitleBar(this.Theme);
         }
+        */
     }
 }

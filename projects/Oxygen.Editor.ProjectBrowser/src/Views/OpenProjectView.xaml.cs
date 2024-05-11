@@ -6,10 +6,11 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
 using System.Globalization;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Hosting.Generators;
+using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Storage;
@@ -19,30 +20,18 @@ using WinRT;
 /// An empty page that can be used on its own or navigated to within a
 /// Frame.
 /// </summary>
-public sealed partial class StartOpenPage
+[ViewModel(typeof(OpenProjectViewModel))]
+[InjectAs(ServiceLifetime.Singleton)]
+public sealed partial class OpenProjectView
 {
     /// <summary>Initializes a new instance of the <see cref="StartOpenPage" /> class.</summary>
-    public StartOpenPage()
-    {
-        this.InitializeComponent();
-
-        this.ViewModel = Ioc.Default.GetRequiredService<StartOpenViewModel>();
-    }
-
-    public StartOpenViewModel ViewModel { get; }
-
-    protected override async void OnNavigatedTo(NavigationEventArgs e)
-    {
-        Debug.WriteLine("Navigation to StartOpenPage.");
-
-        await this.ViewModel.Initialize().ConfigureAwait(true);
-    }
+    public OpenProjectView() => this.InitializeComponent();
 
     private void KnownLocationButton_OnClick(object? sender, KnownLocation e)
     {
         _ = sender;
 
-        this.ViewModel.SelectLocation(e);
+        this.ViewModel!.SelectLocation(e);
     }
 
     private void ListView_OnItemClick(object sender, ItemClickEventArgs e)
@@ -54,11 +43,11 @@ public sealed partial class StartOpenPage
 
         if (item is IFolder)
         {
-            this.ViewModel.ChangeFolder(item.Location);
+            this.ViewModel!.ChangeFolder(item.Location);
         }
         else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
-            this.ViewModel.OpenProjectFile((item as INestedItem)!.ParentPath);
+            this.ViewModel!.OpenProjectFile((item as INestedItem)!.ParentPath);
         }
     }
 
@@ -67,7 +56,15 @@ public sealed partial class StartOpenPage
         _ = sender;
         _ = args;
 
-        this.ViewModel.ApplyFilter(this.FilterBox.Text);
+        this.ViewModel!.ApplyFilter(this.FilterBox.Text);
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        await this.ViewModel!.Initialize().ConfigureAwait(true);
     }
 }
 

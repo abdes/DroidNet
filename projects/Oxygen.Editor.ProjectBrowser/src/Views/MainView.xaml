@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
 <Page
-    x:Class="Oxygen.Editor.ProjectBrowser.Views.StartPage"
+    x:Class="Oxygen.Editor.ProjectBrowser.Views.MainView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -22,9 +22,9 @@
         IsSettingsVisible="False"
         MenuItemsSource="{x:Bind ViewModel.NavigationItems, Mode=OneWay, FallbackValue={}}"
         OpenPaneLength="140"
-        SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=OneWay, FallbackValue={}}"
-        SelectionChanged="OnNavigationSelectionChanged"
-        SelectionFollowsFocus="Disabled">
+        SelectedItem="{x:Bind ViewModel.SelectedItemIndex, Mode=OneWay, Converter={StaticResource IndexToNavigationItemConverter}}"
+        SelectionChanged="OnSelectionChanged"
+        SelectionFollowsFocus="Enabled">
 
         <NavigationView.Resources>
             <!--  https://github.com/Microsoft/microsoft-ui-xaml/blob/main/dev/NavigationView/NavigationView_rs2_themeresources.xaml  -->
@@ -34,10 +34,13 @@
 
         <NavigationView.MenuItemTemplate>
             <DataTemplate x:DataType="viewModels1:NavigationItem">
-                <NavigationViewItem Padding="28,20,28,20" AccessKey="{x:Bind AccessKey}">
+                <NavigationViewItem
+                    Padding="28,20,28,20"
+                    AccessKey="{x:Bind AccessKey}"
+                    Tag="{x:Bind TargetViewModel.FullName}">
                     <Grid RowDefinitions="64,*">
                         <Viewbox>
-                            <SymbolIcon Symbol="{x:Bind Icon}" />
+                            <FontIcon Glyph="{x:Bind Icon}" />
                         </Viewbox>
                         <TextBlock
                             Grid.Row="1"
@@ -48,7 +51,6 @@
             </DataTemplate>
         </NavigationView.MenuItemTemplate>
 
-
-        <Frame x:Name="ContentFrame" CornerRadius="0,0,0,0" />
+        <ContentPresenter Content="{x:Bind ViewModel.CurrentNavigation, Mode=OneWay, Converter={StaticResource VmToViewConverter}}" />
     </NavigationView>
 </Page>

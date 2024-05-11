@@ -5,56 +5,49 @@
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Hosting.Generators;
+using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
+using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
-/// <summary>
-/// An empty page that can be used on its own or navigated to within a
-/// Frame.
-/// </summary>
-public sealed partial class StartNewPage
+/// <summary>Start Home page.</summary>
+[ViewModel(typeof(HomeViewModel))]
+[InjectAs(ServiceLifetime.Singleton)]
+public sealed partial class HomeView
 {
-    /// <summary>Initializes a new instance of the <see cref="StartNewPage" /> class.</summary>
-    public StartNewPage()
-    {
-        this.InitializeComponent();
+    public HomeView() => this.InitializeComponent();
 
-        this.ViewModel = Ioc.Default.GetRequiredService<StartNewViewModel>();
+    private async void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.ViewModel!.LoadTemplates();
+        await this.ViewModel!.LoadRecentProjects().ConfigureAwait(true);
     }
 
-    public StartNewViewModel ViewModel { get; }
-
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        Debug.WriteLine("Navigation to StartNewPage.");
-
-        this.ViewModel.LoadTemplates();
-    }
-
-    private void OnTemplateClicked(object? sender, ITemplateInfo item)
+    private void OnProjectClick(object sender, IProjectInfo e)
     {
         _ = sender;
 
-        this.ViewModel.SelectItem(item);
+        this.ViewModel!.OpenProject(e);
     }
 
-    private async void CreateButton_OnClick(object? sender, RoutedEventArgs args)
+    private async void OnTemplateClick(object? sender, ITemplateInfo template)
     {
         _ = sender;
-        _ = args;
 
-        var template = this.ViewModel.SelectedItem!;
         var dialog = new NewProjectDialog(template) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 
         if (result == ContentDialogResult.Primary)
         {
-            var success = await this.ViewModel.NewProjectFromTemplate(
+            var success = await this.ViewModel!.NewProjectFromTemplate(
                     template,
                     dialog.ViewModel.ProjectName,
                     dialog.ViewModel.SelectedLocation.Path)

@@ -4,23 +4,15 @@
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 
-using Microsoft.UI.Xaml.Controls;
-
-public class NavigationItem
+public class NavigationItem(string path, string text, string icon, string accessKey, Type target)
 {
-    public NavigationItem(string text, Symbol icon, string accessKey, Type target)
-    {
-        this.Text = text;
-        this.Icon = icon;
-        this.AccessKey = accessKey;
-        this.TargetViewModel = target;
-    }
+    public string Path { get; } = path;
 
-    public string Text { get; }
+    public string Text { get; } = text;
 
-    public Symbol Icon { get; }
+    public string Icon { get; } = icon;
 
-    public string AccessKey { get; }
+    public string AccessKey { get; } = accessKey;
 
-    public Type TargetViewModel { get; }
+    public Type TargetViewModel { get; } = target;
 }

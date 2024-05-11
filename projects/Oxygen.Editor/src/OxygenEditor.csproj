@@ -66,7 +66,6 @@
         <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="Testably.Abstractions" />
-        <PackageReference Include="WinUIEx" />
     </ItemGroup>
 
     <ItemGroup>
@@ -76,10 +75,13 @@
         <ProjectReference Include="..\..\Config\src\Config.csproj" />
         <ProjectReference Include="..\..\Routing.WinUI\src\Routing.WinUI.csproj" />
 
-        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
-        <!-- We DO reference the attributes dll -->
+        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <ItemGroup>

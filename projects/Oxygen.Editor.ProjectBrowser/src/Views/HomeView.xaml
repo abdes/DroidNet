@@ -1,13 +1,14 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
-    x:Class="Oxygen.Editor.ProjectBrowser.Views.StartHomePage"
+    x:Class="Oxygen.Editor.ProjectBrowser.Views.HomeView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
+    Loaded="OnLoaded"
     mc:Ignorable="d">
 
     <!--  ViewModel will never be null under standard operation conditions  -->
@@ -83,7 +84,7 @@
                 Grid.Row="2"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal">
-                <HyperlinkButton Command="{x:Bind ViewModel.NavigationViewModel.ShowNewPageCommand, FallbackValue={}}">
+                <HyperlinkButton Command="{x:Bind ViewModel.MoreTemplatesCommand, FallbackValue={}}">
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                         <TextBlock Margin="0,0,20,0" Text="More Templates" />
                         <SymbolIcon Symbol="Forward" />
@@ -111,7 +112,7 @@
                 Grid.Row="4"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal">
-                <HyperlinkButton Command="{x:Bind ViewModel.NavigationViewModel.ShowOpenPageCommand, FallbackValue={}}">
+                <HyperlinkButton Command="{x:Bind ViewModel.MoreProjectsCommand, FallbackValue={}}">
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                         <TextBlock Margin="0,0,20,0" Text="More Projects" />
                         <SymbolIcon Symbol="Forward" />

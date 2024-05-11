@@ -6,20 +6,11 @@ namespace Oxygen.Editor.Services;
 
 using System.Collections.Specialized;
 using System.Web;
+using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppNotifications;
 
 public class AppNotificationService : IAppNotificationService
 {
-    private readonly INavigationService navigationService;
-
-    /// <summary>
-    /// Initializes a new instance of the
-    /// <see cref="AppNotificationService" /> class.
-    /// </summary>
-    /// <param name="navigationService"></param>
-    public AppNotificationService(INavigationService navigationService)
-        => this.navigationService = navigationService;
-
     public void Initialize()
     {
         AppNotificationManager.Default.NotificationInvoked += this.OnNotificationInvoked;
@@ -52,15 +43,18 @@ public class AppNotificationService : IAppNotificationService
         ////        _navigationService.NavigateTo(typeof(SettingsViewModel).FullName!);
         ////    });
         //// }
-        App.MainWindow.DispatcherQueue.TryEnqueue(
-            () =>
-            {
-                App.MainWindow.ShowMessageDialogAsync(
-                    "TODO: Handle notification invocations when your app is already running.",
-                    "Notification Invoked");
+        DispatcherQueue.GetForCurrentThread()
+            .TryEnqueue(
+                () =>
+                {
+                    /* TODO: refactor how notifications are handled
+                    App.MainWindow.ShowMessageDialogAsync(
+                        "TODO: Handle notification invocations when your app is already running.",
+                        "Notification Invoked");
 
-                App.MainWindow.BringToFront();
-            });
+                    App.MainWindow.BringToFront();
+                    */
+                });
 
     /// <summary>
     /// Finalizes an instance of the <see cref="AppNotificationService" />

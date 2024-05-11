@@ -8,27 +8,32 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
+using DroidNet.Hosting.Generators;
+using DroidNet.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>ViewModel for the initial page displaying when starting the project browser.</summary>
-public partial class StartHomeViewModel
+[InjectAs(ServiceLifetime.Singleton)]
+public partial class HomeViewModel : IRoutingAware
 {
+    private readonly IRouter router;
     private readonly IProjectsService projectsService;
     private readonly ITemplatesService templateService;
 
-    public StartHomeViewModel(
+    public HomeViewModel(
+        IRouter router,
         ITemplatesService templateService,
-        IProjectsService projectsService,
-        StartViewModel navigationViewModel)
+        IProjectsService projectsService)
     {
+        this.router = router;
         this.templateService = templateService;
         this.projectsService = projectsService;
-        this.NavigationViewModel = navigationViewModel;
     }
 
-    public StartViewModel NavigationViewModel { get; init; }
+    public IActiveRoute? ActiveRoute { get; set; }
 
     public ObservableCollection<ITemplateInfo> Templates { get; } = new();
 
@@ -67,6 +72,24 @@ public partial class StartHomeViewModel
         await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
             this.RecentProjects.InsertInPlace(project, x => x.LastUsedOn, new DateTimeComparerDescending());
+        }
+    }
+
+    [RelayCommand]
+    public void MoreTemplates()
+    {
+        if (this.ActiveRoute is not null)
+        {
+            this.router.Navigate("new", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+        }
+    }
+
+    [RelayCommand]
+    public void MoreProjects()
+    {
+        if (this.ActiveRoute is not null)
+        {
+            this.router.Navigate("open", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
         }
     }
 

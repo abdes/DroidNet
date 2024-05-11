@@ -35,22 +35,22 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Converters\src\Converters.csproj" />
-        <ProjectReference Include="..\..\Resources\src\Resources.csproj" />
-        <ProjectReference Include="..\..\Collections\src\Collections.csproj" />
-        <ProjectReference Include="..\..\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
-        <ProjectReference Include="..\..\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
-        <ProjectReference Include="..\..\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
-        <!-- <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
-        <ProjectReference Include="..\..\Routing.Controls\src\Routing.Controls.csproj" /> -->
+        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
 
-        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
-        <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
-        <ProjectReference Include="..\..\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <ItemGroup>
