@@ -27,8 +27,6 @@ using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
-using Oxygen.Editor.Pages.Settings.ViewModels;
-using Oxygen.Editor.Pages.Settings.Views;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
@@ -38,7 +36,6 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage.Native;
 using Oxygen.Editor.ViewModels;
-using Oxygen.Editor.Views;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -162,9 +159,7 @@ public static partial class Program
         sp.Container.Register<NativeStorageProvider>(Reuse.Singleton);
         sp.Container.Register<IPathFinder, DevelopmentPathFinder>(Reuse.Singleton); // TODO: release version
         sp.Container.Register<IThemeSelectorService, ThemeSelectorService>(Reuse.Singleton);
-        sp.Container.Register<INavigationService, NavigationService>(Reuse.Singleton);
         sp.Container.Register<IAppNotificationService, AppNotificationService>(Reuse.Singleton);
-        sp.Container.Register<IPageService, PageService>(Reuse.Singleton);
         sp.Container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
         // Register domain specific services, which serve data required by the views
@@ -192,17 +187,7 @@ public static partial class Program
         // corresponding to name of the special target <see cref="Target.Main" />.
         sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
-        // Views and ViewModels
-        sp.Container.Register<ShellViewModel>(Reuse.Transient);
-        sp.Container.Register<SettingsViewModel>(Reuse.Transient);
-        sp.Container.Register<StartHomeViewModel>(Reuse.Singleton);
-        sp.Container.Register<StartNewViewModel>(Reuse.Transient);
-        sp.Container.Register<StartOpenViewModel>(Reuse.Singleton);
-        sp.Container.Register<StartViewModel>(Reuse.Singleton);
-        sp.Container.Register<MainViewModel>(Reuse.Transient);
-        sp.Container.Register<SettingsPage>(Reuse.Transient);
-        sp.Container.Register<ShellPage>(Reuse.Transient);
-        sp.Container.Register<MainPage>(Reuse.Transient);
+        // Views and ViewModels that are not auto-registered for injection
     }
 
     private static Routes MakeRoutes() => new(
@@ -212,6 +197,44 @@ public static partial class Program
             Path = string.Empty,
             MatchMethod = PathMatch.StrictPrefix,
             ViewModelType = typeof(ShellViewModel),
+            Children = new Routes(
+            [
+                new Route()
+                {
+                    // The project browser is the root of a multi-page navigation view.
+                    Path = "pb",
+                    ViewModelType = typeof(ProjectBrowser.ViewModels.MainViewModel),
+                    Children = new Routes(
+                    [
+                        new Route()
+                        {
+                            Path = "home",
+                            MatchMethod = PathMatch.Prefix,
+                            ViewModelType = typeof(HomeViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "new",
+                            MatchMethod = PathMatch.Prefix,
+                            ViewModelType = typeof(NewProjectViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "open",
+                            MatchMethod = PathMatch.Prefix,
+                            ViewModelType = typeof(OpenProjectViewModel),
+                        },
+                        /* TODO: uncomment after settings page is refactored
+                        new Route()
+                        {
+                            Path = "settings",
+                            MatchMethod = PathMatch.Prefix,
+                            ViewModelType = typeof(SettingsViewModel),
+                        },
+                        */
+                    ]),
+                },
+            ]),
         },
     ]);
 

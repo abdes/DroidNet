@@ -10,6 +10,8 @@ using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
+using DroidNet.Hosting.Generators;
+using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Storage;
@@ -18,7 +20,8 @@ using Oxygen.Editor.Storage.Native;
 using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
 
 /// <summary>ViewModel for the page used to open an existing project in the project browser.</summary>
-public partial class StartOpenViewModel : ObservableObject
+[InjectAs(ServiceLifetime.Singleton)]
+public partial class OpenProjectViewModel : ObservableObject
 {
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
@@ -47,7 +50,7 @@ public partial class StartOpenViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CurrentFolder))]
     private KnownLocation? selectedLocation;
 
-    public StartOpenViewModel(
+    public OpenProjectViewModel(
         NativeStorageProvider storageProvider,
         IProjectsService projectsService,
         IKnownLocationsService knownLocationsService)

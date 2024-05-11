@@ -4,66 +4,33 @@
 
 namespace Oxygen.Editor.ViewModels;
 
-using System.Windows.Input;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Hosting.Generators;
+using DroidNet.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Navigation;
-using Oxygen.Editor.Pages.Settings.ViewModels;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
-using Oxygen.Editor.Services;
 
-public partial class ShellViewModel : ObservableRecipient
+[InjectAs(ServiceLifetime.Singleton)]
+public partial class ShellViewModel : AbstractOutletContainer
 {
-    [ObservableProperty]
-    private bool isBackEnabled;
+    private readonly IRouter router;
 
-    public ShellViewModel(INavigationService navigationService)
+    public ShellViewModel(IRouter router)
     {
-        this.NavigationService = navigationService;
-        this.NavigationService.Navigated += this.OnNavigated;
-
-        this.MenuFileExitCommand = new RelayCommand(OnMenuFileExit);
-        this.MenuSettingsCommand = new RelayCommand(this.OnMenuSettings);
-        this.MenuViewsMainCommand = new RelayCommand(this.OnMenuViewsMain);
-        this.MenuViewsStartCommand = new RelayCommand(this.OnMenuViewsStart);
+        this.router = router;
+        this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
     }
 
-    public ICommand MenuFileExitCommand
-    {
-        get;
-    }
+    public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
-    public ICommand MenuSettingsCommand
-    {
-        get;
-    }
-
-    public ICommand MenuViewsMainCommand
-    {
-        get;
-    }
-
-    public ICommand MenuViewsStartCommand
-    {
-        get;
-    }
-
-    public INavigationService NavigationService
-    {
-        get;
-    }
-
+    [RelayCommand]
     private static void OnMenuFileExit() => Application.Current.Exit();
 
-    private void OnNavigated(object sender, NavigationEventArgs e)
-        => this.IsBackEnabled = this.NavigationService.CanGoBack;
-
+    [RelayCommand]
     private void OnMenuSettings()
-        => this.NavigationService.NavigateTo(typeof(SettingsViewModel).FullName!);
+        => this.router.Navigate("/settings");
 
-    private void OnMenuViewsMain()
-        => this.NavigationService.NavigateTo(typeof(MainViewModel).FullName!);
-
-    private void OnMenuViewsStart() => this.NavigationService.NavigateTo(typeof(StartViewModel).FullName!);
+    [RelayCommand]
+    private void MenuViewsProjectBrowser()
+        => this.router.Navigate("/pb/home");
 }

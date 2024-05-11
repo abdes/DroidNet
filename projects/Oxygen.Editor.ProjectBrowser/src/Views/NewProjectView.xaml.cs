@@ -5,44 +5,46 @@
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Hosting.Generators;
+using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
-using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
-/// <summary>Start Home page.</summary>
-public sealed partial class StartHomePage
+/// <summary>
+/// An empty page that can be used on its own or navigated to within a
+/// Frame.
+/// </summary>
+[ViewModel(typeof(NewProjectViewModel))]
+[InjectAs(ServiceLifetime.Singleton)]
+public sealed partial class NewProjectView
 {
-    public StartHomePage()
-    {
-        this.InitializeComponent();
+    /// <summary>Initializes a new instance of the <see cref="NewProjectView" /> class.</summary>
+    public NewProjectView() => this.InitializeComponent();
 
-        this.ViewModel = Ioc.Default.GetRequiredService<StartHomeViewModel>();
+    private void OnLoaded(object sender, RoutedEventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.ViewModel!.LoadTemplates();
     }
 
-    public StartHomeViewModel ViewModel { get; }
-
-    protected override async void OnNavigatedTo(NavigationEventArgs e)
-    {
-        Debug.WriteLine("Navigation to StartHomePage.");
-
-        this.ViewModel.LoadTemplates();
-        await this.ViewModel.LoadRecentProjects().ConfigureAwait(true);
-    }
-
-    private void OnProjectClick(object sender, IProjectInfo e)
+    private void OnTemplateClicked(object? sender, ITemplateInfo item)
     {
         _ = sender;
 
-        this.ViewModel.OpenProject(e);
+        this.ViewModel!.SelectItem(item);
     }
 
-    private async void OnTemplateClick(object? sender, ITemplateInfo template)
+    private async void CreateButton_OnClick(object? sender, RoutedEventArgs args)
     {
         _ = sender;
+        _ = args;
 
+        var template = this.ViewModel!.SelectedItem!;
         var dialog = new NewProjectDialog(template) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();

@@ -9,11 +9,14 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
+using DroidNet.Hosting.Generators;
+using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>The ViewModel for the StartNewPage.</summary>
-public partial class StartNewViewModel : ObservableObject
+[InjectAs(ServiceLifetime.Singleton)]
+public partial class NewProjectViewModel : ObservableObject
 {
     private readonly IProjectsService projectsService;
     private readonly ITemplatesService templateService;
@@ -21,7 +24,7 @@ public partial class StartNewViewModel : ObservableObject
     [ObservableProperty]
     private ITemplateInfo? selectedItem;
 
-    public StartNewViewModel(ITemplatesService templateService, IProjectsService projectsService)
+    public NewProjectViewModel(ITemplatesService templateService, IProjectsService projectsService)
     {
         this.templateService = templateService;
         this.projectsService = projectsService;
