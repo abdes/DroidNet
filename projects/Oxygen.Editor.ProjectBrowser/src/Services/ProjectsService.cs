@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ProjectBrowser.Services;
 
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.Core.Services;
@@ -152,37 +152,40 @@ public class ProjectsService : IProjectsService
         return locations;
     }
 
-    public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var state = Ioc.Default.CreateAsyncScope()
-            .ServiceProvider.GetRequiredService<PersistentState>();
-        await using (state.ConfigureAwait(true))
-        {
-            foreach (var item in state.RecentlyUsedProjects)
+    public IObservable<IProjectInfo> GetRecentlyUsedProjects(CancellationToken cancellationToken = default)
+        => Observable.Create<IProjectInfo>(
+            async (observer) =>
             {
-                var projectInfo = await this.projectsSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(true);
-                if (projectInfo != null)
+                var state = Ioc.Default.CreateAsyncScope()
+                    .ServiceProvider.GetRequiredService<PersistentState>();
+                await using (state.ConfigureAwait(true))
                 {
-                    projectInfo.LastUsedOn = item.LastUsedOn;
-                    yield return projectInfo;
-                }
-                else
-                {
-                    try
+                    foreach (var item in state.RecentlyUsedProjects)
                     {
-                        _ = state.RecentlyUsedProjects!.Remove(item);
+                        var projectInfo
+                            = await this.projectsSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(true);
+                        if (projectInfo != null)
+                        {
+                            projectInfo.LastUsedOn = item.LastUsedOn;
+                            observer.OnNext(projectInfo);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                _ = state.RecentlyUsedProjects!.Remove(item);
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine(
+                                    $"Failed to remove entry from the most recently used projects: {ex.Message}");
+                            }
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to remove entry from the most recently used projects: {ex.Message}");
-                    }
-                }
-            }
 
-            _ = await state.SaveChangesAsync(cancellationToken).ConfigureAwait(true);
-        }
-    }
+                    _ = await state.SaveChangesAsync(cancellationToken).ConfigureAwait(true);
+                }
+            });
 
     private static async Task TryUpdateRecentUsageAsync(string location)
     {

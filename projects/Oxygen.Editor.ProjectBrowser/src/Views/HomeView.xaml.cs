@@ -21,13 +21,13 @@ public sealed partial class HomeView
 {
     public HomeView() => this.InitializeComponent();
 
-    private async void OnLoaded(object sender, RoutedEventArgs args)
+    private void OnLoaded(object sender, RoutedEventArgs args)
     {
         _ = sender; // unused
         _ = args; // unused
 
-        this.ViewModel!.LoadTemplates();
-        await this.ViewModel!.LoadRecentProjects().ConfigureAwait(true);
+        this.ViewModel?.LoadTemplates();
+        this.ViewModel!.LoadRecentProjects();
     }
 
     private void OnProjectClick(object sender, IProjectInfo e)
