@@ -9,7 +9,7 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 
 public interface IProjectsService
 {
-    IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
+    IObservable<IProjectInfo> GetRecentlyUsedProjects(CancellationToken cancellationToken = default);
 
     Task<bool> NewProjectFromTemplate(ITemplateInfo templateInfo, string projectName, string atLocationPath);
 

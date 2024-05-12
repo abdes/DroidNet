@@ -76,10 +76,7 @@ public partial class OpenProjectViewModel : ObservableObject
     {
         this.SelectedLocation = location;
         this.FileList.Clear();
-        await foreach (var item in location.GetItemsAsync().ConfigureAwait(true))
-        {
-            this.FileList.Add(item);
-        }
+        _ = location.GetItems().Subscribe(item => this.FileList.Add(item));
 
         if (location.Location != string.Empty)
         {

@@ -63,16 +63,18 @@ public partial class HomeViewModel : IRoutingAware
     }
 
     [RelayCommand]
-    public async Task LoadRecentProjects()
+    public void LoadRecentProjects()
     {
         Debug.WriteLine("StartHomeViewModel Clear Recent Projects");
         this.RecentProjects.Clear();
         Debug.WriteLine("StartHomeViewModel Load Recent Projects");
 
-        await foreach (var project in this.projectsService.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
-        {
-            this.RecentProjects.InsertInPlace(project, x => x.LastUsedOn, new DateTimeComparerDescending());
-        }
+        _ = this.projectsService.GetRecentlyUsedProjects()
+            .Subscribe(
+                projectInfo => this.RecentProjects.InsertInPlace(
+                    projectInfo,
+                    x => x.LastUsedOn,
+                    new DateTimeComparerDescending()));
     }
 
     [RelayCommand]

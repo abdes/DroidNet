@@ -29,6 +29,7 @@
         <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="System.Linq.Async" />
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="DynamicData" />
         <PackageReference Include="DryIoc.dll" />
