@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Views;
+namespace Oxygen.Editor.Shell;
 
 using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
@@ -12,7 +12,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Helpers;
-using Oxygen.Editor.ViewModels;
 using Windows.System;
 
 /// <summary>The view for the application's main window shell.</summary>
