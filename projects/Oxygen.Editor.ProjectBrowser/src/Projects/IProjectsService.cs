@@ -2,9 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Services;
+namespace Oxygen.Editor.ProjectBrowser.Projects;
 
-using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 public interface IProjectsService

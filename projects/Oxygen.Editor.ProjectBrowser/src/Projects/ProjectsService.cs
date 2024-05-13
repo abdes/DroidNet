@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Services;
+namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 using System.Diagnostics;
 using System.Reactive.Linq;
@@ -11,7 +11,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
-using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Storage;
 

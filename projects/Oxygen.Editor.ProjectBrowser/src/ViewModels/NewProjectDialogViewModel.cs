@@ -8,7 +8,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>ViewModel for the dialog used to create a new project.</summary>

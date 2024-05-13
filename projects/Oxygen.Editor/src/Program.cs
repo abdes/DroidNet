@@ -30,7 +30,6 @@ using Oxygen.Editor.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Services;
-using Oxygen.Editor.ProjectBrowser.Storage;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Services;
@@ -164,9 +163,16 @@ public static partial class Program
 
         // Register domain specific services, which serve data required by the views
         sp.Container.Register<IKnownLocationsService, KnownLocationsService>(Reuse.Singleton);
-        sp.Container.Register<LocalTemplatesSource>(Reuse.Singleton);
-        sp.Container.Register<ITemplatesSource, TemplatesSource>(Reuse.Singleton);
+
+        // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
+        // Register specific template source implementations KEYED. They are injected only as a collection of implementation
+        // instances, only by the universal source.
+        sp.Container.Register<ITemplatesSource, UniversalTemplatesSource>(reuse: Reuse.Singleton);
+        sp.Container.Register<ITemplatesSource, LocalTemplatesSource>(
+            reuse: Reuse.Singleton,
+            serviceKey: Uri.UriSchemeFile);
         sp.Container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
+
         sp.Container.Register<LocalProjectsSource>(Reuse.Singleton);
         sp.Container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
         sp.Container.Register<IProjectsService, ProjectsService>(Reuse.Singleton);

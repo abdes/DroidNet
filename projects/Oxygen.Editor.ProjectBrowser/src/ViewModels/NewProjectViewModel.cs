@@ -11,7 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
-using Oxygen.Editor.ProjectBrowser.Services;
+using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>The ViewModel for the StartNewPage.</summary>
