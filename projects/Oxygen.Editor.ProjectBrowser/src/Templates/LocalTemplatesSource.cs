@@ -30,7 +30,7 @@ public class LocalTemplatesSource
         this.BuiltinTemplates = Path.Combine(
             pathFinder.ProgramData,
             $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
-            "Data",
+            "Assets",
             "Templates");
         this.LocalTemplates = Path.Combine(pathFinder.LocalAppData, "Templates");
 

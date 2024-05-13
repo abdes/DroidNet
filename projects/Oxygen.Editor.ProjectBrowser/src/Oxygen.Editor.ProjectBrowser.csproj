@@ -55,13 +55,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="Data\Templates\**\*">
+        <Content Include="Assets\Templates\**\*">
         <CopyToOutputDirectory>Never</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="Data\Images\**\*">
+        <Content Include="Assets\Images\**\*">
         <CopyToOutputDirectory>Never</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
