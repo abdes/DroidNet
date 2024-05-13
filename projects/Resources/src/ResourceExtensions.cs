@@ -18,19 +18,27 @@ public static class ResourceExtensions
         return localized != null ? localized.ValueAsString : value;
     }
 
-    public static string GetLocalizedMine(this string value)
+    public static string TryGetLocalizedMine(this string value)
     {
-        var assemblyName = Assembly.GetCallingAssembly()
-            .GetName()
-            .Name;
-        var subMap = Strings.GetSubtree($"{Assembly.GetCallingAssembly().GetName().Name}/Strings");
-        if (subMap == null)
+        try
         {
-            Debug.WriteLine($"Resource map for assembly `{assemblyName}` does not exist.");
+            var assemblyName = Assembly.GetCallingAssembly()
+                .GetName()
+                .Name;
+            var subMap = Strings.GetSubtree($"{Assembly.GetCallingAssembly().GetName().Name}/Strings");
+            if (subMap == null)
+            {
+                Debug.WriteLine($"Resource map for assembly `{assemblyName}` does not exist.");
+                return value;
+            }
+
+            var localized = subMap.TryGetValue(value);
+            return localized != null ? localized.ValueAsString : value;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get localized version of `{value}`: {ex.Message}");
             return value;
         }
-
-        var localized = subMap.TryGetValue(value);
-        return localized != null ? localized.ValueAsString : value;
     }
 }
