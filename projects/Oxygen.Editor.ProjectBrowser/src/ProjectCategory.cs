@@ -11,8 +11,8 @@ public class ProjectCategory
     public ProjectCategory(string id, string name, string description)
     {
         this.Id = id;
-        this.Name = name.GetLocalizedMine() ?? string.Empty;
-        this.Description = description.GetLocalizedMine() ?? string.Empty;
+        this.Name = name.TryGetLocalizedMine() ?? string.Empty;
+        this.Description = description.TryGetLocalizedMine() ?? string.Empty;
     }
 
     public string Id { get; }
