@@ -1,5 +1,5 @@
 <Page
-    x:Class="Oxygen.Editor.Views.ShellView"
+    x:Class="Oxygen.Editor.Shell.ShellView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:animatedvisuals="using:Microsoft.UI.Xaml.Controls.AnimatedVisuals"
