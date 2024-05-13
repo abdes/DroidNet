@@ -13,8 +13,6 @@ using CommunityToolkit.WinUI.Collections;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Services;
-using Oxygen.Editor.ProjectBrowser.Storage;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 using IStorageItem = Oxygen.Editor.Storage.IStorageItem;

@@ -5,11 +5,14 @@
 namespace Oxygen.Editor.ProjectBrowser.Services;
 
 using System.Diagnostics;
+using System.IO.Abstractions;
 using System.Reactive.Linq;
+using System.Reflection;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
@@ -19,18 +22,36 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 public partial class TemplatesService : ITemplatesService
 {
     private readonly ILogger<TemplatesService> logger;
+    private readonly IFileSystem fs;
     private readonly ProjectBrowserSettings settings;
     private readonly ITemplatesSource templatesSource;
 
     public TemplatesService(
         ILogger<TemplatesService> logger,
+        IFileSystem fs,
+        IPathFinder pathFinder,
         IOptions<ProjectBrowserSettings> settings,
         ITemplatesSource templatesSource)
     {
         this.logger = logger;
+        this.fs = fs;
         this.settings = settings.Value;
+
+        // This is the non-keyed implementation of ITemplateSource registered with the DI container.
         this.templatesSource = templatesSource;
+
+        this.BuiltinTemplates = fs.Path.Combine(
+            pathFinder.ProgramData,
+            $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
+            "Assets",
+            "Templates");
+
+        this.LocalTemplates = fs.Path.Combine(pathFinder.LocalAppData, "Templates");
     }
+
+    private string BuiltinTemplates { get; }
+
+    private string LocalTemplates { get; }
 
     public static async Task TryClearRecentUsageAsync(RecentlyUsedTemplate template)
     {
@@ -55,12 +76,6 @@ public partial class TemplatesService : ITemplatesService
         }
     }
 
-    public IList<ProjectCategory> GetProjectCategories()
-        => this.settings.Categories;
-
-    public ProjectCategory? GetProjectCategoryById(string id)
-        => this.settings.GetProjectCategoryById(id);
-
     public IObservable<ITemplateInfo> GetLocalTemplates()
         => Observable.Create<ITemplateInfo>(
             async (observer) =>
@@ -68,10 +83,12 @@ public partial class TemplatesService : ITemplatesService
                 // Load builtin templates
                 foreach (var template in this.settings.BuiltinTemplates)
                 {
+                    var templateFullPath = this.fs.Path.Combine(this.BuiltinTemplates, template);
                     try
                     {
-                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(template)
-                            .ConfigureAwait(true);
+                        var templateUri = new Uri($"{Uri.UriSchemeFile}:///{templateFullPath}");
+                        var templateInfo
+                            = await this.templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
 
                         // Update template last used time
                         templateInfo.LastUsedOn = LoadUsageData()
@@ -83,7 +100,7 @@ public partial class TemplatesService : ITemplatesService
                     }
                     catch (Exception ex)
                     {
-                        this.CouldNotLoadTemplate(template, ex.Message);
+                        this.CouldNotLoadTemplate(templateFullPath, ex.Message);
                     }
                 }
             });
@@ -106,7 +123,7 @@ public partial class TemplatesService : ITemplatesService
                     try
                     {
                         var templateDescriptor = Path.Combine(template.Key, "Template.json");
-                        var templateInfo = await this.templatesSource.LoadLocalTemplateAsync(templateDescriptor)
+                        var templateInfo = await this.templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
                             .ConfigureAwait(true);
 
                         templateInfo.LastUsedOn = template.Value.LastUsedOn;

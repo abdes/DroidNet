@@ -6,14 +6,12 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 using System.Diagnostics;
 using System.IO.Abstractions;
-using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Utils;
 
-public class LocalTemplatesSource
+public class LocalTemplatesSource : ITemplatesSource
 {
     private readonly IFileSystem fs;
     private readonly ProjectBrowserSettings settings;
@@ -21,18 +19,10 @@ public class LocalTemplatesSource
 
     public LocalTemplatesSource(
         IFileSystem filesystem,
-        IOptions<ProjectBrowserSettings> settings,
-        IPathFinder pathFinder)
+        IOptions<ProjectBrowserSettings> settings)
     {
         this.fs = filesystem;
         this.settings = settings.Value;
-
-        this.BuiltinTemplates = Path.Combine(
-            pathFinder.ProgramData,
-            $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
-            "Assets",
-            "Templates");
-        this.LocalTemplates = Path.Combine(pathFinder.LocalAppData, "Templates");
 
         this.jsonSerializerOptions = new JsonSerializerOptions
         {
@@ -41,50 +31,77 @@ public class LocalTemplatesSource
         };
     }
 
-    private string BuiltinTemplates { get; }
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="LocalTemplatesSource" /> only supports locations with a URi scheme <see cref="Uri.UriSchemeFile" />.
+    /// </remarks>
+    public bool CanLoad(Uri fromUri) => string.Equals(
+        fromUri.Scheme,
+        Uri.UriSchemeFile,
+        StringComparison.OrdinalIgnoreCase);
 
-    private string LocalTemplates { get; }
-
-    public async Task<ITemplateInfo> LoadTemplateAsync(string path)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Fails if the provided <paramref name="fromUri">location</paramref> does not correspond to an existing and accessible
+    /// template descriptor file, if the file contains invalid data, or if any other required template file is missing at the
+    /// location (such as the specified thumbnail or preview images).
+    /// </remarks>
+    public async Task<ITemplateInfo> LoadTemplateAsync(Uri fromUri)
     {
-        var fullPath = Path.Combine(this.IsBuiltin(path) ? this.BuiltinTemplates : this.LocalTemplates, path);
-
-        if (!this.fs.File.Exists(fullPath))
+        if (!this.CanLoad(fromUri))
         {
-            Debug.WriteLine($"Template info file `{fullPath}` does not exist");
-            throw new ArgumentException($"Template info file `{fullPath}` does not exist", nameof(path));
+            throw new ArgumentException(
+                $"{nameof(LocalTemplatesSource)} can only load templates with a '{Uri.UriSchemeFile}' URI scheme. The given URI used the '{fromUri.Scheme}'.",
+                nameof(fromUri));
         }
 
-        Debug.WriteLine($"Loading project template info from `{fullPath}`");
+        var templatePath = fromUri.LocalPath;
+        if (!this.fs.File.Exists(fromUri.LocalPath))
+        {
+            throw new TemplateLoadingException(
+                $"Location `{templatePath}` does not correspond to an existing template descriptor file.");
+        }
+
+        Debug.WriteLine($"Loading local project template info from `{templatePath}`");
 
         try
         {
-            var json = await this.fs.File.ReadAllTextAsync(fullPath, CancellationToken.None).ConfigureAwait(true);
+            var json = await this.fs.File.ReadAllTextAsync(templatePath, CancellationToken.None).ConfigureAwait(true);
 
             var template = JsonSerializer.Deserialize<Template>(json, this.jsonSerializerOptions);
-            Debug.Assert(template != null, $"Json content of template at `{fullPath}` is not valid");
+            Debug.Assert(template != null, $"Json content of template at `{templatePath}` is not valid");
 
             // Update the paths for the icon and preview images to become absolute
-            template.Location = Path.GetDirectoryName(fullPath);
+            template.Location = this.fs.Path.GetFullPath(this.fs.Path.GetDirectoryName(templatePath)!);
             if (template.Icon != null)
             {
-                template.Icon = Path.Combine(template.Location!, template.Icon);
+                var iconPath = this.fs.Path.Combine(template.Location!, template.Icon);
+                if (!this.fs.File.Exists(iconPath))
+                {
+                    throw new TemplateLoadingException(
+                        $"Missing icon file `{template.Icon}` at the template location.");
+                }
+
+                template.Icon = iconPath;
             }
 
             for (var index = 0; index < template.PreviewImages.Count; index++)
             {
-                template.PreviewImages[index] = Path.Combine(template.Location!, template.PreviewImages[index]);
+                var previewImagePath = this.fs.Path.Combine(template.Location!, template.PreviewImages[index]);
+                if (!this.fs.File.Exists(previewImagePath))
+                {
+                    throw new TemplateLoadingException(
+                        $"Missing preview image file `{previewImagePath}` at the template location.");
+                }
+
+                template.PreviewImages[index] = previewImagePath;
             }
 
             return template;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to load template info: {ex.Message}");
-            throw;
+            throw new TemplateLoadingException($"Could not load template from location `{fromUri}`", ex);
         }
     }
-
-    private bool IsBuiltin(string path)
-        => this.settings.BuiltinTemplates.Contains(path, StringComparer.Ordinal);
 }

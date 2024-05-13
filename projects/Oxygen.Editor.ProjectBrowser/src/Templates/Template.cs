@@ -4,26 +4,28 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
+using System.Text.Json.Serialization;
 using DroidNet.Resources;
 
-public class Template : ITemplateInfo
+[method: JsonConstructor]
+public class Template(string description, string name, ProjectCategory category) : ITemplateInfo
 {
-    private string? description;
-    private string? name;
+    private string description = description.TryGetLocalizedMine();
+    private string name = name.TryGetLocalizedMine();
 
-    public string? Name
+    public required string Name
     {
         get => this.name;
-        set => this.name = value?.GetLocalizedMine() ?? string.Empty;
+        set => this.name = value?.TryGetLocalizedMine() ?? string.Empty;
     }
 
-    public string? Description
+    public string Description
     {
         get => this.description;
-        set => this.description = value?.GetLocalizedMine() ?? string.Empty;
+        set => this.description = value?.TryGetLocalizedMine() ?? string.Empty;
     }
 
-    public ProjectCategory? Category { get; set; }
+    public ProjectCategory Category { get; set; } = category;
 
     public string? Location { get; set; }
 

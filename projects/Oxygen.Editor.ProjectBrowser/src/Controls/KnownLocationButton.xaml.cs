@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Storage;
 
 /// <summary>
 /// An interactive control to display a known location for project storage. Similar

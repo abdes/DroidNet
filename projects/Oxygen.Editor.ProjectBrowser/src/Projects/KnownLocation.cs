@@ -6,18 +6,17 @@ namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
-using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 
 public class KnownLocation(
-    Storage.KnownLocations key,
+    KnownLocations key,
     string name,
     string location,
     NativeStorageProvider localStorage,
     IProjectsService projectsService)
 {
-    public Storage.KnownLocations Key { get; init; } = key;
+    public KnownLocations Key { get; init; } = key;
 
     public string Name { get; } = name;
 
@@ -29,12 +28,12 @@ public class KnownLocation(
 #pragma warning disable IDE0072 // Add missing cases
         => this.Key switch
         {
-            Storage.KnownLocations.RecentProjects
+            KnownLocations.RecentProjects
                 => localStorage.GetLogicalDrives()
                     .ToObservable()
                     .SelectMany(drive => localStorage.GetFolderFromPathAsync(drive, cancellationToken).ToObservable()),
 
-            Storage.KnownLocations.ThisComputer
+            KnownLocations.ThisComputer
                 => projectsService.GetRecentlyUsedProjects(cancellationToken)
                     .Where(projectInfo => projectInfo.Location is not null)
                     .SelectMany(

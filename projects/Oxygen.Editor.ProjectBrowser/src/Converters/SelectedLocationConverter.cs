@@ -7,7 +7,6 @@ namespace Oxygen.Editor.ProjectBrowser.Converters;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Storage;
 
 public class SelectedLocationConverter : IValueConverter
 {

@@ -33,6 +33,7 @@
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="DynamicData" />
         <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
 
     <ItemGroup>

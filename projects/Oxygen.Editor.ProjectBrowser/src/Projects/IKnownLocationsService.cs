@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Storage;
-
-using Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 public interface IKnownLocationsService
 {

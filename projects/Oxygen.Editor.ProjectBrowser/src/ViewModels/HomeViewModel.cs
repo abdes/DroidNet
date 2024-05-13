@@ -12,7 +12,6 @@ using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>ViewModel for the initial page displaying when starting the project browser.</summary>

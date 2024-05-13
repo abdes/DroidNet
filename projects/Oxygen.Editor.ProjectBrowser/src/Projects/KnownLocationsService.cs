@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Services;
+namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DroidNet.Resources;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Storage;
 using Oxygen.Editor.Storage.Native;
 
 public class KnownLocationsService : IKnownLocationsService
@@ -33,13 +31,13 @@ public class KnownLocationsService : IKnownLocationsService
         {
             KnownLocations.RecentProjects => new KnownLocation(
                 key,
-                "Recent Projects".GetLocalizedMine(),
+                "Recent Projects".TryGetLocalizedMine(),
                 string.Empty,
                 this.localStorage,
                 this.projectsService),
             KnownLocations.ThisComputer => new KnownLocation(
                 key,
-                "This Computer".GetLocalizedMine(),
+                "This Computer".TryGetLocalizedMine(),
                 string.Empty,
                 this.localStorage,
                 this.projectsService),
@@ -82,7 +80,7 @@ public class KnownLocationsService : IKnownLocationsService
     private static extern string SHGetKnownFolderPath(
         [MarshalAs(UnmanagedType.LPStruct)] Guid refToGuid,
         uint dwFlags,
-        IntPtr hToken = default);
+        nint hToken = default);
 #pragma warning restore SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
 
     private async Task<KnownLocation?> FromLocalFolderPathAsync(

@@ -6,11 +6,11 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 public interface ITemplateInfo
 {
-    string? Name { get; set; }
+    string Name { get; set; }
 
-    string? Description { get; set; }
+    string Description { get; set; }
 
-    ProjectCategory? Category { get; }
+    ProjectCategory Category { get; }
 
     string? Location { get; set; }
 
