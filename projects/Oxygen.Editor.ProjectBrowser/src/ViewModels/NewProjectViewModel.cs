@@ -37,7 +37,8 @@ public partial class NewProjectViewModel : ObservableObject
     {
         this.Templates.Clear();
 
-        _ = this.templateService.GetLocalTemplates()
+        _ = this.templateService.GetLocalTemplatesAsync()
+            .ToObservable()
             .Subscribe(
                 template => this.Templates.InsertInPlace(template, x => x.LastUsedOn),
                 _ =>
