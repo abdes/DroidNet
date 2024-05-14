@@ -66,7 +66,7 @@ public class LocalTemplatesSource : ITemplatesSource
 
         try
         {
-            var json = await this.fs.File.ReadAllTextAsync(templatePath, CancellationToken.None).ConfigureAwait(true);
+            var json = await this.fs.File.ReadAllTextAsync(templatePath, CancellationToken.None).ConfigureAwait(false);
 
             var template = JsonSerializer.Deserialize<Template>(json, this.jsonSerializerOptions);
             Debug.Assert(template != null, $"Json content of template at `{templatePath}` is not valid");
