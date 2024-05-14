@@ -24,7 +24,6 @@ using WinRT;
 [InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class OpenProjectView
 {
-    /// <summary>Initializes a new instance of the <see cref="StartOpenPage" /> class.</summary>
     public OpenProjectView() => this.InitializeComponent();
 
     private void KnownLocationButton_OnClick(object? sender, KnownLocation e)

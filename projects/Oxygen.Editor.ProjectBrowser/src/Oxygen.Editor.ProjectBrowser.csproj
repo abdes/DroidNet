@@ -31,7 +31,6 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="System.Linq.Async" />
         <PackageReference Include="System.Reactive" />
-        <PackageReference Include="DynamicData" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="System.Reactive.Async" />
         <PackageReference Include="Testably.Abstractions" />
