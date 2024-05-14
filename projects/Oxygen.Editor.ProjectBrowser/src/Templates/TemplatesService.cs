@@ -76,34 +76,35 @@ public partial class TemplatesService : ITemplatesService
         }
     }
 
-    public IObservable<ITemplateInfo> GetLocalTemplates()
-        => Observable.Create<ITemplateInfo>(
-            async (observer) =>
+    public async IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync()
+    {
+        // Load builtin templates
+        foreach (var template in this.settings.BuiltinTemplates)
+        {
+            var templateFullPath = this.fs.Path.Combine(this.BuiltinTemplates, template);
+            var templateUri = new Uri($"{Uri.UriSchemeFile}:///{templateFullPath}");
+
+            ITemplateInfo? templateInfo;
+            try
             {
-                // Load builtin templates
-                foreach (var template in this.settings.BuiltinTemplates)
-                {
-                    var templateFullPath = this.fs.Path.Combine(this.BuiltinTemplates, template);
-                    try
-                    {
-                        var templateUri = new Uri($"{Uri.UriSchemeFile}:///{templateFullPath}");
-                        var templateInfo
-                            = await this.templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
+                templateInfo = await this.templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                // Log the error, but continue with the rest of templates
+                this.CouldNotLoadTemplate(templateFullPath, ex.Message);
+                continue;
+            }
 
-                        // Update template last used time
-                        templateInfo.LastUsedOn = LoadUsageData()
-                            .TryGetValue(templateInfo.Location!, out var recentlyUsedTemplate)
-                            ? recentlyUsedTemplate.LastUsedOn
-                            : DateTime.MaxValue;
+            // Update template last used time
+            templateInfo.LastUsedOn = LoadUsageData()
+                .TryGetValue(templateInfo.Location!, out var recentlyUsedTemplate)
+                ? recentlyUsedTemplate.LastUsedOn
+                : DateTime.MaxValue;
 
-                        observer.OnNext(templateInfo);
-                    }
-                    catch (Exception ex)
-                    {
-                        this.CouldNotLoadTemplate(templateFullPath, ex.Message);
-                    }
-                }
-            });
+            yield return templateInfo;
+        }
+    }
 
     public bool HasRecentlyUsedTemplates()
     {

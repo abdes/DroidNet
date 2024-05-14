@@ -6,6 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
 using DroidNet.Hosting.Generators;
@@ -16,48 +17,43 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>ViewModel for the initial page displaying when starting the project browser.</summary>
 [InjectAs(ServiceLifetime.Singleton)]
-public partial class HomeViewModel : IRoutingAware
+public partial class HomeViewModel(
+    IRouter router,
+    ITemplatesService templateService,
+    IProjectsService projectsService) : ObservableObject, IRoutingAware
 {
-    private readonly IRouter router;
-    private readonly IProjectsService projectsService;
-    private readonly ITemplatesService templateService;
-
-    public HomeViewModel(
-        IRouter router,
-        ITemplatesService templateService,
-        IProjectsService projectsService)
-    {
-        this.router = router;
-        this.templateService = templateService;
-        this.projectsService = projectsService;
-    }
+    [ObservableProperty]
+    private ITemplateInfo? selectedTemplate;
 
     public IActiveRoute? ActiveRoute { get; set; }
 
-    public ObservableCollection<ITemplateInfo> Templates { get; } = new();
+    public ObservableCollection<ITemplateInfo> Templates { get; } = [];
 
-    public ObservableCollection<IProjectInfo> RecentProjects { get; } = new();
+    public ObservableCollection<IProjectInfo> RecentProjects { get; } = [];
 
     [RelayCommand]
-    public void LoadTemplates()
+    public async Task LoadTemplates()
     {
         Debug.WriteLine("StartHomeViewModel Clear Templates");
         this.Templates.Clear();
         Debug.WriteLine("StartHomeViewModel Load Templates");
 
-        if (this.templateService.HasRecentlyUsedTemplates())
+        if (templateService.HasRecentlyUsedTemplates())
         {
-            _ = this.templateService.GetRecentlyUsedTemplates()
+            _ = templateService.GetRecentlyUsedTemplates()
                 .Subscribe(template => this.Templates.InsertInPlace(template, x => x.LastUsedOn));
         }
         else
         {
-            _ = this.templateService.GetLocalTemplates()
-                .Subscribe(
-                    template => this.Templates.InsertInPlace(
-                        template,
-                        x => (DateTime)x.LastUsedOn!,
-                        new DateTimeComparerDescending()));
+            await foreach (var template in templateService.GetLocalTemplatesAsync().ConfigureAwait(true))
+            {
+                this.Templates.InsertInPlace(
+                    template,
+                    x => (DateTime)x.LastUsedOn!,
+                    new DateTimeComparerDescending());
+            }
+
+            this.SelectedTemplate = this.Templates[0];
         }
     }
 
@@ -68,7 +64,7 @@ public partial class HomeViewModel : IRoutingAware
         this.RecentProjects.Clear();
         Debug.WriteLine("StartHomeViewModel Load Recent Projects");
 
-        _ = this.projectsService.GetRecentlyUsedProjects()
+        _ = projectsService.GetRecentlyUsedProjects()
             .Subscribe(
                 projectInfo => this.RecentProjects.InsertInPlace(
                     projectInfo,
@@ -81,7 +77,7 @@ public partial class HomeViewModel : IRoutingAware
     {
         if (this.ActiveRoute is not null)
         {
-            this.router.Navigate("new", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+            router.Navigate("new", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
         }
     }
 
@@ -90,7 +86,7 @@ public partial class HomeViewModel : IRoutingAware
     {
         if (this.ActiveRoute is not null)
         {
-            this.router.Navigate("open", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+            router.Navigate("open", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
         }
     }
 
@@ -99,11 +95,11 @@ public partial class HomeViewModel : IRoutingAware
         Debug.WriteLine(
             $"New project from template: {template.Category!.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await this.projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        return await projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }
 
     public void OpenProject(IProjectInfo projectInfo)
-        => this.projectsService.LoadProjectAsync(projectInfo.Location!).Wait();
+        => projectsService.LoadProjectAsync(projectInfo.Location!).Wait();
 
     private sealed class DateTimeComparerDescending : Comparer<DateTime>
     {

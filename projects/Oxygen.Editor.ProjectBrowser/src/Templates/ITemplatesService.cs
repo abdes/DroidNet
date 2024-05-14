@@ -6,7 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 public interface ITemplatesService
 {
-    IObservable<ITemplateInfo> GetLocalTemplates();
+    IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync();
 
     bool HasRecentlyUsedTemplates();
 

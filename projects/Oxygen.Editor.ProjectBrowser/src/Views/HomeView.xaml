@@ -74,7 +74,8 @@
                     Height="{x:Bind pb:ProjectTemplatesGrid.ItemHeight}"
                     VerticalAlignment="Top"
                     ItemClick="OnTemplateClick"
-                    ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}" />
+                    ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
+                    SelectedItem="{x:Bind ViewModel.SelectedTemplate, Mode=TwoWay}" />
 
                 <!--  Bottom Border Only  -->
             </Border>
