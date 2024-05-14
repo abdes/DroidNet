@@ -4,8 +4,7 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
-using System.Reactive.Linq;
-using System.Reactive.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 
@@ -13,7 +12,7 @@ public class KnownLocation(
     KnownLocations key,
     string name,
     string location,
-    NativeStorageProvider localStorage,
+    NativeStorageProvider storage,
     IProjectsService projectsService)
 {
     public KnownLocations Key { get; init; } = key;
@@ -22,26 +21,52 @@ public class KnownLocation(
 
     public string Location { get; } = location;
 
-    public IObservable<IStorageItem> GetItems(
+    public async IAsyncEnumerable<IStorageItem> GetItems(
         ProjectItemKind kind = ProjectItemKind.All,
+        [EnumeratorCancellation]
         CancellationToken cancellationToken = default)
-#pragma warning disable IDE0072 // Add missing cases
-        => this.Key switch
+    {
+        if (this.Key == KnownLocations.RecentProjects)
         {
-            KnownLocations.RecentProjects
-                => localStorage.GetLogicalDrives()
-                    .ToObservable()
-                    .SelectMany(drive => localStorage.GetFolderFromPathAsync(drive, cancellationToken).ToObservable()),
+            await foreach (var item in projectsService.GetRecentlyUsedProjectsAsync(cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
 
-            KnownLocations.ThisComputer
-                => projectsService.GetRecentlyUsedProjects(cancellationToken)
-                    .Where(projectInfo => projectInfo.Location is not null)
-                    .SelectMany(
-                        projectInfo => localStorage
-                            .GetFolderFromPathAsync(projectInfo.Location!, cancellationToken)
-                            .ToObservable()),
-            _
-                => localStorage.GetItemsAsync(this.Location, kind, cancellationToken).ToObservable(),
-        };
-#pragma warning restore IDE0072 // Add missing cases
+                if (item.Location is not null)
+                {
+                    yield return await storage.GetFolderFromPathAsync(item.Location, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+        else if (this.Key == KnownLocations.ThisComputer)
+        {
+            foreach (var drive in storage.GetLogicalDrives())
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
+                yield return await storage.GetFolderFromPathAsync(drive, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            await foreach (var item in storage.GetItemsAsync(this.Location, kind, cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
+                yield return item;
+            }
+        }
+    }
 }

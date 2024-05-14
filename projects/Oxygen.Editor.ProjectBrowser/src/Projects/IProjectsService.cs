@@ -8,7 +8,7 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 
 public interface IProjectsService
 {
-    IObservable<IProjectInfo> GetRecentlyUsedProjects(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
 
     Task<bool> NewProjectFromTemplate(ITemplateInfo templateInfo, string projectName, string atLocationPath);
 
@@ -17,4 +17,6 @@ public interface IProjectsService
     Task<bool> LoadProjectAsync(string location);
 
     IList<QuickSaveLocation> GetQuickSaveLocations();
+
+    Task<KnownLocation[]> GetKnownLocationsAsync();
 }

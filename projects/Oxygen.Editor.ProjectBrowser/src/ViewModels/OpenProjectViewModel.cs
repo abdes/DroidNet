@@ -24,7 +24,6 @@ public partial class OpenProjectViewModel : ObservableObject
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
     private readonly object fileListLock = new();
-    private readonly IKnownLocationsService knownLocationsService;
     private readonly IProjectsService projectsService;
 
 #pragma warning disable CA1859 // Use concrete types when possible for improved performance
@@ -50,12 +49,10 @@ public partial class OpenProjectViewModel : ObservableObject
 
     public OpenProjectViewModel(
         NativeStorageProvider storageProvider,
-        IProjectsService projectsService,
-        IKnownLocationsService knownLocationsService)
+        IProjectsService projectsService)
     {
         this.storageProvider = storageProvider;
         this.projectsService = projectsService;
-        this.knownLocationsService = knownLocationsService;
 
         BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
@@ -74,7 +71,10 @@ public partial class OpenProjectViewModel : ObservableObject
     {
         this.SelectedLocation = location;
         this.FileList.Clear();
-        _ = location.GetItems().Subscribe(item => this.FileList.Add(item));
+        await foreach (var item in location.GetItems().ConfigureAwait(true))
+        {
+            this.FileList.Add(item);
+        }
 
         if (location.Location != string.Empty)
         {
@@ -87,10 +87,9 @@ public partial class OpenProjectViewModel : ObservableObject
     {
         this.OnPropertyChanging(nameof(this.Locations));
 
-        foreach (var locationKey in Enum.GetValues<KnownLocations>())
+        foreach (var location in await this.projectsService.GetKnownLocationsAsync().ConfigureAwait(true))
         {
-            this.Locations[locationKey.ToString()]
-                = await this.knownLocationsService.ForKeyAsync(locationKey).ConfigureAwait(true);
+            this.Locations[location.Key.ToString()] = location;
         }
 
         this.OnPropertyChanged(nameof(this.Locations));

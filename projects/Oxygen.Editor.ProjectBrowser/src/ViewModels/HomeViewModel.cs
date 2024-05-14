@@ -58,18 +58,19 @@ public partial class HomeViewModel(
     }
 
     [RelayCommand]
-    public void LoadRecentProjects()
+    public async Task LoadRecentProjectsAsync()
     {
         Debug.WriteLine("StartHomeViewModel Clear Recent Projects");
         this.RecentProjects.Clear();
         Debug.WriteLine("StartHomeViewModel Load Recent Projects");
 
-        _ = projectsService.GetRecentlyUsedProjects()
-            .Subscribe(
-                projectInfo => this.RecentProjects.InsertInPlace(
-                    projectInfo,
-                    x => x.LastUsedOn,
-                    new DateTimeComparerDescending()));
+        await foreach (var projectInfo in projectsService.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
+        {
+            this.RecentProjects.InsertInPlace(
+                projectInfo,
+                x => x.LastUsedOn,
+                new DateTimeComparerDescending());
+        }
     }
 
     [RelayCommand]

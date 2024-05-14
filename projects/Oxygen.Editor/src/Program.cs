@@ -153,7 +153,10 @@ public static partial class Program
 
     private static void RegisterApplicationServices(HostBuilderContext context, DryIocServiceProvider sp)
     {
-        // Register core services
+        /*
+         * Register core services.
+         */
+
         sp.Container.Register<IFileSystem, RealFileSystem>(Reuse.Singleton);
         sp.Container.Register<NativeStorageProvider>(Reuse.Singleton);
         sp.Container.Register<IPathFinder, DevelopmentPathFinder>(Reuse.Singleton); // TODO: release version
@@ -161,8 +164,9 @@ public static partial class Program
         sp.Container.Register<IAppNotificationService, AppNotificationService>(Reuse.Singleton);
         sp.Container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
-        // Register domain specific services, which serve data required by the views
-        sp.Container.Register<IKnownLocationsService, KnownLocationsService>(Reuse.Singleton);
+        /*
+         * Register domain specific services.
+         */
 
         // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
         // Register specific template source implementations KEYED. They are injected only as a collection of implementation
@@ -177,8 +181,11 @@ public static partial class Program
         sp.Container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
         sp.Container.Register<IProjectsService, ProjectsService>(Reuse.Singleton);
 
-        // Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
-        // if the view cannot be located.
+        /*
+         * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
+         * if the view cannot be located.
+         */
+
         sp.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         sp.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
 
