@@ -11,8 +11,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
-using DynamicData;
-using DynamicData.Binding;
+using DroidNet.Collections;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -29,16 +29,13 @@ public sealed partial class RecentProjectsList
 {
     private SortDescription? byDateSortDescription;
     private SortDescription? byNameSortDescription;
-    private IDisposable? oldListSubscription;
-
-    private ReadOnlyObservableCollection<ProjectItemWithThumbnail> projectItems = new(
-        new ObservableCollection<ProjectItemWithThumbnail>());
+    private IDisposable? projectItemsTransformerDisposable;
 
     public RecentProjectsList()
     {
         this.InitializeComponent();
 
-        this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
+        this.AdvancedProjectItems = new AdvancedCollectionView(this.ProjectItems, isLiveShaping: true);
     }
 
     [Browsable(true)]
@@ -50,9 +47,8 @@ public sealed partial class RecentProjectsList
     {
         set
         {
-            this.oldListSubscription?.Dispose();
-            var x = value.ToObservableChangeSet()
-                .Transform(
+            this.projectItemsTransformerDisposable?.Dispose();
+            var (result, subscription) = value.WithTransformer(
                     p =>
                     {
                         var thumbUri = DefaultProjectThumbnail;
@@ -73,17 +69,17 @@ public sealed partial class RecentProjectsList
                             Thumbnail = bitmap,
                         };
                     })
-                .Bind(out this.projectItems);
+                .Transform();
 
-            this.AdvancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
-
-            this.oldListSubscription = x.Subscribe();
+            this.projectItemsTransformerDisposable = subscription;
+            this.ProjectItems = new ReadOnlyObservableCollection<ProjectItemWithThumbnail>(result);
+            this.AdvancedProjectItems = new AdvancedCollectionView(this.ProjectItems, isLiveShaping: true);
         }
     }
 
     internal AdvancedCollectionView AdvancedProjectItems { get; private set; }
 
-    internal ReadOnlyObservableCollection<ProjectItemWithThumbnail> ProjectItems => this.projectItems;
+    internal ReadOnlyObservableCollection<ProjectItemWithThumbnail> ProjectItems { get; private set; } = new([]);
 
     private static string DefaultProjectThumbnail { get; }
         = $"ms-appx:///{typeof(LocalProjectsSource).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
@@ -140,6 +136,15 @@ public sealed partial class RecentProjectsList
         this.AdvancedProjectItems.SortDescriptions.Clear();
         this.byDateSortDescription = null;
         this.AdvancedProjectItems.SortDescriptions.Add(this.byNameSortDescription);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.projectItemsTransformerDisposable?.Dispose();
+        this.projectItemsTransformerDisposable = null;
     }
 }
 
