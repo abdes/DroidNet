@@ -682,6 +682,8 @@ dotnet_diagnostic.MA0038.severity = none
 dotnet_diagnostic.MA0048.severity = none
 # MA0026 - Fix TODO comment
 dotnet_diagnostic.MA0026.severity = silent
+# MA0051 - Method is too long
+MA0051.skip_local_functions = true # skip local functions when counting statements
 
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
 tab_width = 4
