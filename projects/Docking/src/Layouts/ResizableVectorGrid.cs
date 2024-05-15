@@ -17,13 +17,13 @@ public class ResizableVectorGrid : Grid
 
     public ResizableVectorGrid(Orientation orientation)
     {
-        this.Orientation = orientation;
+        this.VectorOrientation = orientation;
 
         this.HorizontalAlignment = HorizontalAlignment.Stretch;
         this.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
-    public Orientation Orientation { get; }
+    public Orientation VectorOrientation { get; }
 
     public void AddFixedSizeItem(UIElement content, GridLength length, double minLength)
     {
@@ -58,7 +58,7 @@ public class ResizableVectorGrid : Grid
             return;
         }
 
-        if (this.Orientation == this.Orientation.Horizontal)
+        if (this.VectorOrientation == Orientation.Horizontal)
         {
             this.AdjustColumnWidths();
         }
@@ -100,7 +100,7 @@ public class ResizableVectorGrid : Grid
 
     private void DefineItem(GridLength length, double minLength)
     {
-        if (this.Orientation == this.Orientation.Horizontal)
+        if (this.VectorOrientation == Orientation.Horizontal)
         {
             // $"Adding column definition Width={length}"
             this.ColumnDefinitions.Add(
@@ -129,9 +129,9 @@ public class ResizableVectorGrid : Grid
             Padding = new Thickness(0),
             ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext,
             ResizeDirection = GridSplitter.GridResizeDirection.Auto,
-            Orientation = this.Orientation == this.Orientation.Horizontal
-                ? this.Orientation.Vertical
-                : this.Orientation.Horizontal,
+            Orientation = this.VectorOrientation == Orientation.Horizontal
+                ? Orientation.Vertical
+                : Orientation.Horizontal,
         };
         this.DefineItem(GridLength.Auto, 6);
         this.AddItem(splitter);
@@ -140,7 +140,7 @@ public class ResizableVectorGrid : Grid
 
     private void AddItem(UIElement content)
     {
-        var (row, column) = this.Orientation == this.Orientation.Horizontal
+        var (row, column) = this.VectorOrientation == Orientation.Horizontal
             ? (0, this.Children.Count)
             : (this.Children.Count, 0);
 
