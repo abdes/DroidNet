@@ -50,18 +50,18 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
     public override Flow StartFlow(ILayoutSegment segment)
     {
         // $"New Grid for: {segment}"
-        var newGrid = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = segment.ToString() };
+        var newVector = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = segment.ToString() };
 
         var length = segment.StretchToFill
             ? new GridLength(1, GridUnitType.Star)
-            : GetGridLengthForSegment(segment, newGrid.Orientation);
+            : GetGridLengthForSegment(segment, newVector.VectorOrientation);
 
-        this.CurrentGrid.AddResizableItem(newGrid, length, 32);
+        this.CurrentGrid.AddResizableItem(newVector, length, 32);
 
         return new GridFlow(segment)
         {
             Description = $"Grid for {segment}",
-            Grid = newGrid,
+            Grid = newVector,
         };
     }
 
