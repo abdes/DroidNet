@@ -14,6 +14,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Collections.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>
 
 </Project>

@@ -14,6 +14,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public class ObservableCollectionExtensionsTest
 {
     [TestMethod]
+    [TestCategory("ObservableCollection - Insert In Place")]
     public void InsertInPlace_Should_Insert_Item_In_Correct_Position()
     {
         // Arrange
@@ -34,6 +35,7 @@ public class ObservableCollectionExtensionsTest
     }
 
     [TestMethod]
+    [TestCategory("ObservableCollection - Insert In Place")]
     public void InsertInPlace_Should_Handle_Empty_Collection()
     {
         // Arrange
@@ -48,6 +50,7 @@ public class ObservableCollectionExtensionsTest
     }
 
     [TestMethod]
+    [TestCategory("ObservableCollection - Insert In Place")]
     public void InsertInPlace_Should_Insert_Item_With_Duplicate_Key()
     {
         // Arrange
