@@ -9,13 +9,8 @@ using Oxygen.Editor.Data.Models;
 
 #nullable disable
 
-public class PersistentState : DbContext
+public class PersistentState(DbContextOptions<PersistentState> options) : DbContext(options)
 {
-    public PersistentState(DbContextOptions<PersistentState> options)
-        : base(options)
-    {
-    }
-
     public DbSet<ProjectBrowserState> ProjectBrowserStates { get; set; }
 
     public ProjectBrowserState ProjectBrowserState => this.ProjectBrowserStates!.FirstOrDefault()!;

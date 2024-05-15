@@ -975,7 +975,7 @@ public partial class DockingTreeNodeTests
 
         // Act
         const DockGroupOrientation desiredOrientation = DockGroupOrientation.Vertical;
-        var anchorSegment = root.Repartition(relativeDock, desiredOrientation);
+        _ = root.Repartition(relativeDock, desiredOrientation);
 
         // Assert
         _ = root.Left.Should().NotBeNull();
@@ -1003,7 +1003,7 @@ public partial class DockingTreeNodeTests
 
         // Act
         const DockGroupOrientation desiredOrientation = DockGroupOrientation.Vertical;
-        var anchorSegment = root.Repartition(relativeDock, desiredOrientation);
+        _ = root.Repartition(relativeDock, desiredOrientation);
 
         // Assert
         _ = root.Left.Should().NotBeNull();
@@ -1017,7 +1017,7 @@ public partial class DockingTreeNodeTests
         _ = rightSegment.Should().NotBeNull();
         _ = rightSegment!.Docks.Should().BeEquivalentTo([afterDock]);
         _ = rightSegment.Orientation.Should()
-            .Be(rightSegment!.Docks.Count > 1 ? existingOrientation : DockGroupOrientation.Undetermined);
+            .Be(rightSegment.Docks.Count > 1 ? existingOrientation : DockGroupOrientation.Undetermined);
 
         _ = root.Value.Orientation.Should().Be(existingOrientation);
     }
@@ -1036,7 +1036,7 @@ public partial class DockingTreeNodeTests
 
         // Act
         const DockGroupOrientation desiredOrientation = DockGroupOrientation.Vertical;
-        var anchorSegment = root.Repartition(relativeDock, desiredOrientation);
+        _ = root.Repartition(relativeDock, desiredOrientation);
 
         // Assert
         _ = root.Left.Should().NotBeNull();
@@ -1044,7 +1044,7 @@ public partial class DockingTreeNodeTests
         _ = leftSegment.Should().NotBeNull();
         _ = leftSegment!.Docks.Should().BeEquivalentTo([beforeDock]);
         _ = leftSegment.Orientation.Should()
-            .Be(leftSegment!.Docks.Count > 1 ? existingOrientation : DockGroupOrientation.Undetermined);
+            .Be(leftSegment.Docks.Count > 1 ? existingOrientation : DockGroupOrientation.Undetermined);
 
         _ = root.Right.Should().NotBeNull();
         var rightSegment = root.Right!.Value as LayoutDockGroup;
@@ -1071,7 +1071,7 @@ public partial class DockingTreeNodeTests
 
         // Act
         const DockGroupOrientation desiredOrientation = DockGroupOrientation.Vertical;
-        var anchorSegment = root.Repartition(relativeDock, desiredOrientation);
+        _ = root.Repartition(relativeDock, desiredOrientation);
 
         // Assert
         var flattenedNodes = Flatten(root);

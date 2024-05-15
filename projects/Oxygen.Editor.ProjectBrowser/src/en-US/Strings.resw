@@ -6,7 +6,7 @@
     Version 2.0
 
     The primary goals of this format is to allow a simple XML format
-    that is mostly human readable. The generation and parsing of the
+    that is mostly human-readable. The generation and parsing of the
     various data types are done through the TypeConverter classes
     associated with the data types.
 
@@ -142,7 +142,7 @@
     <value>Blank</value>
   </data>
   <data name="PB_Template_Games_FirstPerson_Description" xml:space="preserve">
-    <value>First person game, featuring a player character, viewed from the first person perspective. The player can be moved around using keyboard or mouse input. An initial scene is setup in the project with some 3D objects scattered around.</value>
+    <value>First person game, featuring a player character, viewed from the first-person perspective. The player can be moved around using keyboard or mouse input. An initial scene is set up in the project with some 3D objects scattered around.</value>
   </data>
   <data name="PB_Template_Games_FirstPerson_Name" xml:space="preserve">
     <value>First Person</value>

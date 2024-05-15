@@ -73,7 +73,7 @@ internal sealed partial class LayoutDockGroup(
 /// </summary>
 internal partial class LayoutDockGroup
 {
-    /// <summary>Adds a dock to the group at the last position. Use the version with an <see cref="Anchor" /> to position the dock
+    /// <summary>Adds a dock to the group at the last position. Use the version with <see cref="Anchor" /> to position the dock
     /// relatively to an existing dock in the group.</summary>
     /// <param name="dock">The dock to be added to this group.</param>
     internal override void AddDock(IDock dock)

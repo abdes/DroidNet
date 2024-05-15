@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Demo.Shell;
+namespace DroidNet.Routing.Samples.Simple.Shell;
 
 using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;

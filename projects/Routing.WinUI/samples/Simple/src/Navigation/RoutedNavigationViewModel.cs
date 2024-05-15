@@ -25,8 +25,6 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     private const int SettingsItemIndex = int.MaxValue;
     private const string SettingsItemPath = "settings";
 
-    private readonly IRouter router = router;
-
     [ObservableProperty]
     private object? currentNavigation;
 
@@ -89,7 +87,7 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            this.router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 
@@ -99,7 +97,7 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            this.router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 

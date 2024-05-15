@@ -4,15 +4,9 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
-public class QuickSaveLocation
+public class QuickSaveLocation(string name, string path)
 {
-    public QuickSaveLocation(string name, string path)
-    {
-        this.Path = path;
-        this.Name = name;
-    }
+    public string Path { get; set; } = path;
 
-    public string Path { get; set; }
-
-    public string Name { get; set; }
+    public string Name { get; set; } = name;
 }

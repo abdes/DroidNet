@@ -14,6 +14,7 @@ public class UniversalProjectSource : IProjectSource
 {
     private readonly LocalProjectsSource localSource;
 
+    // TODO: refactor to get multiple sources from the DI
     public UniversalProjectSource(LocalProjectsSource localSource)
         => this.localSource = localSource;
 

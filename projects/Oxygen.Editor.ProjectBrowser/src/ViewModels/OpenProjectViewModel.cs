@@ -65,7 +65,7 @@ public partial class OpenProjectViewModel : ObservableObject
 
     public AdvancedCollectionView AdvancedFileList { get; init; }
 
-    private ObservableCollection<IStorageItem> FileList { get; } = new();
+    private ObservableCollection<IStorageItem> FileList { get; } = [];
 
     public async void SelectLocation(KnownLocation location)
     {

@@ -14,7 +14,7 @@ internal static class TreeTraversal
     public delegate bool Visitor<T>(BinaryTreeNode<T>? node);
 
     /// <summary>
-    /// Traverses the sub-tree rooted at the given <paramref name="node" /> using a depth-first algorithm with in-order traversal.
+    /// Traverses the subtree rooted at the given <paramref name="node" /> using a depth-first algorithm with in-order traversal.
     /// </summary>
     /// <typeparam name="T">The type of values stored in the tree nodes.</typeparam>
     /// <param name="node">The root of the (sub-)tree to be traversed.</param>
@@ -74,18 +74,17 @@ internal static class TreeTraversal
     public static List<T> Flatten<T>(BinaryTreeNode<T> node)
     {
         var flattened = new List<T>();
+        DepthFirstInOrder(node, Visitor);
+        return flattened;
 
-        bool Visitor(BinaryTreeNode<T>? node)
+        bool Visitor(BinaryTreeNode<T>? visitedNode)
         {
-            if (node is not null)
+            if (visitedNode is not null)
             {
-                flattened.Add(node.Value);
+                flattened.Add(visitedNode.Value);
             }
 
             return true;
         }
-
-        DepthFirstInOrder(node, Visitor);
-        return flattened;
     }
 }

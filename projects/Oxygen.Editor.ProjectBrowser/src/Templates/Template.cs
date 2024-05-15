@@ -16,13 +16,13 @@ public class Template(string description, string name, ProjectCategory category)
     public required string Name
     {
         get => this.name;
-        set => this.name = value?.TryGetLocalizedMine() ?? string.Empty;
+        set => this.name = value.TryGetLocalizedMine();
     }
 
     public string Description
     {
         get => this.description;
-        set => this.description = value?.TryGetLocalizedMine() ?? string.Empty;
+        set => this.description = value.TryGetLocalizedMine();
     }
 
     public ProjectCategory Category { get; set; } = category;

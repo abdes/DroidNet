@@ -389,7 +389,7 @@ public partial class Docker
         }
         else
         {
-            // We must always find an edge node if there is a non null edge segment corresponding to it.
+            // We must always find an edge node if there is a non-null edge segment corresponding to it.
             edgeNode = this.FindNode(edgeSegment)!;
         }
 
@@ -495,11 +495,47 @@ public partial class Docker
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "MA0051:Method is too long",
-        Justification = "method contains local functions")]
+        "Roslynator",
+        "RCS1134:Remove redundant statement",
+        Justification = "Use explicit return statement to separate functions defined locally")]
     private static void Layout(DockingTreeNode node, LayoutEngine layoutEngine)
     {
+        if (!ShouldShowNodeRecursive(node))
+        {
+            // $"Skipping {node.Value}"
+            return;
+        }
+
+        // $"Layout started for item {node.Value}"
+        var reoriented = ReorientFlowIfNeeded(node.Value);
+        if (reoriented)
+        {
+            var flow = layoutEngine.StartFlow(node.Value);
+            layoutEngine.PushFlow(flow);
+        }
+
+        if (node.Value is DockGroup group && group.Docks.Count != 0)
+        {
+            // A group with docks -> Layout the docks as items in the vector grid.
+            foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
+            {
+                layoutEngine.PlaceDock(dock);
+            }
+        }
+        else
+        {
+            HandlePart(node.Left);
+            HandlePart(node.Right);
+        }
+
+        if (reoriented)
+        {
+            layoutEngine.EndFlow();
+            layoutEngine.PopFlow();
+        }
+
+        return;
+
         static bool ShouldShowNodeRecursive(DockingTreeNode? node)
         {
             if (node is null)
@@ -514,7 +550,7 @@ public partial class Docker
                     : dockGroup.Docks.Any(d => d.State != DockingState.Minimized);
             }
 
-            if (node.Value is LayoutGroup layoutGroup)
+            if (node.Value is LayoutGroup)
             {
                 return ShouldShowNodeRecursive(node.Left) || ShouldShowNodeRecursive(node.Right);
             }
@@ -522,14 +558,14 @@ public partial class Docker
             throw new UnreachableException();
         }
 
-        bool ReorientFlowIfNeeded(LayoutSegment segment, LayoutEngine layoutEngine)
+        bool ReorientFlowIfNeeded(ILayoutSegment segment)
         {
             // For the sake of layout, if a group has Docks and only one of them is
             // pinned, we consider the group's orientation as Undetermined. That
             // way, we don't create a new grid for that group.
             var orientation = segment.Orientation;
-            if (segment is DockGroup group &&
-                group.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
+            if (segment is DockGroup dockGroup &&
+                dockGroup.Docks.Where(d => d.State == DockingState.Pinned).Take(2).Count() == 1)
             {
                 // "Group has only one pinned dock, considering it as DockGroupOrientation.Undetermined"
                 orientation = DockGroupOrientation.Undetermined;
@@ -540,7 +576,7 @@ public partial class Docker
                    flow.Direction != segment.Orientation.ToFlowDirection();
         }
 
-        void HandlePart(DockingTreeNode? child, LayoutEngine layoutEngine)
+        void HandlePart(DockingTreeNode? child)
         {
             if (child is null)
             {
@@ -561,42 +597,6 @@ public partial class Docker
 
             Layout(child, layoutEngine);
         }
-
-        if (!ShouldShowNodeRecursive(node))
-        {
-            // $"Skipping {node.Value}"
-            return;
-        }
-
-        // $"Layout started for item {node.Value}"
-        var reoriented = ReorientFlowIfNeeded(node.Value, layoutEngine);
-        if (reoriented)
-        {
-            var flow = layoutEngine.StartFlow(node.Value);
-            layoutEngine.PushFlow(flow);
-        }
-
-        if (node.Value is DockGroup group && group.Docks.Count != 0)
-        {
-            // A group with docks -> Layout the docks as items in the vector grid.
-            foreach (var dock in group.Docks.Where(d => d.State != DockingState.Minimized))
-            {
-                layoutEngine.PlaceDock(dock);
-            }
-        }
-        else
-        {
-            HandlePart(node.Left, layoutEngine);
-            HandlePart(node.Right, layoutEngine);
-        }
-
-        if (reoriented)
-        {
-            layoutEngine.EndFlow();
-            layoutEngine.PopFlow();
-        }
-
-        // $"Layout ended for Group {node}"
     }
 
     private void FireLayoutChangedEvent(LayoutChangeReason reason)

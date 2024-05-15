@@ -131,7 +131,7 @@ internal class BinaryTreeNode<T>(T storedValue) : IDisposable
     }
 
     /// <summary>
-    /// Dump the contents of a docking tree, starting at the this node, to the Debug output.
+    /// Dump the contents of a docking tree, starting at this node, to the Debug output.
     /// </summary>
     /// <param name="indentChar">The character used to indent children relative to their parent. Default is <c>' '</c>.</param>
     /// <param name="indentSize">The number of indent characters to use per indentation level. Default is <c>3</c>.</param>

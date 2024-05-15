@@ -68,10 +68,7 @@ internal partial class ActiveRoute
     internal bool IsActivated { get; set; }
 
     public override string ToString()
-    {
-        var url = string.Join('/', this.UrlSegments.Select(s => s.Path));
-        return $"{this.ViewModel?.GetType().Name} (o={this.Outlet} p={this.RouteConfig.Path})";
-    }
+        => $"{this.ViewModel?.GetType().Name} (o={this.Outlet} p={this.RouteConfig.Path})";
 
     /// <summary>
     /// Helper function to call base implementation after checking that the

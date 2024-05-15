@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Services;
+namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 using System.Diagnostics;
 using System.IO.Abstractions;
@@ -16,7 +16,6 @@ using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
-using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>Provides method to access and manipulate templates.</summary>
 public partial class TemplatesService : ITemplatesService
@@ -45,13 +44,9 @@ public partial class TemplatesService : ITemplatesService
             $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
             "Assets",
             "Templates");
-
-        this.LocalTemplates = fs.Path.Combine(pathFinder.LocalAppData, "Templates");
     }
 
     private string BuiltinTemplates { get; }
-
-    private string LocalTemplates { get; }
 
     public static async Task TryClearRecentUsageAsync(RecentlyUsedTemplate template)
     {

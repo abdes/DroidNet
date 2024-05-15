@@ -7,5 +7,5 @@ namespace DroidNet.Docking.Workspace;
 internal class LayoutGroup(IDocker docker, DockGroupOrientation orientation = DockGroupOrientation.Undetermined)
     : LayoutSegment(docker, orientation)
 {
-    public override string? ToString() => $"{base.ToString()}";
+    public override string ToString() => $"{base.ToString()}";
 }

@@ -5,11 +5,10 @@
 namespace DroidNet.Routing.Debugger.UI.UrlTree;
 
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml.Controls;
 
 /// <summary>The view for the <see cref="UrlTreeViewModel" />.</summary>
 [ViewModel(typeof(UrlTreeViewModel))]
-public sealed partial class UrlTreeView : UserControl
+public sealed partial class UrlTreeView
 {
     public UrlTreeView() => this.InitializeComponent();
 }
