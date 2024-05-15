@@ -29,7 +29,7 @@ public sealed partial class RecentProjectsList
 {
     private SortDescription? byDateSortDescription;
     private SortDescription? byNameSortDescription;
-    private IDisposable? projectItemsTransformerDisposable;
+    private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? dynamicProjectItems;
 
     public RecentProjectsList()
     {
@@ -47,32 +47,30 @@ public sealed partial class RecentProjectsList
     {
         set
         {
-            this.projectItemsTransformerDisposable?.Dispose();
-            var (result, subscription) = value.WithTransformer(
-                    p =>
+            this.dynamicProjectItems?.Dispose();
+            this.dynamicProjectItems = value.Transform(
+                p =>
+                {
+                    var thumbUri = DefaultProjectThumbnail;
+                    if (p is { Location: not null, Thumbnail: not null })
                     {
-                        var thumbUri = DefaultProjectThumbnail;
-                        if (p is { Location: not null, Thumbnail: not null })
+                        var thumbFilePath = Path.GetFullPath(Path.Combine(p.Location, p.Thumbnail));
+                        if (File.Exists(thumbFilePath))
                         {
-                            var thumbFilePath = Path.GetFullPath(Path.Combine(p.Location, p.Thumbnail));
-                            if (File.Exists(thumbFilePath))
-                            {
-                                thumbUri = thumbFilePath;
-                            }
+                            thumbUri = thumbFilePath;
                         }
+                    }
 
-                        var bitmap = new BitmapImage(new Uri(thumbUri));
+                    var bitmap = new BitmapImage(new Uri(thumbUri));
 
-                        return new ProjectItemWithThumbnail()
-                        {
-                            ProjectInfo = p,
-                            Thumbnail = bitmap,
-                        };
-                    })
-                .Transform();
+                    return new ProjectItemWithThumbnail()
+                    {
+                        ProjectInfo = p,
+                        Thumbnail = bitmap,
+                    };
+                });
 
-            this.projectItemsTransformerDisposable = subscription;
-            this.ProjectItems = new ReadOnlyObservableCollection<ProjectItemWithThumbnail>(result);
+            this.ProjectItems = new ReadOnlyObservableCollection<ProjectItemWithThumbnail>(this.dynamicProjectItems);
             this.AdvancedProjectItems = new AdvancedCollectionView(this.ProjectItems, isLiveShaping: true);
         }
     }
@@ -143,8 +141,8 @@ public sealed partial class RecentProjectsList
         _ = sender; // unused
         _ = args; // unused
 
-        this.projectItemsTransformerDisposable?.Dispose();
-        this.projectItemsTransformerDisposable = null;
+        this.dynamicProjectItems?.Dispose();
+        this.dynamicProjectItems = null;
     }
 }
 
