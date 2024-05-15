@@ -16,7 +16,7 @@
         Orientation="Vertical"
         Spacing="10">
         <TextBlock TextWrapping="Wrap"><Run Text="Dockable Id: " /><Run Text="{x:Bind ViewModel.DockableId}" /></TextBlock>
-        <TextBlock TextWrapping="Wrap"><Run Text="Onwer Dock Id: " /><Run Text="{x:Bind ViewModel.DockId}" /></TextBlock>
+        <TextBlock TextWrapping="Wrap"><Run Text="Owner Dock Id: " /><Run Text="{x:Bind ViewModel.DockId}" /></TextBlock>
         <TextBlock TextWrapping="Wrap"><Run Text="Layout Group: " /><Run Text="{x:Bind ViewModel.GroupInfo}" /></TextBlock>
     </StackPanel>
 </UserControl>

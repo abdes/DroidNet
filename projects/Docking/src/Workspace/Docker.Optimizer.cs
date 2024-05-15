@@ -57,7 +57,7 @@ public partial class Docker
 
         if (node.Value is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
         {
-            return new RemovenodeFromParent(node, node.Parent).Execute();
+            return new RemoveNodeFromParent(node, node.Parent).Execute();
         }
 
         // Potential for collapsing into parent or merger with sibling
@@ -118,7 +118,7 @@ public partial class Docker
 
             // Remove the edge node from the docking tree.
             Debug.Assert(node.Parent is not null, $"unexpected edge node {node} without a parent");
-            return new RemovenodeFromParent(node, node.Parent).Execute();
+            return new RemoveNodeFromParent(node, node.Parent).Execute();
         }
 
         return null;
@@ -162,7 +162,7 @@ public partial class Docker
         protected abstract void DumpImpactedSubTree();
     }
 
-    private sealed class RemovenodeFromParent(DockingTreeNode node, DockingTreeNode parent) : DockingTreeOptimization
+    private sealed class RemoveNodeFromParent(DockingTreeNode node, DockingTreeNode parent) : DockingTreeOptimization
     {
         protected override string Description => "remove empty group from parent";
 

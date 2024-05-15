@@ -45,7 +45,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// segment has more than one child.</param>
     public void AddChildLeft(DockingTreeNode node, DockGroupOrientation orientation)
     {
-        // Ensure that this node can take a children or resturcture it to make it so.
+        // Ensure that this node can take a children or restructure it to make it so.
         this.EnsureInternalNode();
 
         if (this.Left is null)
@@ -90,7 +90,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// segment has more than one child.</param>
     public void AddChildRight(DockingTreeNode node, DockGroupOrientation orientation)
     {
-        // Ensure that this node can take a children or resturcture it to make it so.
+        // Ensure that this node can take a children or restructure it to make it so.
         this.EnsureInternalNode();
 
         if (this.Right is null)
@@ -139,8 +139,8 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// <remarks>
     /// This method may result in a restructuring of the node and its children. Although there are multiple structures that could
     /// achieve the same result, the post-condition that must be guaranteed is that if the sub-tree under the current node is
-    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediatley <b>after</b> the
-    /// specified <paramref name="sibling" />.
+    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediateley <b>after</b>
+    /// the specified <paramref name="sibling" />.
     /// </remarks>
     public void AddChildAfter(DockingTreeNode node, DockingTreeNode sibling, DockGroupOrientation orientation)
     {
@@ -190,8 +190,8 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// <remarks>
     /// This method may result in a restructuring of the node and its children. Although there are multiple structures that could
     /// achieve the same result, the post-condition that must be guaranteed is that if the sub-tree under the current node is
-    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediatley <b>before</b> the
-    /// specified <paramref name="sibling" />.
+    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediateley <b>before</b>
+    /// the specified <paramref name="sibling" />.
     /// </remarks>
     public void AddChildBefore(DockingTreeNode node, DockingTreeNode sibling, DockGroupOrientation orientation)
     {
@@ -291,7 +291,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         this.RemoveChild(this.Right);
     }
 
-    /// <summary>Restructure the docks in this node's segment to partition them into theree groups. The first group will hold any
+    /// <summary>Restructure the docks in this node's segment to partition them into three groups. The first group will hold any
     /// docks before the <paramref name="relativeTo" /> dock, the second will hold the <paramref name="relativeTo" /> dock, and
     /// the third will hold the docks after the <paramref name="relativeTo" /> dock.</summary>
     /// <param name="relativeTo">The dock relative to which the partitioning will happen.</param>
@@ -340,7 +340,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// <summary>Migrate the content of a lone child into this node then remove the child from the node.</summary>
     /// <param name="child">The child to be assimilated.</param>
     /// <exception cref="InvalidOperationException">
-    /// When the <paramref name="child" /> has a sibling, or ishold a root group (<see cref="CenterGroup" /> or
+    /// When the <paramref name="child" /> has a sibling, or is a root group (<see cref="CenterGroup" /> or
     /// <see cref="EdgeGroup" />), or the specified child is not a child of this node.
     /// </exception>
     /// <remarks>
