@@ -43,7 +43,7 @@ public abstract class DockGroup : LayoutSegment, IDockGroup
     /// <see cref="AnchorPosition.Bottom" />.
     /// </exception>
     /// <remarks>
-    /// A rlative position of <see cref="AnchorPosition.Left" /> or <see cref="AnchorPosition.Top" /> will insert the new dock
+    /// A relative position of <see cref="AnchorPosition.Left" /> or <see cref="AnchorPosition.Top" /> will insert the new dock
     /// <b>before</b> its anchor dock, while a relative position of <see cref="AnchorPosition.Right" /> or <see cref="AnchorPosition.Bottom" /> will insert it after.
     /// </remarks>
     internal abstract void AddDock(IDock dock, Anchor anchor);

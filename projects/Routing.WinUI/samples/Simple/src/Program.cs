@@ -146,7 +146,7 @@ public static partial class Program
         // corresponding to name of the special target <see cref="Target.Main" />.
         sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
-        // Views and ViewModels, which are not auto registred in the DI injector via the InjectAs attribute
+        // Views and ViewModels, which are not auto registered in the DI injector via the InjectAs attribute
     }
 
     private static Routes MakeRoutes() => new(

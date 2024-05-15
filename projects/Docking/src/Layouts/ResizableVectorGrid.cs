@@ -13,7 +13,7 @@ public class ResizableVectorGrid : Grid
 {
     private readonly List<bool> resizableItems = [];
 
-    private bool hasStrectToFillItem;
+    private bool containsStretchToFillItem;
 
     public ResizableVectorGrid(Orientation orientation)
     {
@@ -36,7 +36,7 @@ public class ResizableVectorGrid : Grid
     {
         if (length.IsStar)
         {
-            this.hasStrectToFillItem = true;
+            this.containsStretchToFillItem = true;
         }
 
         if (this.Children.Count > 0 && this.resizableItems[this.Children.Count - 1])
@@ -53,12 +53,12 @@ public class ResizableVectorGrid : Grid
 
     public void AdjustSizes()
     {
-        if (this.hasStrectToFillItem)
+        if (this.containsStretchToFillItem)
         {
             return;
         }
 
-        if (this.Orientation == Orientation.Horizontal)
+        if (this.Orientation == this.Orientation.Horizontal)
         {
             this.AdjustColumnWidths();
         }
@@ -100,7 +100,7 @@ public class ResizableVectorGrid : Grid
 
     private void DefineItem(GridLength length, double minLength)
     {
-        if (this.Orientation == Orientation.Horizontal)
+        if (this.Orientation == this.Orientation.Horizontal)
         {
             // $"Adding column definition Width={length}"
             this.ColumnDefinitions.Add(
@@ -129,9 +129,9 @@ public class ResizableVectorGrid : Grid
             Padding = new Thickness(0),
             ResizeBehavior = GridSplitter.GridResizeBehavior.PreviousAndNext,
             ResizeDirection = GridSplitter.GridResizeDirection.Auto,
-            Orientation = this.Orientation == Orientation.Horizontal
-                ? Orientation.Vertical
-                : Orientation.Horizontal,
+            Orientation = this.Orientation == this.Orientation.Horizontal
+                ? this.Orientation.Vertical
+                : this.Orientation.Horizontal,
         };
         this.DefineItem(GridLength.Auto, 6);
         this.AddItem(splitter);
@@ -140,7 +140,7 @@ public class ResizableVectorGrid : Grid
 
     private void AddItem(UIElement content)
     {
-        var (row, column) = this.Orientation == Orientation.Horizontal
+        var (row, column) = this.Orientation == this.Orientation.Horizontal
             ? (0, this.Children.Count)
             : (this.Children.Count, 0);
 

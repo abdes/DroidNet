@@ -18,7 +18,7 @@ internal static class TreeTraversal
     /// </summary>
     /// <typeparam name="T">The type of values stored in the tree nodes.</typeparam>
     /// <param name="node">The root of the (sub-)tree to be traversed.</param>
-    /// <param name="visit">The node visitor that will be invoked when a node is visted.</param>
+    /// <param name="visit">The node visitor that will be invoked when a node is visited.</param>
     /// <remarks>
     /// In this traversal, the traversal goes as deep as possible and then visits in order, the left child, the parent node and
     /// then the right child. The steps can be summarized as following:

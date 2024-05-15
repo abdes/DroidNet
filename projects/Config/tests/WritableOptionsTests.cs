@@ -32,8 +32,8 @@ public class WritableOptionsTests
         var builder = Host.CreateDefaultBuilder();
         _ = builder.ConfigureServices(sc => sc.AddSingleton<IFileSystem>(new MockFileSystem()));
 
-        // The following should normally be done by configurating the builder to add the config file, but for testing purposes,
-        // we don't want the builder to access the filesystem.
+        // The following should normally be done by configuring the builder to add the config file, but for testing
+        // purposes, we don't want the builder to access the filesystem.
         var configuration = new ConfigurationBuilder().Build();
         var section = configuration.GetSection(SectionName);
 
@@ -66,8 +66,8 @@ public class WritableOptionsTests
                 _ = sc.AddSingleton<IFileSystem>(fileSystem);
             });
 
-        // The following should normally be done by configurating the builder to add the config file, but for testing purposes,
-        // we don't want the builder to access the filesystem.
+        // The following should normally be done by configuring the builder to add the config file, but for testing
+        // purposes, we don't want the builder to access the filesystem.
         var configuration = new ConfigurationBuilder().Build();
         var section = configuration.GetSection(SectionName);
 

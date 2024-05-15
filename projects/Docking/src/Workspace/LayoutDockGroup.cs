@@ -109,7 +109,7 @@ internal partial class LayoutDockGroup
 
         Debug.Assert(
             this.Orientation == requiredOrientation,
-            $"unexpected orientation mismatch for group {this} when addding a dock");
+            $"unexpected orientation mismatch for group {this} when adding a dock");
 
         var insertPosition = 0;
         if (this.Docks.Count != 0)
