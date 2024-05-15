@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml.Data;
 /// <typeparam name="T">The type of values in the dictionary.</typeparam>
 /// <remarks>
 /// <para>
-/// Only <see langword="string"/> keys are supported and it should not be an issue as only string values are really convenient to
+/// Only <see langword="string" /> keys are supported, and it should not be an issue as only string values are really convenient to
 /// use as keys in a binding.
 /// </para>
 /// <para>
@@ -33,8 +33,8 @@ public class DictionaryValueConverter<T> : IValueConverter
     /// <param name="parameter">The key that will be used to get the returned item from the dictionary.</param>
     /// <param name="language">Not used. The item is returned as-is.</param>
     /// <returns>
-    /// A non-null object of type <typeparamref name="T"/>if <paramref name="value"/> is not null, <paramref name="parameter"/> is
-    /// not null and an item for the <paramref name="parameter"/> key exists in the dictionary; null otherwise.
+    /// A non-null object of type <typeparamref name="T" />if <paramref name="value" /> is not null, <paramref name="parameter" /> is
+    /// not null and an item for the <paramref name="parameter" /> key exists in the dictionary; null otherwise.
     /// </returns>
     public object? Convert(object? value, Type targetType, object? parameter, string language)
     {

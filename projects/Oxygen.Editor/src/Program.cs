@@ -29,7 +29,6 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Services;
@@ -214,7 +213,7 @@ public static partial class Program
             [
                 new Route()
                 {
-                    // The project browser is the root of a multi-page navigation view.
+                    // The project browser is the root of a navigation view with multiple pages.
                     Path = "pb",
                     ViewModelType = typeof(ProjectBrowser.ViewModels.MainViewModel),
                     Children = new Routes(

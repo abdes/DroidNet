@@ -43,14 +43,14 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <!--  Where i want the static content located  -->
+                            <!--  Where we want the static content located  -->
                             <FontIcon
                                 Grid.Column="0"
                                 Margin="10,0,0,0"
                                 HorizontalAlignment="Left"
                                 Glyph="{Binding Path=IconGlyph, ElementName=LocationButtonControl}" />
 
-                            <!--  Where i want content to appear  -->
+                            <!--  Where we want content to appear  -->
                             <ContentPresenter
                                 x:Name="ContentPresenter"
                                 Grid.Column="0"

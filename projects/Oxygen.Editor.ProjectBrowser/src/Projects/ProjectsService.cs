@@ -6,7 +6,6 @@ namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
@@ -34,7 +33,7 @@ public class ProjectsService : IProjectsService
         this.finder = finder;
         this.localStorage = localStorage;
 
-        this.lazyLocations = new Lazy<Task<KnownLocation[]>>(() => this.InitializeKnownLocationsAsync());
+        this.lazyLocations = new Lazy<Task<KnownLocation[]>>(this.InitializeKnownLocationsAsync);
     }
 
     public async Task<bool> NewProjectFromTemplate(
@@ -317,9 +316,7 @@ public class ProjectsService : IProjectsService
         async Task<KnownLocation?> LocationFromLocalFolderPathAsync(KnownLocations key, string path)
         {
             var folder = await this.localStorage.GetFolderFromPathAsync(path).ConfigureAwait(false);
-            return folder != null
-                ? new KnownLocation(key, folder.Name, folder.Location, this.localStorage, this)
-                : null;
+            return new KnownLocation(key, folder.Name, folder.Location, this.localStorage, this);
         }
     }
 }

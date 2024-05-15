@@ -47,7 +47,7 @@ public class LocalTemplatesSourceTests
         """;
 
     private readonly string[] descriptors =
-    {
+    [
         /*lang=json,strict*/
         """
         {
@@ -72,7 +72,7 @@ public class LocalTemplatesSourceTests
             ]
         }
         """,
-    };
+    ];
 
     private readonly MockFileSystem fileSystem = new();
     private readonly IHost host;
@@ -172,10 +172,10 @@ public class LocalTemplatesSourceTests
         var template = await sut.LoadTemplateAsync(new Uri($"file:///templates/{templateNumber}/template.json"));
 
         // Assert
-        template.Name.Should().Be($"Template {templateNumber}");
-        template.Category.Should().NotBeNull();
-        template.Category!.Id.Should().Be($"test-{templateNumber}");
-        template.Location.Should().Be(this.fileSystem.Path.GetFullPath($"/templates/{templateNumber}"));
+        _ = template.Name.Should().Be($"Template {templateNumber}");
+        _ = template.Category.Should().NotBeNull();
+        _ = template.Category.Id.Should().Be($"test-{templateNumber}");
+        _ = template.Location.Should().Be(this.fileSystem.Path.GetFullPath($"/templates/{templateNumber}"));
     }
 
     private void InitializeFileSystem() => _ = this.fileSystem.InitializeIn("/")
@@ -187,44 +187,44 @@ public class LocalTemplatesSourceTests
             {
                 _ = d.WithSubdirectory("1")
                     .Initialized(
-                        d =>
+                        sd =>
                         {
-                            _ = d.WithFile("template.json")
+                            _ = sd.WithFile("template.json")
                                 .Which(f => f.HasStringContent(this.descriptors[0]));
-                            _ = d.WithFile("icon.png");
-                            _ = d.WithFile("preview.png");
+                            _ = sd.WithFile("icon.png");
+                            _ = sd.WithFile("preview.png");
                         });
                 _ = d.WithSubdirectory("2")
                     .Initialized(
-                        d =>
+                        sd =>
                         {
-                            _ = d.WithFile("template.json")
+                            _ = sd.WithFile("template.json")
                                 .Which(f => f.HasStringContent(this.descriptors[1]));
-                            _ = d.WithFile("icon.png");
-                            _ = d.WithFile("preview.png");
+                            _ = sd.WithFile("icon.png");
+                            _ = sd.WithFile("preview.png");
                         });
                 _ = d.WithSubdirectory("missing-descriptor-file")
                     .Initialized(
-                        d =>
+                        sd =>
                         {
-                            _ = d.WithFile("icon.png");
-                            _ = d.WithFile("preview.png");
+                            _ = sd.WithFile("icon.png");
+                            _ = sd.WithFile("preview.png");
                         });
                 _ = d.WithSubdirectory("missing-icon-file")
                     .Initialized(
-                        d =>
+                        sd =>
                         {
-                            _ = d.WithFile("template.json")
+                            _ = sd.WithFile("template.json")
                                 .Which(f => f.HasStringContent(this.descriptors[0]));
-                            _ = d.WithFile("preview.png");
+                            _ = sd.WithFile("preview.png");
                         });
                 _ = d.WithSubdirectory("missing-preview-file")
                     .Initialized(
-                        d =>
+                        sd =>
                         {
-                            _ = d.WithFile("template.json")
+                            _ = sd.WithFile("template.json")
                                 .Which(f => f.HasStringContent(this.descriptors[0]));
-                            _ = d.WithFile("icon.png");
+                            _ = sd.WithFile("icon.png");
                         });
             });
 }

@@ -47,7 +47,7 @@ public static class HostingExtensions
                 // Look for the AutoInjectExtensions class
                 var autoInjectType = assembly.GetTypes()
                     .FirstOrDefault(
-                        t => t.IsClass && t.IsSealed && t.IsAbstract && string.Equals(
+                        t => t is { IsClass: true, IsSealed: true, IsAbstract: true } && string.Equals(
                             t.Name,
                             "AutoInjectExtensions",
                             StringComparison.Ordinal));

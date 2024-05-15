@@ -38,7 +38,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
 
     /// <summary>
     /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will be positioned on
-    /// the left side of other segment in the node's sub-tree.
+    /// the left side of other segment in the node's subtree.
     /// </summary>
     /// <param name="node">The child node to add.</param>
     /// <param name="orientation">The desired orientation of the segment after the node is added. Will be applied only if the
@@ -83,7 +83,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
 
     /// <summary>
     /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will be positioned on
-    /// the right side of other segment in the node's sub-tree.
+    /// the right side of other segment in the node's subtree.
     /// </summary>
     /// <param name="node">The child node to add.</param>
     /// <param name="orientation">The desired orientation of the segment after the node is added. Will be applied only if the
@@ -127,7 +127,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     }
 
     /// <summary>
-    /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will be come
+    /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will come
     /// <b>after</b> the specified <paramref name="sibling" />.
     /// </summary>
     /// <param name="node">The child node to add.</param>
@@ -138,8 +138,8 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// node.</exception>
     /// <remarks>
     /// This method may result in a restructuring of the node and its children. Although there are multiple structures that could
-    /// achieve the same result, the post-condition that must be guaranteed is that if the sub-tree under the current node is
-    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediateley <b>after</b>
+    /// achieve the same result, the post-condition that must be guaranteed is that if the subtree under the current node is
+    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediately <b>after</b>
     /// the specified <paramref name="sibling" />.
     /// </remarks>
     public void AddChildAfter(DockingTreeNode node, DockingTreeNode sibling, DockGroupOrientation orientation)
@@ -178,7 +178,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     }
 
     /// <summary>
-    /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will be come
+    /// Adds a child to the node in such a way that in a depth-first in-order traversal, its layout segment will come
     /// <b>before</b> the specified <paramref name="sibling" />.
     /// </summary>
     /// <param name="node">The child node to add.</param>
@@ -189,8 +189,8 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// node.</exception>
     /// <remarks>
     /// This method may result in a restructuring of the node and its children. Although there are multiple structures that could
-    /// achieve the same result, the post-condition that must be guaranteed is that if the sub-tree under the current node is
-    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediateley <b>before</b>
+    /// achieve the same result, the post-condition that must be guaranteed is that if the subtree under the current node is
+    /// flattened using a depth-first in-order traversal into a list, the newly added child will come immediately <b>before</b>
     /// the specified <paramref name="sibling" />.
     /// </remarks>
     public void AddChildBefore(DockingTreeNode node, DockingTreeNode sibling, DockGroupOrientation orientation)
@@ -295,7 +295,7 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     /// docks before the <paramref name="relativeTo" /> dock, the second will hold the <paramref name="relativeTo" /> dock, and
     /// the third will hold the docks after the <paramref name="relativeTo" /> dock.</summary>
     /// <param name="relativeTo">The dock relative to which the partitioning will happen.</param>
-    /// <param name="orientation">The desired orientation of the resulting sub-tree root.</param>
+    /// <param name="orientation">The desired orientation of the resulting subtree root.</param>
     /// <returns>The segment containing the <paramref name="relativeTo" />.</returns>
     /// <exception cref="InvalidOperationException">If this node does not hold a <see cref="LayoutDockGroup" /> segment or if the
     /// <paramref name="relativeTo" /> does not belong to this node's segment.</exception>
@@ -421,13 +421,13 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
     }
 
     /// <summary>
-    /// Create a new sub-tree having as a right child a node holding this node's segment, and as a left child the specified
+    /// Create a new subtree having as a right child a node holding this node's segment, and as a left child the specified
     /// <paramref name="node" />.
     /// </summary>
     /// <param name="node">The node to be added after expansion.</param>
-    /// <returns>The resulting sub-tree.</returns>
+    /// <returns>The resulting subtree.</returns>
     /// <remarks>
-    /// This method does not modify the docking tree or this node. The resulting sub-tree needs to be plugged into the tree after
+    /// This method does not modify the docking tree or this node. The resulting subtree needs to be plugged into the tree after
     /// the expansion.
     /// </remarks>
     private DockingTreeNode ExpandToAddLeft(DockingTreeNode node)
@@ -438,13 +438,13 @@ internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTr
         };
 
     /// <summary>
-    /// Create a new sub-tree having as a left child a node holding this node's segment, and as a right child the specified
+    /// Create a new subtree having as a left child a node holding this node's segment, and as a right child the specified
     /// <paramref name="node" />.
     /// </summary>
     /// <param name="node">The node to be added after expansion.</param>
-    /// <returns>The resulting sub-tree.</returns>
+    /// <returns>The resulting subtree.</returns>
     /// <remarks>
-    /// This method does not modify the docking tree or this node. The resulting sub-tree needs to be plugged into the tree after
+    /// This method does not modify the docking tree or this node. The resulting subtree needs to be plugged into the tree after
     /// the expansion.
     /// </remarks>
     private DockingTreeNode ExpandToAddRight(DockingTreeNode node)

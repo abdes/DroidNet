@@ -8,13 +8,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.ProjectBrowser.Config;
 
-public sealed class CategoryJsonConverter : JsonConverter<ProjectCategory>
+public sealed class CategoryJsonConverter(ProjectBrowserSettings settings) : JsonConverter<ProjectCategory>
 {
-    private readonly ProjectBrowserSettings settings;
-
-    public CategoryJsonConverter(ProjectBrowserSettings settings)
-        => this.settings = settings;
-
     public override ProjectCategory Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.String)
@@ -23,7 +18,7 @@ public sealed class CategoryJsonConverter : JsonConverter<ProjectCategory>
         }
 
         var categoryId = reader.GetString();
-        var category = this.settings.GetProjectCategoryById(categoryId!);
+        var category = settings.GetProjectCategoryById(categoryId!);
         return category ?? throw new JsonException($"Unknown category id '{categoryId}'.");
     }
 

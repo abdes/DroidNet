@@ -15,14 +15,13 @@ using Microsoft.Extensions.DependencyInjection;
 /// The view model for the start screen. Mainly responsible for the navigation
 /// between the different views in the project browser start screen.
 /// </summary>
+/// <param name="router">The application router to use when navigating.</param>
 [InjectAs(ServiceLifetime.Singleton)]
 public partial class MainViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
     private const int SettingsItemIndex = int.MaxValue;
     private const string SettingsItemPath = "settings";
-
-    private readonly IRouter router = router;
 
     [ObservableProperty]
     private object? currentNavigation;
@@ -83,7 +82,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            this.router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 
@@ -93,7 +92,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            this.router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 

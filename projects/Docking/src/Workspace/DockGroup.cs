@@ -56,7 +56,7 @@ public abstract class DockGroup : LayoutSegment, IDockGroup
     /// </exception>
     /// <remarks>
     /// If <paramref name="index" /> is equal to the number of docks in the group, <paramref name="dock" /> is added to the end of
-    /// the docks collection.
+    /// the docks' collection.
     /// </remarks>
     internal virtual void InsertDock(int index, IDock dock) => this.docks.Insert(index, dock);
 

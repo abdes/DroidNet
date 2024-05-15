@@ -15,8 +15,6 @@ using Windows.ApplicationModel;
 
 public partial class SettingsViewModel : ObservableRecipient
 {
-    private readonly IThemeSelectorService themeSelectorService;
-
     [ObservableProperty]
     private ElementTheme elementTheme;
 
@@ -30,8 +28,7 @@ public partial class SettingsViewModel : ObservableRecipient
     /// <param name="themeSelectorService"></param>
     public SettingsViewModel(IThemeSelectorService themeSelectorService)
     {
-        this.themeSelectorService = themeSelectorService;
-        this.elementTheme = this.themeSelectorService.Theme;
+        this.elementTheme = themeSelectorService.Theme;
         this.versionDescription = GetVersionDescription();
 
         this.SwitchThemeCommand = new RelayCommand<ElementTheme>(
@@ -40,7 +37,7 @@ public partial class SettingsViewModel : ObservableRecipient
                 if (this.ElementTheme != param)
                 {
                     this.ElementTheme = param;
-                    await this.themeSelectorService.SetThemeAsync(param).ConfigureAwait(false);
+                    await themeSelectorService.SetThemeAsync(param).ConfigureAwait(false);
                 }
             });
     }

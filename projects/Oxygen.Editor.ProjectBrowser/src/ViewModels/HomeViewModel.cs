@@ -94,7 +94,7 @@ public partial class HomeViewModel(
     public async Task<bool> NewProjectFromTemplate(ITemplateInfo template, string projectName, string location)
     {
         Debug.WriteLine(
-            $"New project from template: {template.Category!.Name}/{template.Name} with name `{projectName}` in location `{location}`");
+            $"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
         return await projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }

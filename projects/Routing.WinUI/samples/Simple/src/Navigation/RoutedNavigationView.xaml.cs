@@ -14,7 +14,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>A replacement for the <see cref="NavigationView" /> control that does not require a <see cref="Frame" /> for better
-/// MVVM compatibility and less dependencies on parent and siblings.</summary>
+/// MVVM compatibility and fewer dependencies on parent and siblings.</summary>
 [ViewModel(typeof(RoutedNavigationViewModel))]
 [InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class RoutedNavigationView
@@ -64,11 +64,9 @@ public sealed partial class RoutedNavigationView
 
     private sealed class IndexToNavigationItemConverter(RoutedNavigationView routedNavigationView) : IValueConverter
     {
-        private readonly RoutedNavigationView view = routedNavigationView;
-
         public object? Convert(object? value, Type targetType, object? parameter, string language)
         {
-            if (value is null || value is not int index || index == -1 || this.view.ViewModel is null)
+            if (value is not int index || index == -1 || routedNavigationView.ViewModel is null)
             {
                 return null;
             }
@@ -76,15 +74,12 @@ public sealed partial class RoutedNavigationView
             if (index == int.MaxValue)
             {
                 // Note that the SettingsItem may be null before the NavigationView is loaded.
-                return this.view.NavigationView.SettingsItem;
+                return routedNavigationView.NavigationView.SettingsItem;
             }
 
-            if (index < this.view.ViewModel.AllItems.Count)
-            {
-                return this.view.ViewModel.AllItems[index];
-            }
-
-            return null;
+            return index < routedNavigationView.ViewModel.AllItems.Count
+                ? routedNavigationView.ViewModel.AllItems[index]
+                : null;
         }
 
         public object ConvertBack(object value, Type targetType, object? parameter, string language)

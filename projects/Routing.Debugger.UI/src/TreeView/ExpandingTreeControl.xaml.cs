@@ -6,13 +6,12 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 /// <summary>
 /// A control to display a tree as a list of expandable items.
 /// </summary>
 [ViewModel(typeof(TreeViewModelBase))]
-public sealed partial class ExpandingTreeControl : UserControl
+public sealed partial class ExpandingTreeControl
 {
     /// <summary>
     /// Identifies the <see cref="HeaderTemplate" /> dependency property.

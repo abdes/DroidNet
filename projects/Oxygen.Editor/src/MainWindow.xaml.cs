@@ -9,7 +9,6 @@ using DroidNet.Mvvm;
 using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Helpers;
-using Windows.UI.ViewManagement;
 
 /// <summary>The application main window, which also acts as a <see cref="IOutletContainer" /> for some routes.</summary>
 [ObservableObject]
@@ -17,8 +16,10 @@ public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IViewLocator viewLocator;
 
-    private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue;
-    private readonly UISettings settings;
+    /*
+     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue;
+     private readonly UISettings settings;
+    */
 
     private object? shellViewModel;
 
@@ -35,11 +36,10 @@ public sealed partial class MainWindow : IOutletContainer
         this.Content = null;
         this.Title = "AppDisplayName".GetLocalized();
 
+        /* TODO: refactor theme management
         // Theme change code picked from https://github.com/microsoft/WinUI-Gallery/pull/1239
         this.dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         this.settings = new UISettings();
-
-        /* TODO: refactor theme management
         this.settings.ColorValuesChanged
             += this.Settings_ColorValuesChanged; // cannot use FrameworkElement.ActualThemeChanged event
         */

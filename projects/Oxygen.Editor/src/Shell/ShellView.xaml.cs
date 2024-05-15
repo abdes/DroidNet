@@ -17,7 +17,7 @@ using Windows.System;
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(ShellViewModel))]
 [InjectAs(ServiceLifetime.Singleton)]
-public sealed partial class ShellView : Page
+public sealed partial class ShellView
 {
     public ShellView()
     {

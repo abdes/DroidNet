@@ -5,11 +5,10 @@
 namespace Oxygen.Editor.Pages.Settings.Views;
 
 using CommunityToolkit.Mvvm.DependencyInjection;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Pages.Settings.ViewModels;
 
 // TODO: Set the URL for your privacy policy by updating SettingsPage_PrivacyTermsLink.NavigateUri in Resources.resw.
-public sealed partial class SettingsPage : Page
+public sealed partial class SettingsPage
 {
     /// <summary>Initializes a new instance of the <see cref="SettingsPage" /> class.</summary>
     public SettingsPage()

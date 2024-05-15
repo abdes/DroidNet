@@ -6,31 +6,23 @@ namespace Oxygen.Editor.Services;
 
 using System.Reactive.Subjects;
 
-public class ActivationService : IActivationService, IDisposable
+/// <summary>
+/// Initializes a new instance of the <see cref="ActivationService" />
+/// class.
+/// </summary>
+/// <param name="theme"></param>
+public class ActivationService(IThemeSelectorService theme) : IActivationService, IDisposable
 {
-    private readonly Func<object, Task> afterActivation;
-
-    private readonly Func<Task> beforeActivation;
-    private readonly Subject<object> subject = new();
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ActivationService" />
-    /// class.
-    /// </summary>
-    /// <param name="navigation"></param>
-    /// <param name="theme"></param>
-    public ActivationService(IThemeSelectorService theme)
+    private readonly Func<object, Task> afterActivation = (activationData) =>
     {
-        this.beforeActivation = () => Task.CompletedTask;
+        _ = activationData; // unused
 
-        this.afterActivation = (object activationData) =>
-        {
-            _ = activationData; // unused
+        theme.ApplyTheme();
+        return Task.CompletedTask;
+    };
 
-            theme.ApplyTheme();
-            return Task.CompletedTask;
-        };
-    }
+    private readonly Func<Task> beforeActivation = () => Task.CompletedTask;
+    private readonly Subject<object> subject = new();
 
     public IDisposable Subscribe(IObserver<object> observer)
         => this.subject.Subscribe(observer);

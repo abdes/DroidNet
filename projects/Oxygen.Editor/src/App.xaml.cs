@@ -58,17 +58,17 @@ public partial class App
         this.UnhandledException += OnAppUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
 
-        // We just wanna exit if navigation fails for some reason
+        // We just want to exit if navigation fails for some reason
         this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
         Ioc.Default.GetRequiredService<IAppNotificationService>()
             .Initialize();
 
         _ = Ioc.Default.GetRequiredService<IActivationService>()
-            .Where(data => data is not null and LaunchActivatedEventArgs)
+            .Where(data => data is LaunchActivatedEventArgs)
             .Select(data => data as LaunchActivatedEventArgs)
             .Subscribe(
-                data =>
+                _ =>
                 {
                     Debug.WriteLine("Launch activation ==> navigate to project browser");
                     this.router.Navigate("/pb/home", new FullNavigation() { Target = Target.Main });

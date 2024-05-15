@@ -11,28 +11,26 @@ using System.Text.RegularExpressions;
 
 public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
 {
-    private readonly IFileSystem fs = fs;
-
-    public IEnumerable<string> GetLogicalDrives() => this.fs.Directory.GetLogicalDrives();
+    public IEnumerable<string> GetLogicalDrives() => fs.Directory.GetLogicalDrives();
 
     public Task<IFolder> GetFolderFromPathAsync(string path, CancellationToken cancellationToken = default)
     {
         try
         {
-            var normalized = this.fs.Path.GetFullPath($"{path}");
-            if (!this.fs.Directory.Exists(normalized))
+            var normalized = fs.Path.GetFullPath($"{path}");
+            if (!fs.Directory.Exists(normalized))
             {
                 Debug.WriteLine($"Folder at path [{normalized}] does not exist");
                 throw new FileNotFoundException();
             }
 
-            var info = this.fs.DirectoryInfo.New(normalized);
+            var info = fs.DirectoryInfo.New(normalized);
             var folderName = info.Name;
             Debug.Assert(folderName != null, $"Path [{normalized}] did not produce a valid folder name");
 
             var dateModified = info.LastAccessTime;
 
-            var parent = this.fs.Directory.GetParent(normalized);
+            var parent = fs.Directory.GetParent(normalized);
 
             var folder = parent == null
                 ? new NativeFolder(this, folderName, normalized, dateModified)
@@ -76,15 +74,15 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         {
             Debug.WriteLine($"Enumerating folders under `{path}`");
 
-            foreach (var item in this.fs.Directory.EnumerateDirectories(path))
+            foreach (var item in fs.Directory.EnumerateDirectories(path))
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
                     yield break;
                 }
 
-                var itemPath = this.fs.Path.Combine(path, item);
-                var info = this.fs.DirectoryInfo.New(itemPath);
+                var itemPath = fs.Path.Combine(path, item);
+                var info = fs.DirectoryInfo.New(itemPath);
                 var dateModified = info.LastAccessTime;
                 yield return new NativeNestedFolder(this, info.Name, itemPath, path, dateModified);
             }
@@ -138,7 +136,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
                 RegexOptions.None,
                 TimeSpan.FromSeconds(1)); // protect regex against denial of service attacks
 
-            foreach (var item in this.fs.Directory.EnumerateFiles(path))
+            foreach (var item in fs.Directory.EnumerateFiles(path))
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -150,8 +148,8 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
                     continue;
                 }
 
-                var itemPath = this.fs.Path.Combine(path, item);
-                var info = this.fs.FileInfo.New(itemPath);
+                var itemPath = fs.Path.Combine(path, item);
+                var info = fs.FileInfo.New(itemPath);
                 var dateModified = info.LastAccessTime;
                 yield return new NativeFile(this, info.Name, itemPath, path, dateModified);
             }

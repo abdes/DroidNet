@@ -8,12 +8,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
-using DroidNet.Docking.Demo.Shell;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Samples.Simple.Navigation;
+using DroidNet.Routing.Samples.Simple.Shell;
 using DroidNet.Routing.WinUI;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
@@ -162,7 +162,7 @@ public static partial class Program
             [
                 new Route()
                 {
-                    // This the root of a multi-page navigation view.
+                    // This the root of a navigation view with multiple pages.
                     Path = "nav",
                     ViewModelType = typeof(RoutedNavigationViewModel),
                     Children = new Routes(

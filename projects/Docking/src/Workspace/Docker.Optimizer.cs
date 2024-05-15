@@ -55,13 +55,13 @@ public partial class Docker
             return null;
         }
 
-        if (node.Value is DockGroup dockGroup && dockGroup.Docks.Count == 0 && node.Parent is not null)
+        if (node is { Value: DockGroup { Docks.Count: 0 }, Parent: not null })
         {
             return new RemoveNodeFromParent(node, node.Parent).Execute();
         }
 
         // Potential for collapsing into parent or merger with sibling
-        return node.Sibling is null or DockingTreeNode { IsLeaf: true } ? node.Parent : null;
+        return node.Sibling is null or { IsLeaf: true } ? node.Parent : null;
     }
 
     private static DockingTreeNode? SimplifyChildren(DockingTreeNode node)
@@ -75,7 +75,7 @@ public partial class Docker
         if (node.Left is not null && node.Right is not null)
         {
             // Parent with two leaf children
-            if (node is { Left: DockingTreeNode { IsLeaf: true }, Right: DockingTreeNode { IsLeaf: true } })
+            if (node is { Left.IsLeaf: true, Right.IsLeaf: true })
             {
                 // and compatible orientations => merge the children
                 if ((node.Left.Value.Orientation is DockGroupOrientation.Undetermined ||
@@ -109,7 +109,7 @@ public partial class Docker
 
     private DockingTreeNode? OptimizedEmptyEdge(DockingTreeNode node)
     {
-        if ((node.Value is EdgeGroup && node.Left is null && node.Right?.Value is TrayGroup) ||
+        if (node is { Value: EdgeGroup, Left: null, Right.Value: TrayGroup } ||
             (node.Right is null && node.Left?.Value is TrayGroup))
         {
             // Clear the edge node from the edges table.

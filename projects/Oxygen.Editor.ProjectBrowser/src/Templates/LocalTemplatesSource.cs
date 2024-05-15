@@ -11,25 +11,16 @@ using Microsoft.Extensions.Options;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Utils;
 
-public class LocalTemplatesSource : ITemplatesSource
+public class LocalTemplatesSource(
+    IFileSystem filesystem,
+    IOptions<ProjectBrowserSettings> settings)
+    : ITemplatesSource
 {
-    private readonly IFileSystem fs;
-    private readonly ProjectBrowserSettings settings;
-    private readonly JsonSerializerOptions jsonSerializerOptions;
-
-    public LocalTemplatesSource(
-        IFileSystem filesystem,
-        IOptions<ProjectBrowserSettings> settings)
+    private readonly JsonSerializerOptions jsonSerializerOptions = new()
     {
-        this.fs = filesystem;
-        this.settings = settings.Value;
-
-        this.jsonSerializerOptions = new JsonSerializerOptions
-        {
-            AllowTrailingCommas = true,
-            Converters = { new CategoryJsonConverter(this.settings) },
-        };
-    }
+        AllowTrailingCommas = true,
+        Converters = { new CategoryJsonConverter(settings.Value) },
+    };
 
     /// <inheritdoc />
     /// <remarks>
@@ -56,7 +47,7 @@ public class LocalTemplatesSource : ITemplatesSource
         }
 
         var templatePath = fromUri.LocalPath;
-        if (!this.fs.File.Exists(fromUri.LocalPath))
+        if (!filesystem.File.Exists(fromUri.LocalPath))
         {
             throw new TemplateLoadingException(
                 $"Location `{templatePath}` does not correspond to an existing template descriptor file.");
@@ -66,17 +57,18 @@ public class LocalTemplatesSource : ITemplatesSource
 
         try
         {
-            var json = await this.fs.File.ReadAllTextAsync(templatePath, CancellationToken.None).ConfigureAwait(false);
+            var json = await filesystem.File.ReadAllTextAsync(templatePath, CancellationToken.None)
+                .ConfigureAwait(false);
 
             var template = JsonSerializer.Deserialize<Template>(json, this.jsonSerializerOptions);
             Debug.Assert(template != null, $"Json content of template at `{templatePath}` is not valid");
 
             // Update the paths for the icon and preview images to become absolute
-            template.Location = this.fs.Path.GetFullPath(this.fs.Path.GetDirectoryName(templatePath)!);
+            template.Location = filesystem.Path.GetFullPath(filesystem.Path.GetDirectoryName(templatePath)!);
             if (template.Icon != null)
             {
-                var iconPath = this.fs.Path.Combine(template.Location!, template.Icon);
-                if (!this.fs.File.Exists(iconPath))
+                var iconPath = filesystem.Path.Combine(template.Location!, template.Icon);
+                if (!filesystem.File.Exists(iconPath))
                 {
                     throw new TemplateLoadingException(
                         $"Missing icon file `{template.Icon}` at the template location.");
@@ -87,8 +79,8 @@ public class LocalTemplatesSource : ITemplatesSource
 
             for (var index = 0; index < template.PreviewImages.Count; index++)
             {
-                var previewImagePath = this.fs.Path.Combine(template.Location!, template.PreviewImages[index]);
-                if (!this.fs.File.Exists(previewImagePath))
+                var previewImagePath = filesystem.Path.Combine(template.Location!, template.PreviewImages[index]);
+                if (!filesystem.File.Exists(previewImagePath))
                 {
                     throw new TemplateLoadingException(
                         $"Missing preview image file `{previewImagePath}` at the template location.");

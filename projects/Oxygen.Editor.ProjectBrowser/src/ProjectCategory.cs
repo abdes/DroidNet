@@ -6,18 +6,11 @@ namespace Oxygen.Editor.ProjectBrowser;
 
 using DroidNet.Resources;
 
-public class ProjectCategory
+public class ProjectCategory(string id, string name, string description)
 {
-    public ProjectCategory(string id, string name, string description)
-    {
-        this.Id = id;
-        this.Name = name.TryGetLocalizedMine() ?? string.Empty;
-        this.Description = description.TryGetLocalizedMine() ?? string.Empty;
-    }
+    public string Id { get; } = id;
 
-    public string Id { get; }
+    public string Name { get; } = name.TryGetLocalizedMine();
 
-    public string Name { get; }
-
-    public string Description { get; }
+    public string Description { get; } = description.TryGetLocalizedMine();
 }
