@@ -68,9 +68,10 @@ public class DynamicObservableCollection<TSource, TResult> : ObservableCollectio
         {
             if (args.NewItems != null)
             {
+                var index = args.NewStartingIndex;
                 foreach (TSource item in args.NewItems)
                 {
-                    this.Add(this.transform(item));
+                    this.Insert(index++, this.transform(item));
                 }
             }
         }
@@ -78,10 +79,9 @@ public class DynamicObservableCollection<TSource, TResult> : ObservableCollectio
         {
             if (args.OldItems != null)
             {
-                foreach (TSource item in args.OldItems)
+                for (var itemNumber = 0; itemNumber < args.OldItems.Count; itemNumber++)
                 {
-                    var index = this.source.IndexOf(item);
-                    this.RemoveAt(index);
+                    this.RemoveAt(args.OldStartingIndex);
                 }
             }
         }
@@ -89,10 +89,10 @@ public class DynamicObservableCollection<TSource, TResult> : ObservableCollectio
         {
             if (args.NewItems != null)
             {
+                var index = args.NewStartingIndex;
                 foreach (TSource item in args.NewItems)
                 {
-                    var index = this.source.IndexOf(item);
-                    this[index] = this.transform(item);
+                    this[index++] = this.transform(item);
                 }
             }
         }
