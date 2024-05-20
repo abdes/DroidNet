@@ -16,8 +16,8 @@
     <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageVersion Include="Serilog.Sinks.Debug" Version="2.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Seq" Version="7.0.0" />
-    <PackageVersion Include="Testably.Abstractions" Version="3.2.0" />
+    <PackageVersion Include="Serilog.Sinks.Seq" Version="7.0.1" />
+    <PackageVersion Include="Testably.Abstractions" Version="3.2.1" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="System.Reactive" Version="6.0.0" />
@@ -41,11 +41,11 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="8.0.240109" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.4" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.5" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.5" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.5" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.5" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.5" />
     <PackageVersion Include="WinUIEx" Version="2.3.4" />
   </ItemGroup>
   <!-- Tooling -->
@@ -55,10 +55,10 @@
     <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.2.6" />
     <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.9.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.2" />
-    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.2" />
-    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.2" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.150" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.3" />
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.3" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.3" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.152" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
@@ -72,9 +72,9 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.11.0" />
     <PackageVersion Include="Moq" Version="4.20.70" />
     <PackageVersion Include="Verify.DiffPlex" Version="3.0.0" />
-    <PackageVersion Include="Verify.MSTest" Version="24.1.0" />
+    <PackageVersion Include="Verify.MSTest" Version="24.2.0" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
-    <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.6.0" />
-    <PackageVersion Include="Testably.Abstractions.Testing" Version="3.2.0" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.7.2" />
+    <PackageVersion Include="Testably.Abstractions.Testing" Version="3.2.1" />
   </ItemGroup>
 </Project>
