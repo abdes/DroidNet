@@ -690,7 +690,7 @@ public partial class DockingTreeNodeTests
         var root = new MockDockingTreeNode(this.docker, new LayoutGroup(this.docker));
 
         // Act
-        var act = () => root.MergeLeafParts();
+        var act = root.MergeLeafParts;
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -716,7 +716,7 @@ public partial class DockingTreeNodeTests
         };
 
         // Act
-        var act = () => root.MergeLeafParts();
+        var act = root.MergeLeafParts;
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -735,7 +735,7 @@ public partial class DockingTreeNodeTests
         };
 
         // Act
-        var act = () => root.MergeLeafParts();
+        var act = root.MergeLeafParts;
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
@@ -754,7 +754,7 @@ public partial class DockingTreeNodeTests
         };
 
         // Act
-        var act = () => root.MergeLeafParts();
+        var act = root.MergeLeafParts;
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>();
