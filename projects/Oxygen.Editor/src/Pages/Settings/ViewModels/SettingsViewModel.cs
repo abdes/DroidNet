@@ -25,13 +25,12 @@ public partial class SettingsViewModel : ObservableRecipient
     /// Initializes a new instance of the <see cref="SettingsViewModel" />
     /// class.
     /// </summary>
-    /// <param name="themeSelectorService"></param>
     public SettingsViewModel(IThemeSelectorService themeSelectorService)
     {
         this.elementTheme = themeSelectorService.Theme;
         this.versionDescription = GetVersionDescription();
 
-        this.SwitchThemeCommand = new RelayCommand<ElementTheme>(
+        this.SwitchThemeCommand = new AsyncRelayCommand<ElementTheme>(
             async (param) =>
             {
                 if (this.ElementTheme != param)
