@@ -9,18 +9,18 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.1.240328-rc" />
     <PackageVersion Include="DryIoc.dll" Version="6.0.0-preview-07" />
     <PackageVersion Include="DryIoc.Microsoft.DependencyInjection" Version="8.0.0-preview-02" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.5.240428000" />
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26031-preview" />
-    <PackageVersion Include="Serilog.Expressions" Version="4.0.0" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.5.240627000" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1" />
+    <PackageVersion Include="Serilog.Expressions" Version="5.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
-    <PackageVersion Include="Serilog.Sinks.Debug" Version="2.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Seq" Version="7.0.1" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Seq" Version="8.0.0" />
     <PackageVersion Include="Testably.Abstractions" Version="3.2.1" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="System.Reactive" Version="6.0.0" />
+    <PackageVersion Include="System.Reactive" Version="6.0.1" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
     <PackageVersion Include="System.Reactive.Async" Version="6.0.0-alpha.18" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
@@ -33,7 +33,7 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Xaml.Behaviors.WinUI.Managed" Version="2.0.9" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.2" />
@@ -41,38 +41,38 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.1.240328-rc" />
     <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="8.0.240109" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.5" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.5" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.5" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.5" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.5" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.7" />
     <PackageVersion Include="WinUIEx" Version="2.3.4" />
   </ItemGroup>
   <!-- Tooling -->
   <ItemGroup>
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
-    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.133" />
+    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.139" />
     <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.2.6" />
     <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.9.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.3" />
-    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.3" />
-    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.3" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.152" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.4" />
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.4" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.4" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.160" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
     <!-- Keep MSTest at 3.1.1 until https://github.com/microsoft/testfx/issues/2188 -->
-    <PackageVersion Include="MSTest.TestAdapter" Version="3.3.1" />
-    <PackageVersion Include="MSTest.TestFramework" Version="3.3.1" />
-    <PackageVersion Include="MSTest.Analyzers" Version="3.3.1" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
-    <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.9.0" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="3.4.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="3.4.3" />
+    <PackageVersion Include="MSTest.Analyzers" Version="3.4.3" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.10.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.11.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.11.3" />
     <PackageVersion Include="Moq" Version="4.20.70" />
-    <PackageVersion Include="Verify.DiffPlex" Version="3.0.0" />
-    <PackageVersion Include="Verify.MSTest" Version="24.2.0" />
+    <PackageVersion Include="Verify.DiffPlex" Version="3.1.0" />
+    <PackageVersion Include="Verify.MSTest" Version="25.3.1" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.2.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.7.2" />
     <PackageVersion Include="Testably.Abstractions.Testing" Version="3.2.1" />
