@@ -5,6 +5,7 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <WindowsSdkPackageVersion>10.0.22621.41</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x86;x64;arm64</Platforms>
