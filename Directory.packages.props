@@ -36,8 +36,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
     <PackageVersion Include="Handlebars.Net" Version="2.1.6" />
-    <!-- 8.3.0 is broken https://github.com/CommunityToolkit/dotnet/issues/927 -->
-    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.3.0" />
     <PackageVersion Include="CommunityToolkit.WinUI.Collections" Version="8.1.240821" />
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.1.240821" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.1.240821" />
@@ -69,10 +68,10 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.0" />
     <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="17.11.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.11.5" />
-    <PackageVersion Include="Moq" Version="4.20.70" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.12.2" />
+    <PackageVersion Include="Moq" Version="4.20.71" />
     <PackageVersion Include="Verify.DiffPlex" Version="3.1.0" />
-    <PackageVersion Include="Verify.MSTest" Version="26.2.0" />
+    <PackageVersion Include="Verify.MSTest" Version="26.3.1" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.4.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.7.8" />
     <PackageVersion Include="Testably.Abstractions.Testing" Version="3.2.3" />
