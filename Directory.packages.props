@@ -3,7 +3,8 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-  <!-- Windows App SDK-->
+  <!-- TODO: Remove the line from project files after .net SDK new version is released in 10/2024 -->
+  <!-- <WindowsSdkPackageVersion>10.0.22621.41</WindowsSdkPackageVersion> -->
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" Version="8.1.240821" />
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.1.240821" />
