@@ -1,7 +1,7 @@
 {
     // Use latest patch
     "sdk": {
-        "version": "8.0.202",
+        "version": "8.0.401",
         "allowPrerelease": false,
         "rollForward": "minor"
     }
