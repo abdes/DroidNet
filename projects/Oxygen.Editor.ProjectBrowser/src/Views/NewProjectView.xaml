@@ -18,7 +18,7 @@
 
     <!--  ViewModel will never be null under standard operation conditions  -->
 
-    <Grid Margin="32,10,32,20" VerticalAlignment="Stretch">
+    <Grid Margin="20,10" VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

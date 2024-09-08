@@ -17,7 +17,7 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 /// </summary>
 public sealed partial class ProjectTemplatesGrid
 {
-    public const double ItemHeight = 155;
+    public const double SingleRowHeight = 165;
 
     public const double IconHeight = 100;
 
