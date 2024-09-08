@@ -59,7 +59,7 @@
     </UserControl.Resources>
 
     <!--  Recent projects list header  -->
-    <Grid Margin="15,0,15,10">
+    <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="60" />
             <ColumnDefinition Width="2*" />

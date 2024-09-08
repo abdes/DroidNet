@@ -13,81 +13,88 @@
 
     <!--  ViewModel will never be null under standard operation conditions  -->
 
-    <ScrollViewer>
-        <Grid Margin="32,4,32,4">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+    <Grid Margin="20,10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!--  Title  -->
+        <TextBlock
+            Grid.Row="0"
+            Margin="0,0,0,20"
+            Style="{ThemeResource TitleTextBlockStyle}">
+            Hello!
+        </TextBlock>
 
-            <!--  Title  -->
-            <TextBlock
-                Grid.Row="0"
-                Margin="0,0,0,20"
-                Style="{ThemeResource TitleTextBlockStyle}">
-                Hello!
-            </TextBlock>
+        <ScrollView Grid.Row="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <!--  Project Templates Area  -->
-            <Border
-                Grid.Row="1"
-                BorderBrush="{ThemeResource ControlStrokeColorDefault}"
-                BorderThickness="0,0,0,1">
-                <pb:ProjectTemplatesGrid
-                    Height="{x:Bind pb:ProjectTemplatesGrid.ItemHeight}"
-                    VerticalAlignment="Top"
-                    ItemClick="OnTemplateClick"
-                    ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
-                    SelectedItem="{x:Bind ViewModel.SelectedTemplate, Mode=TwoWay}" />
+                <!--  Project Templates Area  -->
+                <Border
+                    Grid.Row="0"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefault}"
+                    BorderThickness="0,0,0,1">
+                    <pb:ProjectTemplatesGrid
+                        Height="{x:Bind pb:ProjectTemplatesGrid.SingleRowHeight}"
+                        VerticalAlignment="Top"
+                        ItemClick="OnTemplateClick"
+                        ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
+                        SelectedItem="{x:Bind ViewModel.SelectedTemplate, Mode=TwoWay}" />
 
-                <!--  Bottom Border Only  -->
-            </Border>
+                    <!--  Bottom Border Only  -->
+                </Border>
 
-            <!--  More Templates Button  -->
-            <StackPanel
-                Grid.Row="2"
-                HorizontalAlignment="Right"
-                Orientation="Horizontal">
-                <HyperlinkButton Command="{x:Bind ViewModel.MoreTemplatesCommand, FallbackValue={}}">
-                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                        <TextBlock Margin="0,0,20,0" Text="More Templates" />
-                        <SymbolIcon Symbol="Forward" />
-                    </StackPanel>
-                </HyperlinkButton>
-            </StackPanel>
-            <!--  End of Project Templates Area  -->
+                <!--  More Templates Button  -->
+                <StackPanel
+                    Grid.Row="1"
+                    Margin="0,0,0,20"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal">
+                    <HyperlinkButton Command="{x:Bind ViewModel.MoreTemplatesCommand, FallbackValue={}}">
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                            <TextBlock Margin="0,0,20,0" Text="More Templates" />
+                            <SymbolIcon Symbol="Forward" />
+                        </StackPanel>
+                    </HyperlinkButton>
+                </StackPanel>
+                <!--  End of Project Templates Area  -->
 
+                <!--  Recent projects Area  -->
+                <Border
+                    Grid.Row="2"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefault}"
+                    BorderThickness="0,0,0,1">
+                    <pb:RecentProjectsList
+                        VerticalAlignment="Top"
+                        ItemClick="OnProjectClick"
+                        RecentProjects="{x:Bind ViewModel.RecentProjects, FallbackValue={}}" />
 
-            <!--  Recent projects Area  -->
-            <Border
-                Grid.Row="3"
-                BorderBrush="{ThemeResource ControlStrokeColorDefault}"
-                BorderThickness="0,0,0,1">
-                <pb:RecentProjectsList
-                    VerticalAlignment="Top"
-                    ItemClick="OnProjectClick"
-                    RecentProjects="{x:Bind ViewModel.RecentProjects, FallbackValue={}}" />
+                    <!--  Bottom Border Only  -->
+                </Border>
 
-                <!--  Bottom Border Only  -->
-            </Border>
+                <!--  More Templates Button  -->
+                <StackPanel
+                    Grid.Row="3"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal">
+                    <HyperlinkButton Command="{x:Bind ViewModel.MoreProjectsCommand, FallbackValue={}}">
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                            <TextBlock Margin="0,0,20,0" Text="More Projects" />
+                            <SymbolIcon Symbol="Forward" />
+                        </StackPanel>
+                    </HyperlinkButton>
+                </StackPanel>
+                <!--  End of Project Templates Area  -->
 
-            <!--  More Templates Button  -->
-            <StackPanel
-                Grid.Row="4"
-                HorizontalAlignment="Right"
-                Orientation="Horizontal">
-                <HyperlinkButton Command="{x:Bind ViewModel.MoreProjectsCommand, FallbackValue={}}">
-                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                        <TextBlock Margin="0,0,20,0" Text="More Projects" />
-                        <SymbolIcon Symbol="Forward" />
-                    </StackPanel>
-                </HyperlinkButton>
-            </StackPanel>
-            <!--  End of Project Templates Area  -->
+            </Grid>
+        </ScrollView>
 
-        </Grid>
-    </ScrollViewer>
+    </Grid>
+
 </Page>
