@@ -13,40 +13,6 @@
 
     <!--  ViewModel will never be null under standard operation conditions  -->
 
-    <Page.Resources>
-        <!--  Recent project Item Template  -->
-        <DataTemplate x:Key="RecentProjectTemplate" x:DataType="projects:IProjectInfo">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="60" />
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="1*" />
-                </Grid.ColumnDefinitions>
-                <Ellipse
-                    x:Name="Ellipse"
-                    Grid.Column="0"
-                    Width="32"
-                    Height="32"
-                    Margin="6"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Fill="{ThemeResource SystemControlBackgroundBaseMediumBrush}" />
-                <TextBlock
-                    Grid.Column="1"
-                    Margin="12,6,0,0"
-                    x:Phase="1"
-                    Style="{ThemeResource BaseTextBlockStyle}"
-                    Text="{x:Bind Name}" />
-                <TextBlock
-                    Grid.Column="2"
-                    Margin="12,0,0,6"
-                    x:Phase="2"
-                    Style="{ThemeResource BodyTextBlockStyle}"
-                    Text="{x:Bind LastUsedOn}" />
-            </Grid>
-        </DataTemplate>
-    </Page.Resources>
-
     <ScrollViewer>
         <Grid Margin="32,4,32,4">
             <Grid.RowDefinitions>
