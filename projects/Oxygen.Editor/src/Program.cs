@@ -178,7 +178,12 @@ public static partial class Program
 
         sp.Container.Register<LocalProjectsSource>(Reuse.Singleton);
         sp.Container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
-        sp.Container.Register<IProjectsService, ProjectsService>(Reuse.Singleton);
+        sp.Container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+
+        // Register the project instance using a delegate that will request the currently open project from the project
+        // browser service.
+        sp.Container.RegisterDelegate(
+            resolverContext => resolverContext.Resolve<IProjectBrowserService>().CurrentProject);
 
         /*
          * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
@@ -215,7 +220,7 @@ public static partial class Program
                 {
                     // The project browser is the root of a navigation view with multiple pages.
                     Path = "pb",
-                    ViewModelType = typeof(ProjectBrowser.ViewModels.MainViewModel),
+                    ViewModelType = typeof(MainViewModel),
                     Children = new Routes(
                     [
                         new Route()
@@ -245,6 +250,12 @@ public static partial class Program
                         },
                         */
                     ]),
+                },
+                new Route()
+                {
+                    // The project browser is the root of a navigation view with multiple pages.
+                    Path = "we",
+                    ViewModelType = typeof(WorldEditor.ViewModels.MainViewModel),
                 },
             ]),
         },

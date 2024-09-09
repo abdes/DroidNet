@@ -30,7 +30,7 @@ public partial class NewProjectDialogViewModel : ObservableObject
     {
         this.Template = template;
 
-        var projectsService = Ioc.Default.GetRequiredService<IProjectsService>();
+        var projectsService = Ioc.Default.GetRequiredService<IProjectBrowserService>();
         this.PinnedLocations = projectsService.GetQuickSaveLocations();
         this.SelectedLocation = this.PinnedLocations[0];
 

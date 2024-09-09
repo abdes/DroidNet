@@ -15,11 +15,12 @@ using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 
 /// <summary>Provides method to access and manipulate projects.</summary>
-public class ProjectsService : IProjectsService
+public class ProjectBrowserService : IProjectBrowserService
 {
     private readonly IPathFinder finder;
     private readonly IProjectSource projectsSource;
@@ -27,7 +28,7 @@ public class ProjectsService : IProjectsService
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
 
-    public ProjectsService(IProjectSource source, IPathFinder finder, NativeStorageProvider localStorage)
+    public ProjectBrowserService(IProjectSource source, IPathFinder finder, NativeStorageProvider localStorage)
     {
         this.projectsSource = source;
         this.finder = finder;
@@ -35,6 +36,8 @@ public class ProjectsService : IProjectsService
 
         this.lazyLocations = new Lazy<Task<KnownLocation[]>>(this.InitializeKnownLocationsAsync);
     }
+
+    public IProject? CurrentProject { get; private set; }
 
     public async Task<bool> NewProjectFromTemplate(
         ITemplateInfo templateInfo,
@@ -136,13 +139,22 @@ public class ProjectsService : IProjectsService
         }
     }
 
-    public async Task<bool> LoadProjectAsync(string location)
+    public async Task<bool> LoadProjectInfoAsync(string location)
     {
-        await TryUpdateRecentUsageAsync(location).ConfigureAwait(false);
+        // Load the project info, update it, and save it
+        var projectInfo
+            = await this.projectsSource.LoadProjectInfoAsync(location).ConfigureAwait(false);
+        if (projectInfo != null)
+        {
+            await TryUpdateRecentUsageAsync(location).ConfigureAwait(false);
+            this.CurrentProject = new Project(projectInfo);
+            return true;
+        }
 
-        // TODO(abdes) load the project
-        return true;
+        return false;
     }
+
+    public Task<bool> LoadProjectAsync(IProjectInfo projectInfo) => throw new NotImplementedException();
 
     public IList<QuickSaveLocation> GetQuickSaveLocations()
     {

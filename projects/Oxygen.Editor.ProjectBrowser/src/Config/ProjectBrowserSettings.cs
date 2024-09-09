@@ -6,6 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.Config;
 
 using System.Diagnostics;
 using Oxygen.Editor.Core.Services;
+using Oxygen.Editor.Projects;
 
 /// <summary>Configuration settings for the project browser.</summary>
 /// These settings can be obtained only through the DI injector. They are

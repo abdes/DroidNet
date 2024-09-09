@@ -6,7 +6,8 @@
     },
     "OxygenEditor (Unpackaged)": {
       "commandName": "Project",
-      "commandLineArgs": "--environment Development"
+        "commandLineArgs": "--environment Development",
+        "nativeDebugging": true
     }
   }
 }

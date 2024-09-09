@@ -20,20 +20,19 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
         <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
-        <RootNamespace>Oxygen.Editor.ProjectBrowser</RootNamespace>
+        <RootNamespace>Oxygen.Editor.WorldEditor</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+      <None Remove="Views\MainView.xaml" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Collections" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-        <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <PackageReference Include="System.Linq.Async" />
-        <PackageReference Include="System.Reactive" />
         <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="System.Reactive.Async" />
         <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
 
@@ -42,7 +41,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
@@ -58,25 +56,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="Assets\Templates\**\*">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="Assets\Images\**\*">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="Config\ProjectBrowser.config.json">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
         <PRIResource Update="en-US\Strings.resw" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Views\MainView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
     </ItemGroup>
 
 </Project>

@@ -257,7 +257,7 @@
             <ListView
                 Grid.Row="3"
                 IsItemClickEnabled="True"
-                ItemClick="ListView_OnItemClick"
+                ItemClick="ListView_OnItemClickAsync"
                 ItemTemplateSelector="{StaticResource FileListDataTemplateSelector}"
                 ItemsSource="{x:Bind ViewModel.AdvancedFileList, Mode=OneWay}"
                 SelectionMode="Single" />

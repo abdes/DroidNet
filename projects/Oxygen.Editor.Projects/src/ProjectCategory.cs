@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser;
+namespace Oxygen.Editor.Projects;
 
 using DroidNet.Resources;
 

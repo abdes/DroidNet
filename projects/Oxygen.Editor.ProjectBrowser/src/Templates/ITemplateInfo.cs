@@ -4,6 +4,8 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
+using Oxygen.Editor.Projects;
+
 public interface ITemplateInfo
 {
     string Name { get; set; }

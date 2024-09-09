@@ -11,11 +11,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
 using DroidNet.Hosting.Generators;
+using DroidNet.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+#pragma warning disable IDE0001 // Simplify Names
 using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
+
+#pragma warning restore IDE0001 // Simplify Names
 
 /// <summary>ViewModel for the page used to open an existing project in the project browser.</summary>
 [InjectAs(ServiceLifetime.Singleton)]
@@ -24,7 +29,9 @@ public partial class OpenProjectViewModel : ObservableObject
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
     private readonly object fileListLock = new();
-    private readonly IProjectsService projectsService;
+    private readonly IProjectBrowserService projectBrowserService;
+    private readonly DispatcherQueue dispatcherQueue;
+    private readonly IRouter router;
 
 #pragma warning disable CA1859 // Use concrete types when possible for improved performance
     private readonly IStorageProvider storageProvider;
@@ -48,11 +55,15 @@ public partial class OpenProjectViewModel : ObservableObject
     private KnownLocation? selectedLocation;
 
     public OpenProjectViewModel(
+        IRouter router,
         NativeStorageProvider storageProvider,
-        IProjectsService projectsService)
+        IProjectBrowserService projectBrowserService)
     {
+        this.dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        this.router = router;
+
         this.storageProvider = storageProvider;
-        this.projectsService = projectsService;
+        this.projectBrowserService = projectBrowserService;
 
         BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
@@ -87,7 +98,7 @@ public partial class OpenProjectViewModel : ObservableObject
     {
         this.OnPropertyChanging(nameof(this.Locations));
 
-        foreach (var location in await this.projectsService.GetKnownLocationsAsync().ConfigureAwait(true))
+        foreach (var location in await this.projectBrowserService.GetKnownLocationsAsync().ConfigureAwait(true))
         {
             this.Locations[location.Key.ToString()] = location;
         }
@@ -120,7 +131,16 @@ public partial class OpenProjectViewModel : ObservableObject
             .ConfigureAwait(true);
     }
 
-    public void OpenProjectFile(string location) => this.projectsService.LoadProjectAsync(location).Wait();
+    public async Task<bool> OpenProjectFile(string location)
+    {
+        var success = await this.projectBrowserService.LoadProjectInfoAsync(location!).ConfigureAwait(false);
+        if (success)
+        {
+            success = this.dispatcherQueue.TryEnqueue(() => this.router.Navigate("/we", new FullNavigation()));
+        }
+
+        return success;
+    }
 
     public void ApplyFilter(string pattern)
         => this.AdvancedFileList.Filter = x => ((IStorageItem)x).Name.Contains(

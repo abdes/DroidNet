@@ -13,7 +13,7 @@ public class KnownLocation(
     string name,
     string location,
     NativeStorageProvider storage,
-    IProjectsService projectsService)
+    IProjectBrowserService projectBrowserService)
 {
     public KnownLocations Key { get; init; } = key;
 
@@ -28,7 +28,7 @@ public class KnownLocation(
     {
         if (this.Key == KnownLocations.RecentProjects)
         {
-            await foreach (var item in projectsService.GetRecentlyUsedProjectsAsync(cancellationToken)
+            await foreach (var item in projectBrowserService.GetRecentlyUsedProjectsAsync(cancellationToken)
                                .ConfigureAwait(false))
             {
                 if (cancellationToken.IsCancellationRequested)

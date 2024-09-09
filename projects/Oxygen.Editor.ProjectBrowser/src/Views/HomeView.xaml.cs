@@ -10,7 +10,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
@@ -30,11 +30,15 @@ public sealed partial class HomeView
         await this.ViewModel!.LoadRecentProjectsAsync().ConfigureAwait(true);
     }
 
-    private void OnProjectClick(object sender, IProjectInfo e)
+    private async void OnRecentProjectOpenAsync(object sender, RecentProjectsList.ItemActivatedEventArgs args)
     {
         _ = sender;
 
-        this.ViewModel!.OpenProject(e);
+        var success = await this.ViewModel!.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(false);
+        if (!success)
+        {
+            // TODO: display an error message
+        }
     }
 
     private async void OnTemplateClick(object? sender, ITemplateInfo template)

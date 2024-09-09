@@ -14,9 +14,12 @@ using CommunityToolkit.WinUI.Collections;
 using DroidNet.Collections;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.Projects;
+using Windows.System;
 using static Oxygen.Editor.ProjectBrowser.Controls.ProjectItemWithThumbnail;
 using SortDescription = CommunityToolkit.WinUI.Collections.SortDescription;
 using SortDirection = CommunityToolkit.WinUI.Collections.SortDirection;
@@ -41,7 +44,7 @@ public sealed partial class RecentProjectsList
     [Browsable(true)]
     [Category("Action")]
     [Description("Invoked when user clicks a project item in the list")]
-    public event EventHandler<IProjectInfo>? ItemClick;
+    public event EventHandler<ItemActivatedEventArgs>? ItemActivated;
 
     public ObservableCollection<IProjectInfo> RecentProjects
     {
@@ -86,12 +89,24 @@ public sealed partial class RecentProjectsList
 
     private static SortByName SortByName() => new();
 
-    private void OnProjectItemClick(object sender, ItemClickEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs args)
     {
-        _ = sender;
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.dynamicProjectItems?.Dispose();
+        this.dynamicProjectItems = null;
+    }
+
+    private void OnProjectItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs eventArgs)
+    {
+        _ = eventArgs;
+
+        var listView = (ListView)sender;
+        var selectedItem = (ProjectItemWithThumbnail)listView.SelectedItem;
 
         Debug.WriteLine("Item clicked");
-        this.ItemClick?.Invoke(this, ((ProjectItemWithThumbnail)e.ClickedItem).ProjectInfo);
+        this.ItemActivated?.Invoke(this, new ItemActivatedEventArgs(selectedItem.ProjectInfo));
     }
 
     [RelayCommand]
@@ -136,13 +151,21 @@ public sealed partial class RecentProjectsList
         this.AdvancedProjectItems.SortDescriptions.Add(this.byNameSortDescription);
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs args)
+    private void OnListViewKeyDown(object sender, KeyRoutedEventArgs eventArgs)
     {
-        _ = sender; // unused
-        _ = args; // unused
+        if (eventArgs.Key is VirtualKey.Enter or VirtualKey.Space)
+        {
+            var listView = (ListView)sender;
+            var selectedItem = (ProjectItemWithThumbnail)listView.SelectedItem;
 
-        this.dynamicProjectItems?.Dispose();
-        this.dynamicProjectItems = null;
+            Debug.WriteLine("Item clicked");
+            this.ItemActivated?.Invoke(this, new ItemActivatedEventArgs(selectedItem.ProjectInfo));
+        }
+    }
+
+    public class ItemActivatedEventArgs(IProjectInfo projectInfo) : EventArgs
+    {
+        public IProjectInfo ProjectInfo => projectInfo;
     }
 }
 

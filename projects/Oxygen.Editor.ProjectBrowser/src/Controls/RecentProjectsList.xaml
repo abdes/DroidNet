@@ -116,9 +116,9 @@
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             BorderThickness="0"
-            IsItemClickEnabled="True"
-            ItemClick="OnProjectItemClick"
+            DoubleTapped="OnProjectItemDoubleTapped"
             ItemTemplate="{StaticResource RecentProjectTemplate}"
-            ItemsSource="{x:Bind AdvancedProjectItems}" />
+            ItemsSource="{x:Bind AdvancedProjectItems}"
+            PreviewKeyDown="OnListViewKeyDown" />
     </Grid>
 </UserControl>

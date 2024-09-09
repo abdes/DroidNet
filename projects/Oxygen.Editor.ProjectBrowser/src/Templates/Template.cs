@@ -6,6 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 using System.Text.Json.Serialization;
 using DroidNet.Resources;
+using Oxygen.Editor.Projects;
 
 [method: JsonConstructor]
 public class Template(string description, string name, ProjectCategory category) : ITemplateInfo
