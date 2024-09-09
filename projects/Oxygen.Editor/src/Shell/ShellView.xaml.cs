@@ -50,18 +50,17 @@ public sealed partial class ShellView
     {
         // TODO: refactor custom window title bar
         // TitleBarHelper.UpdateTitleBar(this.RequestedTheme);
-
         this.KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.Left, VirtualKeyModifiers.Menu));
         this.KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.GoBack));
 
         this.ShellMenuBarSettingsButton.AddHandler(
             PointerPressedEvent,
             new PointerEventHandler(this.ShellMenuBarSettingsButton_PointerPressed),
-            true);
+            handledEventsToo: true);
         this.ShellMenuBarSettingsButton.AddHandler(
             PointerReleasedEvent,
             new PointerEventHandler(this.ShellMenuBarSettingsButton_PointerReleased),
-            true);
+            handledEventsToo: true);
     }
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)

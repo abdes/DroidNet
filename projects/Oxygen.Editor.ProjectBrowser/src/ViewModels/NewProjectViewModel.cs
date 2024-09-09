@@ -16,9 +16,11 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>The ViewModel for the StartNewPage.</summary>
 /// <param name="templateService">The template service to be used to access project templates.</param>
-/// <param name="projectsService">The project service to be used to access and manipulate projects.</param>
+/// <param name="projectBrowserService">The project service to be used to access and manipulate projects.</param>
 [InjectAs(ServiceLifetime.Singleton)]
-public partial class NewProjectViewModel(ITemplatesService templateService, IProjectsService projectsService)
+public partial class NewProjectViewModel(
+    ITemplatesService templateService,
+    IProjectBrowserService projectBrowserService)
     : ObservableObject
 {
     [ObservableProperty]
@@ -50,6 +52,6 @@ public partial class NewProjectViewModel(ITemplatesService templateService, IPro
         Debug.WriteLine(
             $"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await projectsService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        return await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }
 }

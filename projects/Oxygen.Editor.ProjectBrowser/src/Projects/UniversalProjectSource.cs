@@ -4,6 +4,7 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 
 /// <summary>
@@ -30,9 +31,6 @@ public class UniversalProjectSource : IProjectSource
 
         return projectInfo;
     }
-
-    public async Task<bool> MakeProjectAvailable(IProjectInfo projectInfo)
-        => await this.localSource.MakeProjectAvailable(projectInfo).ConfigureAwait(true);
 
     public async Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath)
         => await this.localSource.CreateNewProjectFolder(projectName, atLocationPath).ConfigureAwait(true);

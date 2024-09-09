@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Utils;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 using Windows.Storage;
@@ -73,13 +74,6 @@ public partial class LocalProjectsSource : IProjectSource
         }
 
         return null;
-    }
-
-    public async Task<bool> MakeProjectAvailable(IProjectInfo projectInfo)
-    {
-        // Local projects do not need anything to be available.
-        await Task.CompletedTask.ConfigureAwait(true);
-        return true;
     }
 
     public async Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath)

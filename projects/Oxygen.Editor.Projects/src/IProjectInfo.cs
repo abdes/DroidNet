@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.Projects;
 
 using System.Text.Json.Serialization;
 

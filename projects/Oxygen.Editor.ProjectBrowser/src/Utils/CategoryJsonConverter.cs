@@ -7,6 +7,7 @@ namespace Oxygen.Editor.ProjectBrowser.Utils;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.ProjectBrowser.Config;
+using Oxygen.Editor.Projects;
 
 public sealed class CategoryJsonConverter(ProjectBrowserSettings settings) : JsonConverter<ProjectCategory>
 {

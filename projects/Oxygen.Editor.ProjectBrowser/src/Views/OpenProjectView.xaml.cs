@@ -33,7 +33,7 @@ public sealed partial class OpenProjectView
         this.ViewModel!.SelectLocation(e);
     }
 
-    private void ListView_OnItemClick(object sender, ItemClickEventArgs e)
+    private async void ListView_OnItemClickAsync(object sender, ItemClickEventArgs e)
     {
         _ = sender;
 
@@ -46,7 +46,7 @@ public sealed partial class OpenProjectView
         }
         else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
-            this.ViewModel!.OpenProjectFile((item as INestedItem)!.ParentPath);
+            await this.ViewModel!.OpenProjectFile((item as INestedItem)!.ParentPath).ConfigureAwait(false);
         }
     }
 

@@ -72,7 +72,7 @@
                     BorderThickness="0,0,0,1">
                     <pb:RecentProjectsList
                         VerticalAlignment="Top"
-                        ItemClick="OnProjectClick"
+                        ItemActivated="OnRecentProjectOpenAsync"
                         RecentProjects="{x:Bind ViewModel.RecentProjects, FallbackValue={}}" />
 
                     <!--  Bottom Border Only  -->

@@ -5,16 +5,21 @@
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
 using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.Projects;
 
-public interface IProjectsService
+public interface IProjectBrowserService
 {
+    IProject? CurrentProject { get; }
+
     IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
 
     Task<bool> NewProjectFromTemplate(ITemplateInfo templateInfo, string projectName, string atLocationPath);
 
     bool CanCreateProject(string projectName, string atLocationPath);
 
-    Task<bool> LoadProjectAsync(string location);
+    Task<bool> LoadProjectInfoAsync(string location);
+
+    Task<bool> LoadProjectAsync(IProjectInfo projectInfo);
 
     IList<QuickSaveLocation> GetQuickSaveLocations();
 

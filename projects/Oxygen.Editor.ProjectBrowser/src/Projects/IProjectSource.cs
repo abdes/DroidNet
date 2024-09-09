@@ -4,6 +4,7 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 
 /// <summary>
@@ -25,8 +26,6 @@ public interface IProjectSource
     string[] CommonProjectLocations { get; }
 
     Task<IProjectInfo?> LoadProjectInfoAsync(string fullPath);
-
-    Task<bool> MakeProjectAvailable(IProjectInfo projectInfo);
 
     Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath);
 
