@@ -23,7 +23,11 @@
         <RootNamespace>Oxygen.Editor.WorldEditor</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-      <None Remove="Views\MainView.xaml" />
+      <None Remove="Views\ContentBrowserView.xaml" />
+      <None Remove="Views\ProjectExplorerView.xaml" />
+      <None Remove="Views\RendererView.xaml" />
+      <None Remove="Views\SceneDetailsView.xaml" />
+      <None Remove="Views\WorkspaceView.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -37,12 +41,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
 
@@ -56,11 +61,35 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Page Update="Views\ContentBrowserView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Views\SceneDetailsView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Views\ProjectExplorerView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Views\RendererView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
         <PRIResource Update="en-US\Strings.resw" />
     </ItemGroup>
 
     <ItemGroup>
-      <Page Update="Views\MainView.xaml">
+      <Page Update="Views\WorkspaceView.xaml">
         <Generator>MSBuild:Compile</Generator>
       </Page>
     </ItemGroup>

@@ -4,6 +4,7 @@
 
 namespace Oxygen.Editor;
 
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Abstractions;
@@ -11,6 +12,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Config;
+using DroidNet.Docking.Controls;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
@@ -205,6 +207,9 @@ public static partial class Program
         sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
         // Views and ViewModels that are not auto-registered for injection
+        // TODO(abdes): refactor into extension method
+        sp.Container.Register<DockPanelViewModel>(Reuse.Transient);
+        sp.Container.Register<DockPanel>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(
@@ -255,7 +260,7 @@ public static partial class Program
                 {
                     // The project browser is the root of a navigation view with multiple pages.
                     Path = "we",
-                    ViewModelType = typeof(WorldEditor.ViewModels.MainViewModel),
+                    ViewModelType = typeof(WorldEditor.ViewModels.WorkspaceViewModel),
                 },
             ]),
         },
