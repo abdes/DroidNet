@@ -2,12 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
+namespace DroidNet.Converters.Tests;
 
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -15,7 +16,7 @@ public class DictionaryValueConverterTest
 {
     private readonly DictionaryValueConverter<int> converter = new();
 
-    [TestMethod]
+    [UITestMethod]
     public void Convert_ReturnsValue_ForExistingKey()
     {
         // Arrange
