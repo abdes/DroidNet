@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
+namespace DroidNet.Converters.Tests;
 
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
