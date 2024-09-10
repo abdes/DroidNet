@@ -4,12 +4,8 @@
 
 namespace Oxygen.Editor.WorldEditor.ViewModels;
 
-using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.Generators;
 using Microsoft.Extensions.DependencyInjection;
 
-/// <summary>
-/// The view model for the World Editor main view.
-/// </summary>
-[InjectAs(ServiceLifetime.Singleton)]
-public class MainViewModel : ObservableObject;
+[InjectAs(ServiceLifetime.Transient)]
+public class ContentBrowserViewModel;

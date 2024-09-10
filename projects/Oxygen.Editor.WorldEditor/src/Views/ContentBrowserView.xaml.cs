@@ -10,13 +10,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
-/// <summary>
-/// The World Editor main view provides the primary UI for the user to create and manipulate world scenes and associated
-/// entities.
-/// </summary>
-[ViewModel(typeof(MainViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
-public sealed partial class MainView : Page
+[ViewModel(typeof(ContentBrowserViewModel))]
+[InjectAs(ServiceLifetime.Transient)]
+public sealed partial class ContentBrowserView : UserControl
 {
-    public MainView() => this.InitializeComponent();
+    public ContentBrowserView() => this.InitializeComponent();
 }
