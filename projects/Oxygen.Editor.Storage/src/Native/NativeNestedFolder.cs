@@ -4,12 +4,15 @@
 
 namespace Oxygen.Editor.Storage.Native;
 
-public class NativeNestedFolder(
-    NativeStorageProvider storageProvider,
-    string name,
-    string path,
-    string parentPath,
-    DateTime lastModifiedTime) : NativeFolder(storageProvider, name, path, lastModifiedTime), INestedItem
+public class NativeNestedFolder : NativeFolder, INestedFolder
 {
-    public string ParentPath { get; } = parentPath;
+    internal NativeNestedFolder(
+        NativeStorageProvider storageProvider,
+        string name,
+        string path,
+        string parentPath)
+        : base(storageProvider, name, path)
+        => this.ParentPath = parentPath;
+
+    public string ParentPath { get; }
 }
