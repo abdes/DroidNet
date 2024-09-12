@@ -5,4 +5,4 @@
 namespace Oxygen.Editor.Storage;
 
 /// <summary>Represents a folder that resides within another folder.</summary>
-public interface INestedItemFolder : INestedItem, IFolder;
+public interface INestedFolder : INestedItem, IFolder;

@@ -20,12 +20,6 @@ public enum ProjectItemKind : uint
     /// <summary>A file.</summary>
     File = 1u << 1,
 
-    /// <summary>Name that satisfies the naming pattern for a project manifest.</summary>
-    Manifest = 1u << 2,
-
-    /// <summary>A file that satisfies the naming pattern for a project manifest.</summary>
-    ProjectManifest = File | Manifest,
-
     /// <summary>Special value that includes all items.</summary>
     All = File | Folder,
 }

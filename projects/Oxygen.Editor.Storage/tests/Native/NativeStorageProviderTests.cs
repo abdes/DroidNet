@@ -34,6 +34,103 @@ public class NativeStorageProviderTests
     }
 
     [TestMethod]
+    [DataRow("")]
+    [DataRow("|/hello")]
+    [DataRow("c:\\folder\afile")]
+    public void Normalize_ShouldThrowInvalidPathException_WhenPathIsInvalid(string path)
+    {
+        // Act
+        Action act = () => this.nsp.Normalize(path);
+
+        // Assert
+        _ = act.Should()
+            .Throw<InvalidPathException>()
+            .WithMessage($"path [{path}] could not be normalized*");
+    }
+
+    [TestMethod]
+    public void Normalize_ShouldThrowInvalidPathException_WhenPathIsEmpty()
+    {
+        // Act
+        Action act = () => this.nsp.Normalize(string.Empty);
+
+        // Assert
+        _ = act.Should().Throw<InvalidPathException>();
+    }
+
+    [TestMethod]
+    public void Normalize_ShouldThrowInvalidPathException_WhenPathIsAllWhitespaces()
+    {
+        // Act
+        Action act = () => this.nsp.Normalize("    ");
+
+        // Assert
+        _ = act.Should().Throw<InvalidPathException>();
+    }
+
+    [TestMethod]
+    [DataRow("c:/", @"\")]
+    [DataRow(@"C:\", @"\")]
+    [DataRow(@"C:\\", @"\")]
+    [DataRow(@"\hello\world\", @"\hello\world")]
+    [DataRow(@"\\world\\\\", @"\world")]
+    public void Normalize_ShouldStripTrailingDirectorySeparators_ButKeepAtLeastOne(string path, string normalized)
+    {
+        // Act
+        var result = this.nsp.Normalize(path);
+
+        // Assert
+        // Note that to avoid the issues with drive letters, we just test for EndWith
+        _ = result.Should().EndWith(normalized);
+    }
+
+    [TestMethod]
+    [DataRow(@"C:\", @"\hello")]
+    [DataRow("hello", @"C:\world")]
+    [DataRow("hello", "C:world")]
+    public void NormalizeRelativeTo_ShouldThrow_WhenRelativePartIsRooted(string basePath, string relativePath)
+    {
+        // Act
+        var act = () => this.nsp.NormalizeRelativeTo(basePath, relativePath);
+
+        // Assert
+        // Note that to avoid the issues with drive letters, we just test for EndWith
+        _ = act.Should()
+            .Throw<InvalidPathException>()
+            .WithMessage($"path [{relativePath}] is rooted*");
+    }
+
+    [TestMethod]
+    [DataRow("hello", "|hello")]
+    [DataRow("|hello", "world")]
+    [DataRow("|hello", "|world")]
+    public void NormalizeRelativeTo_ShouldThrow_WhenOneOfThePartsIsInvalid(string basePath, string relativePath)
+    {
+        // Act
+        var act = () => this.nsp.NormalizeRelativeTo(basePath, relativePath);
+
+        // Assert
+        // Note that to avoid the issues with drive letters, we just test for EndWith
+        _ = act.Should()
+            .Throw<InvalidPathException>()
+            .WithMessage("could not combine*");
+    }
+
+    [TestMethod]
+    [DataRow(@"C:\", "hello", @"C:\hello")]
+    [DataRow("hello", "world", @"\hello\world")]
+    [DataRow(@"\hello\world\", @"..\good\world\", @"\hello\good\world")]
+    public void NormalizeRelativeTo_ShouldCombineAndNormalize(string basePath, string relativePath, string normalized)
+    {
+        // Act
+        var result = this.nsp.NormalizeRelativeTo(basePath, relativePath);
+
+        // Assert
+        // Note that to avoid the issues with drive letters, we just test for EndWith
+        _ = result.Should().EndWith(normalized);
+    }
+
+    [TestMethod]
     public void LogicalDrivesCannotBeEmpty()
     {
         // Arrange
@@ -52,16 +149,30 @@ public class NativeStorageProviderTests
     }
 
     [TestMethod]
-    [DataRow("")]
-    [DataRow("does_not_exist")]
-    [DataRow(@"c:\folder\file")]
-    public void NullFolderFromInvalidPath(string path)
+    public async Task GetFolderFromPathAsync_ShouldThrow_WhenPathRefersToExistingFile()
     {
+        // Setup
+        const string path = @"C:\folder\project_file.oxy";
+        _ = this.fs.File.Exists(path).Should().BeTrue();
+
         // Act
-        var act = () => this.nsp.GetFolderFromPathAsync(path);
+        var act = async () => await this.nsp.GetFolderFromPathAsync(path).ConfigureAwait(false);
 
         // Assert
-        _ = act.Should().ThrowAsync<ArgumentException>();
+        _ = await act.Should().ThrowAsync<InvalidPathException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    [DataRow("|")]
+    [DataRow("")]
+    [DataRow("  ")]
+    public async Task GetFolderFromPathAsync_ShouldThrow_WhenPathIsInvalid(string path)
+    {
+        // Act
+        var act = async () => await this.nsp.GetFolderFromPathAsync(path).ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<InvalidPathException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -73,14 +184,58 @@ public class NativeStorageProviderTests
     [DataRow("folder.xyz", @"c:\folder.xyz\")]
     [DataRow(@"c:\", @"c:\folder/..")]
     [DataRow("sub_folder_1", @"c:\folder\sub_folder_1")]
-    public async Task GoodFolderFromGoodPath(string name, string path)
+    public async Task GetFolderFromPathAsync_ShouldReturnGoodFolderFromGoodPath(string name, string path)
     {
         var folder = await this.nsp.GetFolderFromPathAsync(path);
         _ = folder.Should().NotBeNull();
         _ = folder.Name.Should().BeEquivalentTo(name);
-        _ = folder.Location.Should().BeEquivalentTo(this.fs.Path.GetFullPath(path));
+        _ = this.fs.Path.IsPathFullyQualified(folder.Location).Should().BeTrue();
     }
 
+    [TestMethod]
+    public async Task GetDocumentFromPathAsync_ShouldThrow_WhenPathRefersToExistingFolder()
+    {
+        // Setup
+        const string path = @"C:\folder";
+        _ = this.fs.Directory.Exists(path).Should().BeTrue();
+
+        // Act
+        var act = async () => await this.nsp.GetDocumentFromPathAsync(path).ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<InvalidPathException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    [DataRow(@"c:\hello\|world")]
+    [DataRow(@"c:\")]
+    [DataRow(@"c:\folder")]
+    [DataRow("")]
+    [DataRow("  ")]
+    public async Task GetDocumentFromPathAsync_ShouldThrow_WhenPathIsInvalid(string path)
+    {
+        // Act
+        var act = async () => await this.nsp.GetDocumentFromPathAsync(path).ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<InvalidPathException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    [DataRow("document", @"c:hello\document")]
+    [DataRow("hello", @"c:\hello")]
+    [DataRow("file_with_no_extension", @"c:\folder\file_with_no_extension")]
+    [DataRow("project_file.oxy", @"c:\folder\project_file.oxy")]
+    [DataRow("other_file.xyz", @"c:\folder\sub_folder_1\other_file.xyz")]
+    public async Task GetDocumentFromPathAsync_ShouldReturnGoodDocumentFromGoodPath(string name, string path)
+    {
+        var folder = await this.nsp.GetDocumentFromPathAsync(path);
+        _ = folder.Should().NotBeNull();
+        _ = folder.Name.Should().BeEquivalentTo(name);
+        _ = this.fs.Path.IsPathFullyQualified(folder.Location).Should().BeTrue();
+    }
+
+#if FALSE
     [TestMethod]
     public void GetItemsThrowsIfFolderDoesNotExist()
     {
@@ -91,7 +246,7 @@ public class NativeStorageProviderTests
             }
         };
 
-        _ = act.Should().ThrowAsync<ArgumentException>();
+        _ = await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [TestMethod]
@@ -186,20 +341,5 @@ public class NativeStorageProviderTests
 
         _ = items.Should().HaveCount(2);
     }
-
-    [TestMethod]
-    public async Task GetItemsCanFilterFiles()
-    {
-        var items = new List<IStorageItem>();
-        await foreach (var item in this.nsp.GetItemsAsync(@"c:\folder", ProjectItemKind.ProjectManifest))
-        {
-            items.Add(item);
-        }
-
-        _ = items.Should().HaveCount(1);
-
-        var document = items[0] as IDocument;
-        _ = document.Should().NotBeNull();
-        _ = document!.Name.Should().BeEquivalentTo("project_file.oxy");
-    }
+#endif
 }

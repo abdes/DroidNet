@@ -4,7 +4,13 @@
 
 namespace Oxygen.Editor.Storage;
 
+/// <summary>
+/// Represents an item that can be nested within a folder structure.
+/// </summary>
 public interface INestedItem
 {
+    /// <summary>
+    /// Gets the path of the parent folder containing the current item.
+    /// </summary>
     string ParentPath { get; }
 }
