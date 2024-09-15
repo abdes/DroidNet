@@ -710,6 +710,58 @@ public class NativeFileTests
     }
 
     [TestMethod]
+    public async Task WriteAllText_WhenDocumentExists_OverwritesContent()
+    {
+        // Setup
+        const string documentPath = @"C:\file1";
+        var document = await this.nsp.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+        _ = (await document.ExistsAsync().ConfigureAwait(false)).Should().BeTrue();
+        var originalContent = await document.ReadAllTextAsync().ConfigureAwait(false);
+        _ = originalContent.Should().Be(File1Content);
+        const string newContent = "new content";
+
+        // Act
+        await document.WriteAllTextAsync(newContent).ConfigureAwait(false);
+
+        // Assert
+        var writtentContent = await document.ReadAllTextAsync().ConfigureAwait(false);
+        _ = writtentContent.Should().Be(newContent);
+    }
+
+    [TestMethod]
+    public async Task WriteAllText_DocumentNotExisting_CreatesDocumentAndWrites()
+    {
+        // Setup
+        const string documentPath = @"C:\not-existing";
+        var document = await this.nsp.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+        _ = (await document.ExistsAsync().ConfigureAwait(false)).Should().BeFalse();
+        const string content = "content";
+
+        // Act
+        await document.WriteAllTextAsync(content).ConfigureAwait(false);
+
+        // Assert
+        _ = (await document.ExistsAsync().ConfigureAwait(false)).Should().BeTrue();
+        var writtentContent = await document.ReadAllTextAsync().ConfigureAwait(false);
+        _ = writtentContent.Should().Be(content);
+    }
+
+    [TestMethod]
+    public async Task ReadAllText_WhenWriteFails_ThrowsStorageException()
+    {
+        // Setup
+        const string documentPath = @"C:\FORBIDDEN";
+        var document = await this.nsp.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+        _ = (await document.ExistsAsync().ConfigureAwait(false)).Should().BeTrue();
+
+        // Act
+        var act = async () => await document.WriteAllTextAsync("content").ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<StorageException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
     public async Task ReadAllText_DocumentNotExisting_ThrowsItemNotFoundException()
     {
         // Setup

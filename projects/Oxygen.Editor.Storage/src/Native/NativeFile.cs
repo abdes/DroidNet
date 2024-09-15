@@ -150,6 +150,20 @@ public class NativeFile : IDocument
         }
     }
 
+    public async Task WriteAllTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var fs = this.StorageProvider.FileSystem;
+        try
+        {
+            await fs.File.WriteAllTextAsync(this.Location, text, Encoding.UTF8, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            throw new StorageException($"could not write text content to document [{this.Location}]", ex);
+        }
+    }
+
     public async Task RenameAsync(string desiredNewName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
