@@ -279,4 +279,23 @@ public interface IDocument : INestedItem, IStorageItem
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
     Task<string> ReadAllTextAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asynchronously writes the specified string to the document, using the "UTF-8" encoding. If the document already exists, it
+    /// is truncated and overwritten. If it does not exist, it is created.
+    /// </summary>
+    /// <param name="text">
+    /// The string, representing the content, to write to the document.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A token to monitor for cancellation requests.
+    /// </param>
+    /// <returns>
+    /// A <see cref="Task{String}" /> that represents the asynchronous operation.
+    /// </returns>
+    /// <exception cref="StorageException">
+    /// Thrown for any errors during the write operation. The <see cref="Exception.InnerException" /> may provide more specific
+    /// information (e.g., <see cref="IOException" />).
+    /// </exception>
+    Task WriteAllTextAsync(string text, CancellationToken cancellationToken = default);
 }
