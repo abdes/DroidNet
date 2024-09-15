@@ -6,7 +6,7 @@ namespace Oxygen.Editor.Projects;
 
 using System.Text.Json.Serialization;
 
-public interface IProjectInfo
+public interface IProjectInfo : IEquatable<ProjectInfo?>
 {
     string Name { get; set; }
 
