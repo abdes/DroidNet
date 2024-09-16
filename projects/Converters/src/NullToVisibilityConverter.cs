@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>Convert a <see langword="null" /> value to a <see cref="Visibility" /> value.</summary>
-public class NullVisibilityConverter : IValueConverter
+public class NullToVisibilityConverter : IValueConverter
 {
     /// <summary>
     /// Convert a <see langword="null" /> value to a <see cref="Visibility" /> value. When the input value is <see langword="null" />, the <paramref name="parameter" /> can be used to specify the <see cref="Visibility" /> value to return.
@@ -41,5 +41,5 @@ public class NullVisibilityConverter : IValueConverter
     }
 
     public object ConvertBack(object value, Type targetType, object? parameter, string language)
-        => throw new InvalidOperationException("Don't use NullVisibilityConverter.ConvertBack; it's meaningless.");
+        => throw new InvalidOperationException("Don't use NullToVisibilityConverter.ConvertBack; it's meaningless.");
 }
