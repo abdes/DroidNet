@@ -32,7 +32,7 @@ public class Template(string description, string name, ProjectCategory category)
 
     public string? Icon { get; set; }
 
-    public IList<string> PreviewImages { get; set; } = new List<string>();
+    public IList<string> PreviewImages { get; set; } = [];
 
     public DateTime? LastUsedOn { get; set; }
 }

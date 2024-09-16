@@ -6,7 +6,6 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -34,8 +33,8 @@ public sealed partial class ProjectTemplatesGrid
     /// <summary>Event fired when an item in the project templates collection is clicked.</summary>
     [Browsable(true)]
     [Category("Action")]
-    [Description("Invoked when user clicks a project template tile")]
-    public event EventHandler<ITemplateInfo>? ItemClick;
+    [Description("Invoked when user activates a project template tile")]
+    public event EventHandler<ItemActivatedEventArgs>? ItemActivated;
 
     public ObservableCollection<ITemplateInfo> ProjectTemplates { get; set; } = [];
 
@@ -48,11 +47,15 @@ public sealed partial class ProjectTemplatesGrid
     private static void OnSelectedItemChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((ProjectTemplatesGrid)d).SelectedItem = (ITemplateInfo)e.NewValue;
 
-    private void OnGridItemClick(object sender, ItemClickEventArgs e)
+    private void OnGridItemClick(object sender, ItemClickEventArgs args)
     {
         _ = sender;
 
-        Debug.WriteLine("Item clicked");
-        this.ItemClick?.Invoke(this, (ITemplateInfo)e.ClickedItem);
+        this.ItemActivated?.Invoke(this, new ItemActivatedEventArgs((ITemplateInfo)args.ClickedItem));
+    }
+
+    public class ItemActivatedEventArgs(ITemplateInfo templateInfo) : EventArgs
+    {
+        public ITemplateInfo TemplateInfo => templateInfo;
     }
 }

@@ -43,7 +43,7 @@
                     <pb:ProjectTemplatesGrid
                         Height="{x:Bind pb:ProjectTemplatesGrid.SingleRowHeight}"
                         VerticalAlignment="Top"
-                        ItemClick="OnTemplateClick"
+                        ItemActivated="OnNewProjectFromTemplateAsync"
                         ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
                         SelectedItem="{x:Bind ViewModel.SelectedTemplate, Mode=TwoWay}" />
 
@@ -73,12 +73,12 @@
                     <pb:RecentProjectsList
                         VerticalAlignment="Top"
                         ItemActivated="OnRecentProjectOpenAsync"
-                        RecentProjects="{x:Bind ViewModel.RecentProjects, FallbackValue={}}" />
+                        RecentProjects="{x:Bind ViewModel.RecentProjects, Mode=OneWay, FallbackValue={}}" />
 
                     <!--  Bottom Border Only  -->
                 </Border>
 
-                <!--  More Templates Button  -->
+                <!--  More Projects Button  -->
                 <StackPanel
                     Grid.Row="3"
                     HorizontalAlignment="Right"

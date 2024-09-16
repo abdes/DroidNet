@@ -11,7 +11,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Controls;
-using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
 /// <summary>Start Home page.</summary>
@@ -26,8 +25,8 @@ public sealed partial class HomeView
         _ = sender; // unused
         _ = args; // unused
 
-        await this.ViewModel!.LoadTemplates().ConfigureAwait(true);
-        await this.ViewModel!.LoadRecentProjectsAsync().ConfigureAwait(true);
+        await this.ViewModel!.LoadTemplatesCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        await this.ViewModel!.LoadRecentProjectsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
     }
 
     private async void OnRecentProjectOpenAsync(object sender, RecentProjectsList.ItemActivatedEventArgs args)
@@ -41,18 +40,18 @@ public sealed partial class HomeView
         }
     }
 
-    private async void OnTemplateClick(object? sender, ITemplateInfo template)
+    private async void OnNewProjectFromTemplateAsync(object? sender, ProjectTemplatesGrid.ItemActivatedEventArgs args)
     {
         _ = sender;
 
-        var dialog = new NewProjectDialog(template) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(args.TemplateInfo) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 
         if (result == ContentDialogResult.Primary)
         {
             var success = await this.ViewModel!.NewProjectFromTemplate(
-                    template,
+                    args.TemplateInfo,
                     dialog.ViewModel.ProjectName,
                     dialog.ViewModel.SelectedLocation.Path)
                 .ConfigureAwait(true);

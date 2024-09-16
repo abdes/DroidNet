@@ -25,9 +25,9 @@ public interface IProjectSource
 {
     string[] CommonProjectLocations { get; }
 
-    Task<IProjectInfo?> LoadProjectInfoAsync(string fullPath);
+    Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath);
 
-    Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath);
+    Task<IFolder?> CreateNewProjectFolderAsync(string projectName, string atLocationPath);
 
     bool CanCreateProject(string projectName, string atLocationPath);
 

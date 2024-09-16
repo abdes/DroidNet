@@ -23,14 +23,14 @@ using Oxygen.Editor.Storage.Native;
 public class ProjectBrowserService : IProjectBrowserService
 {
     private readonly IPathFinder finder;
-    private readonly IProjectSource projectsSource;
+    private readonly IProjectSource projectSource;
     private readonly NativeStorageProvider localStorage;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
 
     public ProjectBrowserService(IProjectSource source, IPathFinder finder, NativeStorageProvider localStorage)
     {
-        this.projectsSource = source;
+        this.projectSource = source;
         this.finder = finder;
         this.localStorage = localStorage;
 
@@ -62,7 +62,7 @@ public class ProjectBrowserService : IProjectBrowserService
         try
         {
             // Create project folder
-            projectFolder = await this.projectsSource.CreateNewProjectFolder(projectName, atLocationPath)
+            projectFolder = await this.projectSource.CreateNewProjectFolderAsync(projectName, atLocationPath)
                 .ConfigureAwait(false);
             if (projectFolder == null)
             {
@@ -74,11 +74,11 @@ public class ProjectBrowserService : IProjectBrowserService
 
             // Load the project info, update it, and save it
             var projectInfo
-                = await this.projectsSource.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(false);
+                = await this.projectSource.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(false);
             if (projectInfo != null)
             {
                 projectInfo.Name = projectName;
-                if (await this.projectsSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
+                if (await this.projectSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
                 {
                     // Update the recently used project entry for the project being saved
                     await TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
@@ -101,6 +101,7 @@ public class ProjectBrowserService : IProjectBrowserService
 
         void CopyTemplateAssetsToProject()
         {
+            // TODO: fix this to implement recursive copying of the template using async enumeration with cancellation
             _ = Parallel.ForEach(
                 templateDirInfo.GetDirectories("*", SearchOption.AllDirectories),
                 srcInfo => Directory.CreateDirectory(
@@ -143,7 +144,7 @@ public class ProjectBrowserService : IProjectBrowserService
     {
         // Load the project info, update it, and save it
         var projectInfo
-            = await this.projectsSource.LoadProjectInfoAsync(location).ConfigureAwait(false);
+            = await this.projectSource.LoadProjectInfoAsync(location).ConfigureAwait(false);
         if (projectInfo != null)
         {
             await TryUpdateRecentUsageAsync(location).ConfigureAwait(false);
@@ -187,7 +188,7 @@ public class ProjectBrowserService : IProjectBrowserService
                     break;
                 }
 
-                var projectInfo = await this.projectsSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
+                var projectInfo = await this.projectSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
                 if (projectInfo != null)
                 {
                     projectInfo.LastUsedOn = item.LastUsedOn;
@@ -205,6 +206,8 @@ public class ProjectBrowserService : IProjectBrowserService
                     }
                 }
             }
+
+            _ = await state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -212,7 +215,7 @@ public class ProjectBrowserService : IProjectBrowserService
         => await this.lazyLocations.Value.ConfigureAwait(false);
 
     public bool CanCreateProject(string projectName, string atLocationPath)
-        => this.projectsSource.CanCreateProject(projectName, atLocationPath);
+        => this.projectSource.CanCreateProject(projectName, atLocationPath);
 
     private static async Task TryUpdateRecentUsageAsync(string location)
     {

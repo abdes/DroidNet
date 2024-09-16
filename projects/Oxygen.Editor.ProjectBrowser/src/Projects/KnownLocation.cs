@@ -22,9 +22,7 @@ public class KnownLocation(
     public string Location { get; } = location;
 
     public async IAsyncEnumerable<IStorageItem> GetItems(
-        ProjectItemKind kind = ProjectItemKind.All,
-        [EnumeratorCancellation]
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (this.Key == KnownLocations.RecentProjects)
         {
@@ -57,8 +55,11 @@ public class KnownLocation(
         }
         else
         {
-            await foreach (var item in storage.GetItemsAsync(this.Location, kind, cancellationToken)
-                               .ConfigureAwait(false))
+            var thisFolder = await storage
+                .GetFolderFromPathAsync(this.Location, cancellationToken)
+                .ConfigureAwait(false);
+
+            await foreach (var item in thisFolder.GetItemsAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
