@@ -13,7 +13,7 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <core:NullVisibilityConverter x:Key="NullToVis" />
+        <core:NullToVisibilityConverter x:Key="NullToVis" />
     </Page.Resources>
 
     <!--  ViewModel will never be null under standard operation conditions  -->
@@ -48,7 +48,7 @@
                 <pb:ProjectTemplatesGrid
                     VerticalAlignment="Top"
                     DataContext="{x:Bind ViewModel}"
-                    ItemClick="OnTemplateClicked"
+                    ItemActivated="OnTemplateSelected"
                     ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
                     SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}" />
 

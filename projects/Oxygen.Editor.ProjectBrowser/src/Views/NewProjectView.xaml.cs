@@ -10,7 +10,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
 /// <summary>
@@ -32,11 +32,11 @@ public sealed partial class NewProjectView
         this.ViewModel!.LoadTemplates();
     }
 
-    private void OnTemplateClicked(object? sender, ITemplateInfo item)
+    private void OnTemplateSelected(object? sender, ProjectTemplatesGrid.ItemActivatedEventArgs args)
     {
         _ = sender;
 
-        this.ViewModel!.SelectItem(item);
+        this.ViewModel!.SelectItem(args.TemplateInfo);
     }
 
     private async void CreateButton_OnClick(object? sender, RoutedEventArgs args)

@@ -12,7 +12,6 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
 using DroidNet.Collections;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -30,28 +29,51 @@ using SortDirection = CommunityToolkit.WinUI.Collections.SortDirection;
 /// </summary>
 public sealed partial class RecentProjectsList
 {
-    private SortDescription? byDateSortDescription;
-    private SortDescription? byNameSortDescription;
-    private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? dynamicProjectItems;
+    /// <summary>
+    /// A <see cref="IComparer" /> used when sorting recent projects by <see cref="IProjectInfo.Name">name</see>.
+    /// </summary>
+    private static readonly ByLastUsedOnComparer SortByLastUsedOn = new();
 
-    public RecentProjectsList()
-    {
-        this.InitializeComponent();
+    /// <summary>
+    /// A <see cref="IComparer" /> used when sorting recent projects by <see cref="IProjectInfo.LastUsedOn">last used date/time</see>.
+    /// </summary>
+    private static readonly ByNameComparer SortByName = new();
 
-        this.AdvancedProjectItems = new AdvancedCollectionView(this.ProjectItems, isLiveShaping: true);
-    }
+    /// <summary>
+    /// The <see cref="RecentProjects" /> property gets a collection of <see cref="IProjectInfo" />, but the control
+    /// needs to display a more visually attractive item for each project, including its thumbnail. For that reason, we
+    /// need to transform on the fly each item into a <see cref="ProjectItemWithThumbnail" />.
+    /// </summary>
+    private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? projectItems;
+
+    /// <summary>
+    /// The <see cref="AdvancedCollectionView" /> gives us sorting and filtering, and is wrapping the <see cref="projectItems" />
+    /// collection. This is the collection that should be used in UI binding and it should bound with <see cref="BindingDirection.OneWay" />,
+    /// as it is recreated everytime the <see cref="RecentProjects" /> property is set.
+    /// </summary>
+    private AdvancedCollectionView advancedProjectItems = [];
+
+    /// <summary>
+    /// When not <see langword="null" />, specifies the current sorting mode of the recent projects list, either
+    /// <see cref="SortByName">by name</see> or <see cref="SortByLastUsedOn">by last access date/time</see>.
+    /// </summary>
+    private SortDescription? sortDescription;
+
+    public RecentProjectsList() => this.InitializeComponent();
 
     [Browsable(true)]
     [Category("Action")]
-    [Description("Invoked when user clicks a project item in the list")]
+    [Description("Invoked when user activates a project item in the list")]
     public event EventHandler<ItemActivatedEventArgs>? ItemActivated;
+
+    public bool ActivateOnDoubleTap { get; set; }
 
     public ObservableCollection<IProjectInfo> RecentProjects
     {
         set
         {
-            this.dynamicProjectItems?.Dispose();
-            this.dynamicProjectItems = value.Transform(
+            this.projectItems?.Dispose();
+            this.projectItems = value.Transform(
                 p =>
                 {
                     var thumbUri = DefaultProjectThumbnail;
@@ -73,49 +95,52 @@ public sealed partial class RecentProjectsList
                     };
                 });
 
-            this.ProjectItems = new ReadOnlyObservableCollection<ProjectItemWithThumbnail>(this.dynamicProjectItems);
-            this.AdvancedProjectItems = new AdvancedCollectionView(this.ProjectItems, isLiveShaping: true);
+            // Create the sortable collection and initialize its sorting criteria.
+            this.advancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
+
+            this.sortDescription ??= new SortDescription(SortDirection.Descending, SortByLastUsedOn);
+            this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
         }
     }
-
-    internal AdvancedCollectionView AdvancedProjectItems { get; private set; }
-
-    internal ReadOnlyObservableCollection<ProjectItemWithThumbnail> ProjectItems { get; private set; } = new([]);
 
     private static string DefaultProjectThumbnail { get; }
         = $"ms-appx:///{typeof(LocalProjectsSource).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
 
-    private static SortByLastUsedOn SortByLastUsedOn() => new();
-
-    private static SortByName SortByName() => new();
-
-    private void OnUnloaded(object sender, RoutedEventArgs args)
+    private void OnProjectItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        _ = sender; // unused
         _ = args; // unused
 
-        this.dynamicProjectItems?.Dispose();
-        this.dynamicProjectItems = null;
-    }
-
-    private void OnProjectItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs eventArgs)
-    {
-        _ = eventArgs;
+        if (!this.ActivateOnDoubleTap)
+        {
+            return;
+        }
 
         var listView = (ListView)sender;
         var selectedItem = (ProjectItemWithThumbnail)listView.SelectedItem;
 
-        Debug.WriteLine("Item clicked");
         this.ItemActivated?.Invoke(this, new ItemActivatedEventArgs(selectedItem.ProjectInfo));
     }
 
+    private void OnProjectItemClicked(object sender, ItemClickEventArgs args)
+    {
+        _ = sender; // unused
+
+        if (this.ActivateOnDoubleTap)
+        {
+            return;
+        }
+
+        var item = (ProjectItemWithThumbnail)args.ClickedItem;
+        this.ItemActivated?.Invoke(this, new ItemActivatedEventArgs(item.ProjectInfo));
+    }
+
     [RelayCommand]
-    private void ToggleSortByDate()
+    private void ToggleSortByLastUsedOn()
     {
         SortDirection direction;
-        if (this.byDateSortDescription != null)
+        if (this.sortDescription?.Comparer is ByLastUsedOnComparer)
         {
-            direction = this.byDateSortDescription.Direction == SortDirection.Descending
+            direction = this.sortDescription.Direction == SortDirection.Descending
                 ? SortDirection.Ascending
                 : SortDirection.Descending;
         }
@@ -124,19 +149,19 @@ public sealed partial class RecentProjectsList
             direction = SortDirection.Descending;
         }
 
-        this.byDateSortDescription = new SortDescription(direction, SortByLastUsedOn());
-        this.AdvancedProjectItems.SortDescriptions.Clear();
-        this.byNameSortDescription = null;
-        this.AdvancedProjectItems.SortDescriptions.Add(this.byDateSortDescription);
+        this.sortDescription = new SortDescription(direction, SortByLastUsedOn);
+
+        this.advancedProjectItems.SortDescriptions.Clear();
+        this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
     }
 
     [RelayCommand]
     private void ToggleSortByName()
     {
         SortDirection direction;
-        if (this.byNameSortDescription != null)
+        if (this.sortDescription?.Comparer is ByNameComparer)
         {
-            direction = this.byNameSortDescription.Direction == SortDirection.Descending
+            direction = this.sortDescription.Direction == SortDirection.Descending
                 ? SortDirection.Ascending
                 : SortDirection.Descending;
         }
@@ -145,10 +170,9 @@ public sealed partial class RecentProjectsList
             direction = SortDirection.Ascending;
         }
 
-        this.byNameSortDescription = new SortDescription(direction, SortByName());
-        this.AdvancedProjectItems.SortDescriptions.Clear();
-        this.byDateSortDescription = null;
-        this.AdvancedProjectItems.SortDescriptions.Add(this.byNameSortDescription);
+        this.sortDescription = new SortDescription(direction, SortByName);
+        this.advancedProjectItems.SortDescriptions.Clear();
+        this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
     }
 
     private void OnListViewKeyDown(object sender, KeyRoutedEventArgs eventArgs)
@@ -175,7 +199,7 @@ internal sealed class ProjectItemWithThumbnail
 
     public required ImageSource Thumbnail { get; init; }
 
-    public sealed class SortByName : IComparer
+    public sealed class ByNameComparer : IComparer
     {
         public int Compare(object? x, object? y)
         {
@@ -185,7 +209,7 @@ internal sealed class ProjectItemWithThumbnail
         }
     }
 
-    public sealed class SortByLastUsedOn : IComparer
+    public sealed class ByLastUsedOnComparer : IComparer
     {
         public int Compare(object? x, object? y)
         {

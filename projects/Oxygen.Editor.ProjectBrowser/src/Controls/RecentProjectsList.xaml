@@ -7,7 +7,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Unloaded="OnUnloaded"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -94,7 +93,7 @@
             VerticalAlignment="Center"
             Background="Transparent"
             BorderThickness="0"
-            Command="{x:Bind ToggleSortByDateCommand}">
+            Command="{x:Bind ToggleSortByLastUsedOnCommand}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Margin="0,0,20,0" Text="Date Modified" />
                 <FontIcon FontSize="14" Glyph="&#xE8CB;" />
@@ -117,8 +116,10 @@
             VerticalAlignment="Stretch"
             BorderThickness="0"
             DoubleTapped="OnProjectItemDoubleTapped"
+            IsItemClickEnabled="True"
+            ItemClick="OnProjectItemClicked"
             ItemTemplate="{StaticResource RecentProjectTemplate}"
-            ItemsSource="{x:Bind AdvancedProjectItems}"
+            ItemsSource="{x:Bind advancedProjectItems, Mode=OneWay}"
             PreviewKeyDown="OnListViewKeyDown" />
     </Grid>
 </UserControl>

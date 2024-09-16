@@ -15,8 +15,6 @@ public interface IProjectBrowserService
 
     Task<bool> NewProjectFromTemplate(ITemplateInfo templateInfo, string projectName, string atLocationPath);
 
-    bool CanCreateProject(string projectName, string atLocationPath);
-
     Task<bool> LoadProjectInfoAsync(string location);
 
     Task<bool> LoadProjectAsync(IProjectInfo projectInfo);

@@ -54,29 +54,26 @@ public partial class LocalProjectsSource : IProjectSource
 
     public string[] CommonProjectLocations { get; }
 
-    public async Task<IProjectInfo?> LoadProjectInfoAsync(string fullPath)
+    public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath)
     {
         // Check if the project location still exists before adding it (maybe the project was deleted)
         try
         {
-            var projectFolder = await StorageFolder.GetFolderFromPathAsync(fullPath);
-            var infoFile = await projectFolder.GetFileAsync(ProjectFileName);
-            var json = await FileIO.ReadTextAsync(infoFile);
+            var projectFolder = await this.localStorage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(false);
+            var projectFile = await projectFolder.GetDocumentAsync(ProjectFileName)
+                .ConfigureAwait(false);
+            var json = await projectFile.ReadAllTextAsync().ConfigureAwait(false);
             return JsonSerializer.Deserialize<ProjectInfo>(json, this.jsonSerializerOptions);
-        }
-        catch (FileNotFoundException)
-        {
-            this.CouldNotLoadProjectInfo(fullPath, "Project file does not exist anymore.");
         }
         catch (Exception ex)
         {
-            this.CouldNotLoadProjectInfo(fullPath, ex.Message);
+            this.CouldNotLoadProjectInfo(projectFolderPath, ex.Message);
         }
 
         return null;
     }
 
-    public async Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath)
+    public async Task<IFolder?> CreateNewProjectFolderAsync(string projectName, string atLocationPath)
     {
         try
         {
@@ -120,21 +117,28 @@ public partial class LocalProjectsSource : IProjectSource
         try
         {
             var json = JsonSerializer.Serialize(projectInfo, this.jsonSerializerOptions);
-            await File.WriteAllTextAsync(Path.Combine(projectInfo.Location!, ProjectFileName), json)
-                .ConfigureAwait(true);
+
+            var documentPath = this.localStorage.NormalizeRelativeTo(projectInfo.Location, ProjectFileName);
+            var document = await this.localStorage.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+
+            await document.WriteAllTextAsync(json).ConfigureAwait(true);
             return true;
         }
         catch (Exception error)
         {
-            Debug.WriteLine($"Failed to save project info: {error.Message}");
+            this.CouldNotSaveProjectInfo(projectInfo.Location, error.Message);
         }
 
         return false;
     }
 
     [LoggerMessage(
-        EventId = 1002,
         Level = LogLevel.Error,
-        Message = "Could not load project info from `{fullPath}`; {error}")]
-    partial void CouldNotLoadProjectInfo(string fullPath, string error);
+        Message = "Could not load project info from `{location}`; {error}")]
+    partial void CouldNotSaveProjectInfo(string location, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not load project info from `{location}`; {error}")]
+    partial void CouldNotLoadProjectInfo(string location, string error);
 }

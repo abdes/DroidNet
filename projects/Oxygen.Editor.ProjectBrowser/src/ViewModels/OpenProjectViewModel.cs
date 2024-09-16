@@ -87,11 +87,10 @@ public partial class OpenProjectViewModel : ObservableObject
             this.FileList.Add(item);
         }
 
-        if (location.Location != string.Empty)
-        {
-            this.CurrentFolder
-                = await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
-        }
+        this.CurrentFolder =
+            location.Location.Length == 0
+                ? null
+                : await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
     }
 
     public async Task Initialize()
@@ -252,7 +251,7 @@ public partial class OpenProjectViewModel : ObservableObject
             var itemX = x as IStorageItem;
             var itemY = y as IStorageItem;
 
-            return DateTime.Compare(itemX!.LastModifiedTime, itemY!.LastModifiedTime);
+            return DateTime.Compare(itemX!.LastAccessTime, itemY!.LastAccessTime);
         }
     }
 }

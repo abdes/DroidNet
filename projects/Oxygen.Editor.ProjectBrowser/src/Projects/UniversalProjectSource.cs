@@ -11,33 +11,27 @@ using Oxygen.Editor.Storage;
 /// A composite source for projects, that invokes the specific implementation based
 /// on the project location.
 /// </summary>
-public class UniversalProjectSource : IProjectSource
+public class UniversalProjectSource(LocalProjectsSource localSource) : IProjectSource
 {
-    private readonly LocalProjectsSource localSource;
+    public string[] CommonProjectLocations => localSource.CommonProjectLocations;
 
-    // TODO: refactor to get multiple sources from the DI
-    public UniversalProjectSource(LocalProjectsSource localSource)
-        => this.localSource = localSource;
-
-    public string[] CommonProjectLocations => this.localSource.CommonProjectLocations;
-
-    public async Task<IProjectInfo?> LoadProjectInfoAsync(string fullPath)
+    public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath)
     {
-        var projectInfo = await this.localSource.LoadProjectInfoAsync(fullPath).ConfigureAwait(true);
+        var projectInfo = await localSource.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(true);
         if (projectInfo != null)
         {
-            projectInfo.Location = fullPath;
+            projectInfo.Location = projectFolderPath;
         }
 
         return projectInfo;
     }
 
-    public async Task<IFolder?> CreateNewProjectFolder(string projectName, string atLocationPath)
-        => await this.localSource.CreateNewProjectFolder(projectName, atLocationPath).ConfigureAwait(true);
+    public async Task<IFolder?> CreateNewProjectFolderAsync(string projectName, string atLocationPath)
+        => await localSource.CreateNewProjectFolderAsync(projectName, atLocationPath).ConfigureAwait(true);
 
     public bool CanCreateProject(string projectName, string atLocationPath)
-        => this.localSource.CanCreateProject(projectName, atLocationPath);
+        => localSource.CanCreateProject(projectName, atLocationPath);
 
     public Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
-        => this.localSource.SaveProjectInfoAsync(projectInfo);
+        => localSource.SaveProjectInfoAsync(projectInfo);
 }
