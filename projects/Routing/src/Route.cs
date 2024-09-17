@@ -65,6 +65,10 @@ public class Route : IRoute
     /// matcher by setting the route's <see cref="Matcher" /> property.
     /// </summary>
     /// <inheritdoc cref="IRoute.PathMatcher" />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "MA0051:Method is too long",
+        Justification = "commenting the code makes the method too long but is useful")]
     internal static IMatchResult DefaultMatcher(
         ReadOnlyCollection<IUrlSegment> segments,
         IUrlSegmentGroup group,
