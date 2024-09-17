@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor;
+namespace DroidNet.Routing;
 
 /// <summary>
 /// Exception thrown when an attempt is made to resolve a View with a <see langword="null" /> type, or with a type that
