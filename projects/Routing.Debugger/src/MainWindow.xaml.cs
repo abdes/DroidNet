@@ -82,12 +82,18 @@ public sealed partial class MainWindow : IOutletContainer
         }
         else
         {
-            throw new ViewTypeException($"invalid view type; not an {nameof(IViewFor)}") { ViewType = view.GetType() };
+            throw new InvalidViewTypeException($"invalid view type; not an {nameof(IViewFor)}")
+            {
+                ViewType = view.GetType(),
+            };
         }
 
         if (!view.GetType().IsAssignableTo(typeof(UIElement)))
         {
-            throw new ViewTypeException($"invalid view type; not a {nameof(UIElement)}") { ViewType = view.GetType() };
+            throw new InvalidViewTypeException($"invalid view type; not a {nameof(UIElement)}")
+            {
+                ViewType = view.GetType(),
+            };
         }
 
         this.ShellView = (UIElement)view;

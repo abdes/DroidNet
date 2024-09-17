@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Samples.Simple;
+namespace DroidNet.Routing;
 
 using DroidNet.Mvvm;
 
@@ -10,22 +10,22 @@ using DroidNet.Mvvm;
 /// Thrown when a View resolved for a certain ViewModel has a type that does not satisfy the requirements, such as not
 /// implementing the <see cref="IViewFor{T}" /> or does not derive from a type that can be set as Content for an outlet.
 /// </summary>
-public class ViewTypeException : Exception
+public class InvalidViewTypeException : Exception
 {
     private const string DefaultMessage = "view type not suitable to be used as Content type";
 
     private readonly Lazy<string> extendedMessage;
 
-    public ViewTypeException()
+    public InvalidViewTypeException()
         : this(DefaultMessage)
     {
     }
 
-    public ViewTypeException(string? message)
+    public InvalidViewTypeException(string? message)
         : base(message)
         => this.extendedMessage = new Lazy<string>(this.FormatMessage);
 
-    public ViewTypeException(string? message, Exception? innerException)
+    public InvalidViewTypeException(string? message, Exception? innerException)
         : base(message, innerException)
         => this.extendedMessage = new Lazy<string>(this.FormatMessage);
 
