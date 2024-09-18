@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    x:Class="DroidNet.Controls.Demo.DynamicTree.Styles"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:dnct="using:DroidNet.Controls.DynamicTree"
+    xmlns:local="using:DroidNet.Controls.Demo.DynamicTree">
+
+    <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnct:TreeItemAdapter">
+        <Image Source="{x:Bind local:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="EntityThumbnailTemplate" x:DataType="dnct:TreeItemAdapter">
+        <SymbolIcon
+            Width="24"
+            Height="24"
+            Symbol="{x:Bind local:ThumbnailGenerator.GetThumbnailForEntity((dnct:TreeItemAdapter))}" />
+    </DataTemplate>
+
+    <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" />
+
+</ResourceDictionary>

@@ -6,5 +6,7 @@ namespace Oxygen.Editor.Projects;
 
 public class Project(IProjectInfo info) : IProject
 {
+    public IList<Scene> Scenes { get; } = [];
+
     public IProjectInfo ProjectInfo => info;
 }
