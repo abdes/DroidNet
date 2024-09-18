@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.DynamicTree.ProjectLayoutView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnct="using:DroidNet.Controls.TreeView"
+    xmlns:dncth="using:DroidNet.Controls.Thumbnail"
+    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:local="using:DroidNet.Controls.Demo.DynamicTree"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="ProjectLayoutView_OnLoaded"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <DataTemplate x:Key="DefaultThumbnailTemplate" x:DataType="dnct:TreeItemAdapter">
+            <dncth:ThumbnailControl />
+        </DataTemplate>
+        <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnct:TreeItemAdapter">
+            <dncth:ThumbnailControl GeneratedImage="{x:Bind local:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />
+        </DataTemplate>
+        <DataTemplate x:Key="EntityThumbnailTemplate" x:DataType="dnct:TreeItemAdapter">
+            <!--  Use a converter if you want to pass the TreeItemAdapter object  -->
+            <dncth:ThumbnailControl IconSymbol="{x:Bind local:ThumbnailGenerator.GetThumbnailForEntity()}" />
+        </DataTemplate>
+        <local:ItemThumbnailTemplateSelector
+            x:Key="ItemThumbnailTemplateSelector"
+            DefaultTemplate="{StaticResource DefaultThumbnailTemplate}"
+            EntityTemplate="{StaticResource EntityThumbnailTemplate}"
+            SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
+    </Page.Resources>
+
+    <dnct:DynamicTreeControl
+        Width="400"
+        HorizontalAlignment="Left"
+        ThumbnailTemplateSelector="{StaticResource ItemThumbnailTemplateSelector}"
+        ViewModel="{x:Bind ViewModel}" />
+</Page>

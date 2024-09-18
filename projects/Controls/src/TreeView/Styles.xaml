@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:st="using:DroidNet.Controls.TreeView.Styles"
+    xmlns:t="using:DroidNet.Controls.TreeView"
+    xmlns:th="using:DroidNet.Controls.Thumbnail">
+
+    <ctkConverters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
+    <t:ExpanderIconConverter x:Key="ExpanderIconConverter" />
+
+    <Style x:Key="DynamicTreeControl" TargetType="t:DynamicTreeControl" />
+
+</ResourceDictionary>
