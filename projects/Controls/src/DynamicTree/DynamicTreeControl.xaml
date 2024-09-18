@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<UserControl
+    x:Class="DroidNet.Controls.DynamicTree.DynamicTreeControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:DroidNet.Converters"
+    xmlns:core="using:Microsoft.Xaml.Interactions.Core"
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
+    xmlns:local="using:DroidNet.Controls.DynamicTree"
+    xmlns:lst="using:DroidNet.Controls.DynamicTree.Styles"
+    x:Name="TreeControl">
+
+    <UserControl.Resources>
+
+        <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+
+        <ctkConverters:BoolToVisibilityConverter x:Key="VisibilityConverter" />
+
+        <converters:ItemClickEventArgsToClickedItemConverter x:Key="EventArgsToClickedItemConverter" />
+        <converters:BoolToBrushConverter
+            x:Key="ItemActiveToBackgroundBrushConverter"
+            ActiveBrush="{StaticResource ActiveItemBackground}"
+            InactiveBrush="{StaticResource InctiveItemBackground}" />
+        <local:IndentToMarginConverter x:Key="IndentToMarginConverter" IndentIncrement="34" />
+
+
+        <DataTemplate x:Key="DefaultThumbnailTemplate" x:DataType="local:TreeItemAdapter">
+            <Border Style="{StaticResource EmptyThumbnailBorderStyle}" />
+        </DataTemplate>
+        <local:DefaultItemThumbnailTemplateSelector x:Key="DefaultThumbnailTemplateSelector" DefaultTemplate="{StaticResource DefaultThumbnailTemplate}" />
+
+    </UserControl.Resources>
+
+    <ItemsView
+        x:Name="ItemsListView"
+        IsItemInvokedEnabled="False"
+        ItemsSource="{x:Bind ViewModel.ShownItems}"
+        SelectionMode="None">
+        <ItemsView.ItemTemplate>
+            <DataTemplate x:DataType="local:TreeItemAdapter">
+                <ItemContainer
+                    Background="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource ItemActiveToBackgroundBrushConverter}}"
+                    DataContext="{x:Bind}"
+                    DoubleTapped="ItemDoubleTapped"
+                    IsDoubleTapEnabled="True"
+                    IsTapEnabled="True"
+                    Tapped="ItemTapped">
+                    <lst:GridForTreeItem Margin="{x:Bind Level, Mode=OneWay, Converter={StaticResource IndentToMarginConverter}}">
+                        <lst:TreeItemExpander
+                            Grid.Column="0"
+                            Collapsed="OnCollapsed"
+                            Expanded="OnExpanded"
+                            TreeItem="{x:Bind}"
+                            Visibility="{x:Bind local:TreeItemAdapter.TreeItemHasChildren(Self), Mode=OneWay}" />
+                        <lst:Thumbnail
+                            Grid.Column="1"
+                            Content="{x:Bind}"
+                            ContentTemplateSelector="{Binding Mode=OneWay, ElementName=TreeControl, Path=ThumbnailTemplateSelector}" />
+                        <TextBlock
+                            Grid.Column="2"
+                            Style="{StaticResource DynamicTreeItemText}"
+                            Text="{x:Bind Label, Mode=OneWay}" />
+                    </lst:GridForTreeItem>
+                </ItemContainer>
+            </DataTemplate>
+        </ItemsView.ItemTemplate>
+
+    </ItemsView>
+
+</UserControl>
