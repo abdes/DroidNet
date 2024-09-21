@@ -25,12 +25,6 @@
             InactiveBrush="{StaticResource InctiveItemBackground}" />
         <local:IndentToMarginConverter x:Key="IndentToMarginConverter" IndentIncrement="34" />
 
-
-        <DataTemplate x:Key="DefaultThumbnailTemplate" x:DataType="local:TreeItemAdapter">
-            <Border Style="{StaticResource EmptyThumbnailBorderStyle}" />
-        </DataTemplate>
-        <local:DefaultItemThumbnailTemplateSelector x:Key="DefaultThumbnailTemplateSelector" DefaultTemplate="{StaticResource DefaultThumbnailTemplate}" />
-
     </UserControl.Resources>
 
     <ItemsView

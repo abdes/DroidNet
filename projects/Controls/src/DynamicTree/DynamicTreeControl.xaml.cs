@@ -36,20 +36,6 @@ public partial class DynamicTreeControl
         set => this.SetValue(ThumbnailTemplateSelectorProperty, value);
     }
 
-    private void ExpanderTapped(object sender, TappedRoutedEventArgs args)
-    {
-        args.Handled = true;
-
-        if (sender is FrameworkElement expander)
-        {
-            // Retrieve the DataContext, which is the TreeItemAdapter object
-            if (expander.DataContext is TreeItemAdapter item)
-            {
-                this.ViewModel!.ToggleExpandedCommand.Execute(item);
-            }
-        }
-    }
-
     private void ItemTapped(object sender, TappedRoutedEventArgs args)
     {
         args.Handled = true;
