@@ -2,21 +2,25 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.DynamicTree;
+namespace DroidNet.Controls;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-public abstract partial class DynamicTreeViewModel(bool showRoot = true) : ObservableObject
+public abstract partial class DynamicTreeViewModel : ObservableObject
 {
+    private SelectionModel<ITreeItem>? selectionModel;
+
     [ObservableProperty]
-    private ITreeItem? activeItem;
+    private DynamicTreeSelectionMode selectionMode = DynamicTreeSelectionMode.None;
 
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
-    public async Task InitializeRootAsync(ITreeItem root)
+    public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
+
+    protected async Task InitializeRootAsync(ITreeItem root)
     {
         this.ShownItems.Clear();
         if (root is null)
@@ -24,39 +28,32 @@ public abstract partial class DynamicTreeViewModel(bool showRoot = true) : Obser
             return;
         }
 
-        if (showRoot)
+        // Do not add the root item, add its children instead and check if it they need to be expanded
+        foreach (var child in await root.Children.ConfigureAwait(false))
         {
-            // Add the root item and check if it needs to be expanded
-            this.ShownItems.Add(root);
-            if (root.IsExpanded)
+            this.ShownItems.Add(child);
+            if (child.IsExpanded)
             {
-                await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
-            }
-        }
-        else
-        {
-            // Do not add the root item, add its children instead and check if it they need to be expanded
-            foreach (var child in await root.Children.ConfigureAwait(false))
-            {
-                this.ShownItems.Add(child);
-                if (child.IsExpanded)
-                {
-                    await this.RestoreExpandedChildrenAsync(child).ConfigureAwait(false);
-                }
+                await this.RestoreExpandedChildrenAsync(child).ConfigureAwait(false);
             }
         }
     }
 
-    partial void OnActiveItemChanged(ITreeItem? oldValue, ITreeItem? newValue)
+    partial void OnSelectionModeChanged(DynamicTreeSelectionMode value)
     {
-        if (oldValue is not null)
+        switch (value)
         {
-            oldValue.IsSelected = false;
-        }
+            case DynamicTreeSelectionMode.None:
+                this.selectionModel = null;
+                break;
 
-        if (newValue is not null)
-        {
-            newValue.IsSelected = true;
+            case DynamicTreeSelectionMode.Single:
+                this.selectionModel = new SingleSelectionModel(this);
+                break;
+
+            default:
+                this.selectionModel = null;
+                break;
         }
     }
 
@@ -118,5 +115,42 @@ public abstract partial class DynamicTreeViewModel(bool showRoot = true) : Obser
                 await this.HideChildrenRecursiveAsync(child, removeIndex).ConfigureAwait(false);
             }
         }
+    }
+
+    protected class SingleSelectionModel : SingleSelectionModel<ITreeItem>
+    {
+        private readonly DynamicTreeViewModel model;
+
+        public SingleSelectionModel(DynamicTreeViewModel model)
+        {
+            this.model = model;
+
+            this.PropertyChanging += (sender, args) =>
+            {
+                var propertyName = args.PropertyName;
+                if (propertyName?.Equals(nameof(this.SelectedItem), StringComparison.Ordinal) == true
+                    && this.SelectedItem is not null)
+                {
+                    this.SelectedItem.IsSelected = false;
+                }
+            };
+
+            this.PropertyChanged += (sender, args) =>
+            {
+                var propertyName = args.PropertyName;
+                if ((string.IsNullOrEmpty(propertyName)
+                     || propertyName.Equals(nameof(this.SelectedItem), StringComparison.Ordinal))
+                    && this.SelectedItem is not null)
+                {
+                    this.SelectedItem.IsSelected = true;
+                }
+            };
+        }
+
+        protected override ITreeItem GetItemAt(int index) => this.model.ShownItems[index];
+
+        protected override int GetItemCount() => this.model.ShownItems.Count;
+
+        protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf(item);
     }
 }

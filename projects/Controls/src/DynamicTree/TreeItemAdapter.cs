@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.DynamicTree;
+namespace DroidNet.Controls;
 
 using System;
 using System.Collections.ObjectModel;
@@ -32,7 +32,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
 
-    public required int Level { get; init; }
+    public int Depth => this.Parent is null ? -1 : this.Parent.Depth + 1;
 
     public TreeItemAdapter Self => this;
 

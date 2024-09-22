@@ -6,27 +6,25 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
-using DroidNet.Controls.DynamicTree;
 
 public class SceneAdapter(Scene item) : TreeItemAdapter, ITreeItem<Scene>
 {
     public override bool IsRoot => false;
 
     public override string Label
-        => this.Item.Name;
+        => this.AttachedObject.Name;
 
-    public Scene Item => item;
+    public Scene AttachedObject => item;
 
     protected override async Task LoadChildren()
     {
-        await ProjectLoaderService.LoadSceneAsync(this.Item).ConfigureAwait(false);
+        await ProjectLoaderService.LoadSceneAsync(this.AttachedObject).ConfigureAwait(false);
 
-        foreach (var entity in this.Item.Entities)
+        foreach (var entity in this.AttachedObject.Entities)
         {
             this.AddChildInternal(
                 new EntityAdapter(entity)
                 {
-                    Level = this.Level + 1,
                     IsExpanded = false,
                 });
         }

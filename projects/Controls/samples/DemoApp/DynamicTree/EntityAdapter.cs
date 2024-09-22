@@ -5,16 +5,15 @@
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls.DynamicTree;
 
 public class EntityAdapter(Entity item) : TreeItemAdapter, ITreeItem<Entity>
 {
     public override bool IsRoot => false;
 
     public override string Label
-        => this.Item.Name;
+        => this.AttachedObject.Name;
 
-    public Entity Item => item;
+    public Entity AttachedObject => item;
 
     protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
 }

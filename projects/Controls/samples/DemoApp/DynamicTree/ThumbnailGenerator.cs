@@ -5,7 +5,6 @@
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 using System.Runtime.InteropServices.WindowsRuntime;
-using DroidNet.Controls.DynamicTree;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -51,7 +50,7 @@ public static class ThumbnailGenerator
 
     public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
     {
-        if (adapter is EntityAdapter entityAdapter && entityAdapter.Item.Name.EndsWith('1'))
+        if (adapter is EntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1'))
         {
             return Symbol.Home;
         }

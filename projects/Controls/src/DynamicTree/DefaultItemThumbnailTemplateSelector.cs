@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.DynamicTree;
+namespace DroidNet.Controls;
 
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
