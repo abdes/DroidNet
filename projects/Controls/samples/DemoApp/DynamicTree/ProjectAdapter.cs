@@ -5,23 +5,21 @@
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls.DynamicTree;
 
 public class ProjectAdapter(Project item) : TreeItemAdapter, ITreeItem<Project>
 {
     public override string Label
-        => this.Item.Name;
+        => this.AttachedObject.Name;
 
-    public Project Item => item;
+    public Project AttachedObject => item;
 
     protected override async Task LoadChildren()
     {
-        foreach (var scene in this.Item.Scenes)
+        foreach (var scene in this.AttachedObject.Scenes)
         {
             this.AddChildInternal(
                 new SceneAdapter(scene)
                 {
-                    Level = this.Level + 1,
                     IsExpanded = true,
                 });
         }

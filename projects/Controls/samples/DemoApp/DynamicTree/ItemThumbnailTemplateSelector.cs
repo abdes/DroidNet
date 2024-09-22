@@ -22,7 +22,7 @@ public class ItemThumbnailTemplateSelector : DataTemplateSelector
             return this.SceneTemplate;
         }
 
-        if (item is EntityAdapter entity && entity.Item.Name.EndsWith('1'))
+        if (item is EntityAdapter entity && entity.AttachedObject.Name.EndsWith('1'))
         {
             return this.EntityTemplate;
         }

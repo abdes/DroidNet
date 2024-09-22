@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
-    x:Class="DroidNet.Controls.DynamicTree.DynamicTreeControl"
+    x:Class="DroidNet.Controls.DynamicTree"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:DroidNet.Converters"
     xmlns:core="using:Microsoft.Xaml.Interactions.Core"
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:interactivity="using:Microsoft.Xaml.Interactivity"
-    xmlns:local="using:DroidNet.Controls.DynamicTree"
-    xmlns:lst="using:DroidNet.Controls.DynamicTree.Styles"
+    xmlns:lc="using:DroidNet.Controls"
     x:Name="TreeControl">
 
     <UserControl.Resources>
@@ -23,7 +22,7 @@
             x:Key="ItemActiveToBackgroundBrushConverter"
             ActiveBrush="{StaticResource ActiveItemBackground}"
             InactiveBrush="{StaticResource InctiveItemBackground}" />
-        <local:IndentToMarginConverter x:Key="IndentToMarginConverter" IndentIncrement="34" />
+        <lc:IndentToMarginConverter x:Key="IndentToMarginConverter" IndentIncrement="34" />
 
     </UserControl.Resources>
 
@@ -33,7 +32,7 @@
         ItemsSource="{x:Bind ViewModel.ShownItems}"
         SelectionMode="None">
         <ItemsView.ItemTemplate>
-            <DataTemplate x:DataType="local:TreeItemAdapter">
+            <DataTemplate x:DataType="lc:TreeItemAdapter">
                 <ItemContainer
                     Background="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource ItemActiveToBackgroundBrushConverter}}"
                     DataContext="{x:Bind}"
@@ -41,14 +40,24 @@
                     IsDoubleTapEnabled="True"
                     IsTapEnabled="True"
                     Tapped="ItemTapped">
-                    <lst:GridForTreeItem Margin="{x:Bind Level, Mode=OneWay, Converter={StaticResource IndentToMarginConverter}}">
-                        <lst:TreeItemExpander
+                    <lc:DynamicTreeItem />
+                    <!--
+                    <Grid Margin="{x:Bind Level, Mode=OneWay, Converter={StaticResource IndentToMarginConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="34" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <lc:TreeItemExpander
                             Grid.Column="0"
                             Collapsed="OnCollapsed"
                             Expanded="OnExpanded"
                             TreeItem="{x:Bind}"
-                            Visibility="{x:Bind local:TreeItemAdapter.TreeItemHasChildren(Self), Mode=OneWay}" />
-                        <lst:Thumbnail
+                            Visibility="{x:Bind lc:TreeItemAdapter.TreeItemHasChildren(Self), Mode=OneWay}" />
+                        <lc:Thumbnail
                             Grid.Column="1"
                             Content="{x:Bind}"
                             ContentTemplateSelector="{Binding Mode=OneWay, ElementName=TreeControl, Path=ThumbnailTemplateSelector}" />
@@ -56,7 +65,8 @@
                             Grid.Column="2"
                             Style="{StaticResource DynamicTreeItemText}"
                             Text="{x:Bind Label, Mode=OneWay}" />
-                    </lst:GridForTreeItem>
+                    </Grid>
+                    -->
                 </ItemContainer>
             </DataTemplate>
         </ItemsView.ItemTemplate>

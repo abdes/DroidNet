@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.DynamicTree;
+namespace DroidNet.Controls;
 
 using System.Collections.ObjectModel;
 
@@ -19,6 +19,8 @@ public interface ITreeItem
     ITreeItem? Parent { get; }
 
     Task<ReadOnlyObservableCollection<ITreeItem>> Children { get; }
+
+    int Depth { get; }
 
     Task<bool> HasChildren();
 
@@ -44,10 +46,10 @@ public interface ITreeItem
 /// </typeparam>
 /// <remarks>
 /// This is a type-safe specialization of the generic <see cref="ITreeItem" /> interface, for use by implementations of custom
-/// <see cref="TreeItemAdapter" /> classes. The <see cref="DynamicTreeControl" /> does not care about the type of object held by
+/// <see cref="TreeItemAdapter" /> classes. The <see cref="DynamicTree" /> does not care about the type of object held by
 /// the tree item, and it only manipulates it as a generic <see cref="ITreeItem" />.
 /// </remarks>
 public interface ITreeItem<out T> : ITreeItem
 {
-    public T Item { get; }
+    public T AttachedObject { get; }
 }

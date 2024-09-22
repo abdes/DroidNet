@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.DynamicTree;
+namespace DroidNet.Controls;
 
 using System.Diagnostics;
-using DroidNet.Controls.DynamicTree.Styles;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,19 +14,45 @@ using Microsoft.UI.Xaml.Input;
 /// A control to display a tree as a list of expandable items.
 /// </summary>
 [ViewModel(typeof(DynamicTreeViewModel))]
-public partial class DynamicTreeControl
+public partial class DynamicTree
 {
+    public static readonly DependencyProperty SelectionModeProperty = DependencyProperty.Register(
+        nameof(SelectionMode),
+        typeof(DynamicTreeSelectionMode),
+        typeof(DynamicTree),
+        new PropertyMetadata(DynamicTreeSelectionMode.None));
+
     public static readonly DependencyProperty ThumbnailTemplateSelectorProperty = DependencyProperty.Register(
         nameof(ThumbnailTemplateSelector),
         typeof(DataTemplateSelector),
-        typeof(DynamicTreeControl),
+        typeof(DynamicTree),
         new PropertyMetadata(default(DataTemplateSelector)));
 
-    public DynamicTreeControl()
+    public DynamicTree()
     {
         this.InitializeComponent();
+        this.Style = (Style)Application.Current.Resources[nameof(DynamicTree)];
 
-        this.Style = (Style)Application.Current.Resources[nameof(DynamicTreeControl)];
+        this.ViewModelChanged += (sender, args) =>
+        {
+            if (this.ViewModel is not null && this.IsLoaded)
+            {
+                this.ViewModel.SelectionMode = this.SelectionMode;
+            }
+        };
+
+        this.Loaded += (sender, args) =>
+        {
+            _ = sender;
+            _ = args;
+            this.ViewModel!.SelectionMode = this.SelectionMode;
+        };
+    }
+
+    public DynamicTreeSelectionMode SelectionMode
+    {
+        get => (DynamicTreeSelectionMode)this.GetValue(SelectionModeProperty);
+        set => this.SetValue(SelectionModeProperty, value);
     }
 
     public DataTemplateSelector ThumbnailTemplateSelector
@@ -45,9 +70,9 @@ public partial class DynamicTreeControl
             Debug.WriteLine($"Item tapped: {itemContainer}");
 
             // Retrieve the DataContext, which is the TreeItemAdapter object
-            if (itemContainer.DataContext is TreeItemAdapter item)
+            if (itemContainer.DataContext is ITreeItem item)
             {
-                this.ViewModel!.ActiveItem = item;
+                this.ViewModel!.SelectItem(item);
             }
         }
     }
