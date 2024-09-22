@@ -29,14 +29,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
 
         // Do not add the root item, add its children instead and check if it they need to be expanded
-        foreach (var child in await root.Children.ConfigureAwait(false))
-        {
-            this.ShownItems.Add(child);
-            if (child.IsExpanded)
-            {
-                await this.RestoreExpandedChildrenAsync(child).ConfigureAwait(false);
-            }
-        }
+        await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
     partial void OnSelectionModeChanged(DynamicTreeSelectionMode value)
@@ -80,21 +73,22 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
     private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
     {
-        var insertIndex = this.ShownItems.IndexOf(itemAdapter);
-        Debug.Assert(insertIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
+        var insertIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
         await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(false);
     }
 
-    private async Task RestoreExpandedChildrenRecursive(ITreeItem parent, int insertIndex)
+    private async Task<int> RestoreExpandedChildrenRecursive(ITreeItem parent, int insertIndex)
     {
         foreach (var child in await parent.Children.ConfigureAwait(false))
         {
-            this.ShownItems.Insert(++insertIndex, child);
+            this.ShownItems.Insert(insertIndex++, child);
             if (child.IsExpanded)
             {
-                await this.RestoreExpandedChildrenRecursive(child, insertIndex).ConfigureAwait(false);
+                insertIndex = await this.RestoreExpandedChildrenRecursive(child, insertIndex).ConfigureAwait(false);
             }
         }
+
+        return insertIndex;
     }
 
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
