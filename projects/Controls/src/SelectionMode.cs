@@ -11,7 +11,7 @@ namespace DroidNet.Controls;
     "Naming",
     "CA1720:Identifier contains type name",
     Justification = "we want to keep the SelectionMode naming consistent with other WinUI controls")]
-public enum DynamicTreeSelectionMode
+public enum SelectionMode
 {
     /// <summary>
     /// A user can't select items.

@@ -17,7 +17,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     private SelectionModel<ITreeItem>? selectionModel;
 
     [ObservableProperty]
-    private DynamicTreeSelectionMode selectionMode = DynamicTreeSelectionMode.None;
+    private SelectionMode selectionMode = Controls.SelectionMode.None;
 
     public ObservableCollection<TreeItemAdapter> ShownItems { get; } = [];
 
@@ -35,15 +35,15 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         await this.RestoreExpandedChildrenAsync((TreeItemAdapter)root).ConfigureAwait(false);
     }
 
-    partial void OnSelectionModeChanged(DynamicTreeSelectionMode value)
+    partial void OnSelectionModeChanged(SelectionMode value)
     {
         switch (value)
         {
-            case DynamicTreeSelectionMode.None:
+            case Controls.SelectionMode.None:
                 this.selectionModel = null;
                 break;
 
-            case DynamicTreeSelectionMode.Single:
+            case Controls.SelectionMode.Single:
                 this.selectionModel = new SingleSelectionModel(this);
                 break;
 
