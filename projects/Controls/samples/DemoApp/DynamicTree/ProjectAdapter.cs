@@ -13,6 +13,8 @@ public class ProjectAdapter(Project item) : TreeItemAdapter, ITreeItem<Project>
 
     public Project AttachedObject => item;
 
+    public override Task<int> GetChildrenCountAsync() => Task.FromResult(this.AttachedObject.Scenes.Count);
+
     protected override async Task LoadChildren()
     {
         foreach (var scene in this.AttachedObject.Scenes)

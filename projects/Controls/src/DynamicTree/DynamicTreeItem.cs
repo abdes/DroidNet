@@ -4,11 +4,12 @@
 
 namespace DroidNet.Controls;
 
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class DynamicTreeItem : ContentControl
+public class DynamicTreeItem : ContentControl, INotifyPropertyChanged
 {
     /// <summary>
     /// Default indent increment value.
@@ -19,9 +20,33 @@ public class DynamicTreeItem : ContentControl
     {
         this.DefaultStyleKey = typeof(DynamicTreeItem);
 
+        this.Loaded += this.OnLoaded;
+
         // Attach an event handler to ensure template is reapplied when DataContext changes
         this.DataContextChanged += this.OnDataContextChanged;
     }
+
+    public event EventHandler<DynamicTreeEventArgs>? Expand;
+
+    public event EventHandler<DynamicTreeEventArgs>? Collapse;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool HasChildren { get; set; }
+
+    public void OnExpand(object? sender, EventArgs args) => this.Expand?.Invoke(
+        this,
+        new DynamicTreeEventArgs()
+        {
+            TreeItem = (TreeItemAdapter)this.DataContext,
+        });
+
+    public void OnCollapse(object? sender, EventArgs args) => this.Collapse?.Invoke(
+        this,
+        new DynamicTreeEventArgs()
+        {
+            TreeItem = (TreeItemAdapter)this.DataContext,
+        });
 
     protected override void OnApplyTemplate()
     {
@@ -51,12 +76,27 @@ public class DynamicTreeItem : ContentControl
         }
     }
 
-    private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    private async void OnLoaded(object sender, RoutedEventArgs args)
     {
-        // Unregsiter from property changes of the old TreeItem if any
+        _ = sender; // unused
+        _ = args; // unused
+
+        // Initialize the HasChildren property for the first time when the control is Loaded.
+        if (this.DataContext is TreeItemAdapter treeItem)
+        {
+            var childrenCount = await treeItem.GetChildrenCountAsync().ConfigureAwait(false);
+            this.HasChildren = childrenCount > 0;
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.HasChildren)));
+        }
+    }
+
+    private async void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        // Unregsiter event handlers from the old TreeItemAdapter if any
         if (this.DataContext is TreeItemAdapter currentTreeItem)
         {
-            currentTreeItem.PropertyChanged -= this.OnTreeItemPropertyChanged;
+            var itemChildren = (INotifyCollectionChanged)await currentTreeItem.Children.ConfigureAwait(true);
+            itemChildren.CollectionChanged -= this.ItemChildrenOnCollectionChanged;
         }
 
         // Update visual state based on the current value of IsSelected in the
@@ -64,24 +104,25 @@ public class DynamicTreeItem : ContentControl
         // TreeItem
         if (args.NewValue is TreeItemAdapter newTreeItem)
         {
-            this.UpdateVisualState(newTreeItem.IsSelected);
-            newTreeItem.PropertyChanged += this.OnTreeItemPropertyChanged;
+            var itemChildren = (INotifyCollectionChanged)await newTreeItem.Children.ConfigureAwait(true);
+            itemChildren.CollectionChanged += this.ItemChildrenOnCollectionChanged;
         }
 
         // Reapply the template to reflect changes in the DataContext
         _ = this.ApplyTemplate();
     }
 
-    private void OnTreeItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    private async void ItemChildrenOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (sender is TreeItemAdapter treeItem && args.PropertyName?.Equals(
-                nameof(ITreeItem.IsSelected),
-                StringComparison.Ordinal) == true)
+        if (this.DataContext is TreeItemAdapter treeItem)
         {
-            this.UpdateVisualState(treeItem.IsSelected);
+            this.HasChildren = (await treeItem.Children.ConfigureAwait(false)).Count > 0;
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.HasChildren)));
         }
     }
+}
 
-    private void UpdateVisualState(bool isSelected)
-        => VisualStateManager.GoToState(this, isSelected ? "Selected" : "Unselected", useTransitions: true);
+public class DynamicTreeEventArgs : EventArgs
+{
+    public required TreeItemAdapter TreeItem { get; init; }
 }

@@ -22,8 +22,6 @@ public interface ITreeItem
 
     int Depth { get; }
 
-    Task<bool> HasChildren();
-
     Task AddChildAsync(ITreeItem child);
 
     Task InsertChildAsync(int index, ITreeItem child);

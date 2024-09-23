@@ -70,9 +70,13 @@ public partial class DynamicTree
             Debug.WriteLine($"Item tapped: {itemContainer}");
 
             // Retrieve the DataContext, which is the TreeItemAdapter object
-            if (itemContainer.DataContext is ITreeItem item)
+            if (itemContainer.DataContext is TreeItemAdapter item)
             {
                 this.ViewModel!.SelectItem(item);
+                _ = VisualStateManager.GoToState(
+                    this,
+                    item.IsSelected ? "Selected" : "Unselected",
+                    useTransitions: true);
             }
         }
     }
@@ -84,19 +88,9 @@ public partial class DynamicTree
         Debug.WriteLine($"Item double tapped: {sender}");
     }
 
-    private void OnExpanded(object? sender, EventArgs e)
-    {
-        if (sender is TreeItemExpander expander)
-        {
-            this.ViewModel!.ExpandItemCommand.Execute(expander.TreeItem);
-        }
-    }
+    private void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
+        => this.ViewModel!.ExpandItemCommand.Execute(args.TreeItem);
 
-    private void OnCollapsed(object? sender, EventArgs e)
-    {
-        if (sender is TreeItemExpander expander)
-        {
-            this.ViewModel!.CollapseItemCommand.Execute(expander.TreeItem);
-        }
-    }
+    private void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
+        => this.ViewModel!.CollapseItemCommand.Execute(args.TreeItem);
 }

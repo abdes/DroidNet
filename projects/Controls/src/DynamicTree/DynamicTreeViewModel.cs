@@ -16,9 +16,9 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     [ObservableProperty]
     private DynamicTreeSelectionMode selectionMode = DynamicTreeSelectionMode.None;
 
-    public ObservableCollection<ITreeItem> ShownItems { get; } = [];
+    public ObservableCollection<TreeItemAdapter> ShownItems { get; } = [];
 
-    public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
+    public void SelectItem(TreeItemAdapter item) => this.selectionModel?.SelectItem(item);
 
     protected async Task InitializeRootAsync(ITreeItem root)
     {
@@ -29,7 +29,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
 
         // Do not add the root item, add its children instead and check if it they need to be expanded
-        await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
+        await this.RestoreExpandedChildrenAsync((TreeItemAdapter)root).ConfigureAwait(false);
     }
 
     partial void OnSelectionModeChanged(DynamicTreeSelectionMode value)
@@ -51,7 +51,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ToggleExpanded(ITreeItem itemAdapter)
+    private async Task ToggleExpanded(TreeItemAdapter itemAdapter)
     {
         if (itemAdapter.IsExpanded)
         {
@@ -64,14 +64,30 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ExpandItemAsync(ITreeItem itemAdapter)
-        => await this.RestoreExpandedChildrenAsync(itemAdapter).ConfigureAwait(false);
+    private async Task ExpandItemAsync(TreeItemAdapter itemAdapter)
+    {
+        if (itemAdapter.IsExpanded)
+        {
+            return;
+        }
+
+        await this.RestoreExpandedChildrenAsync(itemAdapter).ConfigureAwait(false);
+        itemAdapter.IsExpanded = true;
+    }
 
     [RelayCommand]
-    private async Task CollapseItem(ITreeItem itemAdapter)
-        => await this.HideChildrenAsync(itemAdapter).ConfigureAwait(false);
+    private async Task CollapseItem(TreeItemAdapter itemAdapter)
+    {
+        if (!itemAdapter.IsExpanded)
+        {
+            return;
+        }
 
-    private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
+        await this.HideChildrenAsync(itemAdapter).ConfigureAwait(false);
+        itemAdapter.IsExpanded = false;
+    }
+
+    private async Task RestoreExpandedChildrenAsync(TreeItemAdapter itemAdapter)
     {
         var insertIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
         await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(false);
@@ -81,7 +97,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     {
         foreach (var child in await parent.Children.ConfigureAwait(false))
         {
-            this.ShownItems.Insert(insertIndex++, child);
+            this.ShownItems.Insert(insertIndex++, (TreeItemAdapter)child);
             if (child.IsExpanded)
             {
                 insertIndex = await this.RestoreExpandedChildrenRecursive(child, insertIndex).ConfigureAwait(false);
@@ -93,7 +109,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
-        var removeIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
+        var removeIndex = this.ShownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
         await this.HideChildrenRecursiveAsync(itemAdapter, removeIndex).ConfigureAwait(false);
@@ -145,6 +161,6 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         protected override int GetItemCount() => this.model.ShownItems.Count;
 
-        protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf(item);
+        protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf((TreeItemAdapter)item);
     }
 }

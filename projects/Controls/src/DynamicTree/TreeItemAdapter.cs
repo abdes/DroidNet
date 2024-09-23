@@ -7,7 +7,6 @@ namespace DroidNet.Controls;
 using System;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.UI.Xaml;
 
 /// <summary>A base class for implementing tree item adapters.</summary>
 public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
@@ -36,14 +35,10 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     public TreeItemAdapter Self => this;
 
-    public static Visibility TreeItemHasChildren(TreeItemAdapter item)
-        => item.HasChildren().GetAwaiter().GetResult() ? Visibility.Visible : Visibility.Collapsed;
+    public abstract Task<int> GetChildrenCountAsync();
 
-    public async Task<bool> HasChildren()
-    {
-        var collection = await this.Children.ConfigureAwait(false);
-        return collection.Count > 0;
-    }
+    //public static Visibility TreeItemHasChildren(TreeItemAdapter item)
+    //    => item.HasChildren().GetAwaiter().GetResult() ? Visibility.Visible : Visibility.Collapsed;
 
     public async Task AddChildAsync(ITreeItem child) => await this.ManipulateChildrenAsync(
             this.AddChildInternal,
