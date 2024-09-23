@@ -29,7 +29,11 @@
     <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
 
-    <Style x:Key="DynamicTree" TargetType="local:DynamicTree" />
+    <Style
+        x:Key="DynamicTreeItemsViewStyle"
+        BasedOn="{StaticResource DefaultDynamicTreeItemsViewStyle}"
+        TargetType="ItemsView" />
+    <Style x:Key="DefaultDynamicTreeItemsViewStyle" TargetType="ItemsView" />
 
     <DataTemplate x:Key="DefaultThumbnailTemplate">
         <Border

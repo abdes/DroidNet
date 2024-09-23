@@ -31,7 +31,7 @@ public partial class DynamicTree
     public DynamicTree()
     {
         this.InitializeComponent();
-        this.Style = (Style)Application.Current.Resources[nameof(DynamicTree)];
+        this.DefaultStyleKey = typeof(DynamicTree);
 
         this.ViewModelChanged += (sender, args) =>
         {

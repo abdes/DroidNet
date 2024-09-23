@@ -20,4 +20,12 @@
 
     <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" />
 
+    <Style
+        x:Key="DynamicTreeItemsViewStyle"
+        BasedOn="{StaticResource DefaultDynamicTreeItemsViewStyle}"
+        TargetType="ItemsView">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Red" />
+    </Style>
+
 </ResourceDictionary>
