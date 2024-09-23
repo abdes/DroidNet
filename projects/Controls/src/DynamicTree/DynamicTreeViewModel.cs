@@ -9,6 +9,9 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+/// <summary>
+/// A ViewModel for the <see cref="DynamicTree" /> control.
+/// </summary>
 public abstract partial class DynamicTreeViewModel : ObservableObject
 {
     private SelectionModel<ITreeItem>? selectionModel;

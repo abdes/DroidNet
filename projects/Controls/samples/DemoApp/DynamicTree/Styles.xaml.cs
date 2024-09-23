@@ -6,6 +6,10 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 
 using Microsoft.UI.Xaml;
 
+/// <summary>
+/// A <see cref="ResourceDictionary" /> for the styles used in the <see cref="DynamicTree" /> demo. Because the
+/// styles use <c>{x:Bind}</c>, they must be backed by a <see cref="ResourceDictionary" /> implemented in code behind.
+/// </summary>
 public partial class Styles : ResourceDictionary
 {
     public Styles() => this.InitializeComponent();
