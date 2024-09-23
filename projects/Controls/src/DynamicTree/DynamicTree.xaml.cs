@@ -18,9 +18,9 @@ public partial class DynamicTree
 {
     public static readonly DependencyProperty SelectionModeProperty = DependencyProperty.Register(
         nameof(SelectionMode),
-        typeof(DynamicTreeSelectionMode),
+        typeof(SelectionMode),
         typeof(DynamicTree),
-        new PropertyMetadata(DynamicTreeSelectionMode.None));
+        new PropertyMetadata(Controls.SelectionMode.None));
 
     public static readonly DependencyProperty ThumbnailTemplateSelectorProperty = DependencyProperty.Register(
         nameof(ThumbnailTemplateSelector),
@@ -49,9 +49,9 @@ public partial class DynamicTree
         };
     }
 
-    public DynamicTreeSelectionMode SelectionMode
+    public SelectionMode SelectionMode
     {
-        get => (DynamicTreeSelectionMode)this.GetValue(SelectionModeProperty);
+        get => (SelectionMode)this.GetValue(SelectionModeProperty);
         set => this.SetValue(SelectionModeProperty, value);
     }
 
