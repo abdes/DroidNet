@@ -27,6 +27,7 @@ public abstract class SelectionModel<T> : ObservableObject
     /// applicable when in multiple selection mode. When in this mode, the selected index will always represent the last selection
     /// made.
     /// </remarks>
+    /// TODO: Make SelectedIndex ObservableProperty
     public int SelectedIndex => this.selectedIndex;
 
     /// <summary>
@@ -34,6 +35,7 @@ public abstract class SelectionModel<T> : ObservableObject
     /// that there is no selection, or an <see cref="object" /> that is retrieved from the underlying data model of the control the
     /// selection model is associated with.
     /// </summary>
+    /// TODO: Make SelectedItem ObservableProperty
     public T? SelectedItem => this.selectedItem;
 
     /// <summary>
