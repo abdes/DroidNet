@@ -19,7 +19,8 @@
         x:Name="ItemsListView"
         IsItemInvokedEnabled="False"
         ItemsSource="{x:Bind ViewModel.ShownItems}"
-        SelectionMode="None">
+        SelectionMode="None"
+        Style="{StaticResource DynamicTreeItemsViewStyle}">
         <ItemsView.Resources>
             <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
         </ItemsView.Resources>
