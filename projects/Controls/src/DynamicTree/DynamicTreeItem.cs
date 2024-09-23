@@ -11,6 +11,12 @@ using Microsoft.UI.Xaml.Controls;
 
 public class DynamicTreeItem : ContentControl, INotifyPropertyChanged
 {
+    public static readonly DependencyProperty ThumbnailTemplateSelectorProperty = DependencyProperty.Register(
+        nameof(ThumbnailTemplateSelector),
+        typeof(DataTemplateSelector),
+        typeof(DynamicTreeItem),
+        new PropertyMetadata(default(DataTemplateSelector)));
+
     /// <summary>
     /// Default indent increment value.
     /// </summary>
@@ -31,6 +37,12 @@ public class DynamicTreeItem : ContentControl, INotifyPropertyChanged
     public event EventHandler<DynamicTreeEventArgs>? Collapse;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public DataTemplateSelector ThumbnailTemplateSelector
+    {
+        get => (DataTemplateSelector)this.GetValue(ThumbnailTemplateSelectorProperty);
+        set => this.SetValue(ThumbnailTemplateSelectorProperty, value);
+    }
 
     public bool HasChildren { get; set; }
 
