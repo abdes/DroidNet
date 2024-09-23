@@ -37,9 +37,6 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     public abstract Task<int> GetChildrenCountAsync();
 
-    //public static Visibility TreeItemHasChildren(TreeItemAdapter item)
-    //    => item.HasChildren().GetAwaiter().GetResult() ? Visibility.Visible : Visibility.Collapsed;
-
     public async Task AddChildAsync(ITreeItem child) => await this.ManipulateChildrenAsync(
             this.AddChildInternal,
             child)
