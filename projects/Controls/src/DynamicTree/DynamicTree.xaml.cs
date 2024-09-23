@@ -73,10 +73,6 @@ public partial class DynamicTree
             if (itemContainer.DataContext is TreeItemAdapter item)
             {
                 this.ViewModel!.SelectItem(item);
-                _ = VisualStateManager.GoToState(
-                    this,
-                    item.IsSelected ? "Selected" : "Unselected",
-                    useTransitions: true);
             }
         }
     }
