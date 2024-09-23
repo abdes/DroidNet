@@ -4,18 +4,40 @@
 
 namespace DroidNet.Controls.Demo.Services;
 
-using System.Globalization;
 using DroidNet.Controls.Demo.Model;
+using DryIoc.ImTools;
 
 internal static class ProjectLoaderService
 {
+    private static readonly Scene[] Data =
+    [
+        new("Scene 1")
+        {
+            Entities =
+            [
+                new Entity("Scene 1 - Entity 1"),
+                new Entity("Scene 1 - Entity 2"),
+                new Entity("Scene 1 - Entity 3"),
+            ],
+        },
+        new("Scene 2"),
+        new("Scene 3")
+        {
+            Entities =
+            [
+                new Entity("Scene 3 - Entity 1"),
+                new Entity("Scene 3 - Entity 2"),
+                new Entity("Scene 3 - Entity 3"),
+                new Entity("Scene 3 - Entity 4"),
+            ],
+        },
+    ];
+
     public static async Task LoadProjectAsync(Project project)
     {
-        var random = new Random();
-        var numScenes = random.Next(2, 10);
-        for (var index = 1; index <= numScenes; index++)
+        foreach (var scene in Data)
         {
-            project.Scenes.Add(new Scene($"Scene {index.ToString(CultureInfo.InvariantCulture)}"));
+            project.Scenes.Add(new Scene(scene.Name));
         }
 
         await Task.CompletedTask.ConfigureAwait(false);
@@ -23,12 +45,11 @@ internal static class ProjectLoaderService
 
     public static async Task LoadSceneAsync(Scene scene)
     {
-        var random = new Random();
-        var numEnities = random.Next(1, 11);
+        var sceneData = Data.FindFirst((sceneData) => sceneData.Name.Equals(scene.Name, StringComparison.Ordinal));
 
-        for (var index = 1; index < numEnities; index++)
+        foreach (var entity in sceneData.Entities)
         {
-            scene.Entities.Add(new Entity($"{scene.Name} - Entity {index.ToString(CultureInfo.InvariantCulture)}"));
+            scene.Entities.Add(new Entity(entity.Name));
         }
 
         await Task.CompletedTask.ConfigureAwait(false);

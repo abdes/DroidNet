@@ -4,92 +4,53 @@
 
 namespace DroidNet.Controls;
 
-using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 
 public class TreeItemExpander : Control
 {
-    private TreeItemAdapter? treeItem;
+    private bool isExpanded;
 
     public TreeItemExpander()
     {
         this.DefaultStyleKey = typeof(TreeItemExpander);
 
-        this.Tapped += this.OnTapped;
-
-        // Initialize the control's visual state for the first time when it is
-        // loaded. Subsequent transitions will be driven by property changes on
-        // the attached TreeItemAdapter's IsExpanded property.
-        this.Loaded += (sender, args) =>
-        {
-            _ = sender; // unused
-            _ = args; // unused
-            if (this.treeItem is not null)
-            {
-                this.UpdateVisualState();
-            }
-        };
+        this.Tapped += (_, __) => this.Toggle();
+        this.DoubleTapped += (_, __) => this.Toggle();
     }
 
-    public event EventHandler? Expanded;
+    public event EventHandler? Expand;
 
-    public event EventHandler? Collapsed;
+    public event EventHandler? Collapse;
 
-    public TreeItemAdapter? TreeItem
+    public bool IsExpanded
     {
-        get => this.treeItem;
+        get => this.isExpanded;
         set
         {
-            if (this.treeItem == value)
+            if (this.IsExpanded != value)
             {
-                return;
-            }
-
-            if (this.treeItem is not null)
-            {
-                this.treeItem!.PropertyChanged -= this.OnTreeItemIsExpandedChanged;
-            }
-
-            // Only if the value in TreeItem not null
-            this.treeItem = value;
-
-            if (this.treeItem is not null)
-            {
+                this.isExpanded = value;
                 this.UpdateVisualState();
-                this.treeItem!.PropertyChanged += this.OnTreeItemIsExpandedChanged;
             }
         }
     }
-
-    private void OnTreeItemIsExpandedChanged(object? sender, PropertyChangedEventArgs args)
-        => this.UpdateVisualState();
 
     private void UpdateVisualState()
         => _ = VisualStateManager.GoToState(
             this,
-            this.treeItem!.IsExpanded ? "Expanded" : "Collapsed",
+            this.IsExpanded ? "Expanded" : "Collapsed",
             useTransitions: true);
 
-    private void OnTapped(object sender, TappedRoutedEventArgs args)
+    private void Toggle()
     {
-        _ = sender; // unused
-        _ = args; // unused
-
-        if (this.TreeItem is null)
+        if (!this.IsExpanded)
         {
-            return;
-        }
-
-        this.TreeItem.IsExpanded = !this.TreeItem.IsExpanded;
-        if (this.TreeItem.IsExpanded)
-        {
-            this.Expanded?.Invoke(this, EventArgs.Empty);
+            this.Expand?.Invoke(this, EventArgs.Empty);
         }
         else
         {
-            this.Collapsed?.Invoke(this, EventArgs.Empty);
+            this.Collapse?.Invoke(this, EventArgs.Empty);
         }
     }
 }

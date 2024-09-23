@@ -40,7 +40,10 @@
                     IsDoubleTapEnabled="True"
                     IsTapEnabled="True"
                     Tapped="ItemTapped">
-                    <lc:DynamicTreeItem />
+                    <lc:DynamicTreeItem
+                        Collapse="OnCollapseTreeItem"
+                        DataContext="{x:Bind}"
+                        Expand="OnExpandTreeItem" />
                     <!--
                     <Grid Margin="{x:Bind Level, Mode=OneWay, Converter={StaticResource IndentToMarginConverter}}">
                         <Grid.RowDefinitions>
@@ -67,6 +70,25 @@
                             Text="{x:Bind Label, Mode=OneWay}" />
                     </Grid>
                     -->
+
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="SelectionStates">
+                            <VisualState x:Name="Unselected">
+                                <Storyboard>
+                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                        <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource InctiveItemBackground}" />
+                                    </ObjectAnimationUsingKeyFrames>
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Selected">
+                                <Storyboard>
+                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                        <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource ActiveItemBackground}" />
+                                    </ObjectAnimationUsingKeyFrames>
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
                 </ItemContainer>
             </DataTemplate>
         </ItemsView.ItemTemplate>
