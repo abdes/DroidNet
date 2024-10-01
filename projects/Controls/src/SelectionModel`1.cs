@@ -64,8 +64,8 @@ public abstract class SelectionModel<T> : ObservableObject
     /// This method will attempt to select the index that contains the given <paramref name="item" />.
     /// </summary>
     /// <remarks>
-    /// This method will look for the first occurence of the given <paramref name="item" />, and if successful, it will select it.
-    /// This means that this method will not select multiple occurences, and will have no effect if the item was not found.
+    /// This method will look for the first occurrence of the given <paramref name="item" />, and if successful, it will select it.
+    /// This means that this method will not select multiple occurrences, and will have no effect if the item was not found.
     /// </remarks>
     /// <param name="item">
     /// The item to attempt to select in the underlying data model.
@@ -75,6 +75,10 @@ public abstract class SelectionModel<T> : ObservableObject
     /// <summary>
     /// Clears the selection model of any existing selection.
     /// </summary>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> properties if their values
+    /// change.
+    /// </remarks>
     public abstract void ClearSelection();
 
     /// <summary>
@@ -84,6 +88,10 @@ public abstract class SelectionModel<T> : ObservableObject
     /// <param name="index">
     /// The selected item to deselect.
     /// </param>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> properties if their values
+    /// change.
+    /// </remarks>
     public abstract void ClearSelection(int index);
 
     /// <summary>
