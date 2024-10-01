@@ -4,8 +4,6 @@
 
 namespace DroidNet.Controls.Demo.Model;
 
-using System;
-
 public class NamedItem
 {
     private string name;

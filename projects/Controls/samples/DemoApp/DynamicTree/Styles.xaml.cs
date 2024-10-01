@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml;
 /// A <see cref="ResourceDictionary" /> for the styles used in the <see cref="DynamicTree" /> demo. Because the
 /// styles use <c>{x:Bind}</c>, they must be backed by a <see cref="ResourceDictionary" /> implemented in code behind.
 /// </summary>
-public partial class Styles : ResourceDictionary
+public partial class Styles
 {
     public Styles() => this.InitializeComponent();
 }

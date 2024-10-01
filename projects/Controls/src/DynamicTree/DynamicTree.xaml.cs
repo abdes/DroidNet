@@ -20,7 +20,7 @@ public partial class DynamicTree
         nameof(SelectionMode),
         typeof(SelectionMode),
         typeof(DynamicTree),
-        new PropertyMetadata(Controls.SelectionMode.None));
+        new PropertyMetadata(SelectionMode.None));
 
     public static readonly DependencyProperty ThumbnailTemplateSelectorProperty = DependencyProperty.Register(
         nameof(ThumbnailTemplateSelector),
@@ -35,6 +35,9 @@ public partial class DynamicTree
 
         this.ViewModelChanged += (sender, args) =>
         {
+            _ = sender; // unused
+            _ = args; // unused
+
             if (this.ViewModel is not null && this.IsLoaded)
             {
                 this.ViewModel.SelectionMode = this.SelectionMode;
@@ -43,8 +46,9 @@ public partial class DynamicTree
 
         this.Loaded += (sender, args) =>
         {
-            _ = sender;
-            _ = args;
+            _ = sender; // unused
+            _ = args; // unused
+
             this.ViewModel!.SelectionMode = this.SelectionMode;
         };
     }

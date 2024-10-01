@@ -12,16 +12,16 @@
         <converters:BoolToBrushConverter
             x:Key="ItemBackgroundBrushConverter"
             ActiveBrush="{StaticResource ActiveItemBackground}"
-            InactiveBrush="{StaticResource InctiveItemBackground}" />
+            InactiveBrush="{StaticResource InactiveItemBackground}" />
     </UserControl.Resources>
 
     <ItemsView
-        x:Name="ItemsListView"
         IsItemInvokedEnabled="False"
         ItemsSource="{x:Bind ViewModel.ShownItems}"
         SelectionMode="None"
         Style="{StaticResource DynamicTreeItemsViewStyle}">
         <ItemsView.Resources>
+            <!--  ReSharper disable once Xaml.RedundantResource (overriding default behavior of ItemsView)  -->
             <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
         </ItemsView.Resources>
         <ItemsView.ItemTemplate>

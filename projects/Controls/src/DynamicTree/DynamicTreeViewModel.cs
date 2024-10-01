@@ -5,6 +5,7 @@
 namespace DroidNet.Controls;
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -17,7 +18,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     private SelectionModel<ITreeItem>? selectionModel;
 
     [ObservableProperty]
-    private SelectionMode selectionMode = Controls.SelectionMode.None;
+    private SelectionMode selectionMode = SelectionMode.None;
 
     public ObservableCollection<TreeItemAdapter> ShownItems { get; } = [];
 
@@ -26,32 +27,19 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     protected async Task InitializeRootAsync(ITreeItem root)
     {
         this.ShownItems.Clear();
-        if (root is null)
-        {
-            return;
-        }
 
         // Do not add the root item, add its children instead and check if it they need to be expanded
         await this.RestoreExpandedChildrenAsync((TreeItemAdapter)root).ConfigureAwait(false);
     }
 
-    partial void OnSelectionModeChanged(SelectionMode value)
-    {
-        switch (value)
+    partial void OnSelectionModeChanged(SelectionMode value) =>
+        this.selectionModel = value switch
         {
-            case Controls.SelectionMode.None:
-                this.selectionModel = null;
-                break;
-
-            case Controls.SelectionMode.Single:
-                this.selectionModel = new SingleSelectionModel(this);
-                break;
-
-            default:
-                this.selectionModel = null;
-                break;
-        }
-    }
+            SelectionMode.None => default,
+            SelectionMode.Single => new SingleSelectionModel(this),
+            SelectionMode.Multiple => default, // TODO: support multiple selection
+            _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode))
+        };
 
     [RelayCommand]
     private async Task ToggleExpanded(TreeItemAdapter itemAdapter)
@@ -140,6 +128,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
             this.PropertyChanging += (sender, args) =>
             {
+                _ = sender; // unused
+
                 var propertyName = args.PropertyName;
                 if (propertyName?.Equals(nameof(this.SelectedItem), StringComparison.Ordinal) == true
                     && this.SelectedItem is not null)
@@ -150,6 +140,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
             this.PropertyChanged += (sender, args) =>
             {
+                _ = sender; // unused
+
                 var propertyName = args.PropertyName;
                 if ((string.IsNullOrEmpty(propertyName)
                      || propertyName.Equals(nameof(this.SelectedItem), StringComparison.Ordinal))

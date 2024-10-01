@@ -56,7 +56,7 @@ public partial class DemoBrowserViewModel(IRouter router) : ObservableObject, IO
         }
         */
 
-        var (index, navItem) = this.FindNavigationItem(item => item.TargetViewModel.Equals(viewModelType));
+        var (index, navItem) = this.FindNavigationItem(item => item.TargetViewModel == viewModelType);
         if (navItem != null)
         {
             this.SelectedItemIndex = index;
