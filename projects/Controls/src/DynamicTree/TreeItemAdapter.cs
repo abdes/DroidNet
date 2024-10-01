@@ -33,8 +33,6 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     public int Depth => this.Parent is null ? -1 : this.Parent.Depth + 1;
 
-    public TreeItemAdapter Self => this;
-
     public abstract Task<int> GetChildrenCountAsync();
 
     public async Task AddChildAsync(ITreeItem child) => await this.ManipulateChildrenAsync(
@@ -43,7 +41,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         .ConfigureAwait(false);
 
     public async Task InsertChildAsync(int index, ITreeItem child) => await this.ManipulateChildrenAsync(
-            (TreeItemAdapter item) =>
+            (item) =>
             {
                 this.children.Insert(index, item);
                 item.Parent = this;
@@ -52,7 +50,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         .ConfigureAwait(false);
 
     public async Task RemoveChildAsync(ITreeItem child) => await this.ManipulateChildrenAsync(
-            (TreeItemAdapter item) =>
+            (item) =>
             {
                 if (this.children.Remove(item))
                 {

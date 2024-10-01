@@ -4,6 +4,4 @@
 
 namespace DroidNet.Controls.Demo.Model;
 
-public class Entity(string name) : NamedItem(name)
-{
-}
+public class Entity(string name) : NamedItem(name);

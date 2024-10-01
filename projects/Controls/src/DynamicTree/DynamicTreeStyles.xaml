@@ -4,8 +4,6 @@
     x:Class="DroidNet.Controls.DynamicTreeStyles"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:System="using:System"
-    xmlns:ctk="using:CommunityToolkit.WinUI"
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:local="using:DroidNet.Controls">
 
@@ -24,7 +22,7 @@
     <x:Double x:Key="CellContentHeight">24</x:Double>
 
     <SolidColorBrush x:Key="ActiveItemBackground" Color="{ThemeResource SubtleFillColorSecondary}" />
-    <SolidColorBrush x:Key="InctiveItemBackground" Color="{ThemeResource SubtleFillColorTransparent}" />
+    <SolidColorBrush x:Key="InactiveItemBackground" Color="{ThemeResource SubtleFillColorTransparent}" />
 
     <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 

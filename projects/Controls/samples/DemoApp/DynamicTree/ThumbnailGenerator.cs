@@ -29,21 +29,19 @@ public static class ThumbnailGenerator
     {
         var bitmap = new WriteableBitmap(width, height);
 
-        using (var stream = bitmap.PixelBuffer.AsStream())
+        using var stream = bitmap.PixelBuffer.AsStream();
+        var pixels = new byte[width * height * 4]; // RGBA
+        var rand = new Random();
+
+        for (var i = 0; i < pixels.Length; i += 4)
         {
-            var pixels = new byte[width * height * 4]; // RGBA
-            var rand = new Random();
-
-            for (var i = 0; i < pixels.Length; i += 4)
-            {
-                pixels[i] = (byte)rand.Next(256); // R
-                pixels[i + 1] = (byte)rand.Next(256); // G
-                pixels[i + 2] = (byte)rand.Next(256); // B
-                pixels[i + 3] = 255; // A
-            }
-
-            stream.Write(pixels, 0, pixels.Length);
+            pixels[i] = (byte)rand.Next(256); // R
+            pixels[i + 1] = (byte)rand.Next(256); // G
+            pixels[i + 2] = (byte)rand.Next(256); // B
+            pixels[i + 3] = 255; // A
         }
+
+        stream.Write(pixels, 0, pixels.Length);
 
         return bitmap;
     }
