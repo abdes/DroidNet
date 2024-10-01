@@ -4,7 +4,6 @@
         "documentationRules": {
             "companyName": "The Authors",
             "copyrightText": "Distributed under the {licenseName} License. See accompanying file {licenseFile} or copy\nat https://opensource.org/licenses/{licenseName}.\nSPDX-License-Identifier: {licenseName}",
-            "headerDecoration": "===----------------------------------------------------------------------===",
             "variables": {
                 "licenseName": "MIT",
                 "licenseFile": "LICENSE"
