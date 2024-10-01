@@ -20,7 +20,7 @@
         <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
 
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
-        <AppDisplayName>DroidNet Controls Uint Tests</AppDisplayName>
+        <AppDisplayName>DroidNet Controls Unit Tests</AppDisplayName>
     </PropertyGroup>
 
     <ItemGroup>
