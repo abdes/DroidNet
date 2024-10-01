@@ -102,7 +102,7 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
             }
         }
 
-        // Modify the collection quietly. We'll only trigget a collection change
+        // Modify the collection quietly. We'll only trigger a collection change
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
         {
@@ -111,20 +111,35 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Clears the selection model of any existing selection.
+    /// </summary>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/> and <see
+    /// cref="SelectionModel{T}.SelectedItem"/> properties if their values change, and the <see cref="SelectedIndices"/>
+    /// observable collection if its content changes.
+    /// </remarks>
     public override void ClearSelection()
     {
         this.selectedIndices.Clear();
         this.UpdateSelectedIndex(-1);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Clear the selection of the item at the given index. If the given index is not selected or not in the valid range, nothing
+    /// will happen.
+    /// </summary>
+    /// <param name="index">
+    /// The selected item to deselect.
+    /// </param>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/> and <see
+    /// cref="SelectionModel{T}.SelectedItem"/> properties if their values change, and the <see cref="SelectedIndices"/>
+    /// observable collection if its content changes.
+    /// </remarks>
     public override void ClearSelection(int index)
     {
-        if (index < 0 || index >= this.GetItemCount())
-        {
-            throw new ArgumentOutOfRangeException(nameof(index));
-        }
+        this.ValidIndexOrThrow(index);
 
         var removed = this.selectedIndices.Remove(index);
         if (removed)
@@ -159,7 +174,7 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         {
             if (this.SelectionMode == SelectionMode.Single)
             {
-                // Modify the collection quietly. We'll only trigget a collection change
+                // Modify the collection quietly. We'll only trigger a collection change
                 // notification after we resume notifications.
                 using (this.selectedIndices.SuspendNotifications())
                 {
@@ -194,7 +209,58 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// One or more index values that will be added to the selection if they are within the valid range, and do not duplicate
     /// indices already in the existing selection.
     /// </param>
-    public void SelectItemsAt(params int[] indices) => throw new NotImplementedException();
+    public void SelectItemsAt(params int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return;
+        }
+
+        var rowCount = this.selectedIndices.Count;
+
+        // Modify the collection quietly. We'll only trigger a collection change
+        // notification after we resume notifications.
+        using (this.selectedIndices.SuspendNotifications())
+        {
+            this.ClearSelection();
+
+            // If selection mode is single, only process the last valid index in the provided indices.
+            if (this.SelectionMode == SelectionMode.Single)
+            {
+                for (var i = indices.Length - 1; i >= 0; i--)
+                {
+                    var index = indices[i];
+
+                    // Ignore invalid indices
+                    if (index < 0 || index >= rowCount)
+                    {
+                        continue;
+                    }
+
+                    this.selectedIndices.Add(index);
+                    this.UpdateSelectedIndex(index);
+                    break;
+                }
+            }
+            else
+            {
+                var lastIndex = indices
+                    .Where(index => index >= 0 && index < rowCount)
+                    .Select(index =>
+                    {
+                        this.selectedIndices.Add(index);
+                        return index;
+                    })
+                    .DefaultIfEmpty(-1)
+                    .Last();
+
+                if (lastIndex != -1)
+                {
+                    this.UpdateSelectedIndex(lastIndex);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Selects all indices from the given <paramref name="start" /> index to the item before the given <paramref name="end" />
@@ -210,12 +276,54 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// <param name="end">
     /// The last index of the selection - this index will not be selected.
     /// </param>
-    public void SelectRange(int start, int end) => throw new NotImplementedException();
+    public void SelectRange(int start, int end)
+    {
+        var ascending = start < end;
+        var low = ascending ? start : end;
+        var high = ascending ? end : low;
+
+        var arrayLength = high - low;
+        var indices = new int[arrayLength];
+
+        var startValue = ascending ? low : high;
+        for (var index = 0; index < arrayLength; index++)
+        {
+            indices[index] = ascending ? startValue++ : startValue--;
+        }
+
+        this.SelectItemsAt(indices);
+    }
 
     /// <summary>
     /// Convenience method to select all available indices.
     /// </summary>
-    public void SelectAll() => throw new NotImplementedException();
+    public void SelectAll()
+    {
+        if (this.SelectionMode == SelectionMode.Single)
+        {
+            return;
+        }
+
+        var rowCount = this.selectedIndices.Count;
+        if (rowCount == 0)
+        {
+            return;
+        }
+
+        // Modify the collection quietly. We'll only trigger a collection change
+        // notification after we resume notifications.
+        using (this.selectedIndices.SuspendNotifications())
+        {
+            this.ClearSelection();
+            for (var index = 0; index < rowCount; index++)
+            {
+                this.selectedIndices.Add(index);
+            }
+        }
+
+        // TODO: Manage focus
+        this.UpdateSelectedIndex(rowCount - 1);
+    }
 
     /// <summary>
     /// Gets the data model item associated with a specific index.
@@ -250,6 +358,12 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </returns>
     protected abstract int GetItemCount();
 
+    /// <summary>
+    /// Validates the specified index and throws an <see cref="ArgumentOutOfRangeException"/> if the index is out of range.
+    /// </summary>
+    /// <param name="index">The index to validate.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the index is less than 0 or greater than or equal to the item
+    /// count.</exception>
     private void ValidIndexOrThrow(int index)
     {
         if (index < 0 || index >= this.GetItemCount())
@@ -258,6 +372,13 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
     }
 
+    /// <summary>
+    /// Updates the selected index to the specified new index (which could be -1 to clear the current values).
+    /// <para>
+    /// If the new index is valid and different from the current selected index, the selected item is updated accordingly.
+    /// </para>
+    /// </summary>
+    /// <param name="newIndex">The new index to set as selected. Should be -1 or within the valid range [0, ItemCount).</param>
     private void UpdateSelectedIndex(int newIndex)
     {
         Debug.Assert(
