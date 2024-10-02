@@ -69,15 +69,9 @@ public partial class DynamicTree
     {
         args.Handled = true;
 
-        if (sender is FrameworkElement itemContainer)
+        if (sender is FrameworkElement { DataContext: TreeItemAdapter item })
         {
-            Debug.WriteLine($"Item tapped: {itemContainer}");
-
-            // Retrieve the DataContext, which is the TreeItemAdapter object
-            if (itemContainer.DataContext is TreeItemAdapter item)
-            {
-                this.ViewModel!.SelectItem(item);
-            }
+            this.ViewModel!.SelectItem(item);
         }
     }
 

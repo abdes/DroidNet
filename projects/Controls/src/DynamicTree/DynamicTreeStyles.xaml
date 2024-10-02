@@ -120,7 +120,7 @@
                                 Collapse="{x:Bind OnCollapse}"
                                 Expand="{x:Bind OnExpand}"
                                 IsExpanded="{x:Bind ((local:TreeItemAdapter)DataContext).IsExpanded, Mode=OneWay}"
-                                Visibility="{Binding HasChildren, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                Visibility="{Binding Path=HasChildren, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                         </Border>
                         <local:Thumbnail
                             Grid.Column="1"

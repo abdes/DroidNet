@@ -15,6 +15,8 @@
             InactiveBrush="{StaticResource InactiveItemBackground}" />
     </UserControl.Resources>
 
+    <!--  ViewModel will never be null under standard operation conditions  -->
+
     <ItemsView
         IsItemInvokedEnabled="False"
         ItemsSource="{x:Bind ViewModel.ShownItems}"
@@ -26,6 +28,12 @@
         </ItemsView.Resources>
         <ItemsView.ItemTemplate>
             <DataTemplate x:DataType="lc:TreeItemAdapter">
+                <!--
+                    Interaction with the tree items should be possible over the entire surface of the item container.
+                    Therefore, we want to setup the Tapped and DoubleTapped event handlers on the ItemContainer element.
+                    For this to work well, we need to have access to the TreeItemAdapter inside these event handlers,
+                    which we pass as the DataContext.
+                -->
                 <ItemContainer
                     Background="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource ItemBackgroundBrushConverter}}"
                     DataContext="{x:Bind}"
@@ -37,7 +45,7 @@
                         Collapse="OnCollapseTreeItem"
                         DataContext="{x:Bind}"
                         Expand="OnExpandTreeItem"
-                        ThumbnailTemplateSelector="{Binding ThumbnailTemplateSelector, ElementName=TreeControl, Mode=OneWay}" />
+                        ThumbnailTemplateSelector="{Binding Path=ThumbnailTemplateSelector, ElementName=TreeControl, Mode=OneWay}" />
                 </ItemContainer>
             </DataTemplate>
         </ItemsView.ItemTemplate>
