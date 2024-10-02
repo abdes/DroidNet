@@ -65,7 +65,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Controls\src\Controls.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
 

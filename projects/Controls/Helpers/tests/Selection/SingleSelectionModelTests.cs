@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [ExcludeFromCodeCoverage]
 [TestClass]
+[TestCategory($"{nameof(Controls)} - Selection Helpers")]
 public class SingleSelectionModelTests
 {
     [TestMethod]
@@ -110,11 +111,16 @@ public class SingleSelectionModelTests
         _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedItem);
 
         var events = monitor.OccurredEvents
-            .Where(e => string.Equals(e.EventName, nameof(INotifyPropertyChanged.PropertyChanged), StringComparison.Ordinal))
+            .Where(
+                e => string.Equals(
+                    e.EventName,
+                    nameof(INotifyPropertyChanged.PropertyChanged),
+                    StringComparison.Ordinal))
             .Select(e => (PropertyChangedEventArgs)e.Parameters[1])
             .ToList();
 
-        _ = events.Should().HaveCount(2, "only the final property change events should be raised")
+        _ = events.Should()
+            .HaveCount(2, "only the final property change events should be raised")
             .And.ContainSingle(
                 e => string.Equals(e.PropertyName, nameof(model.SelectedIndex), StringComparison.Ordinal),
                 "the SelectedIndex should be set to the new value")

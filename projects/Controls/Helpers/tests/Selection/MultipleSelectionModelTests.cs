@@ -9,8 +9,9 @@ using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-[TestClass]
 [ExcludeFromCodeCoverage]
+[TestClass]
+[TestCategory($"{nameof(Controls)} - Selection Helpers")]
 public class MultipleSelectionModelTests
 {
     [TestMethod]
@@ -128,7 +129,7 @@ public class MultipleSelectionModelTests
         _ = model.SelectedItem.Should().Be(default);
     }
 
-    private class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
+    private sealed class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
     {
         protected override string GetItemAt(int index) => items[index];
 

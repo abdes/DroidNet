@@ -7,7 +7,7 @@ namespace DroidNet.Controls;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 
-internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
+public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<int> selectedIndices = [];
 
@@ -64,14 +64,13 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// Clears the selection model of any existing selection.
     /// </summary>
     /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/> and <see
-    /// cref="SelectionModel{T}.SelectedItem"/> properties if their values change, and the <see cref="SelectedIndices"/>
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" /> properties if their values change, and the <see cref="SelectedIndices" />
     /// observable collection if its content changes.
     /// </remarks>
     public override void ClearSelection()
     {
         this.selectedIndices.Clear();
-        this.UpdateSelectedIndex(-1);
+        this.SetSelectedIndex(-1);
     }
 
     /// <summary>
@@ -82,11 +81,10 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// The selected item to deselect.
     /// </param>
     /// <remarks>
-    /// If the <see cref="SelectionModel{T}.SelectedIndex"/> is the same than the <see paramref="index"/> to be cleared, its value
-    /// is updated to the first item in the <see cref="SelectedIndices"/> collection if it's not empty or <c>-1</c> otherwise.
+    /// If the <see cref="SelectionModel{T}.SelectedIndex" /> is the same than the <see paramref="index" /> to be cleared, its value
+    /// is updated to the first item in the <see cref="SelectedIndices" /> collection if it's not empty or <c>-1</c> otherwise.
     /// <para>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/> and <see
-    /// cref="SelectionModel{T}.SelectedItem"/> properties if their values change, and the <see cref="SelectedIndices"/>
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" /> properties if their values change, and the <see cref="SelectedIndices" />
     /// observable collection if its content changes.
     /// </para>
     /// </remarks>
@@ -99,7 +97,7 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[0];
-        this.UpdateSelectedIndex(newSelectedIndex);
+        this.SetSelectedIndex(newSelectedIndex);
     }
 
     /// <inheritdoc />
@@ -129,7 +127,7 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         this.selectedIndices.Add(index);
-        this.UpdateSelectedIndex(index);
+        this.SetSelectedIndex(index);
     }
 
     /// <summary>
@@ -178,7 +176,7 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
 
             if (lastIndex != -1)
             {
-                this.UpdateSelectedIndex(lastIndex);
+                this.SetSelectedIndex(lastIndex);
             }
         }
     }
@@ -238,44 +236,11 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         // TODO: Manage focus
-        this.UpdateSelectedIndex(rowCount - 1);
+        this.SetSelectedIndex(rowCount - 1);
     }
 
     /// <summary>
-    /// Gets the data model item associated with a specific index.
-    /// </summary>
-    /// <param name="index">
-    /// The position of the item in the underlying data model.
-    /// </param>
-    /// <returns>
-    /// The item that exists at the given index.
-    /// </returns>
-    protected abstract T GetItemAt(int index);
-
-    /// <summary>
-    /// Searches for the specified <paramref name="item" /> in the underlying data model, and returns the zero-based index of its
-    /// first occurrence.
-    /// </summary>
-    /// <param name="item">
-    /// The item to locate in the underlying data model.
-    /// </param>
-    /// <returns>
-    /// The zero-based index of the first occurrence of item within the underlying data model, if found; otherwise, -1.
-    /// </returns>
-    protected abstract int IndexOf(T item);
-
-    /// <summary>
-    /// Gets the number of items available for the selection model. If the number of items can change dynamically, it is the
-    /// responsibility of the concrete implementation to ensure that items are selected or unselected as appropriate as the items
-    /// change.
-    /// </summary>
-    /// <returns>
-    /// A number greater than or equal to 0 representing the number of items available for the selection model.
-    /// </returns>
-    protected abstract int GetItemCount();
-
-    /// <summary>
-    /// Validates the specified index and throws an <see cref="ArgumentOutOfRangeException"/> if the index is out of range.
+    /// Validates the specified index and throws an <see cref="ArgumentOutOfRangeException" /> if the index is out of range.
     /// </summary>
     /// <param name="index">The index to validate.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the index is less than 0 or greater than or equal to the item
@@ -286,27 +251,5 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         {
             throw new ArgumentOutOfRangeException(nameof(index));
         }
-    }
-
-    /// <summary>
-    /// Updates the selected index to the specified new index (which could be -1 to clear the current values).
-    /// <para>
-    /// If the new index is valid and different from the current selected index, the selected item is updated accordingly.
-    /// </para>
-    /// </summary>
-    /// <param name="newIndex">The new index to set as selected. Should be -1 or within the valid range [0, ItemCount).</param>
-    private void UpdateSelectedIndex(int newIndex)
-    {
-        Debug.Assert(
-            newIndex >= -1 && newIndex < this.GetItemCount(),
-            $"{nameof(newIndex)} should be -1 or in the valid range [0, ItemCount)");
-
-        if (!this.SetSelectedIndex(newIndex))
-        {
-            return;
-        }
-
-        var newItem = newIndex == -1 ? default : this.GetItemAt(this.SelectedIndex);
-        _ = this.SetSelectedItem(newItem);
     }
 }

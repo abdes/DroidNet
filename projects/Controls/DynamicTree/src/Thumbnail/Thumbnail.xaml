@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Controls">
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="EmptyThumbnailBorderColor">Black</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="EmptyThumbnailBorderColor">White</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <Style BasedOn="{StaticResource DefaultThumbnailStyle}" TargetType="local:Thumbnail" />
+
+    <DataTemplate x:Key="DefaultThumbnailTemplate">
+        <Border
+            Width="{StaticResource CellContentWidth}"
+            Height="{StaticResource CellContentHeight}"
+            BorderBrush="{ThemeResource EmptyThumbnailBorderColor}"
+            BorderThickness="1" />
+    </DataTemplate>
+
+    <Style x:Key="DefaultThumbnailStyle" TargetType="local:Thumbnail">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:Thumbnail">
+                    <ContentPresenter x:Name="ContentPresenter" Content="{TemplateBinding Content}" />
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="TemplateStates">
+                            <!--
+                                In this state, we simply use the default content template from the static resource. This is
+                                typically the case when no ContentTemplateSelector has been set for the Thumbnail.
+                            -->
+                            <VisualState x:Name="DefaultTemplate">
+                                <VisualState.Setters>
+                                    <Setter Target="ContentPresenter.ContentTemplate" Value="{StaticResource DefaultThumbnailTemplate}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <!--
+                                In this state, we get the content template from the CustomTemplate property of the Thumbnail,
+                                which should have been updated already using the ContentTemplateSelector property of the Thumbnail
+                            -->
+                            <VisualState x:Name="CustomTemplate">
+                                <VisualState.Setters>
+                                    <Setter Target="ContentPresenter.ContentTemplate" Value="{Binding Path=CustomTemplate, RelativeSource={RelativeSource Mode=TemplatedParent}}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

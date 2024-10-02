@@ -20,7 +20,7 @@
         <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
 
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
-        <AppDisplayName>DroidNet Controls Unit Tests</AppDisplayName>
+        <AppDisplayName>DynamicTree Control Unit Tests</AppDisplayName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -44,7 +44,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\src\Controls.csproj" />
+        <ProjectReference Include="..\src\Controls.DynamicTree.csproj" />
     </ItemGroup>
 
 </Project>

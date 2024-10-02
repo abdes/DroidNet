@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+
+    <ResourceDictionary.MergedDictionaries>
+        <DynamicTreeStyles xmlns="using:DroidNet.Controls" />
+        <DynamicTreeItemStyles xmlns="using:DroidNet.Controls" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

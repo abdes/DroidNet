@@ -4,7 +4,8 @@
 
 namespace DroidNet.Controls;
 
-using CommunityToolkit.Mvvm.ComponentModel;
+using System.ComponentModel;
+using System.Diagnostics;
 
 /// <summary>
 /// An abstract class used by controls to provide a consistent interface for maintaining a selection.
@@ -12,11 +13,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// <typeparam name="T">
 /// The type of the item that can be selected, which is typically the type of items in the control.
 /// </typeparam>
-public abstract class SelectionModel<T> : ObservableObject
+public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyPropertyChanged
 {
-    private int selectedIndex = -1;
+    /// <inheritdoc />
+    public event PropertyChangedEventHandler? PropertyChanged;
 
-    private T? selectedItem;
+    /// <inheritdoc />
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     /// <summary>
     /// Gets the currently selected index value in the selection model. The selected index is either <c>-1</c>, to represent that
@@ -27,16 +30,14 @@ public abstract class SelectionModel<T> : ObservableObject
     /// applicable when in multiple selection mode. When in this mode, the selected index will always represent the last selection
     /// made.
     /// </remarks>
-    /// TODO: Make SelectedIndex ObservableProperty
-    public int SelectedIndex => this.selectedIndex;
+    public int SelectedIndex { get; private set; } = -1;
 
     /// <summary>
     /// Gets the currently selected item in the selection model. The selected item is either <see langword="null" />, to represent
     /// that there is no selection, or an <see cref="object" /> that is retrieved from the underlying data model of the control the
     /// selection model is associated with.
     /// </summary>
-    /// TODO: Make SelectedItem ObservableProperty
-    public T? SelectedItem => this.selectedItem;
+    public T? SelectedItem { get; private set; }
 
     /// <summary>
     /// Select the given index in the selection model, assuming the index is within the valid range (i.e. greater than or equal to
@@ -76,7 +77,7 @@ public abstract class SelectionModel<T> : ObservableObject
     /// Clears the selection model of any existing selection.
     /// </summary>
     /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> properties if their values
+    /// Triggers change notifications for the <see cref="SelectedIndex" /> and <see cref="SelectedItem" /> properties if their values
     /// change.
     /// </remarks>
     public abstract void ClearSelection();
@@ -89,7 +90,7 @@ public abstract class SelectionModel<T> : ObservableObject
     /// The selected item to deselect.
     /// </param>
     /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectedIndex"/> and <see cref="SelectedItem"/> properties if their values
+    /// Triggers change notifications for the <see cref="SelectedIndex" /> and <see cref="SelectedItem" /> properties if their values
     /// change.
     /// </remarks>
     public abstract void ClearSelection(int index);
@@ -133,27 +134,41 @@ public abstract class SelectionModel<T> : ObservableObject
     public abstract bool IsEmpty();
 
     /// <summary>
-    /// Compares the current and new values for the <see cref="SelectedIndex" /> property. If the value has changed, raises the
-    /// <see cref="ObservableObject.PropertyChanging" /> event, updates the property and then raises the
-    /// <see cref="ObservableObject.PropertyChanged" /> event.
+    /// Gets the data model item associated with a specific index.
     /// </summary>
-    /// <param name="value">
-    /// The property's value after the change occurred.
+    /// <param name="index">
+    /// The position of the item in the underlying data model.
     /// </param>
     /// <returns>
-    /// <see langword="true" /> if the property was changed, <see langword="false" /> otherwise.
+    /// The item that exists at the given index.
     /// </returns>
-    /// <remarks>
-    /// The <see cref="ObservableObject.PropertyChanging" /> and <see cref="ObservableObject.PropertyChanged" /> events are not
-    /// raised if the current and new value are the same.
-    /// </remarks>
-    protected bool SetSelectedIndex(int value)
-        => this.SetProperty(ref this.selectedIndex, value, nameof(this.SelectedIndex));
+    protected abstract T GetItemAt(int index);
 
     /// <summary>
-    /// Compares the current and new values for the <see cref="SelectedItem" /> property. If the value has changed, raises the
-    /// <see cref="ObservableObject.PropertyChanging" /> event, updates the property and then raises the
-    /// <see cref="ObservableObject.PropertyChanged" /> event.
+    /// Searches for the specified <paramref name="item" /> in the underlying data model, and returns the zero-based index of its
+    /// first occurrence.
+    /// </summary>
+    /// <param name="item">
+    /// The item to locate in the underlying data model.
+    /// </param>
+    /// <returns>
+    /// The zero-based index of the first occurrence of item within the underlying data model, if found; otherwise, -1.
+    /// </returns>
+    protected abstract int IndexOf(T item);
+
+    /// <summary>
+    /// Gets the number of items available for the selection model. If the number of items can change dynamically, it is the
+    /// responsibility of the concrete implementation to ensure that items are selected or unselected as appropriate as the items
+    /// change.
+    /// </summary>
+    /// <returns>
+    /// A number greater than or equal to 0 representing the number of items available for the selection model.
+    /// </returns>
+    protected abstract int GetItemCount();
+
+    /// <summary>
+    /// Compares the current and new values for the <see cref="SelectedIndex" /> property. If the value has changed, raises the
+    /// <see cref="PropertyChanging" /> event, updates the property and then raises the <see cref="PropertyChanged" /> event.
     /// </summary>
     /// <param name="value">
     /// The property's value after the change occurred.
@@ -162,9 +177,40 @@ public abstract class SelectionModel<T> : ObservableObject
     /// <see langword="true" /> if the property was changed, <see langword="false" /> otherwise.
     /// </returns>
     /// <remarks>
-    /// The <see cref="ObservableObject.PropertyChanging" /> and <see cref="ObservableObject.PropertyChanged" /> events are not
-    /// raised if the current and new value are the same.
+    /// The <see cref="PropertyChanging" /> and <see cref="PropertyChanged" /> events are not raised if the current and new value
+    /// are the same.
     /// </remarks>
-    protected bool SetSelectedItem(T? value)
-        => this.SetProperty(ref this.selectedItem, value, nameof(this.SelectedItem));
+    protected bool SetSelectedIndex(int value)
+    {
+        Debug.Assert(
+            value >= -1 && value < this.GetItemCount(),
+            $"{nameof(value)} should be in the range [-1, Items Count)");
+
+        if (value == this.SelectedIndex)
+        {
+            return false;
+        }
+
+        this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.SelectedIndex)));
+
+        this.SelectedIndex = value;
+
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.SelectedIndex)));
+
+        /*
+         * We can only trigger a selection change from the concrete selection model classes through changing the
+         * SelectedIndex. Therefore, we always raise the Property Change events for the SelectedItem as long as the new
+         * value of the SelectedIndex is different from the old value.
+         */
+
+        var newItem = this.SelectedIndex == -1 ? default : this.GetItemAt(this.SelectedIndex);
+
+        this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.SelectedItem)));
+
+        this.SelectedItem = newItem;
+
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.SelectedItem)));
+
+        return true;
+    }
 }
