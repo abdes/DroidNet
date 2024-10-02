@@ -8,10 +8,39 @@ using System.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
-/// A base class for test suites that have test cases checking for Debug
-/// assertions in the code. Use the <see cref="TraceListener" /> to check if
-/// assertions failed.
+/// A base class for test suites that have test cases checking for Debug assertions in the code. Use the <see cref="TraceListener" />
+/// to check if assertions failed.
 /// </summary>
+/// <example>
+/// Derive the test suite from <see cref="TestSuiteWithAssertions" /> and then check for assertion failure messages using the
+/// <see cref="TraceListener" />.
+/// <code>
+/// <![CDATA[
+/// [TestClass]
+/// [ExcludeFromCodeCoverage]
+/// public class DebugAssertionTests : TestSuiteWithAssertions
+/// {
+///     [TestMethod]
+///     public void MethodWithAssert_Fails_WhenNoTruth()
+///     {
+///         MethodWithAssert(truth: false);
+/// #if DEBUG
+///         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
+/// #else
+///         _ = this.TraceListener.RecordedMessages.Should().BeEmpty();
+/// #endif
+///     }
+///     [TestMethod]
+///     public void MethodWithAssert_Works_WhenTruth()
+///     {
+///         MethodWithAssert(truth: true);
+///         _ = this.TraceListener.RecordedMessages.Should().BeEmpty();
+///     }
+///     private static void MethodWithAssert(bool truth) => Debug.Assert(truth, "assert failure was requested");
+/// }
+/// ]]>
+/// </code>
+/// </example>
 public abstract class TestSuiteWithAssertions : IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
