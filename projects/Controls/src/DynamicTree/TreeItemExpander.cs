@@ -28,11 +28,13 @@ public class TreeItemExpander : Control
         get => this.isExpanded;
         set
         {
-            if (this.IsExpanded != value)
+            if (this.IsExpanded == value)
             {
-                this.isExpanded = value;
-                this.UpdateVisualState();
+                return;
             }
+
+            this.isExpanded = value;
+            this.UpdateVisualState();
         }
     }
 

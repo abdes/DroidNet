@@ -33,7 +33,7 @@
         <StartupObject>$(RootNamespace).Program</StartupObject>
     </PropertyGroup>
     <ItemGroup>
-      <None Remove="DynamicTree\Styles.xaml" />
+        <None Remove="DynamicTree\Styles.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -68,6 +68,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\src\Controls.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
 
