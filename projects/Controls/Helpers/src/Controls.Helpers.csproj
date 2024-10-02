@@ -25,24 +25,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" />
-        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <!-- Rererence the attributes project "treat as an analyzer"-->
-        <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
-            <Private>False</Private>
-        </ProjectReference>
-
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
 </Project>
