@@ -10,7 +10,6 @@ using System.Diagnostics;
 internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<int> selectedIndices = [];
-    private SelectionMode selectionMode = SelectionMode.Single;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultipleSelectionModel{T}" /> class.
@@ -31,56 +30,6 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
     /// </summary>
     public ReadOnlyObservableCollection<T> SelectedItems => throw new NotImplementedException();
-
-    /// <summary>
-    /// Gets or sets the <see cref="Controls.SelectionMode">SelectionMode</see> to use in this selection model. The selection mode
-    /// specifies how many items in the underlying data model can be selected at any one time.
-    /// <para>
-    /// By default, the selection mode is <see cref="SelectionMode.Single" />.
-    /// </para>
-    /// </summary>
-    /// <exception cref="ArgumentException">
-    /// If the value provided to set the property is not <see cref="SelectionMode.Single" /> or <see cref="SelectionMode.Multiple" />.
-    /// </exception>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Style",
-        "IDE0010:Add missing cases",
-        Justification = "missing case is part of default")]
-    public SelectionMode SelectionMode
-    {
-        get => this.selectionMode;
-        set
-        {
-            if (this.selectionMode == value)
-            {
-                return;
-            }
-
-            switch (value)
-            {
-                case SelectionMode.Multiple:
-                    this.selectionMode = value;
-                    break;
-
-                case SelectionMode.Single:
-                    this.selectionMode = value;
-                    if (!this.IsEmpty())
-                    {
-                        // We're switching from 'Multiple' to 'Single' selection. Only keep the latest selected item.
-                        var lastIndex = this.SelectedIndex;
-                        this.ClearSelection();
-                        this.SelectItemAt(lastIndex);
-                    }
-
-                    break;
-
-                default:
-                    throw new ArgumentException(
-                        $"{nameof(MultipleSelectionModel<T>)} only supports `{nameof(SelectionMode.Single)}` or `{nameof(SelectionMode.Single)}` selection modes",
-                        nameof(value));
-            }
-        }
-    }
 
     /// <inheritdoc />
     public override void ClearAndSelect(int index)
@@ -133,20 +82,24 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// The selected item to deselect.
     /// </param>
     /// <remarks>
+    /// If the <see cref="SelectionModel{T}.SelectedIndex"/> is the same than the <see paramref="index"/> to be cleared, its value
+    /// is updated to the first item in the <see cref="SelectedIndices"/> collection if it's not empty or <c>-1</c> otherwise.
+    /// <para>
     /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/> and <see
     /// cref="SelectionModel{T}.SelectedItem"/> properties if their values change, and the <see cref="SelectedIndices"/>
     /// observable collection if its content changes.
+    /// </para>
     /// </remarks>
     public override void ClearSelection(int index)
     {
-        this.ValidIndexOrThrow(index);
-
         var removed = this.selectedIndices.Remove(index);
-        if (removed)
+        if (!removed)
         {
-            var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[0];
-            this.UpdateSelectedIndex(newSelectedIndex);
+            return;
         }
+
+        var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[0];
+        this.UpdateSelectedIndex(newSelectedIndex);
     }
 
     /// <inheritdoc />
@@ -170,24 +123,12 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     {
         this.ValidIndexOrThrow(index);
 
-        if (!this.IsSelected(index))
+        if (this.IsSelected(index))
         {
-            if (this.SelectionMode == SelectionMode.Single)
-            {
-                // Modify the collection quietly. We'll only trigger a collection change
-                // notification after we resume notifications.
-                using (this.selectedIndices.SuspendNotifications())
-                {
-                    this.ClearSelection();
-                    this.selectedIndices.Add(index);
-                }
-            }
-            else
-            {
-                this.selectedIndices.Add(index);
-            }
+            return;
         }
 
+        this.selectedIndices.Add(index);
         this.UpdateSelectedIndex(index);
     }
 
@@ -224,40 +165,20 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
         {
             this.ClearSelection();
 
-            // If selection mode is single, only process the last valid index in the provided indices.
-            if (this.SelectionMode == SelectionMode.Single)
-            {
-                for (var i = indices.Length - 1; i >= 0; i--)
-                {
-                    var index = indices[i];
-
-                    // Ignore invalid indices
-                    if (index < 0 || index >= rowCount)
-                    {
-                        continue;
-                    }
-
-                    this.selectedIndices.Add(index);
-                    this.UpdateSelectedIndex(index);
-                    break;
-                }
-            }
-            else
-            {
-                var lastIndex = indices
-                    .Where(index => index >= 0 && index < rowCount)
-                    .Select(index =>
+            var lastIndex = indices
+                .Where(index => index >= 0 && index < rowCount)
+                .Select(
+                    index =>
                     {
                         this.selectedIndices.Add(index);
                         return index;
                     })
-                    .DefaultIfEmpty(-1)
-                    .Last();
+                .DefaultIfEmpty(-1)
+                .Last();
 
-                if (lastIndex != -1)
-                {
-                    this.UpdateSelectedIndex(lastIndex);
-                }
+            if (lastIndex != -1)
+            {
+                this.UpdateSelectedIndex(lastIndex);
             }
         }
     }
@@ -299,11 +220,6 @@ internal abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </summary>
     public void SelectAll()
     {
-        if (this.SelectionMode == SelectionMode.Single)
-        {
-            return;
-        }
-
         var rowCount = this.selectedIndices.Count;
         if (rowCount == 0)
         {
