@@ -14,7 +14,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public class DebugAssertionTests : TestSuiteWithAssertions
 {
     [TestMethod]
-    public void AssertionFailures_WhenTheyHappen()
+    public void AssertionFailures_AreRecorded_WhenTheyHappen()
     {
         MethodWithAssert(truth: false);
 
@@ -26,7 +26,7 @@ public class DebugAssertionTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void NoRecords_WhenTheyNoAssertionFailures()
+    public void NoRecords_WhenNoAssertionFailures()
     {
         MethodWithAssert(truth: true);
 
