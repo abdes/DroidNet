@@ -50,7 +50,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         var result = model.PublicSetSelectedIndex(initialIndex);
 
         // Assert
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -65,7 +65,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         var result = model.PublicSetSelectedIndex(newIndex);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -80,7 +80,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         _ = model.PublicSetSelectedIndex(newIndex);
 
         // Assert
-        model.SelectedIndex.Should().Be(newIndex);
+        _ = model.SelectedIndex.Should().Be(newIndex);
     }
 
     [TestMethod]
@@ -96,7 +96,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         _ = model.PublicSetSelectedIndex(newIndex);
 
         // Assert
-        model.SelectedItem.Should().Be("B");
+        _ = model.SelectedItem.Should().Be("B");
     }
 
     [TestMethod]
@@ -108,11 +108,11 @@ public class SelectionModelTests : TestSuiteWithAssertions
         var model = new TestSelectionModel("A", "B", "C") { InitialIndex = initialIndex };
 
         // Act
-        model.PublicSetSelectedIndex(newIndex);
+        _ = model.PublicSetSelectedIndex(newIndex);
 
         // Assert
-        model.SelectedIndexEventRaisedInfo.PropertyChanging.Should().BeTrue();
-        model.SelectedIndexEventRaisedInfo.PropertyChanged.Should().BeTrue();
+        _ = model.SelectedIndexEventRaisedInfo.PropertyChanging.Should().BeTrue();
+        _ = model.SelectedIndexEventRaisedInfo.PropertyChanged.Should().BeTrue();
     }
 
     [TestMethod]
@@ -124,11 +124,11 @@ public class SelectionModelTests : TestSuiteWithAssertions
         var model = new TestSelectionModel("A", "B", "C") { InitialIndex = initialIndex };
 
         // Act
-        model.PublicSetSelectedIndex(newIndex);
+        _ = model.PublicSetSelectedIndex(newIndex);
 
         // Assert
-        model.SelectedItemEventRaisedInfo.PropertyChanging.Should().BeTrue();
-        model.SelectedItemEventRaisedInfo.PropertyChanged.Should().BeTrue();
+        _ = model.SelectedItemEventRaisedInfo.PropertyChanging.Should().BeTrue();
+        _ = model.SelectedItemEventRaisedInfo.PropertyChanged.Should().BeTrue();
     }
 
     [TestMethod]
@@ -139,13 +139,13 @@ public class SelectionModelTests : TestSuiteWithAssertions
         var model = new TestSelectionModel("A", "B", "C") { InitialIndex = initialIndex };
 
         // Act
-        model.PublicSetSelectedIndex(initialIndex);
+        _ = model.PublicSetSelectedIndex(initialIndex);
 
         // Assert
-        model.SelectedIndexEventRaisedInfo.PropertyChanging.Should().BeFalse();
-        model.SelectedIndexEventRaisedInfo.PropertyChanged.Should().BeFalse();
-        model.SelectedItemEventRaisedInfo.PropertyChanging.Should().BeFalse();
-        model.SelectedItemEventRaisedInfo.PropertyChanged.Should().BeFalse();
+        _ = model.SelectedIndexEventRaisedInfo.PropertyChanging.Should().BeFalse();
+        _ = model.SelectedIndexEventRaisedInfo.PropertyChanged.Should().BeFalse();
+        _ = model.SelectedItemEventRaisedInfo.PropertyChanging.Should().BeFalse();
+        _ = model.SelectedItemEventRaisedInfo.PropertyChanged.Should().BeFalse();
     }
 
     private sealed class TestSelectionModel : SingleSelectionModel<string>
@@ -190,7 +190,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
             {
                 if (value != -1)
                 {
-                    this.SetSelectedIndex(value);
+                    _ = this.SetSelectedIndex(value);
                 }
             }
         }
