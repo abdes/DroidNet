@@ -46,19 +46,31 @@ public class DynamicTreeItem : ContentControl, INotifyPropertyChanged
 
     public bool HasChildren { get; set; }
 
-    public void OnExpand(object? sender, EventArgs args) => this.Expand?.Invoke(
-        this,
-        new DynamicTreeEventArgs()
-        {
-            TreeItem = (TreeItemAdapter)this.DataContext,
-        });
+    public void OnExpand(object? sender, EventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
 
-    public void OnCollapse(object? sender, EventArgs args) => this.Collapse?.Invoke(
-        this,
-        new DynamicTreeEventArgs()
-        {
-            TreeItem = (TreeItemAdapter)this.DataContext,
-        });
+        this.Expand?.Invoke(
+            this,
+            new DynamicTreeEventArgs()
+            {
+                TreeItem = (TreeItemAdapter)this.DataContext,
+            });
+    }
+
+    public void OnCollapse(object? sender, EventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.Collapse?.Invoke(
+            this,
+            new DynamicTreeEventArgs()
+            {
+                TreeItem = (TreeItemAdapter)this.DataContext,
+            });
+    }
 
     protected override void OnApplyTemplate()
     {

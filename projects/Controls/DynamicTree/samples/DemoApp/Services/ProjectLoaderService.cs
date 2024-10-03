@@ -11,7 +11,7 @@ internal static class ProjectLoaderService
 {
     private static readonly Scene[] Data =
     [
-        new Scene("Scene 1")
+        new("Scene 1")
         {
             Entities =
             [
@@ -20,8 +20,8 @@ internal static class ProjectLoaderService
                 new Entity("Scene 1 - Entity 3"),
             ],
         },
-        new Scene("Scene 2"),
-        new Scene("Scene 3")
+        new("Scene 2"),
+        new("Scene 3")
         {
             Entities =
             [

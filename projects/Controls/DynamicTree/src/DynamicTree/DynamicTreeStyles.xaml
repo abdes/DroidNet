@@ -4,8 +4,7 @@
     x:Class="DroidNet.Controls.DynamicTreeStyles"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
-    xmlns:local="using:DroidNet.Controls">
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters">
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
