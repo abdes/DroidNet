@@ -4,10 +4,11 @@
 
 namespace DroidNet.Controls;
 
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 
-internal sealed class SelectionObservableCollection<T> : ObservableCollection<T>
+internal sealed class SelectionObservableCollection<T>(IEnumerable<T> collection) : ObservableCollection<T>(collection)
 {
     private bool suppressNotification;
 
@@ -18,6 +19,30 @@ internal sealed class SelectionObservableCollection<T> : ObservableCollection<T>
         if (!this.suppressNotification)
         {
             base.OnCollectionChanged(e);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Ensures that the collection does not contain duplicate items.
+    /// </remarks>
+    protected override void InsertItem(int index, T item)
+    {
+        if (!this.Contains(item))
+        {
+            base.InsertItem(index, item);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Ensures that the collection does not contain duplicate items.
+    /// </remarks>
+    protected override void SetItem(int index, T item)
+    {
+        if (!this.Contains(item))
+        {
+            base.SetItem(index, item);
         }
     }
 

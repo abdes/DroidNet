@@ -4,18 +4,21 @@
 
 namespace DroidNet.Controls;
 
+using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
-    private readonly SelectionObservableCollection<int> selectedIndices = [];
+    private readonly SelectionObservableCollection<int> selectedIndices;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultipleSelectionModel{T}" /> class.
     /// </summary>
     protected MultipleSelectionModel()
-        => this.SelectedIndices = new ReadOnlyObservableCollection<int>(this.selectedIndices);
+    {
+        this.selectedIndices = new SelectionObservableCollection<int>(new HashSet<int>());
+        this.SelectedIndices = new ReadOnlyObservableCollection<int>(this.selectedIndices);
+    }
 
     /// <summary>
     /// Gets a <see cref="ReadOnlyObservableCollection{T}" /> of all selected indices. The collection will be updated further by
@@ -29,7 +32,17 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// the selection model to always reflect changes in selection. This can be observed by overriding the
     /// <see cref="ReadOnlyObservableCollection{T}.OnCollectionChanged" /> method on the returned collection.
     /// </summary>
-    public ReadOnlyObservableCollection<T> SelectedItems => throw new NotImplementedException();
+    public ReadOnlyObservableCollection<T> SelectedItems
+    {
+        // We expect that the majority of use cases will rather use the SelectedIndices collection. Therefore we accept
+        // that access to the SelectedItems collection is done rarely and it will be good enough to create the collection
+        // on the fly when it is needed.
+        get
+        {
+            var selectedItems = this.selectedIndices.Select(this.GetItemAt);
+            return new ReadOnlyObservableCollection<T>(new ObservableCollection<T>(selectedItems));
+        }
+    }
 
     /// <inheritdoc />
     public override void ClearAndSelect(int index)
@@ -40,15 +53,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         // it is the same as the given index, it should have no effect.
         if (this.IsSelected(index) && this.selectedIndices.Count == 1)
         {
-            Debug.Assert(
-                this.SelectedItem is not null,
-                "expecting a non-null SelectedItem when we have a selected index");
-
-            // Double check that the selected item is the same than the item corresponding to the given index.
-            if (this.SelectedItem.Equals(this.GetItemAt(index)))
-            {
-                return;
-            }
+            return;
         }
 
         // Modify the collection quietly. We'll only trigger a collection change
@@ -146,16 +151,23 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </summary>
     /// <param name="indices">
     /// One or more index values that will be added to the selection if they are within the valid range, and do not duplicate
-    /// indices already in the existing selection.
+    /// indices already in the existing selection. If no values are provided, the current selection is cleared.
     /// </param>
     public void SelectItemsAt(params int[] indices)
     {
-        if (indices.Length == 0)
+        // Bailout quickly if the underlying data model has no items.
+        var itemsCount = this.GetItemCount();
+        if (itemsCount == 0)
         {
             return;
         }
 
-        var rowCount = this.selectedIndices.Count;
+        // If no values are provided, the current selection is cleared.
+        if (indices.Length == 0)
+        {
+            this.ClearSelection();
+            return;
+        }
 
         // Modify the collection quietly. We'll only trigger a collection change
         // notification after we resume notifications.
@@ -164,7 +176,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
             this.ClearSelection();
 
             var lastIndex = indices
-                .Where(index => index >= 0 && index < rowCount)
+                .Where(index => index >= 0 && index < itemsCount)
                 .Select(
                     index =>
                     {
@@ -195,11 +207,18 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// <param name="end">
     /// The last index of the selection - this index will not be selected.
     /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// If the given <paramref name="start" /> or <paramref name="end" /> index is less than zero, or greater than or equal to the
+    /// total number of items in the underlying data model).
+    /// </exception>
     public void SelectRange(int start, int end)
     {
+        this.ValidIndexOrThrow(start);
+        this.ValidIndexOrThrow(end);
+
         var ascending = start < end;
         var low = ascending ? start : end;
-        var high = ascending ? end : low;
+        var high = ascending ? end : start;
 
         var arrayLength = high - low;
         var indices = new int[arrayLength];
@@ -218,8 +237,9 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </summary>
     public void SelectAll()
     {
-        var rowCount = this.selectedIndices.Count;
-        if (rowCount == 0)
+        // Bailout quickly if the underlying data model has no items.
+        var itemsCount = this.GetItemCount();
+        if (itemsCount == 0)
         {
             return;
         }
@@ -229,14 +249,14 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         using (this.selectedIndices.SuspendNotifications())
         {
             this.ClearSelection();
-            for (var index = 0; index < rowCount; index++)
+            for (var index = 0; index < itemsCount; index++)
             {
                 this.selectedIndices.Add(index);
             }
         }
 
         // TODO: Manage focus
-        this.SetSelectedIndex(rowCount - 1);
+        this.SetSelectedIndex(itemsCount - 1);
     }
 
     /// <summary>
