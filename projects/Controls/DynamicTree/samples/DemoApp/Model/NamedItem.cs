@@ -8,7 +8,7 @@ public class NamedItem
 {
     private string name;
 
-    public NamedItem(string name)
+    protected NamedItem(string name)
     {
         ValidateName(name);
         this.name = name;

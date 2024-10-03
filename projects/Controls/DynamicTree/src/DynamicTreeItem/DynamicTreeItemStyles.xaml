@@ -79,7 +79,6 @@
                             BorderThickness="0">
                             <local:TreeItemExpander
                                 x:Name="ItemExpander"
-                                Grid.Column="0"
                                 Collapse="{x:Bind OnCollapse}"
                                 Expand="{x:Bind OnExpand}"
                                 IsExpanded="{x:Bind ((local:TreeItemAdapter)DataContext).IsExpanded, Mode=OneWay}"

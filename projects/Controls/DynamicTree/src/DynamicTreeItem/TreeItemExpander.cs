@@ -15,8 +15,8 @@ public class TreeItemExpander : Control
     {
         this.DefaultStyleKey = typeof(TreeItemExpander);
 
-        this.Tapped += (_, __) => this.Toggle();
-        this.DoubleTapped += (_, __) => this.Toggle();
+        this.Tapped += (_, _) => this.Toggle();
+        this.DoubleTapped += (_, _) => this.Toggle();
     }
 
     public event EventHandler? Expand;
