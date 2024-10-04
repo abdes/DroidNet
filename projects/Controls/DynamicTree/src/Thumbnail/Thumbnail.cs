@@ -76,6 +76,11 @@ public partial class Thumbnail : ContentControl
     /// </summary>
     private void UpdateTemplateState()
     {
+        if (this.Content is null)
+        {
+            return;
+        }
+
         if (this.ContentTemplateSelector != null)
         {
             this.CustomTemplate = this.ContentTemplateSelector.SelectTemplate(this.Content, this);
