@@ -88,7 +88,7 @@ public class SingleSelectionModelTests
         model.SelectItemAt(1);
 
         // Act
-        model.ClearAndSelect(2);
+        model.ClearAndSelectItemAt(2);
 
         // Assert
         _ = model.SelectedIndex.Should().Be(2);
@@ -104,7 +104,7 @@ public class SingleSelectionModelTests
         using var monitor = model.Monitor();
 
         // Act
-        model.ClearAndSelect(2);
+        model.ClearAndSelectItemAt(2);
 
         // Assert
         _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedIndex);

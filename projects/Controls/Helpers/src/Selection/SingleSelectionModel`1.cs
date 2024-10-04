@@ -22,7 +22,7 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
         }
     }
 
-    public override void ClearAndSelect(int index) => this.SelectItemAt(index);
+    public override void ClearAndSelectItemAt(int index) => this.SelectItemAt(index);
 
     public override bool IsEmpty() => this.GetItemCount() == 0 || this.SelectedIndex == -1;
 

@@ -12,7 +12,7 @@
     <dnc:DynamicTree
         Width="400"
         HorizontalAlignment="Left"
-        SelectionMode="Single"
+        SelectionMode="Multiple"
         ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
         ViewModel="{x:Bind ViewModel}" />
 </Page>

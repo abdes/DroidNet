@@ -95,6 +95,17 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// </remarks>
     public abstract void ClearSelection(int index);
 
+    public void ClearSelection(T item)
+    {
+        var index = this.IndexOf(item);
+        if (index == -1)
+        {
+            throw new ArgumentException("item not in selected items collection", nameof(item));
+        }
+
+        this.ClearSelection(index);
+    }
+
     /// <summary>
     /// Clears any selection prior to setting the selection to the given index.
     /// </summary>
@@ -109,7 +120,18 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// If the given <paramref name="index" /> is less than zero, or greater than or equal to the total number of items in the
     /// underlying data model).
     /// </exception>
-    public abstract void ClearAndSelect(int index);
+    public abstract void ClearAndSelectItemAt(int index);
+
+    public virtual void ClearAndSelectItem(T item)
+    {
+        var index = this.IndexOf(item);
+        if (index == -1)
+        {
+            throw new ArgumentException("item not in selected items collection", nameof(item));
+        }
+
+        this.ClearAndSelectItemAt(index);
+    }
 
     /// <summary>
     /// Convenience method to inform if the given <paramref name="index" /> is currently selected in this SelectionModel.

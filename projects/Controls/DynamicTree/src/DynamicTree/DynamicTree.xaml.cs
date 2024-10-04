@@ -6,9 +6,12 @@ namespace DroidNet.Controls;
 
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.System;
+using Windows.UI.Core;
 
 /// <summary>
 /// A control to display a tree as a list of expandable items.
@@ -65,13 +68,48 @@ public partial class DynamicTree
         set => this.SetValue(ThumbnailTemplateSelectorProperty, value);
     }
 
-    private void ItemTapped(object sender, TappedRoutedEventArgs args)
+    private static bool IsControlKeyDown() => InputKeyboardSource
+        .GetKeyStateForCurrentThread(VirtualKey.Control)
+        .HasFlag(CoreVirtualKeyStates.Down);
+
+    private static bool IsShiftKeyDown() => InputKeyboardSource
+        .GetKeyStateForCurrentThread(VirtualKey.Shift)
+        .HasFlag(CoreVirtualKeyStates.Down);
+
+    private void ItemPointerClicked(object sender, PointerRoutedEventArgs args)
     {
         args.Handled = true;
-
-        if (sender is FrameworkElement { DataContext: TreeItemAdapter item })
+        if (sender is not FrameworkElement { DataContext: TreeItemAdapter item } element)
         {
+            return;
+        }
+
+        // Get the current state of the pointer
+        var pointerPoint = args.GetCurrentPoint(element);
+
+        // Check if the pointer device is a mouse
+        // Check if the left mouse button is pressed
+        if (args.Pointer.PointerDeviceType != PointerDeviceType.Mouse || !pointerPoint.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var coreWindow = CoreWindow.GetForCurrentThread();
+
+        if (IsControlKeyDown())
+        {
+            // Handle Ctrl+Click
             this.ViewModel!.SelectItem(item);
+        }
+        else if (IsShiftKeyDown())
+        {
+            // Handle Shift+Click
+            this.ViewModel!.ExtendSelectionTo(item);
+        }
+        else
+        {
+            // Handle regular Click
+            this.ViewModel!.ClearAndSelectItem(item);
         }
     }
 

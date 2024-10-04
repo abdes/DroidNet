@@ -533,7 +533,7 @@ public class MultipleSelectionModelTests
         model.SelectAll();
 
         // Act
-        model.ClearAndSelect(1);
+        model.ClearAndSelectItemAt(1);
 
         // Assert
         _ = model.SelectedIndex.Should().Be(1);
@@ -548,7 +548,7 @@ public class MultipleSelectionModelTests
         model.SelectAll();
 
         // Act
-        var act = () => model.ClearAndSelect(11);
+        var act = () => model.ClearAndSelectItemAt(11);
 
         // Assert
         _ = act.Should().Throw<ArgumentOutOfRangeException>();
@@ -565,7 +565,7 @@ public class MultipleSelectionModelTests
         using var selectedIndicesMonitor = ((INotifyCollectionChanged)model.SelectedIndices).Monitor();
 
         // Act
-        model.ClearAndSelect(0);
+        model.ClearAndSelectItemAt(0);
 
         // Assert
         _ = model.SelectedIndex.Should().Be(0);

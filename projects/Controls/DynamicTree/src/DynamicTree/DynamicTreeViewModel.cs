@@ -24,6 +24,22 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
     public void SelectItem(TreeItemAdapter item) => this.selectionModel?.SelectItem(item);
 
+    public void ClearAndSelectItem(TreeItemAdapter item) => this.selectionModel?.ClearAndSelectItem(item);
+
+    public void ExtendSelectionTo(TreeItemAdapter item)
+    {
+        if (this.SelectionMode == SelectionMode.Multiple && this.selectionModel?.SelectedItem is not null)
+        {
+            ((MultipleSelectionModel<ITreeItem>)this.selectionModel).SelectRange(
+                this.selectionModel.SelectedItem,
+                item);
+        }
+        else
+        {
+            this.selectionModel?.SelectItem(item);
+        }
+    }
+
     protected async Task InitializeRootAsync(ITreeItem root)
     {
         this.ShownItems.Clear();
@@ -37,8 +53,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         {
             SelectionMode.None => default,
             SelectionMode.Single => new SingleSelectionModel(this),
-            SelectionMode.Multiple => default, // TODO: support multiple selection
-            _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode))
+            SelectionMode.Multiple => new MultipleSelectionModel(this),
+            _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode)),
         };
 
     [RelayCommand]
@@ -157,5 +173,14 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         protected override int GetItemCount() => this.model.ShownItems.Count;
 
         protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf((TreeItemAdapter)item);
+    }
+
+    protected class MultipleSelectionModel(DynamicTreeViewModel model) : MultipleSelectionModel<ITreeItem>
+    {
+        protected override ITreeItem GetItemAt(int index) => model.ShownItems[index];
+
+        protected override int GetItemCount() => model.ShownItems.Count;
+
+        protected override int IndexOf(ITreeItem item) => model.ShownItems.IndexOf((TreeItemAdapter)item);
     }
 }

@@ -7,15 +7,13 @@ namespace DroidNet.Controls;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 
-public interface ITreeItem
+public interface ITreeItem : ISelectable
 {
     event EventHandler<NotifyCollectionChangedEventArgs> ChildrenCollectionChanged;
 
     string Label { get; }
 
     bool IsExpanded { get; set; }
-
-    bool IsSelected { get; set; }
 
     bool IsRoot { get; }
 
