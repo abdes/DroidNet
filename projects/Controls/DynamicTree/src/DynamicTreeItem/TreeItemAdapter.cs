@@ -6,6 +6,7 @@ namespace DroidNet.Controls;
 
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 /// <summary>A base class for implementing tree item adapters.</summary>
@@ -20,8 +21,15 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     [ObservableProperty]
     private bool isSelected;
 
-    protected TreeItemAdapter() => this.childrenLazy
-        = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
+    protected TreeItemAdapter()
+    {
+        this.childrenLazy
+            = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
+
+        this.children.CollectionChanged += (sender, args) => this.ChildrenCollectionChanged?.Invoke(this, args);
+    }
+
+    public event EventHandler<NotifyCollectionChangedEventArgs>? ChildrenCollectionChanged;
 
     public virtual bool IsRoot => this.Parent is null;
 
@@ -86,6 +94,6 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     private async Task<ReadOnlyObservableCollection<ITreeItem>> InitializeChildrenCollectionAsync()
     {
         await this.LoadChildren().ConfigureAwait(false);
-        return new ReadOnlyObservableCollection<ITreeItem>(new ObservableCollection<ITreeItem>(this.children));
+        return new ReadOnlyObservableCollection<ITreeItem>(this.children);
     }
 }

@@ -29,7 +29,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:DynamicTreeItem">
-                    <Grid x:Name="RootGrid">
+                    <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="30" />
                         </Grid.RowDefinitions>
@@ -43,21 +43,38 @@
                             Height="{StaticResource CellContentHeight}"
                             Margin="{StaticResource DynamicTreeColumnMargin}"
                             BorderThickness="0">
-                            <local:Expander
-                                x:Name="ItemExpander"
-                                Collapse="{x:Bind OnCollapse}"
-                                Expand="{x:Bind OnExpand}"
-                                IsExpanded="{x:Bind ((local:TreeItemAdapter)DataContext).IsExpanded, Mode=OneWay}"
-                                Visibility="{Binding Path=HasChildren, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue=Visibility.Collapsed}" />
                         </Border>
-                        <local:Thumbnail
+                        <Viewbox
                             Grid.Column="1"
-                            Content="{x:Bind (local:TreeItemAdapter)DataContext}"
-                            ContentTemplateSelector="{x:Bind ThumbnailTemplateSelector, Mode=OneWay}" />
-                        <TextBlock
-                            Grid.Column="2"
-                            Margin="5"
-                            Text="{x:Bind ((local:TreeItemAdapter)DataContext).Label, Mode=OneWay}" />
+                            Width="{StaticResource CellContentWidth}"
+                            Height="{StaticResource CellContentHeight}"
+                            Margin="{StaticResource DynamicTreeColumnMargin}">
+                            <ContentPresenter Name="PartThumbnailPresenter">
+                                <local:Thumbnail Content="{Binding Path=ItemAdapter, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
+                            </ContentPresenter>
+                        </Viewbox>
+                        <ContentPresenter Name="PartContentPresenter" Grid.Column="2">
+                            <TextBlock Margin="5" Text="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}" />
+                        </ContentPresenter>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="ExpansionStates">
+                                <VisualState x:Name="Expanded" />
+                                <VisualState x:Name="Collapsed" />
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="HasChildrenStates">
+                                <VisualState x:Name="WithChildren">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartExpander.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="NoChildren">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartExpander.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
