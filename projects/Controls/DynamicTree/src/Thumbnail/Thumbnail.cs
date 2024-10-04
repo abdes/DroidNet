@@ -6,6 +6,7 @@ namespace DroidNet.Controls;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Markup;
 
 /// <summary>
 /// Represents a custom thumbnail control that extends the <see cref="ContentControl" /> class. This control is designed
@@ -19,10 +20,12 @@ using Microsoft.UI.Xaml.Controls;
 /// </remarks>
 /// <seealso cref="ContentControl.ContentTemplateSelector" />
 /// <seealso cref="CustomTemplate" />
-[TemplateVisualState(Name = "DefaultTemplate", GroupName = "TemplateStates")]
-[TemplateVisualState(Name = "CustomTemplate", GroupName = "TemplateStates")]
+[TemplateVisualState(Name = DefaultTemplateVisualState, GroupName = TemplateVisualStates)]
+[TemplateVisualState(Name = CustomTemplateVisualState, GroupName = TemplateVisualStates)]
+[ContentProperty(Name = nameof(Content))]
 public partial class Thumbnail : ContentControl
 {
+    private const string TemplateVisualStates = "TemplateStates";
     private const string CustomTemplateVisualState = "CustomTemplate";
     private const string DefaultTemplateVisualState = "DefaultTemplate";
 
