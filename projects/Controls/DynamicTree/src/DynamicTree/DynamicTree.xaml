@@ -40,7 +40,7 @@
                     DoubleTapped="ItemDoubleTapped"
                     IsDoubleTapEnabled="True"
                     IsTapEnabled="True"
-                    Tapped="ItemTapped">
+                    PointerPressed="ItemPointerClicked">
                     <lc:DynamicTreeItem
                         Collapse="OnCollapseTreeItem"
                         Expand="OnExpandTreeItem"

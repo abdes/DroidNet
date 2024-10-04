@@ -9,14 +9,18 @@ using System.Collections.ObjectModel;
 
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
-    private readonly SelectionObservableCollection<int> selectedIndices;
+    private readonly SelectionObservableCollection<T> selectedIndices;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultipleSelectionModel{T}" /> class.
     /// </summary>
     protected MultipleSelectionModel()
     {
-        this.selectedIndices = new SelectionObservableCollection<int>(new HashSet<int>());
+        this.selectedIndices
+            = new SelectionObservableCollection<T>(new HashSet<int>())
+            {
+                GetItemAt = this.GetItemAt,
+            };
         this.SelectedIndices = new ReadOnlyObservableCollection<int>(this.selectedIndices);
     }
 
@@ -45,7 +49,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <inheritdoc />
-    public override void ClearAndSelect(int index)
+    public override void ClearAndSelectItemAt(int index)
     {
         this.ValidIndexOrThrow(index);
 
@@ -146,7 +150,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// selections - to do so it is necessary to first call <see cref="ClearSelection()" />.
     /// </para>
     /// <para>
-    /// The last valid index given will become the selected index / selected item.
+    /// The first valid index given will become the selected index / selected item.
     /// </para>
     /// </summary>
     /// <param name="indices">
@@ -175,7 +179,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         {
             this.ClearSelection();
 
-            var lastIndex = indices
+            _ = indices
                 .Where(index => index >= 0 && index < itemsCount)
                 .Select(
                     index =>
@@ -186,26 +190,27 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
                 .DefaultIfEmpty(-1)
                 .Last();
 
-            if (lastIndex != -1)
+            if (this.selectedIndices.Count != 0)
             {
-                this.SetSelectedIndex(lastIndex);
+                this.SetSelectedIndex(this.selectedIndices[0]);
             }
         }
     }
 
     /// <summary>
     /// Selects all indices from the given <paramref name="start" /> index to the item before the given <paramref name="end" />
-    /// index. This means that the selection is inclusive of the <paramref name="start" /> index, and exclusive of the <paramref name="end" /> index.
+    /// index. This means that the selection is inclusive of the <paramref name="start" /> index, and inclusive of the
+    /// <paramref name="end" /> index.
     /// <para>
-    /// This method will work regardless of whether start &lt; end or start &gt; end: the only constant is that the index before
-    /// the given <paramref name="end" /> index will become the <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
+    /// This method will work regardless of whether start &lt; end or start &gt; end: the only constant is that the given
+    /// <paramref name="end" /> index will become the <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
     /// </para>
     /// </summary>
     /// <param name="start">
     /// The first index to select - this index will be selected.
     /// </param>
     /// <param name="end">
-    /// The last index of the selection - this index will not be selected.
+    /// The last index of the selection - this index will be selected.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// If the given <paramref name="start" /> or <paramref name="end" /> index is less than zero, or greater than or equal to the
@@ -220,7 +225,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         var low = ascending ? start : end;
         var high = ascending ? end : start;
 
-        var arrayLength = high - low;
+        var arrayLength = high - low + 1;
         var indices = new int[arrayLength];
 
         var startValue = ascending ? low : high;
@@ -230,6 +235,23 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         this.SelectItemsAt(indices);
+    }
+
+    public void SelectRange(T start, T end)
+    {
+        var startIndex = this.IndexOf(start);
+        if (startIndex == -1)
+        {
+            throw new ArgumentException("item not in selected items collection", nameof(start));
+        }
+
+        var endIndex = this.IndexOf(end);
+        if (endIndex == -1)
+        {
+            throw new ArgumentException("item not in selected items collection", nameof(end));
+        }
+
+        this.SelectRange(startIndex, endIndex);
     }
 
     /// <summary>
