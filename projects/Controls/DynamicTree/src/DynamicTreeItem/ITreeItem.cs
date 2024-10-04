@@ -5,9 +5,12 @@
 namespace DroidNet.Controls;
 
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 
 public interface ITreeItem
 {
+    event EventHandler<NotifyCollectionChangedEventArgs> ChildrenCollectionChanged;
+
     string Label { get; }
 
     bool IsExpanded { get; set; }
@@ -27,6 +30,8 @@ public interface ITreeItem
     Task InsertChildAsync(int index, ITreeItem child);
 
     Task RemoveChildAsync(ITreeItem child);
+
+    Task<int> GetChildrenCountAsync();
 }
 
 /// <summary>

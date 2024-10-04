@@ -43,9 +43,8 @@
                     Tapped="ItemTapped">
                     <lc:DynamicTreeItem
                         Collapse="OnCollapseTreeItem"
-                        DataContext="{x:Bind}"
                         Expand="OnExpandTreeItem"
-                        ThumbnailTemplateSelector="{Binding Path=ThumbnailTemplateSelector, ElementName=TreeControl, Mode=OneWay}" />
+                        ItemAdapter="{x:Bind}" />
                 </ItemContainer>
             </DataTemplate>
         </ItemsView.ItemTemplate>
