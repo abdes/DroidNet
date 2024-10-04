@@ -23,10 +23,6 @@
 
         <RootNamespace>$(RootNamespace).Controls</RootNamespace>
     </PropertyGroup>
-    <ItemGroup>
-      <None Remove="Themes\Generic.xaml" />
-      <None Remove="Thumbnail\Thumbnail.xaml" />
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />

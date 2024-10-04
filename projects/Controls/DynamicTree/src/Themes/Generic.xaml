@@ -6,6 +6,7 @@
         <DynamicTreeStyles xmlns="using:DroidNet.Controls" />
         <DynamicTreeItemStyles xmlns="using:DroidNet.Controls" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Expander/Expander.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>
