@@ -5,6 +5,7 @@
 namespace DroidNet.Controls;
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -30,8 +31,16 @@ public partial class DynamicTree : Control
     {
         this.DefaultStyleKey = typeof(DynamicTree);
 
-        // Update the ViewModel SelectionMode property on load and whenver the ViewModel changes.
-        this.Loaded += (_, _) => this.ViewModel!.SelectionMode = this.SelectionMode;
+        this.Loaded += (_, _) =>
+        {
+            // Update the ViewModel SelectionMode property on load and whenver the ViewModel changes.
+            this.ViewModel!.SelectionMode = this.SelectionMode;
+
+            // Handle key bindings
+            this.Focus(FocusState.Keyboard);
+            this.KeyDown += this.OnKeyDown;
+        };
+
         this.ViewModelChanged += (_, _) =>
         {
             if (this.ViewModel is not null && this.IsLoaded)
@@ -61,6 +70,21 @@ public partial class DynamicTree : Control
     private static bool IsShiftKeyDown() => InputKeyboardSource
         .GetKeyStateForCurrentThread(VirtualKey.Shift)
         .HasFlag(CoreVirtualKeyStates.Down);
+
+    [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
+    [SuppressMessage(
+        "ReSharper",
+        "SwitchStatementMissingSomeEnumCasesNoDefault",
+        Justification = "we only handle some keys")]
+    private async void OnKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        switch (args.Key)
+        {
+            case VirtualKey.Delete:
+                await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(default).ConfigureAwait(true);
+                break;
+        }
+    }
 
     private void ItemsRepeater_OnElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {

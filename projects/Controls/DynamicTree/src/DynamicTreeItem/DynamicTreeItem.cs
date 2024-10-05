@@ -220,7 +220,7 @@ public partial class DynamicTreeItem : ContentControl
             return;
         }
 
-        var childrenCount = this.ItemAdapter.GetChildrenCountAsync().GetAwaiter().GetResult();
+        var childrenCount = this.ItemAdapter.ChildrenCount;
         var hasChildren = childrenCount > 0;
         _ = VisualStateManager.GoToState(
             this,

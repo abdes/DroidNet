@@ -96,10 +96,10 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// </param>
     /// <remarks>
     /// If the <see cref="SelectionModel{T}.SelectedIndex" /> is the same than the <see paramref="index" /> to be cleared, its value
-    /// is updated to the first item in the <see cref="SelectedIndices" /> collection if it's not empty or <c>-1</c> otherwise.
+    /// is updated to the last item in the <see cref="SelectedIndices" /> collection if it's not empty or <c>-1</c> otherwise.
     /// <para>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" /> properties if their values change, and the <see cref="SelectedIndices" />
-    /// observable collection if its content changes.
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" />
+    /// properties if their values change, and the <see cref="SelectedIndices" /> observable collection if its content changes.
     /// </para>
     /// </remarks>
     public override void ClearSelection(int index)
@@ -110,7 +110,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
             return;
         }
 
-        var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[0];
+        var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[^1];
         this.SetSelectedIndex(newSelectedIndex);
     }
 

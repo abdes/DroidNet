@@ -45,6 +45,19 @@ public interface ITreeItem : ISelectable
     Task<ReadOnlyObservableCollection<ITreeItem>> Children { get; }
 
     /// <summary>
+    /// Gets the count of child items under this tree item.
+    /// </summary>
+    /// <value>
+    /// The number of child tree items.
+    /// </value>
+    /// <remarks>
+    /// This property provides a quick way to retrieve the count of child items without the need to access the entire collection.
+    /// If the collection has not been loaded yet, a pr-load count is obtained without loading the items, and is used until the
+    /// collection is loaded. At that point, the count should be the number of items in the <see cref="Children" /> collection.
+    /// </remarks>
+    int ChildrenCount { get; }
+
+    /// <summary>
     /// Gets the depth of the tree item in the hierarchy.
     /// </summary>
     int Depth { get; }
@@ -70,17 +83,6 @@ public interface ITreeItem : ISelectable
     /// <param name="child">The child tree item to remove.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     Task RemoveChildAsync(ITreeItem child);
-
-    /// <summary>
-    /// Gets the count of child tree items asynchronously.
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation, containing the count of child tree items.</returns>
-    /// <remarks>
-    /// Due to the potential that getting the collection of all child items may be very expensive, it is suggested that whenever
-    /// possible, getting the count of children items should be implemented in a lightweight and efficient manner that does not
-    /// require a full update of the <seealso cref="Children" /> collection.
-    /// </remarks>
-    Task<int> GetChildrenCountAsync();
 }
 
 /// <summary>
