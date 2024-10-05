@@ -12,6 +12,8 @@
     <dnc:DynamicTree
         Width="400"
         HorizontalAlignment="Left"
+        BorderBrush="Red"
+        BorderThickness="1"
         SelectionMode="Multiple"
         ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
         ViewModel="{x:Bind ViewModel}" />

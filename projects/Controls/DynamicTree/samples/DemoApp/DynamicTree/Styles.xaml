@@ -8,7 +8,7 @@
     xmlns:local="using:DroidNet.Controls.Demo.DynamicTree">
 
     <ResourceDictionary.MergedDictionaries>
-        <dnc:DynamicTreeStyles />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/DynamicTree.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
@@ -23,13 +23,5 @@
     </DataTemplate>
 
     <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" />
-
-    <Style
-        x:Key="DynamicTreeItemsViewStyle"
-        BasedOn="{StaticResource DefaultDynamicTreeItemsViewStyle}"
-        TargetType="ItemsView">
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="BorderBrush" Value="Red" />
-    </Style>
 
 </ResourceDictionary>
