@@ -16,6 +16,9 @@ using Microsoft.UI.Xaml;
     Justification = "class is designed to be extended when needed")]
 public partial class DynamicTreeItem
 {
+    /// <summary>
+    /// The backing <see cref="DependencyProperty" /> for the <see cref="ItemAdapter" /> property.
+    /// </summary>
     public static readonly DependencyProperty ItemAdapterProperty = DependencyProperty.Register(
         nameof(ItemAdapter),
         typeof(ITreeItem),
@@ -24,12 +27,31 @@ public partial class DynamicTreeItem
             default(TreeItemAdapter),
             (d, e) => ((DynamicTreeItem)d).OnItemAdapterChanged((ITreeItem)e.OldValue, (ITreeItem)e.NewValue)));
 
+    /// <summary>
+    /// Gets or sets the adapter that provides data for the tree item.
+    /// </summary>
+    /// <value>
+    /// An object that implements the <see cref="ITreeItem" /> interface, which provides data and behavior for the tree item.
+    /// </value>
+    /// <remarks>
+    /// The <see cref="ItemAdapter" /> property is used to bind the tree item to a data source. When the value of this property
+    /// changes, the <see cref="OnItemAdapterChanged" /> method is called to handle any necessary updates.
+    /// </remarks>
     public ITreeItem? ItemAdapter
     {
         get => (TreeItemAdapter)this.GetValue(ItemAdapterProperty);
         set => this.SetValue(ItemAdapterProperty, value);
     }
 
+    /// <summary>
+    /// Handles changes to the <see cref="ItemAdapter" /> property.
+    /// </summary>
+    /// <param name="oldItem">The previous value of the <see cref="ItemAdapter" /> property.</param>
+    /// <param name="newItem">The new value of the <see cref="ItemAdapter" /> property.</param>
+    /// <remarks>
+    /// This method is called whenever the <see cref="ItemAdapter" /> property changes. It unregisters event handlers
+    /// from the old item adapter and registers event handlers with the new item adapter.
+    /// </remarks>
     protected virtual void OnItemAdapterChanged(ITreeItem? oldItem, ITreeItem? newItem)
     {
         // Unregsiter event handlers from the old item adapter if any
