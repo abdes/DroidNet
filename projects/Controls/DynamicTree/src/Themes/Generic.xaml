@@ -4,9 +4,9 @@
 
     <ResourceDictionary.MergedDictionaries>
         <DynamicTreeStyles xmlns="using:DroidNet.Controls" />
-        <DynamicTreeItemStyles xmlns="using:DroidNet.Controls" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Expander/Expander.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTreeItem/DynamicTreeItem.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>
