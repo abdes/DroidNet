@@ -6,7 +6,12 @@ namespace DroidNet.Controls;
 
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 
+[SuppressMessage(
+    "ReSharper",
+    "VirtualMemberNeverOverridden.Global",
+    Justification = "methods need to be overridable for testing and extension of the class")]
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<T> selectedIndices;
@@ -157,7 +162,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// One or more index values that will be added to the selection if they are within the valid range, and do not duplicate
     /// indices already in the existing selection. If no values are provided, the current selection is cleared.
     /// </param>
-    public void SelectItemsAt(params int[] indices)
+    public virtual void SelectItemsAt(params int[] indices)
     {
         // Bailout quickly if the underlying data model has no items.
         var itemsCount = this.GetItemCount();
@@ -198,32 +203,32 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     }
 
     /// <summary>
-    /// Selects all indices from the given <paramref name="start" /> index to the item before the given <paramref name="end" />
-    /// index. This means that the selection is inclusive of the <paramref name="start" /> index, and inclusive of the
-    /// <paramref name="end" /> index.
+    /// Selects all indices from the given <paramref name="startIndex" /> index to the item before the given <paramref name="endIndex" />
+    /// index. This means that the selection is inclusive of the <paramref name="startIndex" /> index, and inclusive of the
+    /// <paramref name="endIndex" /> index.
     /// <para>
     /// This method will work regardless of whether start &lt; end or start &gt; end: the only constant is that the given
-    /// <paramref name="end" /> index will become the <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
+    /// <paramref name="endIndex" /> index will become the <see cref="SelectionModel{T}.SelectedIndex">SelectedIndex</see>.
     /// </para>
     /// </summary>
-    /// <param name="start">
+    /// <param name="startIndex">
     /// The first index to select - this index will be selected.
     /// </param>
-    /// <param name="end">
+    /// <param name="endIndex">
     /// The last index of the selection - this index will be selected.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// If the given <paramref name="start" /> or <paramref name="end" /> index is less than zero, or greater than or equal to the
+    /// If the given <paramref name="startIndex" /> or <paramref name="endIndex" /> index is less than zero, or greater than or equal to the
     /// total number of items in the underlying data model).
     /// </exception>
-    public void SelectRange(int start, int end)
+    public virtual void SelectRange(int startIndex, int endIndex)
     {
-        this.ValidIndexOrThrow(start);
-        this.ValidIndexOrThrow(end);
+        this.ValidIndexOrThrow(startIndex);
+        this.ValidIndexOrThrow(endIndex);
 
-        var ascending = start < end;
-        var low = ascending ? start : end;
-        var high = ascending ? end : start;
+        var ascending = startIndex < endIndex;
+        var low = ascending ? startIndex : endIndex;
+        var high = ascending ? endIndex : startIndex;
 
         var arrayLength = high - low + 1;
         var indices = new int[arrayLength];
@@ -237,18 +242,26 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         this.SelectItemsAt(indices);
     }
 
+    /// <summary>
+    /// Selects a range of items between the specified start and end items, inclusive.
+    /// </summary>
+    /// <param name="start">The first item in the range.</param>
+    /// <param name="end">The last item in the range.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when either <paramref name="start" /> or <paramref name="end" /> are not found in the model items collection.
+    /// </exception>
     public void SelectRange(T start, T end)
     {
         var startIndex = this.IndexOf(start);
         if (startIndex == -1)
         {
-            throw new ArgumentException("item not in selected items collection", nameof(start));
+            throw new ArgumentException("item not found", nameof(start));
         }
 
         var endIndex = this.IndexOf(end);
         if (endIndex == -1)
         {
-            throw new ArgumentException("item not in selected items collection", nameof(end));
+            throw new ArgumentException("item not found", nameof(end));
         }
 
         this.SelectRange(startIndex, endIndex);

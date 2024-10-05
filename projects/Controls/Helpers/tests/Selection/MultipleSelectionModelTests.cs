@@ -8,6 +8,8 @@ using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+using Moq.Protected;
 
 [ExcludeFromCodeCoverage]
 [TestClass]
@@ -96,7 +98,7 @@ public class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void ClearSelection_WithIndex_ShouldUpdateSelectedIndex_WhenIndexIsSelectedIndexAnd()
+    public void ClearSelection_WithIndex_ShouldUpdateSelectedIndex_WhenIndexIsSelectedIndex()
     {
         // Arrange
         var model = new TestSelectionModel("A", "B", "C");
@@ -127,6 +129,74 @@ public class MultipleSelectionModelTests
         _ = model.SelectedIndices.Should().BeEmpty();
         _ = model.SelectedIndex.Should().Be(-1);
         _ = model.SelectedItem.Should().Be(default);
+    }
+
+    [TestMethod]
+    public void ClearSelection_WithIndex_ShouldRaiseChangeEvents()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+        model.SelectItemAt(1);
+        using var monitor = model.Monitor();
+        using var selectedIndicesMonitor = ((INotifyCollectionChanged)model.SelectedIndices).Monitor();
+
+        // Act
+        model.ClearSelection();
+
+        // Assert
+        _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedIndex);
+        _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedItem);
+        _ = selectedIndicesMonitor.Should().Raise(nameof(INotifyCollectionChanged.CollectionChanged));
+    }
+
+    [TestMethod]
+    public void ClearSelection_WithItem_ItemNotInCollection_ThrowsArgumentException()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+
+        // Act
+        var act = () => model.ClearSelection("XXX");
+
+        // Assert
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("item not found*")
+            .WithParameterName("item");
+    }
+
+    [TestMethod]
+    public void ClearSelection_WithItem_ItemInCollection_ShouldRemoveItemFromSelection()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+        model.SelectItemAt(1);
+
+        // Act
+        model.ClearSelection("B");
+
+        // Assert
+        _ = model.SelectedIndices.Should().BeEmpty();
+        _ = model.SelectedIndex.Should().Be(-1);
+        _ = model.SelectedItem.Should().Be(default);
+    }
+
+    [TestMethod]
+    public void ClearSelection_WithItem_ShouldRaiseChangeEvents()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+        model.SelectItemAt(1);
+        using var monitor = model.Monitor();
+        using var selectedIndicesMonitor = ((INotifyCollectionChanged)model.SelectedIndices).Monitor();
+
+        // Act
+        model.ClearSelection();
+
+        // Assert
+        _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedIndex);
+        _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedItem);
+        _ = selectedIndicesMonitor.Should().Raise(nameof(INotifyCollectionChanged.CollectionChanged));
     }
 
     [TestMethod]
@@ -309,7 +379,7 @@ public class MultipleSelectionModelTests
 
         // Assert
         _ = model.SelectedIndices.Should().Equal(1, 3, 5);
-        _ = model.SelectedIndex.Should().Be(5);
+        _ = model.SelectedIndex.Should().Be(1);
     }
 
     [TestMethod]
@@ -338,7 +408,7 @@ public class MultipleSelectionModelTests
 
         // Assert
         _ = model.SelectedIndices.Should().Equal(3, 5);
-        _ = model.SelectedIndex.Should().Be(5);
+        _ = model.SelectedIndex.Should().Be(3);
     }
 
     [TestMethod]
@@ -446,8 +516,8 @@ public class MultipleSelectionModelTests
         var model = new TestSelectionModel("A", "B", "C", "D", "E", "F", "G", "H", "I", "J");
         const int start = 1;
         const int end = 4;
-        var expectedSelectedItems = new[] { "B", "C", "D" };
-        var expectedSelectedIndices = new[] { 1, 2, 3 };
+        var expectedSelectedItems = new[] { "B", "C", "D", "E" };
+        var expectedSelectedIndices = new[] { 1, 2, 3, 4 };
 
         // Act
         model.SelectRange(start, end);
@@ -455,7 +525,7 @@ public class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedItems.Should().BeEquivalentTo(expectedSelectedItems);
         _ = model.SelectedIndices.Should().BeEquivalentTo(expectedSelectedIndices);
-        _ = model.SelectedIndex.Should().Be(end - 1);
+        _ = model.SelectedIndex.Should().Be(start);
     }
 
     [TestMethod]
@@ -465,8 +535,8 @@ public class MultipleSelectionModelTests
         var model = new TestSelectionModel("A", "B", "C", "D", "E", "F", "G", "H", "I", "J");
         const int start = 4;
         const int end = 1;
-        var expectedSelectedItems = new[] { "E", "D", "C" };
-        var expectedSelectedIndices = new[] { 4, 3, 2 };
+        var expectedSelectedItems = new[] { "E", "D", "C", "B" };
+        var expectedSelectedIndices = new[] { 4, 3, 2, 1 };
 
         // Act
         model.SelectRange(start, end);
@@ -474,7 +544,7 @@ public class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedItems.Should().BeEquivalentTo(expectedSelectedItems);
         _ = model.SelectedIndices.Should().BeEquivalentTo(expectedSelectedIndices);
-        _ = model.SelectedIndex.Should().Be(end + 1);
+        _ = model.SelectedIndex.Should().Be(start);
     }
 
     [TestMethod]
@@ -526,7 +596,72 @@ public class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void ClearAndSelect_ShouldUpdateSelection_WhenIndexIsValid()
+    public void SelectRange_WithItems_StartItemNotFound_ThrowsArgumentException()
+    {
+        // Arrange
+        var items = new[] { "A", "B", "C", "D" };
+        var model = new TestSelectionModel(items);
+
+        // Act
+        var act = () => model.SelectRange("XXX", "C");
+
+        // Assert
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("item not found*")
+            .WithParameterName("start");
+    }
+
+    [TestMethod]
+    public void SelectRange_WithItems_EndItemNotFound_ThrowsArgumentException()
+    {
+        // Arrange
+        var items = new[] { "A", "B", "C", "D" };
+        var model = new TestSelectionModel(items);
+
+        // Act
+        var act = () => model.SelectRange("A", "XXX");
+
+        // Assert
+        act.Should()
+            .Throw<ArgumentException>()
+            .WithMessage("item not found*")
+            .WithParameterName("end");
+    }
+
+    [TestMethod]
+    public void SelectRange_ValidRange_CallsSelectRangeWithCorrectIndices()
+    {
+        // Arrange
+        var mockModel = new Mock<MultipleSelectionModel<string>> { CallBase = true };
+        mockModel.Protected()
+            .Setup<int>("GetItemCount")
+            .Returns(4);
+        mockModel.Protected()
+            .Setup<int>("IndexOf", ItExpr.IsAny<string>())
+            .Returns<string>(
+                item =>
+                {
+                    // Mock implementation of IndexOf
+                    return item switch
+                    {
+                        "A" => 0,
+                        "B" => 1,
+                        "C" => 2,
+                        "D" => 3,
+                        _ => -1,
+                    };
+                });
+
+        // Act
+        mockModel.Object.SelectRange("B", "D");
+
+        // Assert
+        mockModel.Verify(m => m.SelectRange(1, 3), Times.Once);
+    }
+
+    [TestMethod]
+    public void ClearAndSelect_WithIndex_ShouldUpdateSelection_WhenIndexIsValid()
     {
         // Arrange
         var model = new TestSelectionModel("A", "B", "C");
@@ -541,7 +676,7 @@ public class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void ClearAndSelect_ShouldThrowArgumentOutOfRangeException_WhenIndexIsInvalid()
+    public void ClearAndSelect_WithIndex_ShouldThrowArgumentOutOfRangeException_WhenIndexIsInvalid()
     {
         // Arrange
         var model = new TestSelectionModel("A", "B", "C");
@@ -556,7 +691,7 @@ public class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void ClearAndSelect_DoesNothing_WhenIndexIsSelectedAndOnlyOneItemInCollection()
+    public void ClearAndSelect_WithIndex_DoesNothing_WhenIndexIsSelectedAndOnlyOneItemInCollection()
     {
         // Arrange
         var model = new TestSelectionModel("A");
@@ -574,6 +709,37 @@ public class MultipleSelectionModelTests
         monitor.Should().NotRaisePropertyChangeFor(m => m.SelectedIndex);
         monitor.Should().NotRaisePropertyChangeFor(m => m.SelectedItem);
         selectedIndicesMonitor.Should().NotRaise(nameof(INotifyCollectionChanged.CollectionChanged));
+    }
+
+    [TestMethod]
+    public void ClearAndSelectItem_ShouldCallClearAndSelectItemAt_WithCorrectIndex()
+    {
+        // Arrange
+        var model = new Mock<SelectionModel<string>>();
+        const string item = "A";
+        const int index = 1;
+        model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(index);
+
+        // Act
+        model.Object.ClearAndSelectItem(item);
+
+        // Assert
+        model.Verify(m => m.ClearAndSelectItemAt(index), Times.Once);
+    }
+
+    [TestMethod]
+    public void ClearAndSelectItem_ShouldThrowArgumentException_WhenItemNotFound()
+    {
+        // Arrange
+        var model = new Mock<SelectionModel<string>>();
+        const string item = "A";
+        model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(-1);
+
+        // Act
+        var action = () => model.Object.ClearAndSelectItem(item);
+
+        // Assert
+        action.Should().Throw<ArgumentException>().WithMessage("item not found*");
     }
 
     private sealed class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
