@@ -4,12 +4,15 @@
 
 namespace DroidNet.Converters.Tests;
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory("UITest")]
 public class ItemClickEventArgsToClickedItemConverterTest
 {
     private readonly ItemClickEventArgsToClickedItemConverter converter = new();
