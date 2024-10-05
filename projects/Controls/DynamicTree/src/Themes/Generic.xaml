@@ -3,10 +3,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
     <ResourceDictionary.MergedDictionaries>
-        <DynamicTreeStyles xmlns="using:DroidNet.Controls" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Expander/Expander.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTreeItem/DynamicTreeItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/DynamicTree.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

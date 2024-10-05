@@ -14,6 +14,8 @@ using Microsoft.UI.Xaml.Media;
 /// Represents a dynamic tree item control that can be used within a hierarchical structure.
 /// This control supports various visual states and template parts to manage its appearance and behavior.
 /// </summary>
+[TemplateVisualState(Name = NormalVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = SelectedVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = ExpandedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = CollapsedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = HasChildrenVisualStates)]
@@ -21,12 +23,16 @@ using Microsoft.UI.Xaml.Media;
 [TemplatePart(Name = ThumbnailPresenterPart, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = ExpanderPart, Type = typeof(Expander))]
 [TemplatePart(Name = ContentPresenterPart, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
+[TemplatePart(Name = BorderPart, Type = typeof(Border))]
 [ContentProperty(Name = nameof(Content))]
 public partial class DynamicTreeItem : ContentControl
 {
     private const string ThumbnailPresenterPart = "PartThumbnailPresenter";
     private const string ExpanderPart = "PartExpander";
     private const string ContentPresenterPart = "PartContentPresenter";
+    private const string RootGridPart = "PartRootGrid";
+    private const string BorderPart = "PartBorder";
 
     private const string ExpansionVisualStates = "ExpansionStates";
     private const string ExpandedVisualState = "Expanded";
@@ -35,6 +41,12 @@ public partial class DynamicTreeItem : ContentControl
     private const string HasChildrenVisualStates = "HasChildrenStates";
     private const string WithChildrenVisualState = "WithChildren";
     private const string NoChildrenVisualState = "NoChildren";
+
+    private const string CommonVisualStates = "CommonStates";
+    private const string NormalVisualState = "Normal";
+    private const string PointerOverVisualState = "PointerOver";
+    private const string PointerOverSelectedVisualState = "PointerOverSelected";
+    private const string SelectedVisualState = "Selected";
 
     /// <summary>
     /// Default indent increment value.
@@ -73,6 +85,7 @@ public partial class DynamicTreeItem : ContentControl
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
+        this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected ?? false);
 
         base.OnApplyTemplate();
     }
@@ -81,6 +94,24 @@ public partial class DynamicTreeItem : ContentControl
     {
         _ = sender; // unused
         _ = args; // unused
+
+        this.PointerEntered += (_, _) =>
+        {
+            var isSelected = this.ItemAdapter?.IsSelected ?? false;
+            VisualStateManager.GoToState(
+                this,
+                isSelected ? PointerOverSelectedVisualState : PointerOverVisualState,
+                useTransitions: false);
+        };
+
+        this.PointerExited += (_, _) =>
+        {
+            var isSelected = this.ItemAdapter?.IsSelected ?? false;
+            VisualStateManager.GoToState(
+                this,
+                isSelected ? SelectedVisualState : NormalVisualState,
+                useTransitions: false);
+        };
 
         // Get the parent tree control and update our properties and callbacks
         // for the first time when this control is loaded
@@ -154,12 +185,20 @@ public partial class DynamicTreeItem : ContentControl
         var extraLeftMargin = this.ItemAdapter.Depth * indentIncrement;
 
         // Add the extra margin to the existing left margin
-        this.Margin = new Thickness(
-            this.Margin.Left + extraLeftMargin,
-            this.Margin.Top,
-            this.Margin.Right,
-            this.Margin.Bottom);
+        if (this.GetTemplateChild(RootGridPart) is Grid rootGrid)
+        {
+            rootGrid.Margin = new Thickness(
+                rootGrid.Margin.Left + extraLeftMargin,
+                rootGrid.Margin.Top,
+                rootGrid.Margin.Right,
+                this.Margin.Bottom);
+        }
     }
+
+    private void UpdateSelectionVisualState(bool isSelected) => _ = VisualStateManager.GoToState(
+        this,
+        isSelected ? SelectedVisualState : NormalVisualState,
+        useTransitions: true);
 
     private void UpdateExpansionVisualState()
     {

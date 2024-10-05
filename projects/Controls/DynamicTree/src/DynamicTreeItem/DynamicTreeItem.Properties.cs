@@ -4,6 +4,7 @@
 
 namespace DroidNet.Controls;
 
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 
@@ -58,6 +59,7 @@ public partial class DynamicTreeItem
         if (oldItem is not null)
         {
             oldItem.ChildrenCollectionChanged -= this.TreeItem_ChildrenCollectionChanged;
+            ((INotifyPropertyChanged)oldItem).PropertyChanged -= this.OnItemAdapterPropertyChanged;
         }
 
         // Update visual state based on the current value of IsSelected in the
@@ -66,6 +68,15 @@ public partial class DynamicTreeItem
         if (newItem is not null)
         {
             newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
+            ((INotifyPropertyChanged)newItem).PropertyChanged += this.OnItemAdapterPropertyChanged;
+        }
+    }
+
+    protected virtual void OnItemAdapterPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
+        {
+            this.UpdateSelectionVisualState(this.ItemAdapter!.IsSelected);
         }
     }
 }
