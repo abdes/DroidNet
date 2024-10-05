@@ -90,17 +90,28 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// The selected item to deselect.
     /// </param>
     /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectedIndex" /> and <see cref="SelectedItem" /> properties if their values
-    /// change.
+    /// Triggers change notifications for the <see cref="SelectedIndex" /> and <see cref="SelectedItem" /> properties if their
+    /// values change.
     /// </remarks>
     public abstract void ClearSelection(int index);
 
+    /// <summary>
+    /// Clears the selection of the specified item.
+    /// </summary>
+    /// <param name="item">The item to deselect.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the specified <paramref name="item" /> is not found in the selection model.
+    /// </exception>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectedIndex" /> and <see cref="SelectedItem" /> properties if their
+    /// values change.
+    /// </remarks>
     public void ClearSelection(T item)
     {
         var index = this.IndexOf(item);
         if (index == -1)
         {
-            throw new ArgumentException("item not in selected items collection", nameof(item));
+            throw new ArgumentException("item not found", nameof(item));
         }
 
         this.ClearSelection(index);
@@ -122,12 +133,25 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// </exception>
     public abstract void ClearAndSelectItemAt(int index);
 
-    public virtual void ClearAndSelectItem(T item)
+    /// <summary>
+    /// Clears any existing selection and sets the selection to the specified item.
+    /// </summary>
+    /// <remarks>
+    /// The purpose of this method is to avoid having to call <see cref="ClearSelection()" /> first, meaning that observers that
+    /// are listening to the selected index property will not see the selected index being temporarily set to -1.
+    /// </remarks>
+    /// <param name="item">
+    /// The item that should be the only selected item in this selection model.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the specified <paramref name="item" /> is not found in the selection model.
+    /// </exception>
+    public void ClearAndSelectItem(T item)
     {
         var index = this.IndexOf(item);
         if (index == -1)
         {
-            throw new ArgumentException("item not in selected items collection", nameof(item));
+            throw new ArgumentException("item not found", nameof(item));
         }
 
         this.ClearAndSelectItemAt(index);
