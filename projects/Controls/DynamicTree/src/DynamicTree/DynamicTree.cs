@@ -54,6 +54,14 @@ public partial class DynamicTree : Control
         itemsRepeater.ElementClearing += this.ItemsRepeater_OnElementClearing;
     }
 
+    private static bool IsControlKeyDown() => InputKeyboardSource
+        .GetKeyStateForCurrentThread(VirtualKey.Control)
+        .HasFlag(CoreVirtualKeyStates.Down);
+
+    private static bool IsShiftKeyDown() => InputKeyboardSource
+        .GetKeyStateForCurrentThread(VirtualKey.Shift)
+        .HasFlag(CoreVirtualKeyStates.Down);
+
     private void ItemsRepeater_OnElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {
         if (args.Element is not FrameworkElement element)
@@ -126,20 +134,6 @@ public partial class DynamicTree : Control
         {
             // Handle regular Click
             this.ViewModel!.ClearAndSelectItem(item);
-        }
-
-        static bool IsControlKeyDown()
-        {
-            return InputKeyboardSource
-                .GetKeyStateForCurrentThread(VirtualKey.Control)
-                .HasFlag(CoreVirtualKeyStates.Down);
-        }
-
-        static bool IsShiftKeyDown()
-        {
-            return InputKeyboardSource
-                .GetKeyStateForCurrentThread(VirtualKey.Shift)
-                .HasFlag(CoreVirtualKeyStates.Down);
         }
     }
 
