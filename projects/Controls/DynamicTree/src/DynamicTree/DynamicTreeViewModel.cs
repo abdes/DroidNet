@@ -20,13 +20,14 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     [ObservableProperty]
     private SelectionMode selectionMode = SelectionMode.None;
 
-    public ObservableCollection<TreeItemAdapter> ShownItems { get; } = [];
+    // TODO: need to make this private and expose a read only collection
+    public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
-    public void SelectItem(TreeItemAdapter item) => this.selectionModel?.SelectItem(item);
+    public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
 
-    public void ClearAndSelectItem(TreeItemAdapter item) => this.selectionModel?.ClearAndSelectItem(item);
+    public void ClearAndSelectItem(ITreeItem item) => this.selectionModel?.ClearAndSelectItem(item);
 
-    public void ExtendSelectionTo(TreeItemAdapter item)
+    public void ExtendSelectionTo(ITreeItem item)
     {
         if (this.SelectionMode == SelectionMode.Multiple && this.selectionModel?.SelectedItem is not null)
         {
@@ -44,8 +45,68 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     {
         this.ShownItems.Clear();
 
-        // Do not add the root item, add its children instead and check if it they need to be expanded
+        // Do not add the root item, add its children instead and check if it they need to be expandedxx
         await this.RestoreExpandedChildrenAsync((TreeItemAdapter)root).ConfigureAwait(false);
+    }
+
+    protected abstract bool CanRemoveItem(ITreeItem item);
+
+    [RelayCommand(CanExecute = nameof(CanRemoveItem))]
+    private async Task RemoveItem(ITreeItem item)
+    {
+        // Remove the item's children then the item recursively
+        var children = await item.Children.ConfigureAwait(false);
+        foreach (var child in children)
+        {
+            await this.RemoveItem(child).ConfigureAwait(false);
+        }
+
+        if (item.Parent != null)
+        {
+            await item.Parent.RemoveChildAsync(item).ConfigureAwait(false);
+        }
+
+        // TODO: should add events for item add, delete, move to different parent
+        this.ShownItems.Remove(item);
+    }
+
+    [RelayCommand]
+    private async Task RemoveSelectedItems()
+    {
+        if (this.selectionModel?.IsEmpty() != false)
+        {
+            return;
+        }
+
+        if (this.selectionModel is SingleSelectionModel singleSelection)
+        {
+            var selectedItem = singleSelection.SelectedItem;
+            if (selectedItem is not null && this.CanRemoveItem(selectedItem))
+            {
+                this.selectionModel.ClearSelection();
+                await this.RemoveItem(selectedItem).ConfigureAwait(false);
+            }
+        }
+
+        if (this.selectionModel is MultipleSelectionModel multipleSelection)
+        {
+            var selectedIndices = multipleSelection.SelectedIndices.ToList();
+
+            // Clear the selection before we start modifying the shown items
+            // collection so that the indices are still valid while updating the
+            // items being deselected.
+            this.selectionModel.ClearSelection();
+
+            // Sort selected indices in descending order to avoid index shifting issues
+            selectedIndices.Sort((a, b) => b.CompareTo(a));
+
+            var tasks = selectedIndices
+                .Select(index => this.ShownItems[index])
+                .Where(this.CanRemoveItem)
+                .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
     }
 
     partial void OnSelectionModeChanged(SelectionMode value) =>

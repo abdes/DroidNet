@@ -76,11 +76,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// </remarks>
     public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
 
-    /// <inheritdoc />
-    public int Depth => this.Parent is null ? -1 : this.Parent.Depth + 1;
+    public int ChildrenCount => this.childrenLazy.IsValueCreated
+        ? this.children.Count
+        : this.GetChildrenCount();
 
     /// <inheritdoc />
-    public abstract Task<int> GetChildrenCountAsync();
+    public int Depth => this.Parent is null ? -1 : this.Parent.Depth + 1;
 
     /// <summary>
     /// Adds a child item asynchronously.
@@ -125,6 +126,17 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
                 },
                 child)
             .ConfigureAwait(false);
+
+    /// <summary>
+    /// Gets the count of child tree items asynchronously.
+    /// </summary>
+    /// <returns>The count of child tree items.</returns>
+    /// <remarks>
+    /// Due to the potential that getting the collection of all child items may be very expensive, it is suggested that whenever
+    /// possible, getting the count of children items should be implemented in a lightweight and efficient manner that does not
+    /// require a full update of the <seealso cref="Children" /> collection.
+    /// </remarks>
+    protected abstract int GetChildrenCount();
 
     /// <summary>
     /// Loads the child items asynchronously. Used to lazily initialize the collection of child items.

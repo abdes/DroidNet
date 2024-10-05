@@ -16,7 +16,7 @@ public class SceneAdapter(Scene item) : TreeItemAdapter, ITreeItem<Scene>
 
     public Scene AttachedObject => item;
 
-    public override Task<int> GetChildrenCountAsync() => Task.FromResult(this.AttachedObject.Entities.Count);
+    protected override int GetChildrenCount() => this.AttachedObject.Entities.Count;
 
     protected override async Task LoadChildren()
     {

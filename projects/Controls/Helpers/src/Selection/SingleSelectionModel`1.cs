@@ -14,6 +14,17 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
 {
     public override void ClearSelection() => this.SetSelectedIndex(-1);
 
+    /// <summary>
+    /// Clear the current selection if the given <paramref name="index" /> is the selected one.
+    /// If the given index is not selected or not in the valid range, nothing will happen.
+    /// </summary>
+    /// <param name="index">
+    /// The selected item to deselect.
+    /// </param>
+    /// <remarks>
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" />
+    /// properties if their values change.
+    /// </remarks>
     public override void ClearSelection(int index)
     {
         if (this.SelectedIndex == index)

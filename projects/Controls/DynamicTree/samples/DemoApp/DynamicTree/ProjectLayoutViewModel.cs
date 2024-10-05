@@ -18,6 +18,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     public Project? Project { get; private set; }
 
+    protected override bool CanRemoveItem(ITreeItem item) => true;
+
     [RelayCommand]
     private async Task LoadProjectAsync()
     {

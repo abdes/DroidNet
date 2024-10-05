@@ -15,7 +15,7 @@ public class EntityAdapter(Entity item) : TreeItemAdapter, ITreeItem<Entity>
 
     public Entity AttachedObject => item;
 
-    public override Task<int> GetChildrenCountAsync() => Task.FromResult(0);
+    protected override int GetChildrenCount() => 0;
 
     protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
 }
