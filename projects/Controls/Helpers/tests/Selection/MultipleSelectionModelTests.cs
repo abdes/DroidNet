@@ -641,17 +641,14 @@ public class MultipleSelectionModelTests
             .Setup<int>("IndexOf", ItExpr.IsAny<string>())
             .Returns<string>(
                 item =>
-                {
-                    // Mock implementation of IndexOf
-                    return item switch
+                    item switch
                     {
                         "A" => 0,
                         "B" => 1,
                         "C" => 2,
                         "D" => 3,
                         _ => -1,
-                    };
-                });
+                    });
 
         // Act
         mockModel.Object.SelectRange("B", "D");
