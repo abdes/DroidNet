@@ -9,12 +9,60 @@
     Loaded="ProjectLayoutView_OnLoaded"
     mc:Ignorable="d">
 
-    <dnc:DynamicTree
+    <Grid
         Width="400"
+        Padding="4"
         HorizontalAlignment="Left"
-        BorderBrush="Red"
-        BorderThickness="1"
-        SelectionMode="Multiple"
-        ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-        ViewModel="{x:Bind ViewModel}" />
+        BorderBrush="Gray"
+        BorderThickness="1">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Border
+            Padding="0,3"
+            BorderBrush="Red"
+            BorderThickness="1"
+            CornerRadius="3">
+            <dnc:DynamicTree
+                SelectionMode="Multiple"
+                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                ViewModel="{x:Bind ViewModel}" />
+        </Border>
+        <Grid Grid.Row="1">
+            <Grid.Resources>
+                <Style TargetType="AppBarButton">
+                    <Setter Property="Width" Value="40" />
+                </Style>
+            </Grid.Resources>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <CommandBar
+                Grid.Column="1"
+                DefaultLabelPosition="Collapsed"
+                OverflowButtonVisibility="Collapsed">
+                <AppBarButton
+                    Icon="Rename"
+                    IsCompact="True"
+                    Label="Rename" />
+                <AppBarButton
+                    Icon="Repair"
+                    IsCompact="True"
+                    Label="Edit Properties" />
+                <AppBarButton
+                    Icon="Add"
+                    IsCompact="True"
+                    Label="Create New Scene" />
+                <AppBarButton
+                    Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
+                    Icon="Delete"
+                    IsCompact="True"
+                    Label="Delete"
+                    ToolTipService.ToolTip="Delete (Del)" />
+            </CommandBar>
+        </Grid>
+    </Grid>
 </Page>

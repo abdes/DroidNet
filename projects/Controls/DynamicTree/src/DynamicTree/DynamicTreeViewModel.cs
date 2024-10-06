@@ -17,7 +17,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     // TODO: need to make this private and expose a read only collection
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
-    public async Task ExpandItemAsync(TreeItemAdapter itemAdapter)
+    public async Task ExpandItemAsync(ITreeItem itemAdapter)
     {
         if (itemAdapter.IsExpanded)
         {
@@ -28,7 +28,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         itemAdapter.IsExpanded = true;
     }
 
-    public async Task CollapseItemAsync(TreeItemAdapter itemAdapter)
+    public async Task CollapseItemAsync(ITreeItem itemAdapter)
     {
         if (!itemAdapter.IsExpanded)
         {
@@ -47,13 +47,15 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
+    // TODO: should add events for item add, delete, move to different parent
     private async Task RemoveItem(ITreeItem item)
     {
-        // Remove the item's children then the item recursively
-        var children = await item.Children.ConfigureAwait(false);
-        for (var childIndex = children.Count - 1; childIndex >= 0; childIndex--)
+        // Fire the ItemBeingRemoved event before any changes are made to the tree
+        var eventArgs = new ItemBeingRemovedEventArgs() { TreeItem = item };
+        this.ItemBeingRemoved?.Invoke(this, eventArgs);
+        if (!eventArgs.Proceed)
         {
-            await this.RemoveItem(children[childIndex]).ConfigureAwait(false);
+            return;
         }
 
         if (item.Parent != null)
@@ -61,11 +63,23 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             await item.Parent.RemoveChildAsync(item).ConfigureAwait(false);
         }
 
-        // TODO: should add events for item add, delete, move to different parent
-        this.ShownItems.Remove(item);
+        // Remove the item and its children from ShownItems in a single pass
+        for (var removeAtIndex = this.ShownItems.IndexOf(item); removeAtIndex < this.ShownItems.Count;)
+        {
+            if (this.ShownItems[removeAtIndex] == item || this.ShownItems[removeAtIndex].Parent == item)
+            {
+                this.ShownItems.RemoveAt(removeAtIndex);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        this.ItemRemoved?.Invoke(this, new ItemRemovedEventArgs() { TreeItem = item });
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelectedItems))]
+    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     private async Task RemoveSelectedItems()
     {
         if (this.selectionModel?.IsEmpty ?? false)
@@ -85,6 +99,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         if (this.selectionModel is MultipleSelectionModel multipleSelection)
         {
+            // Save the selection in a list for processing the removal
             var selectedIndices = multipleSelection.SelectedIndices.ToList();
 
             // Clear the selection before we start modifying the shown items
@@ -92,12 +107,21 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             // items being deselected.
             this.selectionModel.ClearSelection();
 
-            // Sort selected indices in descending order to avoid index shifting issues
-            selectedIndices.Sort((a, b) => b.CompareTo(a));
-
             var tasks = selectedIndices
+                .Order()
                 .Select(index => this.ShownItems[index])
-                /* .Where(this.CanRemoveItem) TODO: add possibility to protect item against delete */
+                .Where(item => !item.IsLocked)
+                .Aggregate(
+                    new Stack<ITreeItem>(),
+                    (stack, item) =>
+                    {
+                        if (item.Parent == null || !stack.Contains(item.Parent))
+                        {
+                            stack.Push(item);
+                        }
+
+                        return stack;
+                    })
                 .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
