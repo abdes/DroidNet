@@ -19,13 +19,15 @@
                         Background="{Binding Path=Background, RelativeSource={RelativeSource Mode=TemplatedParent}}"
                         BorderBrush="{Binding Path=BorderBrush, RelativeSource={RelativeSource Mode=TemplatedParent}}"
                         BorderThickness="{Binding Path=BorderThickness, RelativeSource={RelativeSource Mode=TemplatedParent}}">
-                        <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=ViewModel.ShownItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate>
-                                    <lc:DynamicTreeItem x:Name="PartTreeItem" ItemAdapter="{Binding}" />
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
+                        <ScrollViewer>
+                            <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=ViewModel.ShownItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate>
+                                        <lc:DynamicTreeItem x:Name="PartTreeItem" ItemAdapter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </ScrollViewer>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
