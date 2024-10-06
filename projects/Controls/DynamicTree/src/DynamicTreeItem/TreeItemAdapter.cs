@@ -50,7 +50,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     {
         this.childrenLazy
             = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
-        this.children.CollectionChanged += (sender, args) => this.ChildrenCollectionChanged?.Invoke(this, args);
+        this.children.CollectionChanged += (_, args) => this.ChildrenCollectionChanged?.Invoke(this, args);
     }
 
     /// <summary>
