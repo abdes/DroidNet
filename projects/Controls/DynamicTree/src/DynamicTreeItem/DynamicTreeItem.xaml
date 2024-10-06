@@ -34,13 +34,12 @@
 
     <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
-    <Style BasedOn="{StaticResource DefaultDynamicTreeItemStyle}" TargetType="local:DynamicTreeItem" />
-
-
     <Style x:Key="DynamicTreeItemText" TargetType="TextBlock">
         <Setter Property="Margin" Value="{StaticResource DynamicTreeColumnMargin}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+
+    <Style BasedOn="{StaticResource DefaultDynamicTreeItemStyle}" TargetType="local:DynamicTreeItem" />
 
     <Style x:Key="DefaultDynamicTreeItemStyle" TargetType="local:DynamicTreeItem">
         <Setter Property="Background" Value="{ThemeResource DynamicTreeItemBackground}" />

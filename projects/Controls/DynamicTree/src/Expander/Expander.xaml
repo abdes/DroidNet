@@ -4,7 +4,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:DroidNet.Controls">
 
-    <Style TargetType="local:Expander">
+    <Style BasedOn="{StaticResource DefaultExpanderStyle}" TargetType="local:Expander" />
+
+    <Style x:Key="DefaultExpanderStyle" TargetType="local:Expander">
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="Template">
