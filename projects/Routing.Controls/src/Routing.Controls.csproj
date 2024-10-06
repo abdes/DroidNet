@@ -22,7 +22,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
-            <Private>False</Private>
+            <Private>True</Private>
         </ProjectReference>
         <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj">
             <Private>False</Private>

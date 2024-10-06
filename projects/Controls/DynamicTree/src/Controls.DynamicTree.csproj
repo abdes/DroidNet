@@ -37,7 +37,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\Helpers\src\Controls.Helpers.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
-            <Private>False</Private>
+            <Private>True</Private>
         </ProjectReference>
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
