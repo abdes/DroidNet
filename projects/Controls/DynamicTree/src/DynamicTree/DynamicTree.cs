@@ -27,6 +27,9 @@ public partial class DynamicTree : Control
     private const string ItemsRepeaterPart = "PartItemsRepeater";
     private const string TreeItemPart = "PartTreeItem";
 
+    private ItemsRepeater? itemsRepeater;
+    private Grid? rootGrid;
+
     public DynamicTree()
     {
         this.DefaultStyleKey = typeof(DynamicTree);
@@ -54,13 +57,31 @@ public partial class DynamicTree : Control
     {
         base.OnApplyTemplate();
 
-        if (this.GetTemplateChild(ItemsRepeaterPart) is not ItemsRepeater itemsRepeater)
+        if (this.itemsRepeater is not null)
+        {
+            this.itemsRepeater.ElementPrepared -= this.OnElementPrepared;
+            this.itemsRepeater.ElementClearing -= this.ItemsRepeater_OnElementClearing;
+        }
+
+        this.rootGrid?.RemoveHandler(PointerPressedEvent, new PointerEventHandler(this.OnPointerPressed));
+
+        if (this.GetTemplateChild(ItemsRepeaterPart) is not ItemsRepeater itemsRepeaterPart)
         {
             throw new InvalidOperationException("PartItemsRepeater not found in the control template.");
         }
 
-        itemsRepeater.ElementPrepared += this.OnElementPrepared;
-        itemsRepeater.ElementClearing += this.ItemsRepeater_OnElementClearing;
+        this.itemsRepeater = itemsRepeaterPart;
+        this.rootGrid = this.GetTemplateChild(RootGridPart) as Grid;
+
+        this.itemsRepeater.ElementPrepared += this.OnElementPrepared;
+        this.itemsRepeater.ElementClearing += this.ItemsRepeater_OnElementClearing;
+
+        // Hook events that will check for clicks on empty space inside the ItemsRepeater
+        // Use AddHandler to be able to handle the events even if something inside ItemsRepeater is also doing it.
+        this.rootGrid?.AddHandler(
+            PointerPressedEvent,
+            new PointerEventHandler(this.OnPointerPressed),
+            handledEventsToo: true);
     }
 
     private static bool IsControlKeyDown() => InputKeyboardSource
@@ -70,6 +91,21 @@ public partial class DynamicTree : Control
     private static bool IsShiftKeyDown() => InputKeyboardSource
         .GetKeyStateForCurrentThread(VirtualKey.Shift)
         .HasFlag(CoreVirtualKeyStates.Down);
+
+    private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        this.Focus(FocusState.Keyboard);
+
+        // Detect pointer events not originating from an Item control, which will have a
+        // non null DataContext
+        if (args.OriginalSource is FrameworkElement { DataContext: not null })
+        {
+            return;
+        }
+
+        this.ViewModel!.ClearSelection();
+        args.Handled = true;
+    }
 
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
     [SuppressMessage(
