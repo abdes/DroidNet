@@ -333,7 +333,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         // TODO: Manage focus
-        this.SetSelectedIndex(this.selectedIndices[^1]);
+        this.SetSelectedIndex(this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1]);
     }
 
     /// <summary>
