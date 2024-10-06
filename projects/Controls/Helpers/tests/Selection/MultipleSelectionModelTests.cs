@@ -712,6 +712,51 @@ public class MultipleSelectionModelTests
         action.Should().Throw<ArgumentException>().WithMessage("item not found*");
     }
 
+    [TestMethod]
+    public void InvertSelection_ShouldInvertSelectionStateOfAllItems()
+    {
+        // Arrange
+        var model = new TestSelectableSelectionModel(
+        [
+            new TestSelectable(),
+            new TestSelectable(),
+            new TestSelectable(),
+        ]);
+        model.SelectItemAt(1);
+
+        // Act
+        model.InvertSelection();
+
+        // Assert
+        model.SelectedIndices.Should().Contain([0, 2]);
+    }
+
+    [TestMethod]
+    public void InvertSelection_WithEmptyModel_DoesNothing()
+    {
+        // Arrange
+        var model = new TestSelectableSelectionModel([]);
+
+        // Act
+        model.InvertSelection();
+
+        // Assert
+        model.SelectedIndices.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void InvertSelection_WhenItemTypeIsNotISelectable_Throws()
+    {
+        // Arrange
+        var model = new TestSelectionModel([]);
+
+        // Act
+        var act = model.InvertSelection;
+
+        // Assert
+        _ = act.Should().Throw<InvalidOperationException>();
+    }
+
     private sealed class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
     {
         protected override string GetItemAt(int index) => items[index];
@@ -719,5 +764,19 @@ public class MultipleSelectionModelTests
         protected override int IndexOf(string item) => Array.IndexOf(items, item);
 
         protected override int GetItemCount() => items.Length;
+    }
+
+    private sealed class TestSelectableSelectionModel(ISelectable[] items) : MultipleSelectionModel<ISelectable>
+    {
+        protected override int IndexOf(ISelectable item) => Array.IndexOf(items, item);
+
+        protected override ISelectable GetItemAt(int index) => items[index];
+
+        protected override int GetItemCount() => items.Length;
+    }
+
+    private sealed class TestSelectable : ISelectable
+    {
+        public bool IsSelected { get; set; }
     }
 }

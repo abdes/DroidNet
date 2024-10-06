@@ -120,6 +120,10 @@ public partial class DynamicTree : Control
 
                 return;
 
+            case VirtualKey.I when IsControlKeyDown() && IsShiftKeyDown():
+                this.ViewModel!.InvertSelectionCommand.Execute(default);
+                return;
+
             case VirtualKey.Delete:
                 await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(default).ConfigureAwait(true);
                 return;

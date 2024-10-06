@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
 [TestClass]
+[TestCategory($"{nameof(Controls)} - Selection Helpers")]
 [ExcludeFromCodeCoverage]
 public class SelectionObservableCollectionTests
 {
