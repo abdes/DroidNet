@@ -14,8 +14,6 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <Style BasedOn="{StaticResource DefaultThumbnailStyle}" TargetType="local:Thumbnail" />
-
     <DataTemplate x:Key="DefaultThumbnailTemplate">
         <Border
             Width="{StaticResource CellContentWidth}"
@@ -23,6 +21,8 @@
             BorderBrush="{ThemeResource EmptyThumbnailBorderColor}"
             BorderThickness="1" />
     </DataTemplate>
+
+    <Style BasedOn="{StaticResource DefaultThumbnailStyle}" TargetType="local:Thumbnail" />
 
     <Style x:Key="DefaultThumbnailStyle" TargetType="local:Thumbnail">
         <Setter Property="Template">
