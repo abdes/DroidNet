@@ -22,6 +22,8 @@ public abstract partial class DynamicTreeViewModel
 
     public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
 
+    public void ClearSelection(ITreeItem item) => this.selectionModel?.ClearSelection(item);
+
     public void ClearAndSelectItem(ITreeItem item) => this.selectionModel?.ClearAndSelectItem(item);
 
     public void ExtendSelectionTo(ITreeItem item)
@@ -55,8 +57,6 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    public void ClearSelection(ITreeItem item) => this.selectionModel?.ClearSelection(item);
-
     [RelayCommand(CanExecute = nameof(HasSelectedItems))]
     internal void SelectNone() => this.selectionModel?.ClearSelection();
 
@@ -67,6 +67,17 @@ public abstract partial class DynamicTreeViewModel
         {
             multipleSelection.SelectAll();
         }
+    }
+
+    [RelayCommand]
+    private void InvertSelection()
+    {
+        if (this.selectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            return;
+        }
+
+        multipleSelection.InvertSelection();
     }
 
     partial void OnSelectionModeChanged(SelectionMode value)

@@ -51,9 +51,9 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     {
         // Remove the item's children then the item recursively
         var children = await item.Children.ConfigureAwait(false);
-        foreach (var child in children)
+        for (var childIndex = children.Count - 1; childIndex >= 0; childIndex--)
         {
-            await this.RemoveItem(child).ConfigureAwait(false);
+            await this.RemoveItem(children[childIndex]).ConfigureAwait(false);
         }
 
         if (item.Parent != null)

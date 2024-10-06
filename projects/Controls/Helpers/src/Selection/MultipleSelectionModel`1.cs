@@ -6,6 +6,7 @@ namespace DroidNet.Controls;
 
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 [SuppressMessage(
@@ -288,7 +289,51 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         // TODO: Manage focus
-        this.SetSelectedIndex(itemsCount - 1);
+        this.SetSelectedIndex(this.selectedIndices[^1]);
+    }
+
+    /// <summary>
+    /// Inverts the selection state of all items in the collection.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the underlying data model does not implement <see cref="ISelectable" />.
+    /// </exception>
+    public void InvertSelection()
+    {
+        if (!typeof(ISelectable).IsAssignableFrom(typeof(T)))
+        {
+            throw new InvalidOperationException(
+                "Cannot invert selection when the underlying data model does not implement ISelectable.");
+        }
+
+        // Bailout quickly if the underlying data model has no items.
+        var itemsCount = this.GetItemCount();
+        if (itemsCount == 0)
+        {
+            return;
+        }
+
+        // Modify the collection quietly. We'll only trigger a collection change
+        // notification after we resume notifications.
+        using (this.selectedIndices.SuspendNotifications())
+        {
+            for (var index = 0; index < itemsCount; index++)
+            {
+                var item = this.GetItemAt(index) as ISelectable;
+                Debug.Assert(item is not null, "InvertSelection throws if the type T does not implement ISelectable");
+                if (item.IsSelected)
+                {
+                    this.selectedIndices.Remove(index);
+                }
+                else
+                {
+                    this.selectedIndices.Add(index);
+                }
+            }
+        }
+
+        // TODO: Manage focus
+        this.SetSelectedIndex(this.selectedIndices[^1]);
     }
 
     /// <summary>
