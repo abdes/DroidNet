@@ -21,8 +21,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Mvvm\src\Mvvm.csproj" />
-        <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
+            <Private>False</Private>
+        </ProjectReference>
+        <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj">
+            <Private>False</Private>
+        </ProjectReference>
     </ItemGroup>
 
 </Project>
