@@ -187,7 +187,14 @@ public partial class DynamicTree : Control
         if (IsControlKeyDown())
         {
             // Handle Ctrl+Click
-            this.ViewModel!.SelectItem(item);
+            if (item.IsSelected)
+            {
+                this.ViewModel!.ClearSelection(item);
+            }
+            else
+            {
+                this.ViewModel!.SelectItem(item);
+            }
         }
         else if (IsShiftKeyDown())
         {

@@ -51,6 +51,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
     }
 
+    public void ClearSelection(ITreeItem item) => this.selectionModel?.ClearSelection(item);
+
     [RelayCommand(CanExecute = nameof(HasSelectedItems))]
     internal void ClearSelection() => this.selectionModel?.ClearSelection();
 
