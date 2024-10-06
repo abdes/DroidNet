@@ -40,7 +40,6 @@ public partial class DynamicTree : Control
             this.ViewModel!.SelectionMode = this.SelectionMode;
 
             // Handle key bindings
-            this.Focus(FocusState.Keyboard);
             this.KeyDown += this.OnKeyDown;
         };
 
@@ -59,7 +58,7 @@ public partial class DynamicTree : Control
 
         if (this.itemsRepeater is not null)
         {
-            this.itemsRepeater.ElementPrepared -= this.OnElementPrepared;
+            this.itemsRepeater.ElementPrepared -= this.ItemsRepeater_OnElementPrepared;
             this.itemsRepeater.ElementClearing -= this.ItemsRepeater_OnElementClearing;
         }
 
@@ -73,7 +72,7 @@ public partial class DynamicTree : Control
         this.itemsRepeater = itemsRepeaterPart;
         this.rootGrid = this.GetTemplateChild(RootGridPart) as Grid;
 
-        this.itemsRepeater.ElementPrepared += this.OnElementPrepared;
+        this.itemsRepeater.ElementPrepared += this.ItemsRepeater_OnElementPrepared;
         this.itemsRepeater.ElementClearing += this.ItemsRepeater_OnElementClearing;
 
         // Hook events that will check for clicks on empty space inside the ItemsRepeater
@@ -145,7 +144,7 @@ public partial class DynamicTree : Control
         treeItem.DoubleTapped -= this.TreeItem_DoubleTapped;
     }
 
-    private void OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    private void ItemsRepeater_OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
         if (args.Element is not Control element)
         {
