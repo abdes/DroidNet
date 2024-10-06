@@ -102,7 +102,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        this.ViewModel!.ClearSelection();
+        this.ViewModel!.SelectNone();
         args.Handled = true;
     }
 
@@ -116,7 +116,8 @@ public partial class DynamicTree : Control
         switch (args.Key)
         {
             case VirtualKey.A when IsControlKeyDown():
-                this.ViewModel!.SelectAll();
+                this.ViewModel!.ToggleSelectAll();
+
                 return;
 
             case VirtualKey.Delete:

@@ -38,9 +38,18 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    public void SelectAll()
+    public void ToggleSelectAll()
     {
-        if (this.selectionModel is MultipleSelectionModel<ITreeItem> multipleSelection)
+        if (this.selectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            return;
+        }
+
+        if (multipleSelection.SelectedIndices.Count == this.ShownItems.Count)
+        {
+            multipleSelection.ClearSelection();
+        }
+        else
         {
             multipleSelection.SelectAll();
         }
@@ -49,7 +58,16 @@ public abstract partial class DynamicTreeViewModel
     public void ClearSelection(ITreeItem item) => this.selectionModel?.ClearSelection(item);
 
     [RelayCommand(CanExecute = nameof(HasSelectedItems))]
-    internal void ClearSelection() => this.selectionModel?.ClearSelection();
+    internal void SelectNone() => this.selectionModel?.ClearSelection();
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        if (this.selectionModel is MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            multipleSelection.SelectAll();
+        }
+    }
 
     partial void OnSelectionModeChanged(SelectionMode value)
     {
