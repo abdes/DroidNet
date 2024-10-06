@@ -18,7 +18,7 @@ public abstract partial class DynamicTreeViewModel
     [ObservableProperty]
     private SelectionMode selectionMode = SelectionMode.None;
 
-    public bool HasSelectedItems => !this.selectionModel?.IsEmpty ?? false;
+    public bool HasUnlockedSelectedItems { get; private set; }
 
     public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
 
@@ -57,7 +57,7 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelectedItems))]
+    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     internal void SelectNone() => this.selectionModel?.ClearSelection();
 
     [RelayCommand]
@@ -103,10 +103,39 @@ public abstract partial class DynamicTreeViewModel
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
         {
-            // Notify that HasSelectedItems has changed
-            this.OnPropertyChanged(nameof(this.HasSelectedItems));
+            return;
+        }
+
+        var hasUnlockedSelectedItems = false;
+        switch (this.selectionModel)
+        {
+            case SingleSelectionModel:
+                hasUnlockedSelectedItems = this.selectionModel.SelectedItem?.IsLocked == false;
+                break;
+
+            case MultipleSelectionModel multipleSelectionModel:
+                foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
+                {
+                    var item = this.ShownItems[selectedIndex];
+                    hasUnlockedSelectedItems = !item.IsLocked;
+                    if (hasUnlockedSelectedItems)
+                    {
+                        break;
+                    }
+                }
+
+                break;
+
+            default:
+                // Keep it false
+                break;
+        }
+
+        if (hasUnlockedSelectedItems != this.HasUnlockedSelectedItems)
+        {
+            this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
             this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
         }
     }
