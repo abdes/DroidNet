@@ -35,8 +35,6 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
 
     public override void ClearAndSelectItemAt(int index) => this.SelectItemAt(index);
 
-    public override bool IsEmpty() => this.GetItemCount() == 0 || this.SelectedIndex == -1;
-
     public override bool IsSelected(int index) => this.SelectedIndex == index;
 
     public override void SelectItem(T item)

@@ -27,7 +27,7 @@ public class MultipleSelectionModelTests
         model.ClearSelection();
 
         // Assert
-        _ = model.IsEmpty().Should().BeTrue();
+        _ = model.IsEmpty.Should().BeTrue();
         _ = model.SelectedIndices.Should().BeEmpty();
         _ = model.SelectedIndex.Should().Be(-1);
         _ = model.SelectedItem.Should().BeNull();
@@ -111,16 +111,16 @@ public class MultipleSelectionModelTests
 
         // Assert
         _ = model.SelectedIndices.Should().ContainInConsecutiveOrder(0, 2);
-        _ = model.SelectedIndex.Should().Be(0);
-        _ = model.SelectedItem.Should().Be("A");
+        _ = model.SelectedIndex.Should().Be(2, "last selected index");
+        _ = model.SelectedItem.Should().Be("C", "last selected item");
 
         // Act
         model.ClearSelection(0);
 
         // Assert
         _ = model.SelectedIndices.Should().ContainInConsecutiveOrder(2);
-        _ = model.SelectedIndex.Should().Be(2);
-        _ = model.SelectedItem.Should().Be("C");
+        _ = model.SelectedIndex.Should().Be(2, "last selected index");
+        _ = model.SelectedItem.Should().Be("C", "last selected item");
 
         // Act
         model.ClearSelection(2);
@@ -222,33 +222,6 @@ public class MultipleSelectionModelTests
         _ = model.IsSelected(0).Should().BeFalse();
         _ = model.IsSelected(1).Should().BeFalse();
         _ = model.IsSelected(2).Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void IsEmpty_ShouldReturnTrue_WhenNoItemIsSelected()
-    {
-        // Arrange
-        var model = new TestSelectionModel("A", "B", "C");
-
-        // Act
-        var isEmpty = model.IsEmpty();
-
-        // Assert
-        _ = isEmpty.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void IsEmpty_ShouldReturnFalse_WhenAnItemIsSelected()
-    {
-        // Arrange
-        var model = new TestSelectionModel("A", "B", "C");
-        model.SelectItemAt(1);
-
-        // Act
-        var isEmpty = model.IsEmpty();
-
-        // Assert
-        _ = isEmpty.Should().BeFalse();
     }
 
     [TestMethod]

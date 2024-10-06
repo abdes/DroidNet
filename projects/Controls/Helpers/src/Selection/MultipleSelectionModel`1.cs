@@ -110,12 +110,9 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
             return;
         }
 
-        var newSelectedIndex = this.IsEmpty() ? -1 : this.selectedIndices[^1];
+        var newSelectedIndex = this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1];
         this.SetSelectedIndex(newSelectedIndex);
     }
-
-    /// <inheritdoc />
-    public override bool IsEmpty() => this.selectedIndices.Count == 0;
 
     /// <inheritdoc />
     public override bool IsSelected(int index) => this.selectedIndices.Contains(index);
