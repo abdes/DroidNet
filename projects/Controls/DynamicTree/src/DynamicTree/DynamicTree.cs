@@ -80,9 +80,13 @@ public partial class DynamicTree : Control
     {
         switch (args.Key)
         {
+            case VirtualKey.A when IsControlKeyDown():
+                this.ViewModel!.SelectAll();
+                return;
+
             case VirtualKey.Delete:
                 await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(default).ConfigureAwait(true);
-                break;
+                return;
         }
     }
 

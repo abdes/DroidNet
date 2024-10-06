@@ -43,6 +43,14 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
     }
 
+    public void SelectAll()
+    {
+        if (this.selectionModel is MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            multipleSelection.SelectAll();
+        }
+    }
+
     protected async Task InitializeRootAsync(ITreeItem root)
     {
         this.ShownItems.Clear();
