@@ -24,6 +24,10 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// <summary>
     /// Gets the currently selected index value in the selection model. The selected index is either <c>-1</c>, to represent that
     /// there is no selection, or an integer value that is within the range of the underlying data model size.
+    /// <para>
+    /// Changes to this property can be observed through the <see cref="PropertyChanging" /> and <see cref="PropertyChanged" />
+    /// events of the selection model.
+    /// </para>
     /// </summary>
     /// <remarks>
     /// The selected index property is most commonly used when the selection model only allows single selection, but is equally
@@ -36,8 +40,24 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     /// Gets the currently selected item in the selection model. The selected item is either <see langword="null" />, to represent
     /// that there is no selection, or an <see cref="object" /> that is retrieved from the underlying data model of the control the
     /// selection model is associated with.
+    /// <para>
+    /// Changes to this property can be observed through the <see cref="PropertyChanging" /> and <see cref="PropertyChanged" />
+    /// events of the selection model.
+    /// </para>
     /// </summary>
     public T? SelectedItem { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether there are any selected indices/items.
+    /// <para>
+    /// Changes to this property can be observed through the <see cref="PropertyChanging" /> and <see cref="PropertyChanged" />
+    /// events of the selection model.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// <see langword="true" /> if there are no selected items, and <see langword="false" /> if there are.
+    /// </returns>
+    public bool IsEmpty => this.SelectedIndex == -1;
 
     /// <summary>
     /// Select the given index in the selection model, assuming the index is within the valid range (i.e. greater than or equal to
@@ -172,14 +192,6 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
     public abstract bool IsSelected(int index);
 
     /// <summary>
-    /// Check if there are any selected indices/items.
-    /// </summary>
-    /// <returns>
-    /// <see langword="true" /> if there are no selected items, and <see langword="false" /> if there are.
-    /// </returns>
-    public abstract bool IsEmpty();
-
-    /// <summary>
     /// Gets the data model item associated with a specific index.
     /// </summary>
     /// <param name="index">
@@ -237,25 +249,24 @@ public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyProper
             return false;
         }
 
+        var isEmptyValueChanging = value == -1 || this.SelectedIndex == -1;
+
         this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.SelectedIndex)));
+        this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.SelectedItem)));
+        if (isEmptyValueChanging)
+        {
+            this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.IsEmpty)));
+        }
 
         this.SelectedIndex = value;
+        this.SelectedItem = this.SelectedIndex == -1 ? default : this.GetItemAt(this.SelectedIndex);
 
         this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.SelectedIndex)));
-
-        /*
-         * We can only trigger a selection change from the concrete selection model classes through changing the
-         * SelectedIndex. Therefore, we always raise the Property Change events for the SelectedItem as long as the new
-         * value of the SelectedIndex is different from the old value.
-         */
-
-        var newItem = this.SelectedIndex == -1 ? default : this.GetItemAt(this.SelectedIndex);
-
-        this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(this.SelectedItem)));
-
-        this.SelectedItem = newItem;
-
         this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.SelectedItem)));
+        if (isEmptyValueChanging)
+        {
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.IsEmpty)));
+        }
 
         return true;
     }

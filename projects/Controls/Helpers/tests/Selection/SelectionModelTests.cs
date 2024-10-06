@@ -15,6 +15,33 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public class SelectionModelTests : TestSuiteWithAssertions
 {
     [TestMethod]
+    public void IsEmpty_ShouldReturnTrue_WhenNoItemIsSelected()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+
+        // Act
+        var isEmpty = model.IsEmpty;
+
+        // Assert
+        _ = isEmpty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsEmpty_ShouldReturnFalse_WhenAnItemIsSelected()
+    {
+        // Arrange
+        var model = new TestSelectionModel("A", "B", "C");
+        model.SelectItemAt(1);
+
+        // Act
+        var isEmpty = model.IsEmpty;
+
+        // Assert
+        _ = isEmpty.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void UpdateSelectedIndex_AssertsIndexArgumentIsValid()
     {
         // Arrange
@@ -132,6 +159,53 @@ public class SelectionModelTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void SelectItemAt_ShouldRaisePropertyChangeEventsForIsEmpty_WhenNoSelection()
+    {
+        // Arrange
+        const int initialIndex = 0;
+        const int newIndex = -1;
+        var model = new TestSelectionModel("A", "B", "C") { InitialIndex = initialIndex };
+
+        // Act
+        _ = model.PublicSetSelectedIndex(newIndex);
+
+        // Assert
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanging.Should().BeTrue();
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanged.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void SelectItemAt_ShouldRaisePropertyChangeEventsForIsEmpty_WhenSelectionAfterNoSelection()
+    {
+        // Arrange
+        const int newIndex = 1;
+        var model = new TestSelectionModel("A", "B", "C");
+
+        // Act
+        _ = model.PublicSetSelectedIndex(newIndex);
+
+        // Assert
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanging.Should().BeTrue();
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanged.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void SelectItemAt_ShouldNotRaisePropertyChangeEventsForIsEmpty_WhenSelectionWhileNotEmpty()
+    {
+        // Arrange
+        const int initialIndex = 0;
+        const int newIndex = 1;
+        var model = new TestSelectionModel("A", "B", "C") { InitialIndex = initialIndex };
+
+        // Act
+        _ = model.PublicSetSelectedIndex(newIndex);
+
+        // Assert
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanging.Should().BeFalse();
+        _ = model.IsEmptyEventRaisedInfo.PropertyChanged.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void SetSelectedIndex_ShouldNotRaiseEvents_WhenValueIsSameAsSelectedIndex()
     {
         // Arrange
@@ -158,24 +232,41 @@ public class SelectionModelTests : TestSuiteWithAssertions
 
             this.PropertyChanging += (_, args) =>
             {
-                if (string.Equals(args.PropertyName, nameof(this.SelectedIndex), StringComparison.Ordinal))
+                switch (args.PropertyName)
                 {
-                    this.SelectedIndexEventRaisedInfo.PropertyChanging = true;
-                }
-                else if (string.Equals(args.PropertyName, nameof(this.SelectedItem), StringComparison.Ordinal))
-                {
-                    this.SelectedItemEventRaisedInfo.PropertyChanging = true;
+                    case nameof(this.SelectedIndex):
+                        this.SelectedIndexEventRaisedInfo.PropertyChanging = true;
+                        break;
+                    case nameof(this.SelectedItem):
+                        this.SelectedItemEventRaisedInfo.PropertyChanging = true;
+                        break;
+                    case nameof(this.IsEmpty):
+                        this.IsEmptyEventRaisedInfo.PropertyChanging = true;
+                        break;
+
+                    default:
+                        // Ignore
+                        break;
                 }
             };
+
             this.PropertyChanged += (_, args) =>
             {
-                if (string.Equals(args.PropertyName, nameof(this.SelectedIndex), StringComparison.Ordinal))
+                switch (args.PropertyName)
                 {
-                    this.SelectedIndexEventRaisedInfo.PropertyChanged = true;
-                }
-                else if (string.Equals(args.PropertyName, nameof(this.SelectedItem), StringComparison.Ordinal))
-                {
-                    this.SelectedItemEventRaisedInfo.PropertyChanged = true;
+                    case nameof(this.SelectedIndex):
+                        this.SelectedIndexEventRaisedInfo.PropertyChanged = true;
+                        break;
+                    case nameof(this.SelectedItem):
+                        this.SelectedItemEventRaisedInfo.PropertyChanged = true;
+                        break;
+                    case nameof(this.IsEmpty):
+                        this.IsEmptyEventRaisedInfo.PropertyChanged = true;
+                        break;
+
+                    default:
+                        // Ignore
+                        break;
                 }
             };
         }
@@ -183,6 +274,8 @@ public class SelectionModelTests : TestSuiteWithAssertions
         public EventRaisedInfo SelectedIndexEventRaisedInfo { get; } = new();
 
         public EventRaisedInfo SelectedItemEventRaisedInfo { get; } = new();
+
+        public EventRaisedInfo IsEmptyEventRaisedInfo { get; } = new();
 
         public int InitialIndex
         {
@@ -201,6 +294,8 @@ public class SelectionModelTests : TestSuiteWithAssertions
             this.SelectedIndexEventRaisedInfo.PropertyChanged = false;
             this.SelectedItemEventRaisedInfo.PropertyChanging = false;
             this.SelectedItemEventRaisedInfo.PropertyChanged = false;
+            this.IsEmptyEventRaisedInfo.PropertyChanging = false;
+            this.IsEmptyEventRaisedInfo.PropertyChanged = false;
 
             return this.SetSelectedIndex(value);
         }

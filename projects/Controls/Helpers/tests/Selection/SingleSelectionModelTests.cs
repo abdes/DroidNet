@@ -26,7 +26,7 @@ public class SingleSelectionModelTests
         model.ClearSelection();
 
         // Assert
-        _ = model.IsEmpty().Should().BeTrue();
+        _ = model.IsEmpty.Should().BeTrue();
         _ = model.SelectedIndex.Should().Be(-1);
         _ = model.SelectedItem.Should().BeNull();
     }
@@ -43,7 +43,7 @@ public class SingleSelectionModelTests
         model.ClearSelection();
 
         // Assert
-        _ = model.IsEmpty().Should().BeTrue();
+        _ = model.IsEmpty.Should().BeTrue();
         _ = model.SelectedIndex.Should().Be(-1);
         _ = model.SelectedItem.Should().BeNull();
         _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedIndex);
@@ -154,33 +154,6 @@ public class SingleSelectionModelTests
 
         // Assert
         _ = isSelected.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void IsEmpty_ShouldReturnTrue_WhenNoItemIsSelected()
-    {
-        // Arrange
-        var model = new TestSelectionModel("A", "B", "C");
-
-        // Act
-        var isEmpty = model.IsEmpty();
-
-        // Assert
-        _ = isEmpty.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void IsEmpty_ShouldReturnFalse_WhenAnItemIsSelected()
-    {
-        // Arrange
-        var model = new TestSelectionModel("A", "B", "C");
-        model.SelectItemAt(1);
-
-        // Act
-        var isEmpty = model.IsEmpty();
-
-        // Assert
-        _ = isEmpty.Should().BeFalse();
     }
 
     [TestMethod]
