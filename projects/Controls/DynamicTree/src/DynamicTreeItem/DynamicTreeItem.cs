@@ -306,14 +306,3 @@ public partial class DynamicTreeItem : ContentControl
         }
     }
 }
-
-/// <summary>
-/// Provides data for the <see cref="DynamicTreeItem.Expand" /> and <see cref="DynamicTreeItem.Collapse" /> events.
-/// </summary>
-public class DynamicTreeEventArgs : EventArgs
-{
-    /// <summary>
-    /// Gets the tree item associated with the event.
-    /// </summary>
-    public required TreeItemAdapter TreeItem { get; init; }
-}
