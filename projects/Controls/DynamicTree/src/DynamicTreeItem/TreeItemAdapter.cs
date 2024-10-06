@@ -44,6 +44,15 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     private bool isSelected;
 
     /// <summary>
+    /// Indicates whether the tree item is locked.
+    /// <remarks>
+    /// When <see langword="true" />, the item cannot be deleted or moved within the tree.
+    /// </remarks>
+    /// </summary>
+    [ObservableProperty]
+    private bool isLocked;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TreeItemAdapter" /> class.
     /// </summary>
     protected TreeItemAdapter()

@@ -11,7 +11,7 @@ using System.Collections.Specialized;
 /// Represents an item in a hierarchical tree structure, providing functionality for managing child items,
 /// tracking selection state, and handling expansion and collapse states.
 /// </summary>
-public interface ITreeItem : ISelectable
+public interface ITreeItem : ISelectable, ILockable
 {
     /// <summary>
     /// Occurs when the collection of child items changes.
