@@ -23,6 +23,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     // TODO: need to make this private and expose a read only collection
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
+    public bool HasSelectedItems => !this.selectionModel?.IsEmpty ?? false;
+
     public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
 
     public void ClearAndSelectItem(ITreeItem item) => this.selectionModel?.ClearAndSelectItem(item);
@@ -49,9 +51,6 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
-    protected abstract bool CanRemoveItem(ITreeItem item);
-
-    [RelayCommand(CanExecute = nameof(CanRemoveItem))]
     private async Task RemoveItem(ITreeItem item)
     {
         // Remove the item's children then the item recursively
@@ -70,10 +69,10 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         this.ShownItems.Remove(item);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasSelectedItems))]
     private async Task RemoveSelectedItems()
     {
-        if (this.selectionModel?.IsEmpty() != false)
+        if (this.selectionModel?.IsEmpty ?? false)
         {
             return;
         }
@@ -81,7 +80,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         if (this.selectionModel is SingleSelectionModel singleSelection)
         {
             var selectedItem = singleSelection.SelectedItem;
-            if (selectedItem is not null && this.CanRemoveItem(selectedItem))
+            if (selectedItem is not null /* TODO: add possibility to protect item against delete */)
             {
                 this.selectionModel.ClearSelection();
                 await this.RemoveItem(selectedItem).ConfigureAwait(false);
@@ -102,14 +101,20 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
             var tasks = selectedIndices
                 .Select(index => this.ShownItems[index])
-                .Where(this.CanRemoveItem)
+                /* .Where(this.CanRemoveItem) TODO: add possibility to protect item against delete */
                 .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
     }
 
-    partial void OnSelectionModeChanged(SelectionMode value) =>
+    partial void OnSelectionModeChanged(SelectionMode value)
+    {
+        if (this.selectionModel is not null)
+        {
+            this.selectionModel.PropertyChanged -= this.OnSelectionModelPropertyChanged;
+        }
+
         this.selectionModel = value switch
         {
             SelectionMode.None => default,
@@ -117,6 +122,21 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             SelectionMode.Multiple => new MultipleSelectionModel(this),
             _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode)),
         };
+
+        if (this.selectionModel is not null)
+        {
+            this.selectionModel.PropertyChanged += this.OnSelectionModelPropertyChanged;
+        }
+    }
+
+    private void OnSelectionModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        {
+            // Notify that HasSelectedItems has changed
+            this.OnPropertyChanged(nameof(this.HasSelectedItems));
+        }
+    }
 
     [RelayCommand]
     private async Task ToggleExpanded(TreeItemAdapter itemAdapter)
