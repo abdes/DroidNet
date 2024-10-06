@@ -46,7 +46,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         this.ShownItems.Clear();
 
         // Do not add the root item, add its children instead and check if it they need to be expandedxx
-        await this.RestoreExpandedChildrenAsync((TreeItemAdapter)root).ConfigureAwait(false);
+        await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
     protected abstract bool CanRemoveItem(ITreeItem item);
@@ -155,7 +155,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         itemAdapter.IsExpanded = false;
     }
 
-    private async Task RestoreExpandedChildrenAsync(TreeItemAdapter itemAdapter)
+    private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
     {
         var insertIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
         await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(false);
