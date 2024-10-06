@@ -216,9 +216,9 @@ public partial class DynamicTree : Control
         Debug.WriteLine($"Item double tapped: {sender}");
     }
 
-    private void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
-        => this.ViewModel!.ExpandItemCommand.Execute(args.TreeItem);
+    private async void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
+        => await this.ViewModel!.ExpandItemAsync(args.TreeItem).ConfigureAwait(true);
 
-    private void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
-        => this.ViewModel!.CollapseItemCommand.Execute(args.TreeItem);
+    private async void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
+        => await this.ViewModel!.CollapseItemAsync(args.TreeItem).ConfigureAwait(true);
 }
