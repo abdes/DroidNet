@@ -69,6 +69,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
             <Private>True</Private>
+            <ReferenceOutputAssembly>True</ReferenceOutputAssembly>
         </ProjectReference>
 
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
