@@ -107,6 +107,7 @@ public abstract partial class DynamicTreeViewModel
         {
             // Notify that HasSelectedItems has changed
             this.OnPropertyChanged(nameof(this.HasSelectedItems));
+            this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
         }
     }
 
