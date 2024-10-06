@@ -67,7 +67,9 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
+            <Private>True</Private>
+        </ProjectReference>
 
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
