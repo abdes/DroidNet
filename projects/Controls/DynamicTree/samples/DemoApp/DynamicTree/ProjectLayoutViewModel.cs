@@ -4,6 +4,7 @@
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
+using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.Model;
@@ -17,9 +18,68 @@ using Microsoft.Extensions.DependencyInjection;
 [InjectAs(ServiceLifetime.Singleton)]
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
-    public ProjectLayoutViewModel() => this.ItemBeingRemoved += this.OnItemBeingRemoved;
+    public ProjectLayoutViewModel()
+    {
+        this.ItemBeingRemoved += this.OnItemBeingRemoved;
+        this.ItemBeingAdded += this.OnItemBeingAdded;
+    }
 
-    public Project? Project { get; private set; }
+    public ProjectAdapter? Project { get; private set; }
+
+    protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
+    {
+        base.OnSelectionModelChanged(oldValue);
+
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
+        }
+
+        if (this.SelectionModel is not null)
+        {
+            this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
+        }
+    }
+
+    private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        {
+            this.AddEntityCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private void OnItemBeingAdded(object? sender, ItemBeingAddedEventArgs args)
+    {
+        _ = sender; // unused
+
+        switch (args.TreeItem)
+        {
+            case SceneAdapter sceneAdapter:
+            {
+                var scene = sceneAdapter.AttachedObject;
+                var parentAdapter = args.Parent as ProjectAdapter;
+                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
+                var project = parentAdapter.AttachedObject;
+                project.Scenes.Add(scene);
+                break;
+            }
+
+            case EntityAdapter entityAdapter:
+            {
+                var entity = entityAdapter.AttachedObject;
+                var parentAdapter = args.Parent as SceneAdapter;
+                Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
+                var scene = parentAdapter.AttachedObject;
+                scene.Entities.Add(entity);
+                break;
+            }
+
+            default:
+                // Do nothing
+                break;
+        }
+    }
 
     private void OnItemBeingRemoved(object? sender, ItemBeingRemovedEventArgs args)
     {
@@ -57,10 +117,54 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     [RelayCommand]
     private async Task LoadProjectAsync()
     {
-        this.Project = new Project("Sample Project");
-        await ProjectLoaderService.LoadProjectAsync(this.Project).ConfigureAwait(false);
+        var project = new Project("Sample Project");
+        await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
 
-        var root = new ProjectAdapter(this.Project);
-        await this.InitializeRootAsync(root).ConfigureAwait(false);
+        this.Project = new ProjectAdapter(project);
+        await this.InitializeRootAsync(this.Project).ConfigureAwait(false);
+    }
+
+    [RelayCommand]
+    private async Task AddScene()
+    {
+        if (this.Project is null)
+        {
+            return;
+        }
+
+        var newScene = new SceneAdapter(new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}"));
+
+        await this.AddItem(this.Project, newScene).ConfigureAwait(false);
+    }
+
+    private bool CanAddEntity()
+        => (this.SelectionModel is SingleSelectionModel && this.SelectionModel.SelectedIndex != -1) ||
+           this.SelectionModel is MultipleSelectionModel { SelectedIndices.Count: 1 };
+
+    [RelayCommand(CanExecute = nameof(CanAddEntity))]
+    private async Task AddEntity()
+    {
+        var selectedItem = this.SelectionModel?.SelectedItem;
+        if (selectedItem is null)
+        {
+            return;
+        }
+
+        var scene = selectedItem switch
+        {
+            SceneAdapter item => item,
+            EntityAdapter { Parent: SceneAdapter } entity => (SceneAdapter)entity.Parent,
+
+            // Anything else is not a valid item to which we can add an entity
+            _ => null,
+        };
+
+        if (scene is null)
+        {
+            return;
+        }
+
+        var newEntity = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
+        await this.AddItem(scene, newEntity).ConfigureAwait(false);
     }
 }

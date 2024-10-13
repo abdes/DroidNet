@@ -13,36 +13,36 @@ using CommunityToolkit.Mvvm.Input;
 /// </summary>
 public abstract partial class DynamicTreeViewModel
 {
-    private SelectionModel<ITreeItem>? selectionModel;
-
     [ObservableProperty]
     private SelectionMode selectionMode = SelectionMode.None;
 
+    public SelectionModel<ITreeItem>? SelectionModel { get; private set; }
+
     public bool HasUnlockedSelectedItems { get; private set; }
 
-    public void SelectItem(ITreeItem item) => this.selectionModel?.SelectItem(item);
+    public void SelectItem(ITreeItem item) => this.SelectionModel?.SelectItem(item);
 
-    public void ClearSelection(ITreeItem item) => this.selectionModel?.ClearSelection(item);
+    public void ClearSelection(ITreeItem item) => this.SelectionModel?.ClearSelection(item);
 
-    public void ClearAndSelectItem(ITreeItem item) => this.selectionModel?.ClearAndSelectItem(item);
+    public void ClearAndSelectItem(ITreeItem item) => this.SelectionModel?.ClearAndSelectItem(item);
 
     public void ExtendSelectionTo(ITreeItem item)
     {
-        if (this.SelectionMode == SelectionMode.Multiple && this.selectionModel?.SelectedItem is not null)
+        if (this.SelectionMode == SelectionMode.Multiple && this.SelectionModel?.SelectedItem is not null)
         {
-            ((MultipleSelectionModel<ITreeItem>)this.selectionModel).SelectRange(
-                this.selectionModel.SelectedItem,
+            ((MultipleSelectionModel<ITreeItem>)this.SelectionModel).SelectRange(
+                this.SelectionModel.SelectedItem,
                 item);
         }
         else
         {
-            this.selectionModel?.SelectItem(item);
+            this.SelectionModel?.SelectItem(item);
         }
     }
 
     public void ToggleSelectAll()
     {
-        if (this.selectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
         {
             return;
         }
@@ -58,12 +58,25 @@ public abstract partial class DynamicTreeViewModel
     }
 
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
-    internal void SelectNone() => this.selectionModel?.ClearSelection();
+    internal void SelectNone() => this.SelectionModel?.ClearSelection();
+
+    protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
+        }
+
+        if (this.SelectionModel is not null)
+        {
+            this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
+        }
+    }
 
     [RelayCommand]
     private void SelectAll()
     {
-        if (this.selectionModel is MultipleSelectionModel<ITreeItem> multipleSelection)
+        if (this.SelectionModel is MultipleSelectionModel<ITreeItem> multipleSelection)
         {
             multipleSelection.SelectAll();
         }
@@ -72,7 +85,7 @@ public abstract partial class DynamicTreeViewModel
     [RelayCommand]
     private void InvertSelection()
     {
-        if (this.selectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
         {
             return;
         }
@@ -82,12 +95,9 @@ public abstract partial class DynamicTreeViewModel
 
     partial void OnSelectionModeChanged(SelectionMode value)
     {
-        if (this.selectionModel is not null)
-        {
-            this.selectionModel.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
-        }
+        var oldValue = this.SelectionModel;
 
-        this.selectionModel = value switch
+        this.SelectionModel = value switch
         {
             SelectionMode.None => default,
             SelectionMode.Single => new SingleSelectionModel(this),
@@ -95,10 +105,7 @@ public abstract partial class DynamicTreeViewModel
             _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(SelectionMode)),
         };
 
-        if (this.selectionModel is not null)
-        {
-            this.selectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
-        }
+        this.OnSelectionModelChanged(oldValue);
     }
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -109,10 +116,10 @@ public abstract partial class DynamicTreeViewModel
         }
 
         var hasUnlockedSelectedItems = false;
-        switch (this.selectionModel)
+        switch (this.SelectionModel)
         {
             case SingleSelectionModel:
-                hasUnlockedSelectedItems = this.selectionModel.SelectedItem?.IsLocked == false;
+                hasUnlockedSelectedItems = this.SelectionModel.SelectedItem?.IsLocked == false;
                 break;
 
             case MultipleSelectionModel multipleSelectionModel:

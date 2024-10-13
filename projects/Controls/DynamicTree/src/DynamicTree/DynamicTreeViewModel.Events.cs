@@ -10,12 +10,12 @@ namespace DroidNet.Controls;
 public abstract partial class DynamicTreeViewModel
 {
     /// <summary>
-    /// Fires when an item before an item is removed from the dynamic tree.
+    /// Fires before an item is removed from the dynamic tree.
     /// </summary>
     /// <remarks>
-    /// It is important to subscribe this event at least from the derived concrete ViewModel to do the actions necessary to update
-    /// the underlying model objects when the item is being removed from the tree. If the removal needs to be aborted and no
-    /// changes should be made to the tree, the <see cref="ItemBeingRemovedEventArgs.Proceed" /> property should be set to <see langword="false" />.
+    /// It is important to subscribe to this event at least from the derived concrete ViewModel to do the actions necessary to
+    /// update the underlying model objects when the item is being removed from the tree. If the removal needs to be aborted and
+    /// no changes should be made to the tree, the <see cref="ItemBeingRemovedEventArgs.Proceed" /> property should be set to <see langword="false" />.
     /// </remarks>
     public event EventHandler<ItemBeingRemovedEventArgs>? ItemBeingRemoved;
 
@@ -23,6 +23,22 @@ public abstract partial class DynamicTreeViewModel
     /// Fires when an item is removed from the dynamic tree.
     /// </summary>
     public event EventHandler<ItemRemovedEventArgs>? ItemRemoved;
+
+    /// <summary>
+    /// Fires before an item is added from the dynamic tree.
+    /// </summary>
+    /// <remarks>
+    /// It is important to subscribe to this event at least from the derived concrete ViewModel to do the actions necessary to
+    /// update the underlying model objects when the item is being added to the tree. If the addition needs to be aborted and
+    /// no changes should be made to the tree, the <see cref="ItemBeingAddedEventArgs.Proceed" /> property should be set to
+    /// <see langword="false" />.
+    /// </remarks>
+    public event EventHandler<ItemBeingAddedEventArgs>? ItemBeingAdded;
+
+    /// <summary>
+    /// Fires when an item is added to the dynamic tree.
+    /// </summary>
+    public event EventHandler<ItemAddedEventArgs>? ItemAdded;
 
     /// <summary>
     /// Provides data for the <see cref="DynamicTreeViewModel.ItemBeingRemoved" /> event.
@@ -45,4 +61,28 @@ public abstract partial class DynamicTreeViewModel
     /// Provides data for the <see cref="DynamicTreeViewModel.ItemRemoved" /> event.
     /// </summary>
     public class ItemRemovedEventArgs : DynamicTreeEventArgs;
+
+    /// <summary>
+    /// Provides data for the <see cref="DynamicTreeViewModel.ItemBeingAdded" /> event.
+    /// </summary>
+    public class ItemBeingAddedEventArgs : DynamicTreeEventArgs
+    {
+        /// <summary>
+        /// Gets or sets a value indicating whether the addition of the item should proceed.
+        /// </summary>
+        /// <value>
+        /// <see langword="true" /> if the item addition should proceed; otherwise, <see langword="false" />.
+        /// </value>
+        /// <remarks>
+        /// Set this property to <see langword="false" /> to abort the addition of the item from the dynamic tree.
+        /// </remarks>
+        public bool Proceed { get; set; } = true;
+
+        public required ITreeItem Parent { get; init; }
+    }
+
+    /// <summary>
+    /// Provides data for the <see cref="DynamicTreeViewModel.ItemAdded" /> event.
+    /// </summary>
+    public class ItemAddedEventArgs : DynamicTreeEventArgs;
 }
