@@ -664,27 +664,6 @@ public partial class MultipleSelectionModelTests
     }
 
     [TestMethod]
-    public void ClearAndSelect_WithIndex_DoesNothing_WhenIndexIsSelectedAndOnlyOneItemInCollection()
-    {
-        // Arrange
-        var model = new TestSelectionModel("A");
-        model.SelectAll();
-        using var monitor = model.Monitor();
-        using var selectedIndicesMonitor = ((INotifyCollectionChanged)model.SelectedIndices).Monitor();
-
-        // Act
-        model.ClearAndSelectItemAt(0);
-
-        // Assert
-        _ = model.SelectedIndex.Should().Be(0);
-        _ = model.SelectedItem.Should().Be("A");
-        _ = model.SelectedIndices.Should().BeEquivalentTo([0]);
-        monitor.Should().NotRaisePropertyChangeFor(m => m.SelectedIndex);
-        monitor.Should().NotRaisePropertyChangeFor(m => m.SelectedItem);
-        selectedIndicesMonitor.Should().NotRaise(nameof(INotifyCollectionChanged.CollectionChanged));
-    }
-
-    [TestMethod]
     public void ClearAndSelectItem_ShouldCallClearAndSelectItemAt_WithCorrectIndex()
     {
         // Arrange

@@ -59,13 +59,6 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     {
         this.ValidIndexOrThrow(index);
 
-        // If this method is called while there is only one selected index and
-        // it is the same as the given index, it should have no effect.
-        if (this.IsSelected(index) && this.selectedIndices.Count == 1)
-        {
-            return;
-        }
-
         // Modify the collection quietly. We'll only trigger a collection change
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
