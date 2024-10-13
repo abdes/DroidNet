@@ -7,7 +7,10 @@ namespace DroidNet.Converters;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
-public class ItemClickEventArgsToClickedItemConverter : IValueConverter
+/// <summary>
+/// A converter that will convert an <see cref="ItemClickEventArgs" /> object into the corresponding clicked item object.
+/// </summary>
+public partial class ItemClickEventArgsToClickedItemConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object? parameter, string language)
         => value is ItemClickEventArgs args

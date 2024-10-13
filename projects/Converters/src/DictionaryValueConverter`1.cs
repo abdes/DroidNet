@@ -23,7 +23,7 @@ using Microsoft.UI.Xaml.Data;
 /// override any method.
 /// </para>
 /// </remarks>
-public class DictionaryValueConverter<T> : IValueConverter
+public partial class DictionaryValueConverter<T> : IValueConverter
 {
     /// <summary>
     /// Convert a binding to a dictionary item by key to the corresponding item.

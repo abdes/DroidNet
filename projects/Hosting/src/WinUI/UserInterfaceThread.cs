@@ -34,7 +34,7 @@ using WinRT;
 /// Used to obtain a logger for this class. If not possible, a
 /// <see cref="NullLogger" /> will be used instead.
 /// </param>
-public class UserInterfaceThread(
+public partial class UserInterfaceThread(
     IServiceProvider serviceProvider,
     IHostApplicationLifetime lifetime,
     HostingContext context,

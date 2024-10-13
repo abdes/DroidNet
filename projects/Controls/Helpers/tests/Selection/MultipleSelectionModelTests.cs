@@ -11,10 +11,13 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Moq.Protected;
 
+/// <summary>
+/// Unit test cases for the <see cref="MultipleSelectionModel{T}" /> class.
+/// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
 [TestCategory($"{nameof(Controls)} - Selection Helpers")]
-public class MultipleSelectionModelTests
+public partial class MultipleSelectionModelTests
 {
     [TestMethod]
     public void ClearSelection_ShouldClearEverything()
@@ -757,7 +760,7 @@ public class MultipleSelectionModelTests
         _ = act.Should().Throw<InvalidOperationException>();
     }
 
-    private sealed class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
+    private sealed partial class TestSelectionModel(params string[] items) : MultipleSelectionModel<string>
     {
         protected override string GetItemAt(int index) => items[index];
 
@@ -766,7 +769,7 @@ public class MultipleSelectionModelTests
         protected override int GetItemCount() => items.Length;
     }
 
-    private sealed class TestSelectableSelectionModel(ISelectable[] items) : MultipleSelectionModel<ISelectable>
+    private sealed partial class TestSelectableSelectionModel(ISelectable[] items) : MultipleSelectionModel<ISelectable>
     {
         protected override int IndexOf(ISelectable item) => Array.IndexOf(items, item);
 

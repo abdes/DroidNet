@@ -73,6 +73,7 @@
 
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
 
         <!--
         For source generator (or analyzer) projects, you need to tweak the project reference element so it works as

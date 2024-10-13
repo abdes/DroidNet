@@ -6,12 +6,16 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
 
-public class ProjectAdapter(Project item) : TreeItemAdapter, ITreeItem<Project>
+/// <summary>
+/// A <see cref="DynamicTree" /> item adapter for the <see cref="Project" /> model class.
+/// </summary>
+/// <param name="project">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+public partial class ProjectAdapter(Project project) : TreeItemAdapter, ITreeItem<Project>
 {
     public override string Label
         => this.AttachedObject.Name;
 
-    public Project AttachedObject => item;
+    public Project AttachedObject => project;
 
     protected override int GetChildrenCount() => this.AttachedObject.Scenes.Count;
 

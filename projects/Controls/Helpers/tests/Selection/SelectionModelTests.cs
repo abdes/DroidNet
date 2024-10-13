@@ -9,10 +9,13 @@ using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="SelectionModel{T}" /> class.
+/// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
 [TestCategory($"{nameof(Controls)} - Selection Helpers")]
-public class SelectionModelTests : TestSuiteWithAssertions
+public partial class SelectionModelTests : TestSuiteWithAssertions
 {
     [TestMethod]
     public void IsEmpty_ShouldReturnTrue_WhenNoItemIsSelected()
@@ -222,7 +225,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         _ = model.SelectedItemEventRaisedInfo.PropertyChanged.Should().BeFalse();
     }
 
-    private sealed class TestSelectionModel : SingleSelectionModel<string>
+    private sealed partial class TestSelectionModel : SingleSelectionModel<string>
     {
         private readonly string[] items;
 
@@ -314,7 +317,7 @@ public class SelectionModelTests : TestSuiteWithAssertions
         }
     }
 
-    private sealed class FailAssertSelectionModel : SingleSelectionModel<string>
+    private sealed partial class FailAssertSelectionModel : SingleSelectionModel<string>
     {
         private const int BadIndex = -100;
 

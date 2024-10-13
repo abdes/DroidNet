@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,7 +8,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 
-internal sealed class SelectionObservableCollection<T>(IEnumerable<int> collection)
+/// <summary>
+/// A custom <see cref="ObservableCollection{T}" /> that, if its items are of type <see cref="ISelectable" />, will automatically
+/// manage their <see cref="ISelectable.IsSelected" /> property when added to or removed from the collection.
+/// </summary>
+/// <typeparam name="T">The type of items in the collection.</typeparam>
+/// <param name="collection">The collection from whihc the initial elements in the observable collection are copied.</param>
+internal sealed partial class SelectionObservableCollection<T>(IEnumerable<int> collection)
     : ObservableCollection<int>(collection)
 {
     private bool suppressNotification;
@@ -86,7 +92,7 @@ internal sealed class SelectionObservableCollection<T>(IEnumerable<int> collecti
         base.RemoveItem(index);
     }
 
-    private sealed class NotificationSuspender : IDisposable
+    private sealed partial class NotificationSuspender : IDisposable
     {
         private readonly SelectionObservableCollection<T> collection;
 
