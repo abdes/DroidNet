@@ -67,6 +67,7 @@ public partial class DynamicTreeItem
         // TreeItem
         if (newItem is not null)
         {
+            this.UpdateSelectionVisualState(newItem.IsSelected);
             newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
             ((INotifyPropertyChanged)newItem).PropertyChanged += this.OnItemAdapterPropertyChanged;
         }
