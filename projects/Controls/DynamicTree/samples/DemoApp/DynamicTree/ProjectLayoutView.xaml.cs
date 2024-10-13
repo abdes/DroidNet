@@ -9,6 +9,7 @@ using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 
 /// <summary>
 /// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which
@@ -30,5 +31,21 @@ public sealed partial class ProjectLayoutView
         {
             await this.ViewModel.LoadProjectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
+    }
+
+    private void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        this.ViewModel!.UndoCommand.Execute(parameter: null);
+    }
+
+    private void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        this.ViewModel!.RedoCommand.Execute(parameter: null);
     }
 }

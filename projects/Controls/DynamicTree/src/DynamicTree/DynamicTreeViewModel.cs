@@ -44,6 +44,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         this.ShownItems.Clear();
 
         // Do not add the root item, add its children instead and check if it they need to be expandedxx
+        root.IsExpanded = true;
         await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
@@ -66,15 +67,30 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         await parent.InsertChildAsync(0, item).ConfigureAwait(false);
         var newItemIndex = this.ShownItems.IndexOf(parent) + 1;
-        this.ShownItems.Insert(newItemIndex, item);
+        if (parent.IsExpanded)
+        {
+            this.ShownItems.Insert(newItemIndex, item);
+        }
+        else
+        {
+            await this.ExpandItemAsync(parent).ConfigureAwait(false);
+        }
+
         this.SelectionModel?.SelectItemAt(newItemIndex);
 
         this.ItemAdded?.Invoke(this, new ItemAddedEventArgs() { TreeItem = item });
     }
 
     // TODO: should add events for item add, delete, move to different parent
-    private async Task RemoveItem(ITreeItem item)
+    protected async Task RemoveItem(ITreeItem item)
     {
+        var removeAtIndex = this.ShownItems.IndexOf(item);
+        if (removeAtIndex == -1)
+        {
+            Debug.WriteLine($"Expecting item ({item.Label}) to be in the shown items collection but it was not");
+            return;
+        }
+
         // Fire the ItemBeingRemoved event before any changes are made to the tree
         var eventArgs = new ItemBeingRemovedEventArgs() { TreeItem = item };
         this.ItemBeingRemoved?.Invoke(this, eventArgs);
@@ -83,25 +99,39 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             return;
         }
 
-        if (item.Parent != null)
+        // Remove the item's children from ShownItems in a single pass
+        var children = (await item.Children.ConfigureAwait(false)).ToArray();
+        for (var childIndex = children.Length - 1; childIndex >= 0; childIndex--)
         {
-            await item.Parent.RemoveChildAsync(item).ConfigureAwait(false);
+            var child = children[childIndex];
+            await item.RemoveChildAsync(child).ConfigureAwait(false);
+            if (item.IsExpanded)
+            {
+                this.ShownItems.RemoveAt(removeAtIndex + childIndex + 1);
+            }
+
+            this.ItemRemoved?.Invoke(
+                this,
+                new ItemRemovedEventArgs()
+                {
+                    TreeItem = child,
+                    Parent = item,
+                });
         }
 
-        // Remove the item and its children from ShownItems in a single pass
-        for (var removeAtIndex = this.ShownItems.IndexOf(item); removeAtIndex < this.ShownItems.Count;)
-        {
-            if (this.ShownItems[removeAtIndex] == item || this.ShownItems[removeAtIndex].Parent == item)
-            {
-                this.ShownItems.RemoveAt(removeAtIndex);
-            }
-            else
-            {
-                break;
-            }
-        }
+        // Remove the item
+        var itemParent = item.Parent;
+        Debug.Assert(itemParent != null, "an item being removed from the tree always has a parent");
+        await itemParent.RemoveChildAsync(item).ConfigureAwait(false);
+        this.ShownItems.RemoveAt(removeAtIndex);
 
-        this.ItemRemoved?.Invoke(this, new ItemRemovedEventArgs() { TreeItem = item });
+        this.ItemRemoved?.Invoke(
+            this,
+            new ItemRemovedEventArgs()
+            {
+                TreeItem = item,
+                Parent = itemParent,
+            });
     }
 
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
@@ -115,45 +145,49 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         if (this.SelectionModel is SingleSelectionModel singleSelection)
         {
             var selectedItem = singleSelection.SelectedItem;
-            if (selectedItem is not null /* TODO: add possibility to protect item against delete */)
+            if (selectedItem?.IsLocked == false)
             {
+                var selectedIndex = this.SelectionModel.SelectedIndex;
                 this.SelectionModel.ClearSelection();
+
                 await this.RemoveItem(selectedItem).ConfigureAwait(false);
+
+                var newSelectedIndex = selectedIndex < this.ShownItems.Count ? selectedIndex : 0;
+                this.SelectionModel.SelectItemAt(newSelectedIndex);
             }
         }
 
         if (this.SelectionModel is MultipleSelectionModel multipleSelection)
         {
             // Save the selection in a list for processing the removal
-            var selectedIndices = multipleSelection.SelectedIndices.ToList();
+            var selectedIndices = multipleSelection.SelectedIndices.OrderDescending().ToList();
 
             // Clear the selection before we start modifying the shown items
             // collection so that the indices are still valid while updating the
             // items being deselected.
             this.SelectionModel.ClearSelection();
 
+            var originalShownItemsCount = this.ShownItems.Count;
+
             var tasks = selectedIndices
-                .Order()
                 .Select(index => this.ShownItems[index])
                 .Where(item => !item.IsLocked)
                 .Aggregate(
-                    new Stack<ITreeItem>(),
-                    (stack, item) =>
+                    new List<ITreeItem>(),
+                    (list, item) =>
                     {
-                        if (item.Parent == null || !stack.Contains(item.Parent))
-                        {
-                            stack.Push(item);
-                        }
-
-                        return stack;
+                        list.Add(item);
+                        return list;
                     })
                 .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
 
+            var removedItemsCount = originalShownItemsCount - this.ShownItems.Count;
+
             // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
             // item if the items collection is not empty, other wise leave the selection empty.
-            var newSelectedIndex = selectedIndices[^1] + 1 - selectedIndices.Count;
+            var newSelectedIndex = selectedIndices[0] + 1 - removedItemsCount;
             if (newSelectedIndex < this.ShownItems.Count)
             {
                 this.SelectionModel.SelectItemAt(newSelectedIndex);

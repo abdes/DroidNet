@@ -5,6 +5,7 @@
 namespace DroidNet.Controls;
 
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
 
@@ -75,9 +76,15 @@ public partial class DynamicTreeItem
 
     protected virtual void OnItemAdapterPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
+        if (sender is not null && string.Equals(
+                args.PropertyName,
+                nameof(ITreeItem.IsSelected),
+                StringComparison.Ordinal))
         {
-            this.UpdateSelectionVisualState(this.ItemAdapter!.IsSelected);
+            var adapter = (TreeItemAdapter)sender;
+            Debug.WriteLine(
+                $"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
+            this.UpdateSelectionVisualState(adapter.IsSelected);
         }
     }
 }

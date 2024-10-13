@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
 using DroidNet.Hosting.Generators;
+using DroidNet.TimeMachine;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
@@ -21,7 +22,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     public ProjectLayoutViewModel()
     {
         this.ItemBeingRemoved += this.OnItemBeingRemoved;
+        this.ItemRemoved += this.OnItemRemoved;
+
         this.ItemBeingAdded += this.OnItemBeingAdded;
+        this.ItemAdded += this.OnItemAdded;
     }
 
     public ProjectAdapter? Project { get; private set; }
@@ -40,6 +44,32 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
         }
     }
+
+    private void OnItemAdded(object? sender, ItemAddedEventArgs args)
+    {
+        _ = sender; // unused
+
+        UndoRedo.Default[this]
+            .AddChange(
+                $"Remove Item {args.TreeItem.Label}",
+                () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
+    }
+
+    private void OnItemRemoved(object? sender, ItemRemovedEventArgs args)
+    {
+        _ = sender; // unused
+
+        UndoRedo.Default[this]
+            .AddChange(
+                $"Add Item {args.TreeItem.Label}",
+                () => this.AddItem(args.Parent, args.TreeItem).GetAwaiter().GetResult());
+    }
+
+    [RelayCommand]
+    private void Undo() => UndoRedo.Default[this].Undo();
+
+    [RelayCommand]
+    private void Redo() => UndoRedo.Default[this].Redo();
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
