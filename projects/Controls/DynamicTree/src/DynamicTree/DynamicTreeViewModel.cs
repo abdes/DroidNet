@@ -47,6 +47,31 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
     }
 
+    protected async Task AddItem(ITreeItem parent, ITreeItem item)
+    {
+        // Fire the ItemBeingAdded event before any changes are made to the tree
+        var eventArgs = new ItemBeingAddedEventArgs()
+        {
+            TreeItem = item,
+            Parent = parent,
+        };
+        this.ItemBeingAdded?.Invoke(this, eventArgs);
+        if (!eventArgs.Proceed)
+        {
+            return;
+        }
+
+        // Clear selection first because after insertion, the selected indices will be invalid
+        this.SelectionModel?.ClearSelection();
+
+        await parent.InsertChildAsync(0, item).ConfigureAwait(false);
+        var newItemIndex = this.ShownItems.IndexOf(parent) + 1;
+        this.ShownItems.Insert(newItemIndex, item);
+        this.SelectionModel?.SelectItemAt(newItemIndex);
+
+        this.ItemAdded?.Invoke(this, new ItemAddedEventArgs() { TreeItem = item });
+    }
+
     // TODO: should add events for item add, delete, move to different parent
     private async Task RemoveItem(ITreeItem item)
     {
@@ -82,22 +107,22 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     private async Task RemoveSelectedItems()
     {
-        if (this.selectionModel?.IsEmpty ?? false)
+        if (this.SelectionModel?.IsEmpty ?? false)
         {
             return;
         }
 
-        if (this.selectionModel is SingleSelectionModel singleSelection)
+        if (this.SelectionModel is SingleSelectionModel singleSelection)
         {
             var selectedItem = singleSelection.SelectedItem;
             if (selectedItem is not null /* TODO: add possibility to protect item against delete */)
             {
-                this.selectionModel.ClearSelection();
+                this.SelectionModel.ClearSelection();
                 await this.RemoveItem(selectedItem).ConfigureAwait(false);
             }
         }
 
-        if (this.selectionModel is MultipleSelectionModel multipleSelection)
+        if (this.SelectionModel is MultipleSelectionModel multipleSelection)
         {
             // Save the selection in a list for processing the removal
             var selectedIndices = multipleSelection.SelectedIndices.ToList();
@@ -105,7 +130,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             // Clear the selection before we start modifying the shown items
             // collection so that the indices are still valid while updating the
             // items being deselected.
-            this.selectionModel.ClearSelection();
+            this.SelectionModel.ClearSelection();
 
             var tasks = selectedIndices
                 .Order()
@@ -125,6 +150,18 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
                 .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
+            // item if the items collection is not empty, other wise leave the selection empty.
+            var newSelectedIndex = selectedIndices[^1] + 1 - selectedIndices.Count;
+            if (newSelectedIndex < this.ShownItems.Count)
+            {
+                this.SelectionModel.SelectItemAt(newSelectedIndex);
+            }
+            else if (this.ShownItems.Count > 0)
+            {
+                this.SelectionModel.SelectItemAt(0);
+            }
         }
     }
 

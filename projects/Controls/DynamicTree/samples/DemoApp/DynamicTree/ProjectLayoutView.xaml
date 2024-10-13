@@ -53,6 +53,15 @@
                     IsCompact="True"
                     Label="Edit Properties" />
                 <AppBarButton
+                    Command="{x:Bind ViewModel.AddEntityCommand}"
+                    IsCompact="True"
+                    Label="Add Entity">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xECC8;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    Command="{x:Bind ViewModel.AddSceneCommand}"
                     Icon="Add"
                     IsCompact="True"
                     Label="Create New Scene" />
