@@ -10,10 +10,13 @@ using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="SingleSelectionModel{T}" /> class.
+/// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
 [TestCategory($"{nameof(Controls)} - Selection Helpers")]
-public class SingleSelectionModelTests
+public partial class SingleSelectionModelTests
 {
     [TestMethod]
     public void ClearSelection_ShouldClearEverything()
@@ -269,7 +272,7 @@ public class SingleSelectionModelTests
         _ = monitor.Should().RaisePropertyChangeFor(m => m.SelectedItem);
     }
 
-    private sealed class TestSelectionModel(params string[] items) : SingleSelectionModel<string>
+    private sealed partial class TestSelectionModel(params string[] items) : SingleSelectionModel<string>
     {
         protected override string GetItemAt(int index) => items[index];
 

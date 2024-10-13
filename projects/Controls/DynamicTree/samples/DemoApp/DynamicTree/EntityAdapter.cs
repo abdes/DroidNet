@@ -6,14 +6,18 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
 
-public class EntityAdapter(Entity item) : TreeItemAdapter, ITreeItem<Entity>
+/// <summary>
+/// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.
+/// </summary>
+/// <param name="entity">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+public partial class EntityAdapter(Entity entity) : TreeItemAdapter, ITreeItem<Entity>
 {
     public override bool IsRoot => false;
 
     public override string Label
         => this.AttachedObject.Name;
 
-    public Entity AttachedObject => item;
+    public Entity AttachedObject => entity;
 
     protected override int GetChildrenCount() => 0;
 

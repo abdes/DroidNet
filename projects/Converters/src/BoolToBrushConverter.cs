@@ -12,7 +12,7 @@ using Windows.UI;
 /// <summary>
 /// Select a color <see cref="Brush" /> based on a <see langword="bool" /> value.
 /// </summary>
-public class BoolToBrushConverter : IValueConverter
+public partial class BoolToBrushConverter : IValueConverter
 {
     /// <summary>
     /// Gets or sets the <see cref="Brush" /> to use when the value is <see langword="true" />.

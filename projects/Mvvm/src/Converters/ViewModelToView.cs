@@ -44,7 +44,7 @@ using Microsoft.UI.Xaml.Data;
 ///     <ContentPresenter Content="{x:Bind ViewModel.Workspace, Converter={StaticResource VmToViewConverter}}" />
 /// ]]></code>
 /// </example>
-public class ViewModelToView(IViewLocator viewLocator) : IValueConverter
+public partial class ViewModelToView(IViewLocator viewLocator) : IValueConverter
 {
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, string? language)

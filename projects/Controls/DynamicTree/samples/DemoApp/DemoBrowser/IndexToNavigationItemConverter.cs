@@ -6,7 +6,11 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 
 using Microsoft.UI.Xaml.Data;
 
-internal sealed class IndexToNavigationItemConverter(DemoBrowserView routedNavigationView) : IValueConverter
+/// <summary>
+/// A converter used to get a <see cref="NavigationItem" /> by its index in the items collection view.
+/// </summary>
+/// <param name="routedNavigationView">The view that contains the items collection.</param>
+internal sealed partial class IndexToNavigationItemConverter(DemoBrowserView routedNavigationView) : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, string language)
     {

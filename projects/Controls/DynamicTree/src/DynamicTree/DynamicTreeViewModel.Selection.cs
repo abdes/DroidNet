@@ -140,7 +140,10 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    protected class SingleSelectionModel : SingleSelectionModel<ITreeItem>
+    /// <summary>
+    /// An implementation of the <see cref="SingleSelectionModel{T}" /> for the <see cref="DynamicTreeViewModel" />.
+    /// </summary>
+    protected partial class SingleSelectionModel : SingleSelectionModel<ITreeItem>
     {
         private readonly DynamicTreeViewModel model;
 
@@ -181,7 +184,11 @@ public abstract partial class DynamicTreeViewModel
         protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf((TreeItemAdapter)item);
     }
 
-    protected class MultipleSelectionModel(DynamicTreeViewModel model) : MultipleSelectionModel<ITreeItem>
+    /// <summary>
+    /// An implementation of the <see cref="MultipleSelectionModel{T}" /> for the <see cref="DynamicTreeViewModel" />.
+    /// </summary>
+    /// <param name="model">The associated <see cref="DynamicTreeViewModel" />.</param>
+    protected partial class MultipleSelectionModel(DynamicTreeViewModel model) : MultipleSelectionModel<ITreeItem>
     {
         protected override ITreeItem GetItemAt(int index) => model.ShownItems[index];
 

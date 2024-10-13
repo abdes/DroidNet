@@ -7,7 +7,11 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class ThumbnailTemplateSelector : DataTemplateSelector
+/// <summary>
+/// A <see cref="DataTemplateSelector" /> that can map a <see cref="TreeItemAdapter" /> to a template that can be used to display a
+/// <see cref="Thumbnail" /> for it.
+/// </summary>
+public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
