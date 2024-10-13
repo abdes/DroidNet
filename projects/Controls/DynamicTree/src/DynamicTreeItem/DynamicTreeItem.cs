@@ -53,6 +53,8 @@ public partial class DynamicTreeItem : ContentControl
     /// </summary>
     private const double DefaultIndentIncrement = 34.0;
 
+    private readonly double indentIncrement;
+
     private DynamicTree? treeControl;
     private Expander? expander;
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
@@ -61,8 +63,30 @@ public partial class DynamicTreeItem : ContentControl
     {
         this.DefaultStyleKey = typeof(DynamicTreeItem);
 
+        // Try to get the indent increment from the XAML resources, fallback to default if not found
+        this.indentIncrement = DefaultIndentIncrement;
+        if (Application.Current.Resources.TryGetValue(
+                "DynamicTreeItemIndentIncrement",
+                out var indentIncrementObj) && indentIncrementObj is double increment)
+        {
+            this.indentIncrement = increment;
+        }
+
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
+    }
+
+    internal void UpdateItemMargin()
+    {
+        // Handle situations when the itemn is not yet fully configured or its template not yet loaded
+        if (this.ItemAdapter is null || this.GetTemplateChild(RootGridPart) is not Grid rootGrid)
+        {
+            return;
+        }
+
+        // Calculate the extra left margin based on the IndentLevel and set it as the RootGrid margin
+        var extraLeftMargin = this.ItemAdapter.Depth * this.indentIncrement;
+        rootGrid.Margin = new Thickness(extraLeftMargin, 0, 0, 0);
     }
 
     protected override void OnApplyTemplate()
@@ -82,10 +106,10 @@ public partial class DynamicTreeItem : ContentControl
         }
 
         this.OnThumbnailTemplateSelectorChanged();
+
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
-        this.OnItemAdapterChanged(oldItem: null, newItem: this.ItemAdapter);
 
         base.OnApplyTemplate();
     }
@@ -165,40 +189,11 @@ public partial class DynamicTreeItem : ContentControl
             });
     }
 
-    private void UpdateItemMargin()
-    {
-        if (this.ItemAdapter is null)
-        {
-            return;
-        }
-
-        // Try to get the indent increment from the XAML resources, fallback to default if not found
-        var indentIncrement = DefaultIndentIncrement;
-        if (Application.Current.Resources.TryGetValue(
-                "DynamicTreeItemIndentIncrement",
-                out var indentIncrementObj) && indentIncrementObj is double increment)
-        {
-            indentIncrement = increment;
-        }
-
-        // Calculate the extra left margin based on the IndentLevel
-        var extraLeftMargin = this.ItemAdapter.Depth * indentIncrement;
-
-        // Add the extra margin to the existing left margin
-        if (this.GetTemplateChild(RootGridPart) is Grid rootGrid)
-        {
-            rootGrid.Margin = new Thickness(
-                rootGrid.Margin.Left + extraLeftMargin,
-                rootGrid.Margin.Top,
-                rootGrid.Margin.Right,
-                this.Margin.Bottom);
-        }
-    }
-
-    private void UpdateSelectionVisualState(bool isSelected) => _ = VisualStateManager.GoToState(
-        this,
-        isSelected ? SelectedVisualState : NormalVisualState,
-        useTransitions: true);
+    private void UpdateSelectionVisualState(bool isSelected)
+        => _ = VisualStateManager.GoToState(
+            this,
+            isSelected ? SelectedVisualState : NormalVisualState,
+            useTransitions: true);
 
     private void UpdateExpansionVisualState()
     {

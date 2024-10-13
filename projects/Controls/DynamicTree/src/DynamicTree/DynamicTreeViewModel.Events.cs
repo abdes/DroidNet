@@ -60,7 +60,10 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     /// Provides data for the <see cref="DynamicTreeViewModel.ItemRemoved" /> event.
     /// </summary>
-    public class ItemRemovedEventArgs : DynamicTreeEventArgs;
+    public class ItemRemovedEventArgs : DynamicTreeEventArgs
+    {
+        public required ITreeItem Parent { get; init; }
+    }
 
     /// <summary>
     /// Provides data for the <see cref="DynamicTreeViewModel.ItemBeingAdded" /> event.

@@ -47,6 +47,11 @@ internal static class ProjectLoaderService
     {
         var sceneData = Data.FindFirst((sceneData) => sceneData.Name.Equals(scene.Name, StringComparison.Ordinal));
 
+        if (sceneData is null)
+        {
+            return;
+        }
+
         foreach (var entity in sceneData.Entities)
         {
             scene.Entities.Add(new Entity(entity.Name));

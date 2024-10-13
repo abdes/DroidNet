@@ -8,6 +8,16 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Loaded="ProjectLayoutView_OnLoaded"
     mc:Ignorable="d">
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="UndoInvoked"
+            Modifiers="Control" />
+        <KeyboardAccelerator
+            Key="Y"
+            Invoked="RedoInvoked"
+            Modifiers="Control" />
+    </Page.KeyboardAccelerators>
 
     <Grid
         Width="400"

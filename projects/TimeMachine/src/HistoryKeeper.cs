@@ -91,15 +91,17 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         {
             this.redoStack.Push(change);
             this.OnRedoStackChanged();
+            return;
         }
-        else
+
+        if (this.State != States.Redoing)
         {
             this.redoStack.Clear();
             this.OnRedoStackChanged();
-
-            this.undoStack.Push(change);
-            this.OnUndoStackChanged();
         }
+
+        this.undoStack.Push(change);
+        this.OnUndoStackChanged();
     }
 
     /// <summary>
@@ -121,9 +123,6 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         {
             lastChange.Apply();
             this.OnUndoStackChanged();
-
-            this.redoStack.Push(lastChange);
-            this.OnRedoStackChanged();
         }
     }
 
@@ -146,9 +145,6 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         {
             lastChange.Apply();
             this.OnRedoStackChanged();
-
-            this.undoStack.Push(lastChange);
-            this.OnUndoStackChanged();
         }
     }
 

@@ -168,6 +168,8 @@ public partial class DynamicTree : Control
         treeItem.Collapse += this.OnCollapseTreeItem;
         treeItem.Expand += this.OnExpandTreeItem;
         treeItem.DoubleTapped += this.TreeItem_DoubleTapped;
+
+        treeItem.UpdateItemMargin();
     }
 
     private void TreeItem_PointerPressed(object sender, PointerRoutedEventArgs args)
