@@ -85,7 +85,7 @@ public partial class DynamicTreeItem : ContentControl
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
-        this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected ?? false);
+        this.OnItemAdapterChanged(oldItem: null, newItem: this.ItemAdapter);
 
         base.OnApplyTemplate();
     }
