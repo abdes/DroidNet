@@ -6,6 +6,7 @@ namespace DroidNet.Converters;
 
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using static DroidNet.Converters.IndexToNavigationItemConverter;
 
 /// <summary>
 /// A converter to get the navigation item corresponding to the given index in the containing <see cref="NavigationView" />.
@@ -14,9 +15,11 @@ using Microsoft.UI.Xaml.Data;
 /// <param name="navigationItems">The list of all navigation items.</param>
 public sealed partial class IndexToNavigationItemConverter(
     NavigationView routedNavigationView,
-    IList<object> navigationItems)
+    GetNavigationItems navigationItems)
     : IValueConverter
 {
+    public delegate IList<object> GetNavigationItems();
+
     public object? Convert(object? value, Type targetType, object? parameter, string language)
     {
         if (value is not int index || index == -1)
@@ -30,9 +33,8 @@ public sealed partial class IndexToNavigationItemConverter(
             return routedNavigationView.SettingsItem;
         }
 
-        return index < navigationItems.Count
-            ? navigationItems[index]
-            : null;
+        var items = navigationItems();
+        return index < items.Count ? items[index] : null;
     }
 
     public object ConvertBack(object value, Type targetType, object? parameter, string language)
