@@ -102,7 +102,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        this.ViewModel!.SelectNone();
+        this.ViewModel!.SelectNoneCommand.Execute(parameter: null);
         args.Handled = true;
     }
 
@@ -111,7 +111,7 @@ public partial class DynamicTree : Control
         "ReSharper",
         "SwitchStatementMissingSomeEnumCasesNoDefault",
         Justification = "we only handle some keys")]
-    private async void OnKeyDown(object sender, KeyRoutedEventArgs args)
+    private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
         switch (args.Key)
         {
@@ -122,10 +122,6 @@ public partial class DynamicTree : Control
 
             case VirtualKey.I when IsControlKeyDown() && IsShiftKeyDown():
                 this.ViewModel!.InvertSelectionCommand.Execute(default);
-                return;
-
-            case VirtualKey.Delete:
-                await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(default).ConfigureAwait(true);
                 return;
         }
     }

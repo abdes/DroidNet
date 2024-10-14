@@ -30,6 +30,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
     public ProjectAdapter? Project { get; private set; }
 
+    private bool HasUnlockedSelectedItems { get; set; }
+
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
@@ -43,6 +45,16 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         {
             this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
+    protected override async Task RemoveSelectedItems()
+    {
+        // TODO: activate batch collection of undo changes
+        await base.RemoveSelectedItems().ConfigureAwait(false);
+
+        // TODO: finish batch collection of undo changes
+        _ = 1;
     }
 
     private void OnItemAdded(object? sender, ItemAddedEventArgs args)
@@ -73,9 +85,42 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
         {
-            this.AddEntityCommand.NotifyCanExecuteChanged();
+            return;
+        }
+
+        this.AddEntityCommand.NotifyCanExecuteChanged();
+
+        var hasUnlockedSelectedItems = false;
+        switch (this.SelectionModel)
+        {
+            case SingleSelectionModel:
+                hasUnlockedSelectedItems = this.SelectionModel.SelectedItem?.IsLocked == false;
+                break;
+
+            case MultipleSelectionModel multipleSelectionModel:
+                foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
+                {
+                    var item = this.ShownItems[selectedIndex];
+                    hasUnlockedSelectedItems = !item.IsLocked;
+                    if (hasUnlockedSelectedItems)
+                    {
+                        break;
+                    }
+                }
+
+                break;
+
+            default:
+                // Keep it false
+                break;
+        }
+
+        if (hasUnlockedSelectedItems != this.HasUnlockedSelectedItems)
+        {
+            this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
+            this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
         }
     }
 

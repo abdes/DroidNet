@@ -16,9 +16,7 @@ public abstract partial class DynamicTreeViewModel
     [ObservableProperty]
     private SelectionMode selectionMode = SelectionMode.None;
 
-    public SelectionModel<ITreeItem>? SelectionModel { get; private set; }
-
-    public bool HasUnlockedSelectedItems { get; private set; }
+    protected SelectionModel<ITreeItem>? SelectionModel { get; private set; }
 
     public void SelectItem(ITreeItem item) => this.SelectionModel?.SelectItem(item);
 
@@ -57,21 +55,12 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
-    internal void SelectNone() => this.SelectionModel?.ClearSelection();
-
     protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
-        if (oldValue is not null)
-        {
-            oldValue.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
-        }
-
-        if (this.SelectionModel is not null)
-        {
-            this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
-        }
     }
+
+    [RelayCommand]
+    private void SelectNone() => this.SelectionModel?.ClearSelection();
 
     [RelayCommand]
     private void SelectAll()
@@ -106,45 +95,6 @@ public abstract partial class DynamicTreeViewModel
         };
 
         this.OnSelectionModelChanged(oldValue);
-    }
-
-    private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var hasUnlockedSelectedItems = false;
-        switch (this.SelectionModel)
-        {
-            case SingleSelectionModel:
-                hasUnlockedSelectedItems = this.SelectionModel.SelectedItem?.IsLocked == false;
-                break;
-
-            case MultipleSelectionModel multipleSelectionModel:
-                foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
-                {
-                    var item = this.ShownItems[selectedIndex];
-                    hasUnlockedSelectedItems = !item.IsLocked;
-                    if (hasUnlockedSelectedItems)
-                    {
-                        break;
-                    }
-                }
-
-                break;
-
-            default:
-                // Keep it false
-                break;
-        }
-
-        if (hasUnlockedSelectedItems != this.HasUnlockedSelectedItems)
-        {
-            this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
-            this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
-        }
     }
 
     /// <summary>

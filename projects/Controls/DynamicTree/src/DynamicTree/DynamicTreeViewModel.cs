@@ -134,68 +134,89 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             });
     }
 
-    [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
-    private async Task RemoveSelectedItems()
+    protected virtual async Task RemoveSelectedItems()
     {
         if (this.SelectionModel?.IsEmpty ?? false)
         {
             return;
         }
 
-        if (this.SelectionModel is SingleSelectionModel singleSelection)
+        if (this.SelectionModel is SingleSelectionModel)
         {
-            var selectedItem = singleSelection.SelectedItem;
-            if (selectedItem?.IsLocked == false)
-            {
-                var selectedIndex = this.SelectionModel.SelectedIndex;
-                this.SelectionModel.ClearSelection();
-
-                await this.RemoveItem(selectedItem).ConfigureAwait(false);
-
-                var newSelectedIndex = selectedIndex < this.ShownItems.Count ? selectedIndex : 0;
-                this.SelectionModel.SelectItemAt(newSelectedIndex);
-            }
+            await this.RemoveSingleSelectedItem().ConfigureAwait(false);
         }
 
-        if (this.SelectionModel is MultipleSelectionModel multipleSelection)
+        if (this.SelectionModel is MultipleSelectionModel)
         {
-            // Save the selection in a list for processing the removal
-            var selectedIndices = multipleSelection.SelectedIndices.OrderDescending().ToList();
+            await this.RemoveMultipleSelectionItems().ConfigureAwait(false);
+        }
+    }
 
-            // Clear the selection before we start modifying the shown items
-            // collection so that the indices are still valid while updating the
-            // items being deselected.
+    private async Task RemoveSingleSelectedItem()
+    {
+        if (this.SelectionModel is not SingleSelectionModel singleSelection)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(this.RemoveSingleSelectedItem)} should only be used in single selection mode");
+        }
+
+        var selectedItem = singleSelection.SelectedItem;
+        if (selectedItem?.IsLocked == false)
+        {
+            var selectedIndex = this.SelectionModel.SelectedIndex;
             this.SelectionModel.ClearSelection();
 
-            var originalShownItemsCount = this.ShownItems.Count;
+            await this.RemoveItem(selectedItem).ConfigureAwait(false);
 
-            var tasks = selectedIndices
-                .Select(index => this.ShownItems[index])
-                .Where(item => !item.IsLocked)
-                .Aggregate(
-                    new List<ITreeItem>(),
-                    (list, item) =>
-                    {
-                        list.Add(item);
-                        return list;
-                    })
-                .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
+            var newSelectedIndex = selectedIndex < this.ShownItems.Count ? selectedIndex : 0;
+            this.SelectionModel.SelectItemAt(newSelectedIndex);
+        }
+    }
 
-            await Task.WhenAll(tasks).ConfigureAwait(false);
+    private async Task RemoveMultipleSelectionItems()
+    {
+        if (this.SelectionModel is not MultipleSelectionModel multipleSelection)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(this.RemoveSingleSelectedItem)} should only be used in multiple selection mode");
+        }
 
-            var removedItemsCount = originalShownItemsCount - this.ShownItems.Count;
+        // Save the selection in a list for processing the removal
+        var selectedIndices = multipleSelection.SelectedIndices.OrderDescending().ToList();
 
-            // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
-            // item if the items collection is not empty, other wise leave the selection empty.
-            var newSelectedIndex = selectedIndices[0] + 1 - removedItemsCount;
-            if (newSelectedIndex < this.ShownItems.Count)
-            {
-                this.SelectionModel.SelectItemAt(newSelectedIndex);
-            }
-            else if (this.ShownItems.Count > 0)
-            {
-                this.SelectionModel.SelectItemAt(0);
-            }
+        // Clear the selection before we start modifying the shown items
+        // collection so that the indices are still valid while updating the
+        // items being deselected.
+        this.SelectionModel.ClearSelection();
+
+        var originalShownItemsCount = this.ShownItems.Count;
+
+        var tasks = selectedIndices
+            .Select(index => this.ShownItems[index])
+            .Where(item => !item.IsLocked)
+            .Aggregate(
+                new List<ITreeItem>(),
+                (list, item) =>
+                {
+                    list.Add(item);
+                    return list;
+                })
+            .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        var removedItemsCount = originalShownItemsCount - this.ShownItems.Count;
+
+        // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
+        // item if the items collection is not empty, other wise leave the selection empty.
+        var newSelectedIndex = selectedIndices[0] + 1 - removedItemsCount;
+        if (newSelectedIndex < this.ShownItems.Count)
+        {
+            this.SelectionModel.SelectItemAt(newSelectedIndex);
+        }
+        else if (this.ShownItems.Count > 0)
+        {
+            this.SelectionModel.SelectItemAt(0);
         }
     }
 
