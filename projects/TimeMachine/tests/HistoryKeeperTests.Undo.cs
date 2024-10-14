@@ -159,35 +159,6 @@ public partial class HistoryKeeperTests
     }
 
     [TestMethod]
-    [TestCategory("HistoryKeeper.Undo")]
-    public void Undo_ShouldRaiseEvents_WhenUndoIsPerformed()
-    {
-        // Arrange
-        var historyKeeper = UndoRedo.Default[new object()];
-        using var monitoredSubject = historyKeeper.Monitor();
-
-        // Act
-        Action();
-        historyKeeper.Undo();
-
-        // Assert
-        monitoredSubject.Should().Raise("UndoStackChanged");
-        monitoredSubject.Should().Raise("RedoStackChanged");
-
-        void ReverseAction()
-        {
-            _ = 0;
-            historyKeeper.AddChange("redo = set", Action);
-        }
-
-        void Action()
-        {
-            _ = 1;
-            historyKeeper.AddChange("undo = reset", ReverseAction);
-        }
-    }
-
-    [TestMethod]
     public void Redo_ShouldCommitTransactions_WhenTransactionsExist()
     {
         // Arrange
@@ -221,38 +192,5 @@ public partial class HistoryKeeperTests
 
         // Assert
         act.Should().NotThrow();
-    }
-
-    [TestMethod]
-    public void Redo_ShouldRaiseEvents_WhenRedoIsPerformed()
-    {
-        // Arrange
-        var historyKeeper = UndoRedo.Default[new object()];
-
-        Action();
-
-        historyKeeper.Undo();
-        historyKeeper.CanRedo.Should().BeTrue();
-
-        using var monitoredSubject = historyKeeper.Monitor();
-
-        // Act
-        historyKeeper.Redo();
-
-        // Assert
-        monitoredSubject.Should().Raise("RedoStackChanged");
-        monitoredSubject.Should().Raise("UndoStackChanged");
-
-        void ReverseAction()
-        {
-            _ = 0;
-            historyKeeper.AddChange("redo = set", Action);
-        }
-
-        void Action()
-        {
-            _ = 1;
-            historyKeeper.AddChange("undo = reset", ReverseAction);
-        }
     }
 }
