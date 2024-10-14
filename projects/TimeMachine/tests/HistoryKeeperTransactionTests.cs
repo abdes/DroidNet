@@ -13,6 +13,7 @@ using static DroidNet.TimeMachine.HistoryKeeper;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory($"{nameof(HistoryKeeper)}.Transactions")]
 public class HistoryKeeperTransactionTests
 {
     private readonly Mock<ITransactionFactory> transactionFactoryMock;
