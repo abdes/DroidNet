@@ -4,6 +4,7 @@
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
@@ -11,6 +12,7 @@ using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
 using DroidNet.Hosting.Generators;
 using DroidNet.TimeMachine;
+using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
@@ -21,6 +23,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     public ProjectLayoutViewModel()
     {
+        this.UndoStack = UndoRedo.Default[this].UndoStack;
+        this.RedoStack = UndoRedo.Default[this].RedoStack;
+
         this.ItemBeingRemoved += this.OnItemBeingRemoved;
         this.ItemRemoved += this.OnItemRemoved;
 
@@ -29,6 +34,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     }
 
     public ProjectAdapter? Project { get; private set; }
+
+    public ReadOnlyObservableCollection<IChange> UndoStack { get; }
+
+    public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     private bool HasUnlockedSelectedItems { get; set; }
 
@@ -50,7 +59,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
-        UndoRedo.Default[this].BeginChangeSet("Remove Selected Items");
+        UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
         await base.RemoveSelectedItems().ConfigureAwait(false);
         UndoRedo.Default[this].EndChangeSet();
     }
@@ -61,7 +70,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         UndoRedo.Default[this]
             .AddChange(
-                $"Remove Item {args.TreeItem.Label}",
+                $"RemoveItem({args.TreeItem.Label})",
                 () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
     }
 
@@ -71,7 +80,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         UndoRedo.Default[this]
             .AddChange(
-                $"Add Item {args.TreeItem.Label}",
+                $"Add Item({args.TreeItem.Label})",
                 () => this.AddItem(args.Parent, args.TreeItem).GetAwaiter().GetResult());
     }
 

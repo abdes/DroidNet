@@ -55,4 +55,7 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
 
         this.SetSelectedIndex(index);
     }
+
+    public override string ToString()
+        => this.SelectedIndex == -1 ? "No selection" : $"1 selected item ({this.SelectedItem})";
 }
