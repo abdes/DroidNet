@@ -6,7 +6,10 @@ namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using DroidNet.Docking;
 
-internal sealed class RoutedDockable : Dockable
+/// <summary>
+/// A <see cref="Dockable" /> that can be the target of a route navigated to via an <see cref="IRouter" />.
+/// </summary>
+internal sealed partial class RoutedDockable : Dockable
 {
     internal RoutedDockable(string id, IActiveRoute route)
         : base(id)

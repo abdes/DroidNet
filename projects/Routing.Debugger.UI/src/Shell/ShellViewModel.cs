@@ -7,7 +7,7 @@ namespace DroidNet.Routing.Debugger.UI.Shell;
 /// <summary>
 /// A ViewModel fpr the debugger shell.
 /// </summary>
-public class ShellViewModel : AbstractOutletContainer
+public partial class ShellViewModel : AbstractOutletContainer
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ShellViewModel" /> class.

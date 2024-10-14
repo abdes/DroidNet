@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 /// <summary>
 /// A control that can be used to show any kind of item in a <see cref="TreeView" />.
 /// </summary>
-public class TreeItemControl : Control
+public partial class TreeItemControl : Control
 {
     /// <summary>
     /// Defines the <see cref="ItemAdapter" /> dependency property.

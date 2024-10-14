@@ -8,7 +8,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
-public class TreeItemIcon : ImageIcon
+/// <summary>
+/// A styled <see cref="ImageIcon" /> for the icon used in tree items.
+/// </summary>
+public partial class TreeItemIcon : ImageIcon
 {
     public static readonly DependencyProperty ItemProperty = DependencyProperty.Register(
         nameof(Item),

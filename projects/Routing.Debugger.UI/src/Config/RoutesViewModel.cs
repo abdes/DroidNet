@@ -8,7 +8,10 @@ using System;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
-public class RoutesViewModel : TreeViewModelBase
+/// <summary>
+/// ViewModel for the <see cref="RoutesView" /> view.
+/// </summary>
+public partial class RoutesViewModel : TreeViewModelBase
 {
     public RoutesViewModel(IRoutes config)
     {

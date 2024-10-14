@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class TreeItemHeader : ContentPresenter
+/// <summary>
+/// A styled component for the header part of a tree item.
+/// </summary>
+public partial class TreeItemHeader : ContentPresenter
 {
     public TreeItemHeader() => this.Style = (Style)Application.Current.Resources[nameof(TreeItemHeader)];
 }

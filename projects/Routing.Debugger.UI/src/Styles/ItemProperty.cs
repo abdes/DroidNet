@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.Styles;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class ItemProperty : Grid
+/// <summary>
+/// A custom control to display an item property.
+/// </summary>
+public partial class ItemProperty : Grid
 {
     public static readonly DependencyProperty PropertyNameProperty = DependencyProperty.Register(
         nameof(PropertyName),

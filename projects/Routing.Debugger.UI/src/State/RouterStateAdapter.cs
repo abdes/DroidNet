@@ -12,7 +12,7 @@ using DroidNet.Routing.Debugger.UI.TreeView;
 /// <see cref="RouterStateView" /> control.
 /// </summary>
 /// <param name="item">The item to be adapted.</param>
-public class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase, ITreeItem<IActiveRoute>
+public partial class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase, ITreeItem<IActiveRoute>
 {
     public override bool IsRoot => this.Item.Parent == null;
 

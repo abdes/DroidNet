@@ -10,7 +10,7 @@ using DroidNet.Docking;
 /// Represents a dock that holds only one dockable. Any attempt to add a
 /// <see cref="IDockable" /> to it will result in replacing the current one.
 /// </summary>
-public class ApplicationDock : SingleItemDock
+public partial class ApplicationDock : SingleItemDock
 {
     protected ApplicationDock()
     {

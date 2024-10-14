@@ -8,8 +8,10 @@ using System.Reactive.Linq;
 using DroidNet.Routing.Debugger.UI.TreeView;
 using DroidNet.Routing.Events;
 
-/// <summary>ViewModel for the <see cref="IRouterState" />.</summary>
-public class RouterStateViewModel : TreeViewModelBase, IDisposable
+/// <summary>
+/// ViewModel for the <see cref="IRouterState" />.
+/// </summary>
+public partial class RouterStateViewModel : TreeViewModelBase, IDisposable
 {
     private readonly IDisposable routerEventsSub;
 
