@@ -6,7 +6,7 @@ namespace DroidNet.TimeMachine.Transactions;
 
 using DroidNet.TimeMachine.Changes;
 
-public interface ITransaction : IChange
+public interface ITransaction : IChange, IDisposable
 {
     void Commit();
 

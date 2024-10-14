@@ -13,7 +13,7 @@ using DroidNet.TimeMachine.Changes;
 /// <remarks>
 /// Nested transactions are supported.
 /// </remarks>
-public class Transaction : IDisposable, ITransaction
+public class Transaction : ITransaction
 {
     private readonly ITransactionManager? owner;
     private readonly ChangeSet changes;
