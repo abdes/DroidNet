@@ -70,9 +70,9 @@ internal sealed partial class SelectionObservableCollection<T>(IEnumerable<int> 
 
     protected override void ClearItems()
     {
-        foreach (var item in this)
+        foreach (var index in this)
         {
-            if (this.GetItemAt(item) is ISelectable treeItem)
+            if (this.GetItemAt(index) is ISelectable treeItem)
             {
                 treeItem.IsSelected = false;
             }
