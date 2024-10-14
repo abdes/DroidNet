@@ -44,6 +44,8 @@ public class Transaction : ITransaction
 
     public void Apply() => this.changes.Apply();
 
+    public override string? ToString() => this.Key.ToString();
+
     private void Dispose(bool disposing)
     {
         if (this.disposed)
