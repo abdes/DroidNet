@@ -9,4 +9,6 @@ public abstract class Change : IChange
     public required object Key { get; init; }
 
     public abstract void Apply();
+
+    public override string? ToString() => this.Key.ToString();
 }

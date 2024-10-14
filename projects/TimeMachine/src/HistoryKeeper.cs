@@ -4,6 +4,7 @@
 
 namespace DroidNet.TimeMachine;
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
@@ -12,19 +13,26 @@ using DroidNet.TimeMachine.Transactions;
     "ReSharper",
     "ClassWithVirtualMembersNeverInherited.Global",
     Justification = "needed for mocking in unit tests")]
-public class HistoryKeeper(object root, ITransactionFactory? transactionFactory = null) : ITransactionManager
+public class HistoryKeeper : ITransactionManager
 {
-    private readonly Stack<IChange> undoStack = new();
-    private readonly Stack<IChange> redoStack = new();
+    private readonly ObservableCollection<IChange> undoStack = [];
+    private readonly ObservableCollection<IChange> redoStack = [];
     private readonly Stack<ITransaction> transactions = new();
 
-    private readonly WeakReference root = new(root);
+    private readonly ITransactionFactory? transactionFactory;
+    private readonly WeakReference root;
+
     private int isCollectingChangesCounter;
     private ChangeSet? currentChangeSet;
 
-    public event EventHandler? UndoStackChanged;
+    public HistoryKeeper(object root, ITransactionFactory? transactionFactory = null)
+    {
+        this.transactionFactory = transactionFactory;
+        this.root = new WeakReference(root);
 
-    public event EventHandler? RedoStackChanged;
+        this.RedoStack = new ReadOnlyObservableCollection<IChange>(this.redoStack);
+        this.UndoStack = new ReadOnlyObservableCollection<IChange>(this.undoStack);
+    }
 
     /// <summary>
     /// Represents the various states of the undo/redo <see cref="UndoRedo" />.
@@ -60,12 +68,12 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
     /// <summary>
     /// Gets a collection of undoable changes for the current Root.
     /// </summary>
-    public IEnumerable<IChange> UndoStack => this.undoStack;
+    public ReadOnlyObservableCollection<IChange> UndoStack { get; }
 
     /// <summary>
     /// Gets a collection of redoable changes for the current Root.
     /// </summary>
-    public IEnumerable<IChange> RedoStack => this.redoStack;
+    public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     public bool CanUndo => this.undoStack.Count > 0;
 
@@ -92,8 +100,7 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         // A new change, unrelated to the Undo/Redo stack unqinding should reset the Redo stack
         if (this.State is not (States.Undoing or States.Redoing))
         {
-            this.redoStack.Clear();
-            this.OnRedoStackChanged();
+            this.ClearRedoStack();
         }
 
         if (this.currentChangeSet is not null)
@@ -105,13 +112,11 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
 
         if (this.State == States.Undoing)
         {
-            this.redoStack.Push(change);
-            this.OnRedoStackChanged();
+            this.PushToRedoStack(change);
         }
         else
         {
-            this.undoStack.Push(change);
-            this.OnUndoStackChanged();
+            this.PushToUndoStack(change);
         }
     }
 
@@ -125,12 +130,10 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
             this.CommitTransactions();
         }
 
-        if (!this.undoStack.TryPop(out var lastChange))
+        if (!this.TryPopUndoStack(out var lastChange))
         {
             return;
         }
-
-        this.OnUndoStackChanged();
 
         using (new StateTransition<States>(this, States.Undoing))
         using (new ChangeSetUndoRedo(this, lastChange))
@@ -149,12 +152,10 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
             this.CommitTransactions();
         }
 
-        if (!this.redoStack.TryPop(out var lastChange))
+        if (!this.TryPopRedoStack(out var lastChange))
         {
             return;
         }
-
-        this.OnRedoStackChanged();
 
         using (new StateTransition<States>(this, States.Redoing))
         using (new ChangeSetUndoRedo(this, lastChange))
@@ -170,11 +171,9 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
             throw new InvalidOperationException("unable to clear the undo history because we're not Idle");
         }
 
-        this.undoStack.Clear();
-        this.OnUndoStackChanged();
+        this.ClearUndoStack();
 
-        this.redoStack.Clear();
-        this.OnRedoStackChanged();
+        this.ClearRedoStack();
     }
 
     /// <summary>
@@ -203,19 +202,17 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         switch (this.State)
         {
             case States.Undoing:
-                this.redoStack.Push(this.currentChangeSet);
+                this.PushToRedoStack(this.currentChangeSet);
                 break;
 
             case States.Redoing:
             case States.Idle:
-                this.undoStack.Push(this.currentChangeSet);
+                this.PushToUndoStack(this.currentChangeSet);
                 break;
 
             default:
                 throw new InvalidOperationException($"Invalid state {this.State} to start a new change set");
         }
-
-        this.OnUndoStackChanged();
     }
 
     public void EndChangeSet()
@@ -235,9 +232,9 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
 
     public ITransaction BeginTransaction(object key)
     {
-        var transaction = transactionFactory is null
+        var transaction = this.transactionFactory is null
             ? new Transaction(this, key)
-            : transactionFactory.CreateTransaction(key);
+            : this.transactionFactory.CreateTransaction(key);
 
         this.transactions.Push(transaction);
 
@@ -257,13 +254,11 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
                 {
                     if (this.State == States.Undoing)
                     {
-                        this.redoStack.Push(transaction);
-                        this.OnRedoStackChanged();
+                        this.PushToRedoStack(transaction);
                     }
                     else
                     {
-                        this.undoStack.Push(transaction);
-                        this.OnUndoStackChanged();
+                        this.PushToUndoStack(transaction);
                     }
 
                     break;
@@ -291,11 +286,41 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
         }
     }
 
+    private void ClearUndoStack() => this.undoStack.Clear();
+
+    private bool TryPopRedoStack(out IChange value)
+    {
+        if (this.redoStack.Count > 0)
+        {
+            value = this.redoStack[0];
+            this.redoStack.RemoveAt(0);
+            return true;
+        }
+
+        value = default!;
+        return false;
+    }
+
+    private bool TryPopUndoStack(out IChange value)
+    {
+        if (this.undoStack.Count > 0)
+        {
+            value = this.undoStack[^1];
+            this.undoStack.RemoveAt(this.undoStack.Count - 1);
+            return true;
+        }
+
+        value = default!;
+        return false;
+    }
+
+    private void PushToRedoStack(IChange change) => this.redoStack.Insert(0, change);
+
+    private void PushToUndoStack(IChange change) => this.undoStack.Add(change);
+
+    private void ClearRedoStack() => this.redoStack.Clear();
+
     private void CommitTransactions() => this.transactions.FirstOrDefault()?.Commit();
-
-    private void OnUndoStackChanged() => this.UndoStackChanged?.Invoke(this, EventArgs.Empty);
-
-    private void OnRedoStackChanged() => this.RedoStackChanged?.Invoke(this, EventArgs.Empty);
 
     private sealed class ChangeSetUndoRedo : IDisposable
     {
