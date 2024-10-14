@@ -8,8 +8,10 @@ using System.Text.Json;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
-// Use these extension methods to store and retrieve local and roaming app data
-// More details regarding storing and retrieving app data at https://docs.microsoft.com/windows/apps/design/app-settings/store-and-retrieve-app-data
+/// <summary>
+/// Use these extension methods to store and retrieve local and roaming app data
+/// More details regarding storing and retrieving app data at https://docs.microsoft.com/windows/apps/design/app-settings/store-and-retrieve-app-data
+/// </summary>
 public static class SettingsStorageExtensions
 {
     private const string FileExtension = ".json";

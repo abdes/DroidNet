@@ -13,7 +13,7 @@ public class ProjectBrowserState
 
     public string LastSaveLocation { get; set; } = string.Empty;
 
-    public ICollection<RecentlyUsedProject> RecentProjects { get; set; } = new List<RecentlyUsedProject>();
+    public ICollection<RecentlyUsedProject> RecentProjects { get; set; } = [];
 
-    public ICollection<RecentlyUsedTemplate> RecentTemplates { get; set; } = new List<RecentlyUsedTemplate>();
+    public ICollection<RecentlyUsedTemplate> RecentTemplates { get; set; } = [];
 }

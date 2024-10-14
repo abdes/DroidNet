@@ -6,7 +6,10 @@ namespace DroidNet.Docking.Controls;
 
 using Microsoft.UI.Xaml;
 
-internal sealed class PanelMinimizeButton : PanelButton
+/// <summary>
+/// A styled <see cref="PanelButton" /> used for the minimize button of a dock panel.
+/// </summary>
+internal sealed partial class PanelMinimizeButton : PanelButton
 {
     public PanelMinimizeButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelMinimizeButton)];
 }

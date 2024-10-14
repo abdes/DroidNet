@@ -5,6 +5,7 @@
 namespace DroidNet.Controls.Demo.DemoBrowser;
 
 using System.Diagnostics;
+using DroidNet.Converters;
 using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +22,8 @@ public sealed partial class DemoBrowserView
     {
         this.InitializeComponent();
 
-        this.Resources[IndexToNavigationItemConverterKey] = new IndexToNavigationItemConverter(this);
+        this.Resources[IndexToNavigationItemConverterKey]
+            = new IndexToNavigationItemConverter(this.NavigationView, this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
     public object? SettingsItem => this.NavigationView.SettingsItem;

@@ -7,7 +7,13 @@ namespace Oxygen.Editor.Pages.Settings.Views;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using Oxygen.Editor.Pages.Settings.ViewModels;
 
-// TODO: Set the URL for your privacy policy by updating SettingsPage_PrivacyTermsLink.NavigateUri in Resources.resw.
+/// <summary>
+/// The Settings Page.
+/// <remarks>
+/// TODO: Redeign
+/// TODO: Set the URL for your privacy policy by updating SettingsPage_PrivacyTermsLink.NavigateUri in Resources.resw.
+/// </remarks>
+/// </summary>
 public sealed partial class SettingsPage
 {
     /// <summary>Initializes a new instance of the <see cref="SettingsPage" /> class.</summary>
@@ -17,8 +23,5 @@ public sealed partial class SettingsPage
         this.InitializeComponent();
     }
 
-    public SettingsViewModel ViewModel
-    {
-        get;
-    }
+    public SettingsViewModel ViewModel { get; }
 }

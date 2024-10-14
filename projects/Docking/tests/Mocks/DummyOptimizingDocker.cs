@@ -8,8 +8,11 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Workspace;
 
+/// <summary>
+/// A dummy <see cref="Docker" /> that supports optimization.
+/// </summary>
 [ExcludeFromCodeCoverage]
-public class DummyOptimizingDocker : DummyDocker, IOptimizingDocker
+public partial class DummyOptimizingDocker : DummyDocker, IOptimizingDocker
 {
     public bool ConsolidateUpCalled { get; private set; }
 

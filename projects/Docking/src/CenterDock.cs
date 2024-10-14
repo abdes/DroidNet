@@ -6,7 +6,14 @@ namespace DroidNet.Docking;
 
 using DroidNet.Docking.Detail;
 
-public class CenterDock : Dock
+/// <summary>
+/// A type of <see cref="Dock" /> intended for use to dock the central view of the application, usually hosting the application
+/// document(s).
+/// </summary>
+/// <remarks>
+/// This special dock cannot be closed or minimized.
+/// </remarks>
+public partial class CenterDock : Dock
 {
     public override bool CanMinimize => false;
 

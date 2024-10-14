@@ -37,8 +37,8 @@ internal sealed class WritableOptions<T>(
         try
         {
             var jObject = fs.File.Exists(filePath)
-                ? JsonSerializer.Deserialize<JsonObject>(fs.File.ReadAllText(filePath)) ?? new JsonObject()
-                : new JsonObject();
+                ? JsonSerializer.Deserialize<JsonObject>(fs.File.ReadAllText(filePath)) ?? []
+                : [];
             var sectionObject = jObject.TryGetPropertyValue(sectionName, out var section)
                 ? JsonSerializer.Deserialize<T>(section!.ToString(), jsonSerializerOptions)
                 : this.Value;

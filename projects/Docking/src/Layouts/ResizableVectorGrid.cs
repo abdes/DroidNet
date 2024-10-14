@@ -9,7 +9,10 @@ using DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class ResizableVectorGrid : Grid
+/// <summary>
+/// A one-dimensional grid (vector) which can be oriented horizontally or vertically and can hold fixed-size or resizable items.
+/// </summary>
+public partial class ResizableVectorGrid : Grid
 {
     private readonly List<bool> resizableItems = [];
 

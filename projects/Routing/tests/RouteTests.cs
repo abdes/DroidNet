@@ -86,7 +86,7 @@ public class RouteTests
             MatchMethod = PathMatch.Full,
         };
         this.Segments.Add(new UrlSegment("test"));
-        var childSegments = new ReadOnlyCollection<UrlSegment>(new List<UrlSegment> { new("child") });
+        var childSegments = new ReadOnlyCollection<UrlSegment>([new UrlSegment("child")]);
         var childGroup = new UrlSegmentGroup(childSegments);
         this.Group.AddChild("child", childGroup);
 

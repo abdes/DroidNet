@@ -8,23 +8,14 @@ using DroidNet.Config;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Models;
 
-public class ThemeSelectorService : IThemeSelectorService
+public class ThemeSelectorService(IWritableOptions<ThemeSettings> settings) : IThemeSelectorService
 {
     private const string SettingsKey = "AppBackgroundRequestedTheme";
-    private readonly IWritableOptions<ThemeSettings> settings;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ThemeSelectorService" />
-    /// class.
-    /// </summary>
-    /// <param name="settings"></param>
-    public ThemeSelectorService(IWritableOptions<ThemeSettings> settings)
-        => this.settings = settings;
 
     public ElementTheme Theme
     {
-        get => this.settings.Value.AppBackgroundRequestedTheme;
-        private set => this.settings.Value.AppBackgroundRequestedTheme = value;
+        get => settings.Value.AppBackgroundRequestedTheme;
+        private set => settings.Value.AppBackgroundRequestedTheme = value;
     }
 
     public Task SetThemeAsync(ElementTheme theme)
@@ -33,7 +24,7 @@ public class ThemeSelectorService : IThemeSelectorService
 
         this.ApplyTheme();
 
-        this.settings.Update(opt => opt.AppBackgroundRequestedTheme = theme);
+        settings.Update(opt => opt.AppBackgroundRequestedTheme = theme);
         return Task.CompletedTask;
     }
 

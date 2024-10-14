@@ -9,10 +9,13 @@ using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="Dockable.Factory" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(Dockable)}.{nameof(Dockable.Factory)}")]
-public class DockableFactoryTests : TestSuiteWithAssertions
+public partial class DockableFactoryTests : TestSuiteWithAssertions
 {
     private const string DockableId1 = "dockable1";
     private const string DockableId2 = "dockable2";
@@ -171,7 +174,10 @@ public class DockableFactoryTests : TestSuiteWithAssertions
         _ = ((CustomDockable)dockable).StrArg.Should().Be(strArg);
     }
 
-    private sealed class CustomDockable : Dockable
+    /// <summary>
+    /// A custom implementation of <see cref="Dockable" /> for testing.
+    /// </summary>
+    private sealed partial class CustomDockable : Dockable
     {
         public CustomDockable(string id)
             : base(id)

@@ -10,10 +10,13 @@ using DroidNet.Docking.Mocks;
 using DroidNet.Docking.Workspace;
 using FluentAssertions;
 
+/// <summary>
+/// Unit test cases for the <see cref="TrayGroup" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(TrayGroup))]
-public class TrayGroupTests : IDisposable
+public partial class TrayGroupTests : IDisposable
 {
     private readonly DummyDocker docker = new();
     private readonly TrayGroup tray;

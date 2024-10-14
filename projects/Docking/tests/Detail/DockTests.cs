@@ -10,10 +10,13 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="Dock" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(Dock))]
-public class DockTests : IDisposable
+public partial class DockTests : IDisposable
 {
     private readonly SimpleDock dock = new();
 

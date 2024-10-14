@@ -6,7 +6,10 @@ namespace DroidNet.Docking.Controls;
 
 using Microsoft.UI.Xaml;
 
-internal sealed class PanelDockButton : PanelButton
+/// <summary>
+/// A styled <see cref="PanelButton" /> used for the docking button of a dock panel.
+/// </summary>
+internal sealed partial class PanelDockButton : PanelButton
 {
     public PanelDockButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelDockButton)];
 }

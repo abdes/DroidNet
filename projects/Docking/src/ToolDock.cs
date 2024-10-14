@@ -6,7 +6,10 @@ namespace DroidNet.Docking;
 
 using DroidNet.Docking.Detail;
 
-public class ToolDock : Dock
+/// <summary>
+/// A type of <see cref="Dock" /> most suitable for non-document dockable views.
+/// </summary>
+public partial class ToolDock : Dock
 {
     protected ToolDock()
     {

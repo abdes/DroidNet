@@ -8,17 +8,8 @@ using Microsoft.UI.Xaml;
 
 public interface IThemeSelectorService
 {
-    ElementTheme Theme
-    {
-        get;
-    }
+    ElementTheme Theme { get; }
 
-    /// <summary></summary>
-    /// <param name="theme"></param>
-    /// <returns>
-    /// A <see cref="Task" /> representing the result of the asynchronous
-    /// operation.
-    /// </returns>
     Task SetThemeAsync(ElementTheme theme);
 
     void ApplyTheme();

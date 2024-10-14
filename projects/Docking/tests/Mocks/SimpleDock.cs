@@ -7,5 +7,8 @@ namespace DroidNet.Docking.Mocks;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 
+/// <summary>
+/// A simple dock class for testing.
+/// </summary>
 [ExcludeFromCodeCoverage]
-internal sealed class SimpleDock : Dock;
+internal sealed partial class SimpleDock : Dock;

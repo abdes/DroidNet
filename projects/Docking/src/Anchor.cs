@@ -18,7 +18,7 @@ using System.Diagnostics;
 /// anchor repositions itself to the disposed dockable’s relative dockable or defaults to the workspace’s left edge.
 /// </para>
 /// </remarks>
-public class Anchor : IDisposable
+public partial class Anchor : IDisposable
 {
     /// <summary>Keep track of when this object was disposed of.</summary>
     private bool disposed;
@@ -116,16 +116,16 @@ public class Anchor : IDisposable
 
 /// <summary>Represents an anchor point on the left side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
-public class AnchorLeft(IDockable? relativeTo = null) : Anchor(AnchorPosition.Left, relativeTo);
+public partial class AnchorLeft(IDockable? relativeTo = null) : Anchor(AnchorPosition.Left, relativeTo);
 
 /// <summary>Represents an anchor point on the right side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
-public class AnchorRight(IDockable? relativeTo = null) : Anchor(AnchorPosition.Right, relativeTo);
+public partial class AnchorRight(IDockable? relativeTo = null) : Anchor(AnchorPosition.Right, relativeTo);
 
 /// <summary>Represents an anchor point on the top side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
-public class AnchorTop(IDockable? relativeTo = null) : Anchor(AnchorPosition.Top, relativeTo);
+public partial class AnchorTop(IDockable? relativeTo = null) : Anchor(AnchorPosition.Top, relativeTo);
 
 /// <summary>Represents an anchor point on the bottom side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
-public class AnchorBottom(IDockable? relativeTo = null) : Anchor(AnchorPosition.Bottom, relativeTo);
+public partial class AnchorBottom(IDockable? relativeTo = null) : Anchor(AnchorPosition.Bottom, relativeTo);

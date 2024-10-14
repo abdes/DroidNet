@@ -10,7 +10,7 @@ using DroidNet.Docking;
 /// <summary>Represents a node in the binary tree structure that represents the layout of a docking workspace.</summary>
 /// <param name="docker">The workspace docker associated with the node.</param>
 /// <param name="segment">The value stored in the node; corresponds to a layout segment in the workspace layout.</param>
-internal class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTreeNode<LayoutSegment>(segment)
+internal partial class DockingTreeNode(IDocker docker, LayoutSegment segment) : BinaryTreeNode<LayoutSegment>(segment)
 {
     /// <summary>Gets or sets the left child node.</summary>
     /// <remarks>

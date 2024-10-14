@@ -41,7 +41,7 @@ public partial class WorkspaceViewModel : ObservableObject
         };
     }
 
-    private static void RestoreDefaultWorkspace(IResolver resolver, IDocker docker)
+    private static void RestoreDefaultWorkspace(IResolver resolver, Docker docker)
     {
         docker.Dock(CenterDock.New(), new Anchor(AnchorPosition.Center));
 

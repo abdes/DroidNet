@@ -9,10 +9,13 @@ using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="Dock.Factory" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(Dock)}.{nameof(Dock.Factory)}")]
-public class DockFactoryTests : TestSuiteWithAssertions
+public partial class DockFactoryTests : TestSuiteWithAssertions
 {
     [TestMethod]
     public void CreateDock_NoArgumentConstructor_ReturnsInstance()
@@ -85,7 +88,10 @@ public class DockFactoryTests : TestSuiteWithAssertions
 #endif
     }
 
-    private sealed class CustomDock : Dock
+    /// <summary>
+    /// A custom dock for testing.
+    /// </summary>
+    private sealed partial class CustomDock : Dock
     {
         public CustomDock()
         {
