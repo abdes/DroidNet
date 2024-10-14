@@ -8,11 +8,13 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Mocks;
 using FluentAssertions;
 
-/// <summary>Unit test cases for the <see cref="BinaryTreeNode{T}" /> class.</summary>
+/// <summary>
+/// Unit test cases for the <see cref="BinaryTreeNode{T}" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("BinaryTreeNode")]
-public class BinaryTreeNodeTests : IDisposable
+public partial class BinaryTreeNodeTests : IDisposable
 {
     private readonly DummyDocker docker = new();
 

@@ -2,31 +2,36 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DemoBrowser;
+namespace DroidNet.Converters;
 
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>
-/// A converter used to get a <see cref="NavigationItem" /> by its index in the items collection view.
+/// A converter to get the navigation item corresponding to the given index in the containing <see cref="NavigationView" />.
 /// </summary>
-/// <param name="routedNavigationView">The view that contains the items collection.</param>
-internal sealed partial class IndexToNavigationItemConverter(DemoBrowserView routedNavigationView) : IValueConverter
+/// <param name="routedNavigationView">The <see cref="NavigationView" /> containing the navigation items.</param>
+/// <param name="navigationItems">The list of all navigation items.</param>
+public sealed partial class IndexToNavigationItemConverter(
+    NavigationView routedNavigationView,
+    IList<object> navigationItems)
+    : IValueConverter
 {
     public object? Convert(object? value, Type targetType, object? parameter, string language)
     {
-        if (value is not int index || index == -1 || routedNavigationView.ViewModel is null)
+        if (value is not int index || index == -1)
         {
             return null;
         }
 
-        if (index == routedNavigationView.ViewModel.SelectedItemIndex)
+        if (index == int.MaxValue)
         {
             // Note that the SettingsItem may be null before the NavigationView is loaded.
             return routedNavigationView.SettingsItem;
         }
 
-        return index < routedNavigationView.ViewModel.AllItems.Count
-            ? routedNavigationView.ViewModel.AllItems[index]
+        return index < navigationItems.Count
+            ? navigationItems[index]
             : null;
     }
 

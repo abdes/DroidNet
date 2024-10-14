@@ -7,8 +7,11 @@ namespace DroidNet.Docking.Mocks;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 
+/// <summary>
+/// A test dock class that cannot be minimized.
+/// </summary>
 [ExcludeFromCodeCoverage]
-internal sealed class NoMinimizeDock : Dock
+internal sealed partial class NoMinimizeDock : Dock
 {
     public override bool CanMinimize => false;
 }

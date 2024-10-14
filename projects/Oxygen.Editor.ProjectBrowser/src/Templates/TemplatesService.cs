@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Reactive.Linq;
 using System.Reflection;
@@ -17,7 +18,9 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
 
-/// <summary>Provides method to access and manipulate templates.</summary>
+/// <summary>
+/// A service that can be used to access project templates.
+/// </summary>
 public partial class TemplatesService : ITemplatesService
 {
     private readonly ILogger<TemplatesService> logger;
@@ -25,6 +28,14 @@ public partial class TemplatesService : ITemplatesService
     private readonly ProjectBrowserSettings settings;
     private readonly ITemplatesSource templatesSource;
 
+    [SuppressMessage(
+        "ReSharper",
+        "ConvertToPrimaryConstructor",
+        Justification = "keep explicit constructor so we have ILogger member for logging code generation")]
+    [SuppressMessage(
+        "Style",
+        "IDE0290:Use primary constructor",
+        Justification = "keep explicit constructor so we have ILogger member for logging code generation")]
     public TemplatesService(
         ILogger<TemplatesService> logger,
         IFileSystem fs,

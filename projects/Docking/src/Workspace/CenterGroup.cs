@@ -6,7 +6,13 @@ namespace DroidNet.Docking.Workspace;
 
 using DroidNet.Docking.Detail;
 
-internal sealed class CenterGroup(IDocker docker) : DockGroup(docker, DockGroupOrientation.Horizontal), IDisposable
+/// <summary>
+/// A <see cref="DockGroup" /> intended to be used for the <see cref="CenterDock" /> and can be configured to stretch to fill all
+/// the available space.
+/// </summary>
+/// <param name="docker">The <see cref="IDocker" /> managing this group.</param>
+internal sealed partial class CenterGroup(IDocker docker)
+    : DockGroup(docker, DockGroupOrientation.Horizontal), IDisposable
 {
     private bool disposed;
 

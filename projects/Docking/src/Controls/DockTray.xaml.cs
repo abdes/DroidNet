@@ -25,21 +25,48 @@ public sealed partial class DockTray
     }
 }
 
-internal sealed class OrientationTemplateSelector : DataTemplateSelector
+/// <summary>
+/// Selects a <see cref="DataTemplate" /> based on the orientation of the dock tray.
+/// </summary>
+internal sealed partial class OrientationTemplateSelector : DataTemplateSelector
 {
+    /// <summary>
+    /// Gets or sets the template to use when the orientation is vertical.
+    /// </summary>
     public DataTemplate? VerticalTemplate { get; set; }
 
+    /// <summary>
+    /// Gets or sets the template to use when the orientation is horizontal.
+    /// </summary>
     public DataTemplate? HorizontalTemplate { get; set; }
 
+    /// <summary>
+    /// Gets or sets the orientation of the dock tray.
+    /// </summary>
     public Orientation DockTrayOrientation { get; set; }
 
+    /// <summary>
+    /// Selects a template based on the orientation of the dock tray.
+    /// </summary>
+    /// <param name="item">
+    /// The data object for which to select the template.
+    /// </param>
+    /// <param name="container">
+    /// The parent container for the templated item.
+    /// </param>
+    /// <returns>
+    /// A <see cref="DataTemplate" /> that matches the current orientation.
+    /// </returns>
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
         => this.DockTrayOrientation == Orientation.Vertical
             ? this.VerticalTemplate
             : this.HorizontalTemplate;
 }
 
-internal sealed class OrientationToLayoutConverter : IValueConverter
+/// <summary>
+/// A converrter that converts an <see cref="Orientation" /> to the corresponding <see cref="StackLayout" />.
+/// </summary>
+internal sealed partial class OrientationToLayoutConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {

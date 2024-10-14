@@ -46,8 +46,11 @@ public sealed partial class ShellView
         return keyboardAccelerator;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs args)
     {
+        _ = sender; // unused
+        _ = args; // unused
+
         // TODO: refactor custom window title bar
         // TitleBarHelper.UpdateTitleBar(this.RequestedTheme);
         this.KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.Left, VirtualKeyModifiers.Menu));
@@ -65,6 +68,8 @@ public sealed partial class ShellView
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
+        _ = sender; // unused
+
         var resource = args.WindowActivationState == WindowActivationState.Deactivated
             ? "WindowCaptionForegroundDisabled"
             : "WindowCaptionForeground";
@@ -73,8 +78,11 @@ public sealed partial class ShellView
         App.AppTitlebar = this.AppTitleBarText;
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs args)
     {
+        _ = sender; // unused
+        _ = args; // unused
+
         this.ShellMenuBarSettingsButton.RemoveHandler(
             PointerPressedEvent,
             (PointerEventHandler)this.ShellMenuBarSettingsButton_PointerPressed);
@@ -83,15 +91,31 @@ public sealed partial class ShellView
             (PointerEventHandler)this.ShellMenuBarSettingsButton_PointerReleased);
     }
 
-    private void ShellMenuBarSettingsButton_PointerEntered(object sender, PointerRoutedEventArgs e)
-        => AnimatedIcon.SetState((UIElement)sender, "PointerOver");
+    private void ShellMenuBarSettingsButton_PointerEntered(object sender, PointerRoutedEventArgs args)
+    {
+        _ = args; // unused
 
-    private void ShellMenuBarSettingsButton_PointerPressed(object sender, PointerRoutedEventArgs e)
-        => AnimatedIcon.SetState((UIElement)sender, "Pressed");
+        AnimatedIcon.SetState((UIElement)sender, "PointerOver");
+    }
 
-    private void ShellMenuBarSettingsButton_PointerReleased(object sender, PointerRoutedEventArgs e)
-        => AnimatedIcon.SetState((UIElement)sender, "Normal");
+    private void ShellMenuBarSettingsButton_PointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        _ = args; // unused
 
-    private void ShellMenuBarSettingsButton_PointerExited(object sender, PointerRoutedEventArgs e)
-        => AnimatedIcon.SetState((UIElement)sender, "Normal");
+        AnimatedIcon.SetState((UIElement)sender, "Pressed");
+    }
+
+    private void ShellMenuBarSettingsButton_PointerReleased(object sender, PointerRoutedEventArgs args)
+    {
+        _ = args; // unused
+
+        AnimatedIcon.SetState((UIElement)sender, "Normal");
+    }
+
+    private void ShellMenuBarSettingsButton_PointerExited(object sender, PointerRoutedEventArgs args)
+    {
+        _ = args; // unused
+
+        AnimatedIcon.SetState((UIElement)sender, "Normal");
+    }
 }

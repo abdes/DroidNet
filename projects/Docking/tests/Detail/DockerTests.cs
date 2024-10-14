@@ -10,21 +10,15 @@ using DroidNet.Docking.Workspace;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 
+/// <summary>
+/// Unit test cases for the <see cref="Docker" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(Docker))]
-public class DockerTests : TestSuiteWithAssertions, IDisposable
+public partial class DockerTests : TestSuiteWithAssertions, IDisposable
 {
     private readonly Docker sut = new();
-
-    [TestCleanup]
-    public new void Dispose()
-    {
-        base.Dispose();
-
-        this.sut.Dispose();
-        GC.SuppressFinalize(this);
-    }
 
     [TestMethod]
     public void Dock_Works_WhenStateIsNotUnDocked()
@@ -472,5 +466,13 @@ public class DockerTests : TestSuiteWithAssertions, IDisposable
 
         _ = layoutChangedCalled.Should().BeTrue();
         _ = layoutChangeReason.Should().Be(LayoutChangeReason.Floating);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        this.Dispose();
+
+        this.sut.Dispose();
     }
 }

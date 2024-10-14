@@ -7,11 +7,13 @@ namespace Oxygen.Editor.Services;
 using System.Reactive.Subjects;
 
 /// <summary>
-/// Initializes a new instance of the <see cref="ActivationService" />
-/// class.
+/// Handle registration and chain invocation during activation.
 /// </summary>
-/// <param name="theme"></param>
-public class ActivationService(IThemeSelectorService theme) : IActivationService, IDisposable
+/// <param name="theme">
+/// The service that can be used to change the application theme.
+/// TODO: Review and refactor this class
+/// </param>
+public partial class ActivationService(IThemeSelectorService theme) : IActivationService, IDisposable
 {
     private readonly Func<object, Task> afterActivation = (activationData) =>
     {

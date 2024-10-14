@@ -9,10 +9,13 @@ using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+/// <summary>
+/// Unit test cases for the <see cref="Anchor" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(AnchorTests))]
-public class AnchorTests
+public partial class AnchorTests
 {
     [TestMethod]
     public void Constructor_SetsPositionAndRelativeTo()
@@ -106,7 +109,10 @@ public class AnchorTests
         _ = anchor.RelativeTo.Should().BeNull();
     }
 
-    private sealed class MockDockable : IDockable
+    /// <summary>
+    /// A mock for the <see cref="Dockable" /> class for testing.
+    /// </summary>
+    private sealed partial class MockDockable : IDockable
     {
         public MockDockable(string id, IDock? owner = null)
         {

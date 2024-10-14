@@ -6,7 +6,13 @@ namespace DroidNet.Docking.Workspace;
 
 using System.Diagnostics;
 
-internal class BinaryTreeNode<T>(T storedValue) : IDisposable
+/// <summary>
+/// Represents a node in a binary tree, which can store a value of type <typeparamref name="T" /> and can optionally have a left
+/// and a right child.
+/// </summary>
+/// <typeparam name="T">The type of the value held by this node.</typeparam>
+/// <param name="storedValue">The initial value stored by this node.</param>
+internal partial class BinaryTreeNode<T>(T storedValue) : IDisposable
 {
     private bool disposed;
 

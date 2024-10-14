@@ -7,8 +7,11 @@ namespace DroidNet.Docking.Mocks;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 
+/// <summary>
+/// A test dock class that cannot be closed.
+/// </summary>
 [ExcludeFromCodeCoverage]
-internal sealed class NoCloseDock : Dock
+internal sealed partial class NoCloseDock : Dock
 {
     public override bool CanClose => false;
 }

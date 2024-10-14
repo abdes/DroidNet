@@ -9,10 +9,13 @@ using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using static TreeTraversal;
 
+/// <summary>
+/// Unit test cases for the traversal algorithm of binary trees.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(TreeTraversal))]
-public class TreeTraversalTests : IDisposable
+public partial class TreeTraversalTests : IDisposable
 {
     private bool disposed;
 

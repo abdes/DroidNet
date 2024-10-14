@@ -17,52 +17,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public class UrlSegmentTests
 {
-    internal static IEnumerable<object[]> PathData
-        => new[]
-        {
-            new object[] { "home", "home" },
-            [
-                string.Empty,
-                string.Empty,
-            ],
-            [
-                "a;b",
-                "a%3Bb",
-            ],
-            [
-                "a b",
-                "a%20b",
-            ],
-            [
-                "a%20b",
-                "a%2520b",
-            ],
-        };
-
-    internal static IEnumerable<object[]> ParametersData
-        => new[]
-        {
-            new object[] { ReadOnlyParameters.Empty, string.Empty },
-            [
-                new Parameters
-                {
-                    { "1", "one" },
-                },
-                ";1=one",
-            ],
-            [
-                new Parameters()
-                {
-                    { "foo", "foo-value" },
-                    { "bar", "baz=" },
-                    { "sp ace", "v a lue" },
-                    { "empty", string.Empty },
-                },
-                ";foo=foo-value;bar=baz%3D;sp%20ace=v%20a%20lue;empty=",
-            ],
-        };
-
-    internal static IEnumerable<object?[]> SegmentData => new[]
+    public static IEnumerable<object?[]> SegmentData => new[]
     {
         new object?[]
         {
@@ -119,6 +74,51 @@ public class UrlSegmentTests
             "Path and 2 parameters, % encoding",
         ],
     };
+
+    public static IEnumerable<object[]> PathData
+        => new[]
+        {
+            new object[] { "home", "home" },
+            [
+                string.Empty,
+                string.Empty,
+            ],
+            [
+                "a;b",
+                "a%3Bb",
+            ],
+            [
+                "a b",
+                "a%20b",
+            ],
+            [
+                "a%20b",
+                "a%2520b",
+            ],
+        };
+
+    public static IEnumerable<object[]> ParametersData
+        => new[]
+        {
+            new object[] { ReadOnlyParameters.Empty, string.Empty },
+            [
+                new Parameters
+                {
+                    { "1", "one" },
+                },
+                ";1=one",
+            ],
+            [
+                new Parameters()
+                {
+                    { "foo", "foo-value" },
+                    { "bar", "baz=" },
+                    { "sp ace", "v a lue" },
+                    { "empty", string.Empty },
+                },
+                ";foo=foo-value;bar=baz%3D;sp%20ace=v%20a%20lue;empty=",
+            ],
+        };
 
     /// <summary>
     /// Generate a custom display name for the test cases in <see cref="Serialize" />

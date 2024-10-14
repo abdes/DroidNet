@@ -127,4 +127,7 @@ public class HostingExtensionsTests
     }
 }
 
-internal sealed class MyApp : Application;
+/// <summary>
+/// A dummy <see cref="Application" /> for testing.
+/// </summary>
+internal sealed partial class MyApp : Application;

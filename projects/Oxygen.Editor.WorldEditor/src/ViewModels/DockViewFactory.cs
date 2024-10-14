@@ -14,7 +14,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.WorldEditor.Views;
 
-internal class DockViewFactory(IResolver container) : IDockViewFactory
+internal sealed class DockViewFactory(IResolver container) : IDockViewFactory
 {
     public UIElement CreateViewForDock(IDock dock) => dock is CenterDock
         ? new RendererView()

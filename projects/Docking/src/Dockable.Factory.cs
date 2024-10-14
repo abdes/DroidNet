@@ -44,7 +44,11 @@ public partial class Dockable
         GC.SuppressFinalize(this);
     }
 
-    public static class Factory
+    /// <summary>
+    /// A factory class for instances of the <see cref="Dockable" /> class. Manages all the existing instances and guarantees
+    /// uniqueness of their id.
+    /// </summary>
+    public static partial class Factory
     {
         private static readonly ConcurrentDictionary<string, Dockable> Dockables = [];
 
@@ -99,7 +103,10 @@ public partial class Dockable
             return dockable;
         }
 
-        public class DockablesEnumerator : IEnumerator<IDockable>
+        /// <summary>
+        /// Provides an implementation of <see cref="IEnumerator" /> for iteration over the collection of all dockables.
+        /// </summary>
+        public partial class DockablesEnumerator : IEnumerator<IDockable>
         {
             private int position = -1;
 
@@ -119,7 +126,10 @@ public partial class Dockable
         }
     }
 
-    public class AllDockables : IEnumerable<IDockable>
+    /// <summary>
+    /// Represents an <see cref="IEnumerable">enumerable</see> collection of all the instances of <see cref="Dockable" />.
+    /// </summary>
+    public partial class AllDockables : IEnumerable<IDockable>
     {
         public IEnumerator<IDockable> GetEnumerator() => new Factory.DockablesEnumerator();
 

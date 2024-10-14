@@ -6,8 +6,11 @@ namespace DroidNet.Docking.Mocks;
 
 using System.Diagnostics.CodeAnalysis;
 
+/// <summary>
+/// A dummy implementation of <see cref="IDocker" /> for testing.
+/// </summary>
 [ExcludeFromCodeCoverage]
-public class DummyDocker : IDocker
+public partial class DummyDocker : IDocker
 {
 #pragma warning disable CS0067 // Event is never used
     public event EventHandler<LayoutChangedEventArgs>? LayoutChanged;

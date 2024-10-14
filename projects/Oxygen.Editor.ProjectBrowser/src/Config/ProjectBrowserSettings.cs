@@ -23,17 +23,19 @@ public class ProjectBrowserSettings
     public static readonly string ConfigSectionName = "ProjectBrowserSettings";
 
     private readonly Dictionary<string, ProjectCategory> categories = [];
-    private List<string> templates = [];
+    private readonly List<string> templates = [];
 
     /// <summary>
-    /// Gets or sets (only during the DI injection) the list of supported template
-    /// categories.
+    /// Gets the list of supported template categories.
+    /// <remarks>
+    /// The list is initialized during the DI injection.
+    /// </remarks>
     /// </summary>
     /// <value>The list of supported template categories.</value>
     public IList<ProjectCategory> Categories
     {
-        get => this.categories.Values.ToList();
-        set
+        get => [.. this.categories.Values];
+        init
         {
             foreach (var category in value)
             {
@@ -46,19 +48,17 @@ public class ProjectBrowserSettings
     }
 
     /// <summary>
-    /// Gets or sets the list of built-in (i.e. come with the application) project
-    /// templates.
+    /// Gets the list of built-in (i.e. come with the application) project templates.
     /// </summary>
     /// <value>
-    /// The list of built-in project templates. Each item represents the path to the
-    /// template description file. If the path is relative, it will be interpreted
-    /// relative to the application's built-in templates root folder obtained from the
+    /// The list of built-in project templates. Each item represents the path to the template description file. If the path is
+    /// relative, it will be interpreted relative to the application's built-in templates root folder obtained from the
     /// <see cref="IPathFinder" />.
     /// </value>
     public IList<string> BuiltinTemplates
     {
         get => this.templates;
-        set => this.templates = new HashSet<string>(value, StringComparer.Ordinal).ToList();
+        init => this.templates = new HashSet<string>(value, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Get the project category with the given ID.</summary>

@@ -7,7 +7,10 @@ namespace DroidNet.Docking.Controls;
 using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 
-public class DockingSplitter : GridSplitter
+/// <summary>
+/// A <see cref="GridSplitter" /> custom styled for separating docks.
+/// </summary>
+public partial class DockingSplitter : GridSplitter
 {
     public DockingSplitter() => this.Style = (Style)Application.Current.Resources[nameof(DockingSplitter)];
 

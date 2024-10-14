@@ -7,7 +7,7 @@ namespace Oxygen.Editor.Helpers;
 using System.Runtime.InteropServices;
 using System.Text;
 
-public class RuntimeHelper
+public static class RuntimeHelper
 {
     public static bool IsMSIX
     {
@@ -15,7 +15,7 @@ public class RuntimeHelper
         {
             var length = 0;
 
-            return GetCurrentPackageFullName(ref length, null) != 15700L;
+            return GetCurrentPackageFullName(ref length, packageFullName: null) != 15700L;
         }
     }
 

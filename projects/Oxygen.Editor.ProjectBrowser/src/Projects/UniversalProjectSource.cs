@@ -11,6 +11,9 @@ using Oxygen.Editor.Storage;
 /// A composite source for projects, that invokes the specific implementation based
 /// on the project location.
 /// </summary>
+/// <param name="localSource">
+/// A project source that can be used for locally stored projects.
+/// </param>
 public class UniversalProjectSource(LocalProjectsSource localSource) : IProjectSource
 {
     public string[] CommonProjectLocations => localSource.CommonProjectLocations;

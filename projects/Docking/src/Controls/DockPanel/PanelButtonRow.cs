@@ -7,7 +7,10 @@ namespace DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-internal sealed class PanelButtonRow : StackPanel
+/// <summary>
+/// A styled component representing a row of <see cref="PanelButton" /> elements.
+/// </summary>
+internal sealed partial class PanelButtonRow : StackPanel
 {
     public PanelButtonRow() => this.Style = (Style)Application.Current.Resources[nameof(PanelButtonRow)];
 }

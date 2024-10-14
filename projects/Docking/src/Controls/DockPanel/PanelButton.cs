@@ -7,7 +7,10 @@ namespace DroidNet.Docking.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-internal class PanelButton : Button
+/// <summary>
+/// A custom styled button for use inside dock panels.
+/// </summary>
+internal partial class PanelButton : Button
 {
     public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(
         nameof(Glyph),

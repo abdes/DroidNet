@@ -6,7 +6,10 @@ namespace DroidNet.Docking.Controls;
 
 using Microsoft.UI.Xaml;
 
-internal sealed class PanelCloseButton : PanelButton
+/// <summary>
+/// A styled <see cref="PanelButton" /> used for the close button of a dock panel.
+/// </summary>
+internal sealed partial class PanelCloseButton : PanelButton
 {
     public PanelCloseButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelCloseButton)];
 }
