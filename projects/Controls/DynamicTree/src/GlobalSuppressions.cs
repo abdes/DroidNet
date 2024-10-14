@@ -11,3 +11,8 @@ using System.Diagnostics.CodeAnalysis;
         Justification = "We want all controls to be under the namespace DroidNet.Controls",
         Scope = "namespace",
         Target = "~N:DroidNet.Controls")]
+[assembly:
+    SuppressMessage(
+        "Naming",
+        "CA1707:Identifiers should not contain underscores",
+        Justification = "Underscores are useful for event handler naming")]
