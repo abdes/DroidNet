@@ -210,7 +210,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
         // item if the items collection is not empty, other wise leave the selection empty.
         var newSelectedIndex = selectedIndices[0] + 1 - removedItemsCount;
-        if (newSelectedIndex < this.ShownItems.Count)
+        if (newSelectedIndex > 0 && newSelectedIndex < this.ShownItems.Count)
         {
             this.SelectionModel.SelectItemAt(newSelectedIndex);
         }
