@@ -329,6 +329,14 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         this.SetSelectedIndex(this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1]);
     }
 
+    public override string ToString()
+    {
+        var count = this.selectedIndices.Count;
+        return this.SelectedIndex == -1
+            ? "No selection"
+            : $"{count} selected item{(count == 1 ? string.Empty : "s")} [{string.Join(',', this.selectedIndices)}]";
+    }
+
     /// <summary>
     /// Validates the specified index and throws an <see cref="ArgumentOutOfRangeException" /> if the index is out of range.
     /// </summary>

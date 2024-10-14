@@ -3,12 +3,15 @@
     x:Class="DroidNet.Controls.Demo.DynamicTree.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:componentModel="using:System.ComponentModel"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:tm="using:DroidNet.TimeMachine.Changes"
     KeyboardAcceleratorPlacementMode="Hidden"
     Loaded="ProjectLayoutView_OnLoaded"
     mc:Ignorable="d">
+
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator
             Key="Z"
@@ -21,12 +24,11 @@
         <KeyboardAccelerator Key="Delete" Invoked="DeleteInvoked" />
     </Page.KeyboardAccelerators>
 
-    <Grid
-        Width="400"
-        Padding="4"
-        HorizontalAlignment="Left"
-        BorderBrush="Gray"
-        BorderThickness="1">
+    <Grid Padding="4" HorizontalAlignment="Left">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -85,5 +87,23 @@
                     ToolTipService.ToolTip="Delete (Del)" />
             </CommandBar>
         </Grid>
+        <StackPanel
+            Grid.Row="0"
+            Grid.Column="1"
+            Width="300"
+            Padding="32,10"
+            BorderBrush="Gray"
+            BorderThickness="1">
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.UndoStack, Mode=OneWay}">
+                <DataTemplate x:DataType="tm:IChange">
+                    <TextBlock Text="{x:Bind Key}" />
+                </DataTemplate>
+            </ItemsRepeater>
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.RedoStack, Mode=OneWay}">
+                <DataTemplate x:DataType="tm:IChange">
+                    <TextBlock Foreground="Gray" Text="{x:Bind Key}" />
+                </DataTemplate>
+            </ItemsRepeater>
+        </StackPanel>
     </Grid>
 </Page>
