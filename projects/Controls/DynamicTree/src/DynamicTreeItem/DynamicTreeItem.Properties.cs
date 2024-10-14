@@ -60,7 +60,7 @@ public partial class DynamicTreeItem
         if (oldItem is not null)
         {
             oldItem.ChildrenCollectionChanged -= this.TreeItem_ChildrenCollectionChanged;
-            ((INotifyPropertyChanged)oldItem).PropertyChanged -= this.OnItemAdapterPropertyChanged;
+            ((INotifyPropertyChanged)oldItem).PropertyChanged -= this.ItemAdapter_OnPropertyChanged;
         }
 
         // Update visual state based on the current value of IsSelected in the
@@ -69,12 +69,13 @@ public partial class DynamicTreeItem
         if (newItem is not null)
         {
             this.UpdateSelectionVisualState(newItem.IsSelected);
+            this.UpdateHasChildrenVisualState();
             newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
-            ((INotifyPropertyChanged)newItem).PropertyChanged += this.OnItemAdapterPropertyChanged;
+            ((INotifyPropertyChanged)newItem).PropertyChanged += this.ItemAdapter_OnPropertyChanged;
         }
     }
 
-    protected virtual void OnItemAdapterPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    protected virtual void ItemAdapter_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (sender is not null && string.Equals(
                 args.PropertyName,

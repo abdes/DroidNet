@@ -188,6 +188,7 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
     /// If a <see cref="ChangeSet" /> is started while the <see cref="HistoryKeeper" /> is not in the <see cref="States.Idle" />
     /// state.
     /// </exception>
+    [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "only valid states are Undoing and Redoing")]
     public void BeginChangeSet(object key)
     {
         this.isCollectingChangesCounter++;
@@ -210,8 +211,7 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
                 this.undoStack.Push(this.currentChangeSet);
                 break;
 
-            case States.Committing:
-            case States.RollingBack:
+            default:
                 throw new InvalidOperationException($"Invalid state {this.State} to start a new change set");
         }
 

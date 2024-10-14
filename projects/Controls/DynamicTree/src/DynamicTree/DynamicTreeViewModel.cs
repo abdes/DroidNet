@@ -82,7 +82,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     }
 
     // TODO: should add events for item add, delete, move to different parent
-    protected async Task RemoveItem(ITreeItem item)
+    protected async Task RemoveItem(ITreeItem item, bool updateSelection = true)
     {
         var removeAtIndex = this.ShownItems.IndexOf(item);
         if (removeAtIndex == -1)
@@ -97,6 +97,11 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         if (!eventArgs.Proceed)
         {
             return;
+        }
+
+        if (updateSelection)
+        {
+            this.SelectionModel?.ClearSelection();
         }
 
         // Remove the item's children from ShownItems in a single pass
@@ -124,6 +129,11 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         Debug.Assert(itemParent != null, "an item being removed from the tree always has a parent");
         await itemParent.RemoveChildAsync(item).ConfigureAwait(false);
         this.ShownItems.RemoveAt(removeAtIndex);
+
+        if (updateSelection)
+        {
+            this.UpdateSelectionAfterRemoval(removeAtIndex, 1);
+        }
 
         this.ItemRemoved?.Invoke(
             this,
@@ -167,10 +177,43 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             this.SelectionModel.ClearSelection();
 
             await this.RemoveItem(selectedItem).ConfigureAwait(false);
-
-            var newSelectedIndex = selectedIndex < this.ShownItems.Count ? selectedIndex : 0;
-            this.SelectionModel.SelectItemAt(newSelectedIndex);
         }
+    }
+
+    private void UpdateSelectionAfterRemoval(int lastSelectedIndex, int removedItemsCount)
+    {
+        var newSelectedIndex = this.ShownItems.Count != 0 ? 0 : -1;
+        switch (this.SelectionModel)
+        {
+            case SingleSelectionModel:
+                if (lastSelectedIndex < this.ShownItems.Count)
+                {
+                    newSelectedIndex = lastSelectedIndex;
+                }
+
+                break;
+
+            case MultipleSelectionModel:
+                // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
+                // item if the items collection is not empty, other wise leave the selection empty.
+                var tentativeIndex = lastSelectedIndex + 1 - removedItemsCount;
+                if (tentativeIndex > 0 && tentativeIndex < this.ShownItems.Count)
+                {
+                    newSelectedIndex = tentativeIndex;
+                }
+
+                break;
+
+            default:
+                return;
+        }
+
+        if (newSelectedIndex == -1)
+        {
+            return;
+        }
+
+        this.SelectionModel.SelectItemAt(newSelectedIndex);
     }
 
     private async Task RemoveMultipleSelectionItems()
@@ -201,23 +244,13 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
                     list.Add(item);
                     return list;
                 })
-            .Select(async item => await this.RemoveItem(item).ConfigureAwait(false));
+            .Select(async item => await this.RemoveItem(item, updateSelection: false).ConfigureAwait(false));
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
         var removedItemsCount = originalShownItemsCount - this.ShownItems.Count;
 
-        // Select the next item after the last index in selectedIndices if it's valid, otherwise, select the first
-        // item if the items collection is not empty, other wise leave the selection empty.
-        var newSelectedIndex = selectedIndices[0] + 1 - removedItemsCount;
-        if (newSelectedIndex > 0 && newSelectedIndex < this.ShownItems.Count)
-        {
-            this.SelectionModel.SelectItemAt(newSelectedIndex);
-        }
-        else if (this.ShownItems.Count > 0)
-        {
-            this.SelectionModel.SelectItemAt(0);
-        }
+        this.UpdateSelectionAfterRemoval(selectedIndices[0], removedItemsCount);
     }
 
     [RelayCommand]

@@ -50,11 +50,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
-        // TODO: activate batch collection of undo changes
+        UndoRedo.Default[this].BeginChangeSet("Remove Selected Items");
         await base.RemoveSelectedItems().ConfigureAwait(false);
-
-        // TODO: finish batch collection of undo changes
-        _ = 1;
+        UndoRedo.Default[this].EndChangeSet();
     }
 
     private void OnItemAdded(object? sender, ItemAddedEventArgs args)
