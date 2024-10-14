@@ -25,7 +25,9 @@ public sealed partial class RoutedNavigationView
         this.InitializeComponent();
 
         this.Resources[IndexToNavigationItemConverterKey]
-            = new IndexToNavigationItemConverter(this.NavigationView, this.ViewModel!.AllItems.Cast<object>().ToList());
+            = new IndexToNavigationItemConverter(
+                this.NavigationView,
+                () => this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

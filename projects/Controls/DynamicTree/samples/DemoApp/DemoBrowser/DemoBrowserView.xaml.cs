@@ -23,7 +23,9 @@ public sealed partial class DemoBrowserView
         this.InitializeComponent();
 
         this.Resources[IndexToNavigationItemConverterKey]
-            = new IndexToNavigationItemConverter(this.NavigationView, this.ViewModel!.AllItems.Cast<object>().ToList());
+            = new IndexToNavigationItemConverter(
+                this.NavigationView,
+                () => this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
     public object? SettingsItem => this.NavigationView.SettingsItem;

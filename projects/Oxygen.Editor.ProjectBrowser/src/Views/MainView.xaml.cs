@@ -28,7 +28,7 @@ public sealed partial class MainView
 
         this.Resources[IndexToNavigationItemConverterKey] = new IndexToNavigationItemConverter(
             this.NavigationView,
-            this.ViewModel!.AllItems.Cast<object>().ToList());
+            () => this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
