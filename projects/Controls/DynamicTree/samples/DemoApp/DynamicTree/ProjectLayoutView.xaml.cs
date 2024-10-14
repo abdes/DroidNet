@@ -48,4 +48,12 @@ public sealed partial class ProjectLayoutView
 
         this.ViewModel!.RedoCommand.Execute(parameter: null);
     }
+
+    private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+    }
 }
