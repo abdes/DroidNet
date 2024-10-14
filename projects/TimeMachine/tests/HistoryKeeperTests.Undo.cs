@@ -25,14 +25,25 @@ public partial class HistoryKeeperTests
     {
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
-        var change = new Mock<IChange>();
-        historyKeeper.AddChange(change.Object);
 
         // Act
+        Action();
         historyKeeper.Undo();
 
         // Assert
-        historyKeeper.RedoStack.Should().ContainSingle().Which.Should().Be(change.Object);
+        historyKeeper.RedoStack.Should().ContainSingle();
+
+        void Action()
+        {
+            _ = 1;
+            historyKeeper.AddChange("undo = reset", ReverseAction);
+        }
+
+        void ReverseAction()
+        {
+            _ = 0;
+            historyKeeper.AddChange("redo = set", Action);
+        }
     }
 
     [TestMethod]
@@ -153,17 +164,27 @@ public partial class HistoryKeeperTests
     {
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
-        var changeSet = new Mock<ChangeSet>();
-        historyKeeper.AddChange(new SimpleAction(() => _ = 1) { Key = "action" });
-
         using var monitoredSubject = historyKeeper.Monitor();
 
         // Act
+        Action();
         historyKeeper.Undo();
 
         // Assert
         monitoredSubject.Should().Raise("UndoStackChanged");
         monitoredSubject.Should().Raise("RedoStackChanged");
+
+        void ReverseAction()
+        {
+            _ = 0;
+            historyKeeper.AddChange("redo = set", Action);
+        }
+
+        void Action()
+        {
+            _ = 1;
+            historyKeeper.AddChange("undo = reset", ReverseAction);
+        }
     }
 
     [TestMethod]
@@ -207,8 +228,9 @@ public partial class HistoryKeeperTests
     {
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
-        var changeSet = new Mock<ChangeSet>();
-        historyKeeper.AddChange(new SimpleAction(() => _ = 1) { Key = "action" });
+
+        Action();
+
         historyKeeper.Undo();
         historyKeeper.CanRedo.Should().BeTrue();
 
@@ -220,5 +242,17 @@ public partial class HistoryKeeperTests
         // Assert
         monitoredSubject.Should().Raise("RedoStackChanged");
         monitoredSubject.Should().Raise("UndoStackChanged");
+
+        void ReverseAction()
+        {
+            _ = 0;
+            historyKeeper.AddChange("redo = set", Action);
+        }
+
+        void Action()
+        {
+            _ = 1;
+            historyKeeper.AddChange("undo = reset", ReverseAction);
+        }
     }
 }

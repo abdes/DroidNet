@@ -19,6 +19,8 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
     private readonly Stack<ITransaction> transactions = new();
 
     private readonly WeakReference root = new(root);
+    private int isCollectingChangesCounter;
+    private ChangeSet? currentChangeSet;
 
     public event EventHandler? UndoStackChanged;
 
@@ -87,21 +89,30 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
 
     public virtual void AddChange(IChange change)
     {
-        if (this.State == States.Undoing)
-        {
-            this.redoStack.Push(change);
-            this.OnRedoStackChanged();
-            return;
-        }
-
-        if (this.State != States.Redoing)
+        // A new change, unrelated to the Undo/Redo stack unqinding should reset the Redo stack
+        if (this.State is not (States.Undoing or States.Redoing))
         {
             this.redoStack.Clear();
             this.OnRedoStackChanged();
         }
 
-        this.undoStack.Push(change);
-        this.OnUndoStackChanged();
+        if (this.currentChangeSet is not null)
+        {
+            // We are collecting all changes in the current change set
+            this.currentChangeSet.Add(change);
+            return;
+        }
+
+        if (this.State == States.Undoing)
+        {
+            this.redoStack.Push(change);
+            this.OnRedoStackChanged();
+        }
+        else
+        {
+            this.undoStack.Push(change);
+            this.OnUndoStackChanged();
+        }
     }
 
     /// <summary>
@@ -119,10 +130,12 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
             return;
         }
 
+        this.OnUndoStackChanged();
+
         using (new StateTransition<States>(this, States.Undoing))
+        using (new ChangeSetUndoRedo(this, lastChange))
         {
             lastChange.Apply();
-            this.OnUndoStackChanged();
         }
     }
 
@@ -141,10 +154,12 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
             return;
         }
 
+        this.OnRedoStackChanged();
+
         using (new StateTransition<States>(this, States.Redoing))
+        using (new ChangeSetUndoRedo(this, lastChange))
         {
             lastChange.Apply();
-            this.OnRedoStackChanged();
         }
     }
 
@@ -160,6 +175,62 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
 
         this.redoStack.Clear();
         this.OnRedoStackChanged();
+    }
+
+    /// <summary>
+    /// Tells the <see cref="HistoryKeeper" /> that all subsequent changes should be part of a single <see cref="ChangeSet" />
+    /// until the next call to <see cref="EndChangeSet" />.
+    /// </summary>
+    /// <param name="key">
+    /// An object attached to the created <see cref="ChangeSet" /> to help identify it.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// If a <see cref="ChangeSet" /> is started while the <see cref="HistoryKeeper" /> is not in the <see cref="States.Idle" />
+    /// state.
+    /// </exception>
+    public void BeginChangeSet(object key)
+    {
+        this.isCollectingChangesCounter++;
+        if (this.isCollectingChangesCounter != 1)
+        {
+            return;
+        }
+
+        this.currentChangeSet = new ChangeSet() { Key = key };
+
+        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+        switch (this.State)
+        {
+            case States.Undoing:
+                this.redoStack.Push(this.currentChangeSet);
+                break;
+
+            case States.Redoing:
+            case States.Idle:
+                this.undoStack.Push(this.currentChangeSet);
+                break;
+
+            case States.Committing:
+            case States.RollingBack:
+                throw new InvalidOperationException($"Invalid state {this.State} to start a new change set");
+        }
+
+        this.OnUndoStackChanged();
+    }
+
+    public void EndChangeSet()
+    {
+        this.isCollectingChangesCounter--;
+
+        if (this.isCollectingChangesCounter < 0)
+        {
+            this.isCollectingChangesCounter = 0;
+        }
+
+        if (this.isCollectingChangesCounter == 0)
+        {
+            this.currentChangeSet = null;
+        }
     }
 
     public ITransaction BeginTransaction(object key)
@@ -225,4 +296,39 @@ public class HistoryKeeper(object root, ITransactionFactory? transactionFactory 
     private void OnUndoStackChanged() => this.UndoStackChanged?.Invoke(this, EventArgs.Empty);
 
     private void OnRedoStackChanged() => this.RedoStackChanged?.Invoke(this, EventArgs.Empty);
+
+    private sealed class ChangeSetUndoRedo : IDisposable
+    {
+        private readonly HistoryKeeper? keeper;
+
+        private bool disposed;
+
+        public ChangeSetUndoRedo(HistoryKeeper keeper, IChange lastChange)
+        {
+            if (lastChange is not ChangeSet)
+            {
+                return;
+            }
+
+            this.keeper = keeper;
+            keeper.BeginChangeSet(lastChange.Key);
+        }
+
+        public void Dispose() => this.Dispose(disposing: true);
+
+        private void Dispose(bool disposing)
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            if (disposing && this.keeper is not null)
+            {
+                this.keeper.EndChangeSet();
+            }
+
+            this.disposed = true;
+        }
+    }
 }
