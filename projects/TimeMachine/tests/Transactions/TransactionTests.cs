@@ -21,16 +21,6 @@ public class TransactionTests
     private readonly object key = new();
 
     [TestMethod]
-    public void Constructor_ShouldBeginTransaction_WhenOwnerIsNotNull()
-    {
-        // Act
-        _ = new Transaction(this.mockTransactionManager.Object, this.key);
-
-        // Assert
-        this.mockTransactionManager.Verify(m => m.BeginTransaction(this.key), Times.Once);
-    }
-
-    [TestMethod]
     public void Dispose_ShouldCommitTransaction_WhenCalled()
     {
         // Arrange

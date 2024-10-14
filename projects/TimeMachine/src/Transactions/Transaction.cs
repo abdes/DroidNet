@@ -24,7 +24,6 @@ public class Transaction : ITransaction
     {
         this.changes = new ChangeSet { Key = key };
         this.owner = owner;
-        this.owner.BeginTransaction(key);
     }
 
     public IEnumerable<IChange> Changes => this.changes.Changes;
