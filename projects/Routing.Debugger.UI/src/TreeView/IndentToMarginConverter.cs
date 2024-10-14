@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-public class IndentToMarginConverter : IValueConverter
+/// <summary>
+/// A converter that would provide the <see cref="Thickness">margin</see> corresponding to an item's depth in a tree.
+/// </summary>
+public partial class IndentToMarginConverter : IValueConverter
 {
     public Thickness InitialMargin { get; set; } = new(0);
 

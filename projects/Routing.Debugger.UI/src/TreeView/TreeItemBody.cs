@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class TreeItemBody : ContentPresenter
+/// <summary>
+/// A styled component for the body part of a tree item.
+/// </summary>
+public partial class TreeItemBody : ContentPresenter
 {
     public TreeItemBody() => this.Style = (Style)Application.Current.Resources[nameof(TreeItemBody)];
 }

@@ -6,7 +6,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 using Microsoft.UI.Xaml.Data;
 
-public class ExpanderIconConverter : IValueConverter
+/// <summary>
+/// A converter to get the icon to be used for an expander based on whether it is expanded or not.
+/// </summary>
+public partial class ExpanderIconConverter : IValueConverter
 {
     private const string GlyphChevronDown = "\uE972";
     private const string GlyphChevronUp = "\uE70E";

@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class GridForItemHeader : Grid
+/// <summary>
+/// A styled <see cref="Grid" /> for the items header.
+/// </summary>
+public partial class GridForItemHeader : Grid
 {
     public GridForItemHeader()
     {

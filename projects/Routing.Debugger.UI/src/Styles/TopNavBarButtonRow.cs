@@ -7,7 +7,10 @@ namespace DroidNet.Routing.Debugger.UI.Styles;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-public class TopNavBarButtonRow : StackPanel
+/// <summary>
+/// A styled <see cref="StackPanel" /> to be used for a row of buttons in the top navigation bar.
+/// </summary>
+public partial class TopNavBarButtonRow : StackPanel
 {
     public TopNavBarButtonRow() => this.Style = (Style)Application.Current.Resources[nameof(TopNavBarButtonRow)];
 }

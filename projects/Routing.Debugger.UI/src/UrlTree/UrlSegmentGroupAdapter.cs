@@ -8,9 +8,11 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Debugger.UI.TreeView;
 
-/// <summary>Adapter for a <see cref="IUrlSegmentGroup" /> to be used inside a <see cref="UrlTreeView" /> control.</summary>
+/// <summary>
+/// Adapter for a <see cref="IUrlSegmentGroup" /> to be used inside a <see cref="UrlTreeView" /> control.
+/// </summary>
 /// <param name="item">The item to wrap.</param>
-public class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAdapterBase, ITreeItem<IUrlSegmentGroup>
+public partial class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAdapterBase, ITreeItem<IUrlSegmentGroup>
 {
     private readonly OutletName outlet;
 
