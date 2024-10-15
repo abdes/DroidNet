@@ -9,4 +9,6 @@ public static class Constants
     public const string ProjectFileName = "Project.oxy";
 
     public const string ScenesFolderName = "Scenes";
+
+    public const string SceneFileExtension = ".scene";
 }

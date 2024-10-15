@@ -23,4 +23,8 @@ public interface IProjectSource
     Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath);
 
     Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
+
+    Task LoadProjectScenesAsync(Project project);
+
+    Task<Scene?> LoadSceneAsync(string sceneName, string projectLocation);
 }

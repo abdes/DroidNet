@@ -4,10 +4,13 @@
 
 namespace Oxygen.Editor.Projects;
 
+using System.Text.Json.Serialization;
+
 public class NamedItem
 {
     private string name;
 
+    [JsonConstructor]
     protected NamedItem(string name)
     {
         ValidateName(name);

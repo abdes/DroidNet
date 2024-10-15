@@ -4,9 +4,18 @@
 
 namespace Oxygen.Editor.Projects;
 
-public class Scene(string name, Project project) : NamedItem(name)
-{
-    public Project Project => project;
+using System.Text.Json.Serialization;
 
-    public IList<Entity> Entities { get; set; } = [];
+[method: JsonConstructor]
+public class Scene(string name) : NamedItem(name)
+{
+    [JsonIgnore]
+    public Project? Project { get; init; }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "MA0016:Prefer using collection abstraction instead of implementation",
+        Justification = "need AddRange from List")]
+    [JsonInclude]
+    public List<Entity> Entities { get; private set; } = [];
 }

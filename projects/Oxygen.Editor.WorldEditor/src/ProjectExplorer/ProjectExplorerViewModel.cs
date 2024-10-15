@@ -12,7 +12,6 @@ using DroidNet.Controls;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.WorldEditor.Views;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectExplorerView" /> view.
@@ -223,7 +222,10 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         }
 
         var newScene = new SceneAdapter(
-            new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}", this.Project.AttachedObject),
+            new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}")
+            {
+                Project = this.Project.AttachedObject,
+            },
             this.projectManager);
 
         await this.AddItem(this.Project, newScene).ConfigureAwait(false);
