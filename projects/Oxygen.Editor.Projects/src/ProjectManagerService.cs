@@ -52,13 +52,11 @@ public partial class ProjectManagerService : IProjectManagerService
         }
     }
 
-    public async Task<bool> LoadProjectScenesAsync(IProject project)
+    public async Task<bool> LoadProjectScenesAsync(Project project)
     {
         try
         {
-            // TODO: Populate the project's list of scenes
-            await Task.CompletedTask.ConfigureAwait(false);
-
+            await this.projectSource.LoadProjectScenesAsync(project).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
@@ -70,17 +68,33 @@ public partial class ProjectManagerService : IProjectManagerService
 
     public async Task<bool> LoadSceneEntitiesAsync(Scene scene)
     {
+        if (scene.Project is not { ProjectInfo.Location: not null })
+        {
+            this.CouldNotLoadSceneEntities(scene.Name, "null project or project location");
+            return false;
+        }
+
         try
         {
-            // TODO: Load the scene from its corresponding file
-            await Task.CompletedTask.ConfigureAwait(false);
+            var loadedScene = await this.projectSource.LoadSceneAsync(
+                    scene.Name,
+                    scene.Project.ProjectInfo.Location)
+                .ConfigureAwait(false);
+
+            if (loadedScene is null)
+            {
+                return false;
+            }
+
+            scene.Entities.Clear();
+            scene.Entities.AddRange(loadedScene.Entities);
 
             return true;
         }
         catch (Exception ex)
         {
-            this.CouldNotLoadScene(scene.Project.ProjectInfo.Location ?? string.Empty, ex.Message);
-            return await Task.FromResult(true).ConfigureAwait(false);
+            this.CouldNotLoadSceneEntities(scene.Project.ProjectInfo.Location, ex.Message);
+            return false;
         }
     }
 
@@ -98,5 +112,5 @@ public partial class ProjectManagerService : IProjectManagerService
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Could not load scene from `{location}`; {error}")]
-    partial void CouldNotLoadScene(string location, string error);
+    partial void CouldNotLoadSceneEntities(string location, string error);
 }

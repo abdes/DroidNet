@@ -18,7 +18,7 @@ public interface IProjectManagerService
 
     Task<bool> LoadProjectAsync(IProjectInfo projectInfo);
 
-    Task<bool> LoadProjectScenesAsync(IProject project);
+    Task<bool> LoadProjectScenesAsync(Project project);
 
     Task<bool> LoadSceneEntitiesAsync(Scene scene);
 }

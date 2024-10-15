@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.Projects.Storage;
 
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -58,7 +59,13 @@ public partial class LocalProjectsSource : IProjectSource
             var projectFile = await projectFolder.GetDocumentAsync(Constants.ProjectFileName)
                 .ConfigureAwait(false);
             var json = await projectFile.ReadAllTextAsync().ConfigureAwait(false);
-            return JsonSerializer.Deserialize<ProjectInfo>(json, this.jsonOptions);
+            var projectInfo = JsonSerializer.Deserialize<ProjectInfo>(json, this.jsonOptions);
+            if (projectInfo != null)
+            {
+                projectInfo.Location = projectFolderPath;
+            }
+
+            return projectInfo;
         }
         catch (Exception ex)
         {
@@ -66,6 +73,40 @@ public partial class LocalProjectsSource : IProjectSource
         }
 
         return null;
+    }
+
+    public async Task<Scene?> LoadSceneAsync(string sceneName, string projectLocation)
+    {
+        try
+        {
+            var projectFolder = await this.storage.GetFolderFromPathAsync(projectLocation)
+                .ConfigureAwait(false);
+            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
+            var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
+                .ConfigureAwait(false);
+            if (!await sceneFile.ExistsAsync().ConfigureAwait(false))
+            {
+                this.CouldNotLoadScene(sceneFile.Location, "file does not exist");
+                return null;
+            }
+
+            var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(false);
+            var loadedScene = JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
+            if (loadedScene is null)
+            {
+                this.CouldNotLoadScene(sceneFile.Location, "JSON deserialization failed");
+            }
+
+            return loadedScene;
+        }
+        catch (Exception ex)
+        {
+            var sceneLocation = this.storage.NormalizeRelativeTo(
+                projectLocation,
+                $"{Constants.ScenesFolderName}/{sceneName}{Constants.SceneFileExtension}");
+            this.CouldNotLoadScene(sceneLocation, ex.Message);
+            return null;
+        }
     }
 
     public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
@@ -91,6 +132,28 @@ public partial class LocalProjectsSource : IProjectSource
         return false;
     }
 
+    public async Task LoadProjectScenesAsync(Project project)
+    {
+        if (project.ProjectInfo.Location == null)
+        {
+            throw new InvalidOperationException("cannot load project scenes for a project with null location");
+        }
+
+        var projectFolder
+            = await this.storage.GetFolderFromPathAsync(project.ProjectInfo.Location).ConfigureAwait(false);
+        var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
+        project.Scenes.Clear();
+
+        var scenes = scenesFolder.GetDocumentsAsync()
+            .Where(d => d.Name.EndsWith(Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase));
+        await foreach (var item in scenes.ConfigureAwait(false))
+        {
+            var sceneName = item.Name[..item.Name.LastIndexOf('.')];
+            var scene = new Scene(sceneName) { Project = project };
+            project.Scenes.Add(scene);
+        }
+    }
+
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Could not load project info from `{location}`; {error}")]
@@ -100,4 +163,9 @@ public partial class LocalProjectsSource : IProjectSource
         Level = LogLevel.Error,
         Message = "Could not load project info from `{location}`; {error}")]
     partial void CouldNotLoadProjectInfo(string location, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not load scene from `{location}`; {error}")]
+    partial void CouldNotLoadScene(string location, string error);
 }
