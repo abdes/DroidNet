@@ -7,6 +7,7 @@ namespace DroidNet.Controls;
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 /// <summary>
@@ -158,6 +159,11 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     protected abstract Task LoadChildren();
 
     /// <summary>
+    /// Remove all child elements from the collection of children.
+    /// </summary>
+    protected void ClearChildren() => this.children.Clear();
+
+    /// <summary>
     /// Adds a child item to the children collection synchronously. Used internally, and by derived classes, to populate the
     /// collection when items are already being loaded. Use <see cref="AddChildAsync" /> for regular operations to add a child
     /// item.
@@ -197,6 +203,10 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// <returns>A task representing the asynchronous operation.</returns>
     private async Task<ReadOnlyObservableCollection<ITreeItem>> InitializeChildrenCollectionAsync()
     {
+        Debug.Assert(
+            this.children.Count == 0,
+            "Ensure that the children collection is loaded before you add things to it");
+
         await this.LoadChildren().ConfigureAwait(false);
         return new ReadOnlyObservableCollection<ITreeItem>(this.children);
     }
