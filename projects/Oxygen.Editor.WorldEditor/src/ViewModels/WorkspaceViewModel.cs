@@ -12,6 +12,7 @@ using DroidNet.Hosting.Generators;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
 /// The view model for the World Editor main view.

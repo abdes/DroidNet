@@ -33,9 +33,15 @@ using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Config;
+using Oxygen.Editor.Projects.Storage;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell;
+using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
+using Oxygen.Editor.WorldEditor.Views;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -178,14 +184,18 @@ public static partial class Program
             serviceKey: Uri.UriSchemeFile);
         sp.Container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
 
+        // TODO: use keyed registration and parameter name to key mappings
+        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
+        sp.Container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
         sp.Container.Register<LocalProjectsSource>(Reuse.Singleton);
         sp.Container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
         sp.Container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+        sp.Container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 
         // Register the project instance using a delegate that will request the currently open project from the project
         // browser service.
         sp.Container.RegisterDelegate(
-            resolverContext => resolverContext.Resolve<IProjectBrowserService>().CurrentProject);
+            resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
 
         /*
          * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
@@ -210,6 +220,8 @@ public static partial class Program
         // TODO(abdes): refactor into extension method
         sp.Container.Register<DockPanelViewModel>(Reuse.Transient);
         sp.Container.Register<DockPanel>(Reuse.Transient);
+        sp.Container.Register<ProjectExplorerViewModel>(Reuse.Transient);
+        sp.Container.Register<ProjectExplorerView>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(
@@ -274,14 +286,20 @@ public static partial class Program
         var projectBrowserConfigPath = Path.GetFullPath(
             $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}/Config/ProjectBrowser.config.json",
             Finder.ProgramData);
+        var categoriesConfigPath = Path.GetFullPath(
+            $"{Assembly.GetAssembly(typeof(ProjectsSettings))!.GetName().Name}/Config/Categories.config.json",
+            Finder.ProgramData);
+
         _ = config.AddJsonFile(localSettingsPath, optional: true)
-            .AddJsonFile(projectBrowserConfigPath);
+            .AddJsonFile(projectBrowserConfigPath)
+            .AddJsonFile(categoriesConfigPath);
     }
 
     private static void ConfigureOptionsPattern(HostBuilderContext context, IServiceCollection sc)
     {
         _ = sc.Configure<ProjectBrowserSettings>(
             context.Configuration.GetSection(ProjectBrowserSettings.ConfigSectionName));
+        _ = sc.Configure<ProjectsSettings>(context.Configuration.GetSection(ProjectsSettings.ConfigSectionName));
         _ = sc.ConfigureWritable<ThemeSettings>(
             context.Configuration.GetSection(nameof(ThemeSettings)),
             Path.Combine(Finder.LocalAppData, "LocalSettings.json"));
