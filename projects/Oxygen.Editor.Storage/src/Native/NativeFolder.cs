@@ -273,4 +273,34 @@ public class NativeFolder : IFolder
             yield return fileItem;
         }
     }
+
+    public async Task<bool> HasItemsAsync()
+    {
+        // Ensure the directory exists before starting enumeration
+        if (!await this.ExistsAsync().ConfigureAwait(false))
+        {
+            throw new StorageException($"cannot enumerate folder at [{this.Location}] if it does not exist");
+        }
+
+        var fs = this.StorageProvider.FileSystem;
+        try
+        {
+            var directoryInfo = fs.DirectoryInfo.New(this.Location);
+
+            // Check for files, including hidden ones
+            var files = directoryInfo.GetFiles("*", SearchOption.TopDirectoryOnly);
+            if (files.Length > 0)
+            {
+                return true;
+            }
+
+            // Check for directories, including hidden ones
+            var directories = directoryInfo.GetDirectories("*", SearchOption.TopDirectoryOnly);
+            return directories.Length > 0;
+        }
+        catch (Exception ex)
+        {
+            throw new StorageException($"could not check if folder at location [{this.Location}] has items", ex);
+        }
+    }
 }
