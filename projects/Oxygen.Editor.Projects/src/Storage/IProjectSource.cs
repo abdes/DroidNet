@@ -2,10 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
-
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.Storage;
+namespace Oxygen.Editor.Projects.Storage;
 
 /// <summary>
 /// The projects source can be used to enumerate projects available from a certain
@@ -23,13 +20,7 @@ using Oxygen.Editor.Storage;
 /// </para>
 public interface IProjectSource
 {
-    string[] CommonProjectLocations { get; }
-
     Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath);
-
-    Task<IFolder?> CreateNewProjectFolderAsync(string projectName, string atLocationPath);
-
-    bool CanCreateProject(string projectName, string atLocationPath);
 
     Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
 }

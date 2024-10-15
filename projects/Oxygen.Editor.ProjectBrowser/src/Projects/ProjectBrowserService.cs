@@ -23,28 +23,46 @@ using Oxygen.Editor.Storage.Native;
 public class ProjectBrowserService : IProjectBrowserService
 {
     private readonly IPathFinder finder;
-    private readonly IProjectSource projectSource;
+    private readonly IProjectManagerService projectManager;
     private readonly NativeStorageProvider localStorage;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
 
-    public ProjectBrowserService(IProjectSource source, IPathFinder finder, NativeStorageProvider localStorage)
+    public ProjectBrowserService(
+        IProjectManagerService projectManager,
+        IPathFinder finder,
+        IStorageProvider localStorage)
     {
-        this.projectSource = source;
+        this.projectManager = projectManager;
         this.finder = finder;
-        this.localStorage = localStorage;
+        this.localStorage = localStorage as NativeStorageProvider ?? throw new ArgumentException(
+            $"{nameof(ProjectBrowserService)} requires a {nameof(NativeStorageProvider)}",
+            nameof(localStorage));
 
         this.lazyLocations = new Lazy<Task<KnownLocation[]>>(this.InitializeKnownLocationsAsync);
     }
 
-    public IProject? CurrentProject { get; private set; }
+    public async Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath)
+    {
+        // Containing folder must exist
+        if (!await this.localStorage.FolderExistsAsync(atLocationPath).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        // Project folder should not exist, but if it does, it should be empty
+        var projectFolderPath = this.localStorage.NormalizeRelativeTo(atLocationPath, projectName);
+        var projectFolder = await this.localStorage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(false);
+        return !await projectFolder.ExistsAsync().ConfigureAwait(false) ||
+               !await projectFolder.HasItemsAsync().ConfigureAwait(false);
+    }
 
     public async Task<bool> NewProjectFromTemplate(
         ITemplateInfo templateInfo,
         string projectName,
         string atLocationPath)
     {
-        if (!this.CanCreateProject(projectName, atLocationPath))
+        if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(false))
         {
             Debug.WriteLine($"Cannot create a new project with name `{projectName}` at: {atLocationPath}");
             return false;
@@ -62,23 +80,21 @@ public class ProjectBrowserService : IProjectBrowserService
         try
         {
             // Create project folder
-            projectFolder = await this.projectSource.CreateNewProjectFolderAsync(projectName, atLocationPath)
+            projectFolder = await this.localStorage
+                .GetFolderFromPathAsync(this.localStorage.NormalizeRelativeTo(atLocationPath, projectName))
                 .ConfigureAwait(false);
-            if (projectFolder == null)
-            {
-                return false;
-            }
+            await projectFolder.CreateAsync().ConfigureAwait(false);
 
             // Copy all content from template to the new project folder
             CopyTemplateAssetsToProject();
 
             // Load the project info, update it, and save it
             var projectInfo
-                = await this.projectSource.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(false);
+                = await this.projectManager.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(false);
             if (projectInfo != null)
             {
                 projectInfo.Name = projectName;
-                if (await this.projectSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
+                if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
                 {
                     // Update the recently used project entry for the project being saved
                     await TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
@@ -140,23 +156,6 @@ public class ProjectBrowserService : IProjectBrowserService
         }
     }
 
-    public async Task<bool> LoadProjectInfoAsync(string location)
-    {
-        // Load the project info, update it, and save it
-        var projectInfo
-            = await this.projectSource.LoadProjectInfoAsync(location).ConfigureAwait(false);
-        if (projectInfo != null)
-        {
-            await TryUpdateRecentUsageAsync(location).ConfigureAwait(false);
-            this.CurrentProject = new Project(projectInfo);
-            return true;
-        }
-
-        return false;
-    }
-
-    public Task<bool> LoadProjectAsync(IProjectInfo projectInfo) => throw new NotImplementedException();
-
     public IList<QuickSaveLocation> GetQuickSaveLocations()
     {
         using var state = Ioc.Default.CreateScope().ServiceProvider.GetRequiredService<PersistentState>();
@@ -188,7 +187,7 @@ public class ProjectBrowserService : IProjectBrowserService
                     break;
                 }
 
-                var projectInfo = await this.projectSource.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
+                var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
                 if (projectInfo != null)
                 {
                     projectInfo.LastUsedOn = item.LastUsedOn;
@@ -213,9 +212,6 @@ public class ProjectBrowserService : IProjectBrowserService
 
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
         => await this.lazyLocations.Value.ConfigureAwait(false);
-
-    public bool CanCreateProject(string projectName, string atLocationPath)
-        => this.projectSource.CanCreateProject(projectName, atLocationPath);
 
     private static async Task TryUpdateRecentUsageAsync(string location)
     {

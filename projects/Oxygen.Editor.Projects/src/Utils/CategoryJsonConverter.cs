@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Utils;
+namespace Oxygen.Editor.Projects.Utils;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Config;
 
-public sealed class CategoryJsonConverter(ProjectBrowserSettings settings) : JsonConverter<ProjectCategory>
+public sealed class CategoryJsonConverter(ProjectsSettings settings) : JsonConverter<ProjectCategory>
 {
     public override ProjectCategory Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

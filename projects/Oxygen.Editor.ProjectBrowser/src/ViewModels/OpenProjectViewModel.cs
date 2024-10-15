@@ -15,6 +15,7 @@ using DroidNet.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 #pragma warning disable IDE0001 // Simplify Names
@@ -30,6 +31,7 @@ public partial class OpenProjectViewModel : ObservableObject
 
     private readonly object fileListLock = new();
     private readonly IProjectBrowserService projectBrowserService;
+    private readonly IProjectManagerService projectManager;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly IRouter router;
 
@@ -57,13 +59,15 @@ public partial class OpenProjectViewModel : ObservableObject
     public OpenProjectViewModel(
         IRouter router,
         NativeStorageProvider storageProvider,
-        IProjectBrowserService projectBrowserService)
+        IProjectBrowserService projectBrowserService,
+        IProjectManagerService projectManager)
     {
         this.dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         this.router = router;
 
         this.storageProvider = storageProvider;
         this.projectBrowserService = projectBrowserService;
+        this.projectManager = projectManager;
 
         BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
@@ -132,13 +136,18 @@ public partial class OpenProjectViewModel : ObservableObject
 
     public async Task<bool> OpenProjectFile(string location)
     {
-        var success = await this.projectBrowserService.LoadProjectInfoAsync(location!).ConfigureAwait(false);
-        if (success)
+        var projectInfo = await this.projectManager.LoadProjectInfoAsync(location!).ConfigureAwait(false);
+        if (projectInfo is null)
         {
-            success = this.dispatcherQueue.TryEnqueue(() => this.router.Navigate("/we", new FullNavigation()));
+            return false;
         }
 
-        return success;
+        if (!await this.projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return this.dispatcherQueue.TryEnqueue(() => this.router.Navigate("/we", new FullNavigation()));
     }
 
     public void ApplyFilter(string pattern)

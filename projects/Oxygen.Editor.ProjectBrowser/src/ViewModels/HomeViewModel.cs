@@ -26,14 +26,18 @@ using Oxygen.Editor.Projects;
 /// <param name="templateService">
 /// The <see cref="TemplatesService" /> configured for the application. Injected.
 /// </param>
-/// <param name="projectBrowserService">
+/// <param name="projectBrowser">
 /// The <see cref="IProjectBrowserService" /> configured for the application. Injected.
+/// </param>
+/// <param name="projectManager">
+/// The <see cref="IProjectManagerService" /> configured for the application. Injected.
 /// </param>
 [InjectAs(ServiceLifetime.Singleton)]
 public partial class HomeViewModel(
     IRouter router,
     ITemplatesService templateService,
-    IProjectBrowserService projectBrowserService) : ObservableObject, IRoutingAware
+    IProjectBrowserService projectBrowser,
+    IProjectManagerService projectManager) : ObservableObject, IRoutingAware
 {
     private readonly DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
@@ -51,14 +55,13 @@ public partial class HomeViewModel(
         Debug.WriteLine(
             $"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await projectBrowserService.NewProjectFromTemplate(template, projectName, location)
+        return await projectBrowser.NewProjectFromTemplate(template, projectName, location)
             .ConfigureAwait(true);
     }
 
     public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
     {
-        var success = await projectBrowserService.LoadProjectInfoAsync(projectInfo.Location!)
-            .ConfigureAwait(false);
+        var success = await projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(false);
         if (success)
         {
             success = this.dispatcherQueue.TryEnqueue(() => router.Navigate("/we", new FullNavigation()));
@@ -117,7 +120,7 @@ public partial class HomeViewModel(
         var recentlyUsedProjectDict = new Dictionary<IProjectInfo, IProjectInfo>();
 
         // Update existing items and add new items in the RecentProjects collection
-        await foreach (var projectInfo in projectBrowserService.GetRecentlyUsedProjectsAsync()
+        await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync()
                            .ConfigureAwait(true))
         {
             recentlyUsedProjectDict.Add(projectInfo, projectInfo);
