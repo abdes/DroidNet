@@ -159,4 +159,18 @@ public interface IFolder : IStorageItem
     /// cause of the failure.
     /// </exception>
     Task DeleteRecursiveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks if the folder has any items.
+    /// </summary>
+    /// <returns>
+    /// When this method completes successfully, it returns <see langword="true" /> if the folder has any documents or folders;
+    /// otherwise <see langword="false" />.
+    /// </returns>
+    /// <exception cref="StorageException">
+    /// The current folder does not exist, or the enumeration of the folder content failed.
+    /// The <see cref="Exception.InnerException">InnerException</see> property of the exception will indicate the root
+    /// cause of the failure.
+    /// </exception>
+    Task<bool> HasItemsAsync();
 }
