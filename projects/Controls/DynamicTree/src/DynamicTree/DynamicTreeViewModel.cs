@@ -50,6 +50,12 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
     protected async Task AddItem(ITreeItem parent, ITreeItem item)
     {
+        // Always expand the item before adding to to force the children collection to be fully loaded.
+        if (!parent.IsExpanded)
+        {
+            await this.ExpandItemAsync(parent).ConfigureAwait(false);
+        }
+
         // Fire the ItemBeingAdded event before any changes are made to the tree
         var eventArgs = new ItemBeingAddedEventArgs()
         {
@@ -67,14 +73,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         await parent.InsertChildAsync(0, item).ConfigureAwait(false);
         var newItemIndex = this.ShownItems.IndexOf(parent) + 1;
-        if (parent.IsExpanded)
-        {
-            this.ShownItems.Insert(newItemIndex, item);
-        }
-        else
-        {
-            await this.ExpandItemAsync(parent).ConfigureAwait(false);
-        }
+        this.ShownItems.Insert(newItemIndex, item);
 
         this.SelectionModel?.SelectItemAt(newItemIndex);
 
