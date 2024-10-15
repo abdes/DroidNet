@@ -208,14 +208,23 @@
                     <s:PanelCloseButton Command="{x:Bind ViewModel.CloseCommand}" />
                 </s:PanelButtonRow>
             </Grid>
-            <!--  TODO(abdes): use a tabbed view  -->
-            <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Dockables}">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="docking:IDockable">
-                        <ContentControl HorizontalContentAlignment="Stretch" Content="{x:Bind ViewModel, Converter={StaticResource VmToViewConverter}}" />
+
+            <TabView
+                Grid.Row="1"
+                VerticalAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                IsAddTabButtonVisible="False"
+                TabItemsSource="{x:Bind ViewModel.Dockables}"
+                TabWidthMode="SizeToContent">
+                <TabView.TabItemTemplate>
+                    <DataTemplate x:Key="DockableContentTemplate" x:DataType="docking:Dockable">
+                        <TabViewItem
+                            Content="{Binding Path=ViewModel, Converter={StaticResource VmToViewConverter}}"
+                            Header="{Binding Path=TabbedTitle}"
+                            IsClosable="False" />
                     </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                </TabView.TabItemTemplate>
+            </TabView>
 
             <Border
                 Grid.Row="1"
