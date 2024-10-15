@@ -4,11 +4,4 @@
 
 namespace Oxygen.Editor.Projects;
 
-using System.Collections.Generic;
-
-public interface IProject
-{
-    IProjectInfo ProjectInfo { get; }
-
-    IList<Scene> Scenes { get; }
-}
+public class Entity(string name) : NamedItem(name);

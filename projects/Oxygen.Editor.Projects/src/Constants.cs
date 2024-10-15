@@ -4,11 +4,9 @@
 
 namespace Oxygen.Editor.Projects;
 
-using System.Collections.Generic;
-
-public interface IProject
+public static class Constants
 {
-    IProjectInfo ProjectInfo { get; }
+    public const string ProjectFileName = "Project.oxy";
 
-    IList<Scene> Scenes { get; }
+    public const string ScenesFolderName = "Scenes";
 }

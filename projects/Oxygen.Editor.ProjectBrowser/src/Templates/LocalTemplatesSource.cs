@@ -7,19 +7,17 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
-using Oxygen.Editor.ProjectBrowser.Config;
-using Oxygen.Editor.ProjectBrowser.Utils;
+using Oxygen.Editor.Projects;
 
 public class LocalTemplatesSource(
     IFileSystem filesystem,
-    IOptions<ProjectBrowserSettings> settings)
+    IProjectManagerService projectManager)
     : ITemplatesSource
 {
     private readonly JsonSerializerOptions jsonSerializerOptions = new()
     {
         AllowTrailingCommas = true,
-        Converters = { new CategoryJsonConverter(settings.Value) },
+        Converters = { projectManager.CategoryJsonConverter },
     };
 
     /// <inheritdoc />

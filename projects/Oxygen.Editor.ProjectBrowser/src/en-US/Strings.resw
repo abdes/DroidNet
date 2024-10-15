@@ -6,7 +6,7 @@
     Version 2.0
 
     The primary goals of this format is to allow a simple XML format
-    that is mostly human-readable. The generation and parsing of the
+    that is mostly human readable. The generation and parsing of the
     various data types are done through the TypeConverter classes
     associated with the data types.
 
@@ -117,24 +117,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="PB_Category_Games" xml:space="preserve">
-    <value>Games</value>
-  </data>
-  <data name="PB_Category_Games_Description" xml:space="preserve">
-    <value>Start your adventure into game development with a blank project or with one of the existing templates for a specific type of game.</value>
-  </data>
-  <data name="PB_Category_Misc" xml:space="preserve">
-    <value>Misc</value>
-  </data>
-  <data name="PB_Category_Misc_Description" xml:space="preserve">
-    <value>Miscellaneous project templates.</value>
-  </data>
-  <data name="PB_Category_Visualization" xml:space="preserve">
-    <value>Visualization</value>
-  </data>
-  <data name="PB_Category_Visualization_Description" xml:space="preserve">
-    <value>Create stunning visualization for architectural models that you can import from a variety of sources.</value>
-  </data>
   <data name="PB_Template_Games_Blank_Description" xml:space="preserve">
     <value>A starting empty project with no code.</value>
   </data>

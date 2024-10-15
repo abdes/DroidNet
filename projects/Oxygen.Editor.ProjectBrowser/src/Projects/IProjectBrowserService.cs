@@ -9,15 +9,11 @@ using Oxygen.Editor.Projects;
 
 public interface IProjectBrowserService
 {
-    IProject? CurrentProject { get; }
-
     IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(CancellationToken cancellationToken = default);
 
+    Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath);
+
     Task<bool> NewProjectFromTemplate(ITemplateInfo templateInfo, string projectName, string atLocationPath);
-
-    Task<bool> LoadProjectInfoAsync(string location);
-
-    Task<bool> LoadProjectAsync(IProjectInfo projectInfo);
 
     IList<QuickSaveLocation> GetQuickSaveLocations();
 
