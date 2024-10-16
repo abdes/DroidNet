@@ -69,6 +69,7 @@ public class LocalProjectSourceTests
             Name = "name",
             Category = SampleCategory,
             Thumbnail = "Media/Preview.png",
+            Location = projectFolderPath,
         };
         const string json = /*lang=json,strict*/
             """
@@ -91,7 +92,7 @@ public class LocalProjectSourceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Should().BeEquivalentTo(projectInfo);
+        result.Should().BeEquivalentTo(projectInfo, opts => opts.Excluding(pi => pi.LastUsedOn));
     }
 
     [TestMethod]
