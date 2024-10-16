@@ -41,7 +41,6 @@ using Oxygen.Editor.Shell;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
-using Oxygen.Editor.WorldEditor.Views;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -146,6 +145,7 @@ public static partial class Program
     /// of Serilog's ILogger.
     /// </summary>
     /// <seealso href="https://nblumhardt.com/2021/06/customize-serilog-text-output/" />
+    /// TODO: https://github.com/serilog-contrib/serilog-sinks-richtextbox
     private static void ConfigureLogger() =>
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
