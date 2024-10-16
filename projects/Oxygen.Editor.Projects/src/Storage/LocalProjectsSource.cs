@@ -149,7 +149,7 @@ public partial class LocalProjectsSource : IProjectSource
         await foreach (var item in scenes.ConfigureAwait(false))
         {
             var sceneName = item.Name[..item.Name.LastIndexOf('.')];
-            var scene = new Scene(sceneName) { Project = project };
+            var scene = new Scene(project) { Name = sceneName };
             project.Scenes.Add(scene);
         }
     }

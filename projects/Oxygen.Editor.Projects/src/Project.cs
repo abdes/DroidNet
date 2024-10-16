@@ -4,9 +4,9 @@
 
 namespace Oxygen.Editor.Projects;
 
-public class Project(IProjectInfo info) : NamedItem(info.Name), IProject
+public class Project(IProjectInfo info) : NamedItem, IProject
 {
     public IList<Scene> Scenes { get; } = [];
 
-    public IProjectInfo ProjectInfo => info;
+    public IProjectInfo ProjectInfo { get; } = info;
 }

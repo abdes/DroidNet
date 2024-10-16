@@ -42,7 +42,7 @@ public partial class ProjectManagerService : IProjectManagerService
     {
         try
         {
-            this.CurrentProject = new Project(projectInfo);
+            this.CurrentProject = new Project(projectInfo) { Name = projectInfo.Name };
             return await Task.FromResult(true).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -87,7 +87,10 @@ public partial class ProjectManagerService : IProjectManagerService
             }
 
             scene.Entities.Clear();
-            scene.Entities.AddRange(loadedScene.Entities);
+            foreach (var entity in loadedScene.Entities)
+            {
+                scene.Entities.Add(entity);
+            }
 
             return true;
         }
