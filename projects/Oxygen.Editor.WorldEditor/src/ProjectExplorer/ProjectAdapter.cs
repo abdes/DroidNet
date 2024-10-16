@@ -10,7 +10,7 @@ using Oxygen.Editor.Projects;
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Project" /> model class.
 /// </summary>
-/// <param name="project">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+/// <param name="project">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
 /// <param name="projectManager">The configured project manager service.</param>
 public partial class ProjectAdapter(Project project, IProjectManagerService projectManager)
     : TreeItemAdapter, ITreeItem<Project>

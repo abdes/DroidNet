@@ -12,7 +12,7 @@ using Oxygen.Editor.Projects;
 
 /// <summary>
 /// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which
-/// in turn can hold multiple <see cref="Entity">entities</see>. It demonstrates the flexibility of the <see cref="DynamicTree" />
+/// in turn can hold multiple <see cref="GameEntity">entities</see>. It demonstrates the flexibility of the <see cref="DynamicTree" />
 /// in representing hierarchical layouts of mixed types which can be loaded dynamically.
 /// </summary>
 [ViewModel(typeof(ProjectExplorerViewModel))]

@@ -28,6 +28,8 @@ public class GameEntity(Scene scene) : NamedItem
     [JsonIgnore]
     public Scene Scene { get; } = scene;
 
+    public IList<GameComponent> Components { get; private init; } = [];
+
     /// <summary>
     /// Deserializes a JSON string into a <see cref="GameEntity" /> object.
     /// </summary>
@@ -66,7 +68,23 @@ public class GameEntity(Scene scene) : NamedItem
 
             var name = nameElement.ToString();
 
-            return new GameEntity(scene) { Name = name };
+            var components = new List<GameComponent>();
+
+            // ReSharper disable once ArrangeStaticMemberQualifier
+            if (entity.TryGetProperty(nameof(GameEntity.Components), out var elComponents) &&
+                elComponents.ValueKind == JsonValueKind.Array)
+            {
+                components.AddRange(
+                    elComponents.EnumerateArray()
+                        .Select(elComponent => JsonSerializer.Deserialize<GameComponent>(elComponent.GetRawText()))
+                        .OfType<GameComponent>());
+            }
+
+            return new GameEntity(scene)
+            {
+                Name = name,
+                Components = components,
+            };
         }
 
         public override void Write(Utf8JsonWriter writer, GameEntity value, JsonSerializerOptions options)
@@ -75,6 +93,10 @@ public class GameEntity(Scene scene) : NamedItem
 
             // ReSharper disable once ArrangeStaticMemberQualifier
             writer.WriteString(nameof(NamedItem.Name), value.Name);
+
+            // ReSharper disable once ArrangeStaticMemberQualifier
+            writer.WritePropertyName(nameof(GameEntity.Components));
+            JsonSerializer.Serialize(writer, value.Components, options);
 
             // Omit the Scene property
             writer.WriteEndObject();

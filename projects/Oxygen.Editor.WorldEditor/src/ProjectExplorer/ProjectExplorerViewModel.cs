@@ -150,7 +150,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
                 break;
             }
 
-            case EntityAdapter entityAdapter:
+            case GameEntityAdapter entityAdapter:
             {
                 var entity = entityAdapter.AttachedObject;
                 var parentAdapter = args.Parent as SceneAdapter;
@@ -183,7 +183,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
                 break;
             }
 
-            case EntityAdapter entityAdapter:
+            case GameEntityAdapter entityAdapter:
             {
                 var entity = entityAdapter.AttachedObject;
                 var parentAdapter = entityAdapter.Parent as SceneAdapter;
@@ -222,9 +222,9 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         }
 
         var newScene = new SceneAdapter(
-            new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}")
+            new Scene(this.Project.AttachedObject)
             {
-                Project = this.Project.AttachedObject,
+                Name = $"New Scene {this.Project.AttachedObject.Scenes.Count}",
             },
             this.projectManager);
 
@@ -247,7 +247,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         var scene = selectedItem switch
         {
             SceneAdapter item => item,
-            EntityAdapter { Parent: SceneAdapter } entity => (SceneAdapter)entity.Parent,
+            GameEntityAdapter { Parent: SceneAdapter } entity => (SceneAdapter)entity.Parent,
 
             // Anything else is not a valid item to which we can add an entity
             _ => null,
@@ -258,7 +258,12 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var newEntity = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
+        var newEntity
+            = new GameEntityAdapter(
+                new GameEntity(scene.AttachedObject)
+                {
+                    Name = $"New Entity {scene.AttachedObject.Entities.Count}",
+                });
         await this.AddItem(scene, newEntity).ConfigureAwait(false);
     }
 }

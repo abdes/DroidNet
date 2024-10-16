@@ -10,7 +10,7 @@ using Oxygen.Editor.Projects;
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
-/// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+/// <param name="scene">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
 /// <param name="projectManager">The configured project manager service.</param>
 public partial class SceneAdapter(Scene scene, IProjectManagerService projectManager)
     : TreeItemAdapter, ITreeItem<Scene>
@@ -27,7 +27,7 @@ public partial class SceneAdapter(Scene scene, IProjectManagerService projectMan
     {
         this.ClearChildren();
 
-        if (!await projectManager.LoadSceneEntitiesAsync(scene).ConfigureAwait(false))
+        if (!await projectManager.LoadSceneEntitiesAsync(scene).ConfigureAwait(true))
         {
             return;
         }
@@ -35,7 +35,7 @@ public partial class SceneAdapter(Scene scene, IProjectManagerService projectMan
         foreach (var entity in this.AttachedObject.Entities)
         {
             this.AddChildInternal(
-                new EntityAdapter(entity)
+                new GameEntityAdapter(entity)
                 {
                     IsExpanded = false,
                 });
