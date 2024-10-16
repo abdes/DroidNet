@@ -51,7 +51,15 @@ public partial class GameEntity(Scene scene) : GameObject
     /// </summary>
     /// <param name="gameEntity">The <see cref="GameEntity" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="GameEntity" /> object.</returns>
-    public static string ToJson(GameEntity gameEntity) => JsonSerializer.Serialize(gameEntity, JsonOptions);
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
+        Justification = "we need to use the custom converter")]
+    public static string ToJson(GameEntity gameEntity)
+    {
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new GameEntityConverter(default!) } };
+        return JsonSerializer.Serialize(gameEntity, options);
+    }
 
     internal sealed class GameEntityConverter(Scene scene) : JsonConverter<GameEntity>
     {
@@ -76,7 +84,7 @@ public partial class GameEntity(Scene scene) : GameObject
             {
                 components.AddRange(
                     elComponents.EnumerateArray()
-                        .Select(elComponent => JsonSerializer.Deserialize<GameComponent>(elComponent.GetRawText()))
+                        .Select(elComponent => GameComponent.FromJson(elComponent.GetRawText()))
                         .OfType<GameComponent>());
             }
 
@@ -96,7 +104,13 @@ public partial class GameEntity(Scene scene) : GameObject
 
             // ReSharper disable once ArrangeStaticMemberQualifier
             writer.WritePropertyName(nameof(GameEntity.Components));
-            JsonSerializer.Serialize(writer, value.Components, options);
+            var componentSerializerOptions = new JsonSerializerOptions(options);
+            foreach (var converter in GameComponent.JsonOptions.Converters)
+            {
+                componentSerializerOptions.Converters.Add(converter);
+            }
+
+            JsonSerializer.Serialize(writer, value.Components, componentSerializerOptions);
 
             // Omit the Scene property
             writer.WriteEndObject();

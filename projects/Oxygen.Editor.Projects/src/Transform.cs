@@ -30,7 +30,7 @@ public partial class Transform(GameEntity entity) : GameComponent(entity)
 
     public Vector3 Scale
     {
-        get => this.position;
+        get => this.scale;
         set => _ = this.SetField(ref this.scale, value);
     }
 }

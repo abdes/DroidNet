@@ -6,6 +6,7 @@ namespace Oxygen.Editor.Projects.Tests;
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -99,7 +100,12 @@ public class GameEntityTests
         // Arrange
         var gameEntity = new GameEntity(this.ExampleScene) { Name = "Entity Name" };
         gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 1" });
-        gameEntity.Components.Add(new Transform(gameEntity) { Name = "Component 2" });
+        gameEntity.Components.Add(
+            new Transform(gameEntity)
+            {
+                Name = "Component 2",
+                Position = new Vector3(1, 2, 3),
+            });
 
         // Act
         var json = GameEntity.ToJson(gameEntity);
@@ -126,7 +132,12 @@ public class GameEntityTests
                 },
                 {
                   "$type": "Transform",
-                  "Position": {},
+                  "Position":
+                  {
+                    "x": 1,
+                    "y": 2,
+                    "z": 3
+                  },
                   "Rotation": {},
                   "Scale": {},
                   "Name": "Component 2"
@@ -149,5 +160,6 @@ public class GameEntityTests
         gameEntity.Components[0].Should().BeOfType<GameComponent>();
         gameEntity.Components[1].Name.Should().Be("Component 2");
         gameEntity.Components[1].Should().BeOfType<Transform>();
+        gameEntity.Components[1].As<Transform>().Position.Should().BeEquivalentTo(new Vector3(1, 2, 3));
     }
 }

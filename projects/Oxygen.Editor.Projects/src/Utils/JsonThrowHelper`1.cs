@@ -18,7 +18,7 @@ internal abstract class JsonThrowHelper<T>
     protected static void MissingRequiredProperty(string propertyName)
         => throw new JsonException(FormatErrorMessage($"was missing required property: {propertyName}"));
 
-    private static string FormatErrorMessage(string message)
+    protected static string FormatErrorMessage(string message)
     {
         var stackTrace = new StackTrace();
         var callerFrame = stackTrace.GetFrame(3);
