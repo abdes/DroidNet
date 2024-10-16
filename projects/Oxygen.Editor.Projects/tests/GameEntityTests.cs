@@ -99,7 +99,7 @@ public class GameEntityTests
         // Arrange
         var gameEntity = new GameEntity(this.ExampleScene) { Name = "Entity Name" };
         gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 1" });
-        gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 2" });
+        gameEntity.Components.Add(new Transform(gameEntity) { Name = "Component 2" });
 
         // Act
         var json = GameEntity.ToJson(gameEntity);
@@ -119,15 +119,20 @@ public class GameEntityTests
         const string json = /*lang=json,strict*/
             """
             {
-                "Name":"Entity Name",
-                "Components":[
-                    {
-                        "Name":"Component 1"
-                    },
-                    {
-                        "Name":"Component 2"
-                    }
-                ]
+              "Components": [
+                {
+                  "$type": "Base",
+                  "Name": "Component 1"
+                },
+                {
+                  "$type": "Transform",
+                  "Position": {},
+                  "Rotation": {},
+                  "Scale": {},
+                  "Name": "Component 2"
+                }
+              ],
+              "Name": "Entity Name"
             }
             """;
 
@@ -141,6 +146,8 @@ public class GameEntityTests
         gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
         gameEntity.Components.Should().HaveCount(2);
         gameEntity.Components[0].Name.Should().Be("Component 1");
+        gameEntity.Components[0].Should().BeOfType<GameComponent>();
         gameEntity.Components[1].Name.Should().Be("Component 2");
+        gameEntity.Components[1].Should().BeOfType<Transform>();
     }
 }
