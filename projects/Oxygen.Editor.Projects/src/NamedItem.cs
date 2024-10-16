@@ -4,25 +4,19 @@
 
 namespace Oxygen.Editor.Projects;
 
-using System.Text.Json.Serialization;
+using System.Diagnostics.CodeAnalysis;
 
 public class NamedItem
 {
     private string name;
 
-    [JsonConstructor]
-    protected NamedItem(string name)
-    {
-        ValidateName(name);
-        this.name = name;
-    }
-
-    public string Name
+    public required string Name
     {
         get => this.name;
+        [MemberNotNull(nameof(name))]
         set
         {
-            if (this.name.Equals(value, StringComparison.Ordinal))
+            if (this.name?.Equals(value, StringComparison.Ordinal) == true)
             {
                 return;
             }
