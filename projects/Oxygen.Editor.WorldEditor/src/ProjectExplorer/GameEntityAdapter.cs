@@ -8,17 +8,17 @@ using DroidNet.Controls;
 using Oxygen.Editor.Projects;
 
 /// <summary>
-/// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.
+/// A <see cref="DynamicTree" /> item adapter for the <see cref="GameEntity" /> model class.
 /// </summary>
-/// <param name="entity">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class EntityAdapter(Entity entity) : TreeItemAdapter, ITreeItem<Entity>
+/// <param name="gameEntity">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
+public partial class GameEntityAdapter(GameEntity gameEntity) : TreeItemAdapter, ITreeItem<GameEntity>
 {
     public override bool IsRoot => false;
 
     public override string Label
         => this.AttachedObject.Name;
 
-    public Entity AttachedObject => entity;
+    public GameEntity AttachedObject => gameEntity;
 
     protected override int GetChildrenCount() => 0;
 

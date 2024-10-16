@@ -30,12 +30,17 @@ public class GameEntityTests
     {
         // Arrange
         var gameEntity = new GameEntity(this.ExampleScene) { Name = "Entity Name" };
+        gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 1" });
+        gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 2" });
 
         // Act
         var json = JsonSerializer.Serialize(gameEntity, this.jsonOptions);
 
         // Assert
         json.Should().Contain("\"Name\":\"Entity Name\"");
+        json.Should().Contain("\"Components\"");
+        json.Should().Contain("\"Name\":\"Component 1\"");
+        json.Should().Contain("\"Name\":\"Component 2\"");
         json.Should().NotContain("\"Scene\"");
     }
 
@@ -46,7 +51,15 @@ public class GameEntityTests
         const string json = /*lang=json,strict*/
             """
             {
-                "Name":"Entity Name"
+                "Name":"Entity Name",
+                "Components":[
+                    {
+                        "Name":"Component 1"
+                    },
+                    {
+                        "Name":"Component 2"
+                    }
+                ]
             }
             """;
 
@@ -58,6 +71,9 @@ public class GameEntityTests
         Debug.Assert(gameEntity != null, nameof(gameEntity) + " != null");
         gameEntity.Name.Should().Be("Entity Name");
         gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
+        gameEntity.Components.Should().HaveCount(2);
+        gameEntity.Components[0].Name.Should().Be("Component 1");
+        gameEntity.Components[1].Name.Should().Be("Component 2");
     }
 
     [TestMethod]
@@ -82,12 +98,17 @@ public class GameEntityTests
     {
         // Arrange
         var gameEntity = new GameEntity(this.ExampleScene) { Name = "Entity Name" };
+        gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 1" });
+        gameEntity.Components.Add(new GameComponent(gameEntity) { Name = "Component 2" });
 
         // Act
         var json = GameEntity.ToJson(gameEntity);
 
         // Assert
         json.Should().Contain("\"Name\": \"Entity Name\"");
+        json.Should().Contain("\"Components\"");
+        json.Should().Contain("\"Name\": \"Component 1\"");
+        json.Should().Contain("\"Name\": \"Component 2\"");
         json.Should().NotContain("\"Scene\"");
     }
 
@@ -98,7 +119,15 @@ public class GameEntityTests
         const string json = /*lang=json,strict*/
             """
             {
-                "Name":"Entity Name"
+                "Name":"Entity Name",
+                "Components":[
+                    {
+                        "Name":"Component 1"
+                    },
+                    {
+                        "Name":"Component 2"
+                    }
+                ]
             }
             """;
 
@@ -110,5 +139,8 @@ public class GameEntityTests
         Debug.Assert(gameEntity != null, nameof(gameEntity) + " != null");
         gameEntity.Name.Should().Be("Entity Name");
         gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
+        gameEntity.Components.Should().HaveCount(2);
+        gameEntity.Components[0].Name.Should().Be("Component 1");
+        gameEntity.Components[1].Name.Should().Be("Component 2");
     }
 }
