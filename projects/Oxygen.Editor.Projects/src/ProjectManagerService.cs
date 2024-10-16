@@ -76,11 +76,7 @@ public partial class ProjectManagerService : IProjectManagerService
 
         try
         {
-            var loadedScene = await this.projectSource.LoadSceneAsync(
-                    scene.Name,
-                    scene.Project.ProjectInfo.Location)
-                .ConfigureAwait(false);
-
+            var loadedScene = await this.projectSource.LoadSceneAsync(scene.Name, scene.Project).ConfigureAwait(false);
             if (loadedScene is null)
             {
                 return false;
