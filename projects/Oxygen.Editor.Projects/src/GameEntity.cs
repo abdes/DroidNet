@@ -12,7 +12,7 @@ using Oxygen.Editor.Projects.Utils;
 /// Represents a game entity with a name and an associated scene.
 /// </summary>
 /// <param name="scene">The scene associated with the game entity.</param>
-public class GameEntity(Scene scene) : NamedItem
+public partial class GameEntity(Scene scene) : GameObject
 {
     /// <summary>Default template for the JsonSerializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -60,10 +60,10 @@ public class GameEntity(Scene scene) : NamedItem
             var entity = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
 
             // ReSharper disable once ArrangeStaticMemberQualifier
-            if (!entity.TryGetProperty(nameof(NamedItem.Name), out var nameElement))
+            if (!entity.TryGetProperty(nameof(GameObject.Name), out var nameElement))
             {
                 // ReSharper disable once ArrangeStaticMemberQualifier
-                Fail.MissingRequiredProperty(nameof(NamedItem.Name));
+                Fail.MissingRequiredProperty(nameof(GameObject.Name));
             }
 
             var name = nameElement.ToString();
@@ -92,7 +92,7 @@ public class GameEntity(Scene scene) : NamedItem
             writer.WriteStartObject();
 
             // ReSharper disable once ArrangeStaticMemberQualifier
-            writer.WriteString(nameof(NamedItem.Name), value.Name);
+            writer.WriteString(nameof(GameObject.Name), value.Name);
 
             // ReSharper disable once ArrangeStaticMemberQualifier
             writer.WritePropertyName(nameof(GameEntity.Components));

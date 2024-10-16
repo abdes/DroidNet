@@ -4,7 +4,11 @@
 
 namespace Oxygen.Editor.Projects;
 
-public class Project(IProjectInfo info) : NamedItem, IProject
+/// <summary>
+/// Represents a game project with scenes.
+/// </summary>
+/// <param name="info">The metadata information about this project.</param>
+public partial class Project(IProjectInfo info) : GameObject, IProject
 {
     public IList<Scene> Scenes { get; } = [];
 

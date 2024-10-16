@@ -6,7 +6,11 @@ namespace Oxygen.Editor.Projects;
 
 using System.Text.Json.Serialization;
 
-public class GameComponent(GameEntity entity) : NamedItem
+/// <summary>
+/// Represents a component of a game entity, such as transform, geometry, material, etc.
+/// </summary>
+/// <param name="entity">The owner <see cref="GameEntity" />.</param>
+public partial class GameComponent(GameEntity entity) : GameObject
 {
     [JsonIgnore]
     public GameEntity Entity { get; } = entity;
