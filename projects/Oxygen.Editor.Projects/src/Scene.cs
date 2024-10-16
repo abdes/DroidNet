@@ -8,7 +8,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects.Utils;
 
-public class Scene(Project project) : NamedItem
+/// <summary>
+/// Represents a scen in a game project.
+/// </summary>
+/// <param name="project">The owner <see cref="Project" />.</param>
+public partial class Scene(Project project) : GameObject
 {
     /// <summary>Default template for the JsonSerializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -53,10 +57,10 @@ public class Scene(Project project) : NamedItem
             var scene = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
 
             // ReSharper disable once ArrangeStaticMemberQualifier
-            if (!scene.TryGetProperty(nameof(NamedItem.Name), out var nameElement))
+            if (!scene.TryGetProperty(nameof(GameObject.Name), out var nameElement))
             {
                 // ReSharper disable once ArrangeStaticMemberQualifier
-                Fail.MissingRequiredProperty(nameof(NamedItem.Name));
+                Fail.MissingRequiredProperty(nameof(GameObject.Name));
             }
 
             var name = nameElement.ToString();
@@ -85,7 +89,7 @@ public class Scene(Project project) : NamedItem
             writer.WriteStartObject();
 
             // ReSharper disable once ArrangeStaticMemberQualifier
-            writer.WriteString(nameof(NamedItem.Name), value.Name);
+            writer.WriteString(nameof(GameObject.Name), value.Name);
 
             // ReSharper disable once ArrangeStaticMemberQualifier
             writer.WritePropertyName(nameof(Scene.Entities));
