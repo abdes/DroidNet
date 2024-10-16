@@ -24,6 +24,6 @@ public class UniversalProjectSource(LocalProjectsSource localSource) : IProjectS
     public Task LoadProjectScenesAsync(Project project)
         => localSource.LoadProjectScenesAsync(project);
 
-    public Task<Scene?> LoadSceneAsync(string sceneName, string projectLocation)
-        => localSource.LoadSceneAsync(sceneName, projectLocation);
+    public Task<Scene?> LoadSceneAsync(string sceneName, Project project)
+        => localSource.LoadSceneAsync(sceneName, project);
 }

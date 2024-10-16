@@ -17,6 +17,7 @@ public class GameEntity(Scene scene) : NamedItem
     /// <summary>Default template for the JsonSerializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
+        AllowTrailingCommas = true,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
@@ -48,7 +49,7 @@ public class GameEntity(Scene scene) : NamedItem
     /// </summary>
     /// <param name="gameEntity">The <see cref="GameEntity" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="GameEntity" /> object.</returns>
-    public static string? ToJson(GameEntity gameEntity) => JsonSerializer.Serialize(gameEntity, JsonOptions);
+    public static string ToJson(GameEntity gameEntity) => JsonSerializer.Serialize(gameEntity, JsonOptions);
 
     internal sealed class GameEntityConverter(Scene scene) : JsonConverter<GameEntity>
     {

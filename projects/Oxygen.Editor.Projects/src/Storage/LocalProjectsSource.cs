@@ -7,6 +7,7 @@ namespace Oxygen.Editor.Projects.Storage;
 using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Oxygen.Editor.Projects.Config;
@@ -45,6 +46,7 @@ public partial class LocalProjectsSource : IProjectSource
         this.jsonOptions = new JsonSerializerOptions
         {
             AllowTrailingCommas = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             Converters = { new CategoryJsonConverter(settings.Value) },
             WriteIndented = true,
         };
@@ -75,11 +77,17 @@ public partial class LocalProjectsSource : IProjectSource
         return null;
     }
 
-    public async Task<Scene?> LoadSceneAsync(string sceneName, string projectLocation)
+    public async Task<Scene?> LoadSceneAsync(string sceneName, Project project)
     {
+        if (project.ProjectInfo.Location is null)
+        {
+            this.CouldNotLoadScene(sceneName, "null project or project location");
+            return null;
+        }
+
         try
         {
-            var projectFolder = await this.storage.GetFolderFromPathAsync(projectLocation)
+            var projectFolder = await this.storage.GetFolderFromPathAsync(project.ProjectInfo.Location)
                 .ConfigureAwait(false);
             var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
             var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
@@ -91,7 +99,7 @@ public partial class LocalProjectsSource : IProjectSource
             }
 
             var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(false);
-            var loadedScene = JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
+            var loadedScene = Scene.FromJson(json, project);
             if (loadedScene is null)
             {
                 this.CouldNotLoadScene(sceneFile.Location, "JSON deserialization failed");
@@ -102,7 +110,7 @@ public partial class LocalProjectsSource : IProjectSource
         catch (Exception ex)
         {
             var sceneLocation = this.storage.NormalizeRelativeTo(
-                projectLocation,
+                project.ProjectInfo.Location,
                 $"{Constants.ScenesFolderName}/{sceneName}{Constants.SceneFileExtension}");
             this.CouldNotLoadScene(sceneLocation, ex.Message);
             return null;

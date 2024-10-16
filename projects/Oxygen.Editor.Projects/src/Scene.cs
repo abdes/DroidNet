@@ -13,6 +13,7 @@ public class Scene(Project project) : NamedItem
     /// <summary>Default template for the JsonSerializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
+        AllowTrailingCommas = true,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
@@ -43,7 +44,7 @@ public class Scene(Project project) : NamedItem
     /// </summary>
     /// <param name="scene">The <see cref="Scene" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="Scene" /> object.</returns>
-    public static string? ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
+    public static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
 
     public class SceneConverter(Project project) : JsonConverter<Scene>
     {

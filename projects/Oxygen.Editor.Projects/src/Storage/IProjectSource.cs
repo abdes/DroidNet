@@ -26,5 +26,5 @@ public interface IProjectSource
 
     Task LoadProjectScenesAsync(Project project);
 
-    Task<Scene?> LoadSceneAsync(string sceneName, string projectLocation);
+    Task<Scene?> LoadSceneAsync(string sceneName, Project project);
 }
