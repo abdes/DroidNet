@@ -12,7 +12,7 @@ using Serilog.Configuration;
 using Serilog.Core;
 using Serilog.Events;
 
-public static class LoggerSinkConfigurationOutputLogViewExtensions
+public static class LoggerSinkConfigurationOutputLogExtensions
 {
     private const string DefaultRichTextBoxOutputTemplate
         = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:l} {Properties}{NewLine}{Exception}";
