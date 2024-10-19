@@ -15,12 +15,12 @@
         <UseWinUI>true</UseWinUI>
         <EnableMsixTooling>true</EnableMsixTooling>
 
-        <EnableMSTestRunner>False</EnableMSTestRunner>
+        <EnableMSTestRunner>false</EnableMSTestRunner>
         <GenerateTestingPlatformEntryPoint Condition=" '$(EnableMSTestRunner)' == 'true' ">false</GenerateTestingPlatformEntryPoint>
         <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
 
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
-        <AppDisplayName>OutputLog Control UI Unit Tests</AppDisplayName>
+        <AppDisplayName>OutputLog Control Unit Tests</AppDisplayName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -46,5 +46,22 @@
     <ItemGroup>
         <ProjectReference Include="..\src\Controls.OutputLog.csproj" />
     </ItemGroup>
+    <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+    <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <ProjectCapability Include="Msix" />
+    </ItemGroup>
+
+    <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+    <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+        <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+    </PropertyGroup>
 
 </Project>
