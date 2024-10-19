@@ -8,6 +8,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
+using DroidNet.Controls.OutputLog;
 using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,8 +18,10 @@ using Microsoft.Extensions.DependencyInjection;
 /// in the project.
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
+/// <param name="outputLogSink">A <see cref="DelegatingSink{T}" /> sink to be used for logs targeting the output log view.</param>
 [InjectAs(ServiceLifetime.Singleton)]
-public partial class DemoBrowserViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
+public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTextBlockSink> outputLogSink)
+    : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
     private const int SettingsItemIndex = int.MaxValue;
@@ -40,6 +43,8 @@ public partial class DemoBrowserViewModel(IRouter router) : ObservableObject, IO
     public IActiveRoute? ActiveRoute { get; set; }
 
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
+
+    public DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
 
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {

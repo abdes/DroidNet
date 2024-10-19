@@ -34,6 +34,7 @@
     </PropertyGroup>
     <ItemGroup>
         <None Remove="DynamicTree\Styles.xaml" />
+        <None Remove="Logging\OutputLogView.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -56,16 +57,11 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
-        <PackageReference Include="Serilog.Expressions" />
-        <PackageReference Include="Serilog.Extensions.Logging" />
-        <PackageReference Include="Serilog.Sinks.Console" />
-        <PackageReference Include="Serilog.Sinks.Debug" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
             <Private>True</Private>
@@ -95,6 +91,11 @@
     activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
+    </ItemGroup>
+    <ItemGroup>
+      <Page Update="Logging\OutputLogView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
     </ItemGroup>
 
     <!-- Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and
