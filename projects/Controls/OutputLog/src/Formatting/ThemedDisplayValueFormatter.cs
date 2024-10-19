@@ -8,22 +8,21 @@ using System;
 using System.Globalization;
 using DroidNet.Controls.OutputLog.Rendering;
 using DroidNet.Controls.OutputLog.Theming;
-using Microsoft.UI.Xaml.Documents;
 using Serilog.Events;
 using Serilog.Formatting.Json;
+using Span = Microsoft.UI.Xaml.Documents.Span;
 
 internal sealed class ThemedDisplayValueFormatter(Theme theme, IFormatProvider? formatProvider)
     : ThemedValueFormatter(theme, formatProvider)
 {
-    internal void FormatLiteralValue(ScalarValue scalar, dynamic paragraph, string? format)
+    internal (string text, ThemeStyle style) FormatLiteralValue(ScalarValue scalar, string? format)
     {
         var output = new StringWriter();
 
         switch (scalar.Value)
         {
             case null:
-                this.AddThemedRun(paragraph, "null", ThemeStyle.Null);
-                break;
+                return ("null", ThemeStyle.Null);
 
             case string str:
                 var formattedValue = SpecialCharsEscaping.Apply(str);
@@ -34,37 +33,34 @@ internal sealed class ThemedDisplayValueFormatter(Theme theme, IFormatProvider? 
                     formattedValue = output.ToString();
                 }
 
-                this.AddThemedRun(paragraph, formattedValue, ThemeStyle.String);
-                break;
+                return (formattedValue, ThemeStyle.String);
 
             case ValueType and (int or uint or long or ulong or decimal or byte or sbyte or short or ushort or float
                 or double):
                 scalar.Render(output, format, this.FormatProvider);
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Number);
-                break;
+                return (output.ToString(), ThemeStyle.Number);
 
             case bool b:
                 output.Write(b.ToString(CultureInfo.InvariantCulture));
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Boolean);
-                break;
+                return (output.ToString(), ThemeStyle.Boolean);
 
             case char ch:
                 output.Write('\'');
                 output.Write(SpecialCharsEscaping.Apply(ch.ToString()));
                 output.Write('\'');
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Scalar);
-                break;
+                return (output.ToString(), ThemeStyle.Scalar);
 
             default:
                 scalar.Render(output, format, this.FormatProvider);
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Scalar);
-                break;
+                return (output.ToString(), ThemeStyle.Scalar);
         }
     }
 
     protected override VoidResult? VisitScalarValue(State state, ScalarValue scalar)
     {
-        this.FormatLiteralValue(scalar, state.Container, state.Format);
+        var (text, style) = this.FormatLiteralValue(scalar, state.Format);
+        this.AddThemedRun(state.Container, text, style);
+
         return default;
     }
 

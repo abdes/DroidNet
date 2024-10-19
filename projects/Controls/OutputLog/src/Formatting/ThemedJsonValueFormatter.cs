@@ -20,12 +20,11 @@ internal sealed class ThemedJsonValueFormatter(Theme theme, IFormatProvider? for
     protected override VoidResult? VisitScalarValue(State state, ScalarValue scalar)
     {
         // At the top level, for scalar values, use "display" rendering.
-        if (state.IsTopLevel)
-        {
-            this.displayFormatter.FormatLiteralValue(scalar, state.Container, state.Format);
-        }
+        var (text, style) = state.IsTopLevel
+            ? this.displayFormatter.FormatLiteralValue(scalar, state.Format)
+            : FormatLiteralValue(scalar, state.Format);
 
-        this.FormatLiteralValue(scalar, state.Container);
+        this.AddThemedRun(state.Container, text, style);
 
         return default;
     }
@@ -173,63 +172,7 @@ internal sealed class ThemedJsonValueFormatter(Theme theme, IFormatProvider? for
         return default;
     }
 
-    private void FormatLiteralValue(ScalarValue scalar, dynamic paragraph)
-    {
-        var output = new StringWriter();
-
-        switch (scalar.Value)
-        {
-            case null:
-                this.AddThemedRun(paragraph, "null", ThemeStyle.Null);
-                break;
-
-            case string str:
-                var escapedValue = SpecialCharsEscaping.Apply(str);
-                JsonValueFormatter.WriteQuotedJsonString(escapedValue, output);
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.String);
-                break;
-
-            case ValueType and (int or uint or long or ulong or decimal or byte or sbyte or short or ushort):
-                var formattedValue = ((IFormattable)scalar.Value).ToString(format: null, CultureInfo.InvariantCulture);
-                this.AddThemedRun(paragraph, formattedValue, ThemeStyle.Number);
-                break;
-
-            case double d:
-                this.FormatDoubleValue(paragraph, d);
-                break;
-
-            case float f:
-                this.FormatDoubleValue(paragraph, f);
-                break;
-
-            case bool b:
-                output.Write(b ? "true" : "false");
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Boolean);
-                break;
-
-            case char ch:
-                var charString = SpecialCharsEscaping.Apply(ch.ToString());
-                JsonValueFormatter.WriteQuotedJsonString(charString, output);
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Scalar);
-                break;
-
-            case DateTime or DateTimeOffset:
-                output.Write('\"');
-                output.Write(((IFormattable)scalar.Value).ToString("O", CultureInfo.InvariantCulture));
-                output.Write('\"');
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Scalar);
-                break;
-
-            default:
-                JsonValueFormatter.WriteQuotedJsonString(
-                    SpecialCharsEscaping.Apply(scalar.Value.ToString() ?? "null"),
-                    output);
-                this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Scalar);
-                break;
-        }
-    }
-
-    private void FormatDoubleValue(dynamic paragraph, double value)
+    private static (string text, ThemeStyle style) FormatDoubleValue(double value)
     {
         var output = new StringWriter();
         if (double.IsNaN(value) || double.IsInfinity(value))
@@ -241,6 +184,55 @@ internal sealed class ThemedJsonValueFormatter(Theme theme, IFormatProvider? for
             output.Write(value.ToString("R", CultureInfo.InvariantCulture));
         }
 
-        this.AddThemedRun(paragraph, output.ToString(), ThemeStyle.Number);
+        return (output.ToString(), ThemeStyle.Number);
+    }
+
+    private static (string text, ThemeStyle style) FormatLiteralValue(ScalarValue scalar, string? format)
+    {
+        _ = format; // unused
+
+        var output = new StringWriter();
+
+        switch (scalar.Value)
+        {
+            case null:
+                return ("null", ThemeStyle.Null);
+
+            case string str:
+                var escapedValue = SpecialCharsEscaping.Apply(str);
+                JsonValueFormatter.WriteQuotedJsonString(escapedValue, output);
+                return (output.ToString(), ThemeStyle.String);
+
+            case ValueType and (int or uint or long or ulong or decimal or byte or sbyte or short or ushort):
+                var formattedValue = ((IFormattable)scalar.Value).ToString(format: null, CultureInfo.InvariantCulture);
+                return (formattedValue, ThemeStyle.Number);
+
+            case double d:
+                return FormatDoubleValue(d);
+
+            case float f:
+                return FormatDoubleValue(f);
+
+            case bool b:
+                output.Write(b ? "true" : "false");
+                return (output.ToString(), ThemeStyle.Boolean);
+
+            case char ch:
+                var charString = SpecialCharsEscaping.Apply(ch.ToString());
+                JsonValueFormatter.WriteQuotedJsonString(charString, output);
+                return (output.ToString(), ThemeStyle.Scalar);
+
+            case DateTime or DateTimeOffset:
+                output.Write('\"');
+                output.Write(((IFormattable)scalar.Value).ToString("O", CultureInfo.InvariantCulture));
+                output.Write('\"');
+                return (output.ToString(), ThemeStyle.Scalar);
+
+            default:
+                JsonValueFormatter.WriteQuotedJsonString(
+                    SpecialCharsEscaping.Apply(scalar.Value.ToString() ?? "null"),
+                    output);
+                return (output.ToString(), ThemeStyle.Scalar);
+        }
     }
 }
