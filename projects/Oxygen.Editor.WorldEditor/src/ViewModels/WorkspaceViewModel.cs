@@ -65,6 +65,9 @@ public partial class WorkspaceViewModel : ObservableObject
         dockable.ViewModel = resolver.Resolve<Func<IDockable, ContentBrowserViewModel>>()(dockable);
         dockable.PreferredHeight = new Height(200);
         contentBrowser.AdoptDockable(dockable);
+        dockable = Dockable.New("output");
+        dockable.ViewModel = resolver.Resolve<Func<IDockable, LogsViewModel>>()(dockable);
+        contentBrowser.AdoptDockable(dockable);
         docker.Dock(contentBrowser, new AnchorBottom());
 
         docker.DumpWorkspace();

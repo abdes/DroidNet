@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
 
 /// <summary>
@@ -18,10 +19,12 @@ using Oxygen.Editor.Projects;
 /// </summary>
 public partial class ProjectExplorerViewModel : DynamicTreeViewModel
 {
+    private readonly ILogger<ProjectExplorerViewModel> logger;
     private readonly IProjectManagerService projectManager;
 
-    public ProjectExplorerViewModel(IProjectManagerService projectManager)
+    public ProjectExplorerViewModel(ILogger<ProjectExplorerViewModel> logger, IProjectManagerService projectManager)
     {
+        this.logger = logger;
         this.projectManager = projectManager;
 
         // TODO: subscribe to CurrentProject property changes
@@ -75,6 +78,8 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             .AddChange(
                 $"RemoveItem({args.TreeItem.Label})",
                 () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
+
+        this.LogItemAdded(args.TreeItem.Label);
     }
 
     private void OnItemRemoved(object? sender, ItemRemovedEventArgs args)
@@ -85,6 +90,8 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
                 () => this.AddItem(args.Parent, args.TreeItem).GetAwaiter().GetResult());
+
+        this.LogItemRemoved(args.TreeItem.Label);
     }
 
     [RelayCommand]
@@ -266,4 +273,16 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
                 });
         await this.AddItem(scene, newEntity).ConfigureAwait(false);
     }
+
+    [LoggerMessage(
+        EventName = $"ui-{nameof(ProjectExplorerViewModel)}-ItemAdded",
+        Level = LogLevel.Information,
+        Message = "Item added: `{ItemName}`")]
+    private partial void LogItemAdded(string itemName);
+
+    [LoggerMessage(
+        EventName = $"ui-{nameof(ProjectExplorerViewModel)}-ItemRemoved",
+        Level = LogLevel.Information,
+        Message = "Item removed: `{ItemName}`")]
+    private partial void LogItemRemoved(string itemName);
 }
