@@ -103,6 +103,7 @@
             </PropertyGroup>
             <ItemGroup>
                 <ProjectCapability Include="TestContainer" />
+                <PackageReference Include="Microsoft.TestPlatform.TestHost" Condition=" '$(EnableMSTestRunner)' != 'true' " />
                 <PackageReference Include="MSTest.TestAdapter" />
                 <PackageReference Include="MSTest.TestFramework" />
                 <!-- We cannot use the v$(MSTestVersion) has it contains a bug in how the targets are importing the dll for WinUI -->
@@ -118,10 +119,6 @@
     <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <PackageReference Include="Microsoft.TestPlatform.TestHost">
-            <ExcludeAssets>build</ExcludeAssets>
-        </PackageReference>
-        <ProjectCapability Include="TestContainer" />
     </ItemGroup>
     <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
         <PackageReference Include="Microsoft.NET.Test.Sdk" />

@@ -24,6 +24,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public partial class TestApp
 {
+    /*
+    private Window? window;
+    */
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TestApp" /> class.
     /// </summary>
@@ -35,6 +39,7 @@ public partial class TestApp
     /// will be used such as when the application is launched to open a specific file.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
+    /*[MemberNotNull(nameof(window))]*/
     protected override
 #if MSTEST_RUNNER
         async
@@ -44,7 +49,10 @@ public partial class TestApp
 #if !MSTEST_RUNNER
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.CreateDefaultUI();
 #endif
-
+        /*
+        this.window = new MainWindow();
+        this.window.Activate();
+        */
         UITestMethodAttribute.DispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         // Replace back with e.Arguments when https://github.com/microsoft/microsoft-ui-xaml/issues/3368 is fixed

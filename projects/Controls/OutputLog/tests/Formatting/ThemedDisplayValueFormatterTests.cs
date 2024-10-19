@@ -7,24 +7,27 @@ namespace DroidNet.Controls.Tests.Formatting;
 using DroidNet.Controls.OutputLog.Formatting;
 using DroidNet.Controls.OutputLog.Theming;
 using FluentAssertions;
-using Microsoft.UI.Xaml.Documents;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Serilog.Events;
 
 [TestClass]
 public class ThemedDisplayValueFormatterTests
 {
-    private ThemedDisplayValueFormatter sut = new(Theme.None, formatProvider: null);
-    private Paragraph paragraph = new();
+    private readonly ThemedDisplayValueFormatter sut = new(Theme.None, formatProvider: null);
 
-    [UITestMethod]
-    public void StringFormattingDefault()
+    [TestMethod]
+    [DataRow("Hello", "l", "Hello")]
+    [DataRow("Hello", "", "\"Hello\"")]
+    [DataRow("Hello", null, "\"Hello\"")]
+    public void StringFormatting(string value, string? format, string expected)
     {
-        var value = "Hello";
+        // Arrange
 
-        this.sut.FormatLiteralValue(new ScalarValue(value), this.paragraph, format: null);
+        // Act
+        var (text, style) = this.sut.FormatLiteralValue(new ScalarValue(value), format);
 
-        this.paragraph.Inlines.Count.Should().Be(1);
+        // Assert
+        text.Should().Be(expected);
+        style.Should().Be(ThemeStyle.String);
     }
 }
