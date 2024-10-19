@@ -8,9 +8,7 @@ using Microsoft.UI.Xaml.Documents;
 
 internal sealed class EmptyTheme : Theme
 {
-    public override void Reset(dynamic container, Run run)
-    {
-    }
+    public override void Reset(dynamic container, Run run) => container.Inlines.Add(run);
 
     protected override void ConfigureRun(Run run, ThemeStyle style)
     {
