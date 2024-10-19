@@ -29,6 +29,6 @@ public class RichTextBlockSink(RichTextBlock richTextBlock, ILogEventRenderer re
     {
         var paragraph = new Paragraph();
         renderer.Render(logEvent, paragraph);
-        richTextBlock.Blocks.Add(paragraph);
+        richTextBlock.Blocks.Insert(0, paragraph);
     }
 }
