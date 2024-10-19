@@ -82,8 +82,6 @@ public static partial class Program
     {
         XamlCheckProcessRequirements();
 
-        ConfigureLogger();
-
         Log.Information("Setting up the host");
 
         try
