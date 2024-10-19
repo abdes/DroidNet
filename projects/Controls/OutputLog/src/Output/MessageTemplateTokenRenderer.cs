@@ -6,7 +6,6 @@ namespace DroidNet.Controls.OutputLog.Output;
 
 using System;
 using System.Diagnostics;
-using DroidNet.Controls.Demo.Logging.Formatting;
 using DroidNet.Controls.OutputLog.Formatting;
 using DroidNet.Controls.OutputLog.Rendering;
 using DroidNet.Controls.OutputLog.Theming;

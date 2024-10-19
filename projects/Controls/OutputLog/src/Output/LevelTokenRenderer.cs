@@ -63,7 +63,7 @@ internal sealed class LevelTokenRenderer(Theme theme, PropertyToken token) : Tok
 
     private static string GetLevelMoniker(LogEventLevel value, string? format = default)
     {
-        if (format is null || format.Length != 2 && format.Length != 3)
+        if (format is null || (format.Length != 2 && format.Length != 3))
         {
             return CasingTransform.Apply(value.ToString(), format);
         }

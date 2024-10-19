@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.Logging.Formatting;
+namespace DroidNet.Controls.OutputLog.Formatting;
 
 using System;
 using System.Globalization;
-using DroidNet.Controls.OutputLog.Formatting;
 using DroidNet.Controls.OutputLog.Rendering;
 using DroidNet.Controls.OutputLog.Theming;
 using Microsoft.UI.Xaml.Documents;
