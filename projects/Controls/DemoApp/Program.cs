@@ -9,7 +9,6 @@
 namespace DroidNet.Controls.Demo;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
@@ -25,8 +24,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Serilog;
-using Serilog.Events;
-using Serilog.Templates;
 
 /// <summary>
 /// The Main entry of the application.
@@ -63,20 +60,6 @@ public static partial class Program
     {
         XamlCheckProcessRequirements();
 
-        // Use Serilog, but decouple the logging clients from the implementation by using the generic
-        // Microsoft.Extensions.Logging.ILogger instead of Serilog's ILogger.
-        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
-
         Log.Information("Setting up the host");
 
         try
@@ -93,6 +76,7 @@ public static partial class Program
             builder.Properties.Add(
                 Hosting.WinUI.HostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
+
             var host = builder
                 .ConfigureLogging()
                 .ConfigureWinUI<App>()

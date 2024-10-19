@@ -14,6 +14,7 @@ using DroidNet.Hosting.Generators;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectLayoutView" /> view.
@@ -21,8 +22,12 @@ using Microsoft.Extensions.DependencyInjection;
 [InjectAs(ServiceLifetime.Singleton)]
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
-    public ProjectLayoutViewModel()
+    private readonly ILogger<ProjectLayoutViewModel> logger;
+
+    public ProjectLayoutViewModel(ILogger<ProjectLayoutViewModel> logger)
     {
+        this.logger = logger;
+
         this.UndoStack = UndoRedo.Default[this].UndoStack;
         this.RedoStack = UndoRedo.Default[this].RedoStack;
 
@@ -72,6 +77,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             .AddChange(
                 $"RemoveItem({args.TreeItem.Label})",
                 () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
+
+        this.LogItemAdded(args.TreeItem.Label);
     }
 
     private void OnItemRemoved(object? sender, ItemRemovedEventArgs args)
@@ -249,4 +256,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         var newEntity = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
         await this.AddItem(scene, newEntity).ConfigureAwait(false);
     }
+
+    [LoggerMessage(
+        EventName = $"ui-{nameof(ProjectLayoutViewModel)}-ItemRemoved",
+        Level = LogLevel.Information,
+        Message = "Item added: `{ItemName}`")]
+    private partial void LogItemAdded(string itemName);
 }
