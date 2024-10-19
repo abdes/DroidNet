@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <UseWinUI>true</UseWinUI>
+
+        <!--
+        Visual Studio can show the generated source files in the dependencies
+        under the generator package. The below setting may be useful if not
+        using Visual Studio.
+        -->
+        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
+
+        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
+
+        <RootNamespace>$(RootNamespace).Controls.OutputLog</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
+        <PackageReference Include="Serilog.Expressions" />
+        <PackageReference Include="Serilog.Extensions.Logging" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
+            <Private>True</Private>
+        </ProjectReference>
+
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <!-- We DO reference the attributes dll -->
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+</Project>
