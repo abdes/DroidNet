@@ -12,4 +12,5 @@ using System.Runtime.CompilerServices;
  https://aka.ms/assembly-info-properties
 */
 
-[assembly: InternalsVisibleTo("DroidNet.Controls.UI.Tests")]
+[assembly: InternalsVisibleTo("DroidNet.Controls.OutputLog.Tests")]
+[assembly: InternalsVisibleTo("DroidNet.Controls.OutputLog.UI.Tests")]
