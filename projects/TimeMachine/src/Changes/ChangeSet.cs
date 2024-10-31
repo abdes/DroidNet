@@ -21,5 +21,5 @@ public class ChangeSet : Change
         }
     }
 
-    internal void Add(IChange change) => this.changes.Add(change);
+    internal void Add(IChange change) => this.changes.Insert(0, change);
 }
