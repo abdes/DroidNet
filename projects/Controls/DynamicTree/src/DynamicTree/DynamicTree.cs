@@ -36,7 +36,7 @@ public partial class DynamicTree : Control
 
         this.Loaded += (_, _) =>
         {
-            // Update the ViewModel SelectionMode property on load and whenver the ViewModel changes.
+            // Update the ViewModel SelectionMode property on load and whenever the ViewModel changes.
             this.ViewModel!.SelectionMode = this.SelectionMode;
 
             // Handle key bindings

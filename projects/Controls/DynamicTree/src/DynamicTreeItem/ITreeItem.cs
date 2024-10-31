@@ -81,8 +81,10 @@ public interface ITreeItem : ISelectable, ILockable
     /// Removes a child tree item asynchronously.
     /// </summary>
     /// <param name="child">The child tree item to remove.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    Task RemoveChildAsync(ITreeItem child);
+    /// <returns>
+    /// A task that represents the asynchronous operation, holding the index of removed child, or -1 if the item was not found.
+    /// </returns>
+    Task<int> RemoveChildAsync(ITreeItem child);
 }
 
 /// <summary>

@@ -72,7 +72,10 @@
                                     <local:Thumbnail Content="{Binding Path=ItemAdapter, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
                                 </ContentPresenter>
                             </Viewbox>
-                            <ContentPresenter Name="PartContentPresenter" Grid.Column="2">
+                            <ContentPresenter
+                                Name="PartContentPresenter"
+                                Grid.Column="2"
+                                HorizontalContentAlignment="Left">
                                 <TextBlock Margin="5" Text="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}" />
                             </ContentPresenter>
                         </Grid>

@@ -48,6 +48,7 @@ public partial class WorkspaceViewModel : ObservableObject
 
         var projectExplorer = ToolDock.New();
         var dockable = Dockable.New("pe");
+        dockable.TabbedTitle = "Project Explorer";
         dockable.ViewModel = resolver.Resolve<Func<IDockable, ProjectExplorerViewModel>>()(dockable);
         dockable.PreferredWidth = new Width(300);
         projectExplorer.AdoptDockable(dockable);
@@ -55,6 +56,7 @@ public partial class WorkspaceViewModel : ObservableObject
 
         var details = ToolDock.New();
         dockable = Dockable.New("details");
+        dockable.TabbedTitle = "Properties";
         dockable.ViewModel = resolver.Resolve<Func<IDockable, SceneDetailsViewModel>>()(dockable);
         dockable.PreferredWidth = new Width(300);
         details.AdoptDockable(dockable);
@@ -62,10 +64,12 @@ public partial class WorkspaceViewModel : ObservableObject
 
         var contentBrowser = ToolDock.New();
         dockable = Dockable.New("ce");
+        dockable.TabbedTitle = " Content Browser";
         dockable.ViewModel = resolver.Resolve<Func<IDockable, ContentBrowserViewModel>>()(dockable);
         dockable.PreferredHeight = new Height(200);
         contentBrowser.AdoptDockable(dockable);
         dockable = Dockable.New("output");
+        dockable.TabbedTitle = "Output";
         dockable.ViewModel = resolver.Resolve<Func<IDockable, LogsViewModel>>()(dockable);
         contentBrowser.AdoptDockable(dockable);
         docker.Dock(contentBrowser, new AnchorBottom());

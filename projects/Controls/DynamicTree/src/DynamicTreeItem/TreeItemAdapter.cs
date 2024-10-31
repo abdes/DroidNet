@@ -123,19 +123,29 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// Removes a child item asynchronously.
     /// </summary>
     /// <param name="child">The child item to remove.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <returns>
+    /// A task that represents the asynchronous operation, holding the index of removed child, or -1 if the item was not found.
+    /// </returns>
     /// <exception cref="ArgumentException">Thrown when the item does not derive from <see cref="TreeItemAdapter" />.</exception>
-    public async Task RemoveChildAsync(ITreeItem child)
-        => await this.ManipulateChildrenAsync(
+    public async Task<int> RemoveChildAsync(ITreeItem child)
+    {
+        var removeAtIndex = this.children.IndexOf(child);
+        if (removeAtIndex == -1)
+        {
+            return -1;
+        }
+
+        await this.ManipulateChildrenAsync(
                 (item) =>
                 {
-                    if (this.children.Remove(item))
-                    {
-                        item.Parent = null;
-                    }
+                    this.children.RemoveAt(removeAtIndex);
+                    item.Parent = null;
                 },
                 child)
             .ConfigureAwait(false);
+
+        return removeAtIndex;
+    }
 
     /// <summary>
     /// Gets the count of child tree items asynchronously.
