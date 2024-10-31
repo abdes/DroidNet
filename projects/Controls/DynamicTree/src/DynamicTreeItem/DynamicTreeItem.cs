@@ -78,7 +78,7 @@ public partial class DynamicTreeItem : ContentControl
 
     internal void UpdateItemMargin()
     {
-        // Handle situations when the itemn is not yet fully configured or its template not yet loaded
+        // Handle situations when the item is not yet fully configured or its template not yet loaded
         if (this.ItemAdapter is null || this.GetTemplateChild(RootGridPart) is not Grid rootGrid)
         {
             return;
@@ -110,6 +110,7 @@ public partial class DynamicTreeItem : ContentControl
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
+        this.UpdateSelectionVisualState(this.ItemAdapter!.IsSelected);
 
         base.OnApplyTemplate();
     }
@@ -245,9 +246,9 @@ public partial class DynamicTreeItem : ContentControl
 
     /// <summary>
     /// Updates the reference to the ancestor <see cref="DynamicTree" /> control. This method gets the thumbnail template selector
-    /// from the ancestor with type <see cref="DynamicTree" /> and registers or unregisters property change callbacks as necessary
-    /// to keep itself in-sync. This ensures that we handle properly the case where the item is being moved between two tree
-    /// controls.
+    /// from the ancestor with type <see cref="DynamicTree" /> and registers or un-registers property change callbacks as
+    /// necessary to keep itself in-sync. This ensures that we handle properly the case where the item is being moved between two
+    /// tree controls.
     /// </summary>
     /// <remarks>
     /// This method is called when the layout is updated which happens frequently. It's important to minimize the work it does.
@@ -264,7 +265,7 @@ public partial class DynamicTreeItem : ContentControl
             return;
         }
 
-        // Unregister callbacks from the old tree control
+        // Un-register callbacks from the old tree control
         this.treeControl?.UnregisterPropertyChangedCallback(
             DynamicTree.ThumbnailTemplateSelectorProperty,
             this.ancestorTreeThumbnailTemplateSelectorChangeCallbackToken);

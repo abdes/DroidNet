@@ -56,7 +56,7 @@ public partial class DynamicTreeItem
     /// </remarks>
     protected virtual void OnItemAdapterChanged(ITreeItem? oldItem, ITreeItem? newItem)
     {
-        // Unregsiter event handlers from the old item adapter if any
+        // Un-register event handlers from the old item adapter if any
         if (oldItem is not null)
         {
             oldItem.ChildrenCollectionChanged -= this.TreeItem_ChildrenCollectionChanged;
@@ -66,26 +66,26 @@ public partial class DynamicTreeItem
         // Update visual state based on the current value of IsSelected in the
         // new TreeItem and handle future changes to property values in the new
         // TreeItem
-        if (newItem is not null)
+        if (newItem is null)
         {
-            this.UpdateSelectionVisualState(newItem.IsSelected);
-            this.UpdateHasChildrenVisualState();
-            newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
-            ((INotifyPropertyChanged)newItem).PropertyChanged += this.ItemAdapter_OnPropertyChanged;
+            return;
         }
+
+        this.UpdateSelectionVisualState(newItem.IsSelected);
+        this.UpdateHasChildrenVisualState();
+        newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
+        ((INotifyPropertyChanged)newItem).PropertyChanged += this.ItemAdapter_OnPropertyChanged;
     }
 
     protected virtual void ItemAdapter_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (sender is not null && string.Equals(
-                args.PropertyName,
-                nameof(ITreeItem.IsSelected),
-                StringComparison.Ordinal))
+        if (sender is null || !string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
         {
-            var adapter = (TreeItemAdapter)sender;
-            Debug.WriteLine(
-                $"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
-            this.UpdateSelectionVisualState(adapter.IsSelected);
+            return;
         }
+
+        var adapter = (TreeItemAdapter)sender;
+        Debug.WriteLine($"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
+        this.UpdateSelectionVisualState(adapter.IsSelected);
     }
 }

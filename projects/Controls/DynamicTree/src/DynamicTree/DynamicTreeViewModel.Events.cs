@@ -63,6 +63,8 @@ public abstract partial class DynamicTreeViewModel
     public class ItemRemovedEventArgs : DynamicTreeEventArgs
     {
         public required ITreeItem Parent { get; init; }
+
+        public required int RelativeIndex { get; init; }
     }
 
     /// <summary>
@@ -87,5 +89,8 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     /// Provides data for the <see cref="DynamicTreeViewModel.ItemAdded" /> event.
     /// </summary>
-    public class ItemAddedEventArgs : DynamicTreeEventArgs;
+    public class ItemAddedEventArgs : DynamicTreeEventArgs
+    {
+        public required int RelativeIndex { get; init; }
+    }
 }

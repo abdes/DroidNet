@@ -89,7 +89,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         UndoRedo.Default[this]
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
-                () => this.AddItem(args.Parent, args.TreeItem).GetAwaiter().GetResult());
+                () => this.InsertItem(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
@@ -184,7 +184,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             {
                 var scene = sceneAdapter.AttachedObject;
                 var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
+                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
                 var project = parentAdapter.AttachedObject;
                 project.Scenes.Remove(scene);
                 break;
@@ -235,7 +235,24 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             },
             this.projectManager);
 
-        await this.AddItem(this.Project, newScene).ConfigureAwait(false);
+        var selectedItem = this.SelectionModel?.SelectedItem;
+        while (selectedItem is not null && selectedItem is not SceneAdapter && selectedItem.Parent is not null)
+        {
+            selectedItem = selectedItem.Parent;
+        }
+
+        if (selectedItem is null)
+        {
+            await this.InsertItem(0, this.Project, newScene).ConfigureAwait(false);
+            return;
+        }
+
+        Debug.Assert(
+            selectedItem.Parent == this.Project,
+            "if we reach here, we must have selected a scene or crawled up to a scene");
+
+        var selectedItemRelativeIndex = (await this.Project.Children.ConfigureAwait(false)).IndexOf(selectedItem) + 1;
+        await this.InsertItem(selectedItemRelativeIndex, this.Project, newScene).ConfigureAwait(false);
     }
 
     private bool CanAddEntity()
@@ -251,27 +268,29 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var scene = selectedItem switch
+        var relativeIndex = 0;
+        SceneAdapter? parent;
+        if (selectedItem is SceneAdapter sceneAdapter)
         {
-            SceneAdapter item => item,
-            GameEntityAdapter { Parent: SceneAdapter } entity => (SceneAdapter)entity.Parent,
-
-            // Anything else is not a valid item to which we can add an entity
-            _ => null,
-        };
-
-        if (scene is null)
+            parent = sceneAdapter;
+        }
+        else
         {
-            return;
+            parent = selectedItem.Parent as SceneAdapter;
+
+            // As of new, game entities are only created under a scene parent
+            Debug.Assert(parent is not null, "every entity must have a scene parent");
+            relativeIndex = (await parent.Children.ConfigureAwait(false)).IndexOf(selectedItem) + 1;
         }
 
         var newEntity
             = new GameEntityAdapter(
-                new GameEntity(scene.AttachedObject)
+                new GameEntity(parent.AttachedObject)
                 {
-                    Name = $"New Entity {scene.AttachedObject.Entities.Count}",
+                    Name = $"New Entity {parent.AttachedObject.Entities.Count}",
                 });
-        await this.AddItem(scene, newEntity).ConfigureAwait(false);
+
+        await this.InsertItem(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }
 
     [LoggerMessage(

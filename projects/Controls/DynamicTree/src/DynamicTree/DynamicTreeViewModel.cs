@@ -6,6 +6,7 @@ namespace DroidNet.Controls;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -22,6 +23,11 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         if (itemAdapter.IsExpanded)
         {
             return;
+        }
+
+        if (!itemAdapter.Parent!.IsExpanded)
+        {
+            await this.ExpandItemAsync(itemAdapter.Parent).ConfigureAwait(true);
         }
 
         await this.RestoreExpandedChildrenAsync(itemAdapter).ConfigureAwait(true);
@@ -43,13 +49,28 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     {
         this.ShownItems.Clear();
 
-        // Do not add the root item, add its children instead and check if it they need to be expandedxx
+        // Do not add the root item, add its children instead and check if it they need to be expanded
         root.IsExpanded = true;
         await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(true);
     }
 
-    protected async Task AddItem(ITreeItem parent, ITreeItem item)
+    protected async Task InsertItem(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
+        if (relativeIndex < 0)
+        {
+            Debug.WriteLine(
+                $"Request to insert an item in the tree with negative index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}");
+            relativeIndex = 0;
+        }
+
+        if (relativeIndex > parent.ChildrenCount)
+        {
+            Debug.WriteLine(
+                $"Request to insert an item in the tree at index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}, " +
+                $"which is out of range [0, {parent.ChildrenCount.ToString(CultureInfo.InvariantCulture)}]");
+            relativeIndex = parent.ChildrenCount;
+        }
+
         // Always expand the item before adding to to force the children collection to be fully loaded.
         if (!parent.IsExpanded)
         {
@@ -71,13 +92,62 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         // Clear selection first because after insertion, the selected indices will be invalid
         this.SelectionModel?.ClearSelection();
 
-        await parent.InsertChildAsync(0, item).ConfigureAwait(true);
-        var newItemIndex = this.ShownItems.IndexOf(parent) + 1;
+        await parent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+
+        int newItemIndex;
+        if (relativeIndex == 0)
+        {
+            newItemIndex = this.ShownItems.IndexOf(parent) + 1;
+        }
+        else if (relativeIndex == parent.ChildrenCount - 1)
+        {
+            // Find the previous sibling index in the shown items collection and use
+            // it to insert the item just after it.
+            var siblings = await parent.Children.ConfigureAwait(true);
+            var siblingBefore = siblings[relativeIndex - 1];
+            var siblingFound = false;
+            newItemIndex = 0;
+            foreach (var shownItem in this.ShownItems)
+            {
+                if (!siblingFound && shownItem != siblingBefore)
+                {
+                    ++newItemIndex;
+                    continue;
+                }
+
+                siblingFound = true;
+
+                if (shownItem.Depth < siblingBefore.Depth)
+                {
+                    break;
+                }
+
+                ++newItemIndex;
+            }
+
+            Debug.Assert(newItemIndex >= 0, "must be a valid index");
+        }
+        else
+        {
+            // Find the next sibling index in the shown items collection and use
+            // it to insert the item just before it.
+            var siblings = await parent.Children.ConfigureAwait(true);
+            var nextSibling = siblings[relativeIndex + 1];
+            newItemIndex = this.ShownItems.IndexOf(nextSibling);
+            Debug.Assert(newItemIndex >= 0, "must be a valid index");
+        }
+
         this.ShownItems.Insert(newItemIndex, item);
 
         this.SelectionModel?.SelectItemAt(newItemIndex);
 
-        this.ItemAdded?.Invoke(this, new ItemAddedEventArgs() { TreeItem = item });
+        this.ItemAdded?.Invoke(
+            this,
+            new ItemAddedEventArgs()
+            {
+                RelativeIndex = relativeIndex,
+                TreeItem = item,
+            });
     }
 
     // TODO: should add events for item add, delete, move to different parent
@@ -104,11 +174,9 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
 
         // Remove the item's children from ShownItems in a single pass
-        var children = (await item.Children.ConfigureAwait(true)).ToArray();
-        for (var childIndex = children.Length - 1; childIndex >= 0; childIndex--)
+        foreach (var child in (await item.Children.ConfigureAwait(true)).Reverse())
         {
-            var child = children[childIndex];
-            await item.RemoveChildAsync(child).ConfigureAwait(true);
+            var childIndex = await item.RemoveChildAsync(child).ConfigureAwait(true);
             if (item.IsExpanded)
             {
                 this.ShownItems.RemoveAt(removeAtIndex + childIndex + 1);
@@ -118,6 +186,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
                 this,
                 new ItemRemovedEventArgs()
                 {
+                    RelativeIndex = childIndex,
                     TreeItem = child,
                     Parent = item,
                 });
@@ -126,7 +195,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         // Remove the item
         var itemParent = item.Parent;
         Debug.Assert(itemParent != null, "an item being removed from the tree always has a parent");
-        await itemParent.RemoveChildAsync(item).ConfigureAwait(true);
+        var itemIndex = await itemParent.RemoveChildAsync(item).ConfigureAwait(true);
+        Debug.Assert(itemIndex != -1, "the item should exist as it is part of the selection");
         this.ShownItems.RemoveAt(removeAtIndex);
 
         if (updateSelection)
@@ -138,6 +208,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             this,
             new ItemRemovedEventArgs()
             {
+                RelativeIndex = itemIndex,
                 TreeItem = item,
                 Parent = itemParent,
             });
@@ -172,7 +243,6 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         var selectedItem = singleSelection.SelectedItem;
         if (selectedItem?.IsLocked == false)
         {
-            var selectedIndex = this.SelectionModel.SelectedIndex;
             this.SelectionModel.ClearSelection();
 
             await this.RemoveItem(selectedItem).ConfigureAwait(true);
