@@ -23,6 +23,7 @@
         <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
         <RootNamespace>Oxygen.Editor.ProjectBrowser</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
