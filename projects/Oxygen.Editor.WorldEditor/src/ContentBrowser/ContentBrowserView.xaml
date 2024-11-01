@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ContentBrowserView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:router="using:DroidNet.Routing.Controls"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="GridSplitterStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="2*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="0.5*" MaxWidth="100" />
+            </Grid.ColumnDefinitions>
+            <StackPanel
+                Grid.Column="0"
+                Background="Transparent"
+                Orientation="Horizontal">
+
+                <AppBarButton
+                    Icon="Back"
+                    Label="Back"
+                    LabelPosition="Collapsed" />
+                <AppBarButton
+                    Icon="Forward"
+                    Label="Forward"
+                    LabelPosition="Collapsed" />
+                <AppBarButton
+                    Icon="Up"
+                    Label="Up"
+                    LabelPosition="Collapsed" />
+                <AppBarButton
+                    Icon="Refresh"
+                    Label="Refresh"
+                    LabelPosition="Collapsed" />
+            </StackPanel>
+
+            <Border
+                Grid.Column="1"
+                Height="32"
+                BorderBrush="Beige"
+                BorderThickness="1">
+                <BreadcrumbBar />
+            </Border>
+
+            <Grid Grid.Column="2" HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox
+                    Grid.Column="1"
+                    Height="32"
+                    HorizontalAlignment="Stretch"
+                    PlaceholderText="Search">
+                    <AutoSuggestBox.QueryIcon>
+                        <SymbolIcon Symbol="Find" />
+                    </AutoSuggestBox.QueryIcon>
+                </AutoSuggestBox>
+            </Grid>
+
+            <CommandBar
+                Grid.Column="3"
+                Background="Transparent"
+                DefaultLabelPosition="Collapsed"
+                IsOpen="False">
+
+                <CommandBar.PrimaryCommands>
+                    <AppBarButton Icon="Filter" Label="Filter" />
+                </CommandBar.PrimaryCommands>
+                <CommandBar.SecondaryCommands>
+                    <AppBarButton Icon="Setting" Label="Settings">
+                        <AppBarButton.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="I" Modifiers="Control" />
+                        </AppBarButton.KeyboardAccelerators>
+                    </AppBarButton>
+                </CommandBar.SecondaryCommands>
+            </CommandBar>
+
+        </Grid>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <router:RouterOutlet
+                Grid.Column="0"
+                ViewModel="{x:Bind ViewModel.LeftPaneViewModel, Mode=OneWay}"
+                VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
+
+            <!--  Column Grid Splitter  -->
+            <controls:GridSplitter
+                Grid.Column="1"
+                Width="4"
+                HorizontalAlignment="Left"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Auto"
+                Style="{StaticResource InvisibleGridSplitterStyle}" />
+
+            <router:RouterOutlet
+                Grid.Column="2"
+                ViewModel="{x:Bind ViewModel.RightPaneViewModel, Mode=OneWay}"
+                VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
+
+        </Grid>
+
+    </Grid>
+</UserControl>

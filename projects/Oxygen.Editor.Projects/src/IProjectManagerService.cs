@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.Projects;
 
 using Oxygen.Editor.Projects.Utils;
+using Oxygen.Editor.Storage;
 
 public interface IProjectManagerService
 {
@@ -18,7 +19,9 @@ public interface IProjectManagerService
 
     Task<bool> LoadProjectAsync(IProjectInfo projectInfo);
 
-    Task<bool> LoadProjectScenesAsync(Project project);
+    Task<bool> LoadProjectScenesAsync(IProject project);
 
     Task<bool> LoadSceneEntitiesAsync(Scene scene);
+
+    IStorageProvider GetCurrentProjectStorageProvider();
 }

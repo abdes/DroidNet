@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.TilesLayoutView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!--  ImageTextTemplate:  -->
+        <DataTemplate x:Key="GameAssetTemplate" x:DataType="local:GameAsset">
+            <Grid Width="280">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <SymbolIcon
+                    Height="100"
+                    VerticalAlignment="Top"
+                    Symbol="Folder" />
+                <StackPanel Grid.Column="1" Margin="8,0,0,8">
+                    <TextBlock
+                        Margin="0,0,0,8"
+                        Style="{ThemeResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind Name}" />
+                    <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind AssetType}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <GridView
+            x:Name="BasicGridView"
+            IsItemClickEnabled="True"
+            ItemTemplate="{StaticResource GameAssetTemplate}"
+            SelectionMode="Single" />
+    </Grid>
+</UserControl>

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Oxygen.Editor.Projects.Config;
 using Oxygen.Editor.Projects.Storage;
 using Oxygen.Editor.Projects.Utils;
+using Oxygen.Editor.Storage;
 
 /// <summary>
 /// Project management service.
@@ -52,7 +53,7 @@ public partial class ProjectManagerService : IProjectManagerService
         }
     }
 
-    public async Task<bool> LoadProjectScenesAsync(Project project)
+    public async Task<bool> LoadProjectScenesAsync(IProject project)
     {
         try
         {
@@ -102,6 +103,8 @@ public partial class ProjectManagerService : IProjectManagerService
 
     public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo) =>
         await this.projectSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
+
+    public IStorageProvider GetCurrentProjectStorageProvider() => this.projectSource.GetStorageProvider();
 
     [LoggerMessage(
         Level = LogLevel.Error,

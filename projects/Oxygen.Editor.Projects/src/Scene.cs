@@ -12,7 +12,7 @@ using Oxygen.Editor.Projects.Utils;
 /// Represents a scen in a game project.
 /// </summary>
 /// <param name="project">The owner <see cref="Project" />.</param>
-public partial class Scene(Project project) : GameObject
+public partial class Scene(IProject project) : GameObject
 {
     /// <summary>Default template for the JsonSerializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -23,7 +23,7 @@ public partial class Scene(Project project) : GameObject
     };
 
     [JsonIgnore]
-    public Project Project { get; } = project;
+    public IProject Project { get; } = project;
 
     public IList<GameEntity> Entities { get; private init; } = [];
 
@@ -37,7 +37,7 @@ public partial class Scene(Project project) : GameObject
         "Performance",
         "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
         Justification = "we need to set the scene for the converter")]
-    public static Scene? FromJson(string json, Project project)
+    public static Scene? FromJson(string json, IProject project)
     {
         var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneConverter(project) } };
         return JsonSerializer.Deserialize<Scene>(json, options);
@@ -50,7 +50,7 @@ public partial class Scene(Project project) : GameObject
     /// <returns>The JSON string representation of the <see cref="Scene" /> object.</returns>
     public static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
 
-    public class SceneConverter(Project project) : JsonConverter<Scene>
+    public class SceneConverter(IProject project) : JsonConverter<Scene>
     {
         public override Scene Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

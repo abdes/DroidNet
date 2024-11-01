@@ -4,6 +4,8 @@
 
 namespace Oxygen.Editor.Projects.Storage;
 
+using Oxygen.Editor.Storage;
+
 /// <summary>
 /// The projects source can be used to enumerate projects available from a certain
 /// repository.
@@ -24,7 +26,11 @@ public interface IProjectSource
 
     Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
 
-    Task LoadProjectScenesAsync(Project project);
+    Task LoadProjectScenesAsync(IProject project);
 
-    Task<Scene?> LoadSceneAsync(string sceneName, Project project);
+    Task<Scene?> LoadSceneAsync(string sceneName, IProject project);
+
+    IAsyncEnumerable<IFolder> LoadFoldersAsync(string location);
+
+    IStorageProvider GetStorageProvider();
 }

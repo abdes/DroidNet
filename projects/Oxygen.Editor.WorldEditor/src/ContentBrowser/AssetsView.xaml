@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.AssetsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Routing.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border Margin="0,0,4,4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <CommandBar
+                Grid.Column="0"
+                HorizontalAlignment="Left"
+                Background="Transparent"
+                DefaultLabelPosition="Right"
+                IsOpen="False">
+
+                <CommandBar.PrimaryCommands>
+                    <AppBarButton
+                        Icon="Add"
+                        Label="New"
+                        Style="{StaticResource ToolBarAppBarButtonFlyoutStyle}">
+                        <AppBarButton.Flyout>
+                            <MenuFlyout x:Name="NewEmptySpace" Placement="BottomEdgeAlignedLeft">
+                                <MenuFlyoutItem
+                                    x:Name="ToolbarNewFolderItem"
+                                    AccessKey="D"
+                                    AutomationProperties.AutomationId="InnerNavigationToolbarNewFolderButton"
+                                    Text="Folder">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8B7;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem
+                                    x:Name="NewFile"
+                                    AccessKey="F"
+                                    Text="Scene">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE7C3;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutSeparator x:Name="NewMenuFileFolderSeparator" />
+                            </MenuFlyout>
+                        </AppBarButton.Flyout>
+                    </AppBarButton>
+                    <AppBarSeparator />
+                    <AppBarButton
+                        Icon="Cut"
+                        Label="Cut"
+                        LabelPosition="Collapsed" />
+                    <AppBarButton
+                        Icon="Copy"
+                        Label="Copy"
+                        LabelPosition="Collapsed" />
+                    <AppBarButton
+                        Icon="Paste"
+                        Label="Paste"
+                        LabelPosition="Collapsed" />
+                    <AppBarButton
+                        Icon="Rename"
+                        Label="Rename"
+                        LabelPosition="Collapsed" />
+                    <AppBarSeparator />
+                    <AppBarButton
+                        Icon="Delete"
+                        Label="Delete"
+                        LabelPosition="Collapsed" />
+                    <AppBarSeparator />
+                </CommandBar.PrimaryCommands>
+            </CommandBar>
+
+            <controls:RouterOutlet
+                Grid.Row="1"
+                ViewModel="{x:Bind ViewModel.LayoutViewModel, Mode=OneWay}"
+                VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
+
+        </Grid>
+    </Border>
+</UserControl>

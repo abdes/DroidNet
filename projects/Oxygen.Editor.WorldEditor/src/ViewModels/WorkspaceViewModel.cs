@@ -12,6 +12,7 @@ using DroidNet.Hosting.Generators;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
@@ -66,7 +67,7 @@ public partial class WorkspaceViewModel : ObservableObject
         dockable = Dockable.New("ce");
         dockable.TabbedTitle = " Content Browser";
         dockable.ViewModel = resolver.Resolve<Func<IDockable, ContentBrowserViewModel>>()(dockable);
-        dockable.PreferredHeight = new Height(200);
+        dockable.PreferredHeight = new Height(400);
         contentBrowser.AdoptDockable(dockable);
         dockable = Dockable.New("output");
         dockable.TabbedTitle = "Output";

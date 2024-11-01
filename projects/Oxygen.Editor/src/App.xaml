@@ -6,10 +6,11 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Styles/Styles.xaml" />
-                <ResourceDictionary Source="/Styles/FontSizes.xaml" />
-                <ResourceDictionary Source="/Styles/Thickness.xaml" />
-                <ResourceDictionary Source="/Styles/TextBlock.xaml" />
+                <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Themes/Generic.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Themes/Generic.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/FontSizes.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/Thickness.xaml" />
+                <ResourceDictionary Source="ms-appx:///Styles/TextBlock.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

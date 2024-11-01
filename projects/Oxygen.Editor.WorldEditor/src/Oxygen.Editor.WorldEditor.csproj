@@ -23,8 +23,13 @@
         <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
         <RootNamespace>Oxygen.Editor.WorldEditor</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
     <ItemGroup>
+      <None Remove="AssetsView.xaml" />
+      <None Remove="ContentBrowser\ProjectLayoutView.xaml" />
+      <None Remove="ContentBrowser\TilesLayoutView.xaml" />
+      <None Remove="Themes\Generic.xaml" />
       <None Remove="Views\ContentBrowserView.xaml" />
       <None Remove="Views\LogsView.xaml" />
       <None Remove="Views\ProjectExplorerView.xaml" />
@@ -45,6 +50,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\src\Routing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
@@ -69,7 +75,40 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Page Update="AssetsView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Styles\CommandBarStyles.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="ContentBrowser\TilesLayoutView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="ContentBrowser\ProjectLayoutView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+      <Page Update="Themes\Generic.xaml">
+        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
       <Page Update="Views\LogsView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Styles\GridSplitterStyles.xaml">
         <Generator>MSBuild:Compile</Generator>
       </Page>
     </ItemGroup>

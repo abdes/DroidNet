@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ProjectLayoutView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <local:ExpandedToIconGlyphConverter x:Key="IconGlyphConverter" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+            <TreeView ItemsSource="{x:Bind ViewModel.ProjectRoot}">
+                <TreeView.ItemTemplate>
+                    <DataTemplate x:DataType="local:Folder">
+                        <TreeViewItem x:Name="FolderItem" ItemsSource="{x:Bind Children}">
+                            <TreeViewItem.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <FontIcon Foreground="Yellow" Glyph="{Binding ElementName=FolderItem, Path=IsExpanded, Converter={StaticResource IconGlyphConverter}}" />
+                                    <TextBlock Text="{x:Bind Name}" />
+                                </StackPanel>
+                            </TreeViewItem.Content>
+                        </TreeViewItem>
+                    </DataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+        </Border>
+    </Grid>
+</UserControl>
