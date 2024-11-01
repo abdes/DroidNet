@@ -52,14 +52,14 @@
   <!-- Tooling -->
   <ItemGroup>
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
-    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.143" />
+    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.6.146" />
     <PackageVersion Include="Microsoft.VisualStudio.SlnGen" Version="11.4.11" />
     <PackageVersion Include="NuGet.Build.Tasks.Pack" Version="6.9.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.8" />
-    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.8" />
-    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.8" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.170" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.9" />
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.9" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.9" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.177" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>

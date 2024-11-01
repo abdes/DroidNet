@@ -77,7 +77,7 @@ public partial class LocalProjectsSource : IProjectSource
         return null;
     }
 
-    public async Task<Scene?> LoadSceneAsync(string sceneName, Project project)
+    public async Task<Scene?> LoadSceneAsync(string sceneName, IProject project)
     {
         if (project.ProjectInfo.Location is null)
         {
@@ -117,6 +117,19 @@ public partial class LocalProjectsSource : IProjectSource
         }
     }
 
+    public async IAsyncEnumerable<IFolder> LoadFoldersAsync(string location)
+    {
+        var folder = await this.storage.GetFolderFromPathAsync(location)
+            .ConfigureAwait(false);
+
+        await foreach (var item in folder.GetFoldersAsync().ConfigureAwait(false))
+        {
+            yield return item;
+        }
+    }
+
+    public IStorageProvider GetStorageProvider() => this.storage;
+
     public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
     {
         Debug.Assert(projectInfo.Location != null, "The project location must be valid!");
@@ -140,7 +153,7 @@ public partial class LocalProjectsSource : IProjectSource
         return false;
     }
 
-    public async Task LoadProjectScenesAsync(Project project)
+    public async Task LoadProjectScenesAsync(IProject project)
     {
         if (project.ProjectInfo.Location == null)
         {

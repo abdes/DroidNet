@@ -27,7 +27,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         this.logger = logger;
         this.projectManager = projectManager;
 
-        // TODO: subscribe to CurrentProject property changes
+        /* TODO: subscribe to CurrentProject property changes */
 
         this.UndoStack = UndoRedo.Default[this].UndoStack;
         this.RedoStack = UndoRedo.Default[this].RedoStack;

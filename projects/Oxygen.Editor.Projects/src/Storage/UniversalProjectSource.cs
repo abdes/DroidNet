@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.Projects.Storage;
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Storage;
 
 /// <summary>
 /// A composite source for projects, that invokes the specific implementation based
@@ -21,9 +22,14 @@ public class UniversalProjectSource(LocalProjectsSource localSource) : IProjectS
     public Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
         => localSource.SaveProjectInfoAsync(projectInfo);
 
-    public Task LoadProjectScenesAsync(Project project)
+    public Task LoadProjectScenesAsync(IProject project)
         => localSource.LoadProjectScenesAsync(project);
 
-    public Task<Scene?> LoadSceneAsync(string sceneName, Project project)
+    public Task<Scene?> LoadSceneAsync(string sceneName, IProject project)
         => localSource.LoadSceneAsync(sceneName, project);
+
+    public IAsyncEnumerable<IFolder> LoadFoldersAsync(string location)
+        => localSource.LoadFoldersAsync(location);
+
+    public IStorageProvider GetStorageProvider() => localSource.GetStorageProvider();
 }

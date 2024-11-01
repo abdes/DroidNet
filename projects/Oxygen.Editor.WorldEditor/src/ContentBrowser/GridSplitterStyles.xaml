@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="ControlAltFillColorTertiaryBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="ControlAltFillColorQuarternaryBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="ControlAltFillColorDisabledBrush" />
+            <StaticResource x:Key="SizerBaseForeground" ResourceKey="ControlStrongFillColorDefaultBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="ControlAltFillColorTertiaryBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="ControlAltFillColorQuarternaryBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="ControlAltFillColorDisabledBrush" />
+            <StaticResource x:Key="SizerBaseForeground" ResourceKey="ControlStrongFillColorDefaultBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="SystemColorHighlightTextColorBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="SystemColorHighlightColorBrush" />
+            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="SystemColorWindowColorBrush" />
+            <StaticResource x:Key="SizerBaseForeground" ResourceKey="SystemColorButtonTextColorBrush" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <x:Double x:Key="SizerBaseThumbHeight">24</x:Double>
+    <x:Double x:Key="SizerBaseThumbWidth">4</x:Double>
+    <x:Double x:Key="SizerBaseThumbRadius">1</x:Double>
+    <Thickness x:Key="SizerBasePadding">1</Thickness>
+
+    <Style BasedOn="{StaticResource DefaultSizerBaseStyle}" TargetType="ctk:GridSplitter" />
+
+    <Style
+        x:Key="InvisibleGridSplitterStyle"
+        BasedOn="{StaticResource DefaultSizerBaseStyle}"
+        TargetType="ctk:GridSplitter">
+        <Setter Property="Foreground" Value="Transparent" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style x:Key="DefaultSizerBaseStyle" TargetType="ctk:SizerBase">
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="IsFocusEngagementEnabled" Value="True" />
+        <Setter Property="MinHeight" Value="8" />
+        <Setter Property="MinWidth" Value="4" />
+        <Setter Property="Padding" Value="{StaticResource SizerBasePadding}" />
+        <Setter Property="Foreground" Value="{ThemeResource SizerBaseForeground}" />
+        <Setter Property="Background" Value="{ThemeResource SizerBaseBackground}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="AutomationProperties.Name" Value="ms-resource://CommunityToolkit.WinUI.Controls.Sizers/CommunityToolkit.WinUI.Controls.Sizers/Resources/WCT_SizerBase_AutomationName" />
+        <Setter Property="ManipulationMode" Value="TranslateX,TranslateY" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ctk:SizerBase">
+                    <Grid
+                        x:Name="RootGrid"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Grid.BackgroundTransition>
+                            <BrushTransition Duration="0:0:0.083" />
+                        </Grid.BackgroundTransition>
+
+                        <Rectangle
+                            x:Name="PART_Thumb"
+                            Width="{StaticResource SizerBaseThumbWidth}"
+                            Height="{StaticResource SizerBaseThumbHeight}"
+                            Margin="{TemplateBinding Padding}"
+                            Fill="{TemplateBinding Foreground}"
+                            RadiusX="{StaticResource SizerBaseThumbRadius}"
+                            RadiusY="{StaticResource SizerBaseThumbRadius}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource SizerBaseBackgroundPointerOver}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource SizerBaseBackgroundPressed}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource SizerBaseBackgroundDisabled}" />
+                                        <Setter Target="PART_Thumb.Opacity" Value="0.45" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="OrientationStates">
+                                <VisualState x:Name="Vertical" />
+                                <VisualState x:Name="Horizontal">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Thumb.Width" Value="{StaticResource SizerBaseThumbHeight}" />
+                                        <Setter Target="PART_Thumb.Height" Value="{StaticResource SizerBaseThumbWidth}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="ThumbVisibilityStates">
+                                <VisualState x:Name="Visible" />
+                                <VisualState x:Name="Collapsed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Thumb.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
