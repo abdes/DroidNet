@@ -13,6 +13,7 @@
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
         <RootNamespace>Oxygen.Editor.Core</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>

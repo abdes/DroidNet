@@ -13,7 +13,6 @@
 
         <IsPackable>false</IsPackable>
 
-        <AssemblyName>Oxygen.Editor</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
         <EnableMsixTooling>true</EnableMsixTooling>
@@ -25,6 +24,7 @@
         <DebugType>portable</DebugType>
 
         <RootNamespace>Oxygen.Editor</RootNamespace>
+        <AssemblyName>Oxygen.Editor</AssemblyName>
 
         <!-- Use our own Main entry point so we can control the HostBuilder -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -19,6 +19,7 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
         <RootNamespace>Oxygen.Editor.Projects</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
