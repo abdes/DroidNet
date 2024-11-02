@@ -91,7 +91,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         : this.GetChildrenCount();
 
     /// <inheritdoc />
-    public int Depth => this.Parent is null ? -1 : this.Parent.Depth + 1;
+    public required int Depth { get; set; }
 
     /// <summary>
     /// Adds a child item asynchronously.

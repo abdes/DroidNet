@@ -5,6 +5,7 @@
 namespace DroidNet.Controls;
 
 using System.Collections.Specialized;
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
@@ -86,6 +87,7 @@ public partial class DynamicTreeItem : ContentControl
 
         // Calculate the extra left margin based on the IndentLevel and set it as the RootGrid margin
         var extraLeftMargin = this.ItemAdapter.Depth * this.indentIncrement;
+        Debug.Assert(extraLeftMargin >= 0, "negative margin means bad depth, i.e. bug");
         rootGrid.Margin = new Thickness(extraLeftMargin, 0, 0, 0);
     }
 

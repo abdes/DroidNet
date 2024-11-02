@@ -13,10 +13,11 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!--  ReSharper disable Xaml.PathError  -->
                 <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/ContentBrowser/GridSplitterStyles.xaml" />
+                <!--  ReSharper restore Xaml.PathError  -->
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
-
     </UserControl.Resources>
 
     <Grid>
@@ -107,6 +108,7 @@
 
             <router:RouterOutlet
                 Grid.Column="0"
+                Outlet="left"
                 ViewModel="{x:Bind ViewModel.LeftPaneViewModel, Mode=OneWay}"
                 VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
 
@@ -121,6 +123,7 @@
 
             <router:RouterOutlet
                 Grid.Column="2"
+                Outlet="right"
                 ViewModel="{x:Bind ViewModel.RightPaneViewModel, Mode=OneWay}"
                 VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
 

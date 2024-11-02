@@ -21,14 +21,15 @@ public sealed partial class ProjectLayoutView
         Debug.WriteLine("ProjectLayoutView_Constructor");
     }
 
-    protected override void OnApplyTemplate()
+    private async void OnLoaded(object sender, RoutedEventArgs args)
     {
-        base.OnApplyTemplate();
-        Debug.WriteLine("ProjectLayoutView_OnApplyTemplate");
-    }
+        _ = sender; // unused
+        _ = args; // unused
 
-    private void ProjectLayoutView_OnLoaded(object sender, RoutedEventArgs e)
-        => Debug.WriteLine("ProjectLayoutView_OnLoaded");
+        Debug.WriteLine("ProjectLayoutView_OnLoaded");
+
+        await this.ViewModel!.LoadProjectCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+    }
 }
 
 /// <summary>
@@ -39,8 +40,8 @@ internal sealed partial class ExpandedToIconGlyphConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
-        var isExpanded = (bool)value;
-        return isExpanded ? "\uE838" : "\uE8B7";
+        var item = (FolderTreeItemAdapter)value;
+        return item is { IsExpanded: true, ChildrenCount: > 0 } ? "\uE838" : "\uE8B7";
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)

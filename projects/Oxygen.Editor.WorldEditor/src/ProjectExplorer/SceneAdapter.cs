@@ -38,6 +38,7 @@ public partial class SceneAdapter(Scene scene, IProjectManagerService projectMan
                 new GameEntityAdapter(entity)
                 {
                     IsExpanded = false,
+                    Depth = 0,
                 });
         }
 

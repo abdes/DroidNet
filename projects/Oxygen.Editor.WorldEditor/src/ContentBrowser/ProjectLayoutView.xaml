@@ -4,37 +4,31 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Loaded="ProjectLayoutView_OnLoaded"
+    Loaded="OnLoaded"
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <local:ExpandedToIconGlyphConverter x:Key="IconGlyphConverter" />
+        <ResourceDictionary>
+            <local:ExpandedToIconGlyphConverter x:Key="IconGlyphConverter" />
+
+            <!--  Templates an template selector for Folder  -->
+            <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="local:FolderTreeItemAdapter">
+                <FontIcon Foreground="Yellow" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" DefaultTemplate="{StaticResource FolderThumbnailTemplate}" />
+            <!--  ~+~  -->
+
+        </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid>
-        <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-            <TreeView
-                x:Name="TreeView"
-                ItemsSource="{x:Bind ViewModel.ProjectRoot}"
-                SelectionMode="Multiple">
-                <TreeView.ItemTemplate>
-                    <DataTemplate x:DataType="local:Folder">
-                        <TreeViewItem
-                            x:Name="FolderItem"
-                            IsSelected="{x:Bind IsSelected, Mode=OneWay}"
-                            ItemsSource="{x:Bind Children}">
-                            <TreeViewItem.Content>
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Foreground="Yellow" Glyph="{Binding ElementName=FolderItem, Path=IsExpanded, Converter={StaticResource IconGlyphConverter}}" />
-                                    <TextBlock Text="{x:Bind Name}" />
-                                </StackPanel>
-                            </TreeViewItem.Content>
-                        </TreeViewItem>
-                    </DataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
-        </Border>
-    </Grid>
+    <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+        <dnc:DynamicTree
+            SelectionMode="Multiple"
+            ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+            ViewModel="{x:Bind ViewModel}" />
+    </Border>
 </UserControl>

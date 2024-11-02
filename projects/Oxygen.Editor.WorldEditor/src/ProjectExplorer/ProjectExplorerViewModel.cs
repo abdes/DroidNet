@@ -216,7 +216,11 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        this.Project = new ProjectAdapter(project, this.projectManager);
+        this.Project = new ProjectAdapter(project, this.projectManager)
+        {
+            // We're hiding the project root
+            Depth = -1,
+        };
         await this.InitializeRootAsync(this.Project).ConfigureAwait(false);
     }
 
@@ -233,7 +237,10 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             {
                 Name = $"New Scene {this.Project.AttachedObject.Scenes.Count}",
             },
-            this.projectManager);
+            this.projectManager)
+        {
+            Depth = 0, // Scenes always at level 0
+        };
 
         var selectedItem = this.SelectionModel?.SelectedItem;
         while (selectedItem is not null && selectedItem is not SceneAdapter && selectedItem.Parent is not null)
@@ -288,7 +295,10 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
                 new GameEntity(parent.AttachedObject)
                 {
                     Name = $"New Entity {parent.AttachedObject.Entities.Count}",
-                });
+                })
+            {
+                Depth = parent.Depth + 1,
+            };
 
         await this.InsertItem(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }

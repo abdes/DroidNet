@@ -33,6 +33,7 @@ using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Oxygen.Editor.WorldEditor.ViewModels;
 using Oxygen.Editor.WorldEditor.Views;
 using Serilog;
+using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
 using Testably.Abstractions;
@@ -153,6 +154,7 @@ public static class HostingExtensions
     private static void CreateLogger(IContainer container)
         => Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Error)
             .Enrich.FromLogContext()
             .WriteTo.Debug(
                 new ExpressionTemplate(

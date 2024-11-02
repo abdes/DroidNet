@@ -10,6 +10,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
+// TODO: item delete and add still puts items in the wrong place
+
 /// <summary>
 /// A ViewModel for the <see cref="DynamicTree" /> control.
 /// </summary>
@@ -25,7 +27,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
             return;
         }
 
-        if (!itemAdapter.Parent!.IsExpanded)
+        if (itemAdapter.Parent?.IsExpanded == false)
         {
             await this.ExpandItemAsync(itemAdapter.Parent).ConfigureAwait(true);
         }
@@ -45,13 +47,24 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         itemAdapter.IsExpanded = false;
     }
 
-    protected async Task InitializeRootAsync(ITreeItem root)
+    protected async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
     {
         this.ShownItems.Clear();
 
-        // Do not add the root item, add its children instead and check if it they need to be expanded
-        root.IsExpanded = true;
-        await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(true);
+        if (!skipRoot)
+        {
+            this.ShownItems.Add(root);
+        }
+        else
+        {
+            // Do not add the root item, add its children instead and check if it they need to be expanded
+            root.IsExpanded = true;
+        }
+
+        if (root.IsExpanded)
+        {
+            await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
+        }
     }
 
     protected async Task InsertItem(int relativeIndex, ITreeItem parent, ITreeItem item)
