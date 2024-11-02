@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="ProjectLayoutView_OnLoaded"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -14,10 +15,16 @@
 
     <Grid>
         <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-            <TreeView x:Name="TreeView" ItemsSource="{x:Bind ViewModel.ProjectRoot}">
+            <TreeView
+                x:Name="TreeView"
+                ItemsSource="{x:Bind ViewModel.ProjectRoot}"
+                SelectionMode="Multiple">
                 <TreeView.ItemTemplate>
                     <DataTemplate x:DataType="local:Folder">
-                        <TreeViewItem x:Name="FolderItem" ItemsSource="{x:Bind Children}">
+                        <TreeViewItem
+                            x:Name="FolderItem"
+                            IsSelected="{x:Bind IsSelected, Mode=OneWay}"
+                            ItemsSource="{x:Bind Children}">
                             <TreeViewItem.Content>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <FontIcon Foreground="Yellow" Glyph="{Binding ElementName=FolderItem, Path=IsExpanded, Converter={StaticResource IconGlyphConverter}}" />

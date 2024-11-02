@@ -4,7 +4,9 @@
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>
@@ -13,7 +15,20 @@ using Microsoft.UI.Xaml.Data;
 [ViewModel(typeof(ProjectLayoutViewModel))]
 public sealed partial class ProjectLayoutView
 {
-    public ProjectLayoutView() => this.InitializeComponent();
+    public ProjectLayoutView()
+    {
+        this.InitializeComponent();
+        Debug.WriteLine("ProjectLayoutView_Constructor");
+    }
+
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        Debug.WriteLine("ProjectLayoutView_OnApplyTemplate");
+    }
+
+    private void ProjectLayoutView_OnLoaded(object sender, RoutedEventArgs e)
+        => Debug.WriteLine("ProjectLayoutView_OnLoaded");
 }
 
 /// <summary>

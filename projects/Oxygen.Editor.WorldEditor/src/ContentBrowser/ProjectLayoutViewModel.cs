@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
@@ -27,6 +28,8 @@ public partial class ProjectLayoutViewModel : ObservableObject, IRoutingAware
         ILocalRouterContext routerContext,
         ILoggerFactory? loggerFactory)
     {
+        Debug.WriteLine("ProjectLayoutViewModel_Constructor");
+
         this.routerContext = routerContext;
         this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
@@ -49,14 +52,46 @@ public partial class ProjectLayoutViewModel : ObservableObject, IRoutingAware
         var storage = projectManager.GetCurrentProjectStorageProvider();
 
         this.ProjectRoot.Add(
-            new Folder(currentProjectInfo.Name + " (Project)", currentProjectInfo.Location, storage, this.logger));
+            new Folder(
+                currentProjectInfo.Name + " (Project)",
+                currentProjectInfo.Location,
+                string.Empty,
+                storage,
+                path => { return this.SelectedPaths.Contains(path); },
+                this.logger));
 
-        this.routerContext.Router.Events.Subscribe(@event => Debug.WriteLine(@event.ToString()));
+        this.routerContext.Router.Events.Subscribe(
+            @event =>
+            {
+                if (@event is ActivationComplete)
+                {
+                    this.OnRouteActivated();
+                }
+            });
     }
 
     public IActiveRoute? ActiveRoute { get; set; }
 
+    public IList<string> SelectedPaths { get; } = [];
+
     internal ObservableCollection<Folder> ProjectRoot { get; } = [];
+
+    private void OnRouteActivated()
+    {
+        Debug.WriteLine("ProjectLayoutViewModel_OnRouteActivated");
+
+        Debug.Assert(this.ActiveRoute is not null, "route is activates");
+
+        if (this.ActiveRoute.QueryParams.TryGetValue("path", out var pathsParam))
+        {
+            foreach (var path in pathsParam!.Split(','))
+            {
+                this.SelectedPaths.Add(path);
+            }
+        }
+
+        Debug.WriteLine("ProjectLayoutViewModel Initial Selection Populated");
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -76,10 +111,18 @@ public partial class ProjectLayoutViewModel : ObservableObject, IRoutingAware
 /// </summary>
 /// <param name="name">The folder name.</param>
 /// <param name="location">The path at which the folder is located.</param>
+/// <param name="pathFromRoot">The relative path of the folder from the project root.</param>
 /// <param name="storage">The <see cref="IStorageProvider" /> which cam be used to access the physical storage folder.</param>
+/// <param name="selectionChecker">A delegate that can determine whether an item should be selected ot not, based on its relative
+/// path from the project root.</param>
 /// <param name="logger">An <see cref="ILogger" /> that should be used by this class.</param>
-internal sealed partial class Folder(string name, string location, IStorageProvider? storage, ILogger logger)
-    : ObservableObject
+internal sealed partial class Folder(
+    string name,
+    string location,
+    string pathFromRoot,
+    IStorageProvider? storage,
+    Folder.SelectionChecker selectionChecker,
+    ILogger logger) : ObservableObject
 {
     private readonly ObservableCollection<Folder> children = [];
 
@@ -90,6 +133,14 @@ internal sealed partial class Folder(string name, string location, IStorageProvi
 
     [ObservableProperty]
     private string name = name;
+
+    [ObservableProperty]
+    private bool isSelected = selectionChecker(pathFromRoot);
+
+    [ObservableProperty]
+    private string pathFromRoot = pathFromRoot;
+
+    public delegate bool SelectionChecker(string pathFromRoot);
 
     public ObservableCollection<Folder> Children
     {
@@ -114,6 +165,8 @@ internal sealed partial class Folder(string name, string location, IStorageProvi
 
     private async Task LoadProjectFoldersAsync()
     {
+        Debug.WriteLine($"ProjectLayoutViewModel_LoadProjectFoldersAsync '{this.Name}'");
+
         if (storage is null)
         {
             return;
@@ -124,7 +177,18 @@ internal sealed partial class Folder(string name, string location, IStorageProvi
         {
             try
             {
-                this.children.Add(new Folder(child.Name, child.Location, storage, logger));
+                var childPathFromRoot = this.PathFromRoot.Length == 0
+                    ? child.Name
+                    : $"{this.PathFromRoot}/{child.Name}";
+
+                this.children.Add(
+                    new Folder(
+                        child.Name,
+                        child.Location,
+                        childPathFromRoot,
+                        storage,
+                        selectionChecker,
+                        logger));
             }
             catch (Exception ex)
             {
