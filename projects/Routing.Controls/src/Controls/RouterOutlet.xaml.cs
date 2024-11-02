@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing.Controls;
 
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
@@ -45,7 +46,12 @@ public sealed partial class RouterOutlet
             }
 
             this.UpdateContent();
+
+            // Listen for future changes to the ViewModel or the VmToViewConverter properties
+            this.PropertyChanged += this.OnNeedUpdateContent;
         };
+
+        this.Unloaded += (_, _) => this.PropertyChanged -= this.OnNeedUpdateContent;
     }
 
     public string? Outlet { get; set; }
@@ -56,16 +62,16 @@ public sealed partial class RouterOutlet
 
     public bool IsPopulated => this.OutletContent is not null;
 
-    partial void OnViewModelChanged(object? value)
+    private void OnNeedUpdateContent(object? sender, PropertyChangedEventArgs args)
     {
-        _ = value; // Avoid parameter unused warning
-        this.UpdateContent();
-    }
+        _ = sender; // unused
 
-    partial void OnVmToViewConverterChanged(IValueConverter? value)
-    {
-        _ = value; // Avoid parameter unused warning
-        this.UpdateContent();
+        if (args.PropertyName is not null &&
+            (args.PropertyName.Equals(nameof(this.ViewModel), StringComparison.Ordinal) ||
+             args.PropertyName.Equals(nameof(this.VmToViewConverter), StringComparison.Ordinal)))
+        {
+            this.UpdateContent();
+        }
     }
 
     private void UpdateContent()
