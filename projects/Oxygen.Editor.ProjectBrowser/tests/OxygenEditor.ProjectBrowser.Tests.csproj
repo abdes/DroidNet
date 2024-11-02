@@ -21,6 +21,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Hosting" />
         <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
