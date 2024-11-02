@@ -59,6 +59,13 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     {
         this.ValidIndexOrThrow(index);
 
+        // Avoid unnecessary change events when the only already selected item
+        // is selected again
+        if (this.selectedIndices.Count == 1 && index == this.SelectedIndex)
+        {
+            return;
+        }
+
         // Modify the collection quietly. We'll only trigger a collection change
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
