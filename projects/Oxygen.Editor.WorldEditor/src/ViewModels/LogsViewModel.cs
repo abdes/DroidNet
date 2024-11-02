@@ -5,10 +5,7 @@
 namespace Oxygen.Editor.WorldEditor.ViewModels;
 
 using DroidNet.Controls.OutputLog;
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
 
-[InjectAs(ServiceLifetime.Transient)]
 public class LogsViewModel(DelegatingSink<RichTextBlockSink> outputLogSink)
 {
     public DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;

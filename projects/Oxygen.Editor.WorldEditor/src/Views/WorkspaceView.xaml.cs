@@ -4,9 +4,7 @@
 
 namespace Oxygen.Editor.WorldEditor.Views;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
 /// <summary>
@@ -14,7 +12,6 @@ using Oxygen.Editor.WorldEditor.ViewModels;
 /// entities.
 /// </summary>
 [ViewModel(typeof(WorkspaceViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class WorkspaceView
 {
     public WorkspaceView() => this.InitializeComponent();

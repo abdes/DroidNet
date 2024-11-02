@@ -5,13 +5,10 @@
 namespace Oxygen.Editor.Shell;
 
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 /// <summary>The ViewModel for the application main window's shell.</summary>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class ShellViewModel : AbstractOutletContainer
 {
     private readonly IRouter router;

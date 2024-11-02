@@ -57,10 +57,8 @@
         -->
 
         <!-- Don't reference the generator dll -->
-        <ProjectReference Include="..\..\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="..\..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
         <ProjectReference Include="..\..\..\Hosting\src\Hosting.csproj" />
     </ItemGroup>

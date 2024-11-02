@@ -6,42 +6,33 @@ namespace DroidNet.Routing.WinUI;
 
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using DryIoc;
 
 /// <summary>
-/// Provides extension methods for the <see cref="IHostBuilder" />
-/// class to configure a <see cref="Router" />.
+/// Provides extension methods for the DryIoc <see cref="IContainer" /> class to configure a <see cref="Router" />.
 /// </summary>
 public static class HostBuilderExtensions
 {
     /// <summary>
-    /// Configures a <see cref="Router" /> for the
-    /// <see cref="IHostBuilder" /> using the provided <see cref="Routes" />
+    /// Configures a <see cref="Router" /> for the DryIoc <see cref="IContainer" /> using the provided <see cref="Routes" />
     /// <paramref name="config" />.
     /// </summary>
-    /// <param name="hostBuilder">
-    /// The <see cref="IHostBuilder" />instance.
+    /// <param name="container">
+    /// The DryIoc <see cref="IContainer" />instance to which to add service registrations for the Router module.
     /// </param>
     /// <param name="config">The <see cref="Routes" /> configuration.</param>
-    /// <returns>The <see cref="IHostBuilder" /> instance.</returns>
-    public static IHostBuilder ConfigureRouter(this IHostBuilder hostBuilder, Routes config)
+    public static void ConfigureRouter(this IContainer container, Routes config)
     {
-        _ = hostBuilder.ConfigureServices(
-            (_, services) => services
-                /* Configure the router support services*/
-                .AddSingleton<IViewLocator, DefaultViewLocator>()
-                .AddSingleton<ViewModelToView>()
-                .AddSingleton<IUrlSerializer, DefaultUrlSerializer>()
-                .AddSingleton<IUrlParser, DefaultUrlParser>()
-                .AddSingleton<IRouteActivator, WindowRouteActivator>()
-                .AddSingleton<IContextProvider, WindowContextProvider>()
-                /* Configure the router */
-                .AddSingleton<IRoutes>(config)
-                .AddSingleton<IRouterStateManager, RouterStateManager>()
-                .AddSingleton<RouterContextManager>()
-                .AddSingleton<IRouter, Router>());
-
-        return hostBuilder;
+        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+        container.Register<ViewModelToView>(Reuse.Singleton);
+        container.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
+        container.Register<IUrlParser, DefaultUrlParser>(Reuse.Singleton);
+        container.Register<IRouteActivator, WindowRouteActivator>(Reuse.Singleton);
+        container.Register<IContextProvider, WindowContextProvider>(Reuse.Singleton);
+        /* Configure the router */
+        container.RegisterInstance<IRoutes>(config);
+        container.Register<IRouterStateManager, RouterStateManager>(Reuse.Singleton);
+        container.Register<RouterContextManager>(Reuse.Singleton);
+        container.Register<IRouter, Router>(Reuse.Singleton);
     }
 }

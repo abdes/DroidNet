@@ -52,18 +52,18 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
-        <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
         <PackageReference Include="Serilog.Expressions" />
         <PackageReference Include="Serilog.Extensions.Logging" />
         <PackageReference Include="Serilog.Sinks.Console" />
         <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\Docking\src\Docking.csproj" />
-        <ProjectReference Include="..\..\..\Mvvm\src\Mvvm.csproj" />
-        <ProjectReference Include="..\..\..\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
 
         <!--
         For source generator (or analyzer) projects, you need to tweak the project reference element so it works as
@@ -73,25 +73,15 @@
          - ReferenceOutputAssembly="false" tells the project not to reference the source generator project's dll.
         -->
 
-        <ProjectReference Include="..\..\..\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="..\..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
-
-        <ProjectReference Include="..\..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="..\..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be
     activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
-    </ItemGroup>
-    <ItemGroup>
-      <Page Update="Info\WelcomeView.xaml">
-        <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-        <SubType>Designer</SubType>
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
     </ItemGroup>
 
     <!-- Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and

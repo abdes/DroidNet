@@ -6,21 +6,23 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.Diagnostics;
 using DroidNet.Routing;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
 /// <summary>
 /// Implements the <see cref="IRouteActivator" /> interface for activating routes inside the internal router used by the Content
 /// Browser module.
 /// </summary>
-/// <param name="serviceProvider">
+/// <param name="container">
 /// The <see cref="IServiceProvider" /> that should be used to obtain instances of required service, ViewModels and Views.
 /// </param>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
-internal sealed partial class InternalRouteActivator(IServiceProvider serviceProvider, ILoggerFactory? loggerFactory)
-    : AbstractRouteActivator(serviceProvider, loggerFactory)
+internal sealed partial class InternalRouteActivator(IContainer container, ILoggerFactory? loggerFactory)
+    : AbstractRouteActivator(container, CreateLogger(loggerFactory))
 {
     protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
     {
@@ -62,6 +64,10 @@ internal sealed partial class InternalRouteActivator(IServiceProvider servicePro
                 $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
         }
     }
+
+    private static ILogger<InternalRouteActivator> CreateLogger(ILoggerFactory? loggerFactory)
+        => loggerFactory?.CreateLogger<InternalRouteActivator>() ??
+           NullLoggerFactory.Instance.CreateLogger<InternalRouteActivator>();
 
     [LoggerMessage(
         SkipEnabledCheck = true,

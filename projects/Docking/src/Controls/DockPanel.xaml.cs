@@ -71,12 +71,12 @@ public sealed partial class DockPanel
             .Subscribe(
                 evt => this.DispatcherQueue.TryEnqueue(() => this.ViewModel?.OnSizeChanged(evt.EventArgs.NewSize)));
 
-        // We should always set the initial size in the view model after the view is loaded, and everytime the view
+        // We should always set the initial size in the view model after the view is loaded, and every time the view
         // model changes.
         this.ViewModel?.OnSizeChanged(this.GetActualSize());
         this.ViewModelChanged += this.OnViewModelChanged;
 
-        //this.InitializeTabView();
+        // this.InitializeTabView();
     }
 
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<DockPanelViewModel> args)
@@ -89,12 +89,13 @@ public sealed partial class DockPanel
         if (this.ViewModel is not null)
         {
             // Subscribe
-            //((INotifyCollectionChanged)this.ViewModel.Dockables).CollectionChanged += this.Dockables_CollectionChanged;
+            // ((INotifyCollectionChanged)this.ViewModel.Dockables).CollectionChanged += this.Dockables_CollectionChanged;
         }
 
         this.UpdateViewModelWithInitialSize();
     }
 
+    // TODO: Rework tabs for DockPanel dockables
 #if false
     private void InitializeTabView()
     {

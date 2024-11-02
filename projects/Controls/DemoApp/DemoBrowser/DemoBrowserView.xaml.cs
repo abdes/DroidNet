@@ -6,14 +6,11 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 
 using System.Diagnostics;
 using DroidNet.Converters;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(DemoBrowserViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class DemoBrowserView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";

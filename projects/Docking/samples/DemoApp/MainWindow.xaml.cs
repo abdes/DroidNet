@@ -11,9 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking.Demo.Controls;
 using DroidNet.Docking.Demo.Shell;
 using DroidNet.Docking.Workspace;
-using DroidNet.Hosting.Generators;
 using DryIoc;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 /// <summary>The User Interface's main window.</summary>
@@ -32,7 +30,6 @@ using Microsoft.UI.Xaml;
 /// </remarks>
 [ExcludeFromCodeCoverage]
 [ObservableObject]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class MainWindow
 {
     [ObservableProperty]

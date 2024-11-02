@@ -43,13 +43,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
         <PackageReference Include="Serilog.Expressions" />
         <PackageReference Include="Serilog.Extensions.Logging" />
         <PackageReference Include="Serilog.Extensions.Hosting" />
         <PackageReference Include="Serilog.Sinks.Console" />
         <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>
@@ -64,8 +64,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
-        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators\src\Hosting.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-        <ProjectReference Include="$(ProjectsRoot)\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

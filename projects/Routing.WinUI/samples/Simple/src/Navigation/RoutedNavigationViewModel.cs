@@ -8,9 +8,7 @@ using System;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// A ViewModel for a page with a NavigationView control, which relies on a <see cref="IRouter">router</see> to navigate between
@@ -18,7 +16,6 @@ using Microsoft.Extensions.DependencyInjection;
 /// work if it creates the Page instances itself, breaking the MVVM model.
 /// </summary>
 /// <param name="router">The router to use for navigation.</param>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class RoutedNavigationViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
@@ -33,13 +30,13 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
 
     public IList<NavigationItem> NavigationItems { get; } =
     [
-        new NavigationItem("1", "One", "\uf146", "1", typeof(PageOneViewModel)),
-        new NavigationItem("2", "Two", "\uf147", "2", typeof(PageTwoViewModel)),
+        new("1", "One", "\uf146", "1", typeof(PageOneViewModel)),
+        new("2", "Two", "\uf147", "2", typeof(PageTwoViewModel)),
     ];
 
     public IList<NavigationItem> FooterItems { get; } =
     [
-        new NavigationItem("3", "Three", "\uf148", "3", typeof(PageThreeViewModel)),
+        new("3", "Three", "\uf148", "3", typeof(PageThreeViewModel)),
     ];
 
     public IList<NavigationItem> AllItems => [.. this.NavigationItems, .. this.FooterItems];

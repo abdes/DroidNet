@@ -6,16 +6,11 @@ namespace Oxygen.Editor;
 
 using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Config;
-using DroidNet.Docking.Controls;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DryIoc;
@@ -24,26 +19,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Config;
-using Oxygen.Editor.Projects.Storage;
-using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell;
-using Oxygen.Editor.Storage;
-using Oxygen.Editor.Storage.Native;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Serilog;
-using Serilog.Events;
-using Serilog.Templates;
 using Testably.Abstractions;
 
 /// <summary>
@@ -97,23 +80,26 @@ public static partial class Program
                 DroidNet.Hosting.WinUI.HostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
 
-            var host = builder
+            // Setup injections for the Options pattern
+            // Configure the DB Context for the persistent state
+            _ = builder
                 .ConfigureAppConfiguration(AddConfigurationFiles)
-                .ConfigureLogging()
-                .ConfigureWinUI<App>()
-                .ConfigureRouter(MakeRoutes())
-                .ConfigureAutoInjected()
-
-                // Setup injections for the Options pattern
                 .ConfigureServices(ConfigureOptionsPattern)
+                .ConfigureServices(ConfigurePersistentStateDatabase);
 
-                // Configure the DB Context for the persistent state
-                .ConfigureServices(ConfigurePersistentStateDatabase)
+            var host = builder
+                .ConfigureWinUI<App>()
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (_, serviceProvider) =>
+                    {
+                        var container = serviceProvider.Container;
+                        container.ConfigureLogging();
+                        container.ConfigureRouter(MakeRoutes());
+                        container.ConfigureApplicationServices();
 
-                // Continue setting up the DI container using DryIo API for more flexibility
-                .ConfigureContainer<DryIocServiceProvider>(RegisterApplicationServices)
-
-                // Build the host
+                        // Setup the CommunityToolkit.Mvvm Ioc helper
+                        Ioc.Default.ConfigureServices(serviceProvider);
+                    })
                 .Build();
 
             using (var scope = host.Services.CreateScope())
@@ -121,8 +107,6 @@ public static partial class Program
                 var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
                 db.Database.Migrate();
             }
-
-            Ioc.Default.ConfigureServices(host.Services);
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
             // closing the UI windows or programmatically.
@@ -136,90 +120,6 @@ public static partial class Program
         {
             Log.CloseAndFlush();
         }
-    }
-
-    /// <summary>
-    /// Use Serilog, but decouple the logging clients from the implementation by using the generic <see cref="ILogger" /> instead
-    /// of Serilog's ILogger.
-    /// </summary>
-    /// <seealso href="https://nblumhardt.com/2021/06/customize-serilog-text-output/" />
-    /// TODO: https://github.com/serilog-contrib/serilog-sinks-richtextbox
-    private static void ConfigureLogger() =>
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
-
-    private static void RegisterApplicationServices(HostBuilderContext context, DryIocServiceProvider sp)
-    {
-        /*
-         * Register core services.
-         */
-
-        sp.Container.Register<IFileSystem, RealFileSystem>(Reuse.Singleton);
-        sp.Container.Register<NativeStorageProvider>(Reuse.Singleton);
-        sp.Container.Register<IPathFinder, DevelopmentPathFinder>(Reuse.Singleton); // TODO: release version
-        sp.Container.Register<IThemeSelectorService, ThemeSelectorService>(Reuse.Singleton);
-        sp.Container.Register<IAppNotificationService, AppNotificationService>(Reuse.Singleton);
-        sp.Container.Register<IActivationService, ActivationService>(Reuse.Singleton);
-
-        /*
-         * Register domain specific services.
-         */
-
-        // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
-        // Register specific template source implementations KEYED. They are injected only as a collection of implementation
-        // instances, only by the universal source.
-        sp.Container.Register<ITemplatesSource, UniversalTemplatesSource>(reuse: Reuse.Singleton);
-        sp.Container.Register<ITemplatesSource, LocalTemplatesSource>(
-            reuse: Reuse.Singleton,
-            serviceKey: Uri.UriSchemeFile);
-        sp.Container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
-
-        // TODO: use keyed registration and parameter name to key mappings
-        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
-        sp.Container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
-        sp.Container.Register<LocalProjectsSource>(Reuse.Singleton);
-        sp.Container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
-        sp.Container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
-        sp.Container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
-
-        // Register the project instance using a delegate that will request the currently open project from the project
-        // browser service.
-        sp.Container.RegisterDelegate(
-            resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
-
-        /*
-         * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
-         * if the view cannot be located.
-         */
-
-        sp.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        sp.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
-
-        /*
-         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
-         * target name is the key used when registering the window type.
-         *
-         * There should always be a Window registered for the special target <c>_main</c>.
-         */
-
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // Views and ViewModels that are not auto-registered for injection
-        // TODO(abdes): refactor into extension method
-        sp.Container.Register<DockPanelViewModel>(Reuse.Transient);
-        sp.Container.Register<DockPanel>(Reuse.Transient);
-        sp.Container.Register<ProjectExplorerViewModel>(Reuse.Transient);
-        sp.Container.Register<ProjectExplorerView>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(

@@ -14,7 +14,7 @@
 
     <Grid>
         <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-            <TreeView ItemsSource="{x:Bind ViewModel.ProjectRoot}">
+            <TreeView x:Name="TreeView" ItemsSource="{x:Bind ViewModel.ProjectRoot}">
                 <TreeView.ItemTemplate>
                     <DataTemplate x:DataType="local:Folder">
                         <TreeViewItem x:Name="FolderItem" ItemsSource="{x:Bind Children}">

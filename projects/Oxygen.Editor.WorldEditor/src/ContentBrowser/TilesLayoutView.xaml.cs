@@ -4,14 +4,10 @@
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml.Controls;
 
 [ViewModel(typeof(TilesLayoutViewModel))]
-[InjectAs(ServiceLifetime.Transient)]
-public sealed partial class TilesLayoutView : UserControl
+public sealed partial class TilesLayoutView
 {
     public TilesLayoutView() => this.InitializeComponent();
 }

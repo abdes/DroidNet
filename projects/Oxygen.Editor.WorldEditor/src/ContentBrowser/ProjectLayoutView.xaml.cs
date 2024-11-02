@@ -4,16 +4,13 @@
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
 
 /// <summary>
 /// The View for the Project Layout pane in the <see cref="ContentBrowserView" />.
 /// </summary>
 [ViewModel(typeof(ProjectLayoutViewModel))]
-[InjectAs(ServiceLifetime.Transient)]
 public sealed partial class ProjectLayoutView
 {
     public ProjectLayoutView() => this.InitializeComponent();

@@ -6,6 +6,7 @@ namespace DroidNet.Routing;
 
 using System.Diagnostics;
 using DroidNet.Routing.Detail;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -13,36 +14,41 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// Abstract route activator to just provide an implementation for <see cref="IRouteActivator.ActivateRoutesRecursive" /> using
 /// the <see cref="IRouteActivator.ActivateRoute" /> method.
 /// </summary>
-/// <param name="serviceProvider">The dependency injector's service provider.</param>
-/// <param name="loggerFactory">
-/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a
-/// <see cref="ILogger" /> from the Dependency Injector.
+/// <param name="container">
+/// The IoC container to use when resolving a ViewModel type to a ViewModel for the route being activated.
 /// </param>
-public abstract partial class AbstractRouteActivator(
-    IServiceProvider serviceProvider,
-    ILoggerFactory? loggerFactory) : IRouteActivator
+/// <param name="logger">
+/// The logger to be used by this base class for logging.
+/// </param>
+public abstract partial class AbstractRouteActivator(IContainer container, ILogger logger)
+    : IRouteActivator
 {
-    protected ILogger Logger { get; } = loggerFactory?.CreateLogger<Router>() ??
-                                        NullLoggerFactory.Instance.CreateLogger<Router>();
+    /// <summary>
+    /// Gets the logger used by this base class and its derived class.
+    /// </summary>
+    /// <remarks>
+    /// The proper way for getting the logger is to have a <see cref="ILoggerFactory" /> injected in the concrete class, and then
+    /// if it's not <see langword="null" />, get a <see cref="ILogger" /> from it, otherwise use a <see cref="NullLogger" />. This
+    /// way, we ensure that if this API is used and logging is not desired, it can simply be completely turned off by providing a
+    /// <see langword="null" /> <see cref="ILoggerFactory" />.
+    /// </remarks>
+    protected ILogger Logger => logger;
 
     /// <inheritdoc />
     public bool ActivateRoutesRecursive(IActiveRoute root, RouterContext context)
     {
-        var success = true;
+        var activationSuccessful = true;
 
         // The state root is simply a placeholder for the tree and cannot be
         // activated.
         if (root.Parent != null)
         {
-            success = success && this.ActivateRoute(root, context);
+            activationSuccessful = activationSuccessful && this.ActivateRoute(root, context);
         }
 
-        foreach (var route in root.Children)
-        {
-            success = success && this.ActivateRoutesRecursive(route, context);
-        }
-
-        return success;
+        return root.Children.Aggregate(
+            activationSuccessful,
+            (currentStatus, route) => currentStatus && this.ActivateRoutesRecursive(route, context));
     }
 
     /// <inheritdoc />
@@ -54,7 +60,7 @@ public abstract partial class AbstractRouteActivator(
 
         if (routeImpl.IsActivated)
         {
-            LogActivationSkipped(this.Logger, route);
+            LogActivationSkipped(logger, route);
             return true;
         }
 
@@ -68,10 +74,11 @@ public abstract partial class AbstractRouteActivator(
         {
             // The route may be without a ViewModel (typically a route to load
             // data or hold shared parameters).
-            var viewmodelType = routeImpl.RouteConfig.ViewModelType;
-            if (viewmodelType != null)
+            var viewModelType = routeImpl.RouteConfig.ViewModelType;
+            if (viewModelType != null)
             {
-                var viewModel = this.ResolveViewModel(viewmodelType);
+                var viewModel = container.GetService(viewModelType) ??
+                                throw new MissingViewModelException { ViewModelType = viewModelType };
                 routeImpl.ViewModel = viewModel;
                 if (viewModel is IRoutingAware injectable)
                 {
@@ -86,7 +93,7 @@ public abstract partial class AbstractRouteActivator(
         }
         catch (Exception ex)
         {
-            LogActivationFailed(this.Logger, routeImpl, ex);
+            LogActivationFailed(logger, routeImpl, ex);
             return false;
         }
     }
@@ -104,10 +111,4 @@ public abstract partial class AbstractRouteActivator(
         Level = LogLevel.Debug,
         Message = "Activation not needed because the route {Route} is already activated")]
     private static partial void LogActivationSkipped(ILogger logger, IActiveRoute route);
-
-    private object ResolveViewModel(Type viewModelType)
-    {
-        var viewModel = serviceProvider.GetService(viewModelType);
-        return viewModel ?? throw new MissingViewModelException { ViewModelType = viewModelType };
-    }
 }

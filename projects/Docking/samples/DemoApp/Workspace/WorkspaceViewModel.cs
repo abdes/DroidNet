@@ -6,12 +6,9 @@ namespace DroidNet.Docking.Demo.Workspace;
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking.Layouts.GridFlow;
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 /// <summary>The ViewModel for the docking workspace.</summary>
-[InjectAs(ServiceLifetime.Transient)]
 public partial class WorkspaceViewModel : ObservableObject
 {
     [ObservableProperty]

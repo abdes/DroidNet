@@ -4,9 +4,7 @@
 
 namespace Oxygen.Editor.Shell;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -16,7 +14,6 @@ using Windows.System;
 
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(ShellViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class ShellView
 {
     public ShellView()

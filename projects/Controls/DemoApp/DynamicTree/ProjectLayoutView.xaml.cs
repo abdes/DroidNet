@@ -5,9 +5,7 @@
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 using DroidNet.Controls.Demo.Model;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 
@@ -17,7 +15,6 @@ using Microsoft.UI.Xaml.Input;
 /// in representing hierarchical layouts of mixed types which can be loaded dynamically.
 /// </summary>
 [ViewModel(typeof(ProjectLayoutViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class ProjectLayoutView
 {
     public ProjectLayoutView() => this.InitializeComponent();

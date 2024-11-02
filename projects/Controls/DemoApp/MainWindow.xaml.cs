@@ -9,10 +9,8 @@ namespace DroidNet.Controls.Demo;
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.WinUI;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 /// <summary>The User Interface's main window.</summary>
@@ -31,7 +29,6 @@ using Microsoft.UI.Xaml;
 /// </remarks>
 [ExcludeFromCodeCoverage]
 [ObservableObject]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class MainWindow : IOutletContainer
 {
     private readonly IViewLocator viewLocator;

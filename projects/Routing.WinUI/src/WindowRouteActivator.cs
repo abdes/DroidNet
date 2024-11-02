@@ -5,28 +5,26 @@
 namespace DroidNet.Routing.WinUI;
 
 using System.Diagnostics;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
-/// Represents a route activator (<see cref="IRouteActivator" />) that
-/// activates routes by loading their view models into
-/// <see cref="IOutletContainer">outlets</see> defined in their parent views.
+/// Represents a route activator (<see cref="IRouteActivator" />) that activates routes by loading their view models into <see cref="IOutletContainer">outlets</see> defined in their parent views.
 /// </summary>
 /// <remarks>
-/// If the route being activated is the root route, then it does not have a
-/// parent. In such case, the content is loaded into the context's window,
-/// provided that window implements <see cref="IOutletContainer" />.
+/// If the route being activated is the root route, then it does not have a parent. In such case, the content is loaded into the
+/// context's window, provided that window implements <see cref="IOutletContainer" />.
 /// </remarks>
-/// <param name="provider">The dependency injector's service provider.</param>
+/// <param name="container">
+/// The IoC container to use when resolving a ViewModel type to a ViewModel for the route being activated.
+/// </param>
 /// <param name="loggerFactory">
-/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
-/// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
-/// from the Dependency Injector.
+/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
 internal sealed partial class WindowRouteActivator(
-    IServiceProvider provider,
-    ILoggerFactory? loggerFactory) : AbstractRouteActivator(provider, loggerFactory)
+    IContainer container,
+    ILoggerFactory? loggerFactory) : AbstractRouteActivator(container, CreateLogger(loggerFactory))
 {
     /// <inheritdoc />
     protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
@@ -62,9 +60,9 @@ internal sealed partial class WindowRouteActivator(
 
             Debug.WriteLine($"Effective parent for '{route}' is: {parent}");
 
-            if (parent?.ViewModel is IOutletContainer container)
+            if (parent?.ViewModel is IOutletContainer outletContainer)
             {
-                container.LoadContent(route.ViewModel, route.Outlet);
+                outletContainer.LoadContent(route.ViewModel, route.Outlet);
             }
             else
             {
@@ -78,6 +76,10 @@ internal sealed partial class WindowRouteActivator(
             }
         }
     }
+
+    private static ILogger<WindowRouteActivator> CreateLogger(ILoggerFactory? loggerFactory)
+        => loggerFactory?.CreateLogger<WindowRouteActivator>() ??
+           NullLoggerFactory.Instance.CreateLogger<WindowRouteActivator>();
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -93,9 +95,9 @@ internal sealed partial class WindowRouteActivator(
             window is not null,
             "expecting the window in the router context to be created by me");
 
-        if (window is IOutletContainer container)
+        if (window is IOutletContainer outletContainer)
         {
-            container.LoadContent(route.ViewModel, route.Outlet);
+            outletContainer.LoadContent(route.ViewModel, route.Outlet);
         }
         else
         {

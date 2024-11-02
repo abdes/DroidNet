@@ -10,9 +10,7 @@ using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Projects;
@@ -24,7 +22,6 @@ using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
 #pragma warning restore IDE0001 // Simplify Names
 
 /// <summary>ViewModel for the page used to open an existing project in the project browser.</summary>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class OpenProjectViewModel : ObservableObject
 {
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;

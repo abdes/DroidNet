@@ -10,19 +10,16 @@ namespace DroidNet.Controls.Demo;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
 using Serilog;
 
 /// <summary>
@@ -78,11 +75,18 @@ public static partial class Program
                 new HostingContext() { IsLifetimeLinked = true });
 
             var host = builder
-                .ConfigureLogging()
                 .ConfigureWinUI<App>()
-                .ConfigureRouter(MakeRoutes())
-                .ConfigureAutoInjected()
-                .ConfigureContainer<DryIocServiceProvider>(ConfigureAdditionalServices)
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (_, serviceProvider) =>
+                    {
+                        var container = serviceProvider.Container;
+                        container.ConfigureLogging();
+                        container.ConfigureRouter(MakeRoutes());
+                        container.ConfigureApplicationServices();
+
+                        // Setup the CommunityToolkit.Mvvm Ioc helper
+                        Ioc.Default.ConfigureServices(serviceProvider);
+                    })
                 .Build();
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
@@ -97,24 +101,6 @@ public static partial class Program
         {
             Log.CloseAndFlush();
         }
-    }
-
-    private static void ConfigureAdditionalServices(
-        HostBuilderContext hostBuilderContext,
-        DryIocServiceProvider sp)
-    {
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // TODO(abdes): refactor into extension method
-        // Set up the view model to view converters. We're using the standard
-        // converter, and a custom one with fall back if the view cannot be
-        // located.
-        sp.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        sp.Container.Register<IValueConverter, ViewModelToView>(
-            Reuse.Singleton,
-            serviceKey: "VmToView");
     }
 
     private static Routes MakeRoutes() => new(

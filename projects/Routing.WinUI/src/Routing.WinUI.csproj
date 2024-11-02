@@ -17,8 +17,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />

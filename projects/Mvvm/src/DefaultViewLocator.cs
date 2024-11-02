@@ -6,6 +6,7 @@ namespace DroidNet.Mvvm;
 
 using System.Diagnostics;
 using System.Reflection;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -77,8 +78,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// class using the default implementation for the function mapping view
 /// model's name to view name.
 /// </remarks>
-/// <param name="serviceLocator">
-/// The DI <see cref="IServiceProvider" />.
+/// <param name="container">
+/// The DryIoc <see cref="IContainer" /> used to locate views and view models registered as services.
 /// </param>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
@@ -89,7 +90,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// The method which will convert a 'ViewModel' name into a 'View' name.
 /// </param>
 public partial class DefaultViewLocator(
-    IServiceProvider serviceLocator,
+    IContainer container,
     ILoggerFactory? loggerFactory,
     Func<string, string>? viewModelToViewFunc = null) : IViewLocator
 {
@@ -293,7 +294,7 @@ public partial class DefaultViewLocator(
                 return null;
             }
 
-            var service = serviceLocator.GetService(viewType);
+            var service = container.GetService(viewType);
             if (service is IViewFor view)
             {
                 return view;

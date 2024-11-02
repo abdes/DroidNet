@@ -9,8 +9,6 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Samples.Simple.Navigation;
 using DroidNet.Routing.Samples.Simple.Shell;
@@ -18,10 +16,7 @@ using DroidNet.Routing.WinUI;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -77,21 +72,19 @@ public static partial class Program
 
             var host = builder
                 .ConfigureAppConfiguration(AddConfigurationFiles)
-                .ConfigureLogging()
                 .ConfigureWinUI<App>()
-                .ConfigureRouter(MakeRoutes())
-                .ConfigureAutoInjected()
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (_, serviceProvider) =>
+                    {
+                        var container = serviceProvider.Container;
+                        container.ConfigureLogging();
+                        container.ConfigureRouter(MakeRoutes());
+                        container.ConfigureApplicationServices();
 
-                // Setup injections for the Options pattern
-                .ConfigureServices(ConfigureOptionsPattern)
-
-                // Continue setting up the DI container using DryIo API for more flexibility
-                .ConfigureContainer<DryIocServiceProvider>(RegisterApplicationServices)
-
-                // Build the host
+                        // Setup the CommunityToolkit.Mvvm Ioc helper
+                        Ioc.Default.ConfigureServices(serviceProvider);
+                    })
                 .Build();
-
-            Ioc.Default.ConfigureServices(host.Services);
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
             // closing the UI windows or programmatically.
@@ -123,31 +116,6 @@ public static partial class Program
                     new CultureInfo("en-US")))
             /* .WriteTo.Seq("http://localhost:5341/") */
             .CreateLogger();
-
-    private static void RegisterApplicationServices(HostBuilderContext context, DryIocServiceProvider sp)
-    {
-        // Register core services
-
-        // Register domain specific services, which serve data required by the views
-
-        // Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
-        // if the view cannot be located.
-        sp.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        sp.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
-
-        /*
-         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
-         * target name is the key used when registering the window type.
-         *
-         * There should always be a Window registered for the special target <c>_main</c>.
-         */
-
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        sp.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // Views and ViewModels, which are not auto registered in the DI injector via the InjectAs attribute
-    }
 
     private static Routes MakeRoutes() => new(
     [
@@ -201,11 +169,5 @@ public static partial class Program
     {
         _ = context; // unused
         _ = config; // unused
-    }
-
-    private static void ConfigureOptionsPattern(HostBuilderContext context, IServiceCollection sc)
-    {
-        _ = context; // unused
-        _ = sc; // unused
     }
 }

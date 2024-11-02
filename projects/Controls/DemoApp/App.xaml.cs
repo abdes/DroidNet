@@ -24,25 +24,19 @@ public partial class App
     /// <summary>
     /// Initializes a new instance of the <see cref="App" /> class.
     /// </summary>
-    /// In this project architecture, the single instance of the application is
-    /// created by the User Interface hosted service as part of the application
-    /// host initialization. Its lifecycle is managed together with the rest of
-    /// the services.
+    /// In this project architecture, the single instance of the application is created by the User Interface hosted service as
+    /// part of the application host initialization. Its lifecycle is managed together with the rest of the services.
     /// <param name="lifetime">
-    /// The host application lifetime, used to
-    /// imperatively exit the application when needed.
+    /// The host application lifetime, used to imperatively exit the application when needed.
     /// </param>
     /// <param name="router">The application router.</param>
     /// <param name="converter">
-    /// The ViewModel to View converter to be used to set the content inside
-    /// the content control.
+    /// The ViewModel to View converter to be used to set the content inside the content control.
     /// </param>
     /// <remarks>
-    /// The <paramref name="converter" /> needs to be available in the XAML as
-    /// a static resource. However, because it has dependencies injected via
-    /// the Dependency Injector, we create it in the code behind and
-    /// programmatically add it as a static resource after the application is
-    /// <see cref="OnLaunched">launched</see>.
+    /// The <paramref name="converter" /> needs to be available in the XAML as a static resource. However, because it has
+    /// dependencies injected via the Dependency Injector, we create it in the code behind and programmatically add it as a static
+    /// resource after the application is <see cref="OnLaunched">launched</see>.
     /// </remarks>
     public App(
         IHostApplicationLifetime lifetime,

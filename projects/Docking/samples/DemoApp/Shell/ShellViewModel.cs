@@ -8,12 +8,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking.Demo.Workspace;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Layouts.GridFlow;
-using DroidNet.Hosting.Generators;
 using DryIoc;
-using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>The ViewModel for the application main window shell.</summary>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class ShellViewModel : ObservableObject
 {
     private readonly IResolver resolver;

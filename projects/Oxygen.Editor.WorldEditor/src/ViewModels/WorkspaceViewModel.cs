@@ -8,9 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts.GridFlow;
 using DroidNet.Docking.Workspace;
-using DroidNet.Hosting.Generators;
 using DryIoc;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
@@ -18,7 +16,6 @@ using Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// <summary>
 /// The view model for the World Editor main view.
 /// </summary>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class WorkspaceViewModel : ObservableObject
 {
     [ObservableProperty]

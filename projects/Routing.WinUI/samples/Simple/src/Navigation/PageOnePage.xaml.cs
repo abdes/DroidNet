@@ -4,13 +4,10 @@
 
 namespace DroidNet.Routing.Samples.Simple.Navigation;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>A simple page for demonstration.</summary>
 [ViewModel(typeof(PageOneViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class PageOneView
 {
     public PageOneView() => this.InitializeComponent();

@@ -13,7 +13,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="GridSplitterStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/ContentBrowser/GridSplitterStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
 

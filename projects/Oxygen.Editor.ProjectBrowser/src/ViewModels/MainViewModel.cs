@@ -7,16 +7,13 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// The view model for the start screen. Mainly responsible for the navigation
 /// between the different views in the project browser start screen.
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class MainViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
@@ -31,9 +28,9 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
 
     public IList<NavigationItem> NavigationItems { get; } =
     [
-        new NavigationItem("home", "Home", "\uE80F", "H", typeof(HomeViewModel)),
-        new NavigationItem("new", "New", "\uE8A5", "N", typeof(NewProjectViewModel)),
-        new NavigationItem("open", "Open", "\uE8B7", "O", typeof(OpenProjectViewModel)),
+        new("home", "Home", "\uE80F", "H", typeof(HomeViewModel)),
+        new("new", "New", "\uE8A5", "N", typeof(NewProjectViewModel)),
+        new("open", "Open", "\uE8B7", "O", typeof(OpenProjectViewModel)),
     ];
 
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];

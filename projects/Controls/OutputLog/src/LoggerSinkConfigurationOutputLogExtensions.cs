@@ -5,7 +5,7 @@
 namespace DroidNet.Controls.OutputLog;
 
 using DroidNet.Controls.OutputLog.Theming;
-using Microsoft.Extensions.DependencyInjection;
+using DryIoc;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Configuration;
@@ -23,7 +23,7 @@ public static class LoggerSinkConfigurationOutputLogExtensions
     /// </summary>
     /// <typeparam name="T">The type of <see cref="ILogEventSink" /> to output logs to.</typeparam>
     /// <param name="sinkConfiguration">The <see cref="LoggerSinkConfiguration" /> to apply the sink to.</param>
-    /// <param name="builder">The <see cref="IHostBuilder" /> to integrate the sink with.</param>
+    /// <param name="container">The DryIoc <see cref="IContainer" /> to integrate the sink with.</param>
     /// <param name="outputTemplate">The output template to format log events. Defaults to <c>DefaultRichTextBoxOutputTemplate</c>.</param>
     /// <param name="formatProvider">An optional provider to format values.</param>
     /// <param name="restrictedToMinimumLevel">The minimum level for events passed through the sink. Defaults to <see cref="LevelAlias.Minimum" />.</param>
@@ -35,7 +35,7 @@ public static class LoggerSinkConfigurationOutputLogExtensions
     /// </remarks>
     public static LoggerConfiguration OutputLogView<T>(
         this LoggerSinkConfiguration sinkConfiguration,
-        IHostBuilder builder,
+        IContainer container,
         string outputTemplate = DefaultRichTextBoxOutputTemplate,
         IFormatProvider? formatProvider = null,
         LogEventLevel restrictedToMinimumLevel = LevelAlias.Minimum,
@@ -46,7 +46,7 @@ public static class LoggerSinkConfigurationOutputLogExtensions
         var delegatingSink = new DelegatingSink<T>(outputTemplate, formatProvider, theme);
 
         // Add the delegating sink
-        builder.ConfigureServices((_, services) => services.AddSingleton(delegatingSink));
+        container.RegisterInstance(delegatingSink);
 
         return sinkConfiguration.Logger(
             lc => lc.Filter.ByIncludingOnly(FilterDelegatingSinkLogEvents)

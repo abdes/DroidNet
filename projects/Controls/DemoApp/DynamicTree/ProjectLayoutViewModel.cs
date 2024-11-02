@@ -10,16 +10,13 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
-using DroidNet.Hosting.Generators;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectLayoutView" /> view.
 /// </summary>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
@@ -88,7 +85,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         UndoRedo.Default[this]
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
-                () => this.AddItem(args.Parent, args.TreeItem).GetAwaiter().GetResult());
+                () => this.InsertItem(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
     }
 
     [RelayCommand]
@@ -223,7 +220,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         var newScene = new SceneAdapter(new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}"));
 
-        await this.AddItem(this.Project, newScene).ConfigureAwait(false);
+        await this.InsertItem(0, this.Project, newScene).ConfigureAwait(false);
     }
 
     private bool CanAddEntity()
@@ -254,7 +251,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
 
         var newEntity = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
-        await this.AddItem(scene, newEntity).ConfigureAwait(false);
+        await this.InsertItem(0, scene, newEntity).ConfigureAwait(false);
     }
 
     [LoggerMessage(

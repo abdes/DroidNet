@@ -9,9 +9,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -32,7 +30,6 @@ using Oxygen.Editor.Projects;
 /// <param name="projectManager">
 /// The <see cref="IProjectManagerService" /> configured for the application. Injected.
 /// </param>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class HomeViewModel(
     IRouter router,
     ITemplatesService templateService,
