@@ -5,19 +5,26 @@
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 using System.IO.Abstractions;
+using DryIoc;
+using DryIoc.Microsoft.DependencyInjection;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Oxygen.Editor.ProjectBrowser.Config;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Config;
+using Oxygen.Editor.Projects.Storage;
+using Oxygen.Editor.Storage;
+using Oxygen.Editor.Storage.Native;
 using Testably.Abstractions.Testing;
 
 [TestClass]
 [TestCategory(nameof(LocalTemplatesSource))]
 public class LocalTemplatesSourceTests
 {
-    private const string Settings =
+    private const string TemplateSettings =
         /*lang=json,strict*/
         """
         {
@@ -43,7 +50,32 @@ public class LocalTemplatesSourceTests
             ]
           }
         }
+        """;
 
+    private const string CategorySettings =
+        /*lang=json,strict*/
+        """
+        {
+            "ProjectsSettings": {
+              "Categories": [
+                {
+                  "Id": "test-1",
+                  "Name": "PB_Category_Games",
+                  "Description": "PB_Category_Games_Description"
+                },
+                {
+                  "Id": "test-2",
+                  "Name": "PB_Category_Visualization",
+                  "Description": "PB_Category_Visualization_Description"
+                },
+                {
+                  "Id": "test-3",
+                  "Name": "PB_Category_Misc",
+                  "Description": "PB_Category_Misc_Description"
+                }
+              ]
+            }
+        }
         """;
 
     private readonly string[] descriptors =
@@ -81,15 +113,39 @@ public class LocalTemplatesSourceTests
     {
         this.InitializeFileSystem();
 
-        this.host = Host.CreateDefaultBuilder()
+        var builder = Host.CreateDefaultBuilder();
+
+        // Use DryIoc instead of the built-in service provider.
+        _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
+
+        // Setup injections for the Options pattern
+        // Configure the DB Context for the persistent state
+        _ = builder
             .ConfigureAppConfiguration(
-                (_, config) => config.AddJsonStream(this.fileSystem.File.OpenRead("settings.json")))
+                (_, config) => config
+                    .AddJsonStream(this.fileSystem.File.OpenRead("template-settings.json"))
+                    .AddJsonStream(this.fileSystem.File.OpenRead("category-settings.json")))
             .ConfigureServices(
-                (context, sc) => _ = sc.AddSingleton<IFileSystem>(this.fileSystem)
-                    .AddSingleton(Settings)
-                    .AddSingleton<ITemplatesSource, LocalTemplatesSource>()
-                    .Configure<ProjectBrowserSettings>(
-                        context.Configuration.GetSection(ProjectBrowserSettings.ConfigSectionName)))
+                (context, sc) =>
+                    _ = sc
+                        .Configure<ProjectBrowserSettings>(
+                            context.Configuration.GetSection(ProjectBrowserSettings.ConfigSectionName))
+                        .Configure<ProjectsSettings>(
+                            context.Configuration.GetSection(ProjectsSettings.ConfigSectionName)));
+
+        this.host = builder
+            .ConfigureContainer<DryIocServiceProvider>(
+                (_, serviceProvider) =>
+                {
+                    var container = serviceProvider.Container;
+                    container.RegisterInstance<IFileSystem>(this.fileSystem);
+                    container.Register<IStorageProvider, NativeStorageProvider>();
+                    container.Register<IProjectSource, LocalProjectsSource>();
+                    container.Register<IProjectManagerService, ProjectManagerService>();
+                    container.RegisterInstance(TemplateSettings);
+                    container.RegisterInstance(CategorySettings);
+                    container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton);
+                })
             .Build();
     }
 
@@ -179,8 +235,10 @@ public class LocalTemplatesSourceTests
     }
 
     private void InitializeFileSystem() => _ = this.fileSystem.InitializeIn("/")
-        .WithFile("settings.json")
-        .Which(f => f.HasStringContent(Settings))
+        .WithFile("template-settings.json")
+        .Which(f => f.HasStringContent(TemplateSettings))
+        .WithFile("category-settings.json")
+        .Which(f => f.HasStringContent(CategorySettings))
         .WithSubdirectory("templates")
         .Initialized(
             d =>
