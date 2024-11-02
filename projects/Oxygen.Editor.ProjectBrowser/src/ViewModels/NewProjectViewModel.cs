@@ -9,15 +9,12 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>The ViewModel for the StartNewPage.</summary>
 /// <param name="templateService">The template service to be used to access project templates.</param>
 /// <param name="projectBrowserService">The project service to be used to access and manipulate projects.</param>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class NewProjectViewModel(
     ITemplatesService templateService,
     IProjectBrowserService projectBrowserService)

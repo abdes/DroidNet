@@ -6,9 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
 using System.Globalization;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -21,7 +19,6 @@ using WinRT;
 /// Frame.
 /// </summary>
 [ViewModel(typeof(OpenProjectViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class OpenProjectView
 {
     public OpenProjectView() => this.InitializeComponent();

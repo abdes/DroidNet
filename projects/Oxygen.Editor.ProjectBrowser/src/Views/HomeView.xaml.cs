@@ -5,9 +5,7 @@
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Controls;
@@ -15,7 +13,6 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 
 /// <summary>Start Home page.</summary>
 [ViewModel(typeof(HomeViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class HomeView
 {
     public HomeView() => this.InitializeComponent();

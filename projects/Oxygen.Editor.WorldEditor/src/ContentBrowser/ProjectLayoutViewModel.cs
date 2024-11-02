@@ -7,23 +7,27 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
+using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
+using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectLayoutView" /> view.
 /// </summary>
-[InjectAs(ServiceLifetime.Transient)]
-public partial class ProjectLayoutViewModel : ObservableObject
+public partial class ProjectLayoutViewModel : ObservableObject, IRoutingAware
 {
     private readonly ILogger logger;
+    private readonly ILocalRouterContext routerContext;
 
-    public ProjectLayoutViewModel(IProjectManagerService projectManager, ILoggerFactory? loggerFactory)
+    public ProjectLayoutViewModel(
+        IProjectManagerService projectManager,
+        ILocalRouterContext routerContext,
+        ILoggerFactory? loggerFactory)
     {
+        this.routerContext = routerContext;
         this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
 
@@ -46,7 +50,11 @@ public partial class ProjectLayoutViewModel : ObservableObject
 
         this.ProjectRoot.Add(
             new Folder(currentProjectInfo.Name + " (Project)", currentProjectInfo.Location, storage, this.logger));
+
+        this.routerContext.Router.Events.Subscribe(@event => Debug.WriteLine(@event.ToString()));
     }
+
+    public IActiveRoute? ActiveRoute { get; set; }
 
     internal ObservableCollection<Folder> ProjectRoot { get; } = [];
 

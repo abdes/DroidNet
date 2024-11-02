@@ -4,8 +4,4 @@
 
 namespace DroidNet.Docking.Demo.Controls;
 
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
-
-[InjectAs(ServiceLifetime.Transient)]
 public class WelcomeViewModel;

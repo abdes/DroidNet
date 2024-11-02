@@ -6,9 +6,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
 using DroidNet.Converters;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
@@ -17,7 +15,6 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 /// for page navigation, it uses the application router.
 /// </summary>
 [ViewModel(typeof(MainViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class MainView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";

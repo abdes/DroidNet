@@ -11,15 +11,11 @@ namespace DroidNet.Docking.Demo;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using DroidNet.Docking.Controls;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
-using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Xaml.Data;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -60,19 +56,7 @@ public static partial class Program
     {
         XamlCheckProcessRequirements();
 
-        // Use Serilog, but decouple the logging clients from the implementation by using the generic
-        // Microsoft.Extensions.Logging.ILogger instead of Serilog's ILogger.
-        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
+        ConfigureLogger();
 
         Log.Information("Setting up the host");
 
@@ -85,16 +69,18 @@ public static partial class Program
             // Use DryIoc instead of the built-in service provider.
             _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
 
-            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
-            // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                Hosting.WinUI.HostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
             var host = builder
-                .ConfigureLogging()
                 .ConfigureWinUI<App>()
-                .ConfigureAutoInjected()
-                .ConfigureContainer<DryIocServiceProvider>(ConfigureAdditionalServices)
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (_, serviceProvider) =>
+                    {
+                        var container = serviceProvider.Container;
+                        container.ConfigureLogging();
+                        container.ConfigureApplicationServices();
+
+                        // Setup the CommunityToolkit.Mvvm Ioc helper
+                        Ioc.Default.ConfigureServices(serviceProvider);
+                    })
                 .Build();
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
@@ -111,21 +97,17 @@ public static partial class Program
         }
     }
 
-    private static void ConfigureAdditionalServices(
-        HostBuilderContext hostBuilderContext,
-        DryIocServiceProvider serviceProvider)
-    {
-        // TODO(abdes): refactor into extension method
-        // Set up the view model to view converters. We're using the standard
-        // converter, and a custom one with fall back if the view cannot be
-        // located.
-        serviceProvider.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        serviceProvider.Container.Register<IValueConverter, ViewModelToView>(
-            Reuse.Singleton,
-            serviceKey: "VmToView");
+    private static void ConfigureLogger() =>
 
-        // TODO(abdes): refactor into extension method
-        serviceProvider.Container.Register<DockPanelViewModel>(Reuse.Transient);
-        serviceProvider.Container.Register<DockPanel>(Reuse.Transient);
-    }
+        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .Enrich.FromLogContext()
+            .WriteTo.Debug(
+                new ExpressionTemplate(
+                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
+                    new CultureInfo("en-US")))
+            /* .WriteTo.Seq("http://localhost:5341/") */
+            .CreateLogger();
 }

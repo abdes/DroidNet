@@ -6,6 +6,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.ComponentModel;
 using DroidNet.Routing;
+using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
 /// <summary>
 /// The implementation of <see cref="IContextProvider" /> for the dedicated router used inside the content browser.

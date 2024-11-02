@@ -4,10 +4,6 @@
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
-
-[InjectAs(ServiceLifetime.Transient)]
 public class TilesLayoutViewModel
 {
 }

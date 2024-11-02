@@ -4,8 +4,4 @@
 
 namespace Oxygen.Editor.WorldEditor.ViewModels;
 
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
-
-[InjectAs(ServiceLifetime.Transient)]
 public class RendererViewModel;

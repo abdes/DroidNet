@@ -32,14 +32,20 @@ public sealed partial class RouterOutlet
     {
         this.InitializeComponent();
 
-        if (!Application.Current.Resources.TryGetValue("VmToViewConverter", out var converter))
+        this.Loaded += (_, _) =>
         {
-            // We can't find the default converter resource. Whoever is using
-            // this control will have to explicitly provide a converter.
-            return;
-        }
+            if (this.VmToViewConverter is null)
+            {
+                if (!Application.Current.Resources.TryGetValue("VmToViewConverter", out var converter))
+                {
+                    return;
+                }
 
-        this.vmToViewConverter = (IValueConverter)converter;
+                this.vmToViewConverter = (IValueConverter)converter;
+            }
+
+            this.UpdateContent();
+        };
     }
 
     public string? Outlet { get; set; }

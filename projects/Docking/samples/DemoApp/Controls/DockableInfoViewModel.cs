@@ -5,10 +5,7 @@
 namespace DroidNet.Docking.Demo.Controls;
 
 using DroidNet.Docking.Detail;
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
 
-[InjectAs(ServiceLifetime.Transient)]
 public class DockableInfoViewModel(IDockable dockable)
 {
     public string DockableId => dockable.Id;

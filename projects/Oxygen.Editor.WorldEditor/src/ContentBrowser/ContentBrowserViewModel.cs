@@ -6,14 +6,12 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 using IContainer = DryIoc.IContainer;
 
 /// <summary>
@@ -23,7 +21,6 @@ using IContainer = DryIoc.IContainer;
 /// This is an <see cref="IOutletContainer" /> with two outlets, the "left" outlet for the left pane, and the "right" outlet for
 /// the right pane.
 /// </remarks>
-[InjectAs(ServiceLifetime.Transient)]
 public partial class ContentBrowserViewModel : AbstractOutletContainer
 {
     private static readonly Routes RoutesConfig = new(
@@ -61,17 +58,19 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
     public ContentBrowserViewModel(IContainer container, ILoggerFactory? loggerFactory)
     {
         // Create a scoped child container for resolutions local to this content browser.
-        var scopedContainer = container.CreateChild(IfAlreadyRegistered.Replace);
+        var childContainer = container.WithRegistrationsCopy();
+
+        var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
 
         // Register all local ViewModels and services in the child container
-        scopedContainer.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        scopedContainer.Register<ViewModelToView>(Reuse.Singleton);
-        scopedContainer.Register<ProjectLayoutViewModel>();
-        scopedContainer.Register<ProjectLayoutView>();
-        scopedContainer.Register<AssetsViewModel>();
-        scopedContainer.Register<AssetsView>();
-        scopedContainer.Register<TilesLayoutViewModel>();
-        scopedContainer.Register<TilesLayoutView>();
+        childContainer.RegisterInstance<IViewLocator>(viewLocator);
+        childContainer.RegisterInstance(new ViewModelToView(viewLocator));
+        childContainer.Register<ProjectLayoutViewModel>();
+        childContainer.Register<ProjectLayoutView>();
+        childContainer.Register<AssetsViewModel>();
+        childContainer.Register<AssetsView>();
+        childContainer.Register<TilesLayoutViewModel>();
+        childContainer.Register<Oxygen.Editor.WorldEditor.ContentBrowser.TilesLayoutView>();
 
         var context = new LocalRouterContext() { RootViewModel = this };
         var routerContextProvider = new RouterContextProvider(context);
@@ -79,19 +78,21 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
             RoutesConfig,
             new RouterStateManager(RoutesConfig),
             new RouterContextManager(routerContextProvider),
-            new InternalRouteActivator(container.GetServiceProvider(), loggerFactory),
+            new InternalRouteActivator(childContainer, loggerFactory),
             routerContextProvider,
             new DefaultUrlSerializer(new DefaultUrlParser()),
             loggerFactory);
 
         context.Router = router;
+        context.GlobalRouter = container.Resolve<IRouter>();
+        childContainer.RegisterInstance<ILocalRouterContext>(context);
 
-        this.VmToViewConverter = scopedContainer.Resolve<ViewModelToView>();
+        this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
 
         this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
         this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
-        router.Navigate("/(left:project~~right:assets/tiles)");
+        router.Navigate("/(left:project~~right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
     }
 
     public ViewModelToView VmToViewConverter { get; init; }
@@ -105,6 +106,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
     {
         private readonly ContentBrowserViewModel? contentBrowserViewModel;
         private IRouter? router;
+        private IRouter? globalRouter;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -118,6 +120,12 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         {
             get => this.router ?? throw new InvalidOperationException();
             internal set => _ = this.SetField(ref this.router, value);
+        }
+
+        public IRouter GlobalRouter
+        {
+            get => this.globalRouter ?? throw new InvalidOperationException();
+            internal set => _ = this.SetField(ref this.globalRouter, value);
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

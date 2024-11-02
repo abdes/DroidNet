@@ -9,9 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.OutputLog;
-using DroidNet.Hosting.Generators;
 using DroidNet.Routing;
-using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// The view model for the <see cref="DemoBrowserView" /> view. Mainly responsible for the navigation between the different demos
@@ -19,7 +17,6 @@ using Microsoft.Extensions.DependencyInjection;
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
 /// <param name="outputLogSink">A <see cref="DelegatingSink{T}" /> sink to be used for logs targeting the output log view.</param>
-[InjectAs(ServiceLifetime.Singleton)]
 public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTextBlockSink> outputLogSink)
     : ObservableObject, IOutletContainer, IRoutingAware
 {

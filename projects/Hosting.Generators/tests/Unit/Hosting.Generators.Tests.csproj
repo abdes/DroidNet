@@ -21,11 +21,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\Hosting.Generators.Attributes\src\Hosting.Generators.Attributes.csproj" />
-        <ProjectReference Include="..\..\..\Hosting.Generators\src\Hosting.Generators.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
         <Folder Include="Snapshots\" />
     </ItemGroup>
 

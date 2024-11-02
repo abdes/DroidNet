@@ -5,9 +5,7 @@
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
 using System.Diagnostics;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Controls;
@@ -18,7 +16,6 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 /// Frame.
 /// </summary>
 [ViewModel(typeof(NewProjectViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class NewProjectView
 {
     /// <summary>Initializes a new instance of the <see cref="NewProjectView" /> class.</summary>

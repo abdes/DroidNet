@@ -4,14 +4,11 @@
 
 namespace Oxygen.Editor.WorldEditor.Views;
 
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
 [ViewModel(typeof(LogsViewModel))]
-[InjectAs(ServiceLifetime.Transient)]
 public sealed partial class LogsView : UserControl
 {
     public LogsView() => this.InitializeComponent();

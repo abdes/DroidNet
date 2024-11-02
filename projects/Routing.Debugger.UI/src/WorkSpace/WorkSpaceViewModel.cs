@@ -83,7 +83,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "An error occured while loading content for route `{Path}`: {ErrorMessage}")]
+        Message = "An error occurred while loading content for route `{Path}`: {ErrorMessage}")]
     private static partial void LogDockablePlacementError(ILogger logger, string? path, string errorMessage);
 
     private static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right)

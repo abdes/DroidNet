@@ -11,11 +11,7 @@ namespace DroidNet.Routing.Debugger;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
-using DroidNet.Docking.Controls;
-using DroidNet.Docking.Layouts;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
 using DroidNet.Routing.Debugger.UI.Shell;
@@ -24,11 +20,8 @@ using DroidNet.Routing.Debugger.UI.UrlTree;
 using DroidNet.Routing.Debugger.UI.WorkSpace;
 using DroidNet.Routing.Debugger.Welcome;
 using DroidNet.Routing.WinUI;
-using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Data;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
@@ -58,17 +51,7 @@ public static partial class Program
     {
         XamlCheckProcessRequirements();
 
-        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
+        ConfigureLogger();
 
         Log.Information("Setting up the host");
 
@@ -86,16 +69,21 @@ public static partial class Program
             builder.Properties.Add(
                 Hosting.WinUI.HostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
-            var host = builder
-                .ConfigureLogging()
-                .ConfigureWinUI<App>()
-                .ConfigureRouter(MakeRoutes())
-                .ConfigureAutoInjected()
-                .ConfigureContainer<DryIocServiceProvider>(ConfigureAdditionalServices)
-                .Build();
 
-            // Set up the MVVM Ioc using the host built services.
-            Ioc.Default.ConfigureServices(host.Services);
+            var host = builder
+                .ConfigureWinUI<App>()
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (_, serviceProvider) =>
+                    {
+                        var container = serviceProvider.Container;
+                        container.ConfigureLogging();
+                        container.ConfigureRouter(MakeRoutes());
+                        container.ConfigureApplicationServices();
+
+                        // Setup the CommunityToolkit.Mvvm Ioc helper
+                        Ioc.Default.ConfigureServices(serviceProvider);
+                    })
+                .Build();
 
             // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
             // closing the UI windows or programmatically.
@@ -111,46 +99,19 @@ public static partial class Program
         }
     }
 
-    private static void ConfigureAdditionalServices(
-        HostBuilderContext hostBuilderContext,
-        DryIocServiceProvider serviceProvider)
-    {
-        // TODO(abdes): refactor into extension method
-        // Set up the view model to view converters. We're using the standard
-        // converter, and a custom one with fall back if the view cannot be
-        // located.
-        serviceProvider.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        serviceProvider.Container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
+    private static void ConfigureLogger() =>
 
-        // TODO(abdes): refactor into extension method
-        serviceProvider.Container.Register<DockPanelViewModel>(Reuse.Transient);
-        serviceProvider.Container.Register<DockPanel>(Reuse.Transient);
-
-        /*
-         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
-         * target name is the key used when registering the window type.
-         *
-         * There should always be a Window registered for the special target <c>_main</c>.
-         */
-
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        serviceProvider.Container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        serviceProvider.Container.Register<ShellViewModel>(Reuse.Singleton);
-        serviceProvider.Container.Register<ShellView>(Reuse.Singleton);
-        serviceProvider.Container.Register<WelcomeViewModel>(Reuse.Transient);
-        serviceProvider.Container.Register<WelcomeView>(Reuse.Transient);
-        serviceProvider.Container.Register<WorkSpaceViewModel>(Reuse.Transient);
-        serviceProvider.Container.Register<WorkSpaceView>(Reuse.Transient);
-        serviceProvider.Container.Register<RoutesViewModel>(Reuse.Singleton);
-        serviceProvider.Container.Register<RoutesView>(Reuse.Transient);
-        serviceProvider.Container.Register<UrlTreeViewModel>(Reuse.Singleton);
-        serviceProvider.Container.Register<UrlTreeView>(Reuse.Transient);
-        serviceProvider.Container.Register<RouterStateViewModel>(Reuse.Singleton);
-        serviceProvider.Container.Register<RouterStateView>(Reuse.Transient);
-        serviceProvider.Container.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
-    }
+        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .Enrich.FromLogContext()
+            .WriteTo.Debug(
+                new ExpressionTemplate(
+                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
+                    new CultureInfo("en-US")))
+            /* .WriteTo.Seq("http://localhost:5341/") */
+            .CreateLogger();
 
     private static Routes MakeRoutes() => new(
     [

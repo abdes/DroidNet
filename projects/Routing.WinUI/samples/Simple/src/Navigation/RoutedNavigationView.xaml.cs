@@ -6,16 +6,13 @@ namespace DroidNet.Routing.Samples.Simple.Navigation;
 
 using System.Diagnostics;
 using DroidNet.Converters;
-using DroidNet.Hosting.Generators;
 using DroidNet.Mvvm.Generators;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>A replacement for the <see cref="NavigationView" /> control that does not require a <see cref="Frame" /> for better
 /// MVVM compatibility and fewer dependencies on parent and siblings.</summary>
 [ViewModel(typeof(RoutedNavigationViewModel))]
-[InjectAs(ServiceLifetime.Singleton)]
 public sealed partial class RoutedNavigationView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";

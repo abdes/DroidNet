@@ -4,10 +4,6 @@
 
 namespace DroidNet.Routing.Samples.Simple.Navigation;
 
-using DroidNet.Hosting.Generators;
-using Microsoft.Extensions.DependencyInjection;
-
-[InjectAs(ServiceLifetime.Singleton)]
 public class SettingsViewModel : IRoutingAware
 {
     public IActiveRoute? ActiveRoute { get; set; }

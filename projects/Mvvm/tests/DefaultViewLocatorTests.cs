@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using IContainer = DryIoc.IContainer;
 
 /// <summary>Test cases for the <see cref="DefaultViewLocator" /> class.</summary>
 [TestClass]
@@ -15,7 +16,7 @@ using Moq;
 [ExcludeFromCodeCoverage]
 public class DefaultViewLocatorTests
 {
-    private Mock<IServiceProvider>? serviceLocatorMock;
+    private Mock<IContainer>? serviceLocatorMock;
     private MyView? view;
     private DefaultViewLocator? viewLocator;
 
@@ -23,7 +24,7 @@ public class DefaultViewLocatorTests
     [TestInitialize]
     public void Initialize()
     {
-        this.serviceLocatorMock = new Mock<IServiceProvider>();
+        this.serviceLocatorMock = new Mock<IContainer>();
         this.viewLocator = new DefaultViewLocator(this.serviceLocatorMock!.Object, loggerFactory: null);
 
         this.view = new MyView(new MyViewModel());
