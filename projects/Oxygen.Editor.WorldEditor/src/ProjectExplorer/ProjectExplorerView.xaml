@@ -40,8 +40,8 @@
                 DefaultTemplate="{StaticResource DefaultThumbnailTemplate}"
                 EntityTemplate="{StaticResource EntityThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
-        </ResourceDictionary>
 
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <UserControl.KeyboardAccelerators>

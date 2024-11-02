@@ -36,6 +36,7 @@ public partial class ProjectAdapter(Project project, IProjectManagerService proj
                 new SceneAdapter(scene, projectManager)
                 {
                     IsExpanded = true,
+                    Depth = this.Depth + 1,
                 });
         }
 

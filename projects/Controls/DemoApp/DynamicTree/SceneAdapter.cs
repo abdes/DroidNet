@@ -32,6 +32,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 new EntityAdapter(entity)
                 {
                     IsExpanded = false,
+                    Depth = 1,
                 });
         }
 

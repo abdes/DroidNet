@@ -79,6 +79,7 @@
 
             <controls:RouterOutlet
                 Grid.Row="1"
+                Outlet="assets"
                 ViewModel="{x:Bind ViewModel.LayoutViewModel, Mode=OneWay}"
                 VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
 

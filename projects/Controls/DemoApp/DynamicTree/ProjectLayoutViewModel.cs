@@ -206,7 +206,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         var project = new Project("Sample Project");
         await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
 
-        this.Project = new ProjectAdapter(project);
+        this.Project = new ProjectAdapter(project) { Depth = -1 };
         await this.InitializeRootAsync(this.Project).ConfigureAwait(false);
     }
 
@@ -218,7 +218,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        var newScene = new SceneAdapter(new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}"));
+        var newScene
+            = new SceneAdapter(new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}")) { Depth = 0 };
 
         await this.InsertItem(0, this.Project, newScene).ConfigureAwait(false);
     }
@@ -250,7 +251,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        var newEntity = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
+        var newEntity
+            = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}")) { Depth = 1 };
         await this.InsertItem(0, scene, newEntity).ConfigureAwait(false);
     }
 

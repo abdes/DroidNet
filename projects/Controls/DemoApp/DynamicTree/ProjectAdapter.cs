@@ -27,6 +27,7 @@ public partial class ProjectAdapter(Project project) : TreeItemAdapter, ITreeIte
                 new SceneAdapter(scene)
                 {
                     IsExpanded = true,
+                    Depth = 0,
                 });
         }
 
