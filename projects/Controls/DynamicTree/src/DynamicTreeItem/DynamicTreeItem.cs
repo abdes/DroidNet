@@ -6,10 +6,13 @@ namespace DroidNet.Controls;
 
 using System.Collections.Specialized;
 using System.Diagnostics;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
+using Windows.System;
+using Windows.UI.Core;
 
 /// <summary>
 /// Represents a dynamic tree item control that can be used within a hierarchical structure.
@@ -21,9 +24,14 @@ using Microsoft.UI.Xaml.Media;
 [TemplateVisualState(Name = CollapsedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = HasChildrenVisualStates)]
 [TemplateVisualState(Name = NoChildrenVisualState, GroupName = HasChildrenVisualStates)]
+[TemplateVisualState(Name = NameIsValidVisualState, GroupName = NameValidationState)]
+[TemplateVisualState(Name = NameIsInvalidVisualState, GroupName = NameValidationState)]
 [TemplatePart(Name = ThumbnailPresenterPart, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = ExpanderPart, Type = typeof(Expander))]
 [TemplatePart(Name = ContentPresenterPart, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = InPlaceRenamePart, Type = typeof(Grid))]
+[TemplatePart(Name = ItemNamePart, Type = typeof(TextBlock))]
+[TemplatePart(Name = ItemNameEditPart, Type = typeof(TextBox))]
 [TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
 [TemplatePart(Name = BorderPart, Type = typeof(Border))]
 [ContentProperty(Name = nameof(Content))]
@@ -31,9 +39,16 @@ public partial class DynamicTreeItem : ContentControl
 {
     private const string ThumbnailPresenterPart = "PartThumbnailPresenter";
     private const string ExpanderPart = "PartExpander";
-    private const string ContentPresenterPart = "PartContentPresenter";
     private const string RootGridPart = "PartRootGrid";
     private const string BorderPart = "PartBorder";
+    private const string ContentPresenterPart = "PartContentPresenter";
+    private const string InPlaceRenamePart = "PartInPlaceRename";
+    private const string ItemNamePart = "PartItemName";
+    private const string ItemNameEditPart = "PartItemNameEdit";
+
+    private const string NameValidationState = "NameValidationStates";
+    private const string NameIsValidVisualState = "NameIsValid";
+    private const string NameIsInvalidVisualState = "NameIsInvalid";
 
     private const string ExpansionVisualStates = "ExpansionStates";
     private const string ExpandedVisualState = "Expanded";
@@ -58,6 +73,7 @@ public partial class DynamicTreeItem : ContentControl
 
     private DynamicTree? treeControl;
     private Expander? expander;
+
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
 
     public DynamicTreeItem()
@@ -93,6 +109,25 @@ public partial class DynamicTreeItem : ContentControl
 
     protected override void OnApplyTemplate()
     {
+        this.SetupExpanderPart();
+        this.SetupItemNameParts();
+
+        this.OnThumbnailTemplateSelectorChanged();
+
+        this.UpdateItemMargin();
+        this.UpdateExpansionVisualState();
+        this.UpdateHasChildrenVisualState();
+        this.UpdateSelectionVisualState(this.ItemAdapter!.IsSelected);
+
+        base.OnApplyTemplate();
+    }
+
+    private static bool IsShiftKeyDown() => InputKeyboardSource
+        .GetKeyStateForCurrentThread(VirtualKey.Shift)
+        .HasFlag(CoreVirtualKeyStates.Down);
+
+    private void SetupExpanderPart()
+    {
         if (this.expander is not null)
         {
             this.expander.Expand -= this.OnExpand;
@@ -106,15 +141,6 @@ public partial class DynamicTreeItem : ContentControl
             this.expander.Expand += this.OnExpand;
             this.expander.Collapse += this.OnCollapse;
         }
-
-        this.OnThumbnailTemplateSelectorChanged();
-
-        this.UpdateItemMargin();
-        this.UpdateExpansionVisualState();
-        this.UpdateHasChildrenVisualState();
-        this.UpdateSelectionVisualState(this.ItemAdapter!.IsSelected);
-
-        base.OnApplyTemplate();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args)

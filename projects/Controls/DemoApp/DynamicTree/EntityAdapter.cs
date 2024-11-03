@@ -31,6 +31,8 @@ public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: fals
 
     public Entity AttachedObject => entity;
 
+    public override bool ValidateItemName(string name) => name.Trim().Length != 0;
+
     protected override int GetChildrenCount() => 0;
 
     protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);

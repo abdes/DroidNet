@@ -4,6 +4,7 @@
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
+using System.Text.RegularExpressions;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
 
@@ -13,6 +14,14 @@ using DroidNet.Controls.Demo.Services;
 /// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
 public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>
 {
+    /// <summary>
+    /// A regular expression pattern to validate a suggested scene name. It checks
+    /// that the name can be used for a file name.
+    /// </summary>
+    /// <see href="https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN" />
+    private const string ValidNamePattern
+        = """^(?!^(PRN|AUX|CLOCK\$|NUL|CON|COM\d|LPT\d|\.\.|\.)(\.|\..|[^ ]*\.{1,2})?$)([^<>:"/\\|?*\x00-\x1F]+[^<>:"/\\|?*\x00-\x1F\ .])$""";
+
     private string label = scene.Name;
 
     public override string Label
@@ -32,6 +41,8 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
 
     public Scene AttachedObject => scene;
 
+    public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);
+
     protected override int GetChildrenCount() => this.AttachedObject.Entities.Count;
 
     protected override async Task LoadChildren()
@@ -49,4 +60,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
 
         await Task.CompletedTask.ConfigureAwait(true);
     }
+
+    [GeneratedRegex(ValidNamePattern, RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ValidNameMatcher();
 }

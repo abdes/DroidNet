@@ -169,6 +169,9 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         : this.GetChildrenCount();
 
     /// <inheritdoc />
+    public abstract bool ValidateItemName(string name);
+
+    /// <inheritdoc />
     /// <exception cref="ArgumentException">
     /// Thrown when the item does not derive from <see cref="TreeItemAdapter" />.
     /// </exception>

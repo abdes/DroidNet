@@ -75,8 +75,57 @@
                             <ContentPresenter
                                 Name="PartContentPresenter"
                                 Grid.Column="2"
-                                HorizontalContentAlignment="Left">
-                                <TextBlock Margin="5" Text="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}" />
+                                VerticalAlignment="Center"
+                                HorizontalContentAlignment="Stretch">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <!--  Item Name  -->
+                                    <TextBlock
+                                        Name="PartItemName"
+                                        Grid.Column="0"
+                                        Margin="5"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap"
+                                        Visibility="Visible" />
+                                    <!--  In-place rename part  -->
+                                    <Grid
+                                        x:Name="PartInPlaceRename"
+                                        Grid.Column="0"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="50" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox
+                                            Name="PartItemNameEdit"
+                                            Grid.Column="0"
+                                            Margin="0"
+                                            VerticalAlignment="Center"
+                                            TextAlignment="Left"
+                                            TextWrapping="NoWrap"
+                                            Visibility="Collapsed">
+                                            <TextBox.Resources>
+                                                <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                                                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                            </TextBox.Resources>
+                                        </TextBox>
+
+                                        <FontIcon
+                                            Name="PartItemNameError"
+                                            Grid.Column="1"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Glyph="&#xEA39;"
+                                            Visibility="Collapsed" />
+                                    </Grid>
+                                </Grid>
                             </ContentPresenter>
                         </Grid>
                         <VisualStateManager.VisualStateGroups>
@@ -102,10 +151,12 @@
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
+
                             <VisualStateGroup x:Name="ExpansionStates">
                                 <VisualState x:Name="Expanded" />
                                 <VisualState x:Name="Collapsed" />
                             </VisualStateGroup>
+
                             <VisualStateGroup x:Name="HasChildrenStates">
                                 <VisualState x:Name="WithChildren">
                                     <VisualState.Setters>
@@ -115,6 +166,15 @@
                                 <VisualState x:Name="NoChildren">
                                     <VisualState.Setters>
                                         <Setter Target="PartExpander.Visibility" Value="Collapsed" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="NameValidationStates">
+                                <VisualState x:Name="NameIsValid" />
+                                <VisualState x:Name="NameIsInvalid">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartItemNameError.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
