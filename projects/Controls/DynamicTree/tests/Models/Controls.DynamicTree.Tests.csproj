@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
+        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x86;x64;arm64</Platforms>
+        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+
+        <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Moq" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
+    </ItemGroup>
+
+</Project>
