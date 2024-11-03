@@ -31,6 +31,8 @@ public partial class ProjectAdapter(Project project) : TreeItemAdapter(isRoot: t
 
     public Project AttachedObject => project;
 
+    public override bool ValidateItemName(string name) => name.Trim().Length != 0;
+
     protected override int GetChildrenCount() => this.AttachedObject.Scenes.Count;
 
     protected override async Task LoadChildren()

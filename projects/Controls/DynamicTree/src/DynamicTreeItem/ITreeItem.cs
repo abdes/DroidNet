@@ -20,9 +20,9 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     event EventHandler<NotifyCollectionChangedEventArgs> ChildrenCollectionChanged;
 
     /// <summary>
-    /// Gets the label of the tree item, used when presenting the item content with the default styling.
+    /// Gets or sets the label of the tree item, used when presenting the item content with the default styling.
     /// </summary>
-    string Label { get; }
+    string Label { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the tree item is expanded.
@@ -66,6 +66,13 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// collection is loaded. At that point, the count should be the number of items in the <see cref="Children" /> collection.
     /// </remarks>
     int ChildrenCount { get; }
+
+    /// <summary>
+    /// Validates the given <paramref name="name" />.
+    /// </summary>
+    /// <param name="name">The proposed name to be validated.</param>
+    /// <returns><see langword="true" /> if the <paramref name="name" /> is valid; <see langword="false" /> otherwise.</returns>
+    bool ValidateItemName(string name);
 
     /// <summary>
     /// Adds a child tree item asynchronously.

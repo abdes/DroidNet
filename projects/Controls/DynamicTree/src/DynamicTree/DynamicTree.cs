@@ -93,8 +93,6 @@ public partial class DynamicTree : Control
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        this.Focus(FocusState.Keyboard);
-
         // Detect pointer events not originating from an Item control, which will have a
         // non null DataContext
         if (args.OriginalSource is FrameworkElement { DataContext: not null })
@@ -103,7 +101,7 @@ public partial class DynamicTree : Control
         }
 
         this.ViewModel!.SelectNoneCommand.Execute(parameter: null);
-        args.Handled = true;
+        this.Focus(FocusState.Keyboard);
     }
 
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
@@ -170,11 +168,12 @@ public partial class DynamicTree : Control
 
     private void TreeItem_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        args.Handled = true;
         if (sender is not FrameworkElement { DataContext: TreeItemAdapter item } element)
         {
             return;
         }
+
+        Debug.WriteLine($"Tree: TreeItem_PointerPressed - {item.Label}");
 
         // Get the current state of the pointer
         var pointerPoint = args.GetCurrentPoint(element);
@@ -208,6 +207,9 @@ public partial class DynamicTree : Control
             // Handle regular Click
             this.ViewModel!.ClearAndSelectItem(item);
         }
+
+        // Give focus to the clicked element
+        element.Focus(FocusState.Programmatic);
     }
 
     private void TreeItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
