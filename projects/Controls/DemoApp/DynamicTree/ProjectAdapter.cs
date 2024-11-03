@@ -10,10 +10,24 @@ using DroidNet.Controls.Demo.Model;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Project" /> model class.
 /// </summary>
 /// <param name="project">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class ProjectAdapter(Project project) : TreeItemAdapter, ITreeItem<Project>
+public partial class ProjectAdapter(Project project) : TreeItemAdapter(isRoot: true, isHidden: true), ITreeItem<Project>
 {
+    private string label = project.Name;
+
     public override string Label
-        => this.AttachedObject.Name;
+    {
+        get => this.label;
+        set
+        {
+            if (string.Equals(value, this.label, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.label = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public Project AttachedObject => project;
 
@@ -27,7 +41,6 @@ public partial class ProjectAdapter(Project project) : TreeItemAdapter, ITreeIte
                 new SceneAdapter(scene)
                 {
                     IsExpanded = true,
-                    Depth = 0,
                 });
         }
 

@@ -10,12 +10,24 @@ using DroidNet.Controls.Demo.Model;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.
 /// </summary>
 /// <param name="entity">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class EntityAdapter(Entity entity) : TreeItemAdapter, ITreeItem<Entity>
+public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Entity>
 {
-    public override bool IsRoot => false;
+    private string label = entity.Name;
 
     public override string Label
-        => this.AttachedObject.Name;
+    {
+        get => this.label;
+        set
+        {
+            if (string.Equals(value, this.label, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.label = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public Entity AttachedObject => entity;
 
