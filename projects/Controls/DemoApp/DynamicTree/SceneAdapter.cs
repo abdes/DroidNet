@@ -11,12 +11,24 @@ using DroidNet.Controls.Demo.Services;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
 /// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scene>
+public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>
 {
-    public override bool IsRoot => false;
+    private string label = scene.Name;
 
     public override string Label
-        => this.AttachedObject.Name;
+    {
+        get => this.label;
+        set
+        {
+            if (string.Equals(value, this.label, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.label = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public Scene AttachedObject => scene;
 
@@ -32,7 +44,6 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 new EntityAdapter(entity)
                 {
                     IsExpanded = false,
-                    Depth = 1,
                 });
         }
 
