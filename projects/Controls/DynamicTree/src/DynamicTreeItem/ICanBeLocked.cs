@@ -4,7 +4,7 @@
 
 namespace DroidNet.Controls;
 
-public interface ILockable
+public interface ICanBeLocked
 {
     /// <summary>
     /// Gets or sets a value indicating whether the tree item is locked.
