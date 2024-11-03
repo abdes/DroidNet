@@ -11,7 +11,7 @@ using System.Collections.Specialized;
 /// Represents an item in a hierarchical tree structure, providing functionality for managing child items,
 /// tracking selection state, and handling expansion and collapse states.
 /// </summary>
-public interface ITreeItem : ISelectable, ILockable
+public interface ITreeItem : ISelectable, ICanBeLocked
 {
     /// <summary>
     /// Occurs when the collection of child items changes.
@@ -30,14 +30,24 @@ public interface ITreeItem : ISelectable, ILockable
     bool IsExpanded { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether the tree item is the root.
+    /// Gets a value indicating whether the tree item is the root. Defaults to <see langword="false" />, unless otherwise set at
+    /// creation.
+    /// <remarks>
+    /// The root of the tree is always <see cref="ICanBeLocked.IsLocked">locked</see>, protecting it from being moved or deleted.
+    /// Once an item is marked as the root of a tree, it will stay the root forever.
+    /// </remarks>
     /// </summary>
-    bool IsRoot { get; }
+    bool IsRoot { get; init; }
 
     /// <summary>
     /// Gets the parent tree item.
     /// </summary>
     ITreeItem? Parent { get; }
+
+    /// <summary>
+    /// Gets the depth of the tree item in the hierarchy.
+    /// </summary>
+    int Depth { get; }
 
     /// <summary>
     /// Gets the collection of child tree items.
@@ -56,11 +66,6 @@ public interface ITreeItem : ISelectable, ILockable
     /// collection is loaded. At that point, the count should be the number of items in the <see cref="Children" /> collection.
     /// </remarks>
     int ChildrenCount { get; }
-
-    /// <summary>
-    /// Gets the depth of the tree item in the hierarchy.
-    /// </summary>
-    int Depth { get; }
 
     /// <summary>
     /// Adds a child tree item asynchronously.
@@ -82,7 +87,7 @@ public interface ITreeItem : ISelectable, ILockable
     /// </summary>
     /// <param name="child">The child tree item to remove.</param>
     /// <returns>
-    /// A task that represents the asynchronous operation, holding the index of removed child, or -1 if the item was not found.
+    /// A task that represents the asynchronous operation, holding the index of removed child, or `-1` if the item was not found.
     /// </returns>
     Task<int> RemoveChildAsync(ITreeItem child);
 }
