@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Events;
 
-public class ContextDestroyed(IRouterContext context) : RouterContextEvent(context)
+public class ContextDestroyed(INavigationContext context) : RouterContextEvent(context)
 {
     /// <inheritdoc />
     public override string ToString() => $"Context destroyed: {base.ToString()}";

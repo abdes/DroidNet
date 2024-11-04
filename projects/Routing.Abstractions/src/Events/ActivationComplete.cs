@@ -9,5 +9,5 @@ public class ActivationComplete(NavigationOptions options, IRouterState state) :
     public IRouterState RouterState { get; } = state;
 
     /// <inheritdoc />
-    public override string ToString() => $"Routes activation complete -> {this.RouterState.Root}";
+    public override string ToString() => $"Routes activation complete -> {this.RouterState.RootNode}";
 }

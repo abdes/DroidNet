@@ -18,9 +18,9 @@ using Moq;
 [TestCategory(nameof(RouterContextManager))]
 public class RouterContextManagerTests : IDisposable
 {
-    private readonly Mock<IContextProvider> contextProviderMock;
+    private readonly Mock<IContextProvider<NavigationContext>> contextProviderMock;
     private readonly RouterContextManager contextManager;
-    private readonly RouterContext mainContext = new(Target.Main);
+    private readonly NavigationContext mainContext = new(Target.Main) { RouteActivationObserver = null };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouterContextManagerTests" />
@@ -31,8 +31,8 @@ public class RouterContextManagerTests : IDisposable
     /// </remarks>
     public RouterContextManagerTests()
     {
-        this.contextProviderMock = new Mock<IContextProvider>();
-        _ = this.contextProviderMock.Setup(a => a.ContextForTarget(Target.Main, It.IsAny<RouterContext>()))
+        this.contextProviderMock = new Mock<IContextProvider<NavigationContext>>();
+        _ = this.contextProviderMock.Setup(a => a.ContextForTarget(Target.Main, It.IsAny<NavigationContext>()))
             .Returns(this.mainContext);
 
         this.contextManager = new RouterContextManager(this.contextProviderMock.Object);
@@ -51,7 +51,8 @@ public class RouterContextManagerTests : IDisposable
     [DataRow("_self")]
     public void GetContextForTarget_NullTargetOrSelf_CurrentContextNotNull_ReturnsCurrentContext(string target)
     {
-        var currentContext = this.SetCurrentContext(new RouterContext("current"));
+        var currentContext
+            = this.SetCurrentContext(new NavigationContext("current") { RouteActivationObserver = null });
 
         var actualContext = this.contextManager.GetContextForTarget(target);
 
@@ -100,8 +101,8 @@ public class RouterContextManagerTests : IDisposable
     public void GetContextForTarget_CustomTarget_ReturnsValidContext()
     {
         const string target = "custom";
-        RouterContext expectedContext = new(target);
-        _ = this.contextProviderMock.Setup(a => a.ContextForTarget(target, It.IsAny<RouterContext>()))
+        NavigationContext expectedContext = new(target) { RouteActivationObserver = null };
+        _ = this.contextProviderMock.Setup(a => a.ContextForTarget(target, It.IsAny<NavigationContext>()))
             .Returns(expectedContext);
 
         var actualContext = this.contextManager.GetContextForTarget(target);
@@ -116,7 +117,7 @@ public class RouterContextManagerTests : IDisposable
         this.contextManager.Dispose();
     }
 
-    private RouterContext? SetCurrentContext(RouterContext? context)
+    private NavigationContext? SetCurrentContext(NavigationContext? context)
     {
         // Trigger ContextChanged event to set currentContext
         this.contextProviderMock.Raise(

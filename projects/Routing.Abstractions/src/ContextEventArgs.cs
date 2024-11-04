@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing;
 
-public class ContextEventArgs(RouterContext? context) : EventArgs
+public class ContextEventArgs(INavigationContext? context) : EventArgs
 {
-    public RouterContext? Context => context;
+    public INavigationContext? Context => context;
 }

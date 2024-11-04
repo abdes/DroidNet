@@ -12,7 +12,7 @@ public interface IRouterState
     /// <value>The url from which this router state was created.</value>
     string Url { get; }
 
-    IActiveRoute Root { get; }
+    IActiveRoute RootNode { get; }
 
     IUrlTree UrlTree { get; }
 }

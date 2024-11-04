@@ -10,6 +10,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Routing.Detail;
 using DroidNet.Routing.Events;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
@@ -26,10 +27,14 @@ public partial class Router : IRouter, IDisposable
     private readonly IUrlSerializer urlSerializer;
 
     private readonly BehaviorSubject<RouterEvent> eventSource = new(new RouterReady());
+    private readonly IRouteActivationObserver routeActivationObserver;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Router" /> class.
     /// </summary>
+    /// <param name="container">
+    /// The IoC container used to resolve ViewModel instances for the routes being activated.
+    /// </param>
     /// <param name="config">The routes configuration to use.</param>
     /// <param name="states">The router state manager to use.</param>
     /// <param name="contextManager">The router context manager.</param>
@@ -50,6 +55,7 @@ public partial class Router : IRouter, IDisposable
     /// from the Dependency Injector.
     /// </param>
     public Router(
+        IContainer container,
         IRoutes config,
         IRouterStateManager states,
         RouterContextManager contextManager,
@@ -59,6 +65,8 @@ public partial class Router : IRouter, IDisposable
         ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<Router>() ?? NullLoggerFactory.Instance.CreateLogger<Router>();
+
+        this.routeActivationObserver = new RouteActivationObserver(container);
 
         this.states = states;
         this.contextManager = contextManager;
@@ -329,7 +337,7 @@ public partial class Router : IRouter, IDisposable
     /// This method is intended to improve the efficiency of route activation by
     /// reusing previously activated routes in the router state.
     /// </remarks>
-    private static void OptimizeRouteActivation(RouterContext context) =>
+    private static void OptimizeRouteActivation(NavigationContext context) =>
 
         // TODO(abdes) implement OptimizeRouteActivation
         _ = context;
@@ -372,9 +380,9 @@ public partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new ActivationStarted(options, context.State));
 
-            // Activate routes in the router state that still need activation after
-            // the optimization.
-            var success = this.routeActivator.ActivateRoutesRecursive(context.State.Root, context);
+            // Activate routes in the router state that still need activation after the optimization.
+            context.RouteActivationObserver = this.routeActivationObserver;
+            var success = this.routeActivator.ActivateRoutesRecursive(context.State.RootNode, context);
 
             // Finally activate the context.
             this.contextProvider.ActivateContext(context);
