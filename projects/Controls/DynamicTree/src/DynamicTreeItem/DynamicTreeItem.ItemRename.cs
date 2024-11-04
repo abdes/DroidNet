@@ -5,9 +5,9 @@
 namespace DroidNet.Controls;
 
 using System.Diagnostics;
-using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
@@ -17,6 +17,7 @@ using Windows.System;
 public partial class DynamicTreeItem
 {
     private ContentPresenter? itemContentPart;
+    private Popup? inPlaceRenamePart;
     private TextBlock? itemNameTextBlock;
     private TextBox? itemNameTextBox;
     private string? oldItemName;
@@ -36,10 +37,9 @@ public partial class DynamicTreeItem
             return;
         }
 
+        this.inPlaceRenamePart = this.GetTemplateChild(InPlaceRenamePart) as Popup;
         this.itemNameTextBlock = this.GetTemplateChild(ItemNamePart) as TextBlock;
-        var inPlaceRenamePart = this.GetTemplateChild(InPlaceRenamePart) as Grid;
-        this.itemNameTextBox = inPlaceRenamePart?.FindDescendant<TextBox>(
-            x => string.Equals(x.Name, ItemNameEditPart, StringComparison.Ordinal));
+        this.itemNameTextBox = this.GetTemplateChild(ItemNameEditPart) as TextBox;
         if (this.itemNameTextBlock is not null && this.itemNameTextBox is not null)
         {
             this.itemNameTextBlock.DoubleTapped += this.StartRenameItem;
@@ -100,16 +100,20 @@ public partial class DynamicTreeItem
         this.oldItemName = this.itemNameTextBlock.Text;
         this.itemNameTextBlock.Visibility = Visibility.Collapsed;
         this.itemNameTextBox.Visibility = Visibility.Visible;
+        this.itemNameTextBox.SelectAll();
+
+        if (this.inPlaceRenamePart is not null)
+        {
+            this.inPlaceRenamePart.IsOpen = true;
+        }
+
+        _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
 
         this.itemNameTextBox.TextChanged += this.RenameTextBox_TextChanged;
         this.itemNameTextBox.LostFocus += this.RenameTextBox_LostFocus;
         this.itemNameTextBox.KeyDown += this.RenameTextBox_KeyDown;
         this.itemNameTextBox.GotFocus += this.RenameTextBox_GotFocus;
         this.itemNameTextBox.ContextMenuOpening += this.RenameTextBox_ContextMenuOpening;
-
-        _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
-
-        this.itemNameTextBox.SelectAll();
     }
 
     private void EndRename()
@@ -118,15 +122,20 @@ public partial class DynamicTreeItem
             this.itemNameTextBlock is not null && this.itemNameTextBox is not null,
             "event handler should not be setup if parts are missing");
 
-        this.itemNameTextBox.Visibility = Visibility.Collapsed;
-        this.itemNameTextBlock.Visibility = Visibility.Visible;
-
         // Unsubscribe from events
         this.itemNameTextBox.TextChanged -= this.RenameTextBox_TextChanged;
         this.itemNameTextBox.LostFocus -= this.RenameTextBox_LostFocus;
         this.itemNameTextBox.KeyDown -= this.RenameTextBox_KeyDown;
         this.itemNameTextBox.GotFocus -= this.RenameTextBox_GotFocus;
         this.itemNameTextBox.ContextMenuOpening -= this.RenameTextBox_ContextMenuOpening;
+
+        this.itemNameTextBox.Visibility = Visibility.Collapsed;
+        this.itemNameTextBlock.Visibility = Visibility.Visible;
+
+        if (this.inPlaceRenamePart is not null)
+        {
+            this.inPlaceRenamePart.IsOpen = false;
+        }
 
         // Re-focus selected list item
         this.Focus(FocusState.Programmatic);
