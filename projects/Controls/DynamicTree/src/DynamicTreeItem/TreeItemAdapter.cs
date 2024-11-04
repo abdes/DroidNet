@@ -54,6 +54,8 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     private readonly bool isRoot;
 
+    private bool suspendChildrenCollectionNotifications;
+
     [ObservableProperty]
     private bool isExpanded;
 
@@ -181,9 +183,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
         await this.ManipulateChildrenAsync(this.AddChildInternal, child).ConfigureAwait(false);
 
-        this.ChildrenCollectionChanged?.Invoke(
-            this,
-            new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, this.ChildrenCount - 1));
+        if (!this.suspendChildrenCollectionNotifications)
+        {
+            this.ChildrenCollectionChanged?.Invoke(
+                this,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, this.ChildrenCount - 1));
+        }
     }
 
     /// <inheritdoc />
@@ -203,9 +208,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
                 child)
             .ConfigureAwait(false);
 
-        this.ChildrenCollectionChanged?.Invoke(
-            this,
-            new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, index));
+        if (!this.suspendChildrenCollectionNotifications)
+        {
+            this.ChildrenCollectionChanged?.Invoke(
+                this,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, index));
+        }
     }
 
     /// <inheritdoc />
@@ -229,9 +237,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
                 child)
             .ConfigureAwait(false);
 
-        this.ChildrenCollectionChanged?.Invoke(
-            this,
-            new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, child, removeAtIndex));
+        if (!this.suspendChildrenCollectionNotifications)
+        {
+            this.ChildrenCollectionChanged?.Invoke(
+                this,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, child, removeAtIndex));
+        }
 
         return removeAtIndex;
     }
@@ -256,6 +267,11 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// their children to be loaded.
     /// </remarks>
     protected abstract Task LoadChildren();
+
+    /// <summary>
+    /// Remove all child elements from the collection of children.
+    /// </summary>
+    protected void ClearChildren() => this.children.Clear();
 
     /// <summary>
     /// Adds a child item to the children collection synchronously. Used internally, and by derived classes, to populate the
@@ -315,11 +331,19 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
             this.children.Count == 0,
             "Ensure that the children collection is loaded before you add things to it");
 
-        await this.LoadChildren().ConfigureAwait(false);
+        try
+        {
+            this.suspendChildrenCollectionNotifications = true;
+            await this.LoadChildren().ConfigureAwait(false);
 
-        this.ChildrenCollectionChanged?.Invoke(
-            this,
-            new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.ChildrenCollectionChanged?.Invoke(
+                this,
+                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
+        finally
+        {
+            this.suspendChildrenCollectionNotifications = false;
+        }
 
         return new ReadOnlyObservableCollection<ITreeItem>(this.children);
     }
