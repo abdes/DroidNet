@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Utils;
+namespace DroidNet.Routing.Tests.Utils;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Routing.Utils;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -124,7 +125,7 @@ public class TreeNodeTests
 
     /// <summary>
     /// Verifies that the <see cref="TreeNode.RemoveChild" /> returns
-    /// <see langword="false"/> when the child does not exist.
+    /// <see langword="false" /> when the child does not exist.
     /// </summary>
     [TestMethod]
     public void RemoveChild_WhenChildDoesNotExist_ReturnsFalse()
@@ -196,7 +197,7 @@ public class TreeNodeTests
 
     /// <summary>
     /// Verifies that the <see cref="TreeNode.RemoveSibling" /> returns
-    /// <see langword="false"/> when the node has no parent.
+    /// <see langword="false" /> when the node has no parent.
     /// </summary>
     [TestMethod]
     public void RemoveSibling_WhenNodeHasNoParent_ReturnsFalse()

@@ -95,6 +95,7 @@ public partial class Router : IRouter, IDisposable
         => this.Navigate(this.urlSerializer.Parse(url), options ?? new FullNavigation());
 
     /// <inheritdoc />
+    /// TODO: implement partial navigation with a URL
     public void Navigate(string url, PartialNavigation options)
         => this.Navigate(this.urlSerializer.Parse(url), options);
 
