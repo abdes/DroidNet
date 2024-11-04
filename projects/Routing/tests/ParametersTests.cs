@@ -266,6 +266,86 @@ public class ParametersTests
     }
 
     [TestMethod]
+    public void GetValues_ShouldReturnNull_WhenParameterDoesNotExist()
+    {
+        // Arrange
+        var parameters = new Parameters();
+
+        // Act
+        var result = parameters.GetValues("NonExistentParameter");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [TestMethod]
+    public void GetValues_ShouldReturnEmptyArray_WhenParameterHasNoValue()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "EmptyParam", null },
+        };
+
+        // Act
+        var result = parameters.GetValues("EmptyParam");
+
+        // Assert
+        result.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [TestMethod]
+    public void GetValues_ShouldReturnEmptyString_WhenParameterValueIsEmpty()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "EmptyStringParam", string.Empty },
+        };
+
+        // Act
+        var result = parameters.GetValues("EmptyStringParam");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().ContainSingle().Which.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void GetValues_ShouldReturnSingleValue_WhenParameterHasSingleValue()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "SingleValueParam", "Value1" },
+        };
+
+        // Act
+        var result = parameters.GetValues("SingleValueParam");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().ContainSingle().Which.Should().Be("Value1");
+    }
+
+    [TestMethod]
+    public void GetValues_ShouldReturnMultipleValues_WhenParameterHasCommaSeparatedValues()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "MultipleValuesParam", "Value1,Value2,Value3" },
+        };
+
+        // Act
+        var result = parameters.GetValues("MultipleValuesParam");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().ContainInOrder("Value1", "Value2", "Value3");
+    }
+
+    [TestMethod]
     public void GenericGetEnumerator_Should_Return_All_Parameters()
     {
         // Arrange

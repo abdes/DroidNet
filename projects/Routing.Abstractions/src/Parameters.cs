@@ -9,6 +9,10 @@ using System.Collections;
 /// <summary>
 /// Represents a collection of URL parameters (<see cref="Parameter" />).
 /// </summary>
+/// <remarks>
+/// This implementation always stores the parameter values as a single value. If multiple values are specified for a
+/// parameter, they will be stored as a comma separated list of values.
+/// </remarks>
 public class Parameters : IParameters
 {
     /// <summary>Dictionary to store parameters, with case-insensitive names.</summary>
@@ -24,6 +28,26 @@ public class Parameters : IParameters
     public bool TryGetValue(string name, out string? value) => this.parameters.TryGetValue(name, out value);
 
     /// <inheritdoc />
+    public string[]? GetValues(string name)
+    {
+        if (!this.parameters.TryGetValue(name, out var value))
+        {
+            // Parameter does not exist
+            return null;
+        }
+
+        if (value is null)
+        {
+            // Parameter has no values
+            return [];
+        }
+
+        return value.Length == 0
+            ? [string.Empty] // Has a single value, the empty string
+            : value.Split(','); // Has one ore more (comma-separated) values
+    }
+
+    /// <inheritdoc />
     public bool Contains(string parameterName) => this.parameters.ContainsKey(parameterName);
 
     /// <summary>
@@ -31,7 +55,7 @@ public class Parameters : IParameters
     /// If the parameter exists, its value is updated; otherwise, a new parameter is added.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
-    /// <param name="value">The value of the parameter.</param>
+    /// <param name="value">The value(s) of the parameter, encoded as a comma-separated list of values if multiple.</param>
     /// <exception cref="ArgumentException">Thrown if the parameter name is empty.</exception>
     public void AddOrUpdate(string name, string? value)
     {
@@ -47,7 +71,7 @@ public class Parameters : IParameters
     /// Adds a parameter with the specified name and value to the collection.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
-    /// <param name="value">The value of the parameter.</param>
+    /// <param name="value">The value(s) of the parameter, encoded as a comma-separated list of values if multiple.</param>
     /// <exception cref="ArgumentException">
     /// Thrown if the parameter name is empty, or if a parameter with the same name already exists in the collection.
     /// </exception>
@@ -65,7 +89,7 @@ public class Parameters : IParameters
     /// Attempts to add a parameter with the specified name and value to the collection.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
-    /// <param name="value">The value of the parameter.</param>
+    /// <param name="value">The value(s) of the parameter, encoded as a comma-separated list of values if multiple.</param>
     /// <returns><see langword="true" /> if the parameter was added successfully; otherwise, <see langword="false" />.</returns>
     /// <exception cref="ArgumentException">Thrown if the parameter name is empty.</exception>
     /// <remarks>
