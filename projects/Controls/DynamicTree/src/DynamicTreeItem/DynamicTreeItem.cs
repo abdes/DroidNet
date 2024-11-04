@@ -269,7 +269,7 @@ public partial class DynamicTreeItem : ContentControl
         _ = sender; // unused
         _ = args; // unused
 
-        this.UpdateHasChildrenVisualState();
+        this.DispatcherQueue.TryEnqueue(this.UpdateHasChildrenVisualState);
     }
 
     /// <summary>
