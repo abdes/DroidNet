@@ -13,6 +13,7 @@ using Moq;
 /// <summary>Unit tests for the Routes class.</summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Router Config")]
 public class RoutesTest
 {
     private readonly Mock<IRouteValidator> validator;

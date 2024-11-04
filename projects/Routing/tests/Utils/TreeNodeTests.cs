@@ -14,6 +14,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("URL Tree")]
 public class TreeNodeTests
 {
     private readonly TestableTreeNode sut;

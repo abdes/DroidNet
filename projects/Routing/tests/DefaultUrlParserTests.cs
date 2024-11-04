@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// <summary>Unit tests for the <see cref="DefaultUrlParser" /> class.</summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("URL Parsing")]
 public class DefaultUrlParserTests
 {
     /// <summary>

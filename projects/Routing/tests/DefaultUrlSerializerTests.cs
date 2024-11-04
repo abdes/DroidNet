@@ -14,6 +14,7 @@ using Moq;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("URL Serialization")]
 public class DefaultUrlSerializerTests
 {
     private DefaultUrlSerializer? serializer;

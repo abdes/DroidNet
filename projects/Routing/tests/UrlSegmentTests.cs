@@ -15,6 +15,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("URL Tree")]
 public class UrlSegmentTests
 {
     public static IEnumerable<object?[]> SegmentData => new[]
