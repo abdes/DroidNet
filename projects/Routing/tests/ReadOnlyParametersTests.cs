@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
+namespace DroidNet.Routing.Tests;
 
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
@@ -15,15 +15,45 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public class ReadOnlyParametersTests
 {
     [TestMethod]
+    public void IsEmpty_ShouldReturnTrue_WhenCollectionIsEmpty()
+    {
+        // Arrange
+        var parameters = new Parameters().AsReadOnly();
+
+        // Act
+        var isEmpty = parameters.IsEmpty;
+
+        // Assert
+        isEmpty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsEmpty_ShouldReturnFalse_WhenCollectionIsNotEmpty()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "Param1", "Value1" },
+        }.AsReadOnly();
+
+        // Act
+        var isEmpty = parameters.IsEmpty;
+
+        // Assert
+        isEmpty.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void Contains_Should_Return_True_When_Parameter_Exists()
     {
         // Arrange
-        var parameters = new Parameters();
-        parameters.AddOrUpdate("param1", "value1");
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters
+        {
+            { "param1", "value1" },
+        }.AsReadOnly();
 
         // Act
-        var result = readOnlyParameters.Contains("param1");
+        var result = parameters.Contains("param1");
 
         // Assert
         _ = result.Should().BeTrue();
@@ -33,11 +63,10 @@ public class ReadOnlyParametersTests
     public void Contains_Should_Return_False_When_Parameter_Not_Exists()
     {
         // Arrange
-        var parameters = new Parameters();
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters().AsReadOnly();
 
         // Act
-        var result = readOnlyParameters.Contains("param1");
+        var result = parameters.Contains("param1");
 
         // Assert
         _ = result.Should().BeFalse();
@@ -47,12 +76,13 @@ public class ReadOnlyParametersTests
     public void TryGetValue_Should_Return_True_And_Value_When_Parameter_Exists()
     {
         // Arrange
-        var parameters = new Parameters();
-        parameters.AddOrUpdate("param1", "value1");
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters
+        {
+            { "param1", "value1" },
+        }.AsReadOnly();
 
         // Act
-        var result = readOnlyParameters.TryGetValue("param1", out var value);
+        var result = parameters.TryGetValue("param1", out var value);
 
         // Assert
         _ = result.Should().BeTrue();
@@ -63,11 +93,10 @@ public class ReadOnlyParametersTests
     public void TryGetValue_Should_Return_False_When_Parameter_Not_Exists()
     {
         // Arrange
-        var parameters = new Parameters();
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters().AsReadOnly();
 
         // Act
-        var result = readOnlyParameters.TryGetValue("param1", out var value);
+        var result = parameters.TryGetValue("param1", out var value);
 
         // Assert
         _ = result.Should().BeFalse();
@@ -78,13 +107,14 @@ public class ReadOnlyParametersTests
     public void GetEnumerator_Should_Return_All_Parameters()
     {
         // Arrange
-        var parameters = new Parameters();
-        parameters.AddOrUpdate("param1", "value1");
-        parameters.AddOrUpdate("param2", "value2");
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters
+        {
+            { "param1", "value1" },
+            { "param2", "value2" },
+        }.AsReadOnly();
 
         // Act
-        var paramList = readOnlyParameters.ToList();
+        var paramList = parameters.ToList();
 
         _ = paramList.Should().HaveCount(2);
         _ = paramList.Should().Contain(new Parameter("param1", "value1"));
@@ -100,17 +130,17 @@ public class ReadOnlyParametersTests
     [TestMethod]
     public void GenericGetEnumerator_Should_Return_All_Parameters()
     {
-        // Arrange
-        var parameters = new Parameters();
-        parameters.AddOrUpdate("param1", "value1");
-        parameters.AddOrUpdate("param2", "value2");
-        var readOnlyParameters = parameters.AsReadOnly();
+        var parameters = new Parameters
+        {
+            { "param1", "value1" },
+            { "param2", "value2" },
+        }.AsReadOnly();
 
         // Act
-        var count = CountAll(readOnlyParameters);
+        var count = CountAll(parameters);
 
         // Assert
-        _ = count.Should().Be(readOnlyParameters.Count);
+        _ = count.Should().Be(parameters.Count);
     }
 
     private static int CountAll(IEnumerable collection) => collection.Cast<object?>().Count();
