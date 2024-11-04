@@ -5,7 +5,7 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Manages <see cref="RouterContext" /> instances used by the router.
+/// Manages <see cref="NavigationContext" /> instances used by the router.
 /// </summary>
 /// <remarks>
 /// At a minimum, the router has one main context, corresponding to the special
@@ -19,18 +19,18 @@ namespace DroidNet.Routing;
 /// </remarks>
 public class RouterContextManager : IDisposable
 {
-    private readonly Lazy<RouterContext> lazyMainContext;
-    private readonly IContextProvider contextProvider;
+    private readonly Lazy<NavigationContext> lazyMainContext;
+    private readonly IContextProvider<NavigationContext> contextProvider;
     private readonly EventHandler<ContextEventArgs> onContextChanged;
 
     /// <summary>
     /// Gets a value representing the current routing context.
     /// </summary>
     /// <value>
-    /// An instance of <see cref="RouterContext" /> representing the current
+    /// An instance of <see cref="NavigationContext" /> representing the current
     /// routing context.
     /// </value>
-    private RouterContext? currentContext;
+    private NavigationContext? currentContext;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouterContextManager" />
@@ -40,7 +40,7 @@ public class RouterContextManager : IDisposable
     /// The <see cref="IContextProvider" /> to use for getting contexts
     /// for routing targets and activating them.
     /// </param>
-    public RouterContextManager(IContextProvider contextProvider)
+    public RouterContextManager(IContextProvider<NavigationContext> contextProvider)
     {
         this.contextProvider = contextProvider;
 
@@ -53,26 +53,26 @@ public class RouterContextManager : IDisposable
                 return;
             }
 
-            this.currentContext = args.Context;
+            this.currentContext = args.Context as NavigationContext;
         };
         this.contextProvider.ContextChanged += this.onContextChanged;
 
-        this.lazyMainContext = new Lazy<RouterContext>(() => contextProvider.ContextForTarget(Target.Main));
+        this.lazyMainContext = new Lazy<NavigationContext>(() => contextProvider.ContextForTarget(Target.Main));
     }
 
     /// <summary>
-    /// Gets the <see cref="RouterContext" /> instance for the special target
+    /// Gets the <see cref="NavigationContext" /> instance for the special target
     /// <see cref="Target.Main" />.
     /// </summary>
     /// <value>
-    /// The <see cref="RouterContext" /> for the special target <see cref="Target.Main" />.
+    /// The <see cref="NavigationContext" /> for the special target <see cref="Target.Main" />.
     /// </value>
     /// <remarks>
     /// For a certain <see cref="Router" />, there is only one routing context
     /// for the special target <see cref="Target.Main" />, and within an
     /// application, there is usually a single top-level router.
     /// </remarks>
-    private RouterContext MainContext => this.lazyMainContext.Value;
+    private NavigationContext MainContext => this.lazyMainContext.Value;
 
     /// <summary>
     /// Gets the router context for the specified target.
@@ -83,7 +83,7 @@ public class RouterContextManager : IDisposable
     /// any other application specific target name.
     /// </param>
     /// <returns>
-    /// The <see cref="RouterContext" /> for the specified target.
+    /// The <see cref="NavigationContext" /> for the specified target.
     /// </returns>
     /// <remarks>
     /// If the target is <see langword="null" /> or <see cref="Target.Self" />, the method
@@ -96,7 +96,7 @@ public class RouterContextManager : IDisposable
     /// activator.
     /// </para>
     /// </remarks>
-    public RouterContext GetContextForTarget(Target? target)
+    public NavigationContext GetContextForTarget(Target? target)
     {
         if (target?.IsSelf != false)
         {

@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Events;
 
-public class ContextChanged(IRouterContext? context) : RouterContextEvent(context)
+public class ContextChanged(INavigationContext? context) : RouterContextEvent(context)
 {
     /// <inheritdoc />
     public override string ToString() => $"Context changed -> {base.ToString()}";

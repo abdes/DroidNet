@@ -4,9 +4,9 @@
 
 namespace DroidNet.Routing.Events;
 
-public abstract class RouterContextEvent(IRouterContext? context) : RouterEvent
+public abstract class RouterContextEvent(INavigationContext? context) : RouterEvent
 {
-    public IRouterContext? Context { get; } = context;
+    public INavigationContext? Context { get; } = context;
 
     /// <inheritdoc />
     public override string ToString() => this.Context?.ToString() ?? "_None_";

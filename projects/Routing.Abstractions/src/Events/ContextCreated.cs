@@ -4,7 +4,7 @@
 
 namespace DroidNet.Routing.Events;
 
-public class ContextCreated(IRouterContext context) : RouterContextEvent(context)
+public class ContextCreated(INavigationContext context) : RouterContextEvent(context)
 {
     /// <inheritdoc />
     public override string ToString() => $"Context created: {base.ToString()}";

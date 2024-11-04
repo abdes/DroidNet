@@ -18,7 +18,7 @@ internal sealed class RouterState(string url, IUrlTree urlTree, IActiveRoute roo
 {
     public string Url { get; set; } = url;
 
-    public IActiveRoute Root { get; } = root;
+    public IActiveRoute RootNode { get; } = root;
 
     public IUrlTree UrlTree { get; } = urlTree;
 }

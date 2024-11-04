@@ -9,5 +9,5 @@ public class ActivationStarted(NavigationOptions options, IRouterState state) : 
     public IRouterState RouterState { get; } = state;
 
     /// <inheritdoc />
-    public override string ToString() => $"Routes activation started -> {this.RouterState.Root}";
+    public override string ToString() => $"Routes activation started -> {this.RouterState.RootNode}";
 }

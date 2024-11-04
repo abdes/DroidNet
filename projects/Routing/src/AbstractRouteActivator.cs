@@ -4,111 +4,109 @@
 
 namespace DroidNet.Routing;
 
-using System.Diagnostics;
-using DroidNet.Routing.Detail;
-using DryIoc;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
-/// Abstract route activator to just provide an implementation for <see cref="IRouteActivator.ActivateRoutesRecursive" /> using
-/// the <see cref="IRouteActivator.ActivateRoute" /> method.
+/// Abstract implementation of the <see cref="IRouteActivator" /> that handles recursive route activation. It injects
+/// the <see cref="ActivateRoute" /> method in the ViewModel of an activated route if it implements the
+/// <see cref="IRoutingAware" /> interface. It skips activation for routes that are already activated.
 /// </summary>
-/// <param name="container">
-/// The IoC container to use when resolving a ViewModel type to a ViewModel for the route being activated.
+/// <param name="loggerFactory">
+/// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger cannot be obtained, a
+/// <see cref="NullLogger" /> is used silently.
 /// </param>
-/// <param name="logger">
-/// The logger to be used by this base class for logging.
-/// </param>
-public abstract partial class AbstractRouteActivator(IContainer container, ILogger logger)
+/// <remarks>
+/// Extend this class and implement the <see cref="DoActivateRoute" /> method to complete the activation of child
+/// routes.
+/// </remarks>
+public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFactory = null)
     : IRouteActivator
 {
-    /// <summary>
-    /// Gets the logger used by this base class and its derived class.
-    /// </summary>
+    /// <summary>Gets the logger used by this base class and its derived classes.</summary>
     /// <remarks>
-    /// The proper way for getting the logger is to have a <see cref="ILoggerFactory" /> injected in the concrete class, and then
-    /// if it's not <see langword="null" />, get a <see cref="ILogger" /> from it, otherwise use a <see cref="NullLogger" />. This
-    /// way, we ensure that if this API is used and logging is not desired, it can simply be completely turned off by providing a
+    /// The logger is obtained using the provided <see cref="ILoggerFactory" />. If the factory is <see langword="null" />,
+    /// a <see cref="NullLogger" /> is used instead. This ensures logging can be completely disabled by supplying a
     /// <see langword="null" /> <see cref="ILoggerFactory" />.
     /// </remarks>
-    protected ILogger Logger => logger;
+    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "may be used by derived classes")]
+    protected ILogger Logger { get; } = loggerFactory?.CreateLogger<IRouteActivator>() ??
+                                        NullLoggerFactory.Instance.CreateLogger<IRouteActivator>();
 
     /// <inheritdoc />
-    public bool ActivateRoutesRecursive(IActiveRoute root, RouterContext context)
+    public bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context)
     {
         var activationSuccessful = true;
 
-        // The state root is simply a placeholder for the tree and cannot be
-        // activated.
+        // The root node is a placeholder for the tree and cannot be activated.
         if (root.Parent != null)
         {
-            activationSuccessful = activationSuccessful && this.ActivateRoute(root, context);
+            activationSuccessful = this.ActivateRoute(root, context) && activationSuccessful;
         }
 
         return root.Children.Aggregate(
             activationSuccessful,
-            (currentStatus, route) => currentStatus && this.ActivateRoutesRecursive(route, context));
+            (currentStatus, route) => this.ActivateRoutesRecursive(route, context) && currentStatus);
     }
 
     /// <inheritdoc />
-    public bool ActivateRoute(IActiveRoute route, RouterContext context)
+    public bool ActivateRoute(IActiveRoute route, INavigationContext context)
     {
-        var routeImpl = route as ActiveRoute ?? throw new ArgumentException(
-            $"expecting the {nameof(route)} to be of the internal type {typeof(ActiveRoute)}",
-            nameof(route));
+        var activationObserver = context.RouteActivationObserver;
 
-        if (routeImpl.IsActivated)
-        {
-            LogActivationSkipped(logger, route);
-            return true;
-        }
-
-        Debug.WriteLine($"Activating route `{routeImpl}` for the first time");
-
-        // Resolve the view model and then ask the concrete activator to finish
-        // activation. The ActiveRoute must be fully setup before we do the
-        // actual activation, because it may be injected in the view model being
-        // activated and used.
         try
         {
-            // The route may be without a ViewModel (typically a route to load
-            // data or hold shared parameters).
-            var viewModelType = routeImpl.RouteConfig.ViewModelType;
-            if (viewModelType != null)
+            // Check if observer is available; proceed if OnActivating returns true or observer is null.
+            if (activationObserver?.OnActivating(route, context) != false)
             {
-                var viewModel = container.GetService(viewModelType) ??
-                                throw new MissingViewModelException { ViewModelType = viewModelType };
-                routeImpl.ViewModel = viewModel;
-                if (viewModel is IRoutingAware injectable)
-                {
-                    injectable.ActiveRoute = routeImpl;
-                }
+                LogRouteActivating(this.Logger, route);
+
+                this.DoActivateRoute(route, context);
+
+                // Notify observer post-activation if it exists.
+                activationObserver?.OnActivated(route, context);
+
+                LogRouteActivated(this.Logger, route);
+                return true;
             }
 
-            this.DoActivateRoute(routeImpl, context);
-
-            routeImpl.IsActivated = true;
-            return true;
+            LogActivationSkipped(this.Logger, route);
+            return false;
         }
         catch (Exception ex)
         {
-            LogActivationFailed(logger, routeImpl, ex);
+            LogActivationFailed(this.Logger, route, ex);
             return false;
         }
     }
 
-    protected abstract void DoActivateRoute(IActiveRoute route, RouterContext context);
+    /// <summary>Executes the actual activation logic for the specified route.</summary>
+    /// <param name="route">The route to activate.</param>
+    /// <param name="context">The navigation context.</param>
+    protected abstract void DoActivateRoute(IActiveRoute route, INavigationContext context);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Route activation failed {Route}")]
+        Message = "Route activation failed `{Route}`")]
     private static partial void LogActivationFailed(ILogger logger, IActiveRoute route, Exception ex);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Activation not needed because the route {Route} is already activated")]
+        Message = "Activation not needed because the route `{Route}` is already activated")]
     private static partial void LogActivationSkipped(ILogger logger, IActiveRoute route);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Route `{Route}` activating...")]
+    private static partial void LogRouteActivating(ILogger logger, IActiveRoute route);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Route `{Route}` activated")]
+    private static partial void LogRouteActivated(ILogger logger, IActiveRoute route);
 }

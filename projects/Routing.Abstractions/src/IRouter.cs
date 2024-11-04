@@ -20,7 +20,7 @@ using DroidNet.Routing.Events;
 /// document in a separate window.
 /// <para>
 /// The router facilitates navigation between view models within a specified
-/// <see cref="IRouterContext">rendering context</see>, which determines where
+/// <see cref="INavigationContext">rendering context</see>, which determines where
 /// the corresponding view should be rendered. In a windowed application, this
 /// context could be the main window, a new window, or the currently active
 /// window.
@@ -31,7 +31,7 @@ using DroidNet.Routing.Events;
 /// nothing else than the serialized form of the router state. For instance,
 /// when the application starts and its main window displays the 'Home' view
 /// model, the application state corresponds to a specific router state. In this
-/// state, the <see cref="IRouterContext" /> targets the main window, and the
+/// state, the <see cref="INavigationContext" /> targets the main window, and the
 /// 'Home' view is loaded as content inside an 'outlet' in that window.
 /// <para>
 /// </para>
