@@ -4,70 +4,55 @@
 
 namespace DroidNet.Routing;
 
-/// <summary>Represents an outlet name.</summary>
-/// <remarks>
-/// This type offers a self-documented abstraction of outlet names,while keeping
-/// it easy to convert from and to a string. It also encapsulates special
-/// values, such as <see cref="Primary" />, which should always be used instead
-/// of the actual literal string.
-/// </remarks>
+/// <summary>
+/// Represents an outlet name, providing abstraction and easy conversion to and from strings.
+/// Special values like <see cref="Primary" /> should be used for specific purposes.
+/// </summary>
 public record OutletName
 {
-    /// <summary>Gets the outlet name.</summary>
-    /// <value>The string representation of the outlet name.</value>
+    /// <summary>
+    /// Gets the outlet name as a string.
+    /// </summary>
     public required string Name { get; init; }
 
     /// <summary>
-    /// Gets a special outlet name, used to refer to the primary outlet.
+    /// Gets the special outlet name for the primary outlet.
     /// </summary>
-    /// <value>The primary outlet name.</value>
-    public static OutletName Primary => string.Empty;
+    public static OutletName Primary => new(string.Empty);
 
     /// <summary>
-    /// Gets a value indicating whether the outlet name is for a primary outlet.
+    /// Gets a value indicating whether the outlet name is for the primary outlet.
     /// </summary>
-    /// <value>
-    /// When <see langword="true" />, the outlet name refers to a primary outlet.
-    /// </value>
     public bool IsPrimary => this.Name.Equals(Primary.Name, StringComparison.Ordinal);
 
     /// <summary>
-    /// Gets a value indicating whether the outlet name is <b>not</b> for a
-    /// primary outlet.
+    /// Gets a value indicating whether the outlet name is not for the primary outlet.
     /// </summary>
-    /// <value>
-    /// When <see langword="true" />, the outlet name refers to a non-primary outlet.
-    /// </value>
     public bool IsNotPrimary => !this.IsPrimary;
 
-    /// <summary>Implicitly convert a string to an OutletName.</summary>
+    /// <summary>
+    /// Implicitly converts a string to an OutletName. If the string is null, returns <see cref="Primary" />.
+    /// </summary>
     /// <param name="name">The outlet name as a string.</param>
     public static implicit operator OutletName(string? name) => name is null ? Primary : new OutletName { Name = name };
 
-    /// <summary>Implicitly convert an OutletName to a string.</summary>
-    /// <param name="source">An OutletName object.</param>
+    /// <summary>
+    /// Implicitly converts an OutletName to a string.
+    /// </summary>
+    /// <param name="source">The OutletName object.</param>
     public static implicit operator string(OutletName source) => source.Name;
 
     public override string ToString() => this.Name;
 
     /// <summary>
-    /// Provide a custom implementation of equality comparison for the
-    /// <see cref="OutletName" /> class to use with dictionaries, etc.
+    /// Custom equality comparer for <see cref="OutletName" />, suitable for use with collections.
+    /// Compares outlet names using ordinal (binary) sort rules, with optional case insensitivity.
     /// </summary>
-    /// <remarks>
-    /// Comparison of outlet names uses string ordinal (binary) sort rules, and
-    /// by default, is case-insensitive, but this behavior can be customized if
-    /// needed via the <paramref name="ignoreCase" /> flag.
-    /// </remarks>
-    /// <param name="ignoreCase">
-    /// when <see langword="true" />, ignore the case of the outlet names being compared.
-    /// Default is <see langword="true" />.
-    /// </param>
+    /// <param name="ignoreCase">When true, ignores the case of the outlet names. Default is true.</param>
     public class EqualityComparer(bool ignoreCase = true) : EqualityComparer<OutletName>
     {
         /// <summary>
-        /// Returns the default equality comparer, which ignores the case of the
-        /// outlet names being compared.
+        /// Default comparer instance that ignores case.
         /// </summary>
         public static readonly EqualityComparer IgnoreCase = new();
 
