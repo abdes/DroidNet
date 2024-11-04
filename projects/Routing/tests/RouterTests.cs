@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory(nameof(Router))]
 public class RouterTests
 {
     [TestMethod]

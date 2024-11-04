@@ -15,6 +15,7 @@ using Moq;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("URL Tree")]
 public class UrlTreeTests : TestSuiteWithAssertions
 {
     /// <summary>

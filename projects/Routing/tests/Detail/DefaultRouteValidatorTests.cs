@@ -14,6 +14,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory(nameof(DefaultRouteValidator))]
 public class DefaultRouteValidatorTests
 {
     private readonly Routes routes = new([]);

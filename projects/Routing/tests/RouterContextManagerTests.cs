@@ -15,6 +15,7 @@ using Moq;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory(nameof(RouterContextManager))]
 public class RouterContextManagerTests : IDisposable
 {
     private readonly Mock<IContextProvider> contextProviderMock;

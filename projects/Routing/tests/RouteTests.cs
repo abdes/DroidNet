@@ -16,6 +16,7 @@ using Moq;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Router Config")]
 public class RouteTests
 {
     /// <summary>
