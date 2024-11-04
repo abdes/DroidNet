@@ -34,10 +34,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         // Create the root TreeItem for the project root folder.
         var storage = projectManager.GetCurrentProjectStorageProvider();
         var folder = storage.GetFolderFromPathAsync(projectInfo.Location!);
-        this.ProjectRoot = new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name)
+        this.ProjectRoot = new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true)
         {
             IsExpanded = true,
-            Depth = 0,
         };
     }
 

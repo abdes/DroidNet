@@ -8,26 +8,48 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Core;
 using Oxygen.Editor.Storage;
 
 public partial class FolderTreeItemAdapter : TreeItemAdapter
 {
     private readonly ILogger logger;
     private readonly Task<IFolder> folderAsync;
-    private readonly string name;
+    private string label;
 
-    public FolderTreeItemAdapter(ILogger logger, Task<IFolder> folderAsync, string name)
+    public FolderTreeItemAdapter(
+        ILogger logger,
+        Task<IFolder> folderAsync,
+        string label,
+        bool isRoot = false,
+        bool isHidden = false)
+        : base(isRoot, isHidden)
     {
         this.logger = logger;
         this.folderAsync = folderAsync;
-        this.name = name;
+        this.label = label;
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
 
-    public override string Label => this.IsRoot ? $"{this.name} (Project Root)" : this.name;
+    public override string Label
+    {
+        get => this.IsRoot ? $"{this.label} (Project Root)" : this.label;
+        set
+        {
+            if (string.Equals(value, this.label, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.label = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
+
+    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     protected override int GetChildrenCount()
     {
@@ -53,7 +75,6 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
                         // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
                         // To mark selected items specified in the ActiveRoute query params
                         IsExpanded = true,
-                        Depth = this.Depth + 1,
                     });
             }
             catch (Exception ex)

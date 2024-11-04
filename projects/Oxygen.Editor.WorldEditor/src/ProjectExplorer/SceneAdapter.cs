@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 using DroidNet.Controls;
+using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
 
 /// <summary>
@@ -15,11 +16,24 @@ using Oxygen.Editor.Projects;
 public partial class SceneAdapter(Scene scene, IProjectManagerService projectManager)
     : TreeItemAdapter, ITreeItem<Scene>
 {
-    public override bool IsRoot => false;
+    public override string Label
+    {
+        get => this.AttachedObject.Name;
+        set
+        {
+            if (string.Equals(value, this.AttachedObject.Name, StringComparison.Ordinal))
+            {
+                return;
+            }
 
-    public override string Label => scene.Name;
+            this.AttachedObject.Name = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public Scene AttachedObject => scene;
+
+    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     protected override int GetChildrenCount() => scene.Entities.Count;
 
@@ -38,7 +52,6 @@ public partial class SceneAdapter(Scene scene, IProjectManagerService projectMan
                 new GameEntityAdapter(entity)
                 {
                     IsExpanded = false,
-                    Depth = 0,
                 });
         }
 

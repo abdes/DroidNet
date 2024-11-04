@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 using DroidNet.Controls;
+using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
 
 /// <summary>
@@ -13,12 +14,24 @@ using Oxygen.Editor.Projects;
 /// <param name="gameEntity">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
 public partial class GameEntityAdapter(GameEntity gameEntity) : TreeItemAdapter, ITreeItem<GameEntity>
 {
-    public override bool IsRoot => false;
-
     public override string Label
-        => this.AttachedObject.Name;
+    {
+        get => this.AttachedObject.Name;
+        set
+        {
+            if (string.Equals(value, this.AttachedObject.Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.AttachedObject.Name = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public GameEntity AttachedObject => gameEntity;
+
+    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     protected override int GetChildrenCount() => 0;
 

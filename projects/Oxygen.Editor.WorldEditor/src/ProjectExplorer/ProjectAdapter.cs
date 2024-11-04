@@ -5,6 +5,7 @@
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 using DroidNet.Controls;
+using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
 
 /// <summary>
@@ -13,11 +14,26 @@ using Oxygen.Editor.Projects;
 /// <param name="project">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
 /// <param name="projectManager">The configured project manager service.</param>
 public partial class ProjectAdapter(Project project, IProjectManagerService projectManager)
-    : TreeItemAdapter, ITreeItem<Project>
+    : TreeItemAdapter(isRoot: true, isHidden: true), ITreeItem<Project>
 {
-    public override string Label => project.ProjectInfo.Name;
+    public override string Label
+    {
+        get => this.AttachedObject.Name;
+        set
+        {
+            if (string.Equals(value, this.AttachedObject.Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.AttachedObject.Name = value;
+            this.OnPropertyChanged();
+        }
+    }
 
     public Project AttachedObject => project;
+
+    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     protected override int GetChildrenCount() => project.Scenes.Count;
 
@@ -36,7 +52,6 @@ public partial class ProjectAdapter(Project project, IProjectManagerService proj
                 new SceneAdapter(scene, projectManager)
                 {
                     IsExpanded = true,
-                    Depth = this.Depth + 1,
                 });
         }
 
