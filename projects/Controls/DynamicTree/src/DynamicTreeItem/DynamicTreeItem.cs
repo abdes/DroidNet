@@ -9,6 +9,7 @@ using System.Diagnostics;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
@@ -29,7 +30,7 @@ using Windows.UI.Core;
 [TemplatePart(Name = ThumbnailPresenterPart, Type = typeof(ContentPresenter))]
 [TemplatePart(Name = ExpanderPart, Type = typeof(Expander))]
 [TemplatePart(Name = ContentPresenterPart, Type = typeof(ContentPresenter))]
-[TemplatePart(Name = InPlaceRenamePart, Type = typeof(Grid))]
+[TemplatePart(Name = InPlaceRenamePart, Type = typeof(Popup))]
 [TemplatePart(Name = ItemNamePart, Type = typeof(TextBlock))]
 [TemplatePart(Name = ItemNameEditPart, Type = typeof(TextBox))]
 [TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
