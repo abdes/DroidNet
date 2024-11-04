@@ -8,7 +8,7 @@
         <IsPackable>false</IsPackable>
         <IsTestProject>true</IsTestProject>
 
-        <RootNamespace>$(RootNamespace).Routing</RootNamespace>
+        <RootNamespace>$(RootNamespace).Routing.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

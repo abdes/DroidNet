@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
+namespace DroidNet.Routing.Tests;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Routing;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
