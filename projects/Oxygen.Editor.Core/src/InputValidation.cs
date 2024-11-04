@@ -17,7 +17,7 @@ public static partial class InputValidation
     /// </summary>
     /// <see href="https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN" />
     private const string ValidFileNamePattern
-        = """^(?!^(PRN|AUX|CLOCK\$|NUL|CON|COM\d|LPT\d|\.\.|\.)(\.|\..|[^ ]*\.{1,2})?$)([^<>:"/\\|?*\x00-\x1F]+[^<>:"/\\|?*\x00-\x1F\ .])$""";
+        = @"^(?!^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CLOCK\$|\.{2,})$)(?!^\.\.)([^<>:""/\\|?*\x00-\x1F]+[^<>:""/\\|?*\x00-\x1F\ .])$";
 
     public static bool IsValidFileName(string name) => ValidFileNameMatcher().IsMatch(name);
 
