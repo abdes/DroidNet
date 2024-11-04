@@ -9,7 +9,9 @@ namespace DroidNet.Routing;
 /// value are treated as opaque strings without any inherent meaning in this implementation.
 /// </summary>
 /// <param name="Name">The parameter name.</param>
-/// <param name="Value">The parameter value.</param>
+/// <param name="Value">
+/// The parameter value. May contain a comma separated list of values if multiple values were provided for the parameter.
+/// </param>
 public readonly record struct Parameter(string Name, string? Value)
 {
     /// <summary>

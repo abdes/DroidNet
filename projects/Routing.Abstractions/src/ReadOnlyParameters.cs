@@ -53,6 +53,9 @@ public class ReadOnlyParameters : IParameters
     public bool TryGetValue(string name, out string? value) => this.parameters.TryGetValue(name, out value);
 
     /// <inheritdoc />
+    public string?[]? GetValues(string name) => this.parameters.GetValues(name);
+
+    /// <inheritdoc />
     public IEnumerator<Parameter> GetEnumerator() => this.parameters.GetEnumerator();
 
     /// <inheritdoc />
