@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
+namespace DroidNet.Routing.Tests;
 
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
@@ -14,6 +14,35 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public class ParametersTests
 {
+    [TestMethod]
+    public void IsEmpty_ShouldReturnTrue_WhenCollectionIsEmpty()
+    {
+        // Arrange
+        var parameters = new Parameters();
+
+        // Act
+        var isEmpty = parameters.IsEmpty;
+
+        // Assert
+        isEmpty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void IsEmpty_ShouldReturnFalse_WhenCollectionIsNotEmpty()
+    {
+        // Arrange
+        var parameters = new Parameters
+        {
+            { "Param1", "Value1" },
+        };
+
+        // Act
+        var isEmpty = parameters.IsEmpty;
+
+        // Assert
+        isEmpty.Should().BeFalse();
+    }
+
     [TestMethod]
     public void AddOrUpdate_Should_Add_Parameter_When_Not_Exists()
     {
