@@ -5,6 +5,7 @@
 namespace DroidNet.TestHelpers;
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
@@ -41,6 +42,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// ]]>
 /// </code>
 /// </example>
+[ExcludeFromCodeCoverage]
 public abstract class TestSuiteWithAssertions : IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
