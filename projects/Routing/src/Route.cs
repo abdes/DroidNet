@@ -18,7 +18,7 @@ public class Route : IRoute
     internal static readonly IRoute.PathMatcher DefaultMatcher = RouteMatcher.MatchRoute;
 
     /// <inheritdoc />
-    public PathMatch MatchMethod { get; init; } = PathMatch.Default;
+    public PathMatch MatchMethod { get; init; } = PathMatch.Prefix;
 
     /// <inheritdoc />
     public string? Path { get; init; }
