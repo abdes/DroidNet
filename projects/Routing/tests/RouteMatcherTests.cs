@@ -30,6 +30,85 @@ public class RouteMatcherTests
 
     private UrlSegmentGroup Group { get; }
 
+    [TestMethod]
+    public void DefaultMatcher_EmptyPath_Full_TooManySegments()
+    {
+        var route = new Route
+        {
+            Path = string.Empty,
+            MatchMethod = PathMatch.Full,
+        };
+        this.Segments.Add(new UrlSegment("test"));
+
+        var result = Route.DefaultMatcher(this.Segments.AsReadOnly(), this.Group, route);
+
+        _ = result.IsMatch.Should().BeFalse();
+        _ = result.Consumed.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void DefaultMatcher_EmptyPath_Full_HasChildren()
+    {
+        var route = new Route
+        {
+            Path = string.Empty,
+            MatchMethod = PathMatch.Full,
+        };
+        this.Group.AddChild("aux", new UrlSegmentGroup([]));
+
+        var result = Route.DefaultMatcher(this.Segments.AsReadOnly(), this.Group, route);
+
+        _ = result.IsMatch.Should().BeFalse();
+        _ = result.Consumed.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void DefaultMatcher_EmptyPath_FullMatch()
+    {
+        var route = new Route
+        {
+            Path = string.Empty,
+            MatchMethod = PathMatch.Full,
+        };
+
+        var result = Route.DefaultMatcher(this.Segments.AsReadOnly(), this.Group, route);
+
+        _ = result.IsMatch.Should().BeTrue();
+        _ = result.Consumed.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void DefaultMatcher_EmptyPath_PrefixMatch()
+    {
+        var route = new Route
+        {
+            Path = string.Empty,
+            MatchMethod = PathMatch.Prefix,
+        };
+        this.Segments.Add(new UrlSegment("foo"));
+
+        var result = Route.DefaultMatcher(this.Segments.AsReadOnly(), this.Group, route);
+
+        _ = result.IsMatch.Should().BeTrue();
+        _ = result.Consumed.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void DefaultMatcher_EmptyPath_PrefixMatchEmptySegmentRemoved()
+    {
+        var route = new Route
+        {
+            Path = string.Empty,
+            MatchMethod = PathMatch.Prefix,
+        };
+        this.Segments.Add(new UrlSegment(string.Empty));
+
+        var result = Route.DefaultMatcher(this.Segments.AsReadOnly(), this.Group, route);
+
+        _ = result.IsMatch.Should().BeTrue();
+        _ = result.Consumed.Should().HaveCount(1).And.Contain(s => s.Path == string.Empty);
+    }
+
     /// <summary>
     /// Tests that the DefaultMatcher returns no match when called with empty
     /// segments.

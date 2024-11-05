@@ -11,14 +11,10 @@ using DroidNet.Routing.Utils;
 internal static class RouteMatcher
 {
     /// <summary>
-    /// Default path matcher used by the router to match a route's <see cref="Path" /> against segments in the url. Override this default
-    /// matcher by setting the route's <see cref="RouteMatcher" /> property.
+    /// Default path matcher used by the router to match a route's <see cref="Path" /> against segments in the url.
+    /// Override this default matcher by setting the route's <see cref="RouteMatcher" /> property.
     /// </summary>
     /// <inheritdoc cref="IRoute.PathMatcher" />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "MA0051:Method is too long",
-        Justification = "commenting the code makes the method too long but is useful")]
     internal static IMatchResult MatchRoute(
         ReadOnlyCollection<IUrlSegment> segments,
         IUrlSegmentGroup group,
@@ -28,17 +24,15 @@ internal static class RouteMatcher
             route.Path is not null,
             "when the default matcher is being used, a route must have a non-null path");
 
-        // Empty path route with Prefix match method matches anything but does
-        // not consume the segment unless it is the empty path.
-        if (route.Path.Length == 0 && route.MatchMethod == PathMatch.StrictPrefix)
-        {
-            return new Route.Match()
-            {
-                Consumed = segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
-            };
-        }
+        return TryMatchEmptyPath(segments, group, route) ?? MatchNonEmptyPath(segments, group, route);
+    }
 
-        var parts = route.Path.Split('/');
+    private static IMatchResult MatchNonEmptyPath(
+        ReadOnlyCollection<IUrlSegment> segments,
+        IUrlSegmentGroup group,
+        IRoute route)
+    {
+        var parts = route.Path!.Split('/');
 
         if (parts.Length > segments.Count)
         {
@@ -48,16 +42,8 @@ internal static class RouteMatcher
         if (route.MatchMethod == PathMatch.Full &&
             (group.Children is not { Count: 0 } || parts.Length < segments.Count))
         {
-            // The route's Path is longer than the actual segments, or there
-            // are more segments in the children, but we are looking for a full
-            // match.
-            return new Route.NoMatch();
-        }
-
-        if (route.MatchMethod == PathMatch.StrictPrefix && parts.Length < segments.Count)
-        {
-            // The route's Path is longer than the actual segments, but we are
-            // looking for a full match.
+            // The route's Path is longer than the actual segments, or there are more segments in the children, but we
+            // are looking for a full match.
             return new Route.NoMatch();
         }
 
@@ -87,6 +73,31 @@ internal static class RouteMatcher
         {
             Consumed = segments.GetRange(0, parts.Length),
             PositionalParams = posParams,
+        };
+    }
+
+    private static IMatchResult? TryMatchEmptyPath(
+        ReadOnlyCollection<IUrlSegment> segments,
+        IUrlSegmentGroup group,
+        IRoute route)
+    {
+        if (route.Path!.Length != 0)
+        {
+            return null;
+        }
+
+        if (route.MatchMethod == PathMatch.Full)
+        {
+            return group.Children.Count == 0 && segments.Count == 0
+                ? new Route.Match() { Consumed = [] }
+                : new Route.NoMatch();
+        }
+
+        return new Route.Match
+        {
+            // Empty path route with Prefix match method matches anything but does
+            // not consume the segment unless the segment's Path is the empty path.
+            Consumed = segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
         };
     }
 }
