@@ -78,7 +78,7 @@ internal static class UrlParserHelpers
     {
         var index = 0;
         while (index < remaining.Length
-               && remaining[index] != '/' && !remaining.PeekContains(index, "~~") && remaining[index] != '('
+               && remaining[index] != '/' && !remaining.PeekContains(index, "//") && remaining[index] != '('
                && remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';'
                && remaining[index] != '#')
         {
@@ -92,7 +92,7 @@ internal static class UrlParserHelpers
     {
         var index = 0;
         while (index < remaining.Length
-               && remaining[index] != '/' && !remaining.PeekContains(index, "~~") && remaining[index] != '('
+               && remaining[index] != '/' && !remaining.PeekContains(index, "//") && remaining[index] != '('
                && remaining[index] != ')' && remaining[index] != '?' && remaining[index] != ';'
                && remaining[index] != '=' && remaining[index] != '#')
         {
@@ -108,7 +108,7 @@ internal static class UrlParserHelpers
     {
         var index = 0;
         while (index < remaining.Length
-               && !remaining.PeekContains(index, "~~") && remaining[index] != '=' && remaining[index] != '?' &&
+               && !remaining.PeekContains(index, "//") && remaining[index] != '=' && remaining[index] != '?' &&
                remaining[index] != '&' && remaining[index] != '#')
         {
             index++;
@@ -120,7 +120,7 @@ internal static class UrlParserHelpers
     public static string MatchQueryParamValue(this ref ReadOnlySpan<char> remaining)
     {
         var index = 0;
-        while (index < remaining.Length && !remaining.PeekContains(index, "~~") && remaining[index] != '&' &&
+        while (index < remaining.Length && !remaining.PeekContains(index, "//") && remaining[index] != '&' &&
                remaining[index] != '#')
         {
             index++;

@@ -15,6 +15,136 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory("URL Parsing")]
 public class DefaultUrlParserTests
 {
+    [TestMethod]
+    public void EmptyUrl_NoSegmentsNoChildren()
+    {
+        const string url = "";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeTrue();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
+    [TestMethod]
+    public void RootUrl_OneChildForPrimaryOutletWithEmptyPathSegment()
+    {
+        const string url = "/";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeFalse();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Count.Should().Be(1);
+        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        var primary = tree.Root.Children[OutletName.Primary];
+        primary.Segments.Should().HaveCount(1).And.Contain(s => s.Path == string.Empty && s.Parameters.IsEmpty);
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
+    [TestMethod]
+    public void AbsoluteWithSinglePathSegment_OneChildForPrimaryOutletWithPathSegment()
+    {
+        const string url = "/home";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeFalse();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Count.Should().Be(1);
+        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        var primary = tree.Root.Children[OutletName.Primary];
+        primary.Segments.Should().HaveCount(1).And.Contain(s => s.Path == "home" && s.Parameters.IsEmpty);
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
+    [TestMethod]
+    public void AbsoluteWithMultiSegmentPath_OneChildForPrimaryOutletWithMultiSegment()
+    {
+        const string url = "/foo/bar";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeFalse();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Count.Should().Be(1);
+        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        var primary = tree.Root.Children[OutletName.Primary];
+        primary.Segments.Should().HaveCount(2);
+        primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
+        primary.Segments[1].Should().BeEquivalentTo(new UrlSegment("bar"));
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
+    [TestMethod]
+    public void TrailingSlash_ExtraEmptySegment()
+    {
+        const string url = "/foo/";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeFalse();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Count.Should().Be(1);
+        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        var primary = tree.Root.Children[OutletName.Primary];
+        primary.Segments.Should().HaveCount(2);
+        primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
+        primary.Segments[1].Should().BeEquivalentTo(new UrlSegment(string.Empty));
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
+    [TestMethod]
+    public void RootUrlWithOutlet_SingleChildForOutlet()
+    {
+        const string outlet = "out";
+        const string outletPath = "foo";
+        const string url = $"/({outlet}:{outletPath})";
+        var parser = new DefaultUrlParser();
+
+        var tree = parser.Parse(url);
+
+        tree.IsRelative.Should().BeFalse();
+        tree.QueryParams.Should().BeEmpty();
+        tree.Root.Parent.Should().BeNull();
+        tree.Root.Segments.Should().BeEmpty();
+        tree.Root.Children.Count.Should().Be(1);
+
+        tree.Root.Children.Should().HaveCount(1).And.ContainKey(outlet);
+        var outletChild = tree.Root.Children[outlet];
+        outletChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == outletPath);
+
+        var serialized = tree.ToString();
+        serialized.Should().Be(url);
+    }
+
     /// <summary>
     /// Tests that two-way serialization produces the original url string.
     /// </summary>
@@ -32,25 +162,24 @@ public class DefaultUrlParserTests
     [DataRow("/a/")]
     [DataRow("/a/b/")]
     [DataRow("/teams")]
-    [DataRow("/home(left:teams~~right:../projects)")]
+    [DataRow("/home/(welcome)", "/home/welcome")]
+    [DataRow("/home(left:teams//right:../projects)")]
     [DataRow("/team/33")]
     [DataRow("/team/33(right:member)")]
-    [DataRow("/team/33(right:projects/(13~~popup:new))")]
+    [DataRow("/team/33(right:projects/(13//popup:new))")]
     [DataRow("/team/33/members")]
-    [DataRow("/team/33/members/12/(details(popup:new)~~manager:../10)")]
+    [DataRow("/team/33/members/12/(details(popup:new)//manager:../10)")]
     [DataRow("/(a:b)")]
-    [DataRow("/(primary)", "//primary")]
     [DataRow("/primary(left:a)")]
     [DataRow("/primary(left:a/b)")]
-    [DataRow("/(primary~~left:a)")]
     [DataRow("/primary(left:a(sub:b))")]
-    [DataRow("/primary(left:../(a~~sub:b))")]
-    [DataRow("/primary(left:a/(b~~sub:b))", "/primary(left:a/(b~~sub:b))")]
-    [DataRow("/primary(left:a~~right:b)")]
-    [DataRow("/primary/(left:a)")]
-    [DataRow("/primary/(left:a~~right:b)")]
-    [DataRow("/primary/(more~~left:a~~right:b)")]
-    [DataRow("/(app:Home/Welcome~~dock:left(1:One;pinned~~2:Two;below=1~~3:Three;pinned;above=2~~4:Four))")]
+    [DataRow("/primary(left:../(a//sub:b))")]
+    [DataRow("/primary(left:a/(b//sub:b))")]
+    [DataRow("/primary(left:a//right:b)")]
+    [DataRow("/primary(left:a)")]
+    [DataRow("/primary(left:a//right:b)")]
+    [DataRow("/primary/(more//left:a//right:b)")]
+    [DataRow("/Home(app:Welcome//dock:left(1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
     public void TwoWaySerialization(string url, string? canonical = null)
     {
         var parser = new DefaultUrlParser() { AllowMultiValueParams = true };
@@ -430,6 +559,7 @@ public class DefaultUrlParserTests
     [DataRow("/xxx(()")]
     [DataRow("/xxx;=")]
     [DataRow("/xxx/?=x")]
+    [DataRow("/(foo)")]
     public void Parse_MalformedUrl_Throws(string url)
     {
         var parser = new DefaultUrlParser();

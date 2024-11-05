@@ -148,12 +148,15 @@ public class UrlSegmentGroup : IUrlSegmentGroup
                     ? string.Concat(pair.Value.ToString())
                     : string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString()))
             .ToList();
-        if (this.children.Count == 1 && this.children.ContainsKey(OutletName.Primary))
+
+        if (this.children.ContainsKey(OutletName.Primary))
         {
-            return string.Concat(this.SerializeSegments(), '/', childrenAsString[0]);
+            return this.children.Count == 1
+                ? $"{this.SerializeSegments()}/{childrenAsString[0]}"
+                : $"{this.SerializeSegments()}/({string.Join("//", childrenAsString)})";
         }
 
-        return string.Concat(this.SerializeSegments(), '(', string.Join("~~", childrenAsString), ')');
+        return $"{this.SerializeSegments()}({string.Join("//", childrenAsString)})";
     }
 
     private string SerializeAsRoot()
@@ -167,11 +170,11 @@ public class UrlSegmentGroup : IUrlSegmentGroup
             : string.Empty;
 
         var nonPrimary = string.Join(
-            "~~",
+            "//",
             this.children.Where(pair => pair.Key.IsNotPrimary)
                 .Select(pair => string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString())));
 
-        return nonPrimary.Length > 0 ? string.Concat(primary, '(', nonPrimary, ')') : primary;
+        return nonPrimary.Length > 0 ? $"{primary}({nonPrimary})" : primary;
     }
 
     private string SerializeSegments() => string.Join('/', this.Segments.Select(s => s.ToString()));
