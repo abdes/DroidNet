@@ -6,10 +6,8 @@ namespace DroidNet.Routing;
 
 using System;
 using System.Collections.Immutable;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Text;
-using DroidNet.Routing.Utils;
+using DroidNet.Routing.Detail;
 
 /// <summary>
 /// Represents a single route definition including its corresponding view model
@@ -17,6 +15,8 @@ using DroidNet.Routing.Utils;
 /// </summary>
 public class Route : IRoute
 {
+    internal static readonly IRoute.PathMatcher DefaultMatcher = RouteMatcher.MatchRoute;
+
     /// <inheritdoc />
     public PathMatch MatchMethod { get; init; } = PathMatch.Default;
 
@@ -25,9 +25,8 @@ public class Route : IRoute
 
     /// <inheritdoc />
     /// <remarks>
-    /// If not explicitly set, the router uses a <see cref="DefaultMatcher" />
-    /// that attempts to match the route's <see cref="Path" /> in accordance
-    /// with what's specified in the route's <see cref="MatchMethod" />.
+    /// If not explicitly set, the router uses a <see cref="RouteMatcher" /> that attempts to match the route's
+    /// <see cref="Path" /> in accordance with what's specified in the route's <see cref="MatchMethod" />.
     /// </remarks>
     public IRoute.PathMatcher Matcher { get; init; } = DefaultMatcher;
 
@@ -58,86 +57,6 @@ public class Route : IRoute
         }
 
         return res.ToString();
-    }
-
-    /// <summary>
-    /// Default path matcher used by the router to match a route's <see cref="Path" /> against segments in the url. Override this default
-    /// matcher by setting the route's <see cref="Matcher" /> property.
-    /// </summary>
-    /// <inheritdoc cref="IRoute.PathMatcher" />
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "MA0051:Method is too long",
-        Justification = "commenting the code makes the method too long but is useful")]
-    internal static IMatchResult DefaultMatcher(
-        ReadOnlyCollection<IUrlSegment> segments,
-        IUrlSegmentGroup group,
-        IRoute route)
-    {
-        Debug.Assert(
-            route.Path is not null,
-            "when the default matcher is being used, a route must have a non-null path");
-
-        // Empty path route with Prefix match method matches anything but does
-        // not consume the segment unless it is the empty path.
-        if (route.Path.Length == 0 && route.MatchMethod == PathMatch.StrictPrefix)
-        {
-            return new Match()
-            {
-                Consumed = segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
-            };
-        }
-
-        var parts = route.Path.Split('/');
-
-        if (parts.Length > segments.Count)
-        {
-            return new NoMatch();
-        }
-
-        if (route.MatchMethod == PathMatch.Full &&
-            (group.Children is not { Count: 0 } || parts.Length < segments.Count))
-        {
-            // The route's Path is longer than the actual segments, or there
-            // are more segments in the children, but we are looking for a full
-            // match.
-            return new NoMatch();
-        }
-
-        if (route.MatchMethod == PathMatch.StrictPrefix && parts.Length < segments.Count)
-        {
-            // The route's Path is longer than the actual segments, but we are
-            // looking for a full match.
-            return new NoMatch();
-        }
-
-        Dictionary<string, IUrlSegment> posParams = [];
-
-        // Check each config part against the actual URL
-        for (var index = 0; index < parts.Length; index++)
-        {
-            var part = parts[index];
-            var segment = segments[index];
-            var isParameter = part.StartsWith(':');
-            if (isParameter)
-            {
-                // Parameters match any segment
-                posParams[part[1..]] = segment;
-            }
-            else if (!string.Equals(part, segment.Path, StringComparison.Ordinal))
-            {
-                return new NoMatch()
-                {
-                    Consumed = segments.GetRange(0, index),
-                };
-            }
-        }
-
-        return new Match()
-        {
-            Consumed = segments.GetRange(0, parts.Length),
-            PositionalParams = posParams,
-        };
     }
 
     /// <summary>
