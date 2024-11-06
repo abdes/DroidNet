@@ -10,59 +10,51 @@ using System.Diagnostics;
 using DroidNet.Routing.Detail;
 
 /// <summary>
-/// The default implementation of routes URL parsing, heavily inspired by the
-/// way <see href="https://angular.dev/guide/routing">Angular Routing</see>
-/// works.
+/// The default implementation of routes URL parsing, heavily inspired by the way Angular Routing works.
 /// </summary>
 /// <remarks>
-/// Route URL strings are very similar to URIs specified in
-/// <see href="https://en.wikipedia.org/wiki/Uniform_Resource_Identifier">RFC3986</see>
-/// .
-/// They differ in some aspects that make them easier to work with for/edit
-/// specifying navigation routes:
+/// Route URL strings are very similar to URIs specified in RFC3986. They differ in some aspects that make them easier
+/// to work with for/edit specifying navigation routes:
 /// <list type="bullet">
 /// <item>
-/// They don't use a scheme or authority (not needed due to the exclusive use
-/// of these URIs within a navigation routing context).
+/// They don't use a scheme or authority (not needed due to the exclusive use of these URIs within a navigation routing
+/// context).
 /// </item>
 /// <item>
-/// They use parenthesis to specify secondary segments (e.g.
-/// '/inbox/33(popup:compose)').
+/// They use parenthesis to specify secondary segments (e.g. '/inbox/33(popup:compose)').
 /// </item>
 /// <item>
-/// They use colon syntax to specify router outlets (e.g. the 'popup' in
-/// '/inbox/33(popup:compose)').
+/// They use colon syntax to specify router outlets (e.g. the 'popup' in '/inbox/33(popup:compose)').
 /// </item>
 /// <item>
-/// They use the ';parameter=value' syntax (e.g., 'open=true' in
-/// '/inbox/33;open=true/messages/44') to specify route specific parameters.
+/// They use the ';parameter=value' syntax (e.g., 'open=true' in '/inbox/33;open=true/messages/44') to specify route
+/// specific parameters.
 /// </item>
 /// </list>
 /// <para>
-/// A path segment cannot be empty, unless the whole url is just a root url
-/// (i.e "/").
+/// A path segment cannot be empty, unless the whole url is just a root url (i.e "/").
 /// </para>
 /// <para>
-/// A path segment cannot be a single dot '.' or a double dot unless it is
-/// a relative URL and the double dots occur at the start of the URL string.
+/// A path segment cannot be a single dot '.' or a double dot unless it is a relative URL and the double dots occur at
+/// the start of the URL string.
 /// </para>
 /// </remarks>
+/// <seealso href="https://angular.dev/guide/routing" />
+/// <seealso href="https://en.wikipedia.org/wiki/Uniform_Resource_Identifier" />
 public class DefaultUrlParser : IUrlParser
 {
     /// <summary>
-    /// Gets a value indicating whether multiple values for query parameters
-    /// are allowed in URLs or not.
+    /// Gets a value indicating whether multiple values for query parameters are allowed in URLs or not.
     /// </summary>
     /// <value>
-    /// When set to <see langword="true" />, multiple occurrences of the same query
-    /// parameter key in the query parameters will get appended to existing
-    /// values, separated by <c>','</c>. Otherwise, multiple occurrences will
+    /// When set to <see langword="true" />, multiple occurrences of the same query parameter key in the query
+    /// parameters will get appended to existing values, separated by <c>','</c>. Otherwise, multiple occurrences will
     /// be considered as a malformed URL.
     /// </value>
     public bool AllowMultiValueParams { get; init; } = true;
 
     /// <summary>
-    /// Attempt to parse the URL string into a <see cref="UrlTree" />.
+    /// Attempt to parse the URL string into a <see cref="IUrlTree" />.
     /// </summary>
     /// <param name="url">The URL string to parse.</param>
     /// <returns>The <see cref="UrlTree" /> representation.</returns>
@@ -91,23 +83,22 @@ public class DefaultUrlParser : IUrlParser
         }
     }
 
-    /// <summary>Parses the root segment of a URL.</summary>
+    /// <summary>
+    /// Parses the root segment of a URL.
+    /// </summary>
     /// <param name="remaining">
-    /// When called, this parameter contains a
-    /// read-only span of characters representing the input string to parse.
-    /// After being called, the span is modified to consume whatever has been
-    /// parsed and will only contain the remaining part of the URL.
+    /// When called, this parameter contains a read-only span of characters representing the input string to parse. It
+    /// can only be manipulated using the defined <see cref="UrlParserHelpers">extension methods</see> for that purpose.
     /// </param>
     /// <returns>
-    /// A <see cref="UrlSegmentGroup" /> that represents the parsed root
-    /// segment of the URL.
+    /// A <see cref="UrlSegmentGroup" /> that represents the parsed root segment of the URL.
+    /// The <paramref name="remaining" /> span is modified to consume whatever has been parsed and will only contain the
+    /// remaining part of the URL.
     /// </returns>
     /// <remarks>
-    /// This method consumes the leading slash of the URL if it exists. It
-    /// always produces a root <see cref="UrlSegmentGroup" /> with no segments
-    /// and instead defers the segments parsing to its children, so they can be
-    /// added with a corresponding outlet (even if it's just the primary
-    /// outlet).
+    /// This method consumes the leading slash of the URL if it exists. It always produces a root <see cref="UrlSegmentGroup" />
+    /// with no segments and instead defers the segments parsing to its children, so they can be added with a corresponding
+    /// outlet (even if it's just the primary outlet).
     /// </remarks>
     internal UrlSegmentGroup ParseRootSegment(ref ReadOnlySpan<char> remaining)
     {
@@ -122,42 +113,39 @@ public class DefaultUrlParser : IUrlParser
         var absolute = remaining.PeekStartsWith('/');
         return new UrlSegmentGroup(
             [],
-            this.ParseChild(ref remaining, absolute));
+            this.ParseChildren(ref remaining, absolute));
     }
 
     /// <summary>
-    /// Parses child <see cref="UrlSegmentGroup" /> of a
-    /// URL.
+    /// Parses child <see cref="UrlSegmentGroup" /> of a URL.
     /// </summary>
     /// <param name="remaining">
-    /// When called, this parameter contains a
-    /// read-only span of characters representing the input string to parse.
-    /// After being called, the span is modified to consume whatever has been
-    /// parsed and will only contain the remaining part of the URL.
+    /// When called, this parameter contains a read-only span of characters representing the input string to parse. It
+    /// can only be manipulated using the defined <see cref="UrlParserHelpers">extension methods</see> for that purpose.
     /// </param>
     /// <param name="absolute">
-    /// A boolean value indicating whether the URL is absolute. Defaults to
-    /// false.
+    /// A boolean value indicating whether the URL is absolute. Defaults to false.
     /// </param>
     /// <returns>
-    /// A dictionary of <see cref="UrlSegmentGroup" /> that represents the
-    /// parsed child segment groups of the URL. The key of the dictionary is
-    /// the outlet name and the value is the corresponding
-    /// <see cref="UrlSegmentGroup" />.
+    /// A dictionary of <see cref="UrlSegmentGroup" /> that represents the parsed child segment groups of the URL. The
+    /// key of the dictionary is the outlet name and the value is the corresponding <see cref="UrlSegmentGroup" />.
+    /// The <paramref name="remaining" /> span is modified to consume whatever has been parsed and will only contain the
+    /// remaining part of the URL.
     /// </returns>
     /// <remarks>
-    /// This method should not be called if the remaining URL is empty. It
-    /// recursively parses the root segment group as well as child segment
-    /// groups (inside parenthesis).
+    /// This method should not be called if the remaining URL is empty. It recursively parses the root segment group as
+    /// well as child segment groups (inside parenthesis).
     /// </remarks>
     /// <exception cref="UriFormatException">If the remaining part of the URL is malformed.</exception>
-    internal Dictionary<OutletName, IUrlSegmentGroup> ParseChild(
+    internal Dictionary<OutletName, IUrlSegmentGroup> ParseChildren(
         ref ReadOnlySpan<char> remaining,
         bool absolute = false)
     {
-        Debug.Assert(remaining.Length > 0, $"don't call {nameof(this.ParseChild)} if nothing is left in remaining");
+        Debug.Assert(remaining.Length > 0, $"don't call {nameof(this.ParseChildren)} if nothing is left in remaining");
 
         var allowDots = !absolute;
+
+        var allowPrimary = remaining.PeekStartsWith("/(");
 
         remaining.ConsumeOptional('/');
 
@@ -187,7 +175,7 @@ public class DefaultUrlParser : IUrlParser
         Dictionary<OutletName, IUrlSegmentGroup> res = [];
         if (remaining.PeekStartsWith("("))
         {
-            res = this.ParseParens(allowPrimary: false, ref remaining);
+            res = this.ParseParens(allowPrimary, ref remaining);
         }
 
         if (segments.Count > 0 || children.Count > 0)
@@ -202,12 +190,13 @@ public class DefaultUrlParser : IUrlParser
     /// Parses query string into a dictionary of key-value pairs.
     /// </summary>
     /// <param name="remaining">
-    /// When called, this parameter contains a
-    /// read-only span of characters representing the input string to parse.
-    /// After being called, the span is modified to consume whatever has been
-    /// parsed and will only contain the remaining part of the URL.
+    /// When called, this parameter contains a read-only span of characters representing the input string to parse. It
+    /// can only be manipulated using the defined <see cref="UrlParserHelpers">extension methods</see> for that purpose.
     /// </param>
-    /// <returns>A dictionary containing parsed query parameters.</returns>
+    /// <returns>
+    /// A dictionary containing parsed query parameters. The <paramref name="remaining" /> span is modified to consume
+    /// whatever has been parsed and will only contain the remaining part of the URL.
+    /// </returns>
     internal IParameters ParseQueryParams(ref ReadOnlySpan<char> remaining)
     {
         var parameters = new Parameters();
@@ -225,21 +214,19 @@ public class DefaultUrlParser : IUrlParser
 
     /// <summary>Parses a segment in the remaining path in a URI.</summary>
     /// <param name="remaining">
-    /// When called, this parameter contains a read-only span of characters
-    /// representing the input string to parse. After being called, the span is
-    /// modified to consume whatever has been parsed and will only contain the
-    /// remaining part of the URL.
+    /// When called, this parameter contains a read-only span of characters representing the input string to parse. It
+    /// can only be manipulated using the defined <see cref="UrlParserHelpers">extension methods</see> for that purpose.
     /// </param>
     /// <param name="allowDots">
-    /// A boolean value indicating whether dots ('.' or '..') are allowed to
-    /// appear in the segment.
+    /// A boolean value indicating whether dots ('.' or '..') are allowed to appear in the segment.
     /// </param>
     /// <returns>
-    /// An instance of <see cref="UrlSegment" /> representing the parsed segment.
+    /// An instance of <see cref="UrlSegment" /> representing the parsed segment. The <paramref name="remaining" /> span
+    /// is modified to consume whatever has been parsed and will only contain the remaining part of the URL.
     /// </returns>
     /// <exception cref="UriFormatException">
-    /// Thrown if the segment is empty, or if it starts with a dot '..' and
-    /// allowDots is false, or if it starts with '.' in any position.
+    /// Thrown if the segment is empty, or if it starts with a dot '..' and allowDots is false, or if it starts with '.'
+    /// in any position.
     /// </exception>
     internal UrlSegment ParseSegment(ref ReadOnlySpan<char> remaining, bool allowDots)
     {
@@ -260,12 +247,13 @@ public class DefaultUrlParser : IUrlParser
     /// Parses the matrix parameters for a segment.
     /// </summary>
     /// <param name="remaining">
-    /// When called, this parameter contains a read-only span of characters
-    /// representing the input string to parse. After being called, the span is
-    /// modified to consume whatever has been parsed and will only contain the
-    /// remaining part of the URL.
+    /// When called, this parameter contains a read-only span of characters representing the input string to parse. It
+    /// can only be manipulated using the defined <see cref="UrlParserHelpers">extension methods</see> for that purpose.
     /// </param>
-    /// <returns>A dictionary containing parsed matrix parameters.</returns>
+    /// <returns>
+    /// A dictionary containing parsed matrix parameters. The <paramref name="remaining" /> span is modified to consume
+    /// whatever has been parsed and will only contain the remaining part of the URL.
+    /// </returns>
     internal IParameters ParseMatrixParams(ref ReadOnlySpan<char> remaining)
     {
         var parameters = new Parameters();
@@ -330,8 +318,6 @@ public class DefaultUrlParser : IUrlParser
         {
             var path = remaining.MatchSegment();
 
-            var next = remaining[path.Length];
-
             string outletName;
             if (path.IndexOf(':', StringComparison.Ordinal) > -1)
             {
@@ -349,7 +335,7 @@ public class DefaultUrlParser : IUrlParser
                     "not expecting a primary outlet child and did not find an outlet name followed by ':'");
             }
 
-            var children = this.ParseChild(ref remaining);
+            var children = this.ParseChildren(ref remaining);
 
             segmentGroups[outletName]
                 = children.Count == 1 ? children[OutletName.Primary] : new UrlSegmentGroup([], children);
