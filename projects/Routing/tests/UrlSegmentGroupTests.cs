@@ -181,7 +181,7 @@ public class UrlSegmentGroupTests
     /// Test the Serialize method with multiple segments and multiple children.
     /// </summary>
     [TestMethod]
-    public void Serialize_OneChildPrimaryOutlet_ReturnsSegmentsValueWithChildValueNoParenthesis()
+    public void Serialize_OneChildPrimaryOutlet_ReturnsSegmentsAndPrimaryChild()
     {
         // Arrange
         var segment1 = MockUrlSegment("foo");
@@ -194,7 +194,7 @@ public class UrlSegmentGroupTests
         var result = group.ToString();
 
         // Assert
-        _ = result.Should().Be("foo/bar/qux");
+        _ = result.Should().Be("foo/bar/(qux)");
         _ = result.Should().Be(group.ToString());
     }
 
