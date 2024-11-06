@@ -1,0 +1,20 @@
+﻿[
+  {
+    RouteConfig: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RouterStateTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    UrlSegments: [
+      {
+        Path: ,
+        Parameters: []
+      }
+    ],
+    Params: [],
+    QueryParams: []
+  }
+]

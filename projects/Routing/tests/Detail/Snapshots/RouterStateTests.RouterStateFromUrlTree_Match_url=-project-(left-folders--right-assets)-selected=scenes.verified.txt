@@ -1,0 +1,92 @@
+﻿[
+  {
+    RouteConfig: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RouterStateTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    Params: [],
+    QueryParams: [
+      {
+        Name: selected,
+        Value: scenes
+      }
+    ],
+    Children: [
+      {
+        RouteConfig: {
+          MatchMethod: Prefix,
+          Path: project,
+          ViewModelType: RouterStateTests.ProjectViewModel
+        },
+        Outlet: {
+          Name: 
+        },
+        UrlSegments: [
+          {
+            Path: project,
+            Parameters: []
+          }
+        ],
+        Params: [],
+        QueryParams: [
+          {
+            Name: selected,
+            Value: scenes
+          }
+        ],
+        Children: [
+          {
+            RouteConfig: {
+              MatchMethod: Prefix,
+              Path: folders,
+              ViewModelType: RouterStateTests.FoldersViewModel
+            },
+            Outlet: {
+              Name: left
+            },
+            UrlSegments: [
+              {
+                Path: folders,
+                Parameters: []
+              }
+            ],
+            Params: [],
+            QueryParams: [
+              {
+                Name: selected,
+                Value: scenes
+              }
+            ]
+          },
+          {
+            RouteConfig: {
+              MatchMethod: Prefix,
+              Path: assets,
+              ViewModelType: RouterStateTests.AssetsViewModel
+            },
+            Outlet: {
+              Name: right
+            },
+            UrlSegments: [
+              {
+                Path: assets,
+                Parameters: []
+              }
+            ],
+            Params: [],
+            QueryParams: [
+              {
+                Name: selected,
+                Value: scenes
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
