@@ -135,8 +135,6 @@ public class UrlSegmentGroup : IUrlSegmentGroup
 
     private string Serialize()
     {
-        Debug.Assert(this.segments.Count > 0, "Use SerializeAsRoot() if a `UrlSegmentGroup` contains segments");
-
         if (this.Children.Count == 0)
         {
             return this.SerializeSegments();
@@ -149,14 +147,9 @@ public class UrlSegmentGroup : IUrlSegmentGroup
                     : string.Concat(Uri.EscapeDataString(pair.Key), ':', pair.Value.ToString()))
             .ToList();
 
-        if (this.children.ContainsKey(OutletName.Primary))
-        {
-            return this.children.Count == 1
-                ? $"{this.SerializeSegments()}/{childrenAsString[0]}"
-                : $"{this.SerializeSegments()}/({string.Join("//", childrenAsString)})";
-        }
+        var hasPrimaryChild = this.children.ContainsKey(OutletName.Primary);
 
-        return $"{this.SerializeSegments()}({string.Join("//", childrenAsString)})";
+        return $"{this.SerializeSegments()}{(hasPrimaryChild ? "/(" : '(')}{string.Join("//", childrenAsString)})";
     }
 
     private string SerializeAsRoot()
