@@ -47,11 +47,6 @@ public class NoRouteForSegmentsException : Exception
         }
     }
 
-    /// <summary>
-    /// Gets the root of the pared <see cref="IUrlTree" /> to which the unmatched segments belong.
-    /// </summary>
-    public required IUrlSegmentGroup UrlTreeRoot { get; init; }
-
     public override string Message => this.extendedMessage.Value;
 
     private string FormatMessage() => base.Message + $" '{this.Segments}'";
