@@ -20,6 +20,7 @@ public partial class Router : IRouter, IDisposable
 {
     private readonly ILogger logger;
 
+    // TODO(abdes): implement router state manager, with history
     private readonly IRouterStateManager states;
     private readonly RouterContextManager contextManager;
     private readonly IRouteActivator routeActivator;
@@ -371,7 +372,7 @@ public partial class Router : IRouter, IDisposable
             }
 
             // Parse the url tree into a router state.
-            context.State = this.states.CreateFromUrlTree(urlTree);
+            context.State = RouterState.CreateFromUrlTree(urlTree, this.Config);
 
             this.eventSource.OnNext(new RoutesRecognized(urlTree));
 
