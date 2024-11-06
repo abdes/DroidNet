@@ -1,0 +1,34 @@
+﻿[
+  {
+    RouteConfig: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RouterStateTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    Params: [],
+    QueryParams: [],
+    Children: [
+      {
+        RouteConfig: {
+          MatchMethod: Prefix,
+          Path: home,
+          ViewModelType: RouterStateTests.HomeViewModel
+        },
+        Outlet: {
+          Name: 
+        },
+        UrlSegments: [
+          {
+            Path: home,
+            Parameters: []
+          }
+        ],
+        Params: [],
+        QueryParams: []
+      }
+    ]
+  }
+]

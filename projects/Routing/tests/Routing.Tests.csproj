@@ -13,12 +13,13 @@
 
     <ItemGroup>
         <PackageReference Include="Moq" />
+        <PackageReference Include="Verify.DiffPlex" />
+        <PackageReference Include="Verify.MSTest" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
         <ProjectReference Include="..\src\Routing.csproj" />
-        <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>
 
     <ItemGroup>
