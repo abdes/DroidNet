@@ -7,10 +7,10 @@ namespace DroidNet.Routing.WinUI;
 using Microsoft.UI.Xaml;
 
 /// <summary>
-/// An extended <see cref="RouterContext" />, which keeps track of the
+/// An extended <see cref="NavigationContext" />, which keeps track of the
 /// <see cref="Window" /> associated with it.
 /// </summary>
-internal sealed class WindowRouterContext : RouterContext
+internal sealed class WindowNavigationContext : NavigationContext
 {
     /// <summary>
     /// Used for debugging. We want to keep track of the last known window title
@@ -22,14 +22,14 @@ internal sealed class WindowRouterContext : RouterContext
     private bool windowClosed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WindowRouterContext" />
+    /// Initializes a new instance of the <see cref="WindowNavigationContext" />
     /// class.
     /// </summary>
     /// <param name="target">The context's target name.</param>
     /// <param name="window">
     /// The <see cref="Window" /> associated with this context.
     /// </param>
-    public WindowRouterContext(string target, Window window)
+    public WindowNavigationContext(string target, Window window)
         : base(target)
     {
         this.windowTitle = window.Title;

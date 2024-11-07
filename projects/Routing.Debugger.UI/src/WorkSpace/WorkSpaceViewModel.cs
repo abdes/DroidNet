@@ -28,7 +28,12 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         this.Layout = new WorkSpaceLayout(router, this.docker, dockViewFactory, this.logger);
 
         this.routerEventsSub = router.Events.OfType<ActivationComplete>()
-            .Subscribe(@event => this.PlaceDocks(@event.Options));
+            .Subscribe(
+                @event =>
+                {
+                    this.Layout.ActiveRoute = this.ActiveRoute;
+                    this.PlaceDocks(@event.Options);
+                });
     }
 
     public IActiveRoute? ActiveRoute { get; set; }
@@ -104,7 +109,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private void LoadApp(object viewModel)
     {
         this.centerDock = ApplicationDock.New() ?? throw new ContentLoadingException(
-            $"could not create a dock to load content for route `{this.ActiveRoute!.RouteConfig.Path}`")
+            $"could not create a dock to load content for route `{this.ActiveRoute!.Config.Path}`")
         {
             OutletName = DebuggerConstants.AppOutletName,
             ViewModel = viewModel,
@@ -113,7 +118,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         // Dock at the center
         var dockable = Dockable.New(DebuggerConstants.AppOutletName) ??
                        throw new ContentLoadingException(
-                           $"could not create a dockable object while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`")
+                           $"could not create a dockable object while loading content for route `{this.ActiveRoute!.Config.Path}`")
                        {
                            OutletName = DebuggerConstants.AppOutletName,
                            ViewModel = viewModel,
@@ -143,7 +148,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         catch (Exception ex)
         {
             throw new ContentLoadingException(
-                $"an exception occured while loading content for route `{this.ActiveRoute!.RouteConfig.Path}`",
+                $"an exception occurred while loading content for route `{this.ActiveRoute!.Config.Path}`",
                 ex)
             {
                 OutletName = dockableId,
@@ -178,7 +183,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                 catch (Exception ex)
                 {
                     // Log an error and continue with the other docks
-                    LogDockablePlacementError(this.logger, this.ActiveRoute!.RouteConfig.Path, ex.Message);
+                    LogDockablePlacementError(this.logger, this.ActiveRoute!.Config.Path, ex.Message);
                 }
             }
         }

@@ -28,7 +28,9 @@ public static class HostBuilderExtensions
         container.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
         container.Register<IUrlParser, DefaultUrlParser>(Reuse.Singleton);
         container.Register<IRouteActivator, WindowRouteActivator>(Reuse.Singleton);
-        container.Register<IContextProvider, WindowContextProvider>(Reuse.Singleton);
+        var contextProvider = new WindowContextProvider(container);
+        container.RegisterInstance<IContextProvider>(contextProvider);
+        container.RegisterInstance<IContextProvider<NavigationContext>>(contextProvider);
         /* Configure the router */
         container.RegisterInstance<IRoutes>(config);
         container.Register<IRouterStateManager, RouterStateManager>(Reuse.Singleton);

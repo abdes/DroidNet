@@ -30,7 +30,7 @@ public partial class RouterStateAdapter(IActiveRoute item) : TreeItemAdapterBase
         {
             var fullPath = this.Item.Parent is null
                 ? " / "
-                : string.Join('/', this.Item.UrlSegments.Select(i => i.Path).ToList());
+                : string.Join('/', this.Item.Segments.Select(i => i.Path).ToList());
             return fullPath.Length == 0 ? "-empty-" : fullPath;
         }
     }
