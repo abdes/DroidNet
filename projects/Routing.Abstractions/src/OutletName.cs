@@ -4,10 +4,13 @@
 
 namespace DroidNet.Routing;
 
+using Destructurama.Attributed;
+
 /// <summary>
 /// Represents an outlet name, providing abstraction and easy conversion to and from strings.
 /// Special values like <see cref="Primary" /> should be used for specific purposes.
 /// </summary>
+[LogAsScalar]
 public record OutletName
 {
     /// <summary>

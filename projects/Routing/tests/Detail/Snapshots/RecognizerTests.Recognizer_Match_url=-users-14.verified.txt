@@ -1,0 +1,83 @@
+﻿{
+  Url: /users/14,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: [],
+    Children: [
+      {
+        Config: {
+          MatchMethod: Prefix,
+          Path: users/:id
+        },
+        Outlet: {
+          Name: 
+        },
+        Segments: [
+          {
+            Path: users,
+            Parameters: []
+          },
+          {
+            Path: 14,
+            Parameters: []
+          }
+        ],
+        Params: [
+          {
+            Name: id,
+            Value: 14
+          }
+        ],
+        QueryParams: []
+      }
+    ]
+  },
+  UrlTree: {
+    Root: {
+      Children: {
+        : {
+          Segments: [
+            {
+              Path: users,
+              Parameters: []
+            },
+            {
+              Path: 14,
+              Parameters: []
+            }
+          ]
+        }
+      },
+      SortedChildren: [
+        {
+          Key: {
+            Name: 
+          },
+          Value: {
+            Segments: [
+              {
+                Path: users,
+                Parameters: []
+              },
+              {
+                Path: 14,
+                Parameters: []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    QueryParams: [],
+    IsRelative: false
+  }
+}

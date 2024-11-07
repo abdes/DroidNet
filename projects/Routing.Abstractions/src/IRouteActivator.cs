@@ -38,7 +38,7 @@ public interface IRouteActivator
     /// will be loaded into.
     /// </param>
     /// <returns>
-    /// <see langword="false" /> if any of the child routes activation was successful;
+    /// <see langword="false" /> if any of the child routes activation was not successful;
     /// <see langword="true" /> otherwise.
     /// </returns>
     bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context);

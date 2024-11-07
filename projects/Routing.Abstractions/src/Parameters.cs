@@ -24,6 +24,23 @@ public class Parameters : IParameters
     /// <summary>Gets a value indicating whether the collection is empty.</summary>
     public bool IsEmpty => this.parameters.Count == 0;
 
+    public static Parameters Merge(IParameters parentParameters, IParameters childParameter)
+    {
+        var merged = new Parameters();
+        foreach (var pair in parentParameters)
+        {
+            merged.Add(pair.Name, pair.Value);
+        }
+
+        // Merge the child parameters
+        foreach (var parameter in childParameter)
+        {
+            merged.AddOrUpdate(parameter.Name, parameter.Value);
+        }
+
+        return merged;
+    }
+
     /// <inheritdoc />
     public bool TryGetValue(string name, out string? value) => this.parameters.TryGetValue(name, out value);
 

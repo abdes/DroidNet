@@ -18,11 +18,21 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Serilog.Expressions" />
+        <PackageReference Include="Serilog.Extensions.Logging" />
+        <PackageReference Include="Serilog.Extensions.Hosting" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Serilog.Sinks.Seq" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
         <ProjectReference Include="..\src\Routing.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+        <Folder Include="Detail\Snapshots\" />
         <Folder Include="Utils\" />
     </ItemGroup>
 

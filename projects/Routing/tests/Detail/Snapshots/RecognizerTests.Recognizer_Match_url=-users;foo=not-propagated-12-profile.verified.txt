@@ -1,0 +1,136 @@
+﻿{
+  Url: /users;foo=not-propagated/12/profile,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: [],
+    Children: [
+      {
+        Config: {
+          MatchMethod: Prefix,
+          Path: users/:id
+        },
+        Outlet: {
+          Name: 
+        },
+        Segments: [
+          {
+            Path: users,
+            Parameters: [
+              {
+                Name: foo,
+                Value: not-propagated
+              }
+            ]
+          },
+          {
+            Path: 12,
+            Parameters: []
+          },
+          {
+            Path: profile,
+            Parameters: []
+          }
+        ],
+        Params: [
+          {
+            Name: id,
+            Value: 12
+          }
+        ],
+        QueryParams: [],
+        Children: [
+          {
+            Config: {
+              MatchMethod: Prefix,
+              Path: profile,
+              ViewModelType: RecognizerTests.UserProfileViewModel
+            },
+            Outlet: {
+              Name: 
+            },
+            ViewModel: RecognizerTests.UserProfileViewModel,
+            Segments: [
+              {
+                Path: profile,
+                Parameters: []
+              }
+            ],
+            Params: [
+              {
+                Name: id,
+                Value: 12
+              }
+            ],
+            QueryParams: []
+          }
+        ]
+      }
+    ]
+  },
+  UrlTree: {
+    Root: {
+      Children: {
+        : {
+          Segments: [
+            {
+              Path: users,
+              Parameters: [
+                {
+                  Name: foo,
+                  Value: not-propagated
+                }
+              ]
+            },
+            {
+              Path: 12,
+              Parameters: []
+            },
+            {
+              Path: profile,
+              Parameters: []
+            }
+          ]
+        }
+      },
+      SortedChildren: [
+        {
+          Key: {
+            Name: 
+          },
+          Value: {
+            Segments: [
+              {
+                Path: users,
+                Parameters: [
+                  {
+                    Name: foo,
+                    Value: not-propagated
+                  }
+                ]
+              },
+              {
+                Path: 12,
+                Parameters: []
+              },
+              {
+                Path: profile,
+                Parameters: []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    QueryParams: [],
+    IsRelative: false
+  }
+}

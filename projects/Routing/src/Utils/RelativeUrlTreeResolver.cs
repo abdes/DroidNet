@@ -62,7 +62,7 @@ internal static class RelativeUrlTreeResolver
         var origin = relativeTo;
         while (origin.Parent != null)
         {
-            resolvedSegments.InsertRange(0, origin.UrlSegments);
+            resolvedSegments.InsertRange(0, origin.Segments);
             origin = origin.Parent;
         }
 

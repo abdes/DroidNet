@@ -153,7 +153,10 @@ public class DefaultUrlParser : IUrlParser
         if (!remaining.PeekStartsWith('('))
         {
             var segment = this.ParseSegment(ref remaining, allowDots);
-            segments.Add(segment);
+            if (segment.Path.Length > 0)
+            {
+                segments.Add(segment);
+            }
         }
 
         while (remaining.PeekStartsWith('/') && !remaining.PeekStartsWith("//") && !remaining.PeekStartsWith("/("))

@@ -7,6 +7,7 @@ namespace DroidNet.Routing;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using Destructurama.Attributed;
 
 /// <summary>
 /// Represents a parsed sequence of URL segments, forming a path.
@@ -57,6 +58,7 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// children, where the child corresponding to the primary outlet comes
     /// first.
     /// </value>
+    [NotLogged]
     public ReadOnlyCollection<KeyValuePair<OutletName, IUrlSegmentGroup>> SortedChildren
     {
         get
@@ -86,6 +88,7 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// is added as a child to another <see cref="UrlSegmentGroup" />.
     /// </remarks>
     /// <value>The parent <see cref="UrlSegmentGroup" />.</value>
+    [NotLogged]
     public IUrlSegmentGroup? Parent { get; private set; }
 
     /// <summary>
@@ -132,6 +135,12 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// .
     /// </returns>
     public override string ToString() => this.segments.Count == 0 ? this.SerializeAsRoot() : this.Serialize();
+
+    internal void ReplaceSegmentsWithEmptyPath()
+    {
+        Debug.Assert(this.segments.Count == 0, "segments must be empty to insert an empty path segment");
+        this.segments.Add(new UrlSegment(string.Empty));
+    }
 
     private string Serialize()
     {

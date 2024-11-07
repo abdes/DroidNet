@@ -29,6 +29,7 @@ public partial class Router : IRouter, IDisposable
 
     private readonly BehaviorSubject<RouterEvent> eventSource = new(new RouterReady());
     private readonly IRouteActivationObserver routeActivationObserver;
+    private readonly Recognizer recognizer;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Router" /> class.
@@ -70,6 +71,7 @@ public partial class Router : IRouter, IDisposable
         this.routeActivationObserver = new RouteActivationObserver(container);
 
         this.states = states;
+        this.recognizer = new Recognizer(urlSerializer, config, loggerFactory);
         this.contextManager = contextManager;
         this.routeActivator = routeActivator;
         this.contextProvider = contextProvider;
@@ -117,10 +119,10 @@ public partial class Router : IRouter, IDisposable
                 "cannot apply navigation changes without a valid active route",
                 nameof(options));
 
-            var urlTree = activeRoute.UrlSegmentGroup as UrlSegmentGroup;
+            var urlTree = activeRoute.SegmentGroup as UrlSegmentGroup;
             Debug.Assert(
                 urlTree is not null,
-                $"was expecting the active route to have a valid url tree, but it has `{activeRoute.UrlSegmentGroup}` of type `{activeRoute.UrlSegmentGroup.GetType()}`");
+                $"was expecting the active route to have a valid url tree, but it has `{activeRoute.SegmentGroup}` of type `{activeRoute.SegmentGroup.GetType()}`");
 
             var currentContext = this.contextManager.GetContextForTarget(Target.Self);
             var currentState = currentContext.State!;
@@ -231,7 +233,7 @@ public partial class Router : IRouter, IDisposable
     {
         // Compute the path based on the view model type and the active route config
         Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
-        var config = MatchViewModelType(activeRoute.RouteConfig, change);
+        var config = MatchViewModelType(activeRoute.Config, change);
 
         var urlSegmentGroup = new UrlSegmentGroup(
             config.Path?
@@ -244,12 +246,12 @@ public partial class Router : IRouter, IDisposable
         activeRoute.AddChild(
             new ActiveRoute()
             {
-                RouteConfig = config,
+                Config = config,
                 Params = change.Parameters,
                 Outlet = change.Outlet,
                 QueryParams = activeRoute.QueryParams,
-                UrlSegmentGroup = urlSegmentGroup,
-                UrlSegments = urlSegmentGroup.Segments,
+                SegmentGroup = urlSegmentGroup,
+                Segments = urlSegmentGroup.Segments,
             });
     }
 
@@ -265,7 +267,7 @@ public partial class Router : IRouter, IDisposable
                 case RouteChangeAction.Add:
                     // Compute the path based on the view model type and the active route config
                     Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
-                    var config = MatchViewModelType(activeRoute.RouteConfig, change);
+                    var config = MatchViewModelType(activeRoute.Config, change);
 
                     var urlSegmentGroup = new UrlSegmentGroup(
                         config.Path?
@@ -372,7 +374,8 @@ public partial class Router : IRouter, IDisposable
             }
 
             // Parse the url tree into a router state.
-            context.State = RouterState.CreateFromUrlTree(urlTree, this.Config);
+            context.State = this.recognizer.Recognize(urlTree) ??
+                            throw new NavigationFailedException("failed to match the parsed URL to the router config");
 
             this.eventSource.OnNext(new RoutesRecognized(urlTree));
 

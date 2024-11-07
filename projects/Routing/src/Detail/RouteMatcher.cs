@@ -4,7 +4,6 @@
 
 namespace DroidNet.Routing.Detail;
 
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using DroidNet.Routing.Utils;
 
@@ -16,7 +15,7 @@ internal static class RouteMatcher
     /// </summary>
     /// <inheritdoc cref="IRoute.PathMatcher" />
     internal static IMatchResult MatchRoute(
-        ReadOnlyCollection<IUrlSegment> segments,
+        IReadOnlyList<IUrlSegment> segments,
         IUrlSegmentGroup group,
         IRoute route)
     {
@@ -28,7 +27,7 @@ internal static class RouteMatcher
     }
 
     private static IMatchResult MatchNonEmptyPath(
-        ReadOnlyCollection<IUrlSegment> segments,
+        IReadOnlyList<IUrlSegment> segments,
         IUrlSegmentGroup group,
         IRoute route)
     {
@@ -77,7 +76,7 @@ internal static class RouteMatcher
     }
 
     private static IMatchResult? TryMatchEmptyPath(
-        ReadOnlyCollection<IUrlSegment> segments,
+        IReadOnlyList<IUrlSegment> segments,
         IUrlSegmentGroup group,
         IRoute route)
     {
@@ -97,7 +96,7 @@ internal static class RouteMatcher
         {
             // Empty path route with Prefix match method matches anything but does
             // not consume the segment unless the segment's Path is the empty path.
-            Consumed = segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
+            Consumed = segments.Count > 0 && segments[0].Path.Length == 0 ? segments.GetRange(0, 1) : [],
         };
     }
 }

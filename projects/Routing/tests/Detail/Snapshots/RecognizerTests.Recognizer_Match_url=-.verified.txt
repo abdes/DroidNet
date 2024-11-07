@@ -1,0 +1,21 @@
+﻿{
+  Url: /,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: []
+  },
+  UrlTree: {
+    Root: {},
+    QueryParams: [],
+    IsRelative: false
+  }
+}

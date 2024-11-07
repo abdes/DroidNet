@@ -31,7 +31,7 @@ public static class ReadOnlyCollectionExtensions
     /// index and count do not denote a valid range of elements in the
     /// <see cref="ReadOnlyCollection{T}" />.
     /// </exception>
-    public static IList<T> GetRange<T>(this ReadOnlyCollection<T> collection, int start, int count)
+    public static IList<T> GetRange<T>(this IReadOnlyList<T> collection, int start, int count)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(start, 0);
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 0);
