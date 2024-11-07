@@ -1,0 +1,68 @@
+﻿{
+  Url: /home,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: [],
+    Children: [
+      {
+        Config: {
+          MatchMethod: Prefix,
+          Path: home,
+          ViewModelType: RecognizerTests.HomeViewModel
+        },
+        Outlet: {
+          Name: 
+        },
+        ViewModel: RecognizerTests.HomeViewModel,
+        Segments: [
+          {
+            Path: home,
+            Parameters: []
+          }
+        ],
+        Params: [],
+        QueryParams: []
+      }
+    ]
+  },
+  UrlTree: {
+    Root: {
+      Children: {
+        : {
+          Segments: [
+            {
+              Path: home,
+              Parameters: []
+            }
+          ]
+        }
+      },
+      SortedChildren: [
+        {
+          Key: {
+            Name: 
+          },
+          Value: {
+            Segments: [
+              {
+                Path: home,
+                Parameters: []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    QueryParams: [],
+    IsRelative: false
+  }
+}

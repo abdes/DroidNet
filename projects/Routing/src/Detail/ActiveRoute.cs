@@ -5,6 +5,7 @@
 namespace DroidNet.Routing.Detail;
 
 using System.Linq;
+using Destructurama.Attributed;
 using DroidNet.Routing.Utils;
 
 /// <summary>
@@ -16,29 +17,42 @@ using DroidNet.Routing.Utils;
 /// </summary>
 internal sealed partial class ActiveRoute : TreeNode, IActiveRoute
 {
-    public required IRoute RouteConfig { get; init; }
+    public required IRoute Config { get; init; }
 
+    [LogAsScalar]
     public required OutletName Outlet { get; init; }
 
+    [LogAsScalar]
     public object? ViewModel { get; internal set; }
 
-    public required IReadOnlyList<IUrlSegment> UrlSegments { get; init; }
+    public required IReadOnlyList<IUrlSegment> Segments { get; init; }
 
     public required IParameters Params { get; internal set; }
 
     public required IParameters QueryParams { get; init; }
 
+    [NotLogged]
     public new IActiveRoute Root => (IActiveRoute)base.Root;
 
+    [NotLogged]
     public new IActiveRoute? Parent => (IActiveRoute?)base.Parent;
 
     public new IReadOnlyCollection<IActiveRoute> Children
         => base.Children.Cast<ActiveRoute>().ToList().AsReadOnly();
 
+    [NotLogged]
     public new IReadOnlyCollection<IActiveRoute> Siblings
         => base.Siblings.Cast<ActiveRoute>().ToList().AsReadOnly();
 
     public void AddChild(IActiveRoute route) => CheckNodeAndCallBase(route, this.AddChild);
+
+    public void AddChildren(IEnumerable<IActiveRoute> routes)
+    {
+        foreach (var route in routes)
+        {
+            CheckNodeAndCallBase(route, this.AddChild);
+        }
+    }
 
     public bool RemoveChild(IActiveRoute route) => CheckNodeAndCallBase(route, this.RemoveChild);
 
@@ -56,19 +70,19 @@ internal sealed partial class ActiveRoute : TreeNode, IActiveRoute
 internal partial class ActiveRoute
 {
     /// <summary>
-    /// Gets the <see cref="UrlSegmentGroup" /> from which this
+    /// Gets the <see cref="SegmentGroup" /> from which this
     /// <see cref="ActiveRoute" /> was created.
     /// </summary>
     /// <value>
-    /// The <see cref="UrlSegmentGroup" /> from which this <see cref="ActiveRoute" />
+    /// The <see cref="SegmentGroup" /> from which this <see cref="ActiveRoute" />
     /// was created.
     /// </value>
-    internal required IUrlSegmentGroup UrlSegmentGroup { get; init; }
+    internal required IUrlSegmentGroup SegmentGroup { get; init; }
 
     internal bool IsActivated { get; set; }
 
     public override string ToString()
-        => $"{this.ViewModel?.GetType().Name} (o={this.Outlet} p={this.RouteConfig.Path})";
+        => $"vm={this.ViewModel?.GetType().Name} (o={this.Outlet} p={this.Config.Path})";
 
     /// <summary>
     /// Helper function to call base implementation after checking that the

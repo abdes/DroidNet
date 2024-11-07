@@ -37,13 +37,8 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
     /// <inheritdoc />
     public bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context)
     {
-        var activationSuccessful = true;
-
-        // The root node is a placeholder for the tree and cannot be activated.
-        if (root.Parent != null)
-        {
-            activationSuccessful = this.ActivateRoute(root, context) && activationSuccessful;
-        }
+        // Activate the root node
+        var activationSuccessful = this.ActivateRoute(root, context);
 
         return root.Children.Aggregate(
             activationSuccessful,
@@ -72,7 +67,7 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
             }
 
             LogActivationSkipped(this.Logger, route);
-            return false;
+            return true;
         }
         catch (Exception ex)
         {

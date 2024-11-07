@@ -32,7 +32,7 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
 
         // The route may be without a ViewModel (typically a route to load
         // data or hold shared parameters).
-        var viewModelType = route.RouteConfig.ViewModelType;
+        var viewModelType = route.Config.ViewModelType;
         if (viewModelType is null)
         {
             return true;

@@ -40,9 +40,9 @@ public class RelativeUrlTreeResolverTests
         var mockChild3 = new Mock<IActiveRoute>();
 
         // Set up the UrlSegments properties
-        _ = mockChild1.Setup(m => m.UrlSegments).Returns(new List<UrlSegment> { new("segment1") });
-        _ = mockChild2.Setup(m => m.UrlSegments).Returns(new List<UrlSegment> { new("segment2") });
-        _ = mockChild3.Setup(m => m.UrlSegments)
+        _ = mockChild1.Setup(m => m.Segments).Returns(new List<UrlSegment> { new("segment1") });
+        _ = mockChild2.Setup(m => m.Segments).Returns(new List<UrlSegment> { new("segment2") });
+        _ = mockChild3.Setup(m => m.Segments)
             .Returns(
                 new List<UrlSegment>
                 {

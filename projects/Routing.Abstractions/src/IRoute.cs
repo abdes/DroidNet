@@ -4,8 +4,6 @@
 
 namespace DroidNet.Routing;
 
-using System.Collections.ObjectModel;
-
 /// <summary>
 /// A configuration object that defines a single route. A set of routes are collected in a <see cref="IRoutes">list of
 /// routes</see> to define a <see cref="IRouter">router</see> configuration. The router attempts to match segments of a
@@ -35,7 +33,7 @@ public interface IRoute
     /// or not.
     /// </returns>
     public delegate IMatchResult PathMatcher(
-        ReadOnlyCollection<IUrlSegment> segments,
+        IReadOnlyList<IUrlSegment> segments,
         IUrlSegmentGroup group,
         IRoute route);
 
@@ -97,7 +95,7 @@ public interface IRoute
     OutletName Outlet { get; }
 
     /// <summary>Gets the collection of child routes, if any.</summary>
-    IRoutes? Children { get; }
+    IRoutes Children { get; }
 }
 
 /*

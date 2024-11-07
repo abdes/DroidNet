@@ -20,14 +20,14 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// matched by this route. For example if the route is `/users/:id`, then
     /// the list will contain two segments `users` and `:id`.
     /// </value>
-    IReadOnlyList<IUrlSegment> UrlSegments { get; }
+    IReadOnlyList<IUrlSegment> Segments { get; }
 
     /// <summary>Gets the parameters for this route.</summary>
     /// <remarks>
     /// Parameters can be passed either as <see cref="IUrlSegment">url segments</see>,
     /// in such case they are usually referred to as positional parameters, or as
     /// segment matrix parameters are passed as part of each segment in the route
-    /// <see cref="UrlSegments" />.
+    /// <see cref="Segments" />.
     /// <para>
     /// Any time a route is matched and an active route is created for that
     /// match, the router derives a new set of parameters : the router takes
@@ -79,5 +79,5 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// <remarks>
     /// Provided mostly for debugging and troubleshooting.
     /// </remarks>
-    IRoute RouteConfig { get; }
+    IRoute Config { get; }
 }

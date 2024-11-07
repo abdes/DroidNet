@@ -1,0 +1,255 @@
+﻿{
+  Url: /project;foo=bar(left:folders//right:assets)?selected=scenes,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: [
+      {
+        Name: selected,
+        Value: scenes
+      }
+    ],
+    Children: [
+      {
+        Config: {
+          MatchMethod: Prefix,
+          Path: project,
+          ViewModelType: RecognizerTests.ProjectViewModel
+        },
+        Outlet: {
+          Name: 
+        },
+        ViewModel: RecognizerTests.ProjectViewModel,
+        Segments: [
+          {
+            Path: project,
+            Parameters: [
+              {
+                Name: foo,
+                Value: bar
+              }
+            ]
+          }
+        ],
+        Params: [
+          {
+            Name: foo,
+            Value: bar
+          }
+        ],
+        QueryParams: [
+          {
+            Name: selected,
+            Value: scenes
+          }
+        ],
+        Children: [
+          {
+            Config: {
+              MatchMethod: Prefix,
+              Path: folders,
+              ViewModelType: RecognizerTests.FoldersViewModel
+            },
+            Outlet: {
+              Name: left
+            },
+            ViewModel: RecognizerTests.FoldersViewModel,
+            Segments: [
+              {
+                Path: folders,
+                Parameters: []
+              }
+            ],
+            Params: [
+              {
+                Name: foo,
+                Value: bar
+              }
+            ],
+            QueryParams: [
+              {
+                Name: selected,
+                Value: scenes
+              }
+            ]
+          },
+          {
+            Config: {
+              MatchMethod: Prefix,
+              Path: assets,
+              ViewModelType: RecognizerTests.AssetsViewModel
+            },
+            Outlet: {
+              Name: right
+            },
+            ViewModel: RecognizerTests.AssetsViewModel,
+            Segments: [
+              {
+                Path: assets,
+                Parameters: []
+              }
+            ],
+            Params: [
+              {
+                Name: foo,
+                Value: bar
+              }
+            ],
+            QueryParams: [
+              {
+                Name: selected,
+                Value: scenes
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  UrlTree: {
+    Root: {
+      Children: {
+        : {
+          Children: {
+            left: {
+              Segments: [
+                {
+                  Path: folders,
+                  Parameters: []
+                }
+              ]
+            },
+            right: {
+              Segments: [
+                {
+                  Path: assets,
+                  Parameters: []
+                }
+              ]
+            }
+          },
+          SortedChildren: [
+            {
+              Key: {
+                Name: left
+              },
+              Value: {
+                Segments: [
+                  {
+                    Path: folders,
+                    Parameters: []
+                  }
+                ]
+              }
+            },
+            {
+              Key: {
+                Name: right
+              },
+              Value: {
+                Segments: [
+                  {
+                    Path: assets,
+                    Parameters: []
+                  }
+                ]
+              }
+            }
+          ],
+          Segments: [
+            {
+              Path: project,
+              Parameters: [
+                {
+                  Name: foo,
+                  Value: bar
+                }
+              ]
+            }
+          ]
+        }
+      },
+      SortedChildren: [
+        {
+          Key: {
+            Name: 
+          },
+          Value: {
+            Children: {
+              left: {
+                Segments: [
+                  {
+                    Path: folders,
+                    Parameters: []
+                  }
+                ]
+              },
+              right: {
+                Segments: [
+                  {
+                    Path: assets,
+                    Parameters: []
+                  }
+                ]
+              }
+            },
+            SortedChildren: [
+              {
+                Key: {
+                  Name: left
+                },
+                Value: {
+                  Segments: [
+                    {
+                      Path: folders,
+                      Parameters: []
+                    }
+                  ]
+                }
+              },
+              {
+                Key: {
+                  Name: right
+                },
+                Value: {
+                  Segments: [
+                    {
+                      Path: assets,
+                      Parameters: []
+                    }
+                  ]
+                }
+              }
+            ],
+            Segments: [
+              {
+                Path: project,
+                Parameters: [
+                  {
+                    Name: foo,
+                    Value: bar
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    QueryParams: [
+      {
+        Name: selected,
+        Value: scenes
+      }
+    ],
+    IsRelative: false
+  }
+}

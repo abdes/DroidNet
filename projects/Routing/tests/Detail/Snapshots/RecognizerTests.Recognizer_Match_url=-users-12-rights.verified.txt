@@ -1,0 +1,121 @@
+﻿{
+  Url: /users/12/rights,
+  RootNode: {
+    Config: {
+      MatchMethod: Prefix,
+      Path: ,
+      ViewModelType: RecognizerTests.ShellViewModel
+    },
+    Outlet: {
+      Name: 
+    },
+    ViewModel: RecognizerTests.ShellViewModel,
+    Params: [],
+    QueryParams: [],
+    Children: [
+      {
+        Config: {
+          MatchMethod: Prefix,
+          Path: users/:id
+        },
+        Outlet: {
+          Name: 
+        },
+        Segments: [
+          {
+            Path: users,
+            Parameters: []
+          },
+          {
+            Path: 12,
+            Parameters: []
+          },
+          {
+            Path: rights,
+            Parameters: []
+          }
+        ],
+        Params: [
+          {
+            Name: id,
+            Value: 12
+          }
+        ],
+        QueryParams: [],
+        Children: [
+          {
+            Config: {
+              MatchMethod: Prefix,
+              Path: rights,
+              ViewModelType: RecognizerTests.UserRightsViewModel
+            },
+            Outlet: {
+              Name: 
+            },
+            ViewModel: RecognizerTests.UserRightsViewModel,
+            Segments: [
+              {
+                Path: rights,
+                Parameters: []
+              }
+            ],
+            Params: [
+              {
+                Name: id,
+                Value: 12
+              }
+            ],
+            QueryParams: []
+          }
+        ]
+      }
+    ]
+  },
+  UrlTree: {
+    Root: {
+      Children: {
+        : {
+          Segments: [
+            {
+              Path: users,
+              Parameters: []
+            },
+            {
+              Path: 12,
+              Parameters: []
+            },
+            {
+              Path: rights,
+              Parameters: []
+            }
+          ]
+        }
+      },
+      SortedChildren: [
+        {
+          Key: {
+            Name: 
+          },
+          Value: {
+            Segments: [
+              {
+                Path: users,
+                Parameters: []
+              },
+              {
+                Path: 12,
+                Parameters: []
+              },
+              {
+                Path: rights,
+                Parameters: []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    QueryParams: [],
+    IsRelative: false
+  }
+}

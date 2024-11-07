@@ -128,10 +128,10 @@ public class RouteActivationObserverTests
             Outlet = "test",
             Params = new Parameters(),
             QueryParams = new Parameters(),
-            UrlSegments = [],
-            UrlSegmentGroup = new UrlSegmentGroup([]),
+            Segments = [],
+            SegmentGroup = new UrlSegmentGroup([]),
             IsActivated = false,
-            RouteConfig = new Route { ViewModelType = null },
+            Config = new Route { ViewModelType = null },
         };
 
     private static ActiveRoute MakeActiveRouteWithViewModel(Type viewModelType) =>
@@ -140,10 +140,10 @@ public class RouteActivationObserverTests
             Outlet = "test",
             Params = new Parameters(),
             QueryParams = new Parameters(),
-            UrlSegments = [],
-            UrlSegmentGroup = new UrlSegmentGroup([]),
+            Segments = [],
+            SegmentGroup = new UrlSegmentGroup([]),
             IsActivated = false,
-            RouteConfig = new Route { ViewModelType = viewModelType },
+            Config = new Route { ViewModelType = viewModelType },
         };
 
     /// <summary>

@@ -12,12 +12,14 @@
     <PackageVersion Include="DryIoc.Microsoft.DependencyInjection" Version="8.0.0-preview-02" />
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.6.240923002" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageVersion Include="Serilog" Version="4.1.0" />
     <PackageVersion Include="Serilog.Expressions" Version="5.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageVersion Include="Serilog.Sinks.Debug" Version="3.0.0" />
     <PackageVersion Include="Serilog.Sinks.Seq" Version="8.0.0" />
+    <PackageVersion Include="Destructurama.Attributed" Version="4.0.0" />
     <PackageVersion Include="Testably.Abstractions" Version="3.2.3" />
   </ItemGroup>
   <ItemGroup>

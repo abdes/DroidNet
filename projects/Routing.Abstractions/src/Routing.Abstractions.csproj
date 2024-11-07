@@ -10,4 +10,8 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="Destructurama.Attributed" />
+    </ItemGroup>
+
 </Project>

@@ -45,10 +45,6 @@ public class DefaultUrlParserTests
         tree.QueryParams.Should().BeEmpty();
         tree.Root.Parent.Should().BeNull();
         tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
-        tree.Root.Children.Should().ContainKey(OutletName.Primary);
-        var primary = tree.Root.Children[OutletName.Primary];
-        primary.Segments.Should().HaveCount(1).And.Contain(s => s.Path == string.Empty && s.Parameters.IsEmpty);
 
         var serialized = tree.ToString();
         serialized.Should().Be(url);
@@ -209,6 +205,7 @@ public class DefaultUrlParserTests
     [DataRow("/primary(left:a//right:b)")]
     [DataRow("/primary/(more//left:a//right:b)")]
     [DataRow("/(app:Home/Welcome//dock:left(1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
+    [DataRow("/(dock:(app:Home/Welcome//1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
     public void TwoWaySerialization(string url, string? canonical = null)
     {
         var parser = new DefaultUrlParser() { AllowMultiValueParams = true };

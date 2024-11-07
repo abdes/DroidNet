@@ -7,6 +7,7 @@ namespace DroidNet.Routing;
 using System;
 using System.Collections.Immutable;
 using System.Text;
+using Destructurama.Attributed;
 using DroidNet.Routing.Detail;
 
 /// <summary>
@@ -34,10 +35,11 @@ public class Route : IRoute
     public Type? ViewModelType { get; init; }
 
     /// <inheritdoc />
+    [LogAsScalar]
     public OutletName Outlet { get; init; } = OutletName.Primary;
 
     /// <inheritdoc />
-    public IRoutes? Children { get; init; }
+    public IRoutes Children { get; init; } = new Routes([]);
 
     /// <inheritdoc />
     public override string ToString()
@@ -51,7 +53,7 @@ public class Route : IRoute
                     ? $"{this.Path}|{(this.MatchMethod == PathMatch.Full ? 'F' : 'P')}"
                     : "<matcher>");
 
-        if (this.Children != null)
+        if (this.Children.Count != 0)
         {
             _ = res.Append('{').AppendJoin(", ", this.Children).Append('}');
         }

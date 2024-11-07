@@ -4,6 +4,8 @@
 
 namespace DroidNet.Routing;
 
+using Destructurama.Attributed;
+
 /// <summary>Represents a path segment in a router URL.</summary>
 /// <remarks>
 /// A router URL is the serialized form of a certain router state, which
@@ -44,6 +46,7 @@ namespace DroidNet.Routing;
 /// </remarks>
 /// <seealso cref="UrlSegmentGroup" />
 /// <seealso href="https://datatracker.ietf.org/doc/html/rfc3986" />
+[LogAsScalar]
 public class UrlSegment : IUrlSegment
 {
     private readonly Parameters parameters = [];
