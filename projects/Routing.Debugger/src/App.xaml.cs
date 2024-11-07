@@ -65,7 +65,7 @@ public partial class App
         try
         {
             this.router.Navigate(
-                "/(dock:(app:Welcome~~routes:Config/Routes;bottom=url-tree~~url-tree:Parser/UrlTree;left;w=300~~router-state:Router/State;right;w=400))",
+                "/(dock:(app:Welcome//routes:Config;bottom=url-tree//url-tree:Parser;left;w=300//router-state:Recognizer;right;w=400))",
                 new FullNavigation() { Target = Target.Main });
         }
         catch (NavigationFailedException)

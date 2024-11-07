@@ -11,6 +11,7 @@ namespace DroidNet.Routing.Debugger;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using Destructurama;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
@@ -103,6 +104,7 @@ public static partial class Program
 
         // https://nblumhardt.com/2021/06/customize-serilog-text-output/
         Log.Logger = new LoggerConfiguration()
+            .Destructure.UsingAttributes()
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
             .Enrich.FromLogContext()
@@ -118,7 +120,6 @@ public static partial class Program
         new Route
         {
             Path = string.Empty,
-            MatchMethod = PathMatch.StrictPrefix,
             ViewModelType = typeof(ShellViewModel),
             Children = new Routes(
             [
@@ -138,19 +139,19 @@ public static partial class Program
                         new Route
                         {
                             Outlet = "routes",
-                            Path = "Config/Routes",
+                            Path = "Config",
                             ViewModelType = typeof(RoutesViewModel),
                         },
                         new Route
                         {
-                            Outlet = "urlTree",
-                            Path = "Parser/UrlTree",
+                            Outlet = "url-tree",
+                            Path = "Parser",
                             ViewModelType = typeof(UrlTreeViewModel),
                         },
                         new Route
                         {
-                            Outlet = "state",
-                            Path = "Router/State",
+                            Outlet = "router-state",
+                            Path = "Recognizer",
                             ViewModelType = typeof(RouterStateViewModel),
                         },
                     ]),

@@ -29,7 +29,7 @@ public partial class RouterStateViewModel : TreeViewModelBase, IDisposable
                 }
 
                 this.url = state.Url;
-                this.Root = new RouterStateAdapter(state.Root)
+                this.Root = new RouterStateAdapter(state.RootNode)
                 {
                     Level = 0,
                 };

@@ -5,7 +5,6 @@
 namespace DroidNet.Routing.WinUI;
 
 using System.Diagnostics;
-using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,21 +15,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// If the route being activated is the root route, then it does not have a parent. In such case, the content is loaded into the
 /// context's window, provided that window implements <see cref="IOutletContainer" />.
 /// </remarks>
-/// <param name="container">
-/// The IoC container to use when resolving a ViewModel type to a ViewModel for the route being activated.
-/// </param>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
-internal sealed partial class WindowRouteActivator(
-    IContainer container,
-    ILoggerFactory? loggerFactory) : AbstractRouteActivator(container, CreateLogger(loggerFactory))
+internal sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
+    : AbstractRouteActivator(loggerFactory)
 {
     /// <inheritdoc />
-    protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
+    protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)
     {
-        Debug.Assert(context is WindowRouterContext, "expecting the router context to have been created by me");
-        Debug.Assert(route.Parent is not null, "you cannot activate the root!");
+        Debug.Assert(context is WindowNavigationContext, "expecting the router context to have been created by me");
 
         if (route.ViewModel is null)
         {
@@ -43,7 +37,7 @@ internal sealed partial class WindowRouteActivator(
          * its parent activated route view model.
          */
 
-        if (route.Parent.IsRoot)
+        if (route.IsRoot)
         {
             this.DoActivateRootRoute(route, context);
         }
@@ -72,14 +66,10 @@ internal sealed partial class WindowRouteActivator(
                 LogContentLoadingError(this.Logger, route.Outlet, because);
 
                 throw new InvalidOperationException(
-                    $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
+                    $"parent view model of type '{route.Parent.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
             }
         }
     }
-
-    private static ILogger<WindowRouteActivator> CreateLogger(ILoggerFactory? loggerFactory)
-        => loggerFactory?.CreateLogger<WindowRouteActivator>() ??
-           NullLoggerFactory.Instance.CreateLogger<WindowRouteActivator>();
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -87,10 +77,10 @@ internal sealed partial class WindowRouteActivator(
         Message = "Cannot load content into {Outlet} {Because}")]
     private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
 
-    private void DoActivateRootRoute(IActiveRoute route, RouterContext context)
+    private void DoActivateRootRoute(IActiveRoute route, INavigationContext context)
     {
         Debug.Assert(route.ViewModel is not null, "expecting the view model not to be null");
-        var window = (context as WindowRouterContext)?.Window;
+        var window = (context as WindowNavigationContext)?.Window;
         Debug.Assert(
             window is not null,
             "expecting the window in the router context to be created by me");

@@ -23,7 +23,7 @@ using Microsoft.UI.Xaml;
 /// <see cref="Window.Activated">activation</see> is directly mapped into active <see cref="ContextChanged">context changes</see>.
 /// </para>
 /// </remarks>
-internal sealed class WindowContextProvider(IContainer container) : IContextProvider
+internal sealed class WindowContextProvider(IContainer container) : IContextProvider<NavigationContext>
 {
     /// <inheritdoc />
     public event EventHandler<ContextEventArgs>? ContextChanged;
@@ -34,11 +34,14 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
     /// <inheritdoc />
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null)
+        => this.ContextForTarget(target, currentContext as NavigationContext);
+
     /// <inheritdoc />
-    public RouterContext ContextForTarget(Target target, RouterContext? currentContext = null)
+    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
     {
         Debug.Assert(
-            currentContext is null or WindowRouterContext,
+            currentContext is null or WindowNavigationContext,
             "expecting the router context to have been created by me");
 
         var window = container.Resolve<Window>(serviceKey: target);
@@ -46,12 +49,12 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
         // If the current context is valid, and we're getting the same Window
         // instance than what we currently have, we just reuse the current
         // context as if the target were "_self".
-        if (currentContext != null && (currentContext as WindowRouterContext)?.Window == window)
+        if (currentContext != null && (currentContext as WindowNavigationContext)?.Window == window)
         {
             return currentContext;
         }
 
-        var context = new WindowRouterContext(target, window);
+        var context = new WindowNavigationContext(target, window);
         this.ContextCreated?.Invoke(this, new ContextEventArgs(context));
         window.Activated += (_, args) =>
         {
@@ -66,12 +69,14 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
         return context;
     }
 
-    /// <inheritdoc />
-    public void ActivateContext(RouterContext context)
-    {
-        Debug.Assert(context is WindowRouterContext, "expecting the router context to have been created by me");
+    public void ActivateContext(NavigationContext context) => this.ActivateContext(context as INavigationContext);
 
-        if (context is WindowRouterContext c)
+    /// <inheritdoc />
+    public void ActivateContext(INavigationContext context)
+    {
+        Debug.Assert(context is WindowNavigationContext, "expecting the router context to have been created by me");
+
+        if (context is WindowNavigationContext c)
         {
             c.Window.Activate();
         }

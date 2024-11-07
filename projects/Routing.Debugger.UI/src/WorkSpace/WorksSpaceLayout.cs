@@ -21,15 +21,18 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     private readonly IRouter router;
     private readonly ILogger logger;
 
-    private IActiveRoute? activeRoute;
-
     [ObservableProperty]
     private UIElement content = new Grid();
 
-    public WorkSpaceLayout(IRouter router, IDocker docker, IDockViewFactory dockViewFactory, ILogger logger)
+    public WorkSpaceLayout(
+        IRouter router,
+        IDocker docker,
+        IDockViewFactory dockViewFactory,
+        ILogger logger)
     {
-        this.router = router;
         this.logger = logger;
+
+        this.router = router;
 
         var layout = new GridFlowLayout(dockViewFactory);
 
@@ -45,10 +48,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     // docker.
                     case NavigationStart:
                         docker.LayoutChanged -= this.SyncWithRouter;
-                        break;
-
-                    case ActivationComplete activationComplete:
-                        this.activeRoute = FindWorkSpaceActiveRoute(activationComplete.RouterState.Root);
                         break;
 
                     // At the end of the navigation cycle, we need to take into
@@ -78,6 +77,8 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             });
     }
 
+    public IActiveRoute? ActiveRoute { get; set; }
+
     public void Dispose() => this.routerEventsSub.Dispose();
 
     [LoggerMessage(
@@ -85,18 +86,6 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         Level = LogLevel.Debug,
         Message = "Syncing docker workspace layout with the router...")]
     private static partial void LogSyncWithRouter(ILogger logger);
-
-    private static IActiveRoute? FindWorkSpaceActiveRoute(IActiveRoute? node)
-    {
-        if (node is null)
-        {
-            return null;
-        }
-
-        return node.Outlet == DebuggerConstants.DockOutletName
-            ? node
-            : node.Children.Select(FindWorkSpaceActiveRoute).FirstOrDefault();
-    }
 
     private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
     {
@@ -218,14 +207,14 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             changes,
             new PartialNavigation()
             {
-                RelativeTo = this.activeRoute,
+                RelativeTo = this.ActiveRoute,
                 AdditionalInfo = new AdditionalInfo(args.Reason != LayoutChangeReason.Resize),
             });
     }
 
     private void TrackChangedAndAddedDocks(List<RouteChangeItem> changes)
     {
-        Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
+        Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
         foreach (var dockable in Dockable.All)
         {
@@ -242,7 +231,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
              */
 
             var childRoute
-                = this.activeRoute.Children.FirstOrDefault(r => dockable.Id.Equals(r.Outlet, StringComparison.Ordinal));
+                = this.ActiveRoute.Children.FirstOrDefault(r => dockable.Id.Equals(r.Outlet, StringComparison.Ordinal));
             if (childRoute is null)
             {
                 Debug.Assert(
@@ -279,10 +268,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private void TrackClosedDocks(List<RouteChangeItem> changes)
     {
-        Debug.Assert(this.activeRoute is not null, "expecting to have an active route");
+        Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
         changes.AddRange(
-            from dockableRoute in this.activeRoute.Children
+            from dockableRoute in this.ActiveRoute.Children
             where Dockable.FromId(dockableRoute.Outlet) == null
             select new RouteChangeItem()
             {
