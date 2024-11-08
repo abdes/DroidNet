@@ -81,10 +81,10 @@ public class Route : IRoute
         /// All segments in the list have been successfully matched to a
         /// <see cref="UrlSegment" /> in the <see cref="UrlSegmentGroup" />.
         /// </remarks>
-        public required IList<IUrlSegment> Consumed { get; init; } = [];
+        public required IReadOnlyList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
-        public IDictionary<string, IUrlSegment> PositionalParams { get; init; }
+        public IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; init; }
             = new Dictionary<string, IUrlSegment>(StringComparer.Ordinal);
     }
 
@@ -112,13 +112,14 @@ public class Route : IRoute
         /// been successfully matched to a <see cref="UrlSegment" /> in the
         /// <see cref="UrlSegmentGroup" />, up to until the match failed.
         /// </remarks>
-        public IList<IUrlSegment> Consumed { get; init; } = [];
+        public IReadOnlyList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
         /// <remarks>
         /// When a match fails, the list of positional parameters is not
         /// updated, and therefore, it is always empty.
         /// </remarks>
-        public IDictionary<string, IUrlSegment> PositionalParams => ImmutableDictionary<string, IUrlSegment>.Empty;
+        public IReadOnlyDictionary<string, IUrlSegment> PositionalParams
+            => ImmutableDictionary<string, IUrlSegment>.Empty;
     }
 }
