@@ -21,8 +21,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" />
-        <ProjectReference Include="..\..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" />
     </ItemGroup>
 
     <ItemGroup>

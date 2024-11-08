@@ -59,7 +59,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
     </ItemGroup>
 
     <!--
