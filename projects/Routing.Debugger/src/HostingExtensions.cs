@@ -71,14 +71,14 @@ public static class HostingExtensions
         container.Register<EmbeddedAppView>(Reuse.Transient);
         container.Register<WelcomeViewModel>(Reuse.Transient);
         container.Register<WelcomeView>(Reuse.Transient);
-        container.Register<WorkSpaceViewModel>(Reuse.Singleton);
+        container.Register<WorkSpaceViewModel>(Reuse.Transient);
         container.Register<WorkSpaceView>(Reuse.Singleton);
         container.Register<RoutesViewModel>(Reuse.Singleton);
         container.Register<RoutesView>(Reuse.Transient);
         container.Register<UrlTreeViewModel>(Reuse.Singleton);
         container.Register<UrlTreeView>(Reuse.Transient);
-        container.Register<RouterStateViewModel>(Reuse.Singleton);
-        container.Register<RouterStateView>(Reuse.Singleton);
+        container.Register<RouterStateViewModel>(Reuse.Transient);
+        container.Register<RouterStateView>(Reuse.Transient);
         container.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
     }
 }
