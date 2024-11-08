@@ -185,7 +185,10 @@
             BorderThickness="3"
             Canvas.ZIndex="100"
             Opacity="0" />
-        <Grid Name="PanelRoot">
+        <Grid
+            Name="PanelRoot"
+            BorderBrush="Bisque"
+            BorderThickness="0.5">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
