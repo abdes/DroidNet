@@ -146,7 +146,7 @@ internal sealed partial class Recognizer(
         var newState = new ActiveRoute
         {
             SegmentGroup = segmentGroup,
-            Segments = result.Consumed.AsReadOnly(),
+            Segments = result.Consumed,
             Outlet = route.Outlet,
             Params = Parameters.Merge(
                 parentState.Params,
@@ -158,12 +158,12 @@ internal sealed partial class Recognizer(
 
         return new Match
         {
-            Consumed = result.Consumed,
+            Consumed = new List<IUrlSegment>(result.Consumed),
             ContributedState = newState,
         };
 
         static Parameters MergeLocalParameters(
-            IDictionary<string, IUrlSegment> positional,
+            IReadOnlyDictionary<string, IUrlSegment> positional,
             IParameters matrix)
         {
             var merged = new Parameters();
@@ -365,7 +365,7 @@ internal sealed partial class Recognizer(
         var deepMatch = this.MatchSegments(
             segmentsState,
             segmentGroup,
-            remainingSegments.AsReadOnly(),
+            remainingSegments,
             outlet,
             route.Children);
         if (!deepMatch.IsMatch)
@@ -374,12 +374,15 @@ internal sealed partial class Recognizer(
         }
 
         segmentsState.AddChild(deepMatch.ContributedState!);
-        foreach (var consumedSegment in deepMatch.Consumed)
-        {
-            match.Consumed.Add(consumedSegment);
-        }
 
-        return match;
+        var allConsumedSegments = new List<IUrlSegment>(match.Consumed);
+        allConsumedSegments.AddRange(deepMatch.Consumed);
+
+        return new Match
+        {
+            Consumed = allConsumedSegments,
+            ContributedState = match.ContributedState!,
+        };
     }
 
     [LoggerMessage(

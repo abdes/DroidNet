@@ -24,7 +24,7 @@ public interface IMatchResult
     /// consumed during the match.
     /// </summary>
     /// <value>The list of segments consumed during the match.</value>
-    public IList<IUrlSegment> Consumed { get; }
+    public IReadOnlyList<IUrlSegment> Consumed { get; }
 
     /// <summary>
     /// Gets a dictionary of the positional parameters found during the
@@ -40,5 +40,5 @@ public interface IMatchResult
     /// A dictionary of positional parameters, where keys are the parameter
     /// names and values are the matching <see cref="IUrlSegment" />.
     /// </value>
-    public IDictionary<string, IUrlSegment> PositionalParams { get; }
+    public IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; }
 }
