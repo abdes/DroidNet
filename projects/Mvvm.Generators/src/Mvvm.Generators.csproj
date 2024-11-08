@@ -70,7 +70,7 @@ https://github.com/amis92/csharp-source-generators
 
         <!-- Reference the attributes from the generator to compile against them -->
         <!-- Ensure we specify PrivateAssets so the NuGet doesn't have any dependencies -->
-        <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" PrivateAssets="all" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" PrivateAssets="all" />
     </ItemGroup>
     <PropertyGroup>
         <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>

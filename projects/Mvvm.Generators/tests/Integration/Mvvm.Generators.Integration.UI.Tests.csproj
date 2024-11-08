@@ -50,7 +50,7 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <ProjectReference Include="..\..\..\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
 
         <!--
         For source generator (or analyzer) projects, you need to tweak the project
@@ -64,12 +64,12 @@
         -->
 
         <!-- Don't reference the generator dll -->
-        <ProjectReference Include="..\..\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="..\..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
-        <ProjectReference Include="..\..\..\Routing\src\Routing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\src\Routing.csproj" />
     </ItemGroup>
 
 </Project>

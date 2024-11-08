@@ -38,12 +38,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
 
-        <ProjectReference Include="..\..\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
-        <ProjectReference Include="..\..\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
 </Project>

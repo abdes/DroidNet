@@ -29,7 +29,7 @@
         <PackageReference Include="Verify.MSTest" />
 
         <ProjectReference Include="..\src\Docking.csproj" />
-        <ProjectReference Include="..\..\TestHelpers\src\TestHelpers.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
     </ItemGroup>
 
     <ItemGroup>
