@@ -86,6 +86,7 @@ internal sealed partial class Recognizer(
             if (states.Count != 1)
             {
                 this.LogBadConfiguration(urlTree, config);
+                return null;
             }
 
             this.LogRecognitionSuccessful(urlTree);
@@ -189,20 +190,22 @@ internal sealed partial class Recognizer(
         OutletName outlet,
         IRoutes routes)
     {
+        var segments = segmentGroup.Segments.ToList();
+
         // If the routes have empty path matches, and the segments are empty, add
         // an empty path segment to the segment group so we can match the empty
         // path route before we go for the children
-        if (segmentGroup.Segments.Count == 0 && routes.Any(r => EmptyPathMatch(segmentGroup, segmentGroup.Segments, r)))
+        if (segments.Count == 0 && routes.Any(r => EmptyPathMatch(segmentGroup, segments, r)))
         {
-            ((UrlSegmentGroup)segmentGroup).ReplaceSegmentsWithEmptyPath();
+            segments.Add(new UrlSegment(string.Empty));
         }
 
-        if (segmentGroup.Segments.Count == 0 && segmentGroup.Children.Count != 0)
+        if (segments.Count == 0 && segmentGroup.Children.Count != 0)
         {
             return this.ProcessChildren(parentState, segmentGroup, routes);
         }
 
-        var segmentsState = this.ProcessSegments(parentState, segmentGroup, outlet, routes);
+        var segmentsState = this.ProcessSegments(parentState, segmentGroup, segments, outlet, routes);
         return segmentsState is null ? [] : [segmentsState];
     }
 
@@ -269,12 +272,13 @@ internal sealed partial class Recognizer(
     private ActiveRoute? ProcessSegments(
         ActiveRoute parentState,
         IUrlSegmentGroup segmentGroup,
+        List<IUrlSegment> segments,
         OutletName outlet,
         IRoutes routes)
     {
-        this.LogProgress($"Process segments of segment group sg={segmentGroup}", routes);
+        this.LogProgress($"Process segments {string.Join('/', segments)}", routes);
 
-        var match = this.MatchSegments(parentState, segmentGroup, segmentGroup.Segments, outlet, routes);
+        var match = this.MatchSegments(parentState, segmentGroup, segments, outlet, routes);
         if (!match.IsMatch)
         {
             return null;
@@ -331,7 +335,7 @@ internal sealed partial class Recognizer(
         // a config like
         // * `{path: '', children: [{path: 'b', outlet: 'b'}]}`
         // or even
-        // * `{path: '', outlet: 'a', children: [{path: 'b', outlet: 'b'}]`
+        // * `{path: '', outlet: 'a', children: [{path: 'b', outlet: 'b'}]` <- FIXME: this scenario, detect empty path route with named outlet
         if (route.Outlet != outlet && (outlet.IsPrimary || !EmptyPathMatch(segmentGroup, segmentGroup.Segments, route)))
         {
             return new NoMatch();
