@@ -17,7 +17,6 @@
                 <ResourceDictionary Source="ms-appx:///DroidNet.Routing.Debugger.UI/Styles/Styles.xaml" />
                 <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <ResourceDictionary x:Key="VmToViewConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

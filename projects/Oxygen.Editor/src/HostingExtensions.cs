@@ -70,8 +70,6 @@ public static class HostingExtensions
         container.Register<IFileSystem, RealFileSystem>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IPathFinder, DevelopmentPathFinder>(Reuse.Singleton); // TODO: release version
-        container.Register<IThemeSelectorService, ThemeSelectorService>(Reuse.Singleton);
-        container.Register<IAppNotificationService, AppNotificationService>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
         /*
@@ -122,33 +120,7 @@ public static class HostingExtensions
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
         // Views and ViewModels
-        container.Register<ShellViewModel>(Reuse.Singleton);
-        container.Register<ShellView>(Reuse.Singleton);
-
-        container.Register<MainViewModel>(Reuse.Transient);
-        container.Register<MainView>(Reuse.Transient);
-        container.Register<HomeViewModel>(Reuse.Transient);
-        container.Register<HomeView>(Reuse.Transient);
-        container.Register<NewProjectViewModel>(Reuse.Transient);
-        container.Register<NewProjectView>(Reuse.Transient);
-        container.Register<OpenProjectViewModel>(Reuse.Transient);
-        container.Register<OpenProjectView>(Reuse.Transient);
-
-        // TODO Move the DockViewFactory in the World Editor to the Oxygen.Editor project
-        // container.Register<DockViewFactory>(Reuse.Singleton);
-
-        container.Register<WorkspaceViewModel>(Reuse.Transient);
-        container.Register<WorkspaceView>(Reuse.Transient);
-        container.Register<SceneDetailsView>(Reuse.Transient);
-        container.Register<SceneDetailsViewModel>(Reuse.Transient);
-        container.Register<RendererView>(Reuse.Transient);
-        container.Register<RendererViewModel>(Reuse.Transient);
-        container.Register<LogsView>(Reuse.Transient);
-        container.Register<LogsViewModel>(Reuse.Transient);
-        container.Register<ProjectExplorerView>(Reuse.Transient);
-        container.Register<ProjectExplorerViewModel>(Reuse.Transient);
-        container.Register<ContentBrowserView>(Reuse.Transient);
-        container.Register<ContentBrowserViewModel>(Reuse.Transient);
+        RegisterViewsAndViewModels(container);
     }
 
     private static void CreateLogger(IContainer container)
@@ -163,4 +135,32 @@ public static class HostingExtensions
             /* .WriteTo.Seq("http://localhost:5341/") */
             .WriteTo.OutputLogView<RichTextBlockSink>(container, theme: Themes.Literate)
             .CreateLogger();
+
+    private static void RegisterViewsAndViewModels(IContainer container)
+    {
+        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<ShellView>(Reuse.Singleton);
+
+        container.Register<MainViewModel>(Reuse.Transient);
+        container.Register<MainView>(Reuse.Transient);
+        container.Register<HomeViewModel>(Reuse.Transient);
+        container.Register<HomeView>(Reuse.Transient);
+        container.Register<NewProjectViewModel>(Reuse.Transient);
+        container.Register<NewProjectView>(Reuse.Transient);
+        container.Register<OpenProjectViewModel>(Reuse.Transient);
+        container.Register<OpenProjectView>(Reuse.Transient);
+
+        container.Register<WorkspaceViewModel>(Reuse.Transient);
+        container.Register<WorkspaceView>(Reuse.Transient);
+        container.Register<SceneDetailsView>(Reuse.Transient);
+        container.Register<SceneDetailsViewModel>(Reuse.Transient);
+        container.Register<RendererView>(Reuse.Transient);
+        container.Register<RendererViewModel>(Reuse.Transient);
+        container.Register<LogsView>(Reuse.Transient);
+        container.Register<LogsViewModel>(Reuse.Transient);
+        container.Register<ProjectExplorerView>(Reuse.Transient);
+        container.Register<ProjectExplorerViewModel>(Reuse.Transient);
+        container.Register<ContentBrowserView>(Reuse.Transient);
+        container.Register<ContentBrowserViewModel>(Reuse.Transient);
+    }
 }

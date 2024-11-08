@@ -25,10 +25,5 @@ public partial class ShellViewModel : AbstractOutletContainer
     private static void OnMenuFileExit() => Application.Current.Exit();
 
     [RelayCommand]
-    private void OnMenuSettings()
-        => this.router.Navigate("/settings");
-
-    [RelayCommand]
-    private void MenuViewsProjectBrowser()
-        => this.router.Navigate("/pb/home");
+    private void MenuViewsProjectBrowser() => this.router.Navigate("/pb/home");
 }

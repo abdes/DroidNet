@@ -9,17 +9,12 @@ using System.Reactive.Subjects;
 /// <summary>
 /// Handle registration and chain invocation during activation.
 /// </summary>
-/// <param name="theme">
-/// The service that can be used to change the application theme.
-/// TODO: Review and refactor this class
-/// </param>
-public partial class ActivationService(IThemeSelectorService theme) : IActivationService, IDisposable
+public partial class ActivationService : IActivationService, IDisposable
 {
     private readonly Func<object, Task> afterActivation = (activationData) =>
     {
         _ = activationData; // unused
 
-        theme.ApplyTheme();
         return Task.CompletedTask;
     };
 
