@@ -22,12 +22,10 @@ using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
 internal sealed partial class InternalRouteActivator(IContainer container, ILoggerFactory? loggerFactory)
-    : AbstractRouteActivator(container, CreateLogger(loggerFactory))
+    : AbstractRouteActivator(loggerFactory)
 {
-    protected override void DoActivateRoute(IActiveRoute route, RouterContext context)
+    protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)
     {
-        Debug.Assert(route.Parent is not null, "you cannot activate the root!");
-
         if (route.ViewModel is null)
         {
             return;
@@ -49,9 +47,9 @@ internal sealed partial class InternalRouteActivator(IContainer container, ILogg
 
         Debug.WriteLine($"Effective parent ViewModel for '{route}' is: {parentViewModel}");
 
-        if (parentViewModel is IOutletContainer container)
+        if (parentViewModel is IOutletContainer outletContainer)
         {
-            container.LoadContent(route.ViewModel, route.Outlet);
+            outletContainer.LoadContent(route.ViewModel, route.Outlet);
         }
         else
         {
@@ -61,7 +59,7 @@ internal sealed partial class InternalRouteActivator(IContainer container, ILogg
             LogContentLoadingError(this.Logger, route.Outlet, because);
 
             throw new InvalidOperationException(
-                $"parent view model of type '{route.Parent.RouteConfig.ViewModelType} is not a {nameof(IOutletContainer)}");
+                $"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
         }
     }
 
