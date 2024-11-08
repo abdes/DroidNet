@@ -47,8 +47,6 @@ public partial class App
         this.InitializeComponent();
     }
 
-    public static UIElement? AppTitlebar { get; set; }
-
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         base.OnLaunched(args);
@@ -60,9 +58,6 @@ public partial class App
 
         // We just want to exit if navigation fails for some reason
         this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
-
-        Ioc.Default.GetRequiredService<IAppNotificationService>()
-            .Initialize();
 
         _ = Ioc.Default.GetRequiredService<IActivationService>()
             .Where(data => data is LaunchActivatedEventArgs)
@@ -102,12 +97,12 @@ public partial class App
     }
 
     private static void OnAppUnhandledException(object sender, UnhandledExceptionEventArgs e)
-        => OnUnhandledException(e.Exception, shouldShowNotification: true);
+        => OnUnhandledException(e.Exception);
 
     private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
-        => OnUnhandledException((Exception)e.ExceptionObject, shouldShowNotification: true);
+        => OnUnhandledException((Exception)e.ExceptionObject);
 
-    private static void OnUnhandledException(Exception ex, bool shouldShowNotification)
+    private static void OnUnhandledException(Exception ex)
     {
         /*
          * TODO: Log and handle exceptions as appropriate.
@@ -125,22 +120,6 @@ public partial class App
                        ---------------------------------------
                        """;
         Debug.WriteLine(message);
-
-        if (shouldShowNotification)
-        {
-            _ = Ioc.Default.GetService<IAppNotificationService>()
-                ?.Show(
-                    $"""
-                     <toast>
-                         <visual>
-                             <binding template="ToastGeneric">
-                                 <text>Unhandled Exception</text>
-                                 <text>{ex.Message}</text>
-                             </binding>
-                         </visual>
-                     </toast>
-                     """);
-        }
 
         Process.GetCurrentProcess()
             .Kill();

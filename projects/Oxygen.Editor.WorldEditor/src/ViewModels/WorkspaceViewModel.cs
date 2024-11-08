@@ -21,6 +21,9 @@ public partial class WorkspaceViewModel : ObservableObject
     [ObservableProperty]
     private UIElement? workspaceContent;
 
+    // TODO Move the DockViewFactory in the World Editor to the Oxygen.Editor project
+    /* container.Register<DockViewFactory>(Reuse.Singleton); */
+
     public WorkspaceViewModel(IResolver resolver)
     {
         var dockViewFactory = new DockViewFactory(resolver);

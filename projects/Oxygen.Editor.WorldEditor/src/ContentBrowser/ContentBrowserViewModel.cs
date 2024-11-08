@@ -66,12 +66,12 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         // Register all local ViewModels and services in the child container
         childContainer.RegisterInstance<IViewLocator>(viewLocator);
         childContainer.RegisterInstance(new ViewModelToView(viewLocator));
-        childContainer.Register<ProjectLayoutViewModel>();
-        childContainer.Register<ProjectLayoutView>();
-        childContainer.Register<AssetsViewModel>();
-        childContainer.Register<AssetsView>();
-        childContainer.Register<TilesLayoutViewModel>();
-        childContainer.Register<Oxygen.Editor.WorldEditor.ContentBrowser.TilesLayoutView>();
+        childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+        childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+        childContainer.Register<AssetsViewModel>(Reuse.Singleton);
+        childContainer.Register<AssetsView>(Reuse.Singleton);
+        childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
+        childContainer.Register<TilesLayoutView>(Reuse.Singleton);
 
         var context = new LocalRouterContext() { RootViewModel = this };
         var routerContextProvider = new RouterContextProvider(context);
