@@ -43,7 +43,7 @@ internal sealed partial class Recognizer(
     /// </param>
     /// <returns>
     /// A <see cref="RouterState" />, not yet activated, corresponding to the given <paramref name="urlTree" />; or null
-    /// if matching of the <paramref name="urlTree" /> to the <see cref="config" /> failed.
+    /// if matching of the <paramref name="urlTree" /> to the <see paramref="config" /> failed.
     /// </returns>
     /// <remarks>
     /// When trying to match a URL to a route, the router looks at the unmatched segments of the URL and tries to find a
