@@ -20,7 +20,7 @@ using Windows.System;
 [ObservableObject]
 public sealed partial class DockPanel
 {
-    private const double ResizeThrottleInMs = 100.0;
+    private const double ResizeThrottleInMs = 50.0;
 
     private readonly PointerEventHandler pointerEnterEventHandler;
     private readonly PointerEventHandler pointerExitEventHandler;
