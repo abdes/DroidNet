@@ -66,7 +66,7 @@ internal sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory
                 LogContentLoadingError(this.Logger, route.Outlet, because);
 
                 throw new InvalidOperationException(
-                    $"parent view model of type '{route.Parent.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
+                    $"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
             }
         }
     }
