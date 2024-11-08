@@ -6,7 +6,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
 using DroidNet.Routing;
 
-public interface ILocalRouterContext : IRouterContext
+public interface ILocalRouterContext : INavigationContext
 {
     public ContentBrowserViewModel RootViewModel { get; }
 

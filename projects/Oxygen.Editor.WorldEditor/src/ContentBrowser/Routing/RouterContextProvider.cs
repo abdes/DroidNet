@@ -11,18 +11,13 @@ using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 /// <summary>
 /// The implementation of <see cref="IContextProvider" /> for the dedicated router used inside the content browser.
 /// </summary>
-internal sealed partial class RouterContextProvider : IContextProvider, IDisposable
+internal sealed partial class RouterContextProvider : IContextProvider<NavigationContext>, IDisposable
 {
     private readonly ILocalRouterContext theContext;
     private bool disposed;
 
     public RouterContextProvider(ILocalRouterContext context)
     {
-        if (context is not RouterContext)
-        {
-            throw new ArgumentException("context must extend RouterContext", nameof(context));
-        }
-
         if (context is not INotifyPropertyChanged contextNotify)
         {
             throw new ArgumentException("context must implement INotifyPropertyChanged", nameof(context));
@@ -34,7 +29,7 @@ internal sealed partial class RouterContextProvider : IContextProvider, IDisposa
         {
             if (args.PropertyName!.Equals(nameof(ILocalRouterContext.Router), StringComparison.Ordinal))
             {
-                this.ContextCreated?.Invoke(this, new ContextEventArgs((RouterContext)this.theContext));
+                this.ContextCreated?.Invoke(this, new ContextEventArgs(this.theContext));
             }
         };
     }
@@ -47,11 +42,15 @@ internal sealed partial class RouterContextProvider : IContextProvider, IDisposa
 
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
-    public RouterContext ContextForTarget(Target target, RouterContext? currentContext = null)
-        => (RouterContext)this.theContext;
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null)
+        => this.theContext;
 
-    public void ActivateContext(RouterContext context) =>
-        _ = context;
+    public void ActivateContext(INavigationContext context) => _ = context;
+
+    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
+        => (NavigationContext)this.theContext;
+
+    public void ActivateContext(NavigationContext context) => _ = context;
 
     public void Dispose()
     {
@@ -60,8 +59,7 @@ internal sealed partial class RouterContextProvider : IContextProvider, IDisposa
             return;
         }
 
-        this.ContextDestroyed?.Invoke(this, new ContextEventArgs((RouterContext)this.theContext));
+        this.ContextDestroyed?.Invoke(this, new ContextEventArgs(this.theContext));
         this.disposed = true;
-        GC.SuppressFinalize(this);
     }
 }

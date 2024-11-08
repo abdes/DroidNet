@@ -28,7 +28,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         new Route()
         {
             Path = string.Empty,
-            MatchMethod = PathMatch.StrictPrefix,
+            MatchMethod = PathMatch.Prefix,
             Children = new Routes(
             [
                 new Route()
@@ -39,14 +39,15 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
                 },
                 new Route()
                 {
+                    Path = string.Empty,
                     Outlet = "right",
-                    Path = "assets",
                     ViewModelType = typeof(AssetsViewModel),
                     Children = new Routes(
                     [
                         new Route()
                         {
-                            Path = "tiles",
+                            Path = "assets/tiles",
+                            Outlet = "right",
                             ViewModelType = typeof(TilesLayoutViewModel),
                         },
                     ]),
@@ -75,8 +76,9 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         var context = new LocalRouterContext() { RootViewModel = this };
         var routerContextProvider = new RouterContextProvider(context);
         var router = new Router(
+            childContainer,
             RoutesConfig,
-            new RouterStateManager(RoutesConfig),
+            new RouterStateManager(),
             new RouterContextManager(routerContextProvider),
             new InternalRouteActivator(childContainer, loggerFactory),
             routerContextProvider,
@@ -92,7 +94,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
         this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
-        router.Navigate("/(left:project~~right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
+        router.Navigate("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
     }
 
     public ViewModelToView VmToViewConverter { get; init; }
@@ -102,7 +104,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
     public object? RightPaneViewModel => this.Outlets["right"].viewModel;
 
     private sealed partial class LocalRouterContext()
-        : RouterContext(Target.Self), ILocalRouterContext, INotifyPropertyChanged
+        : NavigationContext(Target.Self), ILocalRouterContext, INotifyPropertyChanged
     {
         private readonly ContentBrowserViewModel? contentBrowserViewModel;
         private IRouter? router;

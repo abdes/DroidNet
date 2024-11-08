@@ -124,36 +124,36 @@ public static partial class Program
             // We want the shell view to be loaded not matter what absolute URL we are navigating to. So, it has an
             // empty path with a Prefix matching type, which will always match and not consume a segment.
             Path = string.Empty,
-            MatchMethod = PathMatch.StrictPrefix,
+            MatchMethod = PathMatch.Prefix,
             ViewModelType = typeof(ShellViewModel),
             Children = new Routes(
             [
-                new Route()
+                new Route
                 {
                     // This the root of a navigation view with multiple pages.
                     Path = "nav",
                     ViewModelType = typeof(RoutedNavigationViewModel),
                     Children = new Routes(
                     [
-                        new Route()
+                        new Route
                         {
                             Path = "1",
                             MatchMethod = PathMatch.Prefix,
                             ViewModelType = typeof(PageOneViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "2",
                             MatchMethod = PathMatch.Prefix,
                             ViewModelType = typeof(PageTwoViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "3",
                             MatchMethod = PathMatch.Prefix,
                             ViewModelType = typeof(PageThreeViewModel),
                         },
-                        new Route()
+                        new Route
                         {
                             Path = "settings",
                             MatchMethod = PathMatch.Prefix,

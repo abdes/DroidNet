@@ -127,7 +127,7 @@ public static partial class Program
         new Route
         {
             Path = string.Empty,
-            MatchMethod = PathMatch.StrictPrefix,
+            MatchMethod = PathMatch.Prefix,
             ViewModelType = typeof(ShellViewModel),
             Children = new Routes(
             [
