@@ -5,21 +5,26 @@
 namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 using System.Diagnostics;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Layouts.GridFlow;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 /// <summary>A layout strategy for the workspace.</summary>
 public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 {
+    private const double LayoutSyncThrottleInMs = 150.0;
+
     private readonly IDisposable routerEventsSub;
     private readonly IRouter router;
     private readonly ILogger logger;
+    private IDisposable? layoutChangedSub;
 
     [ObservableProperty]
     private UIElement content = new Grid();
@@ -39,6 +44,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         this.routerEventsSub = router.Events.Subscribe(
             @event =>
             {
+                var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
                 switch (@event)
                 {
                     // At the beginning of each navigation cycle, many changes
@@ -47,7 +53,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     // completes. So we mute the LayoutChanged event from the
                     // docker.
                     case NavigationStart:
-                        docker.LayoutChanged -= this.SyncWithRouter;
+                        this.layoutChangedSub?.Dispose();
                         break;
 
                     // At the end of the navigation cycle, we need to take into
@@ -68,7 +74,23 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                                 $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
                         }
 
-                        docker.LayoutChanged += this.SyncWithRouter;
+                        // Layout changes can happen in a burst because a change to one panel can trigger changes in
+                        // other panels. We throttle the burst and only sync with router after the burst is finished.
+                        this.layoutChangedSub = Observable
+                            .FromEventPattern<EventHandler<LayoutChangedEventArgs>, LayoutChangedEventArgs>(
+                                h => docker.LayoutChanged += h,
+                                h => docker.LayoutChanged -= h)
+                            .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
+                            .Subscribe(
+                                eventPattern
+                                    =>
+                                {
+                                    Debug.WriteLine(
+                                        $"Workspace layout changed because {eventPattern.EventArgs.Reason}");
+                                    dispatcherQueue.TryEnqueue(
+                                        () => this.SyncWithRouter(eventPattern.EventArgs.Reason));
+                                });
+
                         break;
 
                     default: // Ignore
@@ -188,7 +210,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         return changed ? nextParams : null;
     }
 
-    private void SyncWithRouter(object? sender, LayoutChangedEventArgs args)
+    private void SyncWithRouter(LayoutChangeReason reason)
     {
         LogSyncWithRouter(this.logger);
 
@@ -208,7 +230,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             new PartialNavigation()
             {
                 RelativeTo = this.ActiveRoute,
-                AdditionalInfo = new AdditionalInfo(args.Reason != LayoutChangeReason.Resize),
+                AdditionalInfo = new AdditionalInfo(reason != LayoutChangeReason.Resize),
             });
     }
 
