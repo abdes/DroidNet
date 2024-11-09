@@ -21,6 +21,8 @@
         <RootNamespace>DroidNet</RootNamespace>
         <AssemblyName>$(RootNamespace).$(MSBuildProjectName)</AssemblyName>
         <PackageId>$(AssemblyName)</PackageId>
+        <Company>DroidNet</Company>
+        <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>
     </PropertyGroup>
 
     <PropertyGroup>
