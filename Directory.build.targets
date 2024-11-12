@@ -51,7 +51,7 @@
         $ msbuild /Target:SlnGen /Verbosity:Minimal /NoLogo
     -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.VisualStudio.SlnGen" />
+        <PackageReference Include="Microsoft.VisualStudio.SlnGen" PrivateAssets="all" />
     </ItemGroup>
     <ItemGroup>
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), '.editorconfig'))" />
