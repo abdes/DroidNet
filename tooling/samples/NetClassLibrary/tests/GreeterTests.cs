@@ -2,27 +2,27 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.NetClassLibrary;
+namespace DroidNet.Samples.NetClassLibrary.Tests;
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Samples.Samples.NetClassLibrary;
+using DroidNet.Samples.NetClassLibrary;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class HelloWorldTests
+public class GreeterTests
 {
     [TestMethod]
     public void Greeting_ContainsHello()
     {
         // Arrange
-        var sut = new HelloWorld();
+        var sut = new Greeter("Hello World!");
 
         // Act
         var greeting = sut.Greeting;
 
         // Assert
-        _ = greeting.Should().Contain("Hello", "it's a greeting 😀");
+        _ = greeting.Should().Contain("Hello World!", "it's a Hello World library 😀");
     }
 }
