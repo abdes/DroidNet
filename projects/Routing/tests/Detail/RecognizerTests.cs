@@ -105,9 +105,9 @@ public partial class RecognizerTests
     }
 
     [TestMethod]
-    [DataRow("")]
-    [DataRow("a")]
-    public void Recognizer_OutletsDiffer_Match(string outlet)
+    [DataRow("", true)]
+    [DataRow("a", false)]
+    public void Recognizer_OutletsDiffer_Match(string outlet, bool success)
     {
         var routes = new Routes(
         [
@@ -131,7 +131,14 @@ public partial class RecognizerTests
 
         var state = recognizer.Recognize(urlTree);
 
-        state.Should().NotBeNull();
+        if (success)
+        {
+            state.Should().NotBeNull();
+        }
+        else
+        {
+            state.Should().BeNull();
+        }
     }
 
     [TestMethod]

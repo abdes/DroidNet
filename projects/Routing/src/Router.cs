@@ -125,7 +125,8 @@ public partial class Router : IRouter, IDisposable
                 $"was expecting the active route to have a valid url tree, but it has `{activeRoute.SegmentGroup}` of type `{activeRoute.SegmentGroup.GetType()}`");
 
             var currentContext = this.contextManager.GetContextForTarget(Target.Self);
-            var currentState = currentContext.State!;
+            Debug.Assert(currentContext.State is not null, "the current context must have a valid router state");
+            var currentState = currentContext.State;
 
             ApplyChangesToUrlTree(changes, urlTree, activeRoute);
             var url = currentState.UrlTree.ToString() ??
@@ -145,7 +146,7 @@ public partial class Router : IRouter, IDisposable
             var success = this.routeActivator.ActivateRoutesRecursive(activeRoute.Root, currentContext);
             this.contextProvider.ActivateContext(currentContext);
 
-            this.eventSource.OnNext(new ActivationComplete(options, currentState));
+            this.eventSource.OnNext(new ActivationComplete(options, currentContext));
 
             if (success)
             {
@@ -391,7 +392,7 @@ public partial class Router : IRouter, IDisposable
             // Finally activate the context.
             this.contextProvider.ActivateContext(context);
 
-            this.eventSource.OnNext(new ActivationComplete(options, context.State));
+            this.eventSource.OnNext(new ActivationComplete(options, context));
 
             if (success)
             {

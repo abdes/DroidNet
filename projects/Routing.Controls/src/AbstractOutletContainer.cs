@@ -24,6 +24,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// </summary>
 public abstract class AbstractOutletContainer : ObservableObject, IOutletContainer, IDisposable
 {
+    private bool isDisposed;
+
     protected IDictionary<OutletName, (string propertyName, object? viewModel)> Outlets { get; }
         = new Dictionary<OutletName, (string propertyName, object? viewModel)>(OutletName.EqualityComparer.IgnoreCase);
 
@@ -63,8 +65,15 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     /// container is disposed of, we should dispose of all the activated outlet
     /// view models as well.
     /// </remarks>
-    public void Dispose()
+    public virtual void Dispose()
     {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.isDisposed = true;
+
         foreach (var entry in this.Outlets)
         {
             if (entry.Value.viewModel is IDisposable resource)

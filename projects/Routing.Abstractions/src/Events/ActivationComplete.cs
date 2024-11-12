@@ -4,10 +4,10 @@
 
 namespace DroidNet.Routing.Events;
 
-public class ActivationComplete(NavigationOptions options, IRouterState state) : NavigationEvent(options)
+public class ActivationComplete(NavigationOptions options, INavigationContext context) : NavigationEvent(options)
 {
-    public IRouterState RouterState { get; } = state;
+    public INavigationContext Context { get; } = context;
 
     /// <inheritdoc />
-    public override string ToString() => $"Routes activation complete -> {this.RouterState.RootNode}";
+    public override string ToString() => $"Routes activation complete -> {this.Context.State?.RootNode}";
 }
