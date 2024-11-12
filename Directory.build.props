@@ -23,6 +23,8 @@
         <PackageId>$(AssemblyName)</PackageId>
         <Company>DroidNet</Company>
         <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>
+        <RepositoryUrl>https://github.com/abdes/DroidNet</RepositoryUrl>
+        <NeutralLanguage>en-US</NeutralLanguage>
     </PropertyGroup>
 
     <!-- In Release build, we want to specifically target the x64 platform -->
@@ -46,13 +48,8 @@
               tag in the XML comment on 'type_or_member' (but other type
               parameters do)
         -->
-        <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
-        <GenerateDocumentationFile>True</GenerateDocumentationFile>
-        <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
-        <WarningLevel>999</WarningLevel>
-        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-        <!-- For projects targeting .Net 5 or earlier -->
-        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Roslynator.Analyzers">
