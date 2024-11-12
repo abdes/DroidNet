@@ -139,6 +139,13 @@
         <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
         <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
     </ItemGroup>
+
+    <ItemDefinitionGroup>
+        <!-- We always want MSBuild properties generated that point at the restored location of each package. -->
+        <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#generatepathproperty -->
+        <PackageReference GeneratePathProperty="true" />
+    </ItemDefinitionGroup>
+
     <!-- End Packaging -->
 
 </Project>
