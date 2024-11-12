@@ -10,10 +10,10 @@ using System.IO.Abstractions;
 using System.Reactive.Linq;
 using System.Reflection;
 using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Config;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
@@ -129,7 +129,7 @@ public partial class TemplatesService : ITemplatesService
                 {
                     try
                     {
-                        var templateDescriptor = Path.Combine(template.Key, "Template.json");
+                        var templateDescriptor = this.fs.Path.Combine(template.Key, "Template.json");
                         var templateInfo = await this.templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
                             .ConfigureAwait(true);
 

@@ -2,13 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core.Services;
+namespace DroidNet.Config;
 
 public interface IPathFinder
 {
-    protected const string ApplicationStateFolderName = ".state";
+    string Mode { get; }
 
-    protected const string OxygenProjectsFolderName = "Oxygen Projects";
+    string ApplicationName { get; }
+
+    /*
+     * System paths.
+     */
+
+    string SystemRoot { get; }
+
+    string Temp { get; }
 
     /*
      * User environment paths.
@@ -20,21 +28,23 @@ public interface IPathFinder
 
     string UserHome { get; }
 
-    string SystemRoot { get; }
-
-    string Temp { get; }
+    string UserDocuments { get; }
 
     /*
-     * Oxygen Editor specific paths.
+     * Common Application specific paths.
      */
-
-    string PersonalProjects { get; }
-
-    string LocalProjects { get; }
 
     string ProgramData { get; }
 
     string LocalAppData { get; }
 
     string LocalAppState { get; }
+
+    /*
+     * Helper methods.
+     */
+
+    string GetConfigFilePath(string configFileName);
+
+    string GetProgramConfigFilePath(string configFileName);
 }

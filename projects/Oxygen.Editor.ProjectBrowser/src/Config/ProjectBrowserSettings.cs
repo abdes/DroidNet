@@ -4,8 +4,6 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Config;
 
-using Oxygen.Editor.Core.Services;
-
 /// <summary>Configuration settings for the project browser.</summary>
 /// These settings can be obtained only through the DI injector. They are
 /// loaded from one of the application configuration files during the
@@ -27,8 +25,7 @@ public class ProjectBrowserSettings
     /// </summary>
     /// <value>
     /// The list of built-in project templates. Each item represents the path to the template description file. If the path is
-    /// relative, it will be interpreted relative to the application's built-in templates root folder obtained from the
-    /// <see cref="IPathFinder" />.
+    /// relative, it will be interpreted relative to the application's built-in templates root folder.
     /// </value>
     public IList<string> BuiltinTemplates
     {

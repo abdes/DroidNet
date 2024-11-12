@@ -6,7 +6,6 @@ namespace Oxygen.Editor;
 
 using System;
 using System.Globalization;
-using System.IO.Abstractions;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Controls.OutputLog.Theming;
 using DroidNet.Docking.Controls;
@@ -17,7 +16,6 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -36,10 +34,9 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
-using Testably.Abstractions;
 using IContainer = DryIoc.IContainer;
 
-public static class HostingExtensions
+public static class ContainerExtensions
 {
     public static void ConfigureLogging(this IContainer container)
     {
@@ -67,9 +64,7 @@ public static class HostingExtensions
          * Register core services.
          */
 
-        container.Register<IFileSystem, RealFileSystem>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);
-        container.Register<IPathFinder, DevelopmentPathFinder>(Reuse.Singleton); // TODO: release version
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
         /*
@@ -79,10 +74,8 @@ public static class HostingExtensions
         // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
         // Register specific template source implementations KEYED. They are injected only as a collection of implementation
         // instances, only by the universal source.
-        container.Register<ITemplatesSource, UniversalTemplatesSource>(reuse: Reuse.Singleton);
-        container.Register<ITemplatesSource, LocalTemplatesSource>(
-            reuse: Reuse.Singleton,
-            serviceKey: Uri.UriSchemeFile);
+        container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
+        container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
 
         // TODO: use keyed registration and parameter name to key mappings

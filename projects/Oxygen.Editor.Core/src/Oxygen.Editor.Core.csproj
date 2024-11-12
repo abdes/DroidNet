@@ -27,4 +27,8 @@
         <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
+    </ItemGroup>
+
 </Project>

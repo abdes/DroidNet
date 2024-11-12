@@ -4,10 +4,10 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
 
-        <Title>Extended configuration features.</Title>
-        <Description>Provides persistence of configuration options on top of the standard Microsoft.Extensions.Config package.</Description>
+        <Title>DroidNet.Config</Title>
+        <Description>Simplifies application configuration, in `development` and `real` environments, with persistence to Json files, on top of Microsoft.Extensions.Configuration and its recommended Options Pattern.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>config;options;persistence</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
@@ -26,6 +26,8 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="System.Reactive" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
         <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
