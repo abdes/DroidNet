@@ -3,7 +3,7 @@
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
 
-        <RootNamespace>$(RootNamespace).NetClassLibrary</RootNamespace>
+        <RootNamespace>$(RootNamespace).NetClassLibrary.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

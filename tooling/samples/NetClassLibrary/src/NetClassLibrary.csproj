@@ -3,7 +3,21 @@
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
 
-        <RootNamespace>$(RootNamespace).Samples.NetClassLibrary</RootNamespace>
+        <Title>Sample .Net Class Library</Title>
+        <Description>A sample, and a template project, for creating DroidNet .Net class libraries.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>sample;library</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <RootNamespace>$(RootNamespace).NetClassLibrary</RootNamespace>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
 </Project>
