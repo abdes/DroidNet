@@ -25,6 +25,13 @@
         <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>
     </PropertyGroup>
 
+    <!-- In Release build, we want to specifically target the x64 platform -->
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
+    </PropertyGroup>
+
     <PropertyGroup>
         <!--
             Make sure any documentation comments which are included in code get
