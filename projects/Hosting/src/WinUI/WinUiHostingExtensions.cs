@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml;
 /// <summary>
 /// Contains helper extensions for <see cref="HostApplicationBuilder" /> to configure the WinUI service hosting.
 /// </summary>
-public static class HostingExtensions
+public static class WinUiHostingExtensions
 {
     /// <summary>
     /// The key used to access the <see cref="HostingContext" /> instance in <see cref="IHostBuilder.Properties" />.

@@ -71,7 +71,7 @@ public static partial class Program
             // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
             // while you continue setting up other services not required for the UI.
             builder.Properties.Add(
-                Hosting.WinUI.HostingExtensions.HostingContextKey,
+                Hosting.WinUI.WinUiHostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
 
             var host = builder
