@@ -105,7 +105,7 @@ public partial class HomeViewModel(
                     new DateTimeComparerDescending());
             }
 
-            this.SelectedTemplate = this.Templates[0];
+            this.SelectedTemplate = this.Templates.FirstOrDefault();
         }
     }
 

@@ -22,7 +22,7 @@ using Oxygen.Editor.Storage.Native;
 /// <summary>Provides method to access and manipulate projects.</summary>
 public class ProjectBrowserService : IProjectBrowserService
 {
-    private readonly IPathFinder finder;
+    private readonly IOxygenPathFinder finder;
     private readonly IProjectManagerService projectManager;
     private readonly NativeStorageProvider localStorage;
 
@@ -30,7 +30,7 @@ public class ProjectBrowserService : IProjectBrowserService
 
     public ProjectBrowserService(
         IProjectManagerService projectManager,
-        IPathFinder finder,
+        IOxygenPathFinder finder,
         IStorageProvider localStorage)
     {
         this.projectManager = projectManager;
@@ -168,8 +168,8 @@ public class ProjectBrowserService : IProjectBrowserService
             locations.Add(new QuickSaveLocation("Recently Used", lastSaveLocation));
         }
 
-        locations.Add(new QuickSaveLocation("Personal Projects", Path.GetFullPath(this.finder.PersonalProjects)));
-        locations.Add(new QuickSaveLocation("Local Projects", Path.GetFullPath(this.finder.LocalProjects)));
+        locations.Add(new QuickSaveLocation("Personal Projects", this.finder.PersonalProjects));
+        locations.Add(new QuickSaveLocation("Local Projects", this.finder.LocalProjects));
 
         return locations;
     }

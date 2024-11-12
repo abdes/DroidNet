@@ -7,31 +7,45 @@
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
         <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
         <IsPackable>false</IsPackable>
 
+        <!-- The App is Packaged, unless we're running a GitHub workflow -->
+        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
+
+        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
+        <EnableMsixTooling>true</EnableMsixTooling>
+
+        <AssemblyName>Oxygen.Editor</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-        <EnableMsixTooling>true</EnableMsixTooling>
-        <PublishReadyToRun>true</PublishReadyToRun>
-        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
-        <WindowsPackageType>MSIX</WindowsPackageType>
-
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
-        <RootNamespace>Oxygen.Editor</RootNamespace>
-        <AssemblyName>Oxygen.Editor</AssemblyName>
+        <!--<WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>-->
 
         <!-- Use our own Main entry point so we can control the HostBuilder -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+
+        <RootNamespace>Oxygen.Editor</RootNamespace>
         <StartupObject>$(RootNamespace).Program</StartupObject>
 
         <UserSecretsId>916e565c-62a3-4c25-9a26-3637faacd34b</UserSecretsId>
+    </PropertyGroup>
+
+    <!--These project properties will be included in the generated AssemblyInfo -->
+    <PropertyGroup>
+        <Product>Oxygen Editor</Product>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <GITHUB_ACTIONS>false</GITHUB_ACTIONS>
     </PropertyGroup>
 
     <ItemGroup>
