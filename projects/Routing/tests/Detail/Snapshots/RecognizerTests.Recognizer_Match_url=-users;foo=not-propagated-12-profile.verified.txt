@@ -34,10 +34,6 @@
           {
             Path: 12,
             Parameters: []
-          },
-          {
-            Path: profile,
-            Parameters: []
           }
         ],
         Params: [

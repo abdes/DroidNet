@@ -18,9 +18,10 @@ using Moq;
 [TestCategory(nameof(RouterContextManager))]
 public class RouterContextManagerTests : IDisposable
 {
+    private const string TestTarget = "test-target";
     private readonly Mock<IContextProvider<NavigationContext>> contextProviderMock;
     private readonly RouterContextManager contextManager;
-    private readonly NavigationContext mainContext = new(Target.Main) { RouteActivationObserver = null };
+    private readonly NavigationContext mainContext = new(Target.Main, TestTarget) { RouteActivationObserver = null };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouterContextManagerTests" />
@@ -52,7 +53,7 @@ public class RouterContextManagerTests : IDisposable
     public void GetContextForTarget_NullTargetOrSelf_CurrentContextNotNull_ReturnsCurrentContext(string target)
     {
         var currentContext
-            = this.SetCurrentContext(new NavigationContext("current") { RouteActivationObserver = null });
+            = this.SetCurrentContext(new NavigationContext("current", TestTarget) { RouteActivationObserver = null });
 
         var actualContext = this.contextManager.GetContextForTarget(target);
 
@@ -101,7 +102,7 @@ public class RouterContextManagerTests : IDisposable
     public void GetContextForTarget_CustomTarget_ReturnsValidContext()
     {
         const string target = "custom";
-        NavigationContext expectedContext = new(target) { RouteActivationObserver = null };
+        NavigationContext expectedContext = new(target, TestTarget) { RouteActivationObserver = null };
         _ = this.contextProviderMock.Setup(a => a.ContextForTarget(target, It.IsAny<NavigationContext>()))
             .Returns(expectedContext);
 

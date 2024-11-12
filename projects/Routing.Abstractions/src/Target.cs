@@ -12,6 +12,7 @@ namespace DroidNet.Routing;
 /// <see cref="Self" />, which should always be used instead of the actual
 /// literal string.
 /// </remarks>
+/// TODO: support the "Blank" special target
 public record Target
 {
     /// <summary>Gets the target name.</summary>

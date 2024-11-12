@@ -11,7 +11,7 @@ namespace DroidNet.Routing;
 /// The context provider is used by the router to obtain an <see cref="INavigationContext" /> instance for a navigation
 /// target. This context is updated with router state and other routing data as navigation progresses. It is passed to
 /// the <see cref="IRouteActivator" /> when a route is activated. After all routes are activated, the router requests
-/// the <see cref="IContextProvider" /> to activate the <see cref="INavigationContext.Target">target</see> in the
+/// the <see cref="IContextProvider" /> to activate the <see cref="INavigationContext.NavigationTargetKey">target</see> in the
 /// navigation context.
 /// </remarks>
 public interface IContextProvider
@@ -44,7 +44,7 @@ public interface IContextProvider
     INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null);
 
     /// <summary>
-    /// Activates the <see cref="INavigationContext.Target">target</see> in the provided context once all routes have
+    /// Activates the <see cref="INavigationContext.NavigationTargetKey">target</see> in the provided context once all routes have
     /// been activated.
     /// </summary>
     /// <param name="context">The context to activate.</param>

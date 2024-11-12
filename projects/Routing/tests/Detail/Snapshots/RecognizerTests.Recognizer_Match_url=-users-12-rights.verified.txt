@@ -29,10 +29,6 @@
           {
             Path: 12,
             Parameters: []
-          },
-          {
-            Path: rights,
-            Parameters: []
           }
         ],
         Params: [

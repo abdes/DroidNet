@@ -5,10 +5,12 @@
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.ComponentModel;
+using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
@@ -56,55 +58,76 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         },
     ]);
 
-    public ContentBrowserViewModel(IContainer container, ILoggerFactory? loggerFactory)
+    private readonly IDisposable routerEventsSub;
+    private bool isDisposed;
+
+    public ContentBrowserViewModel(IContainer container, IRouter globalRouter, ILoggerFactory? loggerFactory)
     {
-        // Create a scoped child container for resolutions local to this content browser.
-        var childContainer = container.WithRegistrationsCopy();
-
-        var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
-
-        // Register all local ViewModels and services in the child container
-        childContainer.RegisterInstance<IViewLocator>(viewLocator);
-        childContainer.RegisterInstance(new ViewModelToView(viewLocator));
-        childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
-        childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
-        childContainer.Register<AssetsViewModel>(Reuse.Singleton);
-        childContainer.Register<AssetsView>(Reuse.Singleton);
-        childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
-        childContainer.Register<TilesLayoutView>(Reuse.Singleton);
-
-        var context = new LocalRouterContext() { RootViewModel = this };
-        var routerContextProvider = new RouterContextProvider(context);
-        var router = new Router(
-            childContainer,
-            RoutesConfig,
-            new RouterStateManager(),
-            new RouterContextManager(routerContextProvider),
-            new InternalRouteActivator(childContainer, loggerFactory),
-            routerContextProvider,
-            new DefaultUrlSerializer(new DefaultUrlParser()),
-            loggerFactory);
-
-        context.Router = router;
-        context.GlobalRouter = container.Resolve<IRouter>();
-        childContainer.RegisterInstance<ILocalRouterContext>(context);
-
-        this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
-
         this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
         this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
-        router.Navigate("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
+        this.routerEventsSub = globalRouter.Events.OfType<ActivationComplete>()
+            .Subscribe(
+                @event =>
+                {
+                    // Create a scoped child container for resolutions local to this content browser.
+                    var childContainer = container.WithRegistrationsCopy();
+
+                    var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
+
+                    // Register all local ViewModels and services in the child container
+                    childContainer.RegisterInstance<IViewLocator>(viewLocator);
+                    childContainer.RegisterInstance(new ViewModelToView(viewLocator));
+                    childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+                    childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+                    childContainer.Register<AssetsViewModel>(Reuse.Singleton);
+                    childContainer.Register<AssetsView>(Reuse.Singleton);
+                    childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
+                    childContainer.Register<TilesLayoutView>(Reuse.Singleton);
+
+                    var context = new LocalRouterContext(@event.Context.NavigationTarget) { RootViewModel = this };
+                    var routerContextProvider = new RouterContextProvider(context);
+                    var router = new Router(
+                        childContainer,
+                        RoutesConfig,
+                        new RouterStateManager(),
+                        new RouterContextManager(routerContextProvider),
+                        new InternalRouteActivator(childContainer, loggerFactory),
+                        routerContextProvider,
+                        new DefaultUrlSerializer(new DefaultUrlParser()),
+                        loggerFactory);
+
+                    context.Router = router;
+                    context.GlobalRouter = container.Resolve<IRouter>();
+                    childContainer.RegisterInstance<ILocalRouterContext>(context);
+
+                    this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
+
+                    router.Navigate("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
+                });
     }
 
-    public ViewModelToView VmToViewConverter { get; init; }
+    public ViewModelToView? VmToViewConverter { get; private set; }
 
     public object? LeftPaneViewModel => this.Outlets["left"].viewModel;
 
     public object? RightPaneViewModel => this.Outlets["right"].viewModel;
 
-    private sealed partial class LocalRouterContext()
-        : NavigationContext(Target.Self), ILocalRouterContext, INotifyPropertyChanged
+    public override void Dispose()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.isDisposed = true;
+        this.routerEventsSub.Dispose();
+        GC.SuppressFinalize(this);
+        base.Dispose();
+    }
+
+    private sealed partial class LocalRouterContext(object targetObject)
+        : NavigationContext(Target.Self, targetObject), ILocalRouterContext, INotifyPropertyChanged
     {
         private readonly ContentBrowserViewModel? contentBrowserViewModel;
         private IRouter? router;

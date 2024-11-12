@@ -4,17 +4,31 @@
 
 namespace DroidNet.Routing;
 
+using System.Diagnostics.CodeAnalysis;
+
 /// <inheritdoc cref="INavigationContext" />
-/// <param name="target">
-/// The name of the navigation <see cref="Target">target</see> where the root content is or should be loaded.
+/// <param name="targetKey">
+/// The key identifying the navigation <see cref="NavigationTarget">target</see> where the root content is or
+/// should be loaded.
 /// </param>
-public class NavigationContext(Target target) : INavigationContext
+/// <param name="target">The actual navigation target.</param>
+public class NavigationContext(Target targetKey, object target) : INavigationContext
 {
     /// <inheritdoc />
-    public Target Target { get; } = target;
+    public Target NavigationTargetKey { get; } = targetKey;
+
+    /// <inheritdoc />
+    public object NavigationTarget { get; } = target;
 
     /// <inheritdoc />
     public IRouterState? State { get; internal set; }
 
-    public IRouteActivationObserver? RouteActivationObserver { get; internal set; }
+    /// <summary>
+    /// Gets the observer for route activation lifecycle events.
+    /// </summary>
+    [SuppressMessage(
+        "ReSharper",
+        "VirtualMemberNeverOverridden.Global",
+        Justification = "needs to be virtual for mocking")]
+    public virtual IRouteActivationObserver? RouteActivationObserver { get; internal set; }
 }

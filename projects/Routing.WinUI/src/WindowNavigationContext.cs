@@ -25,12 +25,12 @@ internal sealed class WindowNavigationContext : NavigationContext
     /// Initializes a new instance of the <see cref="WindowNavigationContext" />
     /// class.
     /// </summary>
-    /// <param name="target">The context's target name.</param>
+    /// <param name="targetKey">The context's target name.</param>
     /// <param name="window">
     /// The <see cref="Window" /> associated with this context.
     /// </param>
-    public WindowNavigationContext(string target, Window window)
-        : base(target)
+    public WindowNavigationContext(string targetKey, Window window)
+        : base(targetKey, window)
     {
         this.windowTitle = window.Title;
         this.Window = window;
@@ -53,6 +53,6 @@ internal sealed class WindowNavigationContext : NavigationContext
             this.windowTitle = this.Window.Title;
         }
 
-        return $"{this.Target}:{this.Window.GetType().Name}('{this.windowTitle}')";
+        return $"{this.NavigationTargetKey}:{this.Window.GetType().Name}('{this.windowTitle}')";
     }
 }

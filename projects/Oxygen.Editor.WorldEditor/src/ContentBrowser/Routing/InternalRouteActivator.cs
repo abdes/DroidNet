@@ -63,10 +63,6 @@ internal sealed partial class InternalRouteActivator(IContainer container, ILogg
         }
     }
 
-    private static ILogger<InternalRouteActivator> CreateLogger(ILoggerFactory? loggerFactory)
-        => loggerFactory?.CreateLogger<InternalRouteActivator>() ??
-           NullLoggerFactory.Instance.CreateLogger<InternalRouteActivator>();
-
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,

@@ -4,6 +4,7 @@
 
 namespace DroidNet.Routing;
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -48,7 +49,8 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
     /// <inheritdoc />
     public bool ActivateRoute(IActiveRoute route, INavigationContext context)
     {
-        var activationObserver = context.RouteActivationObserver;
+        Debug.Assert(context is NavigationContext, "expecting the context to use my implementation as a base");
+        var activationObserver = ((NavigationContext)context).RouteActivationObserver;
 
         try
         {
