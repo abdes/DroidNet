@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Collections;
+namespace DroidNet.Collections.Tests;
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;

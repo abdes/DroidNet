@@ -9,15 +9,19 @@ using System.Collections.ObjectModel;
 public static class ObservableCollectionExtensions
 {
     /// <summary>
-    /// Inserts an item into a sorted <see cref="ObservableCollection{T}" /> in the correct place, based on the provided key getter
-    /// and key comparer.
+    /// Inserts an item into a sorted <see cref="ObservableCollection{T}" /> in the correct place,
+    /// based on the provided key getter and key comparer.
     /// </summary>
     /// <typeparam name="TItem">The type of elements in the collection.</typeparam>
     /// <typeparam name="TOrderBy">The type of key by which the collection is ordered.</typeparam>
     /// <param name="collection">The collection being modified.</param>
-    /// <param name="itemToAdd">The object to be inserted in the collection. The value can be null for reference types.</param>
+    /// <param name="itemToAdd">
+    /// The object to be inserted in the collection. The value can be null for reference types.
+    /// </param>
     /// <param name="keyGetter">The function to extract the key used to compare items.</param>
-    /// <param name="comparer">The comparison object used to compare two keys. Defaults to <see cref="Comparer{T}.Default" />.</param>
+    /// <param name="comparer">
+    /// The comparison object used to compare two keys. Defaults to <see cref="Comparer{T}.Default" />.
+    /// </param>
     public static void InsertInPlace<TItem, TOrderBy>(
         this ObservableCollection<TItem> collection,
         TItem itemToAdd,
@@ -31,21 +35,23 @@ public static class ObservableCollectionExtensions
     }
 
     /// <summary>
-    /// An extension method for <see cref="ObservableCollection{T}" /> which creates a new <see cref="DynamicObservableCollection{TSource,TResult}" />
-    /// containing the elements of the <paramref name="source" /> collection, to which the <paramref name="transform" /> function
-    /// has been applied. Additionally, any future modification to the <paramref name="source" /> collection will be reflected as
-    /// well.
+    /// An extension method for <see cref="ObservableCollection{T}" /> which creates a new
+    /// <see cref="DynamicObservableCollection{TSource,TResult}" /> containing the elements of the
+    /// <paramref name="source" /> collection, to which the <paramref name="transform" /> function
+    /// has been applied. Additionally, any future modification to the <paramref name="source" />
+    /// collection will be reflected as well.
     /// </summary>
     /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
     /// <typeparam name="TResult">The type of elements in the result collection.</typeparam>
     /// <param name="source">The source collection.</param>
     /// <param name="transform">
-    /// The transformation function to be applied to each element currently in the source collection, or added in the future.
+    /// The transformation function to be applied to each element currently in the source
+    /// collection, or added in the future.
     /// </param>
     /// <returns>
     /// A <see cref="DynamicObservableCollection{TSource,TResult}" /> instance. Call
-    /// <see cref="DynamicObservableCollection{TSource,TResult}.Dispose" /> on it when it is no longer needed to unsubscribe from
-    /// the source collection change notifications.
+    /// <see cref="DynamicObservableCollection{TSource,TResult}.Dispose" /> on it when it is no
+    /// longer needed to unsubscribe from the source collection change notifications.
     /// </returns>
     /// <example>
     /// Here's an example usage:
@@ -54,7 +60,6 @@ public static class ObservableCollectionExtensions
     /// var source = new ObservableCollection<int> { 1, 2, 3 };
     /// var result = source.Transform(x => x.ToString()).Transform();
     /// source.Add(4); // result is now { "1", "2", "3", "4" }
-    ///
     /// result.Dispose();
     /// ]]>
     /// </code>
