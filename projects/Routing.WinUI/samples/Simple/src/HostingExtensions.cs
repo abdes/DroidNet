@@ -57,7 +57,7 @@ public static class HostingExtensions
         // corresponding to name of the special target <see cref="Target.Main" />.
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
-        // Views and ViewModels, which are not auto registered in the DI injector via the InjectAs attribute
+        // Views and ViewModels
         container.Register<ShellView>(Reuse.Singleton);
         container.Register<ShellViewModel>(Reuse.Singleton);
         container.Register<PageOneView>(Reuse.Singleton);
