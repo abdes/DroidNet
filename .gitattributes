@@ -41,3 +41,7 @@
 
 # Other
 *.exe filter=lfs diff=lfs merge=lfs -text
+
+# Verify
+*.verified.cs text eol=lf working-tree-encoding=UTF-8
+*.verified.txt text eol=lf working-tree-encoding=UTF-8
