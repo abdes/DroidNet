@@ -8,14 +8,14 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 
 /// <summary>
-/// An observable collection, bound to source ObservableCollection, mirroring its content, but applying to it a given
-/// transformation function whenever it is added or modified.
+/// An observable collection, bound to source ObservableCollection, mirroring its content, but
+/// applying to it a given transformation function whenever it is added or modified.
 /// </summary>
 /// <typeparam name="TSource">The type of elements in the source collection.</typeparam>
 /// <typeparam name="TResult">The type of elements in the result collection.</typeparam>
 /// <remarks>
-/// This is a disposable class, and its disposal must be explicitly done when it, or the source collection, is no longer needed or
-/// available.
+/// This is a disposable class, and its disposal must be explicitly done when it, or the source
+/// collection, is no longer needed or available.
 /// </remarks>
 public class DynamicObservableCollection<TSource, TResult> : ObservableCollection<TResult>, IDisposable
 {
@@ -25,12 +25,14 @@ public class DynamicObservableCollection<TSource, TResult> : ObservableCollectio
     private bool disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DynamicObservableCollection{TSource,TResult}" /> class with the given
-    /// <paramref name="source" /> collection and the given <see cref="transform">transformation function</see>.
+    /// Initializes a new instance of the <see cref="DynamicObservableCollection{TSource,TResult}" />
+    /// class with the given <paramref name="source" /> collection and the given <see cref="transform" />
+    /// function.
     /// </summary>
     /// <param name="source">The source collection.</param>
     /// <param name="transform">
-    /// The transformation function to be applied to each element currently in the source collection, or added in the future.
+    /// The transformation function to be applied to each element currently in the source
+    /// collection, or added in the future.
     /// </param>
     public DynamicObservableCollection(ObservableCollection<TSource> source, Func<TSource, TResult> transform)
     {

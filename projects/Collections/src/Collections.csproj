@@ -4,11 +4,22 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+
+        <Title>DroidNet Collections</Title>
+        <Description>A lightweight .NET class library providing extension methods and custom collections to fill some gaps in .Net Collections.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>collections;library;ObservableCollection;extensions</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
         <RootNamespace>$(RootNamespace).Collections</RootNamespace>
-
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
 </Project>
