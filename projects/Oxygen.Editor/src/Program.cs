@@ -77,7 +77,7 @@ public static partial class Program
             // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
             // while you continue setting up other services not required for the UI.
             builder.Properties.Add(
-                DroidNet.Hosting.WinUI.HostingExtensions.HostingContextKey,
+                WinUiHostingExtensions.HostingContextKey,
                 new HostingContext() { IsLifetimeLinked = true });
 
             // Setup injections for the Options pattern

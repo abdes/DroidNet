@@ -12,11 +12,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
-/// Uint tests for the <see cref="HostingExtensions" /> class.
+/// Uint tests for the <see cref="WinUiHostingExtensions" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class HostingExtensionsTests
+public class WinUiHostingExtensionsTests
 {
     /// <summary>
     /// Tests that the <c>ConfigureWinUI()</c> extension prefers to use the
@@ -31,7 +31,7 @@ public class HostingExtensionsTests
         // Setup and provision the hosting context for the User Interface
         // service.
         builder.Properties.Add(
-            HostingExtensions.HostingContextKey,
+            WinUiHostingExtensions.HostingContextKey,
             new HostingContext() { IsLifetimeLinked = false });
 
         var host = builder.ConfigureWinUI<MyApp>()
