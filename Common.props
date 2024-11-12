@@ -28,22 +28,31 @@
 
     <!-- Language Options -->
     <PropertyGroup>
+        <LangVersion>latest</LangVersion>
         <Features>Strict</Features>
         <Nullable>enable</Nullable>
-        <WarningsAsErrors>nullable</WarningsAsErrors>
-        <LangVersion>latest</LangVersion>
-        <DefaultLanguage>en-US</DefaultLanguage>
         <ImplicitUsings>enable</ImplicitUsings>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <WarningLevel>999</WarningLevel>
+        <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
+        <WarningsAsErrors>nullable</WarningsAsErrors>
+        <DefaultLanguage>en-US</DefaultLanguage>
         <NoPackageAnalysis>true</NoPackageAnalysis>
+        <DebugType>Embedded</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Local builds should embed PDBs so we never lose them when a subsequent build occurs. -->
+        <DebugType Condition=" '$(CI)' != 'true' and '$(GITHUB_ACTIONS)' != 'true' ">embedded</DebugType>
     </PropertyGroup>
 
     <!-- Package Options -->
     <PropertyGroup>
         <IsPackable>true</IsPackable>
         <IsPublishable>true</IsPublishable>
-        <IncludeSymbols>true</IncludeSymbols>
+        <IncludeSymbols Condition=" '$(DebugType)' != 'embedded' ">true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <DebugType>Embedded</DebugType>
         <PackageOutputPath>bin\Package</PackageOutputPath>
         <AllowedOutputExtensionsInPackageBuildOutputFolder>.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -51,8 +60,13 @@
 
     <!-- Build Options -->
     <PropertyGroup>
-        <DN_PrecommitHooks>true</DN_PrecommitHooks>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <Deterministic>false</Deterministic>
+        <!-- This entire repo has just one version.json file, so compute the version once and share with all projects in a large build. -->
+        <GitVersionBaseDirectory>$(MSBuildThisFileDirectory)</GitVersionBaseDirectory>
+
+        <!-- Automatically install pre-commit hooks if not already done. Set to `false` in CI builds. -->
+        <DN_PrecommitHooks>true</DN_PrecommitHooks>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
         <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
