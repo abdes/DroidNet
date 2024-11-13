@@ -109,18 +109,7 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
     /// <inheritdoc />
     public void Dispose()
     {
-        if (this.isDisposed)
-        {
-            return;
-        }
-
-        if (this.IsDirty)
-        {
-            this.LogDisposedWhileDirty(typeof(TSettings).Name);
-        }
-
-        this.isDisposed = true;
-        this.settingsChangedSubscription.Dispose();
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
@@ -171,7 +160,9 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
             this.IsDirty = false;
         }
+#pragma warning disable CA1031 // We want to catch all exceptions here
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             this.LogSettingsSaveError(typeof(TSettings).Name, configFilePath, ex);
             return false;
@@ -179,6 +170,34 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
 
         this.LogSettingsSaved(typeof(TSettings).Name, configFilePath);
         return true;
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="SettingsService{TSettings}" /> and
+    /// optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            if (this.IsDirty)
+            {
+                this.LogDisposedWhileDirty(typeof(TSettings).Name);
+            }
+
+            this.settingsChangedSubscription.Dispose();
+        }
+
+        this.isDisposed = true;
     }
 
     /// <summary>

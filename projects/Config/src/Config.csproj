@@ -11,6 +11,8 @@
         <PackageTags>config;options;persistence</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
         <RootNamespace>$(RootNamespace).Config</RootNamespace>
     </PropertyGroup>
 

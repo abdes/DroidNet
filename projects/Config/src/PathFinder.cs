@@ -5,8 +5,10 @@
 namespace DroidNet.Config;
 
 using System.IO.Abstractions;
-using System.Runtime.InteropServices;
 
+/// <summary>
+/// Provides methods to find various system, user add application paths.
+/// </summary>
 public class PathFinder : IPathFinder
 {
     /// <summary>
@@ -26,30 +28,32 @@ public class PathFinder : IPathFinder
 
     private readonly IFileSystem fs;
 
-    public PathFinder(IFileSystem fs, Config config)
+    public PathFinder(IFileSystem fs, PathFinderConfig pathFinderConfig)
     {
         this.fs = fs;
 
         // Anything other than development is interpreted as RealMode
-        this.Mode = string.Equals(config.Mode, DevelopmentMode, StringComparison.OrdinalIgnoreCase)
+        this.Mode = string.Equals(pathFinderConfig.Mode, DevelopmentMode, StringComparison.OrdinalIgnoreCase)
             ? DevelopmentMode
             : RealMode;
 
-        this.ApplicationName = config.ApplicationName;
+        this.ApplicationName = pathFinderConfig.ApplicationName;
 
         this.SystemRoot = Environment.GetFolderPath(Environment.SpecialFolder.System);
         this.Temp = Path.GetTempPath();
 
         this.UserDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         this.UserHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        this.UserDownloads = SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0);
+        this.UserDownloads = KnownFolderPathHelpers.SHGetKnownFolderPath(
+            new Guid("374DE290-123F-4565-9164-39C4925E467B"),
+            0);
         this.UserDocuments = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
 
         this.ProgramData = AppContext.BaseDirectory;
 
         var localAppDataSpecialFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var localAppData = fs.Path.GetFullPath(
-            Path.Combine(localAppDataSpecialFolder, config.CompanyName, config.ApplicationName));
+            Path.Combine(localAppDataSpecialFolder, pathFinderConfig.CompanyName, pathFinderConfig.ApplicationName));
         this.LocalAppData = this.Mode switch
         {
             DevelopmentMode => fs.Path.GetFullPath(fs.Path.Combine(localAppData, "Development")),
@@ -85,14 +89,4 @@ public class PathFinder : IPathFinder
 
     public string GetProgramConfigFilePath(string configFileName)
         => this.fs.Path.Combine(this.ProgramData, configFileName);
-
-#pragma warning disable SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]
-    private static extern string SHGetKnownFolderPath(
-        [MarshalAs(UnmanagedType.LPStruct)] Guid refToGuid,
-        uint dwFlags,
-        nint hToken = default);
-#pragma warning restore SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
-
-    public readonly record struct Config(string Mode, string CompanyName, string ApplicationName);
 }
