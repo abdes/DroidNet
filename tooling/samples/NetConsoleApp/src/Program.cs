@@ -4,7 +4,7 @@
 
 namespace DroidNet.Samples.NetConsoleApp;
 
-using DroidNet.Samples.Samples.NetClassLibrary;
+using DroidNet.Samples.NetClassLibrary;
 
 internal static class Program
 {
@@ -17,6 +17,6 @@ internal static class Program
 
         Console.WriteLine();
 
-        Console.WriteLine(new HelloWorld().Greeting);
+        Console.WriteLine(new Greeter("Hello World!").Greeting);
     }
 }
