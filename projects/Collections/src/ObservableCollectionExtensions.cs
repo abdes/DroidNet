@@ -50,7 +50,7 @@ public static class ObservableCollectionExtensions
     /// </param>
     /// <returns>
     /// A <see cref="DynamicObservableCollection{TSource,TResult}" /> instance. Call
-    /// <see cref="DynamicObservableCollection{TSource,TResult}.Dispose" /> on it when it is no
+    /// <see cref="DynamicObservableCollection{TSource,TResult}.Dispose()" /> on it when it is no
     /// longer needed to unsubscribe from the source collection change notifications.
     /// </returns>
     /// <example>

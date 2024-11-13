@@ -30,7 +30,7 @@ public class DynamicObservableCollectionTests
         };
 
         // Act
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Assert
         _ = collection.Count.Should().Be(3);
@@ -43,7 +43,7 @@ public class DynamicObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<int>();
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         source.Add(4);
@@ -63,7 +63,7 @@ public class DynamicObservableCollectionTests
             1,
             2,
         };
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         source.Insert(1, 10);
@@ -83,7 +83,7 @@ public class DynamicObservableCollectionTests
             1,
             2,
         };
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         _ = source.Remove(1);
@@ -103,7 +103,7 @@ public class DynamicObservableCollectionTests
             1,
             2,
         };
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         source[0] = 3;
@@ -124,7 +124,7 @@ public class DynamicObservableCollectionTests
             2,
             3,
         };
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         source.Move(1, 0);
@@ -144,7 +144,7 @@ public class DynamicObservableCollectionTests
             1,
             2,
         };
-        var collection = new DynamicObservableCollection<int, string>(source, this.transform);
+        using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Act
         source.Clear();
