@@ -4,14 +4,12 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x64</Platforms>
 
         <Title>DroidNet.Config</Title>
         <Description>Simplifies application configuration, in `development` and `real` environments, with persistence to Json files, on top of Microsoft.Extensions.Configuration and its recommended Options Pattern.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>config;options;persistence</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
         <RootNamespace>$(RootNamespace).Config</RootNamespace>
     </PropertyGroup>
