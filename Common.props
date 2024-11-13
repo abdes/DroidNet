@@ -62,28 +62,6 @@
         <DebugType>embedded</DebugType>
     </PropertyGroup>
 
-    <!-- Test Projects -->
-    <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
-            <PropertyGroup>
-                <IsTestProject>True</IsTestProject>
-                <IsPackable>False</IsPackable>
-            </PropertyGroup>
-            <ItemGroup>
-                <PackageReference Include="MSTest" />
-                <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
-                <PackageReference Include="FluentAssertions" />
-            </ItemGroup>
-        </When>
-    </Choose>
-    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <PackageReference Include="Microsoft.WindowsAppSDK" />
-        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-    </ItemGroup>
-    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    </ItemGroup>
-
     <!-- Package Options -->
     <PropertyGroup>
         <IsPackable>true</IsPackable>
@@ -140,12 +118,54 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
-    <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <!-- Enable the MSTest runner, this is an opt-in feature -->
-        <EnableMSTestRunner>true</EnableMSTestRunner>
-        <!-- We need to produce an executable and not a DLL -->
-        <OutputType>Exe</OutputType>
-        <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
-    </PropertyGroup>
+        <!-- Test Projects -->
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+            <PropertyGroup>
+                <IsTestProject>True</IsTestProject>
+                <IsPackable>False</IsPackable>
+            </PropertyGroup>
+            <ItemGroup>
+                <ProjectCapability Include="TestContainer" />
+                <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+                <PackageReference Include="FluentAssertions" />
+            </ItemGroup>
+        </When>
+    </Choose>
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+            <PropertyGroup>
+                <!-- Enable the MSTest runner, this is an opt-in feature -->
+                <EnableMSTestRunner>true</EnableMSTestRunner>
+                <!-- We need to produce an executable and not a DLL -->
+                <OutputType>Exe</OutputType>
+                <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+            </PropertyGroup>
+            <ItemGroup>
+                <PackageReference Include="MSTest" />
+            </ItemGroup>
+        </When>
+    </Choose>
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+            <PropertyGroup>
+                <!-- Disable until https://github.com/microsoft/testfx/issues/4056 is fixed -->
+                <EnableMSTestRunner>false</EnableMSTestRunner>
+                <GenerateTestingPlatformEntryPoint Condition=" '$(EnableMSTestRunner)' == 'true' ">false</GenerateTestingPlatformEntryPoint>
+                <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
+            </PropertyGroup>
+            <ItemGroup>
+                <PackageReference Include="Microsoft.WindowsAppSDK" />
+                <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+                <PackageReference Include="Microsoft.TestPlatform.TestHost" Condition="'$(EnableMSTestRunner)' != 'true'" />
+                <PackageReference Include="MSTest.Analyzers">
+                    <PrivateAssets>all</PrivateAssets>
+                    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+                </PackageReference>
+                <PackageReference Include="MSTest.TestAdapter" />
+                <PackageReference Include="MSTest.TestFramework" />
+            </ItemGroup>
+        </When>
+    </Choose>
 
 </Project>
