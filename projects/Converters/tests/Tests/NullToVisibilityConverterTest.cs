@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Null To Visibility")]
 public class NullToVisibilityConverterTest
 {
     private readonly NullToVisibilityConverter converter = new();

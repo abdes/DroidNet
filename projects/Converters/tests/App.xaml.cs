@@ -2,49 +2,40 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
+namespace DroidNet.Converters.Tests;
 
 #if MSTEST_RUNNER
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 #endif
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+using Microsoft.UI.Dispatching;
+using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 /// <summary>
-/// Provides application-specific behavior to supplement the default Application
-/// class.
+/// Provides application-specific behavior to supplement the default Application class.
 /// </summary>
-[ExcludeFromCodeCoverage]
-public partial class TestApp
+public partial class App
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="TestApp" /> class.
+    /// Initializes a new instance of the <see cref="App" /> class. This is the first line of
+    /// authored code executed, and as such is the logical equivalent of main() or WinMain().
     /// </summary>
-    public TestApp() => this.InitializeComponent();
+    public App() => this.InitializeComponent();
 
     /// <summary>
-    /// Invoked when the application is launched normally by the end user.  Other entry
-    /// points
-    /// will be used such as when the application is launched to open a specific file.
+    /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
     protected override
 #if MSTEST_RUNNER
         async
 #endif
-        void OnLaunched(LaunchActivatedEventArgs args)
+        void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
 #if !MSTEST_RUNNER
         Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.CreateDefaultUI();
 #endif
-
         UITestMethodAttribute.DispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         // Replace back with e.Arguments when https://github.com/microsoft/microsoft-ui-xaml/issues/3368 is fixed

@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Dictionary Value")]
 public class DictionaryValueConverterTest
 {
     private readonly DictionaryValueConverter<int> converter = new();
