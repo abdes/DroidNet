@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("UITest")]
+[TestCategory("ItemClickEvent Args")]
 public class ItemClickEventArgsToClickedItemConverterTest
 {
     private readonly ItemClickEventArgsToClickedItemConverter converter = new();
