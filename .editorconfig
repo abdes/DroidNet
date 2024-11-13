@@ -18,10 +18,21 @@ end_of_line = crlf
 indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
+guidelines = 80, 100, 130
+rulers = 80, 100, 130
 
 ##########################################
 # File Extension Settings
 ##########################################
+
+# Verify
+[*.{received,verified}.{cs,txt}]
+end_of_line = lf
+indent_size = unset
+indent_style = unset
+insert_final_newline = true
+tab_width = unset
+trim_trailing_whitespace = false
 
 # Visual Studio Solution Files
 [*.sln]
@@ -695,19 +706,8 @@ indent_size = 4
 dotnet_style_allow_multiple_blank_lines_experimental = true:silent
 dotnet_style_allow_statement_immediately_after_block_experimental = true:silent
 
-[*.{received,verified}.{txt,xml,json}]
-charset = utf-8-bom
-end_of_line = lf
-indent_size = unset
-indent_style = unset
-insert_final_newline = false
-tab_width = unset
-trim_trailing_whitespace = false
-
-# Editor Guidelines
-[*]
-guidelines = 80, 100, 130
-rulers = 80, 100, 130
+# Others added by Visual Studio
+[*.{cs,csx,cake}]
 csharp_prefer_static_anonymous_function = true:suggestion
 csharp_indent_labels = no_change
 csharp_using_directive_placement = inside_namespace:warning
