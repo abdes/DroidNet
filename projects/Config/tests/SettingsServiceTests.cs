@@ -42,7 +42,7 @@ public class SettingsServiceTests
     public void CanCreate()
     {
         // Arrange & Act
-        var service = new TestSettingsService(
+        using var service = new TestSettingsService(
             this.mockSettingsMonitor.Object,
             this.mockFileSystem.Object,
             this.mockLoggerFactory.Object);
@@ -79,7 +79,7 @@ public class SettingsServiceTests
     public void ShouldNotSaveSettings_WhenNotDirty()
     {
         // Arrange
-        var service = new TestSettingsService(
+        using var service = new TestSettingsService(
             this.mockSettingsMonitor.Object,
             this.mockFileSystem.Object,
             this.mockLoggerFactory.Object);
@@ -96,7 +96,7 @@ public class SettingsServiceTests
     public void ShouldSaveSettings_WhenDirty()
     {
         // Arrange
-        var service = new TestSettingsService(
+        using var service = new TestSettingsService(
             this.mockSettingsMonitor.Object,
             this.mockFileSystem.Object,
             this.mockLoggerFactory.Object)
@@ -153,7 +153,7 @@ public class SettingsServiceTests
     public void ShouldLogError_WhenSaveSettingsFails()
     {
         // Arrange
-        var service = new TestSettingsService(
+        using var service = new TestSettingsService(
             this.mockSettingsMonitor.Object,
             this.mockFileSystem.Object,
             this.mockLoggerFactory.Object)
@@ -199,7 +199,7 @@ public class SettingsServiceTests
         this.mockSettingsMonitor.Setup(sm => sm.OnChange(It.IsAny<Action<TestSettings, string?>>()))
             .Callback<Action<TestSettings, string?>>((callback) => onChangeCallback = callback)
             .Returns(Mock.Of<IDisposable>());
-        var service = new TestSettingsService(
+        using var service = new TestSettingsService(
             settingsMonitor,
             this.mockFileSystem.Object,
             this.mockLoggerFactory.Object);

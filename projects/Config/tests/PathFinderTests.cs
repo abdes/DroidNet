@@ -8,11 +8,13 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Abstractions;
-using System.Runtime.InteropServices;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
+/// <summary>
+/// Contains unit tests for the <see cref="PathFinder" /> class.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("PathFinder")]
@@ -37,7 +39,7 @@ public class PathFinderTests
     public void PathFinder_Should_Set_Mode(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -53,7 +55,7 @@ public class PathFinderTests
     public void PathFinder_Should_Set_Application_Name(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -69,7 +71,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_System_Root_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -85,7 +87,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Temp_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -101,7 +103,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_User_Desktop_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -117,14 +119,17 @@ public class PathFinderTests
     public void PathFinder_Should_Get_User_Downloads_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
         var downloadsPath = pathFinder.UserDownloads;
 
         // Assert
-        downloadsPath.Should().Be(SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0));
+        var knownFolderPath = KnownFolderPathHelpers.SHGetKnownFolderPath(
+            new Guid("374DE290-123F-4565-9164-39C4925E467B"),
+            0);
+        downloadsPath.Should().Be(knownFolderPath);
     }
 
     [TestMethod]
@@ -133,7 +138,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_User_Home_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -149,7 +154,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_User_Documents_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
         // Act
@@ -165,7 +170,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Program_Data_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
         var expectedPath = AppContext.BaseDirectory;
 
@@ -182,7 +187,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Local_App_Data_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         this.mockFileSystem.Setup(fs => fs.Path.GetFullPath(It.IsAny<string>())).Returns<string>(p => p);
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
@@ -214,7 +219,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Local_App_State_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         this.mockFileSystem.Setup(fs => fs.Path.GetFullPath(It.IsAny<string>())).Returns<string>(p => p);
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
 
@@ -231,7 +236,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Config_File_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         this.mockFileSystem.Setup(fs => fs.Path.GetFullPath(It.IsAny<string>())).Returns<string>(p => p);
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
         this.mockFileSystem.Setup(fs => fs.Path.Combine(It.IsAny<string>(), It.IsAny<string>()))
@@ -252,7 +257,7 @@ public class PathFinderTests
     public void PathFinder_Should_Get_Program_Config_File_Path(string mode)
     {
         // Arrange
-        var config = new PathFinder.Config(mode, "MyCompany", "MyApp");
+        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
         this.mockFileSystem.Setup(fs => fs.Path.GetFullPath(It.IsAny<string>())).Returns<string>(p => p);
         var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
         this.mockFileSystem.Setup(fs => fs.Path.Combine(It.IsAny<string>(), It.IsAny<string>()))
@@ -266,12 +271,4 @@ public class PathFinderTests
         // Assert
         configFilePath.Should().Be(Path.Combine(pathFinder.ProgramData, configFileName));
     }
-
-#pragma warning disable SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]
-    private static extern string SHGetKnownFolderPath(
-        [MarshalAs(UnmanagedType.LPStruct)] Guid refToGuid,
-        uint dwFlags,
-        nint hToken = default);
-#pragma warning restore SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
 }
