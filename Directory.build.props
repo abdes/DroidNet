@@ -18,63 +18,24 @@
     <Import Project="Common.props" />
 
     <PropertyGroup>
+        <Authors>Abdessattar Sassi</Authors>
+        <Company>DroidNet</Company>
+        <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>
+        <CommonTags>DroidNet;Windows;csharp;dotnet;WinUI;WindowsAppSDK;WinAppSDK</CommonTags>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageIconUrl>https://github.com/abdes/DroidNet/blob/master/icon.png</PackageIconUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/abdes/DroidNet</PackageProjectUrl>
+        <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+
         <RootNamespace>DroidNet</RootNamespace>
         <AssemblyName>$(RootNamespace).$(MSBuildProjectName)</AssemblyName>
         <PackageId>$(AssemblyName)</PackageId>
-        <Company>DroidNet</Company>
-        <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>
-        <RepositoryUrl>https://github.com/abdes/DroidNet</RepositoryUrl>
-        <NeutralLanguage>en-US</NeutralLanguage>
-    </PropertyGroup>
 
-    <!-- In Release build, we want to specifically target the x64 platform -->
-    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-        <PlatformTarget>x64</PlatformTarget>
-        <Prefer32Bit>false</Prefer32Bit>
-    </PropertyGroup>
-
-    <PropertyGroup>
+        <!-- Customize these, if needed, for each published project -->
         <!--
-            Make sure any documentation comments which are included in code get
-            checked for syntax during the build, but do not report warnings for
-            missing comments.
-
-            - CS1573: Parameter 'parameter' has no matching param tag in the XML
-              comment for 'parameter' (but other parameters do)
-            - CS1591: Missing XML comment for publicly visible type or member
-              'Type_or_Member'
-            - CS1712: Type parameter 'type_parameter' has no matching typeparam
-              tag in the XML comment on 'type_or_member' (but other type
-              parameters do)
+        <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
         -->
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
-    </PropertyGroup>
-    <ItemGroup>
-        <PackageReference Include="Roslynator.Analyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Roslynator.CodeAnalysis.Analyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Roslynator.Formatting.Analyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Meziantou.Analyzer">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-    </ItemGroup>
-
-    <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <!-- Enable the MSTest runner, this is an opt-in feature -->
-        <EnableMSTestRunner>true</EnableMSTestRunner>
-        <!-- We need to produce an executable and not a DLL -->
-        <OutputType>Exe</OutputType>
     </PropertyGroup>
 
 </Project>
