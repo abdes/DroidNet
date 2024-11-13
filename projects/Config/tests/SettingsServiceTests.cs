@@ -4,7 +4,7 @@
 
 namespace DroidNet.Config.Tests;
 
-using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Abstractions;
 using FluentAssertions;
@@ -14,6 +14,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory("Setting Service")]
 public class SettingsServiceTests
 {
     private readonly Mock<IFileSystem> mockFileSystem;
@@ -100,6 +102,7 @@ public class SettingsServiceTests
             this.mockLoggerFactory.Object)
         {
             FooString = "UpdatedFoo",
+            BarNumber = 999,
         };
         this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>())).Returns("testDirectory");
         this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: false);
@@ -222,7 +225,7 @@ public class TestSettingsService(
     IOptionsMonitor<TestSettings> settingsMonitor,
     IFileSystem fs,
     ILoggerFactory? loggerFactory = null)
-    : SettingsService<TestSettings>(settingsMonitor, fs, loggerFactory), INotifyPropertyChanged
+    : SettingsService<TestSettings>(settingsMonitor, fs, loggerFactory)
 {
     private string fooString = "InitialFoo";
     private int barNumber = 1;
@@ -247,7 +250,7 @@ public class TestSettingsService(
 
     protected override string GetConfigFilePath() => "testConfig.json";
 
-    protected override string? GetConfigSectionName() => "TestSettings";
+    protected override string GetConfigSectionName() => "TestSettings";
 
     protected override TestSettings GetSettingsSnapshot() =>
         new()
