@@ -10,7 +10,6 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>sample;library</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
         <RootNamespace>$(RootNamespace).NetClassLibrary</RootNamespace>
     </PropertyGroup>
