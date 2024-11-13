@@ -53,67 +53,115 @@ public class DynamicObservableCollection<TSource, TResult> : ObservableCollectio
     /// <remarks>Call this when the collection with transformed elements is no longer needed.</remarks>
     public void Dispose()
     {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="DynamicObservableCollection{TSource,TResult}" />
+    /// and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
         if (this.disposed)
         {
             return;
         }
 
-        this.source.CollectionChanged -= this.OnSourceOnCollectionChanged;
+        if (disposing)
+        {
+            // Dispose managed resources
+            this.source.CollectionChanged -= this.OnSourceOnCollectionChanged;
+        }
 
         this.disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     private void OnSourceOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (args.Action == NotifyCollectionChangedAction.Add)
+        switch (args.Action)
         {
-            if (args.NewItems != null)
-            {
-                var index = args.NewStartingIndex;
-                foreach (TSource item in args.NewItems)
-                {
-                    this.Insert(index++, this.transform(item));
-                }
-            }
+            case NotifyCollectionChangedAction.Add:
+                this.HandleItemsAdded(args);
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                this.HandleItemsRemoved(args);
+                break;
+            case NotifyCollectionChangedAction.Replace:
+                this.HandleItemsReplaced(args);
+                break;
+            case NotifyCollectionChangedAction.Move:
+                this.HandleItemMoved(args);
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                this.HandleCollectionCleared();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(args), $"unexpected `{args.Action}`");
         }
-        else if (args.Action == NotifyCollectionChangedAction.Remove)
-        {
-            if (args.OldItems != null)
-            {
-                for (var itemNumber = 0; itemNumber < args.OldItems.Count; itemNumber++)
-                {
-                    this.RemoveAt(args.OldStartingIndex);
-                }
-            }
-        }
-        else if (args.Action == NotifyCollectionChangedAction.Replace)
-        {
-            if (args.NewItems != null)
-            {
-                var index = args.NewStartingIndex;
-                foreach (TSource item in args.NewItems)
-                {
-                    this[index++] = this.transform(item);
-                }
-            }
-        }
-        else if (args.Action == NotifyCollectionChangedAction.Move)
-        {
-            var oldIndex = args.OldStartingIndex;
-            var newIndex = args.NewStartingIndex;
-            var item = this[oldIndex];
-            this.RemoveAt(oldIndex);
-            this.Insert(newIndex, item);
-        }
-        else if (args.Action == NotifyCollectionChangedAction.Reset)
-        {
-            this.Clear();
+    }
 
-            foreach (var item in this.source)
-            {
-                this.Add(this.transform(item));
-            }
+    private void HandleCollectionCleared()
+    {
+        this.Clear();
+
+        foreach (var item in this.source)
+        {
+            this.Add(this.transform(item));
+        }
+    }
+
+    private void HandleItemMoved(NotifyCollectionChangedEventArgs args)
+    {
+        var oldIndex = args.OldStartingIndex;
+        var newIndex = args.NewStartingIndex;
+        var item = this[oldIndex];
+        this.RemoveAt(oldIndex);
+        this.Insert(newIndex, item);
+    }
+
+    private void HandleItemsReplaced(NotifyCollectionChangedEventArgs args)
+    {
+        if (args.NewItems == null)
+        {
+            return;
+        }
+
+        var index = args.NewStartingIndex;
+        foreach (TSource item in args.NewItems)
+        {
+            this[index++] = this.transform(item);
+        }
+    }
+
+    private void HandleItemsRemoved(NotifyCollectionChangedEventArgs args)
+    {
+        if (args.OldItems == null)
+        {
+            return;
+        }
+
+        for (var itemNumber = 0; itemNumber < args.OldItems.Count; itemNumber++)
+        {
+            this.RemoveAt(args.OldStartingIndex);
+        }
+    }
+
+    private void HandleItemsAdded(NotifyCollectionChangedEventArgs args)
+    {
+        if (args.NewItems == null)
+        {
+            return;
+        }
+
+        var index = args.NewStartingIndex;
+        foreach (TSource item in args.NewItems)
+        {
+            this.Insert(index++, this.transform(item));
         }
     }
 }
