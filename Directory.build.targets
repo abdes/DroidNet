@@ -60,6 +60,9 @@
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'GlobalUsings*.cs'))" />
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'stylecop.json'))" />
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'Directory.packages.props'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'Common.props'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'Directory.build.props'))" />
+        <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'Directory.build.targets'))" />
     </ItemGroup>
     <!-- End Visual Studio solution generator -->
 
@@ -95,63 +98,10 @@
     </ItemGroup>
     <!-- End Git Versioning -->
 
-    <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
-            <PropertyGroup>
-                <IsTestProject>True</IsTestProject>
-                <IsPackable>False</IsPackable>
-            </PropertyGroup>
-            <ItemGroup>
-                <ProjectCapability Include="TestContainer" />
-                <PackageReference Include="Microsoft.TestPlatform.TestHost" Condition=" '$(EnableMSTestRunner)' != 'true' " />
-                <PackageReference Include="MSTest.TestAdapter" />
-                <PackageReference Include="MSTest.TestFramework" />
-                <!-- We cannot use the v$(MSTestVersion) has it contains a bug in how the targets are importing the dll for WinUI -->
-                <PackageReference Include="MSTest.Analyzers" Version="$(MSTestVersion)">
-                    <PrivateAssets>all</PrivateAssets>
-                    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-                </PackageReference>
-                <PackageReference Include="FluentAssertions" />
-                <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
-            </ItemGroup>
-        </When>
-    </Choose>
-    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <PackageReference Include="Microsoft.WindowsAppSDK" />
-        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-    </ItemGroup>
-    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-        <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    </ItemGroup>
-
-    <!-- Packaging -->
-    <PropertyGroup>
-        <CommonTags>$(CommonTags);WinUI;WindowsAppSDK;WinAppSDK</CommonTags>
-        <PackageTags Condition="'$(PackageTags)' != ''">$(CommonTags);$(PackageTags)</PackageTags>
-        <PackageTags Condition="'$(PackageTags)' == ''">$(CommonTags)</PackageTags>
-    </PropertyGroup>
-
-    <ItemGroup Condition="'$(Configuration)' == 'Release'">
-        <PackageReference Include="NuGet.Build.Tasks.Pack" PrivateAssets="all" Pack="false" />
-    </ItemGroup>
-
-    <ItemGroup Condition="'$(IsPackable)'=='True'">
-        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
-        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
-    </ItemGroup>
-
-    <ItemDefinitionGroup>
-        <!-- We always want MSBuild properties generated that point at the restored location of each package. -->
-        <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#generatepathproperty -->
-        <PackageReference GeneratePathProperty="true" />
-    </ItemDefinitionGroup>
-
     <Target Name="PrepareReleaseNotes" BeforeTargets="GenerateNuspec" DependsOnTargets="GetBuildVersion">
         <PropertyGroup>
-        <PackageReleaseNotes Condition="'$(RepositoryUrl)'!=''">$(RepositoryUrl)/releases/tag/v$(Version)</PackageReleaseNotes>
+            <PackageReleaseNotes Condition="'$(RepositoryUrl)'!=''">$(RepositoryUrl)/releases/tag/v$(Version)</PackageReleaseNotes>
         </PropertyGroup>
     </Target>
-
-    <!-- End Packaging -->
 
 </Project>

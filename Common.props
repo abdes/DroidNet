@@ -1,27 +1,21 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
-<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
+         TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
 
-    <!-- Meta Options -->
+    <!--
+    This file is used to define properties shared across all projects within the
+    monorepo. It is imported early in the build process. The properties here are
+    NOT intended to be customized.
+    -->
+
+    <!-- https://learn.microsoft.com/en-us/dotnet/core/project-sdk/msbuild-props#package-properties -->
+    <!-- Package Properties -->
     <PropertyGroup>
-        <Authors>Abdessattar Sassi</Authors>
-        <Company>Happy Coding</Company>
-        <Copyright>(c) Abdessattar Sassi and Contributors.</Copyright>
-        <PackageIcon>icon.png</PackageIcon>
-        <PackageIconUrl>https://github.com/abdes/hc-monorepo/blob/master/icon.png</PackageIconUrl>
-        <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <CommonTags>HappyCoding;Windows;csharp;dotnet</CommonTags>
-
-        <!-- Customize for each published project -->
-        <!--
-        <PackageProjectUrl>https://github.com/abdes/winui-routing</PackageProjectUrl>
-        <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-        <RepositoryType>git</RepositoryType>
-        <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
-        -->
+        <NeutralLanguage>en-US</NeutralLanguage>
     </PropertyGroup>
 
-    <!-- Repo option -->
+    <!-- Repo projects root : used in project references within the repo projects -->
     <PropertyGroup>
         <ProjectsRoot>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))projects</ProjectsRoot>
     </PropertyGroup>
@@ -32,20 +26,63 @@
         <Features>Strict</Features>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <AnalysisLevel>latest</AnalysisLevel>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <WarningLevel>999</WarningLevel>
         <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
         <WarningsAsErrors>nullable</WarningsAsErrors>
         <DefaultLanguage>en-US</DefaultLanguage>
-        <NoPackageAnalysis>true</NoPackageAnalysis>
-        <DebugType>Embedded</DebugType>
+
+        <AnalysisLevel>latest</AnalysisLevel>
+        <AnalysisMode>All</AnalysisMode>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     </PropertyGroup>
 
-    <PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Roslynator.Analyzers">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Roslynator.CodeAnalysis.Analyzers">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Roslynator.Formatting.Analyzers">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Meziantou.Analyzer">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
         <!-- Local builds should embed PDBs so we never lose them when a subsequent build occurs. -->
-        <DebugType Condition=" '$(CI)' != 'true' and '$(GITHUB_ACTIONS)' != 'true' ">embedded</DebugType>
+        <DebugType>embedded</DebugType>
     </PropertyGroup>
+
+    <!-- Test Projects -->
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+            <PropertyGroup>
+                <IsTestProject>True</IsTestProject>
+                <IsPackable>False</IsPackable>
+            </PropertyGroup>
+            <ItemGroup>
+                <PackageReference Include="MSTest" />
+                <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+                <PackageReference Include="FluentAssertions" />
+            </ItemGroup>
+        </When>
+    </Choose>
+    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+    <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    </ItemGroup>
 
     <!-- Package Options -->
     <PropertyGroup>
@@ -57,10 +94,32 @@
         <AllowedOutputExtensionsInPackageBuildOutputFolder>.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
     </PropertyGroup>
+    <PropertyGroup>
+        <PackageTags Condition="'$(PackageTags)' != ''">$(CommonTags);$(PackageTags)</PackageTags>
+        <PackageTags Condition="'$(PackageTags)' == ''">$(CommonTags)</PackageTags>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(Configuration)' == 'Release'">
+        <PackageReference Include="NuGet.Build.Tasks.Pack" PrivateAssets="all" Pack="false" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(IsPackable)'=='True'">
+        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
+        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <ItemDefinitionGroup>
+        <!-- We always want MSBuild properties generated that point at the restored location of each package. -->
+        <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#generatepathproperty -->
+        <PackageReference GeneratePathProperty="true" />
+    </ItemDefinitionGroup>
 
     <!-- Build Options -->
     <PropertyGroup>
-        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+
+        <!-- https://github.com/dotnet/msbuild/blob/main/documentation/ProjectReference-Protocol.md#setplatform-negotiation -->
+        <EnableDynamicPlatformResolution>true</EnableDynamicPlatformResolution>
+
         <Deterministic>false</Deterministic>
         <!-- This entire repo has just one version.json file, so compute the version once and share with all projects in a large build. -->
         <GitVersionBaseDirectory>$(MSBuildThisFileDirectory)</GitVersionBaseDirectory>
@@ -68,11 +127,25 @@
         <!-- Automatically install pre-commit hooks if not already done. Set to `false` in CI builds. -->
         <DN_PrecommitHooks>true</DN_PrecommitHooks>
     </PropertyGroup>
+    <!-- In Release build, we want to specifically target the x64 platform -->
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
+    </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
         <Deterministic>true</Deterministic>
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
         <AccelerateBuildsInVisualStudio>false</AccelerateBuildsInVisualStudio>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <!-- Enable the MSTest runner, this is an opt-in feature -->
+        <EnableMSTestRunner>true</EnableMSTestRunner>
+        <!-- We need to produce an executable and not a DLL -->
+        <OutputType>Exe</OutputType>
+        <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     </PropertyGroup>
 
 </Project>

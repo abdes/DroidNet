@@ -66,6 +66,7 @@
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
+    <PackageVersion Include="MSTest" Version="3.6.2" />
     <PackageVersion Include="MSTest.TestAdapter" Version="3.6.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="3.6.2" />
     <PackageVersion Include="MSTest.Analyzers" Version="3.6.2" />
