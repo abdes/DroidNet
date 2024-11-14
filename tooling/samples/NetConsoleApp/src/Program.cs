@@ -5,6 +5,7 @@
 namespace DroidNet.Samples.NetConsoleApp;
 
 using DroidNet.Samples.NetClassLibrary;
+using DroidNet.Samples.NetConsoleApp.Resources;
 
 internal static class Program
 {
@@ -12,11 +13,11 @@ internal static class Program
     {
         _ = args;
 
-        Console.WriteLine($"My AssemblyFileVersion         : {ThisAssembly.AssemblyFileVersion}");
-        Console.WriteLine($"My AssemblyInformationalVersion: {ThisAssembly.AssemblyInformationalVersion}");
+        Console.WriteLine(Strings.AssemblyFileVersionText, ThisAssembly.AssemblyFileVersion);
+        Console.WriteLine(Strings.AssemblyInformationalVersionText, ThisAssembly.AssemblyInformationalVersion);
 
         Console.WriteLine();
 
-        Console.WriteLine(new Greeter("Hello World!").Greeting);
+        Console.WriteLine(new Greeter(Strings.HelloWorldText).Greeting);
     }
 }
