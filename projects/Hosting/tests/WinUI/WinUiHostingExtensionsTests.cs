@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.WinUI;
+namespace DroidNet.Hosting.Tests.WinUI;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Hosting.WinUI;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,45 +19,29 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [ExcludeFromCodeCoverage]
 public class WinUiHostingExtensionsTests
 {
+    private readonly IHost defaultHost;
+
+    public WinUiHostingExtensionsTests()
+        => this.defaultHost = Host.CreateDefaultBuilder()
+            .ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true))
+            .Build();
+
     /// <summary>
     /// Tests that the <c>ConfigureWinUI()</c> extension prefers to use the
     /// context in the builder's Properties when available.
     /// </summary>
     [TestMethod]
     [TestCategory("Context")]
-    public void WhenProvidedWithContextItUsesIt()
+    public void ConfigureWinUI_UsesProvidedIsLifetimeLinkedValue()
     {
         var builder = Host.CreateDefaultBuilder();
 
-        // Setup and provision the hosting context for the User Interface
-        // service.
-        builder.Properties.Add(
-            WinUiHostingExtensions.HostingContextKey,
-            new HostingContext() { IsLifetimeLinked = false });
-
-        var host = builder.ConfigureWinUI<MyApp>()
+        var host = builder.ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: false))
             .Build();
         _ = host.Should().NotBeNull();
 
         var context = host.Services.GetRequiredService<HostingContext>();
         _ = context.IsLifetimeLinked.Should().BeFalse();
-    }
-
-    /// <summary>
-    /// Tests that the <c>ConfigureWinUI()</c> extension creates and uses a
-    /// default hosting context when not provided with one.
-    /// </summary>
-    [TestMethod]
-    [TestCategory("Context")]
-    public void WhenNotProvidedWithContextItUsesDefault()
-    {
-        var builder = Host.CreateDefaultBuilder();
-        var host = builder.ConfigureWinUI<MyApp>()
-            .Build();
-        _ = host.Should().NotBeNull();
-
-        var context = host.Services.GetRequiredService<HostingContext>();
-        _ = context.IsLifetimeLinked.Should().BeTrue("the default is true");
     }
 
     /// <summary>
@@ -66,14 +51,9 @@ public class WinUiHostingExtensionsTests
     /// </summary>
     [TestMethod]
     [TestCategory("Dependency Injector")]
-    public void RegistersUserInterfaceThread()
+    public void ConfigureWinUI_RegistersUserInterfaceThread()
     {
-        var builder = Host.CreateDefaultBuilder();
-        var host = builder.ConfigureWinUI<MyApp>()
-            .Build();
-        _ = host.Should().NotBeNull();
-
-        var act = () => _ = host.Services.GetRequiredService<IUserInterfaceThread>();
+        var act = () => _ = this.defaultHost.Services.GetRequiredService<IUserInterfaceThread>();
 
         _ = act.Should().NotThrow();
     }
@@ -85,14 +65,9 @@ public class WinUiHostingExtensionsTests
     /// </summary>
     [TestMethod]
     [TestCategory("Dependency Injector")]
-    public void RegistersUserInterfaceHostedService()
+    public void ConfigureWinUI_RegistersUserInterfaceHostedService()
     {
-        var builder = Host.CreateDefaultBuilder();
-        var host = builder.ConfigureWinUI<MyApp>()
-            .Build();
-        _ = host.Should().NotBeNull();
-
-        var uiService = host.Services.GetServices<IHostedService>()
+        var uiService = this.defaultHost.Services.GetServices<IHostedService>()
             .First(service => service is UserInterfaceHostedService);
 
         _ = uiService.Should().NotBeNull();
@@ -105,9 +80,10 @@ public class WinUiHostingExtensionsTests
     /// </summary>
     [TestMethod]
     [TestCategory("Dependency Injector")]
-    public void RegistersApplication()
+    public void ConfigureWinUI_RegistersApplication()
     {
-        var builder = Host.CreateDefaultBuilder().ConfigureWinUI<MyApp>();
+        var builder = Host.CreateDefaultBuilder()
+            .ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true));
 
         _ = builder.ConfigureServices((_, services) => services.Should().Contain(s => s.ServiceType == typeof(MyApp)));
     }
@@ -118,9 +94,10 @@ public class WinUiHostingExtensionsTests
     /// </summary>
     [TestMethod]
     [TestCategory("Dependency Injector")]
-    public void RegistersApplicationWithBaseType()
+    public void ConfigureWinUI_RegistersApplicationWithBaseType()
     {
-        var builder = Host.CreateDefaultBuilder().ConfigureWinUI<MyApp>();
+        var builder = Host.CreateDefaultBuilder()
+            .ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true));
 
         _ = builder.ConfigureServices(
             (_, services) => services.Should().Contain(s => s.ServiceType == typeof(Application)));
@@ -130,4 +107,5 @@ public class WinUiHostingExtensionsTests
 /// <summary>
 /// A dummy <see cref="Application" /> for testing.
 /// </summary>
-internal sealed partial class MyApp : Application;
+[ExcludeFromCodeCoverage]
+public sealed partial class MyApp : Application;

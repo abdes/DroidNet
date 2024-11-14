@@ -73,16 +73,12 @@ that extension method.
         // You can further customize and enhance the builder with additional
         // configuration sources, logging providers, etc.
 
-        // Setup and provision the hosting context for the User Interface
-        // service.
-        ((IHostApplicationBuilder)builder).Properties.Add(
-            key: HostingExtensions.HostingContextKey,
-            value: new HostingContext() { IsLifetimeLinked = true });
-
         // Add the WinUI User Interface hosted service as early as possible to
         // allow the UI to start showing up while you continue setting up other
         // services not required for the UI.
-        var host = builder.ConfigureWinUI<App, MainWindow>().Build();
+        // The IsLifetimeLinked option will make the UI thread terminate the app
+        // when closed.
+        builder.ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true));
 
         // Finally start the host. This will block until the application
         // lifetime is terminated through CTRL+C, closing the UI windows or

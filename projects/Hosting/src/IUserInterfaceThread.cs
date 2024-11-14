@@ -9,19 +9,21 @@ namespace DroidNet.Hosting;
 /// </summary>
 public interface IUserInterfaceThread
 {
-    /// <summary>Starts the User Interface thread.</summary>
+    /// <summary>
+    /// Starts the User Interface thread.
+    /// </summary>
     /// <remarks>
-    /// Note that after calling this method, the thread may not be actually
-    /// running. To check if that is the case or not use the
-    /// <see cref="BaseHostingContext.IsRunning" />.
+    /// Note that after calling this method, the thread may not be actually running. To check if
+    /// that is the case or not, use the <see cref="BaseHostingContext.IsRunning" /> property.
     /// </remarks>
-    void StartUserInterface();
+    public void StartUserInterface();
 
     /// <summary>
-    /// Asynchronously request the User Interface thread to stop.
+    /// Asynchronously requests the User Interface thread to stop.
     /// </summary>
     /// <returns>
-    /// The asynchronous task on which to wait for completion.
+    /// A task that represents the asynchronous operation. The task will complete when the User
+    /// Interface thread has stopped.
     /// </returns>
-    Task StopUserInterfaceAsync();
+    public Task StopUserInterfaceAsync();
 }

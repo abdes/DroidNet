@@ -7,7 +7,7 @@ namespace DroidNet.Hosting.Demo.Services;
 using Microsoft.Extensions.Logging;
 
 /// <summary>A simple test service for demo purpose.</summary>
-internal sealed partial class TestService : ITestInterface, IDisposable
+public sealed partial class TestService : ITestInterface, IDisposable
 {
     private readonly string requester;
     private readonly ILogger logger;

@@ -2,10 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.WinUI;
+namespace DroidNet.Hosting.Tests.WinUI;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
+using DroidNet.Hosting.WinUI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
@@ -29,14 +30,14 @@ public class UserInterfaceHostedServiceTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task StartingTheServiceWillStartTheUserInterfaceUnlessCancelled(bool cancellation)
+    public async Task StartingTheService_WillStartTheUserInterface_UnlessCancelled(bool cancellation)
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
         var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
 
         var cancellationToken = new CancellationToken(cancellation);
-        await sut.StartAsync(cancellationToken);
+        await sut.StartAsync(cancellationToken).ConfigureAwait(false);
         mockThread.Verify(m => m.StartUserInterface(), cancellation ? Times.Never() : Times.Once());
     }
 
@@ -52,20 +53,20 @@ public class UserInterfaceHostedServiceTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task StoppingTheServiceWillStopTheUserInterfaceUnlessCancelled(bool cancellation)
+    public async Task StoppingTheService_WillStopTheUserInterface_UnlessCancelled(bool cancellation)
     {
         var mockContext = new Mock<HostingContext>(true);
         var mockThread = new Mock<IUserInterfaceThread>();
         var sut = new UserInterfaceHostedService(loggerFactory: null, mockThread.Object, mockContext.Object);
 
-        await sut.StartAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
         // Force the state to be `running` as it is expected when a stop is
         // request.
         mockContext.Object.IsRunning = true;
 
         var cancellationToken = new CancellationToken(cancellation);
-        await sut.StopAsync(cancellationToken);
+        await sut.StopAsync(cancellationToken).ConfigureAwait(false);
         mockThread.Verify(m => m.StopUserInterfaceAsync(), cancellation ? Times.Never() : Times.Once());
     }
 }

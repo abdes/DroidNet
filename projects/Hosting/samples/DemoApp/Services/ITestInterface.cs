@@ -6,5 +6,5 @@ namespace DroidNet.Hosting.Demo.Services;
 
 internal interface ITestInterface
 {
-    string Message { get; }
+    internal string Message { get; }
 }

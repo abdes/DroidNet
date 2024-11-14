@@ -10,4 +10,4 @@ using System.Diagnostics.CodeAnalysis;
         "CA1707:Identifiers should not contain underscores",
         Justification = "Test method names are more readable with underscores",
         Scope = "namespaceanddescendants",
-        Target = "~N:DroidNet.Hosting")]
+        Target = "~N:DroidNet.Hosting.Tests")]
