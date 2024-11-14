@@ -7,6 +7,7 @@ namespace DroidNet.Hosting.Demo;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
+using Windows.Graphics;
 
 /// <summary>
 /// Provides application-specific behavior to supplement the default
@@ -47,6 +48,7 @@ public partial class App
          */
 
         this.window = (Window)ActivatorUtilities.CreateInstance(this.serviceProvider, typeof(MainWindow));
+        this.window.AppWindow.Resize(new SizeInt32(1600, 900));
         this.window.Activate();
     }
 }

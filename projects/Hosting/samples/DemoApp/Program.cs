@@ -42,20 +42,23 @@ using Serilog.Templates;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic error if a check fails. Otherwise, it
-    /// quietly does nothing.
-    /// </summary>
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
+        // Ensures that the process can run XAML, and provides a deterministic error if a check
+        // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
         // Use Serilog, but decouple the logging clients from the implementation by using the generic
-        // Microsoft.Extensions.Logging.ILogger instead of Serilog's ILogger.
+        // Microsoft.Extensions.Logging.ILogger instead of Serilog ILogger.
         // https://nblumhardt.com/2021/06/customize-serilog-text-output/
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
@@ -70,6 +73,7 @@ public static partial class Program
 
         Log.Information("Setting up the host");
 
+        var container = new Container();
         try
         {
             // Use a default application host builder, which comes with logging, configuration providers for environment
@@ -77,16 +81,13 @@ public static partial class Program
             var builder = Host.CreateDefaultBuilder(args);
 
             // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
+            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(container));
 
             // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
             // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                WinUI.WinUiHostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
             var host = builder
                 .ConfigureLogging()
-                .ConfigureWinUI<App>()
+                .ConfigureServices(sc => sc.ConfigureWinUI<App>(isLifetimeLinked: true))
                 .ConfigureDemoServices()
                 .Build();
 
@@ -101,6 +102,7 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            container.Dispose();
         }
     }
 }

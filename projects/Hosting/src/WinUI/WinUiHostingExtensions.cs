@@ -10,58 +10,65 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 
 /// <summary>
-/// Contains helper extensions for <see cref="HostApplicationBuilder" /> to configure the WinUI service hosting.
+/// Contains helper extensions for <see cref="HostApplicationBuilder" /> to configure the WinUI
+/// service hosting.
 /// </summary>
 public static class WinUiHostingExtensions
 {
     /// <summary>
-    /// The key used to access the <see cref="HostingContext" /> instance in <see cref="IHostBuilder.Properties" />.
+    /// Configures the host builder for a Windows UI (WinUI) application.
     /// </summary>
-    public const string HostingContextKey = "UserInterfaceHostingContext";
-
-    /// <summary>Configures the host builder for a Windows UI (WinUI) application.</summary>
-    /// <typeparam name="TApplication">The concrete type for the <see cref="Application" /> class.</typeparam>
-    /// <param name="builder">The host builder to which the WinUI service needs to be added.</param>
-    /// <returns>The host builder for chaining calls.</returns>
-    /// <exception cref="ArgumentException">When the application's type does not extend <see cref="Application" />.</exception>
+    /// <typeparam name="TApplication">
+    /// The concrete type for the <see cref="Application" /> class.
+    /// </typeparam>
+    /// <param name="services">
+    /// The collection of services to which the WinUI hosting services will be added.
+    /// </param>
+    /// <param name="isLifetimeLinked">
+    /// Specifies whether the UI lifecycle and the Hosted Application lifecycle are linked or not.
+    /// When <see langword="true" />, termination of the UI thread leads to termination of the
+    /// Hosted Application and vice versa.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the application's type does not extend <see cref="Application" />.
+    /// </exception>
     /// <remarks>
     /// <para>
-    /// This method configures the host builder to support a Windows UI (WinUI) application. It sets up the necessary services,
-    /// including the hosting context, user interface thread, and the hosted service for the user interface.
+    /// This method configures the host builder to support a Windows UI (WinUI) application. It sets
+    /// up the necessary services, including the hosting context, user interface thread, and the
+    /// hosted service for the user interface.
     /// </para>
     /// <para>
-    /// It attempts to find a <see cref="HostingContext" /> instance from the host builder properties and if not available creates
-    /// one and adds it as a singleton service and as a <see cref="BaseHostingContext" /> service for use by the <see cref="UserInterfaceHostedService" />.
+    /// The <see cref="HostingContext" /> is used to manage the lifecycle and configuration of the
+    /// UI thread. It provides the necessary context, such as the dispatcher queue and the
+    /// application instance, to the <see cref="UserInterfaceThread" />.
+    /// The <see cref="BaseHostingContext.IsLifetimeLinked" /> property determines whether the UI
+    /// thread's lifecycle is linked to the application's lifecycle. If linked, terminating the UI
+    /// thread will also terminate the application and vice versa.
     /// </para>
     /// <para>
-    /// Upon successful completion, the dependency injector will be able to provide the single instance of the application as
-    /// <typeparamref name="TApplication" /> and as <see cref="Application" /> if it is not the same type.
+    /// Upon successful completion, the dependency injector will be able to provide the single
+    /// instance of the application as
+    /// <typeparamref name="TApplication" /> and as <see cref="Application" /> if it's not the same
+    /// type.
     /// </para>
     /// </remarks>
-    public static IHostBuilder ConfigureWinUI<TApplication>(this IHostBuilder builder)
-        where TApplication : Application => builder.ConfigureServices(
-        (builderContext, services) =>
+    public static void ConfigureWinUI<TApplication>(this IServiceCollection services, bool isLifetimeLinked)
+        where TApplication : Application
+    {
+        var hostingContext = new HostingContext { IsLifetimeLinked = isLifetimeLinked };
+
+        // In this method we must configure the services using the Microsoft ServiceCollection
+        // because of the way the Host handles the registration of HostedServices.
+        _ = services
+            .AddSingleton(hostingContext)
+            .AddSingleton<IUserInterfaceThread, UserInterfaceThread>()
+            .AddHostedService<UserInterfaceHostedService>()
+            .AddSingleton<TApplication>();
+
+        if (typeof(TApplication) != typeof(Application))
         {
-            HostingContext hostingContext;
-            if (builderContext.Properties.TryGetValue(HostingContextKey, out var hostingContextAsObject))
-            {
-                hostingContext = (HostingContext)hostingContextAsObject;
-            }
-            else
-            {
-                hostingContext = new HostingContext { IsLifetimeLinked = true };
-                builder.Properties[HostingContextKey] = hostingContext;
-            }
-
-            _ = services
-                .AddSingleton(hostingContext)
-                .AddSingleton<IUserInterfaceThread, UserInterfaceThread>()
-                .AddHostedService<UserInterfaceHostedService>()
-                .AddSingleton<TApplication>();
-
-            if (typeof(TApplication) != typeof(Application))
-            {
-                _ = services.AddSingleton<Application>(sp => sp.GetRequiredService<TApplication>());
-            }
-        });
+            _ = services.AddSingleton<Application>(sp => sp.GetRequiredService<TApplication>());
+        }
+    }
 }

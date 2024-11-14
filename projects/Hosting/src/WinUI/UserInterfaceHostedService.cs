@@ -21,24 +21,36 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// AddHostedService </see> extension method.
 /// </para>
 /// <para>
-/// Expects the <see cref="UserInterfaceThread" /> and <see cref="HostingContext" />
-/// singleton instances to be setup in the dependency injector.
+/// Expects the <see cref="UserInterfaceThread" /> and <see cref="HostingContext" /> singleton
+/// instances to be setup in the dependency injector.
+/// </para>
+/// <para>
+/// The <see cref="HostingContext" /> is used to manage the lifecycle and configuration of the UI thread.
+/// It provides the necessary context, such as the dispatcher queue and the application instance, to the
+/// <see cref="UserInterfaceThread" />. The <see cref="BaseHostingContext.IsLifetimeLinked" /> property determines
+/// whether the UI thread's lifecycle is linked to the application's lifecycle. If linked, terminating the UI thread
+/// will also terminate the application and vice versa.
 /// </para>
 /// </remarks>
 /// <param name="loggerFactory">
-/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
-/// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from
-/// the Dependency Injector.
+/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" />
+/// if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
 /// <param name="uiThread">
-/// The <see cref="UserInterfaceThread" /> instance.
+/// The <see cref="IUserInterfaceThread" /> instance.
 /// </param>
-/// <param name="context">The <see cref="HostingContext" /> instance.</param>
+/// <param name="context">
+/// The <see cref="HostingContext" /> instance.
+/// </param>
 public partial class UserInterfaceHostedService(
     ILoggerFactory? loggerFactory,
     IUserInterfaceThread uiThread,
     HostingContext context) : IHostedService
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1823:Avoid unused private fields",
+        Justification = "used in generated code for the logging methods")]
     private readonly ILogger logger = loggerFactory?.CreateLogger<UserInterfaceHostedService>() ??
                                       NullLoggerFactory.Instance.CreateLogger<UserInterfaceHostedService>();
 

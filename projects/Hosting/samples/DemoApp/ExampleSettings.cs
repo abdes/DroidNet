@@ -7,7 +7,7 @@ namespace DroidNet.Hosting.Demo;
 using System.Diagnostics.CodeAnalysis;
 
 [ExcludeFromCodeCoverage]
-internal sealed class ExampleSettings
+public sealed class ExampleSettings
 {
     public const string Section = "Example";
 
