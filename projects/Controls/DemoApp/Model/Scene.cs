@@ -6,5 +6,5 @@ namespace DroidNet.Controls.Demo.Model;
 
 public class Scene(string name) : NamedItem(name)
 {
-    public IList<Entity> Entities { get; set; } = [];
+    public IList<Entity> Entities { get; init; } = [];
 }

@@ -10,16 +10,15 @@ namespace DroidNet.Controls.Demo;
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Bootstrap;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
-using DroidNet.Routing.WinUI;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Xaml;
 using Serilog;
 
 /// <summary>
@@ -45,53 +44,47 @@ using Serilog;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic error if a check fails. Otherwise, it
-    /// quietly does nothing.
-    /// </summary>
+    private static void ConfigureApplicationServices(this IContainer container)
+    {
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+
+        container.Register<DemoBrowserView>(Reuse.Singleton);
+        container.Register<DemoBrowserViewModel>(Reuse.Singleton);
+        container.Register<ProjectLayoutView>(Reuse.Singleton);
+        container.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+    }
+
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
+        // Ensures that the process can run XAML, and provides a deterministic error if a check
+        // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
-        Log.Information("Setting up the host");
-
+        var bootstrap = new Bootstrapper(args);
         try
         {
-            // Use a default application host builder, which comes with logging, configuration providers for environment
-            // variables, command line, 'appsettings.json' and secrets.
-            var builder = Host.CreateDefaultBuilder(args);
+            bootstrap.Configure()
+                .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
+                .WithLoggingAbstraction()
+                .WithMvvm()
+                .WithRouting(MakeRoutes())
+                .WithWinUI<App>()
+                .WithAppServices(ConfigureApplicationServices);
 
-            // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
-
-            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
-            // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                Hosting.WinUI.WinUiHostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
-
-            var host = builder
-                .ConfigureWinUI<App>()
-                .ConfigureContainer<DryIocServiceProvider>(
-                    (_, serviceProvider) =>
-                    {
-                        var container = serviceProvider.Container;
-                        container.ConfigureLogging();
-                        container.ConfigureRouter(MakeRoutes());
-                        container.ConfigureApplicationServices();
-
-                        // Setup the CommunityToolkit.Mvvm Ioc helper
-                        Ioc.Default.ConfigureServices(serviceProvider);
-                    })
-                .Build();
-
-            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
-            // closing the UI windows or programmatically.
-            host.Run();
+            // Finally start the host. This will block until the application lifetime is terminated
+            // through CTRL+C, closing the UI windows or programmatically.
+            bootstrap.Run();
         }
         catch (Exception ex)
         {
@@ -100,6 +93,7 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            bootstrap.Dispose();
         }
     }
 

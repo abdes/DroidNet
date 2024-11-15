@@ -121,11 +121,11 @@ public class TreeItemAdapterTests
                     await Task.CompletedTask.ConfigureAwait(false);
                 });
 
-        _ = await sut.Children;
+        _ = await sut.Children.ConfigureAwait(false);
 
         // After initialization, GetChildrenCount should not be called anymore
         sut.ChildrenCount.Should().Be(1);
-        sutMock.Protected().Verify("GetChildrenCount", Times.Never());
+        sutMock.Protected().Verify("DoGetChildrenCount", Times.Never());
     }
 
     [TestMethod]
@@ -135,10 +135,10 @@ public class TreeItemAdapterTests
         var sut = sutMock.Object;
 
         const int childrenCount = 1;
-        sutMock.Protected().Setup<int>("GetChildrenCount").Returns(childrenCount);
+        sutMock.Protected().Setup<int>("DoGetChildrenCount").Returns(childrenCount);
 
         sut.ChildrenCount.Should().Be(childrenCount);
-        sutMock.Protected().Verify<int>("GetChildrenCount", Times.Once());
+        sutMock.Protected().Verify<int>("DoGetChildrenCount", Times.Once());
     }
 
     [TestMethod]
