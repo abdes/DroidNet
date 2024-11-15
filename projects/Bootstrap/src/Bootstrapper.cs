@@ -318,10 +318,19 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <remarks>
     /// <list type="bullet">
     /// <item>Blocks until the application is shut down,</item>
-    /// <item>Must be called after <see cref="Build" />, if not, it automatically calls <see cref="Build" />.</item>
+    /// <item>Must be called after <see cref="Build" />, if not, it automatically calls it.</item>
     /// </list>
     /// </remarks>
-    public void Run() => this.Build().Run();
+    public void Run()
+    {
+        if (this.host is null)
+        {
+            this.Build();
+        }
+
+        Debug.Assert(this.host is not null, "host should be built");
+        this.host.Run();
+    }
 
     /// <summary>
     /// Disposes the Bootstrapper instance and releases managed and unmanaged resources.
@@ -347,16 +356,40 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     }
 
     /// <summary>
-    /// Configures application-specific services.
+    /// Configures application-specific services using the IoC container.
+    /// <remarks>
+    /// This is the preferred and most flexible method, using the <see cref="IRegistrator.Register" />
+    /// family of methods.
+    /// </remarks>
     /// </summary>
     /// <param name="configureApplicationServices">An action to configure application services.</param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
+    /// <seealso cref="WithAppServices(System.Action{IServiceCollection, Bootstrapper} )" />
     public Bootstrapper WithAppServices(Action<IContainer> configureApplicationServices)
     {
         this.EnsureConfiguredButNotBuilt();
 
         _ = this.builder.ConfigureContainer<DryIocServiceProvider>(
             provider => configureApplicationServices(provider.Container));
+        return this;
+    }
+
+    /// <summary>
+    /// Configures application-specific services directly on the <see cref="IServiceCollection" />.
+    /// <remarks>
+    /// This method is less flexible than <see cref="WithAppServices(System.Action{IContainer})" />,
+    /// but is compatible with those extension methods that use the
+    /// <see cref="Microsoft.Extensions.Hosting" /> API.
+    /// </remarks>
+    /// </summary>
+    /// <param name="configureApplicationServices"> An action to configure application services.</param>
+    /// <returns>The Bootstrapper instance for chaining calls.</returns>
+    /// <seealso cref="WithAppServices(System.Action{IContainer})" />
+    public Bootstrapper WithAppServices(Action<IServiceCollection, Bootstrapper> configureApplicationServices)
+    {
+        this.EnsureConfiguredButNotBuilt();
+
+        _ = this.builder.ConfigureServices(sc => configureApplicationServices(sc, this));
         return this;
     }
 
