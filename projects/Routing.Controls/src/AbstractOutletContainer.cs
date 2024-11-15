@@ -27,7 +27,7 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     private bool isDisposed;
 
     protected IDictionary<OutletName, (string propertyName, object? viewModel)> Outlets { get; }
-        = new Dictionary<OutletName, (string propertyName, object? viewModel)>(OutletName.EqualityComparer.IgnoreCase);
+        = new Dictionary<OutletName, (string propertyName, object? viewModel)>(OutletNameEqualityComparer.IgnoreCase);
 
     /// <inheritdoc />
     public void LoadContent(object viewModel, OutletName? outletName = null)
@@ -59,29 +59,45 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     }
 
     /// <inheritdoc />
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the resources used by the <see cref="AbstractOutletContainer" /> class.
+    /// </summary>
+    /// <param name="disposing">
+    /// A boolean value indicating whether the method has been called directly
+    /// or indirectly by a user's code. If <see langword="true" />, both managed
+    /// and unmanaged resources are disposed. If <see langword="false" />, only
+    /// unmanaged resources are disposed.
+    /// </param>
     /// <remarks>
     /// The outlets in the outlet container may have been activated, and as a
     /// result, they would have a view model which may be disposable. When the
     /// container is disposed of, we should dispose of all the activated outlet
     /// view models as well.
     /// </remarks>
-    public virtual void Dispose()
+    protected virtual void Dispose(bool disposing)
     {
         if (this.isDisposed)
         {
             return;
         }
 
-        this.isDisposed = true;
-
-        foreach (var entry in this.Outlets)
+        if (disposing)
         {
-            if (entry.Value.viewModel is IDisposable resource)
+            foreach (var entry in this.Outlets)
             {
-                resource.Dispose();
+                if (entry.Value.viewModel is IDisposable resource)
+                {
+                    resource.Dispose();
+                }
             }
         }
 
-        GC.SuppressFinalize(this);
+        this.isDisposed = true;
     }
 }

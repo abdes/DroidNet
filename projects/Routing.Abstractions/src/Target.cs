@@ -54,11 +54,24 @@ public record Target
     /// </value>
     public bool IsMain => this.Name.Equals(Main.Name, StringComparison.Ordinal);
 
-    /// <summary>Implicitly convert a string to a Target.</summary>
+    /// <summary>
+    /// Implicitly convert a string to a Target.
+    /// </summary>
     /// <param name="name">The target name as a string.</param>
-    public static implicit operator Target(string? name) => name is null ? Self : new Target { Name = name };
+    public static implicit operator Target(string? name) => FromString(name);
 
-    /// <summary>Implicitly convert a Target to a string.</summary>
+    /// <summary>
+    /// Implicitly convert a Target to a string.
+    /// </summary>
     /// <param name="source">A Target object.</param>
     public static implicit operator string(Target source) => source.Name;
+
+    /// <summary>
+    /// Explicitly convert a string to a Target.
+    /// </summary>
+    /// <param name="name">The target name as a string.</param>
+    /// <returns>The <see cref="Target" /> which name corresponds to the given string.</returns>
+    public static Target FromString(string? name) => name is null ? Self : new Target { Name = name };
+
+    public override string ToString() => this;
 }

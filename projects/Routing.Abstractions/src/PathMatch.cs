@@ -10,6 +10,11 @@ namespace DroidNet.Routing;
 public enum PathMatch
 {
     /// <summary>
+    /// An invalid value that probably indicates that the enum value was not set.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
     /// Matches when the path starts with the route path.
     /// </summary>
     Prefix = 1,

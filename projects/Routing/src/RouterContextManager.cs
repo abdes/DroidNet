@@ -17,11 +17,13 @@ namespace DroidNet.Routing;
 /// This context manager only manages the main and current contexts.
 /// </para>
 /// </remarks>
-public class RouterContextManager : IDisposable
+public sealed class RouterContextManager : IDisposable
 {
     private readonly Lazy<NavigationContext> lazyMainContext;
     private readonly IContextProvider<NavigationContext> contextProvider;
     private readonly EventHandler<ContextEventArgs> onContextChanged;
+
+    private bool isDisposed;
 
     /// <summary>
     /// Gets a value representing the current routing context.
@@ -112,7 +114,12 @@ public class RouterContextManager : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        GC.SuppressFinalize(this);
+        if (this.isDisposed)
+        {
+            return;
+        }
+
         this.contextProvider.ContextChanged -= this.onContextChanged;
+        this.isDisposed = true;
     }
 }

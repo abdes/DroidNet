@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
 
 /// <inheritdoc cref="IRouter" />
-public partial class Router : IRouter, IDisposable
+public sealed partial class Router : IRouter, IDisposable
 {
     private readonly ILogger logger;
 
@@ -30,6 +30,8 @@ public partial class Router : IRouter, IDisposable
     private readonly BehaviorSubject<RouterEvent> eventSource = new(new RouterReady());
     private readonly IRouteActivationObserver routeActivationObserver;
     private readonly Recognizer recognizer;
+
+    private bool isDisposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Router" /> class.
@@ -166,8 +168,13 @@ public partial class Router : IRouter, IDisposable
 
     public void Dispose()
     {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
         this.eventSource.Dispose();
-        GC.SuppressFinalize(this);
+        this.isDisposed = true;
     }
 
     private static void ApplyChangesToRouterState(
@@ -190,6 +197,7 @@ public partial class Router : IRouter, IDisposable
                     ApplyUpdateChange(activeRoute, change);
                     break;
 
+                case RouteChangeAction.None:
                 default:
                     throw new ArgumentOutOfRangeException(
                         $"unexpected change action `{change.ChangeAction}`",
@@ -310,7 +318,7 @@ public partial class Router : IRouter, IDisposable
                     }
 
                     break;
-
+                case RouteChangeAction.None:
                 default:
                     throw new ArgumentOutOfRangeException(
                         $"unexpected change action `{change.ChangeAction}`",
