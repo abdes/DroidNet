@@ -36,6 +36,7 @@ csharp_style_expression_bodied_indexers = true:warning
 csharp_style_expression_bodied_accessors = true:warning
 csharp_style_expression_bodied_lambdas = true:warning
 csharp_style_expression_bodied_local_functions = true:warning
+csharp_prefer_system_threading_lock = true:suggestion
 
 ##########################################
 # File Extension Settings
@@ -714,6 +715,10 @@ dotnet_diagnostic.MA0026.severity = silent
 MA0051.skip_local_functions = true # skip local functions when counting statements
 # MA0165 - Make interpolated string
 dotnet_diagnostic.MA0165.severity = silent
+
+[*.{cs,csx,cake,vb,vbx}]
+# RCS1069: Remove unnecessary case label
+dotnet_diagnostic.RCS1069.severity = none
 
 
 dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
