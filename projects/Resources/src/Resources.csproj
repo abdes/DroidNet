@@ -7,10 +7,10 @@
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
 
-        <Title>Application Resources Use.</Title>
+        <Title>Application Resources Helpers</Title>
         <Description>Provides helpers to facilitate locating and using resources defined in the application or any of its dependency assemblies.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>xaml;resources</PackageTags>

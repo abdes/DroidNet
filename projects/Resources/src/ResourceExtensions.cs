@@ -18,6 +18,10 @@ public static class ResourceExtensions
         return localized != null ? localized.ValueAsString : value;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "does not throw, instead returned the same value")]
     public static string TryGetLocalizedMine(this string value)
     {
         try
