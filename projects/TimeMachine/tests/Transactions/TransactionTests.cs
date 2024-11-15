@@ -51,7 +51,7 @@ public class TransactionTests
     public void Commit_ShouldCallCommitTransaction_OnOwner()
     {
         // Arrange
-        var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
+        using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         // Act
         transaction.Commit();
@@ -64,7 +64,7 @@ public class TransactionTests
     public void Rollback_ShouldCallRollbackTransaction_OnOwner()
     {
         // Arrange
-        var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
+        using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         // Act
         transaction.Rollback();
@@ -77,7 +77,7 @@ public class TransactionTests
     public void AddChange_ShouldAddChange_ToChangeSet()
     {
         // Arrange
-        var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
+        using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         // Act
         transaction.AddChange(this.mockChange.Object);
@@ -107,7 +107,7 @@ public class TransactionTests
         // Arrange
         var changeMock1 = new Mock<IChange>();
         var changeMock2 = new Mock<IChange>();
-        var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
+        using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         transaction.AddChange(changeMock1.Object);
         transaction.AddChange(changeMock2.Object);
@@ -126,7 +126,7 @@ public class TransactionTests
         // Arrange
 
         // Act
-        var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
+        using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         // Assert
         transaction.Key.Should().Be(this.key);

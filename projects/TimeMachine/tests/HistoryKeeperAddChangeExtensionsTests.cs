@@ -18,12 +18,6 @@ public class HistoryKeeperAddChangeExtensionsTests
 {
     private readonly Mock<HistoryKeeper> historyKeeperMock = new(new object(), new Mock<ITransactionFactory>().Object);
 
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "visible for mocking")]
-    public interface ITestTarget
-    {
-        void TestMethod();
-    }
-
     [TestMethod]
     public void AddChange_WithLambdaExpression_ShouldAddChangeToUndoManager()
     {
@@ -73,5 +67,5 @@ public class HistoryKeeperAddChangeExtensionsTests
             Times.Once);
     }
 
-    private static void Action() => Console.WriteLine("Test");
+    private static void Action() => _ = 1;
 }

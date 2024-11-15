@@ -250,23 +250,32 @@ public class HistoryKeeper : ITransactionManager
         {
             while (this.transactions.TryPop(out var toCommit))
             {
-                if (toCommit.Equals(transaction))
+                try
                 {
-                    if (this.State == States.Undoing)
+                    if (toCommit.Equals(transaction))
                     {
-                        this.PushToRedoStack(transaction);
-                    }
-                    else
-                    {
-                        this.PushToUndoStack(transaction);
+                        if (this.State == States.Undoing)
+                        {
+                            this.PushToRedoStack(transaction);
+                        }
+                        else
+                        {
+                            this.PushToUndoStack(transaction);
+                        }
+
+                        break;
                     }
 
-                    break;
+                    if (this.transactions.Count != 0)
+                    {
+                        this.transactions.Peek().AddChange(toCommit);
+                    }
+
+                    toCommit = null;
                 }
-
-                if (this.transactions.Count != 0)
+                finally
                 {
-                    this.transactions.Peek().AddChange(toCommit);
+                    toCommit?.Dispose();
                 }
             }
         }
@@ -279,7 +288,9 @@ public class HistoryKeeper : ITransactionManager
 
         using (new StateTransition<States>(this, currentState))
         {
+#pragma warning disable CA2000 // toRollback.Rollback() is already a Dispose method
             while (this.transactions.TryPop(out var toRollback) && toRollback != transaction)
+#pragma warning restore CA2000
             {
                 toRollback.Rollback();
             }
