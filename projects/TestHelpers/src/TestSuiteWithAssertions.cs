@@ -9,12 +9,12 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
-/// A base class for test suites that have test cases checking for Debug assertions in the code. Use the <see cref="TraceListener" />
-/// to check if assertions failed.
+/// A base class for test suites that have test cases checking for Debug assertions in the code. Use
+/// the <see cref="TraceListener" /> to check if assertions failed.
 /// </summary>
 /// <example>
-/// Derive the test suite from <see cref="TestSuiteWithAssertions" /> and then check for assertion failure messages using the
-/// <see cref="TraceListener" />.
+/// Derive the test suite from <see cref="TestSuiteWithAssertions" /> and then check for assertion
+/// failure messages using the <see cref="TraceListener" />.
 /// <code>
 /// <![CDATA[
 /// [TestClass]
@@ -66,21 +66,37 @@ public abstract class TestSuiteWithAssertions : IDisposable
 
     /// <inheritdoc />
     [TestCleanup]
-    public virtual void Dispose()
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Disposes the resources used by the <see cref="TestSuiteWithAssertions" /> class.
+    /// </summary>
+    /// <param name="disposing">
+    /// A boolean value indicating whether the method is called from the Dispose method (true) or
+    /// from a finalizer (false).
+    /// </param>
+    protected virtual void Dispose(bool disposing)
     {
         if (this.disposed)
         {
             return;
         }
 
-        this.TraceListener.Clear();
-        Trace.Listeners.Clear();
-        if (this.originalTraceListeners != null)
+        if (disposing)
         {
-            Trace.Listeners.AddRange(this.originalTraceListeners);
+            // Dispose managed resources
+            this.TraceListener.Clear();
+            Trace.Listeners.Clear();
+            if (this.originalTraceListeners != null)
+            {
+                Trace.Listeners.AddRange(this.originalTraceListeners);
+            }
         }
 
-        GC.SuppressFinalize(this);
         this.disposed = true;
     }
 }
