@@ -7,18 +7,19 @@ namespace DroidNet.TimeMachine.Transactions;
 using DroidNet.TimeMachine.Changes;
 
 /// <summary>
-/// Provides a simplified way to start and end multiple related changes via a "using" block. When the Transaction is disposed (at
-/// the end of the using block) it will commit the changes to the relevant Undo or Redo stack.
+/// Provides a simplified way to start and end multiple related changes via a "using" block. When
+/// the Transaction is disposed (at the end of the using block) it will commit the changes to the
+/// relevant Undo or Redo stack.
 /// </summary>
 /// <remarks>
 /// Nested transactions are supported.
 /// </remarks>
-public class Transaction : ITransaction
+public sealed class Transaction : ITransaction
 {
     private readonly ITransactionManager? owner;
     private readonly ChangeSet changes;
 
-    private bool disposed;
+    private bool isDisposed;
 
     internal Transaction(ITransactionManager owner, object key)
     {
@@ -32,32 +33,30 @@ public class Transaction : ITransaction
 
     public void Dispose()
     {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.owner?.CommitTransaction(this);
+        this.isDisposed = true;
     }
 
-    public void Commit() => this.owner?.CommitTransaction(this);
+    public void Commit()
+    {
+        this.owner?.CommitTransaction(this);
+        this.isDisposed = true;
+    }
 
-    public void Rollback() => this.owner?.RollbackTransaction(this);
+    public void Rollback()
+    {
+        this.owner?.RollbackTransaction(this);
+        this.isDisposed = true;
+    }
 
     public void AddChange(IChange change) => this.changes.Add(change);
 
     public void Apply() => this.changes.Apply();
 
     public override string? ToString() => this.Key.ToString();
-
-    private void Dispose(bool disposing)
-    {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            this.owner?.CommitTransaction(this);
-        }
-
-        this.disposed = true;
-    }
 }

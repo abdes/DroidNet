@@ -16,12 +16,6 @@ using Moq;
 [TestCategory("Changes")]
 public class LambdaExpressionOnTargetTests
 {
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "used by Moq")]
-    public interface ITarget
-    {
-        void DoSomething();
-    }
-
     [TestMethod]
     public void Apply_ShouldInvokeExpressionOnTarget()
     {

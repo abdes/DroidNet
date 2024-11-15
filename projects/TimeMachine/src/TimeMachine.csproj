@@ -4,11 +4,10 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
 
         <RootNamespace>$(RootNamespace).TimeMachine</RootNamespace>
 
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
 </Project>

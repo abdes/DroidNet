@@ -8,9 +8,9 @@ using DroidNet.TimeMachine.Changes;
 
 public interface ITransaction : IChange, IDisposable
 {
-    void Commit();
+    public void Commit();
 
-    void Rollback();
+    public void Rollback();
 
-    void AddChange(IChange change);
+    public void AddChange(IChange change);
 }

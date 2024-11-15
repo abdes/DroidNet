@@ -14,12 +14,6 @@ using Moq;
 [TestCategory("StateTransition")]
 public class StateTransitionTests
 {
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "used for mocking")]
-    public interface IStateful
-    {
-        object? State { get; set; }
-    }
-
     [TestMethod]
     public void Constructor_ShouldThrowInvalidOperationException_WhenTargetIsNull()
     {
@@ -104,11 +98,10 @@ public class StateTransitionTests
         var mockTarget = new Mock<IStateful>();
         mockTarget.SetupProperty(t => t.State, previousState);
 
-        var transition = new StateTransition<object>(mockTarget.Object, newState);
-
         // Act
         var act = () =>
         {
+            var transition = new StateTransition<object>(mockTarget.Object, newState);
             transition.Dispose();
             transition.Dispose();
         };
