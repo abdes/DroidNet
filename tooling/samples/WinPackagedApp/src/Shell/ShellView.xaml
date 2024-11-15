@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<UserControl
+    x:Class="DroidNet.Samples.Shell.ShellView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:DroidNet.Samples.Shell"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:router="using:DroidNet.Routing.Controls"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <Style x:Key="CompactButton" TargetType="Control">
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style BasedOn="{StaticResource CompactButton}" TargetType="Button" />
+        <Style BasedOn="{StaticResource CompactButton}" TargetType="ToggleButton" />
+
+        <local:IsSelectedToIconConverter x:Key="IsSelectedToIconConverter" />
+    </UserControl.Resources>
+
+    <Grid x:Name="RootGrid" Background="{StaticResource LayerOnMicaBaseAltFillColorDefaultBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Custom TitleBar  -->
+        <Grid x:Name="CustomTitleBar" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LeftPaddingColumn" Width="0" />
+                <ColumnDefinition x:Name="IconColumn" Width="Auto" />
+                <ColumnDefinition x:Name="PrimaryCommandsColumn" Width="Auto" />
+                <ColumnDefinition
+                    x:Name="DragColumn"
+                    Width="*"
+                    MinWidth="48" />
+                <ColumnDefinition x:Name="SecondaryCommandsColumn" Width="Auto" />
+                <ColumnDefinition x:Name="RightPaddingColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+            <ImageIcon
+                Grid.Column="1"
+                Height="26"
+                Margin="8,0,4,0"
+                VerticalAlignment="Center"
+                Source="/Assets/DroidNet.png" />
+            <StackPanel
+                x:Name="PrimaryCommands"
+                Grid.Column="2"
+                Margin="0,0,10,0"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                Orientation="Horizontal">
+                <Button Name="ExpandMenuButton">
+                    <FontIcon Glyph="&#xE700;" />
+                </Button>
+            </StackPanel>
+            <StackPanel
+                x:Name="SecondaryCommands"
+                Grid.Column="4"
+                Margin="0,0,10,0"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                Orientation="Horizontal"
+                Visibility="Collapsed">
+                <Button x:Name="SettingsButton">
+                    <FontIcon Glyph="&#xE713;" />
+                    <!--  The Settings Button has a MenuFlyout created in code behind  -->
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!--  Main Content Area  -->
+        <Grid Name="ContentLayer" Grid.Row="1">
+            <router:RouterOutlet x:Name="OutletContent" ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
+        </Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="WindowWidthStates">
+                <VisualState x:Name="NormalState">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="{x:Bind MinWindowWidth, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="SecondaryCommands.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
+</UserControl>
