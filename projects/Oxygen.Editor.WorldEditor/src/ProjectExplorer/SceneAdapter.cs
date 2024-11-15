@@ -35,7 +35,7 @@ public partial class SceneAdapter(Scene scene, IProjectManagerService projectMan
 
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    protected override int GetChildrenCount() => scene.Entities.Count;
+    protected override int DoGetChildrenCount() => scene.Entities.Count;
 
     protected override async Task LoadChildren()
     {

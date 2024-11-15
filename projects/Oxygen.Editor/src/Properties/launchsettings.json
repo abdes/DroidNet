@@ -1,10 +1,10 @@
 {
     "profiles": {
-        "DemoApp (Package)": {
+        "Oxygen Editor (Package)": {
             "commandName": "MsixPackage",
-            "commandLineArgs": "--mode real"
+            "commandLineArgs": "--mode dev"
         },
-        "DemoApp (Unpackaged)": {
+        "Oxygen Editor (Unpackaged)": {
             "commandName": "Project",
             "commandLineArgs": "--mode dev"
         }

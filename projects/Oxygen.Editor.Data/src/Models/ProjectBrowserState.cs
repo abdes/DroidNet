@@ -6,6 +6,9 @@ namespace Oxygen.Editor.Data.Models;
 
 using System.ComponentModel.DataAnnotations;
 
+/*
+ * TODO: Review this class the data model is not clear.
+ */
 public class ProjectBrowserState
 {
     [Key]
@@ -13,7 +16,7 @@ public class ProjectBrowserState
 
     public string LastSaveLocation { get; set; } = string.Empty;
 
-    public ICollection<RecentlyUsedProject> RecentProjects { get; set; } = [];
+    public ICollection<RecentlyUsedProject> RecentProjects { get; } = [];
 
-    public ICollection<RecentlyUsedTemplate> RecentTemplates { get; set; } = [];
+    public ICollection<RecentlyUsedTemplate> RecentTemplates { get; } = [];
 }

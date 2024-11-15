@@ -51,6 +51,11 @@
     <ItemGroup>
         <Manifest Include="$(ApplicationManifest)" />
     </ItemGroup>
+    <ItemGroup>
+        <None Include="Assets\**\*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="DryIoc.dll" />
@@ -84,8 +89,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ProjectBrowser\src\Oxygen.Editor.ProjectBrowser.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
@@ -115,20 +122,15 @@
     </ItemGroup>
     -->
 
-    <!--
-        Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
-        Tools extension to be activated for this project even if the Windows App SDK Nuget
-        package has not yet been restored.
-    -->
+    <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be
+    activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
 
-    <!--
-        Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
-        Explorer "Package and Publish" context menu entry to be enabled for this project even if
-        the Windows App SDK Nuget package has not yet been restored.
-    -->
+    <!-- Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and
+    Publish" context menu entry to be enabled for this project even if the Windows App SDK Nuget package has not yet
+    been restored. -->
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
     </PropertyGroup>

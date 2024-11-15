@@ -9,9 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Reactive.Linq;
 using System.Reflection;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Config;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Oxygen.Editor.Data;
@@ -27,6 +25,7 @@ public partial class TemplatesService : ITemplatesService
     private readonly IFileSystem fs;
     private readonly ProjectBrowserSettings settings;
     private readonly ITemplatesSource templatesSource;
+    private readonly PersistentState state;
 
     [SuppressMessage(
         "ReSharper",
@@ -38,12 +37,14 @@ public partial class TemplatesService : ITemplatesService
         Justification = "keep explicit constructor so we have ILogger member for logging code generation")]
     public TemplatesService(
         ILogger<TemplatesService> logger,
+        PersistentState state,
         IFileSystem fs,
         IPathFinder pathFinder,
         IOptions<ProjectBrowserSettings> settings,
         ITemplatesSource templatesSource)
     {
         this.logger = logger;
+        this.state = state;
         this.fs = fs;
         this.settings = settings.Value;
 
@@ -59,11 +60,11 @@ public partial class TemplatesService : ITemplatesService
 
     private string BuiltinTemplates { get; }
 
-    public static async Task TryClearRecentUsageAsync(RecentlyUsedTemplate template)
+    public async Task TryClearRecentUsageAsync(RecentlyUsedTemplate template)
     {
         try
         {
-            await ClearRecentUsageAsync(template).ConfigureAwait(true);
+            await this.ClearRecentUsageAsync(template).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -71,14 +72,12 @@ public partial class TemplatesService : ITemplatesService
         }
     }
 
-    public static async Task ClearRecentUsageAsync(RecentlyUsedTemplate template)
+    public async Task ClearRecentUsageAsync(RecentlyUsedTemplate template)
     {
-        var state = Ioc.Default.CreateAsyncScope()
-            .ServiceProvider.GetRequiredService<PersistentState>();
-        await using (state.ConfigureAwait(true))
+        await using (this.state.ConfigureAwait(true))
         {
-            _ = state.RecentlyUsedTemplates!.Remove(template);
-            _ = await state.SaveChangesAsync().ConfigureAwait(true);
+            _ = this.state.RecentlyUsedTemplates!.Remove(template);
+            _ = await this.state.SaveChangesAsync().ConfigureAwait(true);
         }
     }
 
@@ -103,7 +102,7 @@ public partial class TemplatesService : ITemplatesService
             }
 
             // Update template last used time
-            templateInfo.LastUsedOn = LoadUsageData()
+            templateInfo.LastUsedOn = this.LoadUsageData()
                 .TryGetValue(templateInfo.Location!, out var recentlyUsedTemplate)
                 ? recentlyUsedTemplate.LastUsedOn
                 : DateTime.MaxValue;
@@ -112,19 +111,14 @@ public partial class TemplatesService : ITemplatesService
         }
     }
 
-    public bool HasRecentlyUsedTemplates()
-    {
-        using var state = Ioc.Default.CreateScope()
-            .ServiceProvider.GetRequiredService<PersistentState>();
-        return state.RecentlyUsedTemplates?.Any() == true;
-    }
+    public bool HasRecentlyUsedTemplates() => this.state.RecentlyUsedTemplates?.Any() == true;
 
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates()
         => Observable.Create<ITemplateInfo>(
             async (observer) =>
             {
                 // Load builtin templates
-                foreach (var template in LoadUsageData()
+                foreach (var template in this.LoadUsageData()
                              .OrderByDescending(item => item.Value.LastUsedOn))
                 {
                     try
@@ -139,18 +133,16 @@ public partial class TemplatesService : ITemplatesService
                     catch (Exception ex)
                     {
                         this.CouldNotLoadTemplate(template.Key, ex.Message);
-                        await TryClearRecentUsageAsync(template.Value).ConfigureAwait(true);
+                        await this.TryClearRecentUsageAsync(template.Value).ConfigureAwait(true);
                     }
                 }
             });
 
-    private static Dictionary<string, RecentlyUsedTemplate> LoadUsageData()
+    private Dictionary<string, RecentlyUsedTemplate> LoadUsageData()
     {
-        using var state = Ioc.Default.CreateScope()
-            .ServiceProvider.GetRequiredService<PersistentState>();
-        if (state.RecentlyUsedProjects?.Any() == true)
+        if (this.state.RecentlyUsedProjects?.Any() == true)
         {
-            return state.RecentlyUsedTemplates!.ToDictionary(t => t.Location!, StringComparer.Ordinal);
+            return this.state.RecentlyUsedTemplates!.ToDictionary(t => t.Location!, StringComparer.Ordinal);
         }
 
         return new Dictionary<string, RecentlyUsedTemplate>(StringComparer.Ordinal);

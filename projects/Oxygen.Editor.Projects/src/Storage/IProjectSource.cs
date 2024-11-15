@@ -22,15 +22,15 @@ using Oxygen.Editor.Storage;
 /// </para>
 public interface IProjectSource
 {
-    Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath);
+    public Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath);
 
-    Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
+    public Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo);
 
-    Task LoadProjectScenesAsync(IProject project);
+    public Task LoadProjectScenesAsync(IProject project);
 
-    Task<Scene?> LoadSceneAsync(string sceneName, IProject project);
+    public Task<Scene?> LoadSceneAsync(string sceneName, IProject project);
 
-    IAsyncEnumerable<IFolder> LoadFoldersAsync(string location);
+    public IAsyncEnumerable<IFolder> LoadFoldersAsync(string location);
 
-    IStorageProvider GetStorageProvider();
+    public IStorageProvider GetStorageProvider();
 }

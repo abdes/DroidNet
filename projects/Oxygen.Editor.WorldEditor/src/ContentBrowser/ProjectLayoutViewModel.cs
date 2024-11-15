@@ -71,7 +71,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         else
         {
             Debug.Assert(
-                projectInfo?.Location is not null,
+                projectInfo.Location is not null,
                 "current project must be set, have a valid ProjectInfo and a valid Location");
         }
 #endif

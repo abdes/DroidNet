@@ -39,20 +39,20 @@ public partial class ProjectManagerService : IProjectManagerService
 
     public IProject? CurrentProject { get; private set; }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as return value false")]
     public async Task<bool> LoadProjectAsync(IProjectInfo projectInfo)
     {
-        try
-        {
-            this.CurrentProject = new Project(projectInfo) { Name = projectInfo.Name };
-            return await Task.FromResult(true).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            this.CouldNotLoadProject(projectInfo.Location ?? string.Empty, ex.Message);
-            return await Task.FromResult(true).ConfigureAwait(false);
-        }
+        this.CurrentProject = new Project(projectInfo) { Name = projectInfo.Name };
+        return await Task.FromResult(true).ConfigureAwait(false);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as return value false")]
     public async Task<bool> LoadProjectScenesAsync(IProject project)
     {
         try
@@ -67,6 +67,10 @@ public partial class ProjectManagerService : IProjectManagerService
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as return value false")]
     public async Task<bool> LoadSceneEntitiesAsync(Scene scene)
     {
         if (scene.Project is not { ProjectInfo.Location: not null })

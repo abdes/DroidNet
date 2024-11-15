@@ -9,7 +9,7 @@ using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects.Utils;
 
 /// <summary>
-/// Represents a scen in a game project.
+/// Represents a scene in a game project.
 /// </summary>
 /// <param name="project">The owner <see cref="Project" />.</param>
 public partial class Scene(IProject project) : GameObject
@@ -25,7 +25,7 @@ public partial class Scene(IProject project) : GameObject
     [JsonIgnore]
     public IProject Project { get; } = project;
 
-    public IList<GameEntity> Entities { get; private init; } = [];
+    public IList<GameEntity> Entities { get; internal init; } = [];
 
     /// <summary>
     /// Deserializes a JSON string into a <see cref="Scene" /> object.
@@ -39,7 +39,7 @@ public partial class Scene(IProject project) : GameObject
         Justification = "we need to set the scene for the converter")]
     public static Scene? FromJson(string json, IProject project)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneConverter(project) } };
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneJsonConverter(project) } };
         return JsonSerializer.Deserialize<Scene>(json, options);
     }
 
@@ -49,60 +49,60 @@ public partial class Scene(IProject project) : GameObject
     /// <param name="scene">The <see cref="Scene" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="Scene" /> object.</returns>
     public static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
+}
 
-    public class SceneConverter(IProject project) : JsonConverter<Scene>
+public class SceneJsonConverter(IProject project) : JsonConverter<Scene>
+{
+    public override Scene Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        public override Scene Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        var scene = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
+
+        // ReSharper disable once ArrangeStaticMemberQualifier
+        if (!scene.TryGetProperty(nameof(GameObject.Name), out var nameElement))
         {
-            var scene = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
-
             // ReSharper disable once ArrangeStaticMemberQualifier
-            if (!scene.TryGetProperty(nameof(GameObject.Name), out var nameElement))
-            {
-                // ReSharper disable once ArrangeStaticMemberQualifier
-                Fail.MissingRequiredProperty(nameof(GameObject.Name));
-            }
-
-            var name = nameElement.ToString();
-
-            var entities = new List<GameEntity>();
-
-            // ReSharper disable once ArrangeStaticMemberQualifier
-            if (scene.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
-                entitiesElement.ValueKind == JsonValueKind.Array)
-            {
-                entities.AddRange(
-                    entitiesElement.EnumerateArray()
-                        .Select(entityElement => JsonSerializer.Deserialize<GameEntity>(entityElement.GetRawText()))
-                        .OfType<GameEntity>());
-            }
-
-            return new Scene(project)
-            {
-                Name = name,
-                Entities = entities,
-            };
+            Fail.MissingRequiredProperty(nameof(GameObject.Name));
         }
 
-        public override void Write(Utf8JsonWriter writer, Scene value, JsonSerializerOptions options)
+        var name = nameElement.ToString();
+
+        var entities = new List<GameEntity>();
+
+        // ReSharper disable once ArrangeStaticMemberQualifier
+        if (scene.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
+            entitiesElement.ValueKind == JsonValueKind.Array)
         {
-            writer.WriteStartObject();
-
-            // ReSharper disable once ArrangeStaticMemberQualifier
-            writer.WriteString(nameof(GameObject.Name), value.Name);
-
-            // ReSharper disable once ArrangeStaticMemberQualifier
-            writer.WritePropertyName(nameof(Scene.Entities));
-            JsonSerializer.Serialize(writer, value.Entities, options);
-
-            // Omit the Scene property
-            writer.WriteEndObject();
+            entities.AddRange(
+                entitiesElement.EnumerateArray()
+                    .Select(entityElement => JsonSerializer.Deserialize<GameEntity>(entityElement.GetRawText()))
+                    .OfType<GameEntity>());
         }
 
-        private abstract class Fail : JsonThrowHelper<GameEntity>
+        return new Scene(project)
         {
-            public static new void MissingRequiredProperty(string propertyName)
-                => JsonThrowHelper<GameEntity>.MissingRequiredProperty(propertyName);
-        }
+            Name = name,
+            Entities = entities,
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, Scene value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        // ReSharper disable once ArrangeStaticMemberQualifier
+        writer.WriteString(nameof(GameObject.Name), value.Name);
+
+        // ReSharper disable once ArrangeStaticMemberQualifier
+        writer.WritePropertyName(nameof(Scene.Entities));
+        JsonSerializer.Serialize(writer, value.Entities, options);
+
+        // Omit the Scene property
+        writer.WriteEndObject();
+    }
+
+    private abstract class Fail : JsonThrowHelper<GameEntity>
+    {
+        public static new void MissingRequiredProperty(string propertyName)
+            => JsonThrowHelper<GameEntity>.MissingRequiredProperty(propertyName);
     }
 }

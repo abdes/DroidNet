@@ -24,10 +24,10 @@ internal abstract class JsonThrowHelper<T>
         var callerFrame = stackTrace.GetFrame(3);
         var callerName = callerFrame?.GetMethod()?.Name;
         Debug.Assert(callerName is not null, "this method must be called with at least two levels deep");
-        var operation = callerName.ToLowerInvariant() switch
+        var operation = callerName.ToUpperInvariant() switch
         {
-            "read" => "deserialization",
-            "write" => "serialization",
+            "READ" => "deserialization",
+            "WRITE" => "serialization",
             _ => "operation",
         };
 

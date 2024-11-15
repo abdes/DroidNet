@@ -4,7 +4,7 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
 
         <Title>Oxygen Editor Core</Title>
         <Description>Oxygen Editor core services and utilities, including extensions to framework classes.</Description>

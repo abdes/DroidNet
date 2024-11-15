@@ -7,7 +7,6 @@ namespace Oxygen.Editor;
 using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,8 +22,10 @@ public partial class App
     private readonly IRouter router;
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
+    private readonly IActivationService activationService;
 
     /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
+    /// <param name="activationService">The activation service.</param>
     /// In this project architecture, the single instance of the application is created by the User Interface hosted service as
     /// part of the application host initialization. Its lifecycle is managed together with the rest of the services.
     /// <param name="lifetime">The host application lifetime, used to imperatively exit the application when needed.</param>
@@ -36,11 +37,13 @@ public partial class App
     /// resource after the application is <see cref="OnLaunched">launched</see>.
     /// </remarks>
     public App(
+        IActivationService activationService,
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter)
     {
+        this.activationService = activationService;
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
@@ -59,7 +62,7 @@ public partial class App
         // We just want to exit if navigation fails for some reason
         this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
-        _ = Ioc.Default.GetRequiredService<IActivationService>()
+        _ = this.activationService
             .Where(data => data is LaunchActivatedEventArgs)
             .Select(data => data as LaunchActivatedEventArgs)
             .Subscribe(
@@ -93,7 +96,7 @@ public partial class App
 #pragma warning restore IDE0072 // Add missing cases
 
         // Activate the application.
-        Ioc.Default.GetRequiredService<IActivationService>().Activate(activationData);
+        this.activationService.ActivateAsync(activationData).GetAwaiter().GetResult();
     }
 
     private static void OnAppUnhandledException(object sender, UnhandledExceptionEventArgs e)

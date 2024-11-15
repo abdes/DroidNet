@@ -16,8 +16,10 @@ using Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// <summary>
 /// The view model for the World Editor main view.
 /// </summary>
-public partial class WorkspaceViewModel : ObservableObject
+public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 {
+    private readonly Docker docker;
+
     [ObservableProperty]
     private UIElement? workspaceContent;
 
@@ -27,21 +29,23 @@ public partial class WorkspaceViewModel : ObservableObject
     public WorkspaceViewModel(IResolver resolver)
     {
         var dockViewFactory = new DockViewFactory(resolver);
-        var docker = new Docker();
-        RestoreDefaultWorkspace(resolver, docker);
+        this.docker = new Docker();
+        RestoreDefaultWorkspace(resolver, this.docker);
 
         var layout = new GridFlowLayout(dockViewFactory);
 
-        this.UpdateContent(docker, layout);
+        this.UpdateContent(this.docker, layout);
 
-        docker.LayoutChanged += (_, args) =>
+        this.docker.LayoutChanged += (_, args) =>
         {
             if (args.Reason is LayoutChangeReason.Docking)
             {
-                this.UpdateContent(docker, layout);
+                this.UpdateContent(this.docker, layout);
             }
         };
     }
+
+    public void Dispose() => this.docker.Dispose();
 
     private static void RestoreDefaultWorkspace(IResolver resolver, Docker docker)
     {

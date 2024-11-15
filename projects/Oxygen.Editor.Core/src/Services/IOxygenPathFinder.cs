@@ -8,7 +8,7 @@ using DroidNet.Config;
 
 public interface IOxygenPathFinder : IPathFinder
 {
-    string PersonalProjects { get; }
+    public string PersonalProjects { get; }
 
-    string LocalProjects { get; }
+    public string LocalProjects { get; }
 }

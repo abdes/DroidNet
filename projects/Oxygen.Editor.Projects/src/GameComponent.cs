@@ -46,7 +46,7 @@ public partial class GameComponent(GameEntity entity) : GameObject
     /// <returns>The JSON string representation of the <see cref="GameEntity" /> object.</returns>
     public static string ToJson(GameComponent gameComponent) => JsonSerializer.Serialize(gameComponent, JsonOptions);
 
-    public class Vector3JsonConverter : JsonConverter<Vector3>
+    private sealed class Vector3JsonConverter : JsonConverter<Vector3>
     {
         public override Vector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

@@ -51,7 +51,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
 
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    protected override int GetChildrenCount()
+    protected override int DoGetChildrenCount()
     {
         Debug.Fail("should never be called");
 
@@ -67,6 +67,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         var folder = await this.folderAsync.ConfigureAwait(true);
         await foreach (var child in folder.GetFoldersAsync().ConfigureAwait(true))
         {
+#pragma warning disable CA1031 // Do not catch general exception types
             try
             {
                 this.AddChildInternal(
@@ -79,8 +80,10 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
             }
             catch (Exception ex)
             {
+                // Log the failure, but continue with the rest
                 CouldNotLoadProjectFolders(this.logger, folder.Location, ex.Message);
             }
+#pragma warning restore CA1031 // Do not catch general exception types
         }
     }
 

@@ -9,7 +9,7 @@ using System.Reactive.Subjects;
 /// <summary>
 /// Handle registration and chain invocation during activation.
 /// </summary>
-public partial class ActivationService : IActivationService, IDisposable
+public sealed partial class ActivationService : IActivationService, IDisposable
 {
     private readonly Func<object, Task> afterActivation = (activationData) =>
     {
@@ -24,16 +24,12 @@ public partial class ActivationService : IActivationService, IDisposable
     public IDisposable Subscribe(IObserver<object> observer)
         => this.subject.Subscribe(observer);
 
-    public async void Activate(object activationData)
+    public async Task ActivateAsync(object activationData)
     {
         await this.beforeActivation().ConfigureAwait(false);
         this.subject.OnNext(activationData);
         await this.afterActivation(activationData).ConfigureAwait(false);
     }
 
-    public void Dispose()
-    {
-        this.subject.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => this.subject.Dispose();
 }

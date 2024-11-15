@@ -6,21 +6,10 @@
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-
-        <!--
-        Visual Studio can show the generated source files in the dependencies
-        under the generator package. The below setting may be useful if not
-        using Visual Studio.
-        -->
-        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
-
-        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
 
         <RootNamespace>Oxygen.Editor.ProjectBrowser</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>

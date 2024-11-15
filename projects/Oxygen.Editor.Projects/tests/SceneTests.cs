@@ -20,7 +20,7 @@ public class SceneTests
     public SceneTests()
     {
         this.jsonOptions.WriteIndented = false;
-        this.jsonOptions.Converters.Add(new Scene.SceneConverter(this.ExampleProject));
+        this.jsonOptions.Converters.Add(new SceneJsonConverter(this.ExampleProject));
     }
 
     private Project ExampleProject { get; } = new(null!) { Name = "Example Project" };

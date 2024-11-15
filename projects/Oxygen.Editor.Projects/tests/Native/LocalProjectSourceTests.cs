@@ -88,7 +88,7 @@ public class LocalProjectSourceTests
             .ReturnsAsync(json);
 
         // Act
-        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath);
+        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
 
         // Assert
         result.Should().NotBeNull();
@@ -104,7 +104,7 @@ public class LocalProjectSourceTests
             .ThrowsAsync(new DirectoryNotFoundException());
 
         // Act
-        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath);
+        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
 
         // Assert
         result.Should().BeNull();
@@ -122,7 +122,7 @@ public class LocalProjectSourceTests
         this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
-        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath);
+        var result = await this.localProjectsSource.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
 
         // Assert
         result.Should().BeNull();
@@ -158,7 +158,7 @@ public class LocalProjectSourceTests
             .Returns(Task.CompletedTask);
 
         // Act
-        var result = await this.localProjectsSource.SaveProjectInfoAsync(projectInfo);
+        var result = await this.localProjectsSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
 
         // Assert
         result.Should().BeTrue();
@@ -184,7 +184,7 @@ public class LocalProjectSourceTests
         this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
-        var result = await this.localProjectsSource.SaveProjectInfoAsync(projectInfo);
+        var result = await this.localProjectsSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
 
         // Assert
         result.Should().BeFalse();
