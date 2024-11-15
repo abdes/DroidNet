@@ -15,7 +15,6 @@
                 <Styles xmlns="using:DroidNet.Controls.Demo.DynamicTree" />
             </ResourceDictionary.MergedDictionaries>
             <!--  Other app resources here  -->
-            <ResourceDictionary x:Key="VmToViewConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
