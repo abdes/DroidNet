@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers;
+namespace DroidNet.TestHelpers.Tests;
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("Assertions")]
 public class DebugAssertionTests : TestSuiteWithAssertions
 {
     [TestMethod]

@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers;
+namespace DroidNet.TestHelpers.Tests;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.TestHelpers;
 using Serilog;
 
 [TestClass]
-[TestCategory("Test Environment Sanity")]
+[TestCategory("Test Environment")]
 [ExcludeFromCodeCoverage]
 public class TestEnv : CommonTestEnv
 {
@@ -19,8 +20,6 @@ public class TestEnv : CommonTestEnv
 
         ConfigureLogging(TestContainer);
         Log.Information("Test session started");
-
-        ConfigureVerify();
     }
 
     [AssemblyCleanup]
