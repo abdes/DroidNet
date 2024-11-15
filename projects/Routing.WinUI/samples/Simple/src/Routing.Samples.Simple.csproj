@@ -5,7 +5,6 @@
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
         <Platforms>x64</Platforms>
         <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
@@ -13,18 +12,23 @@
 
         <IsPackable>false</IsPackable>
 
+        <!-- The App is Packaged, unless we're running a GitHub workflow -->
+        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
+
+        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
+        <EnableMsixTooling>true</EnableMsixTooling>
+
         <AssemblyName>DroidNet.SimpleRoutedApp</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-        <EnableMsixTooling>true</EnableMsixTooling>
-        <PublishReadyToRun>true</PublishReadyToRun>
-        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
-        <WindowsPackageType>None</WindowsPackageType>
-
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
         <RootNamespace>DroidNet.Routing.Samples.Simple</RootNamespace>
+
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
         <!-- Use our own Main entry point so we can control the HostBuilder -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -33,11 +37,7 @@
 
         <UserSecretsId>916e565c-62a3-4c25-9a26-3637faacd34b</UserSecretsId>
     </PropertyGroup>
-    <ItemGroup>
-      <None Remove="Navigation\PageThree.xaml" />
-      <None Remove="Navigation\SettingsView.xaml" />
-      <None Remove="Package.appxmanifest" />
-    </ItemGroup>
+
     <ItemGroup>
       <AppxManifest Include="Package.appxmanifest">
         <SubType>Designer</SubType>
@@ -46,6 +46,11 @@
 
     <ItemGroup>
         <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="Assets\**\*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
