@@ -364,7 +364,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// </summary>
     /// <param name="configureApplicationServices">An action to configure application services.</param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <seealso cref="WithAppServices(System.Action{IServiceCollection, Bootstrapper} )" />
+    /// <seealso cref="WithAppServices(System.Action{IServiceCollection, Bootstrapper})" />
     public Bootstrapper WithAppServices(Action<IContainer> configureApplicationServices)
     {
         this.EnsureConfiguredButNotBuilt();
