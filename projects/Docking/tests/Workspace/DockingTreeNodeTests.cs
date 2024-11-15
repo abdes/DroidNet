@@ -9,6 +9,8 @@ using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using static TreeTraversal;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>Unit test cases for the <see cref="BinaryTreeNode{T}" /> class.</summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -28,7 +30,6 @@ public sealed partial class DockingTreeNodeTests : IDisposable
 
         this.docker.Dispose();
 
-        GC.SuppressFinalize(this);
         this.disposed = true;
     }
 }
@@ -40,8 +41,8 @@ public partial class DockingTreeNodeTests
     public void AddChildLeft_BothSlotsEmpty()
     {
         // Arrange
-        var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
-        var newChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
+        using var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
+        using var newChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
 
         // Act
         root.AddChildLeft(newChild, DockGroupOrientation.Vertical);
@@ -1100,3 +1101,4 @@ public partial class DockingTreeNodeTests
         _ = root.Value.Orientation.Should().Be(existingOrientation);
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

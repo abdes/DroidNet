@@ -21,7 +21,7 @@ using System.Diagnostics;
 public partial class Anchor : IDisposable
 {
     /// <summary>Keep track of when this object was disposed of.</summary>
-    private bool disposed;
+    private bool isDisposed;
 
     /// <summary>The dockable relative to which the anchor is positioned.</summary>
     private IDockable? dockable;
@@ -66,25 +66,41 @@ public partial class Anchor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Releases all resources used by the <see cref="Anchor" /> object. Should be called as soon as the anchor object is no
-    /// longer needed.
-    /// </summary>
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        this.RelativeTo = null;
-        this.disposed = true;
-
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
     public override string ToString()
         => $"{this.Position} {(this.dockable == null ? "Edge" : $"of `{this.dockable.Id}` in dock `{this.dockable.Owner}`")}";
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="Anchor" /> and optionally releases
+    /// the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            /* Dispose of managed resources */
+            this.RelativeTo = null;
+        }
+
+        /* Dispose of unmanaged resources */
+
+        this.isDisposed = true;
+    }
 
     /// <summary>
     /// Handles the event when the dockable object to which this anchor is attached is disposed of. Automatically chooses a new

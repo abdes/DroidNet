@@ -10,13 +10,15 @@ using DroidNet.Docking.Mocks;
 using DroidNet.Docking.Workspace;
 using FluentAssertions;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>
 /// Unit test cases for the <see cref="TrayGroup" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(TrayGroup))]
-public partial class TrayGroupTests : IDisposable
+public sealed partial class TrayGroupTests : IDisposable
 {
     private readonly DummyDocker docker = new();
     private readonly TrayGroup tray;
@@ -24,11 +26,7 @@ public partial class TrayGroupTests : IDisposable
     public TrayGroupTests() => this.tray = new TrayGroup(this.docker, AnchorPosition.Left);
 
     [TestCleanup]
-    public void Dispose()
-    {
-        this.docker.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => this.docker.Dispose();
 
     [TestMethod]
     public void Constructor_ShouldThrowException_WhenPositionIsWith()
@@ -48,7 +46,7 @@ public partial class TrayGroupTests : IDisposable
     public void Orientation_ShouldBeDeterminedFromPosition(AnchorPosition position, DockGroupOrientation orientation)
     {
         // Act
-        var sut = new TrayGroup(new DummyDocker(), position);
+        var sut = new TrayGroup(this.docker, position);
 
         // Assert
         _ = sut.Orientation.Should().Be(orientation);
@@ -92,3 +90,4 @@ public partial class TrayGroupTests : IDisposable
         _ = result.Should().Contain("Tray");
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

@@ -35,4 +35,10 @@ public class Width : Length
     /// </summary>
     /// <param name="length">the length to be converted to a string.</param>
     public static implicit operator string?(Width? length) => (Length?)length;
+
+    /// <inheritdoc />
+    public override string? ToString() => this;
+
+    /// <inheritdoc />
+    public override string ToDebugString() => "Width=" + base.ToDebugString();
 }

@@ -17,13 +17,22 @@ public partial class Docker : IDocker
     private readonly CenterGroup center;
     private readonly Dictionary<AnchorPosition, LayoutSegment?> edges = [];
 
-    private bool disposed;
+    private bool isDisposed;
 
     public Docker()
     {
         this.root = new DockingTreeNode(this, new LayoutGroup(this));
         this.center = new CenterGroup(this);
-        this.root.AddChildLeft(new DockingTreeNode(this, this.center), DockGroupOrientation.Horizontal);
+        var centerNode = new DockingTreeNode(this, this.center);
+        try
+        {
+            this.root.AddChildLeft(centerNode, DockGroupOrientation.Horizontal);
+            centerNode = null; // Dispose ownership transferred to root
+        }
+        finally
+        {
+            centerNode?.Dispose();
+        }
 
         this.edges.Add(AnchorPosition.Left, default);
         this.edges.Add(AnchorPosition.Right, default);
@@ -35,17 +44,30 @@ public partial class Docker : IDocker
 
     public void DumpWorkspace() => this.root.Dump();
 
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
         {
             return;
         }
 
-        this.root.Dispose();
+        if (disposing)
+        {
+            /* Dispose of managed resources */
+            this.root.Dispose();
+            this.center.Dispose(); // For completeness, but should have been disposed of already in the root
+        }
 
-        this.disposed = true;
-        GC.SuppressFinalize(this);
+        /* Dispose of unmanaged resources */
+
+        this.isDisposed = true;
     }
 }
 
@@ -243,13 +265,22 @@ public partial class Docker
     private void AddToEdge(DockingTreeNode edge, LayoutDockGroup group, DockGroupOrientation orientation)
     {
         var newNode = new DockingTreeNode(this, group);
-        if (edge.Left?.Value is TrayGroup)
+        try
         {
-            edge.AddChildRight(newNode, orientation);
+            if (edge.Left?.Value is TrayGroup)
+            {
+                edge.AddChildRight(newNode, orientation);
+            }
+            else
+            {
+                edge.AddChildLeft(newNode, orientation);
+            }
+
+            newNode = null; // Dispose ownership transferred to edge
         }
-        else
+        finally
         {
-            edge.AddChildLeft(newNode, orientation);
+            newNode?.Dispose();
         }
     }
 
@@ -314,31 +345,19 @@ public partial class Docker
         switch (position)
         {
             case AnchorPosition.Left:
-                this.AddToEdge(
-                    this.GetOrInitEdgeNode(AnchorPosition.Left),
-                    this.NewLayoutDockGroup(dock),
-                    DockGroupOrientation.Horizontal);
+                DockToEdge(AnchorPosition.Left, DockGroupOrientation.Horizontal);
                 break;
 
             case AnchorPosition.Top:
-                this.AddToEdge(
-                    this.GetOrInitEdgeNode(AnchorPosition.Top),
-                    this.NewLayoutDockGroup(dock),
-                    DockGroupOrientation.Vertical);
+                DockToEdge(AnchorPosition.Top, DockGroupOrientation.Vertical);
                 break;
 
             case AnchorPosition.Right:
-                this.AddToEdge(
-                    this.GetOrInitEdgeNode(AnchorPosition.Right),
-                    this.NewLayoutDockGroup(dock),
-                    DockGroupOrientation.Horizontal);
+                DockToEdge(AnchorPosition.Right, DockGroupOrientation.Horizontal);
                 break;
 
             case AnchorPosition.Bottom:
-                this.AddToEdge(
-                    this.GetOrInitEdgeNode(AnchorPosition.Bottom),
-                    this.NewLayoutDockGroup(dock),
-                    DockGroupOrientation.Vertical);
+                DockToEdge(AnchorPosition.Bottom, DockGroupOrientation.Vertical);
                 break;
 
             case AnchorPosition.Center:
@@ -350,6 +369,37 @@ public partial class Docker
 
             default:
                 throw new InvalidEnumArgumentException(nameof(position), (int)position, typeof(AnchorPosition));
+        }
+
+        void DockToEdge(AnchorPosition anchorPosition, DockGroupOrientation dockGroupOrientation)
+        {
+            DockingTreeNode? newNode = null;
+
+            DockingTreeNode edgeNode;
+            var edgeSegment = this.edges[position];
+            if (edgeSegment is not null)
+            {
+                // We must always find an edge node if there is a non-null edge segment corresponding to it.
+                edgeNode = this.FindNode(edgeSegment)!;
+            }
+            else
+            {
+                edgeNode = this.InitEdgeNode(anchorPosition);
+                newNode = edgeNode;
+            }
+
+            var layoutDockGroup = this.NewLayoutDockGroup(dock);
+            try
+            {
+                this.AddToEdge(edgeNode, layoutDockGroup, dockGroupOrientation);
+                newNode = null; // Dispose ownership transferred
+                layoutDockGroup = null; // Dispose ownership transferred
+            }
+            finally
+            {
+                newNode?.Dispose();
+                layoutDockGroup?.Dispose();
+            }
         }
     }
 
@@ -377,26 +427,7 @@ public partial class Docker
         this.InitiateLayoutRefresh(LayoutChangeReason.Docking);
     }
 
-    private DockingTreeNode GetOrInitEdgeNode(AnchorPosition position)
-    {
-        DockingTreeNode edgeNode;
-
-        var edgeSegment = this.edges[position];
-        if (edgeSegment is null)
-        {
-            edgeNode = this.MakeEdgeNode(position);
-            this.edges[position] = edgeNode.Value;
-        }
-        else
-        {
-            // We must always find an edge node if there is a non-null edge segment corresponding to it.
-            edgeNode = this.FindNode(edgeSegment)!;
-        }
-
-        return edgeNode;
-    }
-
-    private DockingTreeNode MakeEdgeNode(AnchorPosition position)
+    private DockingTreeNode InitEdgeNode(AnchorPosition position)
     {
         if (position is AnchorPosition.Center or AnchorPosition.With)
         {
@@ -409,21 +440,36 @@ public partial class Docker
             ? DockGroupOrientation.Horizontal
             : DockGroupOrientation.Vertical;
 
-        var edgeNode = new DockingTreeNode(this, new EdgeGroup(this, orientation));
-        var trayNode = new DockingTreeNode(this, new TrayGroup(this, position));
+        var disposeTrayNode = new DockingTreeNode(this, new TrayGroup(this, position));
+        var disposeEdgeNode = new DockingTreeNode(this, new EdgeGroup(this, orientation));
 
-        if (position is AnchorPosition.Left || position is AnchorPosition.Top)
+        try
         {
-            edgeNode.AddChildLeft(trayNode, orientation);
-            this.AddBeforeCenter(edgeNode, orientation);
-        }
-        else
-        {
-            edgeNode.AddChildRight(trayNode, orientation);
-            this.AddAfterCenter(edgeNode, orientation);
-        }
+            if (position is AnchorPosition.Left or AnchorPosition.Top)
+            {
+                disposeEdgeNode.AddChildLeft(disposeTrayNode, orientation);
+                this.AddBeforeCenter(disposeEdgeNode, orientation);
+            }
+            else
+            {
+                disposeEdgeNode.AddChildRight(disposeTrayNode, orientation);
+                this.AddAfterCenter(disposeEdgeNode, orientation);
+            }
 
-        return edgeNode;
+            this.edges[position] = disposeEdgeNode.Value;
+
+            var newNode = disposeEdgeNode;
+
+            disposeTrayNode = null; // Dispose ownership transferred
+            disposeEdgeNode = null; // Dispose ownership transferred
+
+            return newNode;
+        }
+        finally
+        {
+            disposeEdgeNode?.Dispose();
+            disposeTrayNode?.Dispose();
+        }
     }
 
     private DockingTreeNode FindCenterNode()
@@ -447,22 +493,22 @@ public partial class Docker
     {
         DockingTreeNode? result = null;
 
-        bool Visitor(BinaryTreeNode<LayoutSegment>? node)
-        {
-            if (node is not null && node.Value == segment)
-            {
-                result = (DockingTreeNode?)node;
-
-                // Stop traversal
-                return false;
-            }
-
-            // Continue traversal
-            return true;
-        }
-
         DepthFirstInOrder(this.root, Visitor);
         return result;
+
+        bool Visitor(BinaryTreeNode<LayoutSegment>? node)
+        {
+            if (node is null || node.Value != segment)
+            {
+                // Continue traversal
+                return true;
+            }
+
+            result = (DockingTreeNode?)node;
+
+            // Stop traversal
+            return false;
+        }
     }
 
     private void AddBeforeCenter(DockingTreeNode node, DockGroupOrientation orientation)

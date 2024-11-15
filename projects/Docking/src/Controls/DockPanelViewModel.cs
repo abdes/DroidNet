@@ -84,19 +84,15 @@ public partial class DockPanelViewModel : ObservableRecipient
         StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
     }
 
-    private static AnchorPosition AnchorPositionFromString(string anchorPosition)
-        => anchorPosition.ToLowerInvariant() switch
+    private static AnchorPosition AnchorPositionFromString(string position)
+    {
+        if (Enum.TryParse<AnchorPosition>(position, ignoreCase: true, out var result))
         {
-            "left" => AnchorPosition.Left,
-            "right" => AnchorPosition.Right,
-            "top" => AnchorPosition.Top,
-            "bottom" => AnchorPosition.Bottom,
-            "with" => AnchorPosition.With,
-            "center" => AnchorPosition.Center,
-            _ => throw new ArgumentException(
-                $"invalid anchor position for root docking `{anchorPosition}`",
-                anchorPosition),
-        };
+            return result;
+        }
+
+        throw new ArgumentException($"invalid anchor position for root docking `{position}`", nameof(position));
+    }
 
     [RelayCommand(CanExecute = nameof(CanToggleDockingMode))]
     private void ToggleDockingMode()
@@ -114,8 +110,22 @@ public partial class DockPanelViewModel : ObservableRecipient
     [RelayCommand]
     private void AcceptDockBeingDocked(string anchorPosition)
     {
-        this.AnchorDockBeingDockedAt(new Anchor(AnchorPositionFromString(anchorPosition), this.dock.ActiveDockable));
-        this.ToggleDockingMode();
+        if (this.dockBeingDocked is null)
+        {
+            return;
+        }
+
+        var anchor = new Anchor(AnchorPositionFromString(anchorPosition), this.dock.ActiveDockable);
+        try
+        {
+            this.docker.Dock(this.dockBeingDocked, anchor);
+            anchor = null; // Dispose ownership transferred
+            this.ToggleDockingMode();
+        }
+        finally
+        {
+            anchor?.Dispose();
+        }
     }
 
     [RelayCommand]
@@ -123,18 +133,16 @@ public partial class DockPanelViewModel : ObservableRecipient
     {
         var anchor = new Anchor(AnchorPositionFromString(anchorPosition));
 
-        this.docker.Dock(this.dock, anchor);
-        this.ToggleDockingMode();
-    }
-
-    private void AnchorDockBeingDockedAt(Anchor anchor)
-    {
-        if (this.dockBeingDocked is null)
+        try
         {
-            return;
+            this.docker.Dock(this.dock, anchor);
+            anchor = null; // Dispose ownership transferred
+            this.ToggleDockingMode();
         }
-
-        this.docker.Dock(this.dockBeingDocked, anchor);
+        finally
+        {
+            anchor?.Dispose();
+        }
     }
 
     private void LeaveDockingMode(object recipient, LeaveDockingModeMessage message)

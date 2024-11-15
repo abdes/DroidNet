@@ -18,7 +18,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     public ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
-    public override Flow StartLayout(ILayoutSegment segment)
+    public override LayoutFlow StartLayout(ILayoutSegment segment)
         => new GridFlow(segment)
         {
             Description = $"Root Grid {segment}",
@@ -47,7 +47,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         this.CurrentGrid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
     }
 
-    public override Flow StartFlow(ILayoutSegment segment)
+    public override LayoutFlow StartFlow(ILayoutSegment segment)
     {
         // $"New Grid for: {segment}"
         var newVector = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = segment.ToString() };
@@ -128,7 +128,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             : dock.Height
                 .ToGridLength(); /* $"GridLength for dock {dock} using {(this.CurrentFlow.IsHorizontal ? "width" : "height")}" */
 
-    private sealed class GridFlow(ILayoutSegment segment) : Flow(segment)
+    private sealed class GridFlow(ILayoutSegment segment) : LayoutFlow(segment)
     {
         public ILayoutSegment Segment { get; } = segment;
 

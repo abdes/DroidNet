@@ -9,6 +9,8 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Utils;
 using DroidNet.Docking.Workspace;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(LayoutEngine))]
@@ -57,7 +59,7 @@ public class LayoutEngineTests : VerifyBase
 
         public void DumpLayout() => DumpLayoutItemRecursive(this.CurrentVector, 0);
 
-        public override Flow StartLayout(ILayoutSegment segment)
+        public override LayoutFlow StartLayout(ILayoutSegment segment)
             => new GridFlow(segment)
             {
                 Description = $"Root Grid {segment}",
@@ -79,7 +81,7 @@ public class LayoutEngineTests : VerifyBase
             Debug.WriteLine($"Place Tray: {tray}");
         }
 
-        public override Flow StartFlow(ILayoutSegment segment)
+        public override LayoutFlow StartFlow(ILayoutSegment segment)
         {
             Debug.WriteLine($"New Grid for: {segment}");
             var newFlow = new Vector { Direction = OrientationToFlowDirection(segment.Orientation) };
@@ -142,9 +144,10 @@ public class LayoutEngineTests : VerifyBase
             }
         }
 
-        private sealed class GridFlow(ILayoutSegment segment) : Flow(segment)
+        private sealed class GridFlow(ILayoutSegment segment) : LayoutFlow(segment)
         {
             public required Vector Grid { get; init; }
         }
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

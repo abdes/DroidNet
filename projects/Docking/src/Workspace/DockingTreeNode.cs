@@ -313,22 +313,31 @@ internal partial class DockingTreeNode(IDocker docker, LayoutSegment segment) : 
         var hostNode = new DockingTreeNode(docker, hostGroup);
         var afterNode = afterGroup is null ? null : new DockingTreeNode(docker, afterGroup);
 
-        this.Left = beforeNode ?? hostNode;
-        if (beforeNode is null)
+        try
         {
-            this.Right = afterNode;
-        }
-        else if (afterNode is null)
-        {
-            this.Right = hostNode;
-        }
-        else
-        {
-            this.Right = new DockingTreeNode(docker, new LayoutGroup(docker, this.Value.Orientation))
+            this.Left = beforeNode ?? hostNode;
+            if (beforeNode is null)
             {
-                Left = hostNode,
-                Right = afterNode,
-            };
+                this.Right = afterNode;
+                afterNode = null; // Dispose ownership transferred
+            }
+            else if (afterNode is null)
+            {
+                this.Right = hostNode;
+            }
+            else
+            {
+                this.Right = new DockingTreeNode(docker, new LayoutGroup(docker, this.Value.Orientation))
+                {
+                    Left = hostNode,
+                    Right = afterNode,
+                };
+                afterNode = null; // Dispose ownership transferred
+            }
+        }
+        finally
+        {
+            afterNode?.Dispose();
         }
 
         // We no longer have docks, so we switch the existing item in the node with a new LayoutGroup

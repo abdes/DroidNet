@@ -16,7 +16,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(Dock))]
-public partial class DockTests : IDisposable
+public sealed partial class DockTests : IDisposable
 {
     private readonly SimpleDock dock = new();
 
