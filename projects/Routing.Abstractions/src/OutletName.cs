@@ -37,7 +37,7 @@ public record OutletName
     /// Implicitly converts a string to an OutletName. If the string is null, returns <see cref="Primary" />.
     /// </summary>
     /// <param name="name">The outlet name as a string.</param>
-    public static implicit operator OutletName(string? name) => name is null ? Primary : new OutletName { Name = name };
+    public static implicit operator OutletName(string? name) => FromString(name);
 
     /// <summary>
     /// Implicitly converts an OutletName to a string.
@@ -45,37 +45,44 @@ public record OutletName
     /// <param name="source">The OutletName object.</param>
     public static implicit operator string(OutletName source) => source.Name;
 
-    public override string ToString() => this.Name;
-
     /// <summary>
-    /// Custom equality comparer for <see cref="OutletName" />, suitable for use with collections.
-    /// Compares outlet names using ordinal (binary) sort rules, with optional case insensitivity.
+    /// Explicitly converts a string to an OutletName. If the string is null, returns <see cref="Primary" />.
     /// </summary>
-    /// <param name="ignoreCase">When true, ignores the case of the outlet names. Default is true.</param>
-    public class EqualityComparer(bool ignoreCase = true) : EqualityComparer<OutletName>
+    /// <param name="name">The outlet name as a string.</param>
+    /// <returns>The <see cref="OutletName" /> corresponding to the given string.</returns>
+    public static OutletName FromString(string? name) => name is null ? Primary : new OutletName { Name = name };
+
+    public override string ToString() => this;
+}
+
+/// <summary>
+/// Custom equality comparer for <see cref="OutletName" />, suitable for use with collections.
+/// Compares outlet names using ordinal (binary) sort rules, with optional case insensitivity.
+/// </summary>
+/// <param name="ignoreCase">When true, ignores the case of the outlet names. Default is true.</param>
+public class OutletNameEqualityComparer(bool ignoreCase = true) : EqualityComparer<OutletName>
+{
+    /// <summary>
+    /// Default comparer instance that ignores case.
+    /// </summary>
+    public static readonly OutletNameEqualityComparer IgnoreCase = new();
+
+    /// <inheritdoc />
+    public override bool Equals(OutletName? x, OutletName? y)
     {
-        /// <summary>
-        /// Default comparer instance that ignores case.
-        /// </summary>
-        public static readonly EqualityComparer IgnoreCase = new();
-
-        /// <inheritdoc />
-        public override bool Equals(OutletName? x, OutletName? y)
+        if (ReferenceEquals(x, y))
         {
-            if (ReferenceEquals(x, y))
-            {
-                return true;
-            }
-
-            if (x is null || y is null)
-            {
-                return false;
-            }
-
-            return x.Name.Equals(y.Name, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            return true;
         }
 
-        /// <inheritdoc />
-        public override int GetHashCode(OutletName obj) => obj.Name.GetHashCode(StringComparison.Ordinal);
+        if (x is null || y is null)
+        {
+            return false;
+        }
+
+        return x.Name.Equals(y.Name, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
+
+    /// <inheritdoc />
+    public override int GetHashCode(OutletName obj) => obj.Name.GetHashCode(StringComparison.Ordinal);
 }

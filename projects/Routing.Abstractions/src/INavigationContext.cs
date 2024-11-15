@@ -22,7 +22,7 @@ public interface INavigationContext
     /// <remarks>
     /// The target key defines how the navigation target is obtained from the IoC Container and is
     /// either one of the special key values (<see cref="Target.Main" />, <see cref="Target.Self" />
-    /// or <see cref="Target.Blank" />), or the key used to register a specific the target with the
+    /// or the key used to register a specific the target with the
     /// IoC container as keyed service.
     /// </remarks>
     Target NavigationTargetKey { get; }

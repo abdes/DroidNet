@@ -66,7 +66,7 @@ public class OutletNameTests
     public void EqualityComparer_ShouldIgnoreCase_WhenFlagIsTrue()
     {
         // Arrange
-        var comparer = OutletName.EqualityComparer.IgnoreCase;
+        var comparer = OutletNameEqualityComparer.IgnoreCase;
 
         // ReSharper disable once StringLiteralTypo
         var name1 = new OutletName { Name = "testoutlet" };
@@ -97,7 +97,7 @@ public class OutletNameTests
     public void EqualityComparer_ShouldConsiderCase_WhenFlagIsFalse()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer(ignoreCase: false);
+        var comparer = new OutletNameEqualityComparer(ignoreCase: false);
 
         // ReSharper disable once StringLiteralTypo
         var name1 = new OutletName { Name = "testoutlet" };
@@ -114,7 +114,7 @@ public class OutletNameTests
     public void EqualityComparer_ShouldReturnTrue_WhenBothValuesAreSameInstance()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer();
+        var comparer = new OutletNameEqualityComparer();
         var name = new OutletName { Name = "TestOutlet" };
 
         // Act
@@ -128,7 +128,7 @@ public class OutletNameTests
     public void EqualityComparer_ShouldReturnFalse_WhenOneValueIsNull()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer();
+        var comparer = new OutletNameEqualityComparer();
         var name = new OutletName { Name = "TestOutlet" };
 
         // Act & Assert
@@ -140,7 +140,7 @@ public class OutletNameTests
     public void EqualityComparer_ShouldReturnTrue_WhenBothValuesAreNull()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer();
+        var comparer = new OutletNameEqualityComparer();
 
         // Act
         var areEqual = comparer.Equals(x: null, y: null);
@@ -153,7 +153,7 @@ public class OutletNameTests
     public void GetHashCode_ShouldMatch_WhenNamesAreEqual()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer();
+        var comparer = new OutletNameEqualityComparer();
         var name1 = new OutletName { Name = "TestOutlet" };
         var name2 = new OutletName { Name = "TestOutlet" };
 
@@ -169,7 +169,7 @@ public class OutletNameTests
     public void GetHashCode_ShouldNotMatch_WhenNamesAreDifferent()
     {
         // Arrange
-        var comparer = new OutletName.EqualityComparer();
+        var comparer = new OutletNameEqualityComparer();
         var name1 = new OutletName { Name = "TestOutlet1" };
         var name2 = new OutletName { Name = "TestOutlet2" };
 

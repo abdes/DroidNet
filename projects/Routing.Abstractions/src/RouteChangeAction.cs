@@ -10,12 +10,23 @@ namespace DroidNet.Routing;
 /// </summary>
 public enum RouteChangeAction
 {
-    /// <summary>Add a new active route to the router state.</summary>
+    /// <summary>
+    /// An invalid value, indicating that the action is not set.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// Add a new active route to the router state.
+    /// </summary>
     Add = 1,
 
-    /// <summary>Update an existing active route in the router state.</summary>
+    /// <summary>
+    /// Update an existing active route in the router state.
+    /// </summary>
     Update = 2,
 
-    /// <summary>Delete an active route from the router state.</summary>
+    /// <summary>
+    /// Delete an active route from the router state.
+    /// </summary>
     Delete = 3,
 }
