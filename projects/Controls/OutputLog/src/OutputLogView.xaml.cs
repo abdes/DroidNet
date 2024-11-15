@@ -33,7 +33,7 @@ public sealed partial class OutputLogView
         _ = sender; // unused
         _ = args; // unused
 
-        // TODO: set this up only once when the control's template is applied
+        /* TODO: set this up only once when the control's template is applied */
 
         var appliedTheme = Themes.Builtin[this.OutputLogSink.Theme ?? Themes.Literate];
 
