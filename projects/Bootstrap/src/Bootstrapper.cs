@@ -364,7 +364,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// </summary>
     /// <param name="configureApplicationServices">An action to configure application services.</param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <seealso cref="WithAppServices(System.Action{IServiceCollection, Bootstrapper})" />
+    /// <seealso cref="WithAppServices(Action{IServiceCollection, Bootstrapper})" />
     public Bootstrapper WithAppServices(Action<IContainer> configureApplicationServices)
     {
         this.EnsureConfiguredButNotBuilt();
@@ -377,14 +377,14 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <summary>
     /// Configures application-specific services directly on the <see cref="IServiceCollection" />.
     /// <remarks>
-    /// This method is less flexible than <see cref="WithAppServices(System.Action{IContainer})" />,
+    /// This method is less flexible than <see cref="WithAppServices(Action{IContainer})" />,
     /// but is compatible with those extension methods that use the
     /// <see cref="Microsoft.Extensions.Hosting" /> API.
     /// </remarks>
     /// </summary>
     /// <param name="configureApplicationServices"> An action to configure application services.</param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <seealso cref="WithAppServices(System.Action{IContainer})" />
+    /// <seealso cref="WithAppServices(Action{IContainer})" />
     public Bootstrapper WithAppServices(Action<IServiceCollection, Bootstrapper> configureApplicationServices)
     {
         this.EnsureConfiguredButNotBuilt();

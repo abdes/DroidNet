@@ -175,7 +175,7 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = service.Should().NotBeNull();
         _ = service.Should().BeOfType<MyService>();
 
-        void ConfigureApplicationServices(IContainer container)
+        static void ConfigureApplicationServices(IContainer container)
             => container.Register<IMyService, MyService>(Reuse.Singleton);
     }
 
@@ -196,7 +196,7 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = service.Should().NotBeNull();
         _ = service.Should().BeOfType<MyService>();
 
-        void ConfigureApplicationServices(IServiceCollection sc, Bootstrapper bs)
+        static void ConfigureApplicationServices(IServiceCollection sc, Bootstrapper bs)
         {
             _ = bs; // Unused
 
@@ -250,7 +250,7 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = this.defaultConfiguredBuilder.Build();
 
         // Act & Assert
-        var act = () => this.defaultConfiguredBuilder.Build();
+        var act = this.defaultConfiguredBuilder.Build;
         _ = act.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("*Host already built*");
