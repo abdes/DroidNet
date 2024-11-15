@@ -10,6 +10,8 @@ using System.Globalization;
 using System.IO.Abstractions;
 using System.Reflection;
 using DroidNet.Config;
+using DroidNet.Controls.OutputLog;
+using DroidNet.Controls.OutputLog.Theming;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
@@ -146,7 +148,8 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                     })
 
                 // Continue configuration using DryIoc container API.
-                .ConfigureContainer<DryIocServiceProvider>(provider => this.ConfigureEarlyServices(provider.Container));
+                .ConfigureContainer<DryIocServiceProvider>(
+                    (context, provider) => this.ConfigureEarlyServices(context, provider.Container));
 
             initialContainer = null; // Ownership transferred to the HostBuilder
         }
@@ -170,7 +173,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <exception cref="InvalidOperationException">Thrown if called after Build().</exception>
     public Bootstrapper WithConfiguration(
         Func<IPathFinder, IFileSystem, IConfiguration, IEnumerable<string>> getConfigFiles,
-        Action<IConfiguration, IServiceCollection> configureOptionsPattern)
+        Action<IConfiguration, IServiceCollection>? configureOptionsPattern)
     {
         this.EnsureConfiguredButNotBuilt();
 
@@ -178,18 +181,12 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
             .ConfigureAppConfiguration(
                 (context, configBuilder) => this.AddConfigurationFiles(
                     configBuilder,
-                    getConfigFiles(this.PathFinderService!, this.FileSystemService!, context.Configuration)))
-            .ConfigureServices((context, sc) => configureOptionsPattern(context.Configuration, sc))
+                    getConfigFiles(this.PathFinderService!, this.FileSystemService!, context.Configuration)));
 
-            // At this stage, we may reconfigure the Logger using the loaded configuration
-            .ConfigureAppConfiguration(
-                (_, config) =>
-                {
-                    // Build a temporary config to get access to the command line arguments.
-                    // NOTE: we expect the `--mode dev|real` optional argument.
-                    var configuration = config.Build();
-                    CreateLogger(configuration);
-                });
+        if (configureOptionsPattern is not null)
+        {
+            _ = this.builder.ConfigureServices((context, sc) => configureOptionsPattern(context.Configuration, sc));
+        }
 
         return this;
     }
@@ -441,6 +438,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <summary>
     /// Creates and configures the global Serilog logger instance.
     /// </summary>
+    /// <param name="container">The IoC container, which can be used to register the OutputLog delegating sink.</param>
     /// <param name="configuration">Optional configuration to customize logger settings. If null, uses default debug configuration.</param>
     /// <remarks>
     /// Configuration behavior:
@@ -469,7 +467,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// </list>
     /// </remarks>
     /// <seealso cref="ConfigureLogging" />
-    private static void CreateLogger(IConfiguration? configuration = null)
+    private static void CreateLogger(IContainer? container = null, IConfiguration? configuration = null)
     {
         var loggerConfig = new LoggerConfiguration();
 
@@ -491,6 +489,10 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                     new ExpressionTemplate(
                         "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
                         new CultureInfo("en-US")));
+            if (container is not null)
+            {
+                loggerConfig.WriteTo.OutputLogView<RichTextBlockSink>(container, theme: Themes.Literate);
+            }
         }
 
         if (configuration is not null)
@@ -549,8 +551,11 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <summary>
     /// Registers the services created during the early bootstrapping phase in the final container.
     /// </summary>
+    /// <param name="context">
+    /// The host builder context, which can provide us with the <see cref="IConfiguration" /> object.
+    /// </param>
     /// <param name="container">The final container, passed by the host builder.</param>
-    private void ConfigureEarlyServices(IContainer container)
+    private void ConfigureEarlyServices(HostBuilderContext context, IContainer container)
     {
         // This is the final container that will be used by the application.
         this.finalContainer = container;
@@ -560,6 +565,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         container.RegisterInstance(this.FileSystemService);
         container.RegisterInstance<IPathFinder>(this.PathFinderService!);
 
+        CreateLogger(container, context.Configuration);
         Log.Information(
             $"Application `{this.PathFinderService.ApplicationName}` starting in `{this.PathFinderService.Mode}` mode");
     }
