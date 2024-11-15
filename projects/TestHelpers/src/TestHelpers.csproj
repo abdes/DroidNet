@@ -14,4 +14,20 @@
         <PackageReference Include="MSTest.TestFramework" />
     </ItemGroup>
 
+    <ItemGroup>
+        <PackageReference Include="Verify.DiffPlex" />
+        <PackageReference Include="Verify.MSTest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Serilog.Expressions" />
+        <PackageReference Include="Serilog.Extensions.Logging" />
+        <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Destructurama.Attributed" />
+    </ItemGroup>
+
 </Project>
