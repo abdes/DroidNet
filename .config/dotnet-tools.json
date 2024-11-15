@@ -7,15 +7,15 @@
             "commands": ["dotnet-format"]
         },
         "xamlstyler.console": {
-            "version": "3.2311.2",
+            "version": "3.2404.2",
             "commands": ["xstyler"]
         },
         "microsoft.visualstudio.slngen.tool": {
-            "version": "11.2.6",
+            "version": "11.4.21",
             "commands": ["slngen"]
         },
         "nbgv": {
-            "version": "3.6.133",
+            "version": "3.6.146",
             "commands": ["nbgv"]
         }
     }
