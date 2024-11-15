@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using IContainer = DryIoc.IContainer;
 
 /// <summary>
 /// Contains unit test cases for the <see cref="Bootstrapper" /> class.
@@ -38,6 +39,11 @@ public sealed partial class BootstrapperTests : IDisposable
         {
             bootstrapper?.Dispose();
         }
+    }
+
+    private interface IMyService
+    {
+        public void DoSomething();
     }
 
     public void Dispose() => this.defaultConfiguredBuilder.Dispose();
@@ -150,6 +156,52 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = vmToViewModel.Should().NotBeNull();
         vmToViewModel = this.defaultConfiguredBuilder.Container.GetService<ViewModelToView>();
         _ = vmToViewModel.Should().NotBeNull();
+    }
+
+    [TestMethod]
+    [DisplayName("WithAppServices(Container) should configure application-specific services")]
+    public void WithAppServices_Container_ShouldConfigureApplicationServices()
+    {
+        // Arrange
+        var args = Array.Empty<string>();
+        using var bootstrapper = new Bootstrapper(args);
+        bootstrapper.Configure();
+
+        // Act
+        _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
+
+        // Assert
+        var service = bootstrapper.Container.Resolve<IMyService>();
+        _ = service.Should().NotBeNull();
+        _ = service.Should().BeOfType<MyService>();
+
+        void ConfigureApplicationServices(IContainer container)
+            => container.Register<IMyService, MyService>(Reuse.Singleton);
+    }
+
+    [TestMethod]
+    [DisplayName("WithAppServices(ServiceCollection) should configure application-specific services")]
+    public void WithAppServices_ServiceCollection_ShouldConfigureApplicationServices()
+    {
+        // Arrange
+        var args = Array.Empty<string>();
+        using var bootstrapper = new Bootstrapper(args);
+        bootstrapper.Configure();
+
+        // Act
+        _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
+
+        // Assert
+        var service = bootstrapper.Container.Resolve<IMyService>();
+        _ = service.Should().NotBeNull();
+        _ = service.Should().BeOfType<MyService>();
+
+        void ConfigureApplicationServices(IServiceCollection sc, Bootstrapper bs)
+        {
+            _ = bs; // Unused
+
+            sc.AddSingleton<IMyService, MyService>();
+        }
     }
 
     /*
@@ -327,6 +379,14 @@ public sealed partial class BootstrapperTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("MODE", value: null);
+        }
+    }
+
+    private class MyService : IMyService
+    {
+        public void DoSomething()
+        {
+            // Implementation here
         }
     }
 }
