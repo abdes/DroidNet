@@ -99,5 +99,10 @@
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
     </PropertyGroup>
+    <ItemGroup>
+      <AppxManifest Update="Package.appxmanifest">
+        <SubType>Designer</SubType>
+      </AppxManifest>
+    </ItemGroup>
 
 </Project>

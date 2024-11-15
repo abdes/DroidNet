@@ -8,7 +8,7 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="4af4628e-a801-4d05-88d4-c5b096aa0837"
+    Name="D92CE2CA-DADA-4E6C-99C6-D9962E3B9397"
     Publisher="CN=DroidNet"
     Version="1.0.0.0" />
 
@@ -34,7 +34,7 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Hosting.Demo.App"
+        DisplayName="Docking Demo App"
         Description="Hosting Demo App"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
