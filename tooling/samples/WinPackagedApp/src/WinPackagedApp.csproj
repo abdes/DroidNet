@@ -5,41 +5,82 @@
         <OutputType>WinExe</OutputType>
         <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win10-x86;win10-x64;win10-arm64</RuntimeIdentifiers>
+        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
         <IsPackable>false</IsPackable>
 
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
+        <!-- The App is Packaged, unless we're running a GitHub workflow -->
+        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
+
+        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
         <EnableMsixTooling>true</EnableMsixTooling>
-        <PublishReadyToRun>true</PublishReadyToRun>
-        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
+
+        <AssemblyName>DroidNet.WinPackagedApp</AssemblyName>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <!-- For the debug symbols package -->
         <DebugType>portable</DebugType>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
-        <RootNamespace>$(RootNameSpace).WinPackagedApp</RootNamespace>
+        <RootNamespace>$(RootNameSpace)</RootNamespace>
 
-        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3842 -->
-        <UseRidGraph>true</UseRidGraph>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+        <!-- Use our own Main entry point so we can control the HostBuilder -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+        <StartupObject>$(RootNamespace).Program</StartupObject>
+    </PropertyGroup>
+
+    <!--These project properties will be included in the generated AssemblyInfo -->
+    <PropertyGroup>
+        <Product>Packaged App</Product>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <GITHUB_ACTIONS>false</GITHUB_ACTIONS>
     </PropertyGroup>
 
     <ItemGroup>
-        <Content Include="Assets\SplashScreen.scale-200.png" />
-        <Content Include="Assets\LockScreenLogo.scale-200.png" />
-        <Content Include="Assets\Square150x150Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-        <Content Include="Assets\StoreLogo.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+        <Manifest Include="$(ApplicationManifest)" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="Assets\**\*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Serilog.Expressions" />
+        <PackageReference Include="Serilog.Extensions.Logging" />
+        <PackageReference Include="Serilog.Extensions.Hosting" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Serilog.Settings.Configuration" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
+    </ItemGroup>
+    <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <Manifest Include="$(ApplicationManifest)" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="WinUIEx" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
+
+        <!-- Rererence the attributes project "treat as an analyzer"-->
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
     <!--
