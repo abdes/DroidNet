@@ -5,21 +5,16 @@
 namespace DroidNet.Routing.Samples.Simple;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Bootstrap;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Samples.Simple.Navigation;
 using DroidNet.Routing.Samples.Simple.Shell;
-using DroidNet.Routing.WinUI;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Xaml;
 using Serilog;
-using Serilog.Events;
-using Serilog.Templates;
 
 /// <summary>The Main entry of the application.</summary>
 /// <remarks>
@@ -41,54 +36,35 @@ using Serilog.Templates;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic error if a
-    /// check fails. Otherwise, it quietly does nothing.
-    /// </summary>
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
+        // Ensures that the process can run XAML, and provides a deterministic error if a check
+        // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
-        ConfigureLogger();
-
-        Log.Information("Setting up the host");
-
+        var bootstrap = new Bootstrapper(args);
         try
         {
-            var builder = Host.CreateDefaultBuilder(args);
+            bootstrap.Configure()
+                .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
+                .WithLoggingAbstraction()
+                .WithMvvm()
+                .WithRouting(MakeRoutes())
+                .WithWinUI<App>()
+                .WithAppServices(ConfigureApplicationServices);
 
-            // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
-
-            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
-            // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                Hosting.WinUI.WinUiHostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
-
-            var host = builder
-                .ConfigureAppConfiguration(AddConfigurationFiles)
-                .ConfigureWinUI<App>()
-                .ConfigureContainer<DryIocServiceProvider>(
-                    (_, serviceProvider) =>
-                    {
-                        var container = serviceProvider.Container;
-                        container.ConfigureLogging();
-                        container.ConfigureRouter(MakeRoutes());
-                        container.ConfigureApplicationServices();
-
-                        // Setup the CommunityToolkit.Mvvm Ioc helper
-                        Ioc.Default.ConfigureServices(serviceProvider);
-                    })
-                .Build();
-
-            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
-            // closing the UI windows or programmatically.
-            host.Run();
+            // Finally start the host. This will block until the application lifetime is terminated
+            // through CTRL+C, closing the UI windows or programmatically.
+            bootstrap.Run();
         }
         catch (Exception ex)
         {
@@ -97,25 +73,30 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            bootstrap.Dispose();
         }
     }
 
-    /// <summary>
-    /// Use Serilog, but decouple the logging clients from the implementation by using the generic <see cref="ILogger" /> instead
-    /// of Serilog's ILogger.
-    /// </summary>
-    /// <seealso href="https://nblumhardt.com/2021/06/customize-serilog-text-output/" />
-    private static void ConfigureLogger() =>
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
+    private static void ConfigureApplicationServices(this IContainer container)
+    {
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+
+        // Views and ViewModels
+        container.Register<ShellView>(Reuse.Singleton);
+        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<PageOneView>(Reuse.Singleton);
+        container.Register<PageOneViewModel>(Reuse.Singleton);
+        container.Register<PageTwoView>(Reuse.Singleton);
+        container.Register<PageTwoViewModel>(Reuse.Singleton);
+        container.Register<PageThreeView>(Reuse.Singleton);
+        container.Register<PageThreeViewModel>(Reuse.Singleton);
+        container.Register<RoutedNavigationView>(Reuse.Singleton);
+        container.Register<RoutedNavigationViewModel>(Reuse.Singleton);
+        container.Register<SettingsView>(Reuse.Singleton);
+        container.Register<SettingsViewModel>(Reuse.Singleton);
+    }
 
     private static Routes MakeRoutes() => new(
     [
@@ -164,10 +145,4 @@ public static partial class Program
             ]),
         },
     ]);
-
-    private static void AddConfigurationFiles(HostBuilderContext context, IConfigurationBuilder config)
-    {
-        _ = context; // unused
-        _ = config; // unused
-    }
 }
