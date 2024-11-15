@@ -6,23 +6,25 @@
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
 
-        <!--
-        Visual Studio can show the generated source files in the dependencies
-        under the generator package. The below setting may be useful if not
-        using Visual Studio.
-        -->
-        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
-
-        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
+        <Title>OutputLog Control</Title>
+        <Description>A reusable and customizable log output view for displaying log events in desktop applications using WinUI 3. This control integrates with Serilog for logging functionality and allows you to output logs to a `RichTextBlock` control with theming support.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;controls;logging;richtext;colored;logview;custom</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
         <RootNamespace>$(RootNamespace).Controls.OutputLog</RootNamespace>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
