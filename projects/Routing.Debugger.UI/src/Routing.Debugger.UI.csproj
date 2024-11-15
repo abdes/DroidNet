@@ -6,29 +6,20 @@
         <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
         <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
-        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
-        <!--
-        Visual Studio can show the generated source files in the dependencies
-        under the generator package. The below setting may be useful if not
-        using Visual Studio.
-        -->
-        <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
+        <Title>User Interface for the Routing Debugger App</Title>
+        <Description>Provides the view, viewmodels and controls used in the UI for the Routing debugger.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;routing;debugger;controls</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <!-- <GenerateLibraryLayout>true</GenerateLibraryLayout>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-        <PackageOutputPath>$(SolutionDir)/.Packages</PackageOutputPath> -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-        <RootNamespace>$(RootNamespace).Routing.Debugger.UI</RootNamespace>
+        <RootNamespace>$(RootNameSpace).Routing.Debugger.UI</RootNamespace>
     </PropertyGroup>
-    <ItemGroup>
-        <None Remove="Docks\EmbeddedAppView.xaml" />
-        <None Remove="TreeView\ExpandingTreeControl.xaml" />
-        <None Remove="TreeView\Styles.xaml" />
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
@@ -55,12 +46,6 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Update="Assets\**\*.*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
     </ItemGroup>
 
 </Project>

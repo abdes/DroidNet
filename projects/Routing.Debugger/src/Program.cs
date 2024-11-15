@@ -8,25 +8,23 @@
 
 namespace DroidNet.Routing.Debugger;
 
-using System.Globalization;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
-using Destructurama;
-using DroidNet.Hosting.WinUI;
+using DroidNet.Bootstrap;
+using DroidNet.Docking.Controls;
+using DroidNet.Docking.Layouts;
 using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
+using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.Debugger.UI.Shell;
 using DroidNet.Routing.Debugger.UI.State;
 using DroidNet.Routing.Debugger.UI.UrlTree;
 using DroidNet.Routing.Debugger.UI.WorkSpace;
 using DroidNet.Routing.Debugger.Welcome;
-using DroidNet.Routing.WinUI;
-using DryIoc.Microsoft.DependencyInjection;
+using DryIoc;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Xaml;
 using Serilog;
-using Serilog.Events;
-using Serilog.Templates;
-using Container = DryIoc.Container;
 
 /// <summary>
 /// The Main entry of the application.
@@ -40,55 +38,33 @@ using Container = DryIoc.Container;
 /// </remarks>
 public static partial class Program
 {
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic
-    /// error if a check fails. Otherwise, it quietly does nothing.
-    /// </summary>
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
         XamlCheckProcessRequirements();
 
-        ConfigureLogger();
-
-        Log.Information("Setting up the host");
-
+        var bootstrap = new Bootstrapper(args);
         try
         {
-            // Use a default application host builder, which comes with logging, configuration providers for environment
-            // variables, command line, 'appsettings.json' and secrets.
-            var builder = Host.CreateDefaultBuilder(args);
+            bootstrap.Configure()
+                .WithConfiguration((_, _, _) => [], null)
+                .WithLoggingAbstraction()
+                .WithMvvm()
+                .WithRouting(MakeRoutes())
+                .WithWinUI<App>()
+                .WithAppServices(ConfigureApplicationServices);
 
-            // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
-
-            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
-            // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                Hosting.WinUI.WinUiHostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
-
-            var host = builder
-                .ConfigureWinUI<App>()
-                .ConfigureContainer<DryIocServiceProvider>(
-                    (_, serviceProvider) =>
-                    {
-                        var container = serviceProvider.Container;
-                        container.ConfigureLogging();
-                        container.ConfigureRouter(MakeRoutes());
-                        container.ConfigureApplicationServices();
-
-                        // Setup the CommunityToolkit.Mvvm Ioc helper
-                        Ioc.Default.ConfigureServices(serviceProvider);
-                    })
-                .Build();
-
-            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
-            // closing the UI windows or programmatically.
-            host.Run();
+            // Finally start the host. This will block until the application lifetime is terminated
+            // through CTRL+C, closing the UI windows or programmatically.
+            bootstrap.Run();
         }
         catch (Exception ex)
         {
@@ -97,23 +73,36 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            bootstrap.Dispose();
         }
     }
 
-    private static void ConfigureLogger() =>
+    private static void ConfigureApplicationServices(this IContainer container)
+    {
+        container.Register<DockViewFactory>(Reuse.Singleton);
+        container.Register<DockPanelViewModel>(Reuse.Transient);
+        container.Register<DockPanel>(Reuse.Transient);
 
-        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
-        Log.Logger = new LoggerConfiguration()
-            .Destructure.UsingAttributes()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+
+        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<ShellView>(Reuse.Singleton);
+        container.Register<EmbeddedAppViewModel>(Reuse.Transient);
+        container.Register<EmbeddedAppView>(Reuse.Transient);
+        container.Register<WelcomeViewModel>(Reuse.Transient);
+        container.Register<WelcomeView>(Reuse.Transient);
+        container.Register<WorkSpaceViewModel>(Reuse.Transient);
+        container.Register<WorkSpaceView>(Reuse.Singleton);
+        container.Register<RoutesViewModel>(Reuse.Singleton);
+        container.Register<RoutesView>(Reuse.Transient);
+        container.Register<UrlTreeViewModel>(Reuse.Singleton);
+        container.Register<UrlTreeView>(Reuse.Transient);
+        container.Register<RouterStateViewModel>(Reuse.Transient);
+        container.Register<RouterStateView>(Reuse.Transient);
+        container.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
+    }
 
     private static Routes MakeRoutes() => new(
     [
