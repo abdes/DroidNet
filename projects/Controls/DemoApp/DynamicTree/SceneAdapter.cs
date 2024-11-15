@@ -43,7 +43,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
 
     public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);
 
-    protected override int GetChildrenCount() => this.AttachedObject.Entities.Count;
+    protected override int DoGetChildrenCount() => this.AttachedObject.Entities.Count;
 
     protected override async Task LoadChildren()
     {

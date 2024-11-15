@@ -57,7 +57,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
         else
         {
-            // Do not add the root item, add its children instead and check if it they need to be expanded
+            // Do not add the root item, add its children instead, and check if they need to be expanded
             root.IsExpanded = true;
         }
 
@@ -69,35 +69,14 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
     protected async Task InsertItem(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
-        if (relativeIndex < 0)
-        {
-            Debug.WriteLine(
-                $"Request to insert an item in the tree with negative index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}");
-            relativeIndex = 0;
-        }
+        relativeIndex = ValidateRelativeIndex();
 
-        if (relativeIndex > parent.ChildrenCount)
-        {
-            Debug.WriteLine(
-                $"Request to insert an item in the tree at index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}, " +
-                $"which is out of range [0, {parent.ChildrenCount.ToString(CultureInfo.InvariantCulture)}]");
-            relativeIndex = parent.ChildrenCount;
-        }
+        // Always expand the item before adding to force the children collection to be fully loaded.
+        await EnsureParentIsExpandedAsync().ConfigureAwait(true);
 
-        // Always expand the item before adding to to force the children collection to be fully loaded.
-        if (!parent.IsExpanded)
-        {
-            await this.ExpandItemAsync(parent).ConfigureAwait(true);
-        }
-
-        // Fire the ItemBeingAdded event before any changes are made to the tree
-        var eventArgs = new ItemBeingAddedEventArgs()
-        {
-            TreeItem = item,
-            Parent = parent,
-        };
-        this.ItemBeingAdded?.Invoke(this, eventArgs);
-        if (!eventArgs.Proceed)
+        // Fire the ItemBeingAdded event before any changes are made to the tree, and stop if the
+        // returned verdict is not to proceed
+        if (!ApproveItemBeingAdded())
         {
             return;
         }
@@ -105,62 +84,114 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         // Clear selection first because after insertion, the selected indices will be invalid
         this.SelectionModel?.ClearSelection();
 
+        // Add new item to its parent
         await parent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
 
-        int newItemIndex;
-        if (relativeIndex == 0)
-        {
-            newItemIndex = this.ShownItems.IndexOf(parent) + 1;
-        }
-        else if (relativeIndex == parent.ChildrenCount - 1)
-        {
-            // Find the previous sibling index in the shown items collection and use
-            // it to insert the item just after it.
-            var siblings = await parent.Children.ConfigureAwait(true);
-            var siblingBefore = siblings[relativeIndex - 1];
-            var siblingFound = false;
-            newItemIndex = 0;
-            foreach (var shownItem in this.ShownItems)
-            {
-                if (!siblingFound && shownItem != siblingBefore)
-                {
-                    ++newItemIndex;
-                    continue;
-                }
-
-                siblingFound = true;
-
-                if (shownItem.Depth < siblingBefore.Depth)
-                {
-                    break;
-                }
-
-                ++newItemIndex;
-            }
-
-            Debug.Assert(newItemIndex >= 0, "must be a valid index");
-        }
-        else
-        {
-            // Find the next sibling index in the shown items collection and use
-            // it to insert the item just before it.
-            var siblings = await parent.Children.ConfigureAwait(true);
-            var nextSibling = siblings[relativeIndex + 1];
-            newItemIndex = this.ShownItems.IndexOf(nextSibling);
-            Debug.Assert(newItemIndex >= 0, "must be a valid index");
-        }
-
+        // Update our shown items collection
+        var newItemIndex = await FindNewItemIndexAsync().ConfigureAwait(true);
         this.ShownItems.Insert(newItemIndex, item);
 
+        // Select the new item
         this.SelectionModel?.SelectItemAt(newItemIndex);
 
-        this.ItemAdded?.Invoke(
-            this,
-            new ItemAddedEventArgs()
+        FireItemAddedEvent();
+        return;
+
+        int ValidateRelativeIndex()
+        {
+            if (relativeIndex < 0)
             {
-                RelativeIndex = relativeIndex,
+                Debug.WriteLine(
+                    $"Request to insert an item in the tree with negative index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}");
+                relativeIndex = 0;
+            }
+
+            if (relativeIndex > parent.ChildrenCount)
+            {
+                Debug.WriteLine(
+                    $"Request to insert an item in the tree at index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}, " +
+                    $"which is out of range [0, {parent.ChildrenCount.ToString(CultureInfo.InvariantCulture)}]");
+                relativeIndex = parent.ChildrenCount;
+            }
+
+            return relativeIndex;
+        }
+
+        async Task EnsureParentIsExpandedAsync()
+        {
+            if (!parent.IsExpanded)
+            {
+                await this.ExpandItemAsync(parent).ConfigureAwait(true);
+            }
+        }
+
+        bool ApproveItemBeingAdded()
+        {
+            var eventArgs = new TreeItemBeingAddedEventArgs()
+            {
                 TreeItem = item,
-            });
+                Parent = parent,
+            };
+            this.ItemBeingAdded?.Invoke(this, eventArgs);
+            return eventArgs.Proceed;
+        }
+
+        async Task<int> FindNewItemIndexAsync()
+        {
+            int i;
+            if (relativeIndex == 0)
+            {
+                i = this.ShownItems.IndexOf(parent) + 1;
+            }
+            else if (relativeIndex == parent.ChildrenCount - 1)
+            {
+                // Find the previous sibling index in the shown items collection and use
+                // it to insert the item just after it.
+                var siblings = await parent.Children.ConfigureAwait(true);
+                var siblingBefore = siblings[relativeIndex - 1];
+                var siblingFound = false;
+                i = 0;
+                foreach (var shownItem in this.ShownItems)
+                {
+                    if (!siblingFound && shownItem != siblingBefore)
+                    {
+                        ++i;
+                        continue;
+                    }
+
+                    siblingFound = true;
+
+                    if (shownItem.Depth < siblingBefore.Depth)
+                    {
+                        break;
+                    }
+
+                    ++i;
+                }
+
+                Debug.Assert(i >= 0, "must be a valid index");
+            }
+            else
+            {
+                // Find the next sibling index in the shown items collection and use
+                // it to insert the item just before it.
+                var siblings = await parent.Children.ConfigureAwait(true);
+                var nextSibling = siblings[relativeIndex + 1];
+                i = this.ShownItems.IndexOf(nextSibling);
+                Debug.Assert(i >= 0, "must be a valid index");
+            }
+
+            return i;
+        }
+
+        void FireItemAddedEvent()
+            => this.ItemAdded?.Invoke(
+                this,
+                new TreeItemAddedEventArgs
+                {
+                    RelativeIndex = relativeIndex,
+                    TreeItem = item,
+                });
     }
 
     // TODO: should add events for item add, delete, move to different parent
@@ -174,7 +205,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         }
 
         // Fire the ItemBeingRemoved event before any changes are made to the tree
-        var eventArgs = new ItemBeingRemovedEventArgs() { TreeItem = item };
+        var eventArgs = new TreeItemBeingRemovedEventArgs() { TreeItem = item };
         this.ItemBeingRemoved?.Invoke(this, eventArgs);
         if (!eventArgs.Proceed)
         {
@@ -197,7 +228,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
             this.ItemRemoved?.Invoke(
                 this,
-                new ItemRemovedEventArgs()
+                new TreeItemRemovedEventArgs()
                 {
                     RelativeIndex = childIndex,
                     TreeItem = child,
@@ -219,7 +250,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         this.ItemRemoved?.Invoke(
             this,
-            new ItemRemovedEventArgs()
+            new TreeItemRemovedEventArgs()
             {
                 RelativeIndex = itemIndex,
                 TreeItem = item,

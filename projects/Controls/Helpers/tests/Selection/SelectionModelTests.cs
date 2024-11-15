@@ -45,6 +45,10 @@ public partial class SelectionModelTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all exceptions are ignored because we just care about checking that the assertion failed")]
     public void UpdateSelectedIndex_AssertsIndexArgumentIsValid()
     {
         // Arrange

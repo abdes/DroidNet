@@ -66,7 +66,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         UndoRedo.Default[this].EndChangeSet();
     }
 
-    private void OnItemAdded(object? sender, ItemAddedEventArgs args)
+    private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
     {
         _ = sender; // unused
 
@@ -78,7 +78,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.LogItemAdded(args.TreeItem.Label);
     }
 
-    private void OnItemRemoved(object? sender, ItemRemovedEventArgs args)
+    private void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
 
@@ -135,7 +135,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
-    private void OnItemBeingAdded(object? sender, ItemBeingAddedEventArgs args)
+    private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
         _ = sender; // unused
 
@@ -145,7 +145,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             {
                 var scene = sceneAdapter.AttachedObject;
                 var parentAdapter = args.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
+                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
                 var project = parentAdapter.AttachedObject;
                 project.Scenes.Add(scene);
                 break;
@@ -167,7 +167,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
-    private void OnItemBeingRemoved(object? sender, ItemBeingRemovedEventArgs args)
+    private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
     {
         _ = sender; // unused
 
@@ -178,7 +178,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             {
                 var scene = sceneAdapter.AttachedObject;
                 var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
+                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
                 var project = parentAdapter.AttachedObject;
                 project.Scenes.Remove(scene);
                 break;

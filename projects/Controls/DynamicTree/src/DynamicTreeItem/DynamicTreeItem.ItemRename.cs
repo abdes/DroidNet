@@ -65,6 +65,10 @@ public partial class DynamicTreeItem
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the visual state is used to indicate whether the label is valid or not")]
     private void TryCommitRename()
     {
         Debug.Assert(

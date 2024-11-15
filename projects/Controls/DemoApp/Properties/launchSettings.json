@@ -1,11 +1,12 @@
 {
-  "profiles": {
-    "DemoApp (Package)": {
-      "commandName": "MsixPackage"
-    },
-    "DemoApp (Unpackaged)": {
-        "commandName": "Project",
-        "nativeDebugging": true
+    "profiles": {
+        "DemoApp (Package)": {
+            "commandName": "MsixPackage",
+            "commandLineArgs": "--mode dev"
+        },
+        "DemoApp (Unpackaged)": {
+            "commandName": "Project",
+            "commandLineArgs": "--mode dev"
+        }
     }
-  }
 }

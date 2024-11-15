@@ -5,6 +5,7 @@
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Security.Cryptography;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -31,13 +32,10 @@ public static class ThumbnailGenerator
 
         using var stream = bitmap.PixelBuffer.AsStream();
         var pixels = new byte[width * height * 4]; // RGBA
-        var rand = new Random();
+        RandomNumberGenerator.Fill(pixels);
 
         for (var i = 0; i < pixels.Length; i += 4)
         {
-            pixels[i] = (byte)rand.Next(256); // R
-            pixels[i + 1] = (byte)rand.Next(256); // G
-            pixels[i + 2] = (byte)rand.Next(256); // B
             pixels[i + 3] = 255; // A
         }
 

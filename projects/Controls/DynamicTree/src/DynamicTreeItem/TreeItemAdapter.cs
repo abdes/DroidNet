@@ -35,7 +35,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 /// indicate that its <see cref="Children" /> collection should be populated when the item is displayed. This also applies to the
 /// <see cref="ChildrenCount" /> property. It is lazily evaluated. If the <see cref="Children" /> collection has already been
 /// populated, the count is obtained from that collection; otherwise, it is requested from the concrete class implementation via
-/// the <see cref="GetChildrenCount" /> abstract method.
+/// the <see cref="DoGetChildrenCount" /> abstract method.
 /// </para>
 /// </remarks>
 public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
@@ -168,7 +168,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     public int ChildrenCount => this.childrenLazy.IsValueCreated
         ? this.children.Count
-        : this.GetChildrenCount();
+        : this.DoGetChildrenCount();
 
     /// <inheritdoc />
     public abstract bool ValidateItemName(string name);
@@ -256,7 +256,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// possible, getting the count of children items should be implemented in a lightweight and efficient manner that does not
     /// require a full update of the <seealso cref="Children" /> collection.
     /// </remarks>
-    protected abstract int GetChildrenCount();
+    protected abstract int DoGetChildrenCount();
 
     /// <summary>
     /// Loads the child items asynchronously. Used to lazily initialize the collection of child items.
