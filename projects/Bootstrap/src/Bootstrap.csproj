@@ -32,6 +32,7 @@
         <PackageReference Include="Serilog.Extensions.Hosting" />
         <PackageReference Include="Serilog.Sinks.Console" />
         <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Serilog.Sinks.File" />
         <PackageReference Include="Serilog.Settings.Configuration" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
@@ -45,6 +46,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing.WinUI\src\Routing.WinUI.csproj" />
     </ItemGroup>
 
