@@ -38,7 +38,7 @@
 
     <!--These project properties will be included in the generated AssemblyInfo -->
     <PropertyGroup>
-        <Product>Packaged App</Product>
+        <Product>DroidNet Hosting Demo</Product>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -77,21 +77,17 @@
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
     </ItemGroup>
 
-    <!--
-    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
-    Tools extension to be activated for this project even if the Windows App SDK Nuget
-    package has not yet been restored.
-  -->
+    <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be
+    activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
 
-    <!--
-    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
-    Explorer "Package and Publish" context menu entry to be enabled for this project even if
-    the Windows App SDK Nuget package has not yet been restored.
-  -->
+    <!-- Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and
+    Publish" context menu entry to be enabled for this project even if the Windows App SDK Nuget package has not yet
+    been restored. -->
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
     </PropertyGroup>
+
 </Project>
