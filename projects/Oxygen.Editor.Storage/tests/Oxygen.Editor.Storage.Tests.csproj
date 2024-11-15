@@ -4,10 +4,7 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
-
-        <IsPackable>false</IsPackable>
-        <IsTestProject>true</IsTestProject>
+        <Platforms>x64</Platforms>
 
         <RootNamespace>Oxygen.Editor.Storage</RootNamespace>
     </PropertyGroup>

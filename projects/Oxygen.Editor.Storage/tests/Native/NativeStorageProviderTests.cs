@@ -186,7 +186,7 @@ public class NativeStorageProviderTests
     [DataRow("sub_folder_1", @"c:\folder\sub_folder_1")]
     public async Task GetFolderFromPathAsync_ShouldReturnGoodFolderFromGoodPath(string name, string path)
     {
-        var folder = await this.nsp.GetFolderFromPathAsync(path);
+        var folder = await this.nsp.GetFolderFromPathAsync(path).ConfigureAwait(false);
         _ = folder.Should().NotBeNull();
         _ = folder.Name.Should().BeEquivalentTo(name);
         _ = this.fs.Path.IsPathFullyQualified(folder.Location).Should().BeTrue();
@@ -229,7 +229,7 @@ public class NativeStorageProviderTests
     [DataRow("other_file.xyz", @"c:\folder\sub_folder_1\other_file.xyz")]
     public async Task GetDocumentFromPathAsync_ShouldReturnGoodDocumentFromGoodPath(string name, string path)
     {
-        var folder = await this.nsp.GetDocumentFromPathAsync(path);
+        var folder = await this.nsp.GetDocumentFromPathAsync(path).ConfigureAwait(false);
         _ = folder.Should().NotBeNull();
         _ = folder.Name.Should().BeEquivalentTo(name);
         _ = this.fs.Path.IsPathFullyQualified(folder.Location).Should().BeTrue();

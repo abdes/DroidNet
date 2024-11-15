@@ -10,26 +10,40 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Bootstrap;
 using DroidNet.Config;
+using DroidNet.Docking.Controls;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
-using DroidNet.Routing.WinUI;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.ProjectBrowser.Config;
+using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectBrowser.Views;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Config;
+using Oxygen.Editor.Projects.Storage;
+using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell;
+using Oxygen.Editor.Storage;
+using Oxygen.Editor.Storage.Native;
+using Oxygen.Editor.WorldEditor.ContentBrowser;
+using Oxygen.Editor.WorldEditor.ProjectExplorer;
+using Oxygen.Editor.WorldEditor.ViewModels;
+using Oxygen.Editor.WorldEditor.Views;
 using Serilog;
-using Testably.Abstractions;
 
 /// <summary>
 /// The Main entry of the application.
@@ -56,74 +70,44 @@ using Testably.Abstractions;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    private static OxygenPathFinder? PathFinderService { get; set; }
-
-    private static IFileSystem FileSystemService { get; } = new RealFileSystem();
-
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic error if a
-    /// check fails. Otherwise, it quietly does nothing.
-    /// </summary>
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
+        // Ensures that the process can run XAML, and provides a deterministic error if a check
+        // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
-        Log.Information("Setting up the host");
-
+        var bootstrap = new Bootstrapper(args);
         try
         {
-            var builder = Host.CreateDefaultBuilder(args);
+            bootstrap.Configure()
+                .WithConfiguration(AddConfigurationFiles, ConfigureOptionsPattern)
+                .WithLoggingAbstraction()
+                .WithMvvm()
+                .WithRouting(MakeRoutes())
+                .WithWinUI<App>()
+                .WithAppServices(ConfigurePersistentStateDatabase)
+                .WithAppServices(RegisterViewsAndViewModels)
+                .WithAppServices(ConfigureApplicationServices);
 
-            // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()))
-
-                // Add configuration files and configure Options, but first, initialize the IPathFinder instance, so it
-                // can be used to resolve configuration file paths.
-                .ConfigureAppConfiguration(
-                    (_, config) =>
-                    {
-                        // Build a temporary config to get access to the command line arguments.
-                        // NOTE: we expect the `--mode dev|real` optional argument.
-                        var tempConfig = config.Build();
-                        PathFinderService = CreatePathFinder(tempConfig);
-                    })
-                .ConfigureAppConfiguration(AddConfigurationFiles)
-                .ConfigureServices(ConfigureOptionsPattern)
-                .ConfigureServices(ConfigurePersistentStateDatabase)
-
-                // Continue configuration using DryIoc container API. Configure early services, including Logging. Note
-                // however, that before this point, Logger injection cannot be used.
-                .ConfigureContainer<DryIocServiceProvider>(provider => ConfigureEarlyServices(provider.Container));
-
-            // Add the WinUI User Interface hosted service as early as possible to allow the UI to start showing up
-            // while you continue setting up other services not required for the UI.
-            builder.Properties.Add(
-                WinUiHostingExtensions.HostingContextKey,
-                new HostingContext() { IsLifetimeLinked = true });
-            _ = builder.ConfigureWinUI<App>();
-
-            // Configure the rest of the application services
-            _ = builder.ConfigureContainer<DryIocServiceProvider>(
-                (_, provider) =>
-                {
-                    var container = provider.Container;
-                    container.ConfigureApplicationServices();
-                });
-
-            var host = builder.Build();
+            var host = bootstrap.Build();
             using (var scope = host.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
                 db.Database.Migrate();
             }
 
-            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
-            // closing the UI windows or programmatically.
-            host.Run();
+            // Finally start the host. This will block until the application lifetime is terminated
+            // through CTRL+C, closing the UI windows or programmatically.
+            bootstrap.Run();
         }
         catch (Exception ex)
         {
@@ -132,47 +116,9 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            bootstrap.Dispose();
         }
     }
-
-    private static void ConfigureEarlyServices(IContainer container)
-    {
-        container.RegisterInstance(FileSystemService);
-        container.RegisterInstance<IPathFinder>(PathFinderService!);
-        container.RegisterInstance<IOxygenPathFinder>(PathFinderService!);
-        container.ConfigureLogging();
-        container.ConfigureRouter(MakeRoutes());
-
-        // Setup the CommunityToolkit.Mvvm Ioc helper
-        Ioc.Default.ConfigureServices(container);
-
-        Debug.Assert(
-            PathFinderService is not null,
-            "did you forget to register the IPathFinder service?");
-        Log.Information(
-            $"Application `{PathFinderService.ApplicationName}` starting in `{PathFinderService.Mode}` mode");
-    }
-
-    private static OxygenPathFinder CreatePathFinder(IConfiguration configuration)
-    {
-#if DEBUG
-        var mode = configuration["mode"] ?? PathFinder.DevelopmentMode;
-#else
-        var mode = configuration["mode"] ?? PathFinder.RealMode;
-#endif
-        var assembly = Assembly.GetEntryAssembly() ?? throw new CouldNotIdentifyMainAssemblyException();
-        var companyName = GetAssemblyAttribute<AssemblyCompanyAttribute>(assembly)?.Company;
-        var applicationName = GetAssemblyAttribute<AssemblyProductAttribute>(assembly)?.Product;
-
-        var finderConfig = CreateFinderConfig(mode, companyName, applicationName);
-        return new OxygenPathFinder(FileSystemService, finderConfig);
-    }
-
-    private static PathFinder.Config CreateFinderConfig(string mode, string? companyName, string? applicationName)
-        => new(
-            mode,
-            companyName ?? throw new ArgumentNullException(nameof(companyName)),
-            applicationName ?? throw new ArgumentNullException(applicationName));
 
     private static Routes MakeRoutes() => new(
     [
@@ -222,44 +168,40 @@ public static partial class Program
                 {
                     // The project browser is the root of a navigation view with multiple pages.
                     Path = "we",
-                    ViewModelType = typeof(WorldEditor.ViewModels.WorkspaceViewModel),
+                    ViewModelType = typeof(WorkspaceViewModel),
                 },
             ]),
         },
     ]);
 
-    private static void AddConfigurationFiles(IConfigurationBuilder config)
+    private static IEnumerable<string> AddConfigurationFiles(
+        IPathFinder finder,
+        IFileSystem fileSystem,
+        IConfiguration config)
     {
-        Debug.Assert(PathFinderService is not null, "must setup the PathFinderService before adding config files");
+        Debug.Assert(finder is not null, "must setup the PathFinderService before adding config files");
 
         /* TODO: use the settings service */
         /* TODO: this path is plain wrong - need to embed the configs or find a way to copy them to the app root folder */
 
-        var projectBrowserConfigPath = PathFinderService.GetProgramConfigFilePath(
+        var projectBrowserConfigPath = finder.GetProgramConfigFilePath(
             $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}/Config/ProjectBrowser.config.json");
 
-        var categoriesConfigPath = PathFinderService.GetProgramConfigFilePath(
+        var categoriesConfigPath = finder.GetProgramConfigFilePath(
             $"{Assembly.GetAssembly(typeof(ProjectsSettings))!.GetName().Name}/Config/Categories.config.json");
 
-        // NOTE: Some settings classes may share the same configuration file, and only use a section
-        // in it. We should only add the file once.
-        var configFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            // TODO: PathFinderService.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-            PathFinderService.GetConfigFilePath("LocalSettings.json"),
+        return
+        [
+            /* TODO: PathFinderService.GetConfigFilePath(AppearanceSettings.ConfigFileName),*/
+
+            finder.GetConfigFilePath("LocalSettings.json"),
             projectBrowserConfigPath,
             categoriesConfigPath,
-        };
-
-        foreach (var configFile in configFiles)
-        {
-            _ = config.AddJsonFile(configFile, optional: true, reloadOnChange: true);
-        }
+        ];
     }
 
-    private static void ConfigureOptionsPattern(HostBuilderContext context, IServiceCollection sc)
+    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
     {
-        var config = context.Configuration;
         _ = sc.Configure<ProjectBrowserSettings>(config.GetSection(ProjectBrowserSettings.ConfigSectionName));
         _ = sc.Configure<ProjectsSettings>(config.GetSection(ProjectsSettings.ConfigSectionName));
 
@@ -267,22 +209,99 @@ public static partial class Program
         _ = sc.Configure<ThemeSettings>(config.GetSection(nameof(ThemeSettings)));
     }
 
-    private static void ConfigurePersistentStateDatabase(IServiceCollection sc)
+    private static void ConfigurePersistentStateDatabase(IServiceCollection sc, Bootstrapper bs)
     {
-        Debug.Assert(PathFinderService is not null, "must setup the PathFinderService before adding config files");
+        Debug.Assert(bs.PathFinderService is not null, "must setup the PathFinderService before adding config files");
 
-        var localStateFolder = PathFinderService.LocalAppState;
+        var localStateFolder = bs.PathFinderService.LocalAppState;
         var dbPath = Path.Combine(localStateFolder, "state.db");
         _ = sc.AddSqlite<PersistentState>($"Data Source={dbPath}; Mode=ReadWriteCreate");
     }
 
-    private static T? GetAssemblyAttribute<T>(Assembly assembly)
-        where T : Attribute
-        => (T?)Attribute.GetCustomAttribute(assembly, typeof(T));
+    private static void ConfigureApplicationServices(this IContainer container)
+    {
+        /*
+         * Register core services.
+         */
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Roslynator",
-        "RCS1194:Implement exception constructors",
-        Justification = "This is a simple exception, used only in this class")]
-    private sealed class CouldNotIdentifyMainAssemblyException : Exception;
+        container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
+        container.Register<NativeStorageProvider>(Reuse.Singleton);
+        container.Register<IActivationService, ActivationService>(Reuse.Singleton);
+
+        /*
+         * Register domain specific services.
+         */
+
+        // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
+        // Register specific template source implementations KEYED. They are injected only as a collection of implementation
+        // instances, only by the universal source.
+        container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
+        container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
+        container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
+
+        // TODO: use keyed registration and parameter name to key mappings
+        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
+        container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
+        container.Register<LocalProjectsSource>(Reuse.Singleton);
+        container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
+        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+        container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
+
+        // Register the project instance using a delegate that will request the currently open project from the project
+        // browser service.
+        container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
+
+        /*
+         * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
+         * if the view cannot be located.
+         */
+
+        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+        container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
+
+        container.Register<DockPanelViewModel>(Reuse.Transient);
+        container.Register<DockPanel>(Reuse.Transient);
+
+        /*
+         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
+         * target name is the key used when registering the window type.
+         *
+         * There should always be a Window registered for the special target <c>_main</c>.
+         */
+
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+
+        // Views and ViewModels
+        RegisterViewsAndViewModels(container);
+    }
+
+    private static void RegisterViewsAndViewModels(IContainer container)
+    {
+        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<ShellView>(Reuse.Singleton);
+
+        container.Register<MainViewModel>(Reuse.Transient);
+        container.Register<MainView>(Reuse.Transient);
+        container.Register<HomeViewModel>(Reuse.Transient);
+        container.Register<HomeView>(Reuse.Transient);
+        container.Register<NewProjectViewModel>(Reuse.Transient);
+        container.Register<NewProjectView>(Reuse.Transient);
+        container.Register<OpenProjectViewModel>(Reuse.Transient);
+        container.Register<OpenProjectView>(Reuse.Transient);
+
+        container.Register<WorkspaceViewModel>(Reuse.Transient);
+        container.Register<WorkspaceView>(Reuse.Transient);
+        container.Register<SceneDetailsView>(Reuse.Transient);
+        container.Register<SceneDetailsViewModel>(Reuse.Transient);
+        container.Register<RendererView>(Reuse.Transient);
+        container.Register<RendererViewModel>(Reuse.Transient);
+        container.Register<LogsView>(Reuse.Transient);
+        container.Register<LogsViewModel>(Reuse.Transient);
+        container.Register<ProjectExplorerView>(Reuse.Transient);
+        container.Register<ProjectExplorerViewModel>(Reuse.Transient);
+        container.Register<ContentBrowserView>(Reuse.Transient);
+        container.Register<ContentBrowserViewModel>(Reuse.Transient);
+    }
 }

@@ -8,9 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using DroidNet.Resources;
-using Microsoft.Extensions.DependencyInjection;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
@@ -27,12 +25,15 @@ public class ProjectBrowserService : IProjectBrowserService
     private readonly NativeStorageProvider localStorage;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
+    private readonly PersistentState state;
 
     public ProjectBrowserService(
+        PersistentState state,
         IProjectManagerService projectManager,
         IOxygenPathFinder finder,
         IStorageProvider localStorage)
     {
+        this.state = state;
         this.projectManager = projectManager;
         this.finder = finder;
         this.localStorage = localStorage as NativeStorageProvider ?? throw new ArgumentException(
@@ -97,10 +98,10 @@ public class ProjectBrowserService : IProjectBrowserService
                 if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
                 {
                     // Update the recently used project entry for the project being saved
-                    await TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
+                    await this.TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
 
                     // Update the last save location
-                    await TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName)
+                    await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName)
                         .ConfigureAwait(false);
 
                     return true;
@@ -158,11 +159,9 @@ public class ProjectBrowserService : IProjectBrowserService
 
     public IList<QuickSaveLocation> GetQuickSaveLocations()
     {
-        using var state = Ioc.Default.CreateScope().ServiceProvider.GetRequiredService<PersistentState>();
-
         var locations = new List<QuickSaveLocation>();
 
-        var lastSaveLocation = state.ProjectBrowserState.LastSaveLocation;
+        var lastSaveLocation = this.state.ProjectBrowserState.LastSaveLocation;
         if (lastSaveLocation != string.Empty)
         {
             locations.Add(new QuickSaveLocation("Recently Used", lastSaveLocation));
@@ -177,10 +176,9 @@ public class ProjectBrowserService : IProjectBrowserService
     public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var state = Ioc.Default.CreateAsyncScope().ServiceProvider.GetRequiredService<PersistentState>();
-        await using (state.ConfigureAwait(false))
+        await using (this.state.ConfigureAwait(false))
         {
-            foreach (var item in state.RecentlyUsedProjects)
+            foreach (var item in this.state.RecentlyUsedProjects)
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -197,7 +195,7 @@ public class ProjectBrowserService : IProjectBrowserService
                 {
                     try
                     {
-                        _ = state.RecentlyUsedProjects!.Remove(item);
+                        _ = this.state.RecentlyUsedProjects!.Remove(item);
                     }
                     catch (Exception ex)
                     {
@@ -206,59 +204,12 @@ public class ProjectBrowserService : IProjectBrowserService
                 }
             }
 
-            _ = await state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            _ = await this.state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
         => await this.lazyLocations.Value.ConfigureAwait(false);
-
-    private static async Task TryUpdateRecentUsageAsync(string location)
-    {
-        try
-        {
-            var state = Ioc.Default.CreateAsyncScope().ServiceProvider.GetRequiredService<PersistentState>();
-            await using (state.ConfigureAwait(false))
-            {
-                var recentProjectEntry = state.RecentlyUsedProjects.ToList()
-                    .SingleOrDefault(
-                        p => string.Equals(p.Location, location, StringComparison.Ordinal),
-                        new RecentlyUsedProject(0, location));
-                if (recentProjectEntry.Id != 0)
-                {
-                    recentProjectEntry.LastUsedOn = DateTime.Now;
-                    _ = state.RecentlyUsedProjects!.Update(recentProjectEntry);
-                }
-                else
-                {
-                    state.ProjectBrowserState.RecentProjects.Add(recentProjectEntry);
-                }
-
-                _ = await state.SaveChangesAsync().ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
-        }
-    }
-
-    private static async Task TryUpdateLastSaveLocation(string location)
-    {
-        try
-        {
-            var state = Ioc.Default.CreateAsyncScope().ServiceProvider.GetRequiredService<PersistentState>();
-            await using (state.ConfigureAwait(false))
-            {
-                state.ProjectBrowserState.LastSaveLocation = location;
-                _ = await state.SaveChangesAsync().ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
-        }
-    }
 
 #pragma warning disable SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]
@@ -267,6 +218,51 @@ public class ProjectBrowserService : IProjectBrowserService
         uint dwFlags,
         nint hToken = default);
 #pragma warning restore SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
+
+    private async Task TryUpdateRecentUsageAsync(string location)
+    {
+        try
+        {
+            await using (this.state.ConfigureAwait(false))
+            {
+                var recentProjectEntry = this.state.RecentlyUsedProjects.ToList()
+                    .SingleOrDefault(
+                        p => string.Equals(p.Location, location, StringComparison.Ordinal),
+                        new RecentlyUsedProject(0, location));
+                if (recentProjectEntry.Id != 0)
+                {
+                    recentProjectEntry.LastUsedOn = DateTime.Now;
+                    _ = this.state.RecentlyUsedProjects!.Update(recentProjectEntry);
+                }
+                else
+                {
+                    this.state.ProjectBrowserState.RecentProjects.Add(recentProjectEntry);
+                }
+
+                _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
+        }
+    }
+
+    private async Task TryUpdateLastSaveLocation(string location)
+    {
+        try
+        {
+            await using (this.state.ConfigureAwait(false))
+            {
+                this.state.ProjectBrowserState.LastSaveLocation = location;
+                _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
+        }
+    }
 
     private async Task<KnownLocation[]> InitializeKnownLocationsAsync()
     {

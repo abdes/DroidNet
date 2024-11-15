@@ -349,7 +349,7 @@ public class NativeFileTests
         var targetFolder = await this.nsp.GetFolderFromPathAsync(@"c:\copy-target").ConfigureAwait(false);
 
         // Act
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         await cancellationTokenSource.CancelAsync().ConfigureAwait(false);
         var act = async ()
             => await CopyAsyncWrapper(document, targetFolder, newName, overwrite, cancellationTokenSource.Token)
@@ -539,7 +539,7 @@ public class NativeFileTests
         var targetFolder = await this.nsp.GetFolderFromPathAsync(@"c:\copy-target").ConfigureAwait(false);
 
         // Act
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         await cancellationTokenSource.CancelAsync().ConfigureAwait(false);
         var act = async ()
             => await MoveAsyncWrapper(document, targetFolder, newName, overwrite, cancellationTokenSource.Token)

@@ -33,38 +33,38 @@ public static class TraceListenerCollectionExtensions
     /// </returns>
     public static SuspendTrackerDisposable AssertSuspend(this TraceListenerCollection traceListenerCollection)
         => new(traceListenerCollection);
+}
+
+/// <summary>
+/// This is a helper class that allows us to suspend asserts / all trace listeners.
+/// </summary>
+public sealed class SuspendTrackerDisposable : IDisposable
+{
+    private readonly TraceListener[] suspendedListeners;
+    private readonly TraceListenerCollection traceListenerCollection;
 
     /// <summary>
-    /// This is a helper class that allows us to suspend asserts / all trace listeners.
+    /// Initializes a new instance of the <see cref="SuspendTrackerDisposable" />
+    /// class.
     /// </summary>
-    public class SuspendTrackerDisposable : IDisposable
+    /// <param name="traceListenerCollection">The collection of trace listeners.</param>
+    public SuspendTrackerDisposable(TraceListenerCollection traceListenerCollection)
     {
-        private readonly TraceListener[] suspendedListeners;
-        private readonly TraceListenerCollection traceListenerCollection;
+        this.traceListenerCollection = traceListenerCollection;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SuspendTrackerDisposable" />
-        /// class.
-        /// </summary>
-        /// <param name="traceListenerCollection">The collection of trace listeners.</param>
-        public SuspendTrackerDisposable(TraceListenerCollection traceListenerCollection)
+        var numListeners = traceListenerCollection.Count;
+        this.suspendedListeners = new TraceListener[numListeners];
+        for (var index = 0; index < numListeners; ++index)
         {
-            this.traceListenerCollection = traceListenerCollection;
-
-            var numListeners = traceListenerCollection.Count;
-            this.suspendedListeners = new TraceListener[numListeners];
-            for (var index = 0; index < numListeners; ++index)
-            {
-                this.suspendedListeners[index] = traceListenerCollection[index];
-            }
-
-            traceListenerCollection.Clear();
+            this.suspendedListeners[index] = traceListenerCollection[index];
         }
 
-        public void Dispose()
-        {
-            GC.SuppressFinalize(this);
-            this.traceListenerCollection.AddRange(this.suspendedListeners);
-        }
+        traceListenerCollection.Clear();
+    }
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
+        this.traceListenerCollection.AddRange(this.suspendedListeners);
     }
 }

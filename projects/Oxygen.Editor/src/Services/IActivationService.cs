@@ -57,5 +57,5 @@ namespace Oxygen.Editor.Services;
 /// </list>
 public interface IActivationService : IObservable<object>
 {
-    void Activate(object activationData);
+    public Task ActivateAsync(object activationData);
 }

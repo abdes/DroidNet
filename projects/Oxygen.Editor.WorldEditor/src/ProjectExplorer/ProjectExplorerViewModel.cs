@@ -70,7 +70,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         UndoRedo.Default[this].EndChangeSet();
     }
 
-    private void OnItemAdded(object? sender, ItemAddedEventArgs args)
+    private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
     {
         _ = sender; // unused
 
@@ -82,7 +82,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         this.LogItemAdded(args.TreeItem.Label);
     }
 
-    private void OnItemRemoved(object? sender, ItemRemovedEventArgs args)
+    private void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
 
@@ -141,7 +141,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void OnItemBeingAdded(object? sender, ItemBeingAddedEventArgs args)
+    private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
         _ = sender; // unused
 
@@ -173,7 +173,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void OnItemBeingRemoved(object? sender, ItemBeingRemovedEventArgs args)
+    private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
     {
         _ = sender; // unused
 
@@ -210,7 +210,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
     private async Task LoadProjectAsync()
     {
         var currentProject = this.projectManager.CurrentProject;
-        if (currentProject is not Projects.Project project)
+        if (currentProject is not Project project)
         {
             this.Project = null;
             return;

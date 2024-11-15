@@ -52,6 +52,10 @@ public partial class LocalProjectsSource : IProjectSource
         };
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as null return value")]
     public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath)
     {
         // Check if the project location still exists before adding it (maybe the project was deleted)
@@ -77,6 +81,10 @@ public partial class LocalProjectsSource : IProjectSource
         return null;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as null return value")]
     public async Task<Scene?> LoadSceneAsync(string sceneName, IProject project)
     {
         if (project.ProjectInfo.Location is null)
@@ -130,6 +138,10 @@ public partial class LocalProjectsSource : IProjectSource
 
     public IStorageProvider GetStorageProvider() => this.storage;
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "all failures reported as return value false")]
     public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
     {
         Debug.Assert(projectInfo.Location != null, "The project location must be valid!");

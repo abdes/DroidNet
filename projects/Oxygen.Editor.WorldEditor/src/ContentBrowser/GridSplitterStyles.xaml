@@ -5,25 +5,25 @@
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls">
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
-            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="ControlAltFillColorTertiaryBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="ControlAltFillColorQuarternaryBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="ControlAltFillColorDisabledBrush" />
-            <StaticResource x:Key="SizerBaseForeground" ResourceKey="ControlStrongFillColorDefaultBrush" />
+            <SolidColorBrush x:Key="SizerBaseBackground" Color="{ThemeResource ControlAltFillColorTransparentBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPointerOver" Color="{ThemeResource ControlAltFillColorTertiaryBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPressed" Color="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundDisabled" Color="{ThemeResource ControlAltFillColorDisabledBrush}" />
+            <SolidColorBrush x:Key="SizerBaseForeground" Color="{ThemeResource ControlStrongFillColorDefaultBrush}" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
-            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="ControlAltFillColorTertiaryBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="ControlAltFillColorQuarternaryBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="ControlAltFillColorDisabledBrush" />
-            <StaticResource x:Key="SizerBaseForeground" ResourceKey="ControlStrongFillColorDefaultBrush" />
+            <SolidColorBrush x:Key="SizerBaseBackground" Color="{ThemeResource ControlAltFillColorTransparentBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPointerOver" Color="{ThemeResource ControlAltFillColorTertiaryBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPressed" Color="{ThemeResource ControlAltFillColorQuarternaryBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundDisabled" Color="{ThemeResource ControlAltFillColorDisabledBrush}" />
+            <SolidColorBrush x:Key="SizerBaseForeground" Color="{ThemeResource ControlStrongFillColorDefaultBrush}" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
-            <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPointerOver" ResourceKey="SystemColorHighlightTextColorBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundPressed" ResourceKey="SystemColorHighlightColorBrush" />
-            <StaticResource x:Key="SizerBaseBackgroundDisabled" ResourceKey="SystemColorWindowColorBrush" />
-            <StaticResource x:Key="SizerBaseForeground" ResourceKey="SystemColorButtonTextColorBrush" />
+            <SolidColorBrush x:Key="SizerBaseBackground" Color="{ThemeResource ControlAltFillColorTransparentBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColorBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundPressed" Color="{ThemeResource SystemColorHighlightColorBrush}" />
+            <SolidColorBrush x:Key="SizerBaseBackgroundDisabled" Color="{ThemeResource SystemColorWindowColorBrush}" />
+            <SolidColorBrush x:Key="SizerBaseForeground" Color="{ThemeResource SystemColorButtonTextColorBrush}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

@@ -28,6 +28,10 @@ public class NativeFile : IDocument
 
     public string Location { get; private set; }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "We do want to catch all exception and return the default value of 0")]
     public DateTime LastAccessTime
     {
         get
@@ -44,7 +48,7 @@ public class NativeFile : IDocument
         }
     }
 
-    internal NativeStorageProvider StorageProvider { get; }
+    private NativeStorageProvider StorageProvider { get; }
 
     public Task<bool> ExistsAsync() => Task.FromResult(this.StorageProvider.FileSystem.File.Exists(this.Location));
 
@@ -297,15 +301,7 @@ public class NativeFile : IDocument
         catch (TaskCanceledException)
         {
             // Try to delete any partial result of the copy, ignoring any exception that may occur
-            try
-            {
-                fs.File.Delete(destinationFilePath);
-            }
-            catch (Exception)
-            {
-                Debug.WriteLine(
-                    $"failed to delete copy target file at [{destinationFilePath}] when copy was cancelled");
-            }
+            TryDeleteFile(destinationFilePath);
 
             throw;
         }
@@ -318,5 +314,23 @@ public class NativeFile : IDocument
 
         return await this.StorageProvider.GetDocumentFromPathAsync(destinationFilePath, cancellationToken)
             .ConfigureAwait(false);
+
+        void TryDeleteFile(string filePath)
+        {
+            try
+            {
+                fs.File.Delete(filePath);
+            }
+            catch (IOException ioEx)
+            {
+                Debug.WriteLine(
+                    $"failed to delete copy target file at [{filePath}] when copy was cancelled: {ioEx.Message}");
+            }
+            catch (UnauthorizedAccessException uaEx)
+            {
+                Debug.WriteLine(
+                    $"failed to delete copy target file at [{filePath}] when copy was cancelled: {uaEx.Message}");
+            }
+        }
     }
 }

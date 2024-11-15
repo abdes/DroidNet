@@ -35,7 +35,7 @@ public partial class ProjectAdapter(Project project, IProjectManagerService proj
 
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
-    protected override int GetChildrenCount() => project.Scenes.Count;
+    protected override int DoGetChildrenCount() => project.Scenes.Count;
 
     protected override async Task LoadChildren()
     {

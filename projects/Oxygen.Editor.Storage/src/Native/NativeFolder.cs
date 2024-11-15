@@ -22,6 +22,10 @@ public class NativeFolder : IFolder
 
     public string Location { get; private set; }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "we don't want to fail on getting the LastAccessTime, instead we just use a value of `0`")]
     public DateTime LastAccessTime
     {
         get
@@ -39,7 +43,7 @@ public class NativeFolder : IFolder
         }
     }
 
-    internal NativeStorageProvider StorageProvider { get; }
+    private NativeStorageProvider StorageProvider { get; }
 
     public async Task<IDocument> GetDocumentAsync(string documentName, CancellationToken cancellationToken = default)
     {

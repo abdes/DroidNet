@@ -607,7 +607,7 @@ public class NativeFolderTests
     public async Task GetDocuments_ShouldStopEnumeration_WhenCancellationIsRequested()
     {
         // Arrange
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         var folder = await this.nsp.GetFolderFromPathAsync(@"C:\folder1", cancellationTokenSource.Token)
             .ConfigureAwait(false);
 
@@ -627,7 +627,7 @@ public class NativeFolderTests
     public async Task GetDocuments_ShouldSkipInaccessibleDocuments()
     {
         // Arrange
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         var folder = await this.nsp.GetFolderFromPathAsync(@"C:\folder2", cancellationTokenSource.Token)
             .ConfigureAwait(false);
 
@@ -685,7 +685,7 @@ public class NativeFolderTests
     public async Task GetFolders_ShouldStopEnumeration_WhenCancellationIsRequested()
     {
         // Arrange
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         var folder = await this.nsp.GetFolderFromPathAsync(@"C:\folder1", cancellationTokenSource.Token)
             .ConfigureAwait(false);
 
@@ -705,7 +705,7 @@ public class NativeFolderTests
     public async Task GetFolders_ShouldSkipInaccessibleFolders()
     {
         // Arrange
-        var cancellationTokenSource = new CancellationTokenSource();
+        using var cancellationTokenSource = new CancellationTokenSource();
         var folder = await this.nsp.GetFolderFromPathAsync(@"C:\folder2", cancellationTokenSource.Token)
             .ConfigureAwait(false);
 

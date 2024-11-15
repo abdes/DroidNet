@@ -6,7 +6,6 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.Diagnostics;
 using DroidNet.Routing;
-using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
@@ -15,13 +14,10 @@ using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 /// Implements the <see cref="IRouteActivator" /> interface for activating routes inside the internal router used by the Content
 /// Browser module.
 /// </summary>
-/// <param name="container">
-/// The <see cref="IServiceProvider" /> that should be used to obtain instances of required service, ViewModels and Views.
-/// </param>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
-internal sealed partial class InternalRouteActivator(IContainer container, ILoggerFactory? loggerFactory)
+internal sealed partial class InternalRouteActivator(ILoggerFactory? loggerFactory)
     : AbstractRouteActivator(loggerFactory)
 {
     protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)

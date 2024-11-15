@@ -4,14 +4,13 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
 
         <Title>Oxygen Editor Data Layer</Title>
         <Description>Contains the data model and APIs for projects and templates used by the editor.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;editor;projects;data;persistence</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
         <RootNamespace>Oxygen.Editor.Data</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>

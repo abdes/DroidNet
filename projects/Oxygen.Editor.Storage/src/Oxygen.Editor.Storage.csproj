@@ -4,7 +4,7 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <Platforms>x86;x64;arm64</Platforms>
+        <Platforms>x64</Platforms>
 
         <Title>Oxygen Editor Document Storage Layer</Title>
         <Description>Abstracts the storage of documents and entities in the Oxygen Editor and include implementation for various strage providers, including the native filesystem.</Description>

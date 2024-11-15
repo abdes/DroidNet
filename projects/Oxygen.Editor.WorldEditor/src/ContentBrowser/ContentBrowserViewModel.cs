@@ -92,7 +92,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
                         RoutesConfig,
                         new RouterStateManager(),
                         new RouterContextManager(routerContextProvider),
-                        new InternalRouteActivator(childContainer, loggerFactory),
+                        new InternalRouteActivator(loggerFactory),
                         routerContextProvider,
                         new DefaultUrlSerializer(new DefaultUrlParser()),
                         loggerFactory);
@@ -113,17 +113,20 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
 
     public object? RightPaneViewModel => this.Outlets["right"].viewModel;
 
-    public override void Dispose()
+    protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
         {
             return;
         }
 
-        this.isDisposed = true;
-        this.routerEventsSub.Dispose();
-        GC.SuppressFinalize(this);
-        base.Dispose();
+        if (disposing)
+        {
+            this.isDisposed = true;
+            this.routerEventsSub.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     private sealed partial class LocalRouterContext(object targetObject)
