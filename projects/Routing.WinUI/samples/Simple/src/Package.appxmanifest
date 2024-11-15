@@ -11,14 +11,14 @@
   IgnorableNamespaces="uap rescap genTemplate">
 
     <Identity
-      Name="6ae02a4d-9755-4636-99da-6dd37fd677cb"
+      Name="E144CDE9-5634-4F3C-A8E4-37C067C4E062"
       Publisher="CN=abdes"
       Version="1.0.0.0" />
 
     <mp:PhoneIdentity PhoneProductId="6ae02a4d-9755-4636-99da-6dd37fd677cb" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
     <Properties>
-        <DisplayName>OxygenEditor</DisplayName>
+        <DisplayName>Routing Demo App</DisplayName>
         <PublisherDisplayName>abdes</PublisherDisplayName>
         <Logo>Assets\StoreLogo.png</Logo>
     </Properties>
@@ -37,7 +37,7 @@
           Executable="$targetnametoken$.exe"
           EntryPoint="$targetentrypoint$">
             <uap:VisualElements
-              DisplayName="ms-resource:AppDisplayName"
+              DisplayName="Routing Demo App"
               Description="ms-resource:AppDescription"
               BackgroundColor="transparent"
               Square150x150Logo="Assets\Square150x150Logo.png"
