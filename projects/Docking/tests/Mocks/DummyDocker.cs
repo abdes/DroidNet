@@ -12,12 +12,18 @@ using System.Diagnostics.CodeAnalysis;
 [ExcludeFromCodeCoverage]
 public partial class DummyDocker : IDocker
 {
+    private bool isDisposed;
+
 #pragma warning disable CS0067 // Event is never used
     public event EventHandler<LayoutChangedEventArgs>? LayoutChanged;
 
 #pragma warning restore CS0067 // Event is never used
 
-    public void Dispose() => GC.SuppressFinalize(this);
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
 
     public void Dock(IDock dock, Anchor anchor, bool minimized = false) => throw new NotSupportedException();
 
@@ -34,4 +40,20 @@ public partial class DummyDocker : IDocker
     public void ResizeDock(IDock dock, Width? width, Height? height) => throw new NotSupportedException();
 
     public void CloseDock(IDock dock) => throw new NotSupportedException();
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            /* Dispose of managed resources */
+        }
+
+        /* Dispose of unmanaged resources */
+        this.isDisposed = true;
+    }
 }

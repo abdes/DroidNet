@@ -29,7 +29,7 @@ using DroidNet.Docking.Workspace;
 public abstract partial class Dock : IDock
 {
     private readonly ObservableCollection<IDockable> dockables = [];
-    private bool disposed;
+    private bool isDisposed;
     private Anchor? anchor;
     private Width width = new();
     private Height height = new();
@@ -194,32 +194,52 @@ public abstract partial class Dock : IDock
         this.dockables.Clear();
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        foreach (var dockable in this.dockables)
-        {
-            dockable.AsDockable().PropertyChanged -= this.OnDockablePropertyChanged;
-            dockable.Dispose();
-        }
-
-        // Reset the anchor only after the dockables are disposed of. Our anchor
-        // maybe used to anchor the dockables that were anchored relative to our
-        // dockables.
-        this.anchor = null;
-
-        this.Group = null;
-        this.Docker = null;
-
-        this.disposed = true;
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
     public override string ToString() => $"{this.Id}";
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="Dock" /> and optionally releases the
+    /// managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            /* Dispose of managed resources */
+
+            foreach (var dockable in this.dockables)
+            {
+                dockable.AsDockable().PropertyChanged -= this.OnDockablePropertyChanged;
+                dockable.Dispose();
+            }
+
+            // Reset the anchor only after the dockables are disposed of. Our anchor maybe used to
+            // anchor the dockables that were anchored relative to our dockables.
+            this.anchor = null;
+
+            this.Group = null;
+            this.Docker = null;
+        }
+
+        /* Dispose of unmanaged resources */
+
+        this.isDisposed = true;
+    }
 
     private void OnDockablePropertyChanged(object? sender, PropertyChangedEventArgs args)
     {

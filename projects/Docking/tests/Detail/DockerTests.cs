@@ -10,13 +10,15 @@ using DroidNet.Docking.Workspace;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>
 /// Unit test cases for the <see cref="Docker" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(Docker))]
-public partial class DockerTests : TestSuiteWithAssertions, IDisposable
+public partial class DockerTests : TestSuiteWithAssertions
 {
     private readonly Docker sut = new();
 
@@ -468,11 +470,10 @@ public partial class DockerTests : TestSuiteWithAssertions, IDisposable
         _ = layoutChangeReason.Should().Be(LayoutChangeReason.Floating);
     }
 
-    [TestCleanup]
-    public void Cleanup()
+    protected override void Dispose(bool disposing)
     {
-        this.Dispose();
-
         this.sut.Dispose();
+        base.Dispose(disposing);
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

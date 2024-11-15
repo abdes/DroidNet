@@ -6,9 +6,9 @@ namespace DroidNet.Docking.Workspace;
 
 public interface ILayoutSegment
 {
-    DockGroupOrientation Orientation { get; }
+    public DockGroupOrientation Orientation { get; }
 
-    bool StretchToFill { get; }
+    public bool StretchToFill { get; }
 
-    IDocker Docker { get; }
+    public IDocker Docker { get; }
 }

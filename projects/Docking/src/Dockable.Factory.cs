@@ -27,27 +27,52 @@ public partial class Dockable
 
     public static Dockable New(string id) => Factory.CreateDockable(typeof(Dockable), id);
 
+    /// <inheritdoc />
     public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="Dockable" /> and optionally releases
+    /// the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
     {
         if (this.disposed)
         {
             return;
         }
 
-        // First invoke any subscribers to the OnDisposed event, because they
-        // may still need to use the dockable before it is disposed.
-        this.OnDisposed?.Invoke(this, EventArgs.Empty);
+        if (disposing)
+        {
+            /* Dispose of managed resources */
 
-        Factory.ReleaseDockable(this.Id);
+            // First invoke any subscribers to the OnDisposed event, because they
+            // may still need to use the dockable before it is disposed.
+            this.OnDisposed?.Invoke(this, EventArgs.Empty);
+
+            Factory.ReleaseDockable(this.Id);
+        }
+
+        /* Dispose of unmanaged resources */
 
         this.disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>
     /// A factory class for instances of the <see cref="Dockable" /> class. Manages all the existing instances and guarantees
     /// uniqueness of their id.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1034:Nested types should not be visible",
+        Justification = "nested to be able to set the Id of a dockable, which we want to keep private settable")]
     public static partial class Factory
     {
         private static readonly ConcurrentDictionary<string, Dockable> Dockables = [];
@@ -90,7 +115,7 @@ public partial class Dockable
 
         public static void ReleaseDockable(string id)
         {
-            var found = Dockables.Remove(id, out var _);
+            var found = Dockables.Remove(id, out _);
             Debug.Assert(
                 found,
                 $"unexpected call to {nameof(ReleaseDockable)} with an id `{id}` that is not currently managed");
@@ -106,9 +131,10 @@ public partial class Dockable
         /// <summary>
         /// Provides an implementation of <see cref="IEnumerator" /> for iteration over the collection of all dockables.
         /// </summary>
-        public partial class DockablesEnumerator : IEnumerator<IDockable>
+        internal sealed partial class DockablesEnumerator : IEnumerator<IDockable>
         {
             private int position = -1;
+            private bool isDisposed;
 
             public IDockable Current => Dockables.Values.ElementAt(this.position);
 
@@ -122,14 +148,32 @@ public partial class Dockable
 
             public void Reset() => this.position = -1;
 
-            public void Dispose() => GC.SuppressFinalize(this);
+            /// <inheritdoc />
+            public void Dispose() => this.Dispose(disposing: true);
+
+            private void Dispose(bool disposing)
+            {
+                if (this.isDisposed)
+                {
+                    return;
+                }
+
+                if (disposing)
+                {
+                    /* Dispose of managed resources */
+                }
+
+                /* Dispose of unmanaged resources */
+
+                this.isDisposed = true;
+            }
         }
     }
 
     /// <summary>
     /// Represents an <see cref="IEnumerable">enumerable</see> collection of all the instances of <see cref="Dockable" />.
     /// </summary>
-    public partial class AllDockables : IEnumerable<IDockable>
+    private sealed partial class AllDockables : IEnumerable<IDockable>
     {
         public IEnumerator<IDockable> GetEnumerator() => new Factory.DockablesEnumerator();
 

@@ -8,13 +8,15 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Mocks;
 using FluentAssertions;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>
 /// Unit test cases for the <see cref="BinaryTreeNode{T}" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("BinaryTreeNode")]
-public partial class BinaryTreeNodeTests : IDisposable
+public sealed partial class BinaryTreeNodeTests : IDisposable
 {
     private readonly DummyDocker docker = new();
 
@@ -29,7 +31,6 @@ public partial class BinaryTreeNodeTests : IDisposable
 
         this.docker.Dispose();
 
-        GC.SuppressFinalize(this);
         this.disposed = true;
     }
 
@@ -37,7 +38,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetLeft_Should_UpdateParentRelationship_When_NewLeftNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var newNode = MakeSimpleNode();
 
         // Act
@@ -52,7 +53,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetLeft_Should_HaveNoEffect_When_SameLeftNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var existingNode = MakeSimpleNode();
         parent.Left = existingNode;
 
@@ -68,7 +69,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetLeft_Should_UpdateParentRelationship_When_DifferentLeftNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var oldNode = MakeSimpleNode();
         var newNode = MakeSimpleNode();
         parent.Left = oldNode;
@@ -86,7 +87,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetLeft_Should_AcceptNullValue()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var oldNode = MakeSimpleNode();
         parent.Left = oldNode;
 
@@ -102,7 +103,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetRight_Should_UpdateParentRelationship_When_NewRightNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var newNode = MakeSimpleNode();
 
         // Act
@@ -117,7 +118,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetRight_Should_HaveNoEffect_When_SameRightNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var existingNode = MakeSimpleNode();
         parent.Right = existingNode;
 
@@ -133,7 +134,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetRight_Should_UpdateParentRelationship_When_DifferentRightNode()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var oldNode = MakeSimpleNode();
         var newNode = MakeSimpleNode();
         parent.Right = oldNode;
@@ -151,7 +152,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void SetRight_Should_AcceptNullValue()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var oldNode = MakeSimpleNode();
         parent.Right = oldNode;
 
@@ -180,7 +181,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void Sibling_Should_ReturnRightChild_When_ThisIsLeftChild()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var leftChild = MakeSimpleNode();
         var rightChild = MakeSimpleNode();
         parent.Left = leftChild;
@@ -197,7 +198,7 @@ public partial class BinaryTreeNodeTests : IDisposable
     public void Sibling_Should_ReturnLeftChild_When_ThisIsRightChild()
     {
         // Arrange
-        var parent = MakeSimpleNode();
+        using var parent = MakeSimpleNode();
         var leftChild = MakeSimpleNode();
         var rightChild = MakeSimpleNode();
         parent.Left = leftChild;
@@ -212,3 +213,4 @@ public partial class BinaryTreeNodeTests : IDisposable
 
     private static SimpleBinaryTreeNode MakeSimpleNode() => new(0);
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

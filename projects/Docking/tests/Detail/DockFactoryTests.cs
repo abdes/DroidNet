@@ -9,6 +9,8 @@ using DroidNet.TestHelpers;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>
 /// Unit test cases for the <see cref="Dock.Factory" /> class.
 /// </summary>
@@ -108,3 +110,4 @@ public partial class DockFactoryTests : TestSuiteWithAssertions
         public int IntArg { get; }
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

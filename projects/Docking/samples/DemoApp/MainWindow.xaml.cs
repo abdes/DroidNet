@@ -32,6 +32,8 @@ using Microsoft.UI.Xaml;
 [ObservableObject]
 public sealed partial class MainWindow
 {
+    private readonly Docker? docker;
+
     [ObservableProperty]
     private UIElement? shell;
 
@@ -42,43 +44,63 @@ public sealed partial class MainWindow
         this.InitializeComponent();
 
         // Initialize the docking tree for the demo.
-        var docker = InitializeDockingDemo(resolver);
+        this.docker = InitializeDockingDemo(resolver);
 
         // Initialize the shell for this window.
         var wrapper = resolver.Resolve<Func<Docker, ShellViewModel>>();
-        var shellViewModel = wrapper(docker);
+        var shellViewModel = wrapper(this.docker);
         this.Shell = new ShellView { ViewModel = shellViewModel };
+
+        this.Closed += (_, _) => this.docker.Dispose();
     }
 
     private static Docker InitializeDockingDemo(IResolver resolver)
     {
-        var docker = new Docker();
-        docker.Dock(CenterDock.New(), new Anchor(AnchorPosition.Center));
+        var newDocker = new Docker();
+        Anchor? anchor = null;
+        try
+        {
+            anchor = new Anchor(AnchorPosition.Center);
+            newDocker.Dock(CenterDock.New(), anchor);
 
-        var left1 = MakeDockWithVerticalDockable(resolver, "left1");
-        docker.Dock(left1, new AnchorLeft());
+            var left1 = MakeDockWithVerticalDockable(resolver, "left1");
+            anchor = new AnchorLeft();
+            newDocker.Dock(left1, anchor);
 
-        var left2 = MakeDockWithVerticalDockable(resolver, "left2");
-        docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
-        docker.Dock(MakeDockWithVerticalDockable(resolver, "left3"), new AnchorLeft(), minimized: true);
-        docker.Dock(MakeDockWithVerticalDockable(resolver, "left4"), new AnchorLeft());
+            var left2 = MakeDockWithVerticalDockable(resolver, "left2");
+            anchor = new AnchorBottom(left1.Dockables[0]);
+            newDocker.Dock(left2, anchor);
+            anchor = new AnchorLeft();
+            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "left3"), anchor, minimized: true);
+            anchor = new AnchorLeft();
+            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "left4"), anchor);
 
-        docker.Dock(MakeDockWithHorizontalDockable(resolver, "top1"), new AnchorTop());
+            anchor = new AnchorTop();
+            newDocker.Dock(MakeDockWithHorizontalDockable(resolver, "top1"), anchor);
 
-        docker.Dock(MakeDockWithHorizontalDockable(resolver, "bottom1"), new AnchorBottom(), minimized: true);
+            anchor = new AnchorBottom();
+            newDocker.Dock(MakeDockWithHorizontalDockable(resolver, "bottom1"), anchor, minimized: true);
 
-        var right1 = MakeDockWithVerticalDockable(resolver, "right1");
-        docker.Dock(right1, new AnchorRight());
-        docker.Dock(
-            MakeDockWithVerticalDockable(resolver, "right2"),
-            new Anchor(AnchorPosition.Right, right1.Dockables[0]));
-        docker.Dock(
-            MakeDockWithVerticalDockable(resolver, "right3"),
-            new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
+            var right1 = MakeDockWithVerticalDockable(resolver, "right1");
+            anchor = new AnchorRight();
+            newDocker.Dock(right1, anchor);
 
-        docker.DumpWorkspace();
+            anchor = new Anchor(AnchorPosition.Right, right1.Dockables[0]);
+            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "right2"), anchor);
 
-        return docker;
+            anchor = new Anchor(AnchorPosition.Bottom, right1.Dockables[0]);
+            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "right3"), anchor);
+
+            anchor = null; // Dispose ownership all transferred
+        }
+        finally
+        {
+            anchor?.Dispose();
+        }
+
+        newDocker.DumpWorkspace();
+
+        return newDocker;
     }
 
     private static ToolDock MakeDockWithVerticalDockable(IResolver resolver, string dockableId)

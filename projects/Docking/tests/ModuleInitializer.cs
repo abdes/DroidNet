@@ -26,6 +26,6 @@ public static class ModuleInitializer
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Id));
         VerifierSettings.IgnoreMember(typeof(IDock), nameof(IDock.Docker));
         VerifierSettings.IgnoreMember(typeof(Dock), nameof(Dock.GroupInfo));
-        VerifierSettings.IgnoreMember(typeof(LayoutEngine.Flow), nameof(LayoutEngine.Flow.Description));
+        VerifierSettings.IgnoreMember(typeof(LayoutFlow), nameof(LayoutFlow.Description));
     }
 }

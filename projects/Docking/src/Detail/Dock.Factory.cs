@@ -17,6 +17,10 @@ public partial class Dock
     public static Dock? FromId(DockId id)
         => Factory.TryGetDock(id, out var dock) ? dock : null;
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1034:Nested types should not be visible",
+        Justification = "nested to be able to set the Id of a dock, which we want to keep private settable")]
     public static class Factory
     {
         private static readonly ConcurrentDictionary<DockId, Dock> Docks = [];
@@ -59,7 +63,7 @@ public partial class Dock
             return dock;
         }
 
-        public class AtomicCounter
+        private sealed class AtomicCounter
         {
             private uint value;
 

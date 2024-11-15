@@ -130,7 +130,7 @@ internal partial class BinaryTreeNode<T>(T storedValue) : IDisposable
             this.Right is null ? string.Empty : $"{this.Right.Value}",
         ];
 
-        var childrenStr = children[0] != string.Empty || children[1] != string.Empty
+        var childrenStr = !string.IsNullOrEmpty(children[0]) || !string.IsNullOrEmpty(children[1])
             ? $" {{{string.Join(',', children)}}}"
             : string.Empty;
         return $"{this.Value}{childrenStr}";

@@ -9,13 +9,15 @@ using DroidNet.Docking.Mocks;
 using FluentAssertions;
 using static TreeTraversal;
 
+#pragma warning disable CA2000 // Dispose objects before losing scope
+
 /// <summary>
 /// Unit test cases for the traversal algorithm of binary trees.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(TreeTraversal))]
-public partial class TreeTraversalTests : IDisposable
+public sealed partial class TreeTraversalTests : IDisposable
 {
     private bool disposed;
 
@@ -27,7 +29,6 @@ public partial class TreeTraversalTests : IDisposable
         }
 
         this.disposed = true;
-        GC.SuppressFinalize(this);
     }
 
     [TestMethod]
@@ -168,3 +169,4 @@ public partial class TreeTraversalTests : IDisposable
         _ = flattened.Should().HaveCount(9).And.ContainInConsecutiveOrder([1, 2, 3, 4, 5]);
     }
 }
+#pragma warning restore CA2000 // Dispose objects before losing scope

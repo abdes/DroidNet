@@ -222,6 +222,7 @@
                 TabWidthMode="SizeToContent">
                 <TabView.TabItemTemplate>
                     <DataTemplate x:Key="DockableContentTemplate" x:DataType="docking:Dockable">
+                        <!--  ReSharper disable once Xaml.StaticResourceNotResolved  -->
                         <TabViewItem
                             Content="{Binding Path=ViewModel, Converter={StaticResource VmToViewConverter}}"
                             Header="{Binding Path=TabbedTitle}"

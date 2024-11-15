@@ -9,17 +9,18 @@
 namespace DroidNet.Docking.Demo;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.InteropServices;
-using CommunityToolkit.Mvvm.DependencyInjection;
+using DroidNet.Bootstrap;
+using DroidNet.Docking.Controls;
+using DroidNet.Docking.Demo.Controls;
+using DroidNet.Docking.Demo.Shell;
+using DroidNet.Docking.Demo.Workspace;
+using DroidNet.Docking.Layouts;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
-using DryIoc.Microsoft.DependencyInjection;
+using DryIoc;
 using Microsoft.Extensions.Hosting;
 using Serilog;
-using Serilog.Events;
-using Serilog.Templates;
-using Container = DryIoc.Container;
 
 /// <summary>
 /// The Main entry of the application.
@@ -44,48 +45,34 @@ using Container = DryIoc.Container;
 [ExcludeFromCodeCoverage]
 public static partial class Program
 {
-    /// <summary>
-    /// Ensures that the process can run XAML, and provides a deterministic error if a check fails. Otherwise, it
-    /// quietly does nothing.
-    /// </summary>
     [LibraryImport("Microsoft.ui.xaml.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
+        // Ensures that the process can run XAML, and provides a deterministic error if a check
+        // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
-        ConfigureLogger();
-
-        Log.Information("Setting up the host");
-
+        var bootstrap = new Bootstrapper(args);
         try
         {
-            // Use a default application host builder, which comes with logging, configuration providers for environment
-            // variables, command line, 'appsettings.json' and secrets.
-            var builder = Host.CreateDefaultBuilder(args);
+            bootstrap.Configure()
+                .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
+                .WithLoggingAbstraction()
+                .WithMvvm()
+                .WithWinUI<App>()
+                .WithAppServices(ConfigureApplicationServices);
 
-            // Use DryIoc instead of the built-in service provider.
-            _ = builder.UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container()));
-
-            var host = builder
-                .ConfigureWinUI<App>()
-                .ConfigureContainer<DryIocServiceProvider>(
-                    (_, serviceProvider) =>
-                    {
-                        var container = serviceProvider.Container;
-                        container.ConfigureLogging();
-                        container.ConfigureApplicationServices();
-
-                        // Setup the CommunityToolkit.Mvvm Ioc helper
-                        Ioc.Default.ConfigureServices(serviceProvider);
-                    })
-                .Build();
-
-            // Finally start the host. This will block until the application lifetime is terminated through CTRL+C,
-            // closing the UI windows or programmatically.
-            host.Run();
+            // Finally start the host. This will block until the application lifetime is terminated
+            // through CTRL+C, closing the UI windows or programmatically.
+            bootstrap.Run();
         }
         catch (Exception ex)
         {
@@ -94,20 +81,31 @@ public static partial class Program
         finally
         {
             Log.CloseAndFlush();
+            bootstrap.Dispose();
         }
     }
 
-    private static void ConfigureLogger() =>
+    private static void ConfigureApplicationServices(this IContainer container)
+    {
+        container.Register<DockViewFactory>(Reuse.Singleton);
+        container.Register<DockPanelViewModel>(Reuse.Transient);
+        container.Register<DockPanel>(Reuse.Transient);
 
-        // https://nblumhardt.com/2021/06/customize-serilog-text-output/
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
-            /* .WriteTo.Seq("http://localhost:5341/") */
-            .CreateLogger();
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
+        // corresponding to name of the special target <see cref="Target.Main" />.
+        container.Register<MainWindow>(Reuse.Singleton);
+
+        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<ShellView>(Reuse.Singleton);
+        container.Register<WorkspaceViewModel>(Reuse.Transient);
+        container.Register<WorkspaceView>(Reuse.Transient);
+        container.Register<DockableInfoView>(Reuse.Transient);
+        container.Register<DockableInfoViewModel>(Reuse.Transient);
+        container.Register<WelcomeView>(Reuse.Transient);
+        container.Register<WelcomeViewModel>(Reuse.Transient);
+
+        container.Register<DockPanelViewModel>(Reuse.Transient);
+        container.Register<DockPanel>(Reuse.Transient);
+        container.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
+    }
 }
