@@ -12,8 +12,4 @@
         <ProjectReference Include="..\src\Collections.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
-    </ItemGroup>
-
 </Project>
