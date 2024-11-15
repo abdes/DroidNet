@@ -284,6 +284,10 @@ public partial class DefaultViewLocator(
         return this.AttemptViewResolution(proposedViewTypeName);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "we want to catch all, because we use diagnostics to report errors")]
     private IViewFor? AttemptViewResolution(string viewTypeName)
     {
         try

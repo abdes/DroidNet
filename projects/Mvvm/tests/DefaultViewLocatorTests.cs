@@ -2,9 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm;
+namespace DroidNet.Mvvm.Tests;
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Mvvm;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;

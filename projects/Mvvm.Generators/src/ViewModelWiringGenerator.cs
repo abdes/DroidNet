@@ -77,6 +77,10 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(viewClasses, GenerateViewModelWiring);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "We do want to catch all here and only report errors as diagnostics")]
     private static void GenerateViewModelWiring(SourceProductionContext context, GeneratorAttributeSyntaxContext syntax)
     {
         // If we are called, there must be a ViewModelAttribute in the attributes.
@@ -131,7 +135,8 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
         {
             using var stream = assembly.GetManifestResourceStream(dotPath);
             Debug.Assert(stream is not null, $"expecting to be able to load the template as a resource at: {dotPath}");
-            return new StreamReader(stream).ReadToEnd();
+            using var streamReader = new StreamReader(stream);
+            return streamReader.ReadToEnd();
         }
         catch (Exception ex)
         {
@@ -150,6 +155,8 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
 
     // These are internal exceptions only with their custom constructors, so that we have a common code block for diagnostics.
 #pragma warning disable RCS1194 // Implement exception constructors
+#pragma warning disable CA1032 // Implement standard exception constructors
+#pragma warning disable CA1064 // Exceptions should be public
 
     /// <summary>
     /// Internal exception, thrown to terminate the generation when the template for the class to be generated could not be found.
@@ -172,5 +179,7 @@ public sealed class ViewModelWiringGenerator : IIncrementalGenerator
     private sealed class CouldNotLoadTemplateException(string path, string error) : Exception(
         $"Could not load template '{path}': {error}");
 
+#pragma warning restore CA1064 // Exceptions should be public
+#pragma warning restore CA1032 // Implement standard exception constructors
 #pragma warning restore RCS1194 // Implement exception constructors
 }

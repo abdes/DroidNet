@@ -18,7 +18,7 @@ namespace DroidNet.Mvvm.Generators;
 /// name.
 /// </param>
 [AttributeUsage(AttributeTargets.Class)]
-public class ViewModelAttribute(Type viewModelType) : Attribute
+public sealed class ViewModelAttribute(Type viewModelType) : Attribute
 {
     /// <summary>
     /// Gets the value of the attribute's parameter containing the ViewModel

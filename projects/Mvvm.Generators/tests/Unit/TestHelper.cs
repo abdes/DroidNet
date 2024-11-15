@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators;
+namespace DroidNet.Mvvm.Generators.Tests;
 
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.CodeAnalysis;
@@ -35,7 +35,7 @@ public static class TestHelper
         // Create a Roslyn compilation for the syntax tree.
         var compilation = CSharpCompilation.Create(
             "Tests",
-            new[] { syntaxTree },
+            [syntaxTree],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 

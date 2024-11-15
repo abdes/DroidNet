@@ -8,17 +8,22 @@ using System.Diagnostics;
 using DroidNet.Mvvm;
 using Microsoft.UI.Xaml.Data;
 
-/// <summary>Provides conversion from a ViewModel to the corresponding View using the <see cref="IViewLocator" />.</summary>
+/// <summary>
+/// Provides conversion from a ViewModel to the corresponding View using the
+/// <see cref="IViewLocator" />.
+/// </summary>
 /// <param name="viewLocator">The view locator used for resolution.</param>
 /// <remarks>
-/// In a ViewModel first MVVM approach, it is often the case that the application visual state is represented by a hierarchy of
-/// ViewModel objects. When a View needs to present the content for a specific ViewModel as a child content, it is necessary to
-/// transform that ViewModel into the corresponding View. This is straightforward from the code behind, using the view locator,
-/// but requires a converter in XAML.
+/// In a ViewModel first MVVM approach, it is often the case that the application visual state is
+/// represented by a hierarchy of ViewModel objects. When a View needs to present the content for a
+/// specific ViewModel as a child content, it is necessary to transform that ViewModel into the
+/// corresponding View. This is straightforward from the code behind, using the view locator, but
+/// requires a converter in XAML.
 /// <para>
-/// This converter needs to be made available as a StaticResource, and it is recommended to have this done once at the application
-/// level. Things can get a bit complicated when a Dependency Injector is also being used because XAML and DI don't work well
-/// together. The recommended approach is to add the resource in the code behind, for example in the <c>App.xaml.cs</c> file.
+/// This converter needs to be made available as a StaticResource, and it is recommended to have
+/// this done once at the application level. Things can get a bit complicated when a Dependency
+/// Injector is also being used because XAML and DI don't work well together. The recommended
+/// approach is to add the resource in the code behind, for example in the <c>App.xaml.cs</c> file.
 /// </para>
 /// <code lang="cs"><![CDATA[
 ///     private const string VmToViewConverterResourceKey = "VmToViewConverter";
@@ -64,8 +69,8 @@ public partial class ViewModelToView(IViewLocator viewLocator) : IValueConverter
             view is IViewFor,
             $"a resolved view object must implement `{nameof(IViewFor)}<T>` where `T` is the view model");
 
-        // It's extremely important that the ViewModel property of the view is set here so that we have a completely transparent
-        // management of the ViewModel property.
+        // It's extremely important that the ViewModel property of the view is set here so that we
+        // have a completely transparent management of the ViewModel property.
         ((IViewFor)view).ViewModel = value;
 
         return view;

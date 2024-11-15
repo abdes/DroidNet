@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators.ViewModels;
-
-using DroidNet.Mvvm.Generators.Demo;
+namespace DroidNet.Mvvm.Generators.Tests.Demo;
 
 /// <summary>
 /// A simple view model to be wired to the <see cref="DemoView" /> view.

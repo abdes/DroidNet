@@ -2,15 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators;
+namespace DroidNet.Mvvm.Generators.Tests;
 
 using System.Diagnostics.CodeAnalysis;
+using FluentAssertions;
 
 /// <summary>
 /// Snapshot tests for the <see cref="ViewModelWiringGenerator" />.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("ViewModel Wiring Generator")]
 public class ViewModelWiringGeneratorTests : VerifyBase
 {
     /// <summary>
@@ -39,7 +41,8 @@ public class ViewModelWiringGeneratorTests : VerifyBase
         // Use verify to snapshot test the source generator output!
         var driver = TestHelper.GeneratorDriver(source);
         var runResults = driver.GetRunResult();
-        return this.Verify(runResults).UseDirectory("Snapshots");
+        return this.Verify(runResults.Results.FirstOrDefault().GeneratedSources.FirstOrDefault().SourceText.ToString())
+            .UseDirectory("Snapshots");
     }
 
     /// <summary>
@@ -67,6 +70,8 @@ public class ViewModelWiringGeneratorTests : VerifyBase
         // Use verify to snapshot test the source generator output!
         var driver = TestHelper.GeneratorDriver(source);
         var runResults = driver.GetRunResult();
-        return this.Verify(runResults).UseDirectory("Snapshots");
+        runResults.Results.Length.Should().Be(1);
+        runResults.Results[0].Diagnostics.Length.Should().Be(1);
+        return this.Verify(runResults.Results[0].Diagnostics[0].ToString()).UseDirectory("Snapshots");
     }
 }
