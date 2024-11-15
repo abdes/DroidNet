@@ -130,6 +130,9 @@
                 <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
                 <PackageReference Include="FluentAssertions" />
             </ItemGroup>
+            <ItemGroup>
+                <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
+            </ItemGroup>
         </When>
     </Choose>
     <Choose>
