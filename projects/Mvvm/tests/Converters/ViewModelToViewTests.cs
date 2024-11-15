@@ -2,10 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Converters;
+namespace DroidNet.Mvvm.Tests.Converters;
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;

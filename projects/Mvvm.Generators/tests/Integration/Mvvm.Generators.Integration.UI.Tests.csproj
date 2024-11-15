@@ -3,59 +3,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-        <Platforms>x86;x64;arm64</Platforms>
-        <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-
-        <UseWinUI>true</UseWinUI>
-        <EnableMsixTooling>true</EnableMsixTooling>
-        <WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
-        <WindowsAppContainer>true</WindowsAppContainer>
-
-        <!-- Disable for now, until https://github.com/microsoft/testfx/issues/2620 is fixed -->
-        <EnableMSTestRunner>false</EnableMSTestRunner>
-        <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
-        <!-- Use this to have dotnet test use MSTest runner. Disable for now until we have WinUI working in the test runner. -->
-        <!--<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>-->
-
-        <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
+        <RootNamespace>$(RootNameSpace).Mvvm.Generators.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <AppxManifest Include="Package.appxmanifest">
-            <SubType>Designer</SubType>
-        </AppxManifest>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Manifest Include="$(ApplicationManifest)" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="Assets\LockScreenLogo.scale-200.png" />
-        <Content Include="Assets\SplashScreen.scale-200.png" />
-        <Content Include="Assets\Square150x150Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.scale-200.png" />
-        <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-        <Content Include="Assets\StoreLogo.png" />
-        <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Hosting" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-        <PackageReference Include="CommunityToolkit.Mvvm" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
 
         <!--
-        For source generator (or analyzer) projects, you need to tweak the project
-        reference element so it works as intended. Specifically, you need to add
-        the OutputItemType and ReferenceOutputAssembly attributes.
+        For source generator (or analyzer) projects, you need to tweak the
+        project reference element so it works as intended. Specifically, you
+        need to add the OutputItemType and ReferenceOutputAssembly attributes.
 
          - OutputItemType="Analyzer" tells the compiler to load the project as
            part of the compilation process.
@@ -68,8 +25,6 @@
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
-
-        <ProjectReference Include="$(ProjectsRoot)\Routing\src\Routing.csproj" />
     </ItemGroup>
 
 </Project>

@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators;
+namespace DroidNet.Mvvm.Generators.Tests;
 
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using CommunityToolkit.Mvvm.DependencyInjection;
-using DroidNet.Mvvm.Generators.Demo;
-using DroidNet.Mvvm.Generators.ViewModels;
+using DroidNet.Mvvm.Generators.Tests.Demo;
+using DryIoc;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -17,17 +17,15 @@ using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("ViewModel to View Wiring")]
 public class ViewModelWiringTests
 {
-    /// <summary>
-    /// Validate that the generated extensions do wire the ViewModel properly
-    /// and export the ViewModel property.
-    /// </summary>
     [UITestMethod]
     [TestCategory("UITest")]
+    [DisplayName("Generated extensions do wire the ViewModel properly and export the ViewModel property")]
     public void GenerateViewExtensionsCorrectly()
     {
-        var view = Ioc.Default.GetService<IViewFor<DemoViewModel>>();
+        var view = TestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
         _ = view.Should()
             .NotBeNull(
                 $"""
@@ -44,15 +42,12 @@ public class ViewModelWiringTests
                 """);
     }
 
-    /// <summary>
-    /// Validate that the generated extensions trigger the ViewModelChanged
-    /// event when the ViewModel property is changed.
-    /// </summary>
     [UITestMethod]
     [TestCategory("UITest")]
+    [DisplayName("Generated extensions trigger the ViewModelChanged event when the ViewModel property is changed")]
     public void TriggerEventWhenViewModelIsChanged()
     {
-        var view = Ioc.Default.GetRequiredService<IViewFor<DemoViewModel>>();
+        var view = TestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
         _ = view.Should().NotBeNull();
 
         var eventTriggered = false;

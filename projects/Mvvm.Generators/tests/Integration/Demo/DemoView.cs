@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators.Demo;
+namespace DroidNet.Mvvm.Generators.Tests.Demo;
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Generators;
-using DroidNet.Mvvm.Generators.ViewModels;
 using Microsoft.UI.Xaml;
 
 /// <summary>

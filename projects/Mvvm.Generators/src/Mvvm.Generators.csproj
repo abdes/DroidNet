@@ -14,7 +14,7 @@ https://github.com/amis92/csharp-source-generators
 
         <!--
         Must override this to false from the Directory.Build.props or Nuget
-        will refuse to make the package because we are no shipping the assembly
+        will refuse to make the package because we are not shipping the assembly
         in the usual lib directory for a generator. Instead we ship it in the
         analyzers/dotnet/cs directory.
         -->
@@ -24,17 +24,22 @@ https://github.com/amis92/csharp-source-generators
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IsRoslynComponent>true</IsRoslynComponent>
         <DevelopmentDependency>true</DevelopmentDependency>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <!--Make nuget package automatically during msbuild run-->
-        <IsPackable>true</IsPackable>
-        <!--Also can make the nuget package with dotnet pack-->
+
+        <Title>Source generator for View to ViewModel wiring</Title>
+        <Description>Generates the necessary boilerplate code for implementing `IViewFor{T}` interface on your views, reducing repetitive tasks and improving maintainability.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;mvvm;views;viewmodel;dependency;injection;generator</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
         <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
-        <Title>Source generator for View to ViewModel wiring</Title>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
-
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
     <PropertyGroup>
         <NoWarn>1701;1702;NU5128</NoWarn>
@@ -43,13 +48,6 @@ https://github.com/amis92/csharp-source-generators
     <ItemGroup>
         <None Remove="Templates\**\*.txt" />
         <EmbeddedResource Include="Templates\**\*.txt" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <None Update="README.md">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
     </ItemGroup>
 
     <!--Required for any analyzer / generator-->

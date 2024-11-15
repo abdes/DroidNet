@@ -17,7 +17,7 @@ public interface IViewLocator
     /// </summary>
     /// <param name="viewModel">The view model.</param>
     /// <returns>The 'view' associated with the given view model.</returns>
-    object? ResolveView(object viewModel);
+    public object? ResolveView(object viewModel);
 
     /// <summary>
     /// Determines the 'view' for a ViewModel type <typeparamref name="T" />.
@@ -26,6 +26,6 @@ public interface IViewLocator
     /// <returns>
     /// The 'view' associated with the given view model type.
     /// </returns>
-    IViewFor<T>? ResolveView<T>()
+    public IViewFor<T>? ResolveView<T>()
         where T : class;
 }

@@ -7,7 +7,7 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="55c08abd-eb90-40ee-aebf-b08fca804394"
+    Name="015FD274-93B3-4C4A-86A1-6741EEF7FA58"
     Publisher="CN=abdes"
     Version="1.0.0.0" />
 
@@ -31,7 +31,7 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="AppFwkDep.Core.Tests Package"
+        DisplayName="DroidNet.Mvvm.UI.Tests"
         Description="AppFwkDep.Core.Tests"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"

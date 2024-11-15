@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!-- https://andrewlock.net/creating-a-source-generator-part-8-solving-the-source-generator-marker-attribute-problem-part2/ -->
-
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
 
-        <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
+        <Title>Attributes for DroidNet.Mvvm generators</Title>
+        <Description>Contains the implementation of the annotation Attributes for DroidNet.Mvvm generators, used for View to ViewModel wiring.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;mvvm;views;viewmodel;dependency;injection;generator</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+        <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
 </Project>
