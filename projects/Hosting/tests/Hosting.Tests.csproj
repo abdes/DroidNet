@@ -13,11 +13,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Moq" />
+        <ProjectReference Include="..\src\Hosting.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\src\Hosting.csproj" />
+        <PackageReference Include="Moq" />
     </ItemGroup>
 
 </Project>
