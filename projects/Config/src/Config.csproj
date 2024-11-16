@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net9.0</TargetFramework>
 
         <Title>DroidNet.Config</Title>
         <Description>Simplifies application configuration, in `development` and `real` environments, with persistence to Json files, on top of Microsoft.Extensions.Configuration and its recommended Options Pattern.</Description>

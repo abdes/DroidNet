@@ -1,0 +1,33 @@
+<Page
+    x:Class="DroidNet.Routing.Demo.Navigation.PageTwoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="ContentArea">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Grid.Row="0"
+            Style="{StaticResource PageTitleStyle}"
+            Text="Page Two" />
+
+        <StackPanel
+            Grid.Row="1"
+            HorizontalAlignment="Left"
+            Orientation="Horizontal">
+            <HyperlinkButton Command="{x:Bind ViewModel.PreviousPageCommand}">
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <TextBlock Margin="0,0,20,0" Text="Previous Page" />
+                    <SymbolIcon Symbol="Back" />
+                </StackPanel>
+            </HyperlinkButton>
+        </StackPanel>
+
+    </Grid>
+</Page>
