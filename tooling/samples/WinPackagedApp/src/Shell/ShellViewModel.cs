@@ -64,19 +64,21 @@ public partial class ShellViewModel : AbstractOutletContainer
 
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
-    public override void Dispose()
+    protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
         {
             return;
         }
 
-        this.isDisposed = true;
+        if (disposing)
+        {
+            this.routerEventsSubscription.Dispose();
+            this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
+        }
 
-        this.routerEventsSubscription.Dispose();
-        this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
-        base.Dispose();
-        GC.SuppressFinalize(this);
+        this.isDisposed = true;
+        base.Dispose(disposing);
     }
 
     private static void UpdateThemesSelectedItem(MenuItem themesSubMenu, MenuItem activeItem)

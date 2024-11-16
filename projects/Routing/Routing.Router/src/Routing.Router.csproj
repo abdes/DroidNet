@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+
+        <Title>ViewModel navigation and composition using URL-based routing</Title>
+        <Description>DroidNet.Routing implements and `Angular` like router that enables navigation inside a WinUI application using a URL or by dynamically manipulating the router state.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>routing;navigation;dynamic;views</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+
+        <RootNamespace>$(RootNamespace).Routing</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="System.Reactive" />
+        <PackageReference Include="Destructurama.Attributed" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+    </ItemGroup>
+
+</Project>

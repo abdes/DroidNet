@@ -26,7 +26,7 @@
         <Features>Strict</Features>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
         <WarningLevel>999</WarningLevel>
         <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
         <WarningsAsErrors>nullable</WarningsAsErrors>
@@ -153,10 +153,10 @@
         <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
                 <OutputType>WinExe</OutputType>
-                <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
-                <WindowsSdkPackageVersion>10.0.22621.42</WindowsSdkPackageVersion>
-                <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
-                <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+                <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+                <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
+                <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+                <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
                 <Platforms>x64</Platforms>
                 <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
                 <ApplicationManifest>app.manifest</ApplicationManifest>

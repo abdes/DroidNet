@@ -4,6 +4,8 @@
 
 namespace DroidNet.Controls.OutputLog.Rendering;
 
+using System.Globalization;
+
 internal static class CasingTransform
 {
     /// <summary>
@@ -16,8 +18,8 @@ internal static class CasingTransform
     public static string Apply(string value, string? format = default)
         => format switch
         {
-            "u" => value.ToUpperInvariant(),
-            "w" => value.ToLowerInvariant(),
+            "u" => value.ToUpper(CultureInfo.CurrentUICulture),
+            "w" => value.ToLower(CultureInfo.CurrentUICulture),
             _ => value,
         };
 }

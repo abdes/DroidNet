@@ -6,6 +6,7 @@ namespace DroidNet.Samples.Services;
 
 using System.Diagnostics;
 using DroidNet.Samples.Settings;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Windows.UI;
 

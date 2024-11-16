@@ -5,9 +5,9 @@
 namespace DroidNet.Converters;
 
 using System;
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 /// <summary>
 /// Select a color <see cref="Brush" /> based on a <see langword="bool" /> value.

@@ -1,0 +1,10 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace DroidNet.Routing.Demo.Navigation;
+
+public class PageThreeViewModel : IRoutingAware
+{
+    public IActiveRoute? ActiveRoute { get; set; }
+}

@@ -5,7 +5,7 @@
 namespace DroidNet.Controls;
 
 using Microsoft.UI.Xaml;
-using Windows.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls;
 
 /// <summary>
 /// Properties for the custom thumbnail control.

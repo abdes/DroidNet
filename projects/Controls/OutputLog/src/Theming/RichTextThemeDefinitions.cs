@@ -4,8 +4,8 @@
 
 namespace DroidNet.Controls.OutputLog.Theming;
 
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 internal static class RichTextThemeDefinitions
 {
