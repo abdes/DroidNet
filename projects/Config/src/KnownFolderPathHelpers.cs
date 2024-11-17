@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+
+namespace DroidNet.Config;
 
 /// <summary>
 /// Provides helper methods for retrieving known folder paths.

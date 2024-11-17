@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config;
-
 using System.IO.Abstractions;
+
+namespace DroidNet.Config;
 
 /// <summary>
 /// Provides methods to find various system, user add application paths.
@@ -28,6 +28,11 @@ public class PathFinder : IPathFinder
 
     private readonly IFileSystem fs;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathFinder"/> class.
+    /// </summary>
+    /// <param name="fs">The file system abstraction to use for path operations.</param>
+    /// <param name="pathFinderConfig">The configuration settings for the PathFinder.</param>
     public PathFinder(IFileSystem fs, PathFinderConfig pathFinderConfig)
     {
         this.fs = fs;
@@ -63,30 +68,43 @@ public class PathFinder : IPathFinder
         this.LocalAppState = Path.Combine(this.LocalAppData, ApplicationStateFolderName);
     }
 
+    /// <inheritdoc/>
     public string Mode { get; }
 
+    /// <inheritdoc/>
     public string ApplicationName { get; }
 
+    /// <inheritdoc/>
     public string UserDesktop { get; }
 
+    /// <inheritdoc/>
     public string UserDownloads { get; }
 
+    /// <inheritdoc/>
     public string UserHome { get; }
 
+    /// <inheritdoc/>
     public string UserDocuments { get; }
 
+    /// <inheritdoc/>
     public string SystemRoot { get; }
 
+    /// <inheritdoc/>
     public string Temp { get; }
 
+    /// <inheritdoc/>
     public string ProgramData { get; }
 
+    /// <inheritdoc/>
     public string LocalAppData { get; }
 
+    /// <inheritdoc/>
     public string LocalAppState { get; }
 
+    /// <inheritdoc/>
     public string GetConfigFilePath(string configFileName) => this.fs.Path.Combine(this.LocalAppData, configFileName);
 
+    /// <inheritdoc/>
     public string GetProgramConfigFilePath(string configFileName)
         => this.fs.Path.Combine(this.ProgramData, configFileName);
 }
