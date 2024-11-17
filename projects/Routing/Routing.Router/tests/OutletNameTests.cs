@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -23,7 +22,7 @@ public class OutletNameTests
         OutletName outletName = outletString;
 
         // Assert
-        outletName.Name.Should().Be(outletString);
+        _ = outletName.Name.Should().Be(outletString);
     }
 
     [TestMethod]
@@ -33,7 +32,7 @@ public class OutletNameTests
         string result = new OutletName { Name = "TestOutlet" };
 
         // Assert
-        result.Should().Be("TestOutlet");
+        _ = result.Should().Be("TestOutlet");
     }
 
     [TestMethod]
@@ -46,7 +45,7 @@ public class OutletNameTests
         var isPrimary = outletName.IsPrimary;
 
         // Assert
-        isPrimary.Should().BeTrue();
+        _ = isPrimary.Should().BeTrue();
     }
 
     [TestMethod]
@@ -59,7 +58,7 @@ public class OutletNameTests
         var isNotPrimary = outletName.IsNotPrimary;
 
         // Assert
-        isNotPrimary.Should().BeTrue();
+        _ = isNotPrimary.Should().BeTrue();
     }
 
     [TestMethod]
@@ -76,7 +75,7 @@ public class OutletNameTests
         var areEqual = comparer.Equals(name1, name2);
 
         // Assert
-        areEqual.Should().BeTrue();
+        _ = areEqual.Should().BeTrue();
     }
 
     [TestMethod]
@@ -90,7 +89,7 @@ public class OutletNameTests
         var toStringValue = outletName.ToString();
 
         // Assert
-        toStringValue.Should().Be(name);
+        _ = toStringValue.Should().Be(name);
     }
 
     [TestMethod]
@@ -107,7 +106,7 @@ public class OutletNameTests
         var areEqual = comparer.Equals(name1, name2);
 
         // Assert
-        areEqual.Should().BeFalse();
+        _ = areEqual.Should().BeFalse();
     }
 
     [TestMethod]
@@ -121,7 +120,7 @@ public class OutletNameTests
         var areEqual = comparer.Equals(name, name);
 
         // Assert
-        areEqual.Should().BeTrue();
+        _ = areEqual.Should().BeTrue();
     }
 
     [TestMethod]
@@ -132,8 +131,8 @@ public class OutletNameTests
         var name = new OutletName { Name = "TestOutlet" };
 
         // Act & Assert
-        comparer.Equals(name, y: null).Should().BeFalse();
-        comparer.Equals(x: null, name).Should().BeFalse();
+        _ = comparer.Equals(name, y: null).Should().BeFalse();
+        _ = comparer.Equals(x: null, name).Should().BeFalse();
     }
 
     [TestMethod]
@@ -146,7 +145,7 @@ public class OutletNameTests
         var areEqual = comparer.Equals(x: null, y: null);
 
         // Assert
-        areEqual.Should().BeTrue();
+        _ = areEqual.Should().BeTrue();
     }
 
     [TestMethod]
@@ -162,7 +161,7 @@ public class OutletNameTests
         var hash2 = comparer.GetHashCode(name2);
 
         // Assert
-        hash1.Should().Be(hash2);
+        _ = hash1.Should().Be(hash2);
     }
 
     [TestMethod]
@@ -178,6 +177,6 @@ public class OutletNameTests
         var hash2 = comparer.GetHashCode(name2);
 
         // Assert
-        hash1.Should().NotBe(hash2);
+        _ = hash1.Should().NotBe(hash2);
     }
 }

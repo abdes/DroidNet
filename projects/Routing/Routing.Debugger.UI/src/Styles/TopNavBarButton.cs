@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Styles;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Routing.Debugger.UI.Styles;
 
 /// <summary>
 /// A custom button to be used for the top navigation bar.
@@ -18,8 +18,23 @@ public partial class TopNavBarButton : Button
         typeof(TopNavBarButton),
         new PropertyMetadata(default(string)));
 
-    public TopNavBarButton() => this.Style = (Style)Application.Current.Resources[nameof(TopNavBarButton)];
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TopNavBarButton"/> class.
+    /// </summary>
+    public TopNavBarButton()
+    {
+        this.Style = (Style)Application.Current.Resources[nameof(TopNavBarButton)];
+    }
 
+    /// <summary>
+    /// Gets or sets the tooltip text for the button.
+    /// </summary>
+    /// <value>
+    /// The tooltip text to be displayed.
+    /// </value>
+    /// <remarks>
+    /// When the tooltip text is set, a <see cref="ToolTip"/> is created and assigned to the button.
+    /// </remarks>
     public string Tooltip
     {
         get => (string)this.GetValue(TooltipProperty);

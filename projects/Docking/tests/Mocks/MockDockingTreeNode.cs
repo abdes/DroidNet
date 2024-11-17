@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
-using DroidNet.Docking;
 using DroidNet.Docking.Workspace;
+
+namespace DroidNet.Docking.Tests.Mocks;
 
 /// <summary>
 /// A mock class for the <see cref="DockingTreeNode" /> class.

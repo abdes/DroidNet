@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Demo;
-
 using System.Reactive.Linq;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,14 +9,20 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-/// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
+namespace DroidNet.Routing.Demo;
+
+/// <summary>
+/// Provides application-specific behavior to supplement the default Application class.
+/// </summary>
 public partial class App
 {
     private readonly IRouter router;
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
 
-    /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="App" /> class.
+    /// </summary>
     /// In this project architecture, the single instance of the application is created by the User Interface hosted service as
     /// part of the application host initialization. Its lifecycle is managed together with the rest of the services.
     /// <param name="lifetime">The host application lifetime, used to imperatively exit the application when needed.</param>

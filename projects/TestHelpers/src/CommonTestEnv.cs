@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Destructurama;
@@ -13,20 +11,32 @@ using Serilog;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
 
+namespace DroidNet.TestHelpers;
+
 /// <summary>
-/// Contains global initialization for Verify, the IoC container and logging.
+/// Contains global initialization for Verify, the IoC container, and logging.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Test Environment")]
 public class CommonTestEnv : VerifyBase
 {
+    /// <summary>
+    /// Gets or sets the IoC container used for testing.
+    /// </summary>
     public static IContainer TestContainer { get; set; } = new Container();
 
+    /// <summary>
+    /// Verifies that the conventions are satisfied.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
     [TestMethod]
-    public Task VerifyConventions_Satisfied() =>
-        VerifyChecks.Run();
+    public Task VerifyConventions_Satisfied() => VerifyChecks.Run();
 
+    /// <summary>
+    /// Configures logging for the specified IoC container.
+    /// </summary>
+    /// <param name="container">The IoC container to configure logging for.</param>
     protected static void ConfigureLogging(IContainer container)
     {
         Log.Logger = new LoggerConfiguration()
@@ -65,5 +75,8 @@ public class CommonTestEnv : VerifyBase
             setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
     }
 
+    /// <summary>
+    /// Configures Verify for the test environment.
+    /// </summary>
     protected static void ConfigureVerify() => VerifyDiffPlex.Initialize();
 }

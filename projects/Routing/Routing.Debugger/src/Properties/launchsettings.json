@@ -1,10 +1,10 @@
 {
     "profiles": {
-        "DemoApp (Package)": {
+        "Routing Debugger (Package)": {
             "commandName": "MsixPackage",
             "commandLineArgs": "--mode dev"
         },
-        "DemoApp (Unpackaged)": {
+        "Routing Debugger (Unpackaged)": {
             "commandName": "Project",
             "commandLineArgs": "--mode dev"
         }

@@ -2,19 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Routing.Events;
+
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Manages <see cref="NavigationContext" /> instances used by the router.
+/// Manages the routing contexts within the application, providing methods to retrieve and manage navigation contexts for different targets.
 /// </summary>
 /// <remarks>
-/// At a minimum, the router has one main context, corresponding to the special
-/// <see cref="Target.Main" /> target, and may use multiple other contexts
-/// during the application's lifetime. Such additional contexts are obtained
-/// from a <see cref="IContextProvider" />, and only one at a time is used, the
-/// current context.
+/// The <see cref="RouterContextManager"/> class is responsible for managing the lifecycle and
+/// retrieval of navigation contexts. It ensures that each target has an appropriate context and
+/// facilitates the transition between different navigation states.
 /// <para>
-/// This context manager only manages the main and current contexts.
+/// At a minimum, the router has one main context, corresponding to the special <see cref="Target.Main" />
+/// target, and may use multiple other contexts during the application's lifetime. Such additional
+/// contexts are obtained from a <see cref="IContextProvider" />, and only one at a time is used, the
+/// current context.
 /// </para>
 /// </remarks>
 public sealed class RouterContextManager : IDisposable
@@ -25,23 +28,12 @@ public sealed class RouterContextManager : IDisposable
 
     private bool isDisposed;
 
-    /// <summary>
-    /// Gets a value representing the current routing context.
-    /// </summary>
-    /// <value>
-    /// An instance of <see cref="NavigationContext" /> representing the current
-    /// routing context.
-    /// </value>
     private NavigationContext? currentContext;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RouterContextManager" />
-    /// class.
+    /// Initializes a new instance of the <see cref="RouterContextManager"/> class.
     /// </summary>
-    /// <param name="contextProvider">
-    /// The <see cref="IContextProvider" /> to use for getting contexts
-    /// for routing targets and activating them.
-    /// </param>
+    /// <param name="contextProvider">The context provider used to create and manage navigation contexts.</param>
     public RouterContextManager(IContextProvider<NavigationContext> contextProvider)
     {
         this.contextProvider = contextProvider;
@@ -63,16 +55,12 @@ public sealed class RouterContextManager : IDisposable
     }
 
     /// <summary>
-    /// Gets the <see cref="NavigationContext" /> instance for the special target
-    /// <see cref="Target.Main" />.
+    /// Gets the <see cref="NavigationContext" /> instance for the special target <see cref="Target.Main" />.
     /// </summary>
-    /// <value>
-    /// The <see cref="NavigationContext" /> for the special target <see cref="Target.Main" />.
-    /// </value>
     /// <remarks>
-    /// For a certain <see cref="Router" />, there is only one routing context
-    /// for the special target <see cref="Target.Main" />, and within an
-    /// application, there is usually a single top-level router.
+    /// For a certain <see cref="Router" />, there is only one routing context for the special
+    /// target <see cref="Target.Main" />, and within an application, there is usually a single
+    /// top-level router.
     /// </remarks>
     private NavigationContext MainContext => this.lazyMainContext.Value;
 
@@ -80,23 +68,18 @@ public sealed class RouterContextManager : IDisposable
     /// Gets the router context for the specified target.
     /// </summary>
     /// <param name="target">
-    /// The target for which to get the router context. This can be
-    /// <see langword="null" />, <see cref="Target.Self" />, <see cref="Target.Main" />, or
-    /// any other application specific target name.
+    /// The target for which to get the router context. This can be <see langword="null"/>, <see cref="Target.Self"/>,
+    /// <see cref="Target.Main"/>, or any other application-specific target name.
     /// </param>
     /// <returns>
-    /// The <see cref="NavigationContext" /> for the specified target.
+    /// The <see cref="NavigationContext"/> for the specified target.
     /// </returns>
     /// <remarks>
-    /// If the target is <see langword="null" /> or <see cref="Target.Self" />, the method
-    /// returns the current active context, or the special main context if
-    /// there is no active context yet.
-    /// <para>
-    /// If the target is <see cref="Target.Main" />, the method returns the
-    /// special <c>"_main"</c> context. For any other target, the method
-    /// returns a new context for the specified target, created by the route
-    /// activator.
-    /// </para>
+    /// If the target is <see langword="null"/> or <see cref="Target.Self"/>, the method returns the
+    /// current active context, or the special main context if there is no active context yet.
+    /// If the target is <see cref="Target.Main"/>, the method returns the main context. For any
+    /// other target, the method returns a new context for the specified target, created by the
+    /// route activator.
     /// </remarks>
     public NavigationContext GetContextForTarget(Target? target)
     {

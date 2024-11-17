@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.Welcome;
-
 using DroidNet.Mvvm.Generators;
 using DroidNet.Routing.Debugger.UI.Shell;
+
+namespace DroidNet.Routing.Debugger.Welcome;
 
 /// <summary>
 /// A simple welcome page used as a placeholder for the application main view
@@ -14,5 +14,11 @@ using DroidNet.Routing.Debugger.UI.Shell;
 [ViewModel(typeof(WelcomeViewModel))]
 public sealed partial class WelcomeView
 {
-    public WelcomeView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WelcomeView"/> class.
+    /// </summary>
+    public WelcomeView()
+    {
+        this.InitializeComponent();
+    }
 }

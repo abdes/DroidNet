@@ -5,114 +5,121 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// The interface for traversing and manipulating the <see cref="IActiveRoute" />
-/// tree, specified separately for separation of concerns.
+/// Defines operations for traversing and manipulating the router state tree structure.
 /// </summary>
-/// <seealso cref="IActiveRoute" />
+/// <remarks>
+/// Provides access to the hierarchical relationships between routes and operations to modify the tree
+/// structure. This interface is separated from <see cref="IActiveRoute"/> for separation of concerns,
+/// allowing independent manipulation of the tree structure.
+/// </remarks>
+/// <seealso cref="IActiveRoute"/>
 public interface IActiveRouteTreeNode
 {
-    /// <summary>Gets the root of the router state.</summary>
+    /// <summary>
+    /// Gets the root node of the router state tree.
+    /// </summary>
     /// <value>
-    /// The root <see cref="IActiveRoute" /> of the router state tree.
+    /// The root <see cref="IActiveRoute"/> from which all other routes in the current router state
+    /// descend.
     /// </value>
     IActiveRoute Root { get; }
 
     /// <summary>
-    /// Gets the parent of this route in the router state tree.
+    /// Gets the parent route of this route in the router state tree.
     /// </summary>
     /// <remarks>
-    /// Every route has a parent, except for the root route.
+    /// Every route has a parent except for the root route, which represents the top of the routing
+    /// hierarchy.
     /// </remarks>
     /// <value>
-    /// The parent <see cref="IActiveRoute" /> if any. Null otherwise.
+    /// The parent <see cref="IActiveRoute"/> if this route has a parent; otherwise, null for the root
+    /// route.
     /// </value>
     IActiveRoute? Parent { get; }
 
     /// <summary>
-    /// Gets the children of this route in the router state tree.
+    /// Gets all child routes of this route in the router state tree.
     /// </summary>
     /// <value>
-    /// A read-only collection of <see cref="IActiveRoute" />s which are
-    /// children of this route.
+    /// A read-only collection of <see cref="IActiveRoute"/>s that are direct descendants of this
+    /// route in the hierarchy.
     /// </value>
     IReadOnlyCollection<IActiveRoute> Children { get; }
 
     /// <summary>
-    /// Gets the siblings of this route in the router state tree.
+    /// Gets all sibling routes of this route in the router state tree.
     /// </summary>
     /// <value>
-    /// A read-only collection of <see cref="IActiveRoute" />s which are
-    /// siblings of this route.
+    /// A read-only collection of <see cref="IActiveRoute"/>s that share the same parent as this
+    /// route.
     /// </value>
     IReadOnlyCollection<IActiveRoute> Siblings { get; }
 
     /// <summary>
-    /// Gets a value indicating whether this route is the root route.
+    /// Gets a value indicating whether this route is the root of the router state tree.
     /// </summary>
     /// <value>
-    /// <see langword="true" /> if this route is the root route (i.e. its parent is <see langword="null" />);
-    /// otherwise, <see langword="false" />.
+    /// <see langword="true"/> if this route has no parent (is the root);
+    /// otherwise, <see langword="false"/>.
     /// </value>
     bool IsRoot => this.Parent is null;
 
     /// <summary>
-    /// Add the given <paramref name="route" /> as a child of this route.
+    /// Adds a route as a child of this route.
     /// </summary>
     /// <remarks>
-    /// There should be no assumption regarding the order of the children.
+    /// The order of children in the collection is not guaranteed and should not be relied upon.
     /// </remarks>
-    /// <param name="route">The route to add as a child.</param>
+    /// <param name="route">The route to add as a child of this route.</param>
     void AddChild(IActiveRoute route);
 
     /// <summary>
-    /// Remove the first occurence of the given <paramref name="route" /> from
-    /// the collection of children of this route.
+    /// Removes a child route from this route's children.
     /// </summary>
-    /// <param name="route">The child route to be removed.</param>
+    /// <param name="route">The child route to remove.</param>
     /// <returns>
-    /// <see langword="true" /> if <paramref name="route" /> was successfully removed;
-    /// otherwise, <see langword="false" />. This method also returns false if item was not
-    /// found in the collection of children.
+    /// <see langword="true"/> if the route was found and removed from the children collection;
+    /// <see langword="false"/> if the route was not found.
     /// </returns>
     bool RemoveChild(IActiveRoute route);
 
     /// <summary>
-    /// Add the given <paramref name="route" /> as a sibling of this route.
+    /// Adds a route as a sibling of this route.
     /// </summary>
     /// <remarks>
-    /// There should be no assumption regarding the order of the siblings.
+    /// The order of siblings in the collection is not guaranteed and should not be relied upon.
     /// </remarks>
     /// <param name="route">The route to add as a sibling.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when attempting to add a sibling to a root route that has no parent.
+    /// </exception>
     void AddSibling(IActiveRoute route);
 
     /// <summary>
-    /// Remove the first occurence of the given <paramref name="route" /> from
-    /// the collection of children of this route's parent.
+    /// Removes a sibling route from this route's parent's children.
     /// </summary>
-    /// <param name="route">The sibling route to be removed.</param>
+    /// <param name="route">The sibling route to remove.</param>
     /// <returns>
-    /// <see langword="true" /> if <paramref name="route" /> was successfully removed;
-    /// otherwise, <see langword="false" />. This method also returns false if the route
-    /// has no parent or if the <paramref name="route" /> was not found in the
-    /// collection of siblings.
+    /// <see langword="true"/> if the route was found and removed from the parent's children;
+    /// <see langword="false"/> if this route has no parent or if the specified route was not found.
     /// </returns>
     bool RemoveSibling(IActiveRoute route);
 
     /// <summary>
-    /// Moves this route from its current parent to the new <paramref name="parent" />.
+    /// Moves this route from its current parent to a new parent in the router state tree.
     /// </summary>
-    /// <param name="parent">
-    /// The new parent under which this route should be located.
-    /// </param>
-    /// <exception cref="InvalidOperationException">
-    /// If the route has no parent (cannot move the root node).
-    /// </exception>
     /// <remarks>
-    /// This method removes the route from its current parent, then adds it as
-    /// a child of the new <paramref name="parent" />.
+    /// Removes this route from its current parent's children and adds it to the new parent's
+    /// children collection.
     /// </remarks>
+    /// <param name="parent">The new parent route under which this route should be placed.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when attempting to move the root route which has no parent.
+    /// </exception>
     void MoveTo(IActiveRoute parent);
 
-    /// <summary>Removes all children of this route.</summary>
+    /// <summary>
+    /// Removes all child routes from this route.
+    /// </summary>
     void ClearChildren();
 }

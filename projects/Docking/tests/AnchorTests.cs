@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Docking.Tests;
 
 /// <summary>
 /// Unit test cases for the <see cref="Anchor" /> class.
@@ -18,7 +17,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class AnchorTests
 {
     [TestMethod]
-    public void Constructor_SetsPositionAndRelativeTo()
+    public void ConstructorSetsPositionAndRelativeTo()
     {
         // Arrange
         using var mockDockable = new MockDockable("dockable");
@@ -30,7 +29,7 @@ public partial class AnchorTests
     }
 
     [TestMethod]
-    public void Anchor_Relative_SubscribesToDockableOnDisposed()
+    public void AnchorRelativeSubscribesToDockableOnDisposed()
     {
         // Arrange
         using var mockDockable = new MockDockable("dockable");
@@ -41,7 +40,7 @@ public partial class AnchorTests
     }
 
     [TestMethod]
-    public void Anchor_Relative_WhenDisposed_UnsubscribesFromDockable()
+    public void AnchorRelativeWhenDisposedUnsubscribesFromDockable()
     {
         // Arrange
         using var mockDockable = new MockDockable("dockable");
@@ -60,7 +59,7 @@ public partial class AnchorTests
     }
 
     [TestMethod]
-    public void Anchor_Relative_DockableWithAnchoredOwner_WhenDockableDisposed_MovesAnchorToOwnerAnchor()
+    public void AnchorRelativeDockableWithAnchoredOwnerWhenDockableDisposedMovesAnchorToOwnerAnchor()
     {
         // Arrange
         using var ownerAnchor = new AnchorRight();
@@ -78,7 +77,7 @@ public partial class AnchorTests
     }
 
     [TestMethod]
-    public void Anchor_Relative_DockableWithNoOwner_WhenDockableDisposed_MovesAnchorToRootLeft()
+    public void AnchorRelativeDockableWithNoOwnerWhenDockableDisposedMovesAnchorToRootLeft()
     {
         // Arrange
         var mockDockable = new MockDockable("dockable");
@@ -93,7 +92,7 @@ public partial class AnchorTests
     }
 
     [TestMethod]
-    public void Anchor_Relative_DockableWithOwnerNoAnchor_WhenDockableDisposed_MovesAnchorToRootLeft()
+    public void AnchorRelativeDockableWithOwnerNoAnchorWhenDockableDisposedMovesAnchorToRootLeft()
     {
         // Arrange
         using var ownerAnchor = new AnchorRight();

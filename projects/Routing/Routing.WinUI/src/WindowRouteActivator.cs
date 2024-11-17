@@ -2,26 +2,52 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.WinUI;
-
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+
+namespace DroidNet.Routing.WinUI;
 
 /// <summary>
-/// Represents a route activator (<see cref="IRouteActivator" />) that activates routes by loading their view models into <see cref="IOutletContainer">outlets</see> defined in their parent views.
+/// Represents a route activator that loads view models into outlet containers within WinUI windows and views.
 /// </summary>
+/// <param name="loggerFactory">Logger factory to obtain an ILogger. If null, uses NullLogger.</param>
 /// <remarks>
-/// If the route being activated is the root route, then it does not have a parent. In such case, the content is loaded into the
-/// context's window, provided that window implements <see cref="IOutletContainer" />.
+/// <para>
+/// The WindowRouteActivator handles two distinct activation scenarios in WinUI applications. For
+/// root routes, content is loaded directly into the window itself, requiring the window to
+/// implement IOutletContainer. For child routes, content is loaded into outlets defined by parent
+/// view models, creating a hierarchical structure of views and outlets.
+/// </para>
+/// <para>
+/// During activation, the activator traverses up the route tree looking for the appropriate
+/// container. For root routes, this is the window itself. For child routes, it searches parent
+/// routes until it finds a view model implementing IOutletContainer. This design enables complex
+/// layout structures where content can be nested at various levels within the application.
+/// </para>
 /// </remarks>
-/// <param name="loggerFactory">
-/// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
-/// </param>
-internal sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
+public sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
     : AbstractRouteActivator(loggerFactory)
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Activates a route by loading its view model into the appropriate outlet container.
+    /// </summary>
+    /// <param name="route">The route to activate, containing the view model and target outlet.</param>
+    /// <param name="context">The navigation context containing the window where activation occurs.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no parent view model implementing IOutletContainer is found.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// For root routes, the content is loaded directly into the window specified by the navigation
+    /// context. For child routes, the activator traverses up the route tree looking for a parent
+    /// view model that implements IOutletContainer. Once found, the route's view model is loaded
+    /// into the outlet specified in the route configuration within that container.
+    /// </para>
+    /// <para>
+    /// If no suitable container is found for a child route, an <see cref="InvalidOperationException"/> is thrown. This
+    /// typically indicates a mismatch between the route configuration and the actual view model hierarchy.
+    /// </para>
+    /// </remarks>
     protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)
     {
         Debug.Assert(context is WindowNavigationContext, "expecting the router context to have been created by me");
@@ -31,21 +57,28 @@ internal sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory
             return;
         }
 
-        /*
-         * For a root route, load the content in the context's window outlet.
-         * For a normal route, load the content in the corresponding outlet in
-         * its parent activated route view model.
-         */
+        // Content for the activated route will be loaded in the navigation context's target for a root route,
+        // and in the nearest parent that has ViewModel that is an IOutletContainer for child routes.
+        var contentLoader = route.IsRoot ? context.NavigationTarget : GetNearestContentLoader(route);
 
-        if (route.IsRoot)
+        if (contentLoader is IOutletContainer outletContainer)
         {
-            this.DoActivateRootRoute(route, context);
+            outletContainer.LoadContent(route.ViewModel, route.Outlet);
         }
         else
         {
-            // Go up the tree to find the first parent, skipping the routes
-            // with no view models in between.
+            var reason = $"the {(route.IsRoot ? "window" : "parent view model")} of type '{contentLoader?.GetType().Name ?? "Unknown"}' does not implement {nameof(IOutletContainer)}.";
+
+            LogContentLoadingError(this.Logger, route, route.Outlet, reason);
+
+            throw new InvalidOperationException(
+                $"cannot find a suitable {nameof(IOutletContainer)} for route '{route}'; {reason}");
+        }
+
+        static object? GetNearestContentLoader(IActiveRoute route)
+        {
             var parent = route.Parent;
+
             while (parent is not null && parent.ViewModel is null)
             {
                 Debug.WriteLine("Skipping parent with null ViewModel");
@@ -54,50 +87,13 @@ internal sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory
 
             Debug.WriteLine($"Effective parent for '{route}' is: {parent}");
 
-            if (parent?.ViewModel is IOutletContainer outletContainer)
-            {
-                outletContainer.LoadContent(route.ViewModel, route.Outlet);
-            }
-            else
-            {
-                var because = parent is null
-                    ? $"I could not find an {nameof(IOutletContainer)} parent for it"
-                    : $"the view model of its parent ({parent.ViewModel}) is not an {nameof(IOutletContainer)}";
-                LogContentLoadingError(this.Logger, route.Outlet, because);
-
-                throw new InvalidOperationException(
-                    $"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
-            }
+            return parent?.ViewModel;
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Cannot load content into {Outlet} {Because}")]
-    private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
-
-    private void DoActivateRootRoute(IActiveRoute route, INavigationContext context)
-    {
-        Debug.Assert(route.ViewModel is not null, "expecting the view model not to be null");
-        var window = (context as WindowNavigationContext)?.Window;
-        Debug.Assert(
-            window is not null,
-            "expecting the window in the router context to be created by me");
-
-        if (window is IOutletContainer outletContainer)
-        {
-            outletContainer.LoadContent(route.ViewModel, route.Outlet);
-        }
-        else
-        {
-            LogContentLoadingError(
-                this.Logger,
-                route.Outlet,
-                $"because {window.GetType()} is not an {nameof(IOutletContainer)}");
-
-            throw new InvalidOperationException(
-                $"target window of type '{window.GetType()} is not a {nameof(IOutletContainer)}");
-        }
-    }
+        Message = "Cannot load content for route '{Route}' into outlet '{Outlet}' becaue {Because}")]
+    private static partial void LogContentLoadingError(ILogger logger, IActiveRoute route, OutletName outlet, string because);
 }

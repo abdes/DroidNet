@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Detail;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>Unit tests for the <see cref="DefaultUrlParser" /> class.</summary>
 [TestClass]
@@ -23,14 +22,14 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeTrue();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
+        _ = tree.IsRelative.Should().BeTrue();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     [TestMethod]
@@ -41,13 +40,13 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     [TestMethod]
@@ -58,17 +57,17 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
-        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Count.Should().Be(1);
+        _ = tree.Root.Children.Should().ContainKey(OutletName.Primary);
         var primary = tree.Root.Children[OutletName.Primary];
-        primary.Segments.Should().HaveCount(1).And.Contain(s => s.Path == "home" && s.Parameters.IsEmpty);
+        _ = primary.Segments.Should().HaveCount(1).And.Contain(s => s.Path == "home" && s.Parameters.IsEmpty);
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     [TestMethod]
@@ -79,19 +78,19 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
-        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Count.Should().Be(1);
+        _ = tree.Root.Children.Should().ContainKey(OutletName.Primary);
         var primary = tree.Root.Children[OutletName.Primary];
-        primary.Segments.Should().HaveCount(2);
-        primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
-        primary.Segments[1].Should().BeEquivalentTo(new UrlSegment("bar"));
+        _ = primary.Segments.Should().HaveCount(2);
+        _ = primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
+        _ = primary.Segments[1].Should().BeEquivalentTo(new UrlSegment("bar"));
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     [TestMethod]
@@ -104,18 +103,18 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Count.Should().Be(1);
 
-        tree.Root.Children.Should().HaveCount(1).And.ContainKey(outlet);
+        _ = tree.Root.Children.Should().HaveCount(1).And.ContainKey(outlet);
         var outletChild = tree.Root.Children[outlet];
-        outletChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == outletSegment);
+        _ = outletChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == outletSegment);
 
         var serialized = tree.ToString();
-        serialized.Should().Be(outlet.Length == 0 ? $"/{outletSegment}" : $"/({outlet}:{outletSegment})");
+        _ = serialized.Should().Be(outlet.Length == 0 ? $"/{outletSegment}" : $"/({outlet}:{outletSegment})");
     }
 
     [TestMethod]
@@ -128,22 +127,22 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Count.Should().Be(1);
 
-        tree.Root.Children.Should().HaveCount(1).And.ContainKey(OutletName.Primary);
+        _ = tree.Root.Children.Should().HaveCount(1).And.ContainKey(OutletName.Primary);
         var rootChild = tree.Root.Children[OutletName.Primary];
-        rootChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == segment);
-        rootChild.Children.Should().HaveCount(1).And.ContainKey(OutletName.Primary);
+        _ = rootChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == segment);
+        _ = rootChild.Children.Should().HaveCount(1).And.ContainKey(OutletName.Primary);
 
         var outletChild = rootChild.Children[OutletName.Primary];
-        outletChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == outletPath);
+        _ = outletChild.Segments.Should().HaveCount(1).And.Contain(s => s.Path == outletPath);
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     [TestMethod]
@@ -154,19 +153,19 @@ public class DefaultUrlParserTests
 
         var tree = parser.Parse(url);
 
-        tree.IsRelative.Should().BeFalse();
-        tree.QueryParams.Should().BeEmpty();
-        tree.Root.Parent.Should().BeNull();
-        tree.Root.Segments.Should().BeEmpty();
-        tree.Root.Children.Count.Should().Be(1);
-        tree.Root.Children.Should().ContainKey(OutletName.Primary);
+        _ = tree.IsRelative.Should().BeFalse();
+        _ = tree.QueryParams.Should().BeEmpty();
+        _ = tree.Root.Parent.Should().BeNull();
+        _ = tree.Root.Segments.Should().BeEmpty();
+        _ = tree.Root.Children.Count.Should().Be(1);
+        _ = tree.Root.Children.Should().ContainKey(OutletName.Primary);
         var primary = tree.Root.Children[OutletName.Primary];
-        primary.Segments.Should().HaveCount(2);
-        primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
-        primary.Segments[1].Should().BeEquivalentTo(new UrlSegment(string.Empty));
+        _ = primary.Segments.Should().HaveCount(2);
+        _ = primary.Segments[0].Should().BeEquivalentTo(new UrlSegment("foo"));
+        _ = primary.Segments[1].Should().BeEquivalentTo(new UrlSegment(string.Empty));
 
         var serialized = tree.ToString();
-        serialized.Should().Be(url);
+        _ = serialized.Should().Be(url);
     }
 
     /// <summary>
@@ -442,7 +441,7 @@ public class DefaultUrlParserTests
         var remaining = url.AsSpan();
         var result = parser.ParseSegment(ref remaining, allowDots: false);
 
-        result.Path.Should().Be(string.Empty);
+        _ = result.Path.Should().Be(string.Empty);
     }
 
     /// <summary>

@@ -2,29 +2,30 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using DroidNet.Docking;
 using DroidNet.Docking.Workspace;
 
+namespace DroidNet.Docking.Detail;
+
 /// <summary>
-/// Represents a Dock , which holds a <see cref="Dockable" />, and must be inside a <see cref="LayoutDockGroup" />.
+/// Represents a Dock, which holds a <see cref="Dockable"/>, and must be inside a <see cref="LayoutDockGroup"/>.
 /// </summary>
 /// <remarks>
-/// Dock is an abstract type. Instances of a concrete `Dock`, can only be created through its <see cref="Factory" />, to ensure
-/// that each one of them has a unique ID.
 /// <para>
-/// The <c>Factory</c> itself is internal use only. However, each concrete `Dock` class will offer a simple and straightforward
-/// way to create instances of that specific type. Internally, the implementation will have to use the <c>Factory</c>.
-/// <example>
-/// <code>
-/// var dock = ToolDock.New();
-/// </code>
-/// </example>
+/// Dock is an abstract type. Instances of a concrete `Dock` can only be created through its <see cref="Factory"/>, to ensure
+/// that each one of them has a unique ID.
 /// </para>
+/// <para>
+/// The <c>Factory</c> itself is for internal use only. However, each concrete `Dock` class will offer a simple and straightforward
+/// way to create instances of that specific type. Internally, the implementation will have to use the <c>Factory</c>.
+/// </para>
+/// <example>
+/// <code><![CDATA[
+/// var dock = ToolDock.New();
+/// ]]></code>
+/// </example>
 /// </remarks>
 public abstract partial class Dock : IDock
 {
@@ -34,16 +35,27 @@ public abstract partial class Dock : IDock
     private Width width = new();
     private Height height = new();
 
-    protected Dock() => this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Dock"/> class.
+    /// </summary>
+    protected Dock()
+    {
+        this.Dockables = new ReadOnlyObservableCollection<IDockable>(this.dockables);
+    }
 
+    /// <inheritdoc/>
     public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
+    /// <inheritdoc/>
     public IDockable? ActiveDockable { get; private set; }
 
+    /// <inheritdoc/>
     public virtual bool CanMinimize => true;
 
+    /// <inheritdoc/>
     public virtual bool CanClose => true;
 
+    /// <inheritdoc/>
     public Anchor? Anchor
     {
         get => this.anchor;
@@ -51,30 +63,31 @@ public abstract partial class Dock : IDock
         {
             // Dispose of the old anchor if we had one
             this.anchor?.Dispose();
-
             this.anchor = value;
         }
     }
 
+    /// <inheritdoc/>
     public DockingState State { get; internal set; } = DockingState.Undocked;
 
+    /// <inheritdoc/>
     public DockId Id { get; private set; }
 
+    /// <inheritdoc/>
     public IDocker? Docker { get; internal set; }
 
-    /// <summary>Gets a value representing the width of the Dock.</summary>
+    /// <summary>
+    /// Gets a value representing the width of the Dock.
+    /// </summary>
     /// <remarks>
-    /// Changing the width of a dock will also change its active dockable height.
-    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock" /> method.</para>
+    /// Changing the width of a dock will also change its active dockable width.
+    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock"/> method.</para>
     /// </remarks>
     public Width Width
     {
         get => this.width;
         internal set
         {
-            // $"Dock {this} my width has changed to: {value}"
-
-            // Set the width for the Dock, but also for its Active Dockable
             this.width = value;
             if (this.ActiveDockable != null)
             {
@@ -83,19 +96,18 @@ public abstract partial class Dock : IDock
         }
     }
 
-    /// <summary>Gets a value representing the height of the Dock.</summary>
+    /// <summary>
+    /// Gets a value representing the height of the Dock.
+    /// </summary>
     /// <remarks>
     /// Changing the height of a dock will also change its active dockable height.
-    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock" /> method.</para>
+    /// <para>This operation should only be done via the <see cref="IDocker.ResizeDock"/> method.</para>
     /// </remarks>
     public Height Height
     {
         get => this.height;
         internal set
         {
-            // $"Dock {this} my height has changed to: {value}"
-
-            // Set the height for the Dock, but also for its Active Dockable
             this.height = value;
             if (this.ActiveDockable != null)
             {
@@ -104,10 +116,17 @@ public abstract partial class Dock : IDock
         }
     }
 
+    /// <summary>
+    /// Gets information about the group to which this dock belongs.
+    /// </summary>
     public string GroupInfo => this.Group?.ToString() ?? string.Empty;
 
+    /// <summary>
+    /// Gets or sets the group to which this dock belongs.
+    /// </summary>
     internal DockGroup? Group { get; set; }
 
+    /// <inheritdoc/>
     public virtual void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last)
     {
         var dockableImpl = dockable.AsDockable();
@@ -149,21 +168,20 @@ public abstract partial class Dock : IDock
         dockableImpl.PropertyChanged += this.OnDockablePropertyChanged;
         dockableImpl.IsActive = true;
 
-        // If currently the values of Width or Height are null, the use the
+        // If currently the values of Width or Height are null, use the
         // preferred values from the dockable just added.
         if (this.width.IsNullOrEmpty && !dockableImpl.PreferredWidth.IsNullOrEmpty)
         {
-            // $"Dock {this} initializing my width from dockable {dockableImpl.Id}: {dockableImpl.PreferredWidth}"
             this.width = dockableImpl.PreferredWidth;
         }
 
         if (this.height.IsNullOrEmpty && !dockableImpl.PreferredHeight.IsNullOrEmpty)
         {
-            // $"Dock {this} initializing my height from dockable {dockableImpl.Id}: {dockableImpl.PreferredHeight}"
             this.height = dockableImpl.PreferredHeight;
         }
     }
 
+    /// <inheritdoc/>
     public void DestroyDockable(IDockable dockable)
     {
         var dockableImpl = dockable.AsDockable();
@@ -175,6 +193,7 @@ public abstract partial class Dock : IDock
         dockableImpl.Dispose();
     }
 
+    /// <inheritdoc/>
     public void DisownDockable(IDockable dockable)
     {
         var dockableImpl = dockable.AsDockable();
@@ -183,6 +202,7 @@ public abstract partial class Dock : IDock
         Debug.Assert(found, $"dockable to be disowned ({dockableImpl}) should be managed by me ({this})");
     }
 
+    /// <inheritdoc/>
     public void MigrateDockables(IDock destinationDock)
     {
         foreach (var dockable in this.dockables)
@@ -201,14 +221,15 @@ public abstract partial class Dock : IDock
         GC.SuppressFinalize(this);
     }
 
+    /// <inheritdoc/>
     public override string ToString() => $"{this.Id}";
 
     /// <summary>
-    /// Releases the unmanaged resources used by the <see cref="Dock" /> and optionally releases the
+    /// Releases the unmanaged resources used by the <see cref="Dock"/> and optionally releases the
     /// managed resources.
     /// </summary>
     /// <param name="disposing">
-    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/>
     /// to release only unmanaged resources.
     /// </param>
     protected virtual void Dispose(bool disposing)
@@ -220,15 +241,14 @@ public abstract partial class Dock : IDock
 
         if (disposing)
         {
-            /* Dispose of managed resources */
-
+            // Dispose of managed resources
             foreach (var dockable in this.dockables)
             {
                 dockable.AsDockable().PropertyChanged -= this.OnDockablePropertyChanged;
                 dockable.Dispose();
             }
 
-            // Reset the anchor only after the dockables are disposed of. Our anchor maybe used to
+            // Reset the anchor only after the dockables are disposed of. Our anchor may be used to
             // anchor the dockables that were anchored relative to our dockables.
             this.anchor = null;
 
@@ -236,8 +256,7 @@ public abstract partial class Dock : IDock
             this.Docker = null;
         }
 
-        /* Dispose of unmanaged resources */
-
+        // Dispose of unmanaged resources
         this.isDisposed = true;
     }
 

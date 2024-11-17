@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
 using DroidNet.Docking.Workspace;
+
+namespace DroidNet.Docking.Tests.Mocks;
 
 /// <summary>
 /// A simple <see cref="BinaryTreeNode{T}" /> for testing.

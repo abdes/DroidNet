@@ -5,6 +5,10 @@
 namespace DroidNet.Docking;
 
 #pragma warning disable MA0048 // File name must match type name
+
+/// <summary>
+/// Values that represent the anchor position of a dockable view.
+/// </summary>
 public enum AnchorPosition
 {
     /// <summary>Dock on the left side of the anchor.</summary>
@@ -26,6 +30,9 @@ public enum AnchorPosition
     Center = 5,
 }
 
+/// <summary>
+/// Values that represent a DockGroup orientation.
+/// </summary>
 public enum DockGroupOrientation
 {
     /// <summary>
@@ -157,4 +164,5 @@ public enum DockablePlacement
     /// </summary>
     BeforeActiveItem = 3,
 }
+
 #pragma warning restore MA0048 // File name must match type name

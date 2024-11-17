@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.TestHelpers;
 
 /// <summary>
 /// A base class for test suites that have test cases checking for Debug assertions in the code. Use
@@ -62,6 +61,9 @@ public abstract class TestSuiteWithAssertions : IDisposable
         _ = Trace.Listeners.Add(this.TraceListener);
     }
 
+    /// <summary>
+    /// Gets the trace listener used for capturing debug assertion messages during unit tests.
+    /// </summary>
     protected DebugAssertUnitTestTraceListener TraceListener { get; }
 
     /// <inheritdoc />

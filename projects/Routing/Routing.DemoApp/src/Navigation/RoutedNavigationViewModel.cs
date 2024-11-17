@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Demo.Navigation;
-
-using System;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
+
+namespace DroidNet.Routing.Demo.Navigation;
 
 /// <summary>
 /// A ViewModel for a page with a NavigationView control, which relies on a <see cref="IRouter">router</see> to navigate between
@@ -16,6 +15,10 @@ using DroidNet.Routing;
 /// work if it creates the Page instances itself, breaking the MVVM model.
 /// </summary>
 /// <param name="router">The router to use for navigation.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Maintainability",
+    "CA1515:Consider making public types internal",
+    Justification = "ViewModel classes must be public because the ViewModel property in the generated code for the view is public")]
 public partial class RoutedNavigationViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
@@ -28,23 +31,40 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     [ObservableProperty]
     private int selectedItemIndex = InvalidItemIndex;
 
+    /// <summary>
+    /// Gets the list of navigation items.
+    /// </summary>
     public IList<NavigationItem> NavigationItems { get; } =
     [
         new("1", "One", "\uf146", "1", typeof(PageOneViewModel)),
         new("2", "Two", "\uf147", "2", typeof(PageTwoViewModel)),
     ];
 
+    /// <summary>
+    /// Gets the list of footer items.
+    /// </summary>
     public IList<NavigationItem> FooterItems { get; } =
     [
         new("3", "Three", "\uf148", "3", typeof(PageThreeViewModel)),
     ];
 
+    /// <summary>
+    /// Gets the list of all navigation items, including footer items.
+    /// </summary>
     public IList<NavigationItem> AllItems => [.. this.NavigationItems, .. this.FooterItems];
 
+    /// <inheritdoc/>
     public IActiveRoute? ActiveRoute { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the settings item is selected.
+    /// </summary>
+    /// <value>
+    /// <see langword="true"/> if the settings item is selected; otherwise, <see langword="false"/>.
+    /// </value>
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
+    /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         var viewModelType = viewModel.GetType();
@@ -71,6 +91,14 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         }
     }
 
+    /// <summary>
+    /// Navigates to the specified navigation item.
+    /// </summary>
+    /// <param name="requestedItem">The navigation item to navigate to.</param>
+    /// <remarks>
+    /// This method finds the index of the requested navigation item and navigates to it if it is
+    /// not already selected. If the item is unknown, a debug message is logged.
+    /// </remarks>
     [RelayCommand]
     internal void NavigateToItem(NavigationItem requestedItem)
     {
@@ -88,6 +116,14 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         }
     }
 
+    /// <summary>
+    /// Navigates to the settings page.
+    /// </summary>
+    /// <remarks>
+    /// This method checks if the settings item is already selected. If not, it navigates to the
+    /// settings page using the router. This avoids unnecessary navigation if the settings item is
+    /// already selected.
+    /// </remarks>
     [RelayCommand]
     internal void NavigateToSettings()
     {
@@ -98,6 +134,14 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         }
     }
 
+    /// <summary>
+    /// Finds a navigation item that matches the specified predicate.
+    /// </summary>
+    /// <param name="match">The predicate to match against navigation items.</param>
+    /// <returns>
+    /// A tuple containing the index of the matched navigation item and the navigation item itself.
+    /// If no item is found, returns a tuple with an index of -1 and a null item.
+    /// </returns>
     private (int index, NavigationItem? item) FindNavigationItem(Predicate<NavigationItem> match)
     {
         for (var index = 0; index < this.AllItems.Count; ++index)

@@ -2,13 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Demo.Controls;
-
 using DroidNet.Mvvm.Generators;
+
+namespace DroidNet.Docking.Demo.Controls;
 
 /// <summary>An information card used as a placeholder for a docked dockable.</summary>
 [ViewModel(typeof(DockableInfoViewModel))]
 public sealed partial class DockableInfoView
 {
-    public DockableInfoView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DockableInfoView"/> class.
+    /// </summary>
+    public DockableInfoView()
+    {
+        this.InitializeComponent();
+    }
 }

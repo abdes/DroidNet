@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using DroidNet.Docking.Utils;
 using DroidNet.Docking.Workspace;
+
+namespace DroidNet.Docking;
 
 /// <summary>
 /// Represents an abstract base class for layout flow, which defines the flow direction

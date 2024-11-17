@@ -2,16 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using DroidNet.Mvvm.Converters;
-using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
 public partial class AssetsViewModel : AbstractOutletContainer
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AssetsViewModel"/> class.
+    /// </summary>
+    /// <param name="vmToViewConverter"></param>
     public AssetsViewModel(ViewModelToView vmToViewConverter)
     {
         this.VmToViewConverter = vmToViewConverter;

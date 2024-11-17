@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.TreeView;
-
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// A control to display a tree as a list of expandable items.
@@ -31,6 +31,9 @@ public sealed partial class ExpandingTreeControl
         typeof(TreeItemControl),
         new PropertyMetadata(defaultValue: null));
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExpandingTreeControl"/> class.
+    /// </summary>
     public ExpandingTreeControl()
     {
         this.InitializeComponent();

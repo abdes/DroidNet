@@ -5,41 +5,104 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Specifies the interface of a route activator, responsible for activating routes after the router builds its router
-/// state tree out of the navigation url.
+/// Defines the contract for a route activator - a key component responsible for bringing routes to
+/// life during navigation by creating their view models and loading their corresponding views into
+/// outlets.
 /// </summary>
 /// <remarks>
-/// Route activation involves creating the ViewModel that is the subject of route navigation, optionally injecting into
-/// it the <see cref="IActiveRoute" />, and finally loading its corresponding view in the visual tree. Injection of
-/// <see cref="IActiveRoute" /> only happens if the ViewModel implements the <see cref="IRoutingAware" /> interface.
+/// <para>
+/// When navigation occurs, the router builds a state tree from the URL and hands it to the route
+/// activator. The activator orchestrates three crucial steps in the routing lifecycle:
+/// </para>
+/// <list type="number">
+///   <item>Creates view model instances using dependency injection.</item>
+///   <item>Injects the <see cref="IActiveRoute"/> into view models that implement <see cref="IRoutingAware"/></item>
+///   <item>Loads the corresponding views into their designated outlets in the visual tree</item>
+/// </list>
+///
+/// <example>
+/// <strong>Example Usage</strong>
+/// <para>
+/// Here's an example of how route activation typically flows:
+/// </para>
+/// <code><![CDATA[
+/// // Given a route configuration:
+/// {
+///     Path = "users/:id",
+///     ViewModelType = typeof(UserDetailsViewModel),
+///     Outlet = "primary"
+/// }
+///
+/// // And a navigation to "/users/123"
+/// // The activator will:
+/// 1. Resolve UserDetailsViewModel from the DI container
+/// 2. If UserDetailsViewModel implements IRoutingAware:
+///    - Inject the IActiveRoute (containing id="123")
+/// 3. Load the view into the "primary" outlet
+/// ]]></code>
+/// </example>
+///
+/// <para><strong>Implementation Guidelines:</strong></para>
+/// <para>
+/// The <see cref="IRouteActivator"/> and <see cref="IRouteActivationObserver"/> work together to
+/// provide a flexible and testable route activation system. The activator handles the mechanics of
+/// loading views and managing the visual tree, while the observer controls the view model lifecycle
+/// and activation flow. This separation allows the complex view loading logic to remain in
+/// platform-specific activator implementations, while keeping the core activation logic testable
+/// and reusable.
+/// </para>
+/// <para>
+/// During activation, the activator first consults its observer through <c>OnActivating</c>. The
+/// observer can then create the view model (typically via DI), perform any necessary injections
+/// (such as the <see cref="IActiveRoute"/> for <see cref="IRoutingAware"/> view models), and decide
+/// whether activation should proceed. After successful view loading, the activator calls
+/// <c>OnActivated</c>, allowing the observer to track activation state. A typical implementation
+/// prevents duplicate activations and manages view model creation, while leaving the actual view
+/// loading to platform-specific activators.
+/// </para>
 /// </remarks>
 public interface IRouteActivator
 {
     /// <summary>
-    /// Activates the specified <paramref name="route" /> within the specified <paramref name="context" />.
+    /// Activates a single route within the specified navigation context.
     /// </summary>
-    /// <param name="route">The route to activate.</param>
-    /// <param name="context">The router context. In particular, this context will provide the target (window, content frame, etc...) the view
-    /// identified by the route URL will be loaded into.
+    /// <param name="route">The route to activate, containing view model type and outlet information.</param>
+    /// <param name="context">
+    /// The navigation context containing the target (e.g., window or content frame) where the view
+    /// will be loaded.
     /// </param>
     /// <returns>
-    /// <see langword="true" /> if the activation was successful; <see langword="false" /> otherwise.
+    /// <see langword="true"/> if activation succeeded; <see langword="false"/> if any step failed.
     /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Works in collaboration with an <see cref="IRouteActivationObserver"/> to manage the view model
+    /// lifecycle and activation state. The observer gets opportunities to participate in the activation
+    /// process through its lifecycle hooks, enabling view model creation via dependency injection and
+    /// proper state tracking. This design allows for flexible, platform-specific view loading while
+    /// maintaining a consistent activation model across different implementations.
+    /// </para>
+    /// </remarks>
     bool ActivateRoute(IActiveRoute route, INavigationContext context);
 
     /// <summary>
-    /// Recursively activates a tree of <see cref="IActiveRoute" />, starting
-    /// from its given  <paramref name="root" />, within the specified <paramref name="context" />.
+    /// Recursively activates a tree of routes, starting from the specified root.
     /// </summary>
-    /// <param name="root">The root of the tree to activate.</param>
+    /// <param name="root">The root route of the tree to activate.</param>
     /// <param name="context">
-    /// The router context. In particular, this context will provide the target
-    /// (window, content frame, etc...) the view identified by the route URL
-    /// will be loaded into.
+    /// The navigation context containing the target where views will be loaded.
     /// </param>
     /// <returns>
-    /// <see langword="false" /> if any of the child routes activation was not successful;
-    /// <see langword="true" /> otherwise.
+    /// <see langword="true"/> if all routes in the tree were activated successfully;
+    /// <see langword="false"/> if any activation failed.
     /// </returns>
+    /// <remarks>
+    /// <para>
+    /// Ensures proper activation order in hierarchical routing scenarios by activating parent routes
+    /// before their children. This ordering is crucial as parent routes often provide the outlet
+    /// containers needed by their children's views. The method tracks activation success across the
+    /// entire tree, allowing the router to handle partial activation failures appropriately.
+    /// </para>
+    /// </remarks>
     bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context);
 }

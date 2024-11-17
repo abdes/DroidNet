@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
+
+namespace DroidNet.Docking.Tests.Mocks;
 
 /// <summary>
 /// A test dock class that cannot be minimized.
@@ -13,5 +13,6 @@ using DroidNet.Docking.Detail;
 [ExcludeFromCodeCoverage]
 internal sealed partial class NoMinimizeDock : Dock
 {
+    /// <inheritdoc/>
     public override bool CanMinimize => false;
 }

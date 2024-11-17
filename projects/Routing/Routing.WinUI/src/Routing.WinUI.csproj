@@ -1,32 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-        <UseWinUI>true</UseWinUI>
+	<PropertyGroup>
+		<UseWinUI>true</UseWinUI>
 
-        <!-- https://github.com/microsoft/WindowsAppSDK/issues/3548#issuecomment-1566057006 -->
-        <EnableCoreMrtTooling Condition=" '$(BuildingInsideVisualStudio)' != 'true' ">false</EnableCoreMrtTooling>
+		<Title>DroidNet Routed Navigation for WinUI</Title>
+		<Description>Provides a WinUI specific implementation of routed navigation, and a pattern of usage based on view models acting as outlet container with outlets in which target navigation content is loaded.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageTags>winui;mvvm;views;viewmodel;router;navigation</PackageTags>
+		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <RootNamespace>$(RootNamespace).Routing.WinUI</RootNamespace>
-    </PropertyGroup>
+		<RootNamespace>$(RootNamespace).Routing.WinUI</RootNamespace>
+	</PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="Microsoft.WindowsAppSDK" />
-        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
-    </ItemGroup>
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Controls\src\Routing.Controls.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
-    </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="DryIoc.dll" />
+		<PackageReference Include="CommunityToolkit.Mvvm" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+		<PackageReference Include="Microsoft.Xaml.Behaviors.WinUI.Managed" />
+	</ItemGroup>
+
+	<ItemGroup>
+    <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
+    <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+	</ItemGroup>
 
 </Project>

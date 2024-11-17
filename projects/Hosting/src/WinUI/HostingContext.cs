@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.WinUI;
-
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Hosting.WinUI;
 
 /// <summary>
 /// Encapsulates the information needed to manage the hosting of a WinUI-based

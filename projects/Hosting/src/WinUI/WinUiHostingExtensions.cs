@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.WinUI;
-
-using DroidNet.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Hosting.WinUI;
 
 /// <summary>
 /// Contains helper extensions for <see cref="HostApplicationBuilder" /> to configure the WinUI

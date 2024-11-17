@@ -2,19 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Bootstrap;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Routing;
 using DroidNet.Routing.Demo.Navigation;
 using DroidNet.Routing.Demo.Shell;
 using DryIoc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
+
+namespace DroidNet.Routing.Demo;
 
 /// <summary>The Main entry of the application.</summary>
 /// <remarks>
@@ -54,7 +53,7 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            bootstrap.Configure()
+            _ = bootstrap.Configure()
                 .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
                 .WithLoggingAbstraction()
                 .WithMvvm()

@@ -3,8 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-
         <Title>ViewModel navigation and composition using URL-based routing</Title>
         <Description>DroidNet.Routing implements and `Angular` like router that enables navigation inside a WinUI application using a URL or by dynamically manipulating the router state.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

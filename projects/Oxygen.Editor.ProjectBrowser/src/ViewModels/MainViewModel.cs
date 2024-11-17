@@ -2,12 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
-
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
+
+namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 
 /// <summary>
 /// The view model for the start screen. Mainly responsible for the navigation
@@ -35,10 +36,12 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
 
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];
 
+    /// <inheritdoc/>
     public IActiveRoute? ActiveRoute { get; set; }
 
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
+    /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         var viewModelType = viewModel.GetType();

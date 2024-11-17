@@ -2,13 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Routing;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>Unit tests for the Routes class.</summary>
 [TestClass]
@@ -138,13 +136,12 @@ public class RoutesTest
             Outlet = "outlet1",
         };
         this.routes.AddRange(
-            new List<Route>
-            {
+            [
                 route1,
                 route2,
                 route3,
                 route4,
-            });
+            ]);
 
         var result = this.routes.SortedByMatchingOutlet("outlet1");
 
@@ -176,12 +173,11 @@ public class RoutesTest
             Outlet = "outlet1",
         };
         this.routes.AddRange(
-            new List<Route>
-            {
+            [
                 route1,
                 route2,
                 route3,
-            });
+            ]);
 
         var result = this.routes.SortedByMatchingOutlet("outlet3");
 

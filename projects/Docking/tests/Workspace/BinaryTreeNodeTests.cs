@@ -2,17 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
 using FluentAssertions;
+
+namespace DroidNet.Docking.Tests.Workspace;
 
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
-/// <summary>
-/// Unit test cases for the <see cref="BinaryTreeNode{T}" /> class.
-/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("BinaryTreeNode")]
@@ -22,6 +19,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
 
     private bool disposed;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)
@@ -35,7 +33,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetLeft_Should_UpdateParentRelationship_When_NewLeftNode()
+    public void SetLeftShouldUpdateParentRelationshipWhenNewLeftNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -50,7 +48,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetLeft_Should_HaveNoEffect_When_SameLeftNode()
+    public void SetLeftShouldHaveNoEffectWhenSameLeftNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -66,7 +64,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetLeft_Should_UpdateParentRelationship_When_DifferentLeftNode()
+    public void SetLeftShouldUpdateParentRelationshipWhenDifferentLeftNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -84,7 +82,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetLeft_Should_AcceptNullValue()
+    public void SetLeftShouldAcceptNullValue()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -100,7 +98,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetRight_Should_UpdateParentRelationship_When_NewRightNode()
+    public void SetRightShouldUpdateParentRelationshipWhenNewRightNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -115,7 +113,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetRight_Should_HaveNoEffect_When_SameRightNode()
+    public void SetRightShouldHaveNoEffectWhenSameRightNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -131,7 +129,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetRight_Should_UpdateParentRelationship_When_DifferentRightNode()
+    public void SetRightShouldUpdateParentRelationshipWhenDifferentRightNode()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -149,7 +147,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void SetRight_Should_AcceptNullValue()
+    public void SetRightShouldAcceptNullValue()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -165,7 +163,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void Sibling_Should_ReturnNull_When_NoParent()
+    public void SiblingShouldReturnNullWhenNoParent()
     {
         // Arrange
         var node = MakeSimpleNode();
@@ -178,7 +176,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void Sibling_Should_ReturnRightChild_When_ThisIsLeftChild()
+    public void SiblingShouldReturnRightChildWhenThisIsLeftChild()
     {
         // Arrange
         using var parent = MakeSimpleNode();
@@ -195,7 +193,7 @@ public sealed partial class BinaryTreeNodeTests : IDisposable
     }
 
     [TestMethod]
-    public void Sibling_Should_ReturnLeftChild_When_ThisIsRightChild()
+    public void SiblingShouldReturnLeftChildWhenThisIsRightChild()
     {
         // Arrange
         using var parent = MakeSimpleNode();

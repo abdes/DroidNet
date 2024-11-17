@@ -4,6 +4,9 @@
 
 namespace DroidNet.Routing;
 
+/// <summary>
+/// TODO: Implement router state manager with history and state management.
+/// </summary>
 public interface IRouterStateManager
 {
 }

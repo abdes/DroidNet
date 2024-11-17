@@ -3,9 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <Platforms>x64</Platforms>
-
         <Title>Oxygen Editor Document Storage Layer</Title>
         <Description>Abstracts the storage of documents and entities in the Oxygen Editor and include implementation for various strage providers, including the native filesystem.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

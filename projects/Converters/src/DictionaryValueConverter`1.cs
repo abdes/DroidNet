@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
-
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Converters;
 
 /// <summary>
 /// Converts a binding to a dictionary with a string key as a parameter to the value corresponding to that key in the dictionary.
@@ -36,17 +36,12 @@ public partial class DictionaryValueConverter<T> : IValueConverter
     /// A non-null object of type <typeparamref name="T" />if <paramref name="value" /> is not null, <paramref name="parameter" /> is
     /// not null and an item for the <paramref name="parameter" /> key exists in the dictionary; null otherwise.
     /// </returns>
-    public object? Convert(object? value, Type targetType, object? parameter, string language)
-    {
-        if (value == null || parameter == null || value is not IDictionary<string, T> dictionary ||
-            parameter is not string key)
-        {
-            return null;
-        }
+    public object? Convert(object? value, Type targetType, object? parameter, string language) => value == null || parameter == null || value is not IDictionary<string, T> dictionary ||
+            parameter is not string key
+            ? null
+            : (object?)(dictionary.TryGetValue(key, out var item) ? item! : null);
 
-        return dictionary.TryGetValue(key, out var item) ? item! : null;
-    }
-
+    /// <inheritdoc/>
     public object ConvertBack(object value, Type targetType, object? parameter, string language)
         => throw new InvalidOperationException("Don't use DictionaryValueConverter.ConvertBack; it's meaningless.");
 }

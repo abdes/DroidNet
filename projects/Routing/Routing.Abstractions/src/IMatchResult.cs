@@ -5,40 +5,46 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Interface representing the result of matching a route <see cref="Path" /> with
-/// segments (<see cref="IUrlSegment" />) from a <see cref="IUrlSegmentGroup" />.
+/// Represents the result of matching URL segments against a route's path configuration.
 /// </summary>
-/// <seealso cref="IRoute.PathMatcher" />
+/// <remarks>
+/// During route recognition, the router attempts to match URL segments against route
+/// configurations. A match result indicates whether the match was successful, which URL segments
+/// were consumed by the match, and what positional parameters were extracted (e.g., ':id' in
+/// '/users/:id').
+/// </remarks>
+/// <seealso cref="IRoute.PathMatcher"/>
 public interface IMatchResult
 {
     /// <summary>
     /// Gets a value indicating whether the match was successful.
     /// </summary>
     /// <value>
-    /// <see langword="true" /> if the match was successful.; <see langword="false" /> otherwise.
+    /// <see langword="true"/> if the route's path matched the URL segments;
+    /// otherwise, <see langword="false"/>.
     /// </value>
-    public bool IsMatch { get; }
+    bool IsMatch { get; }
 
     /// <summary>
-    /// Gets the list of segments, from the <see cref="IUrlSegmentGroup" />,
-    /// consumed during the match.
+    /// Gets the list of URL segments that were matched by the route.
     /// </summary>
-    /// <value>The list of segments consumed during the match.</value>
-    public IReadOnlyList<IUrlSegment> Consumed { get; }
+    /// <value>
+    /// The segments from the URL tree that were successfully matched and consumed during route
+    /// recognition.
+    /// </value>
+    IReadOnlyList<IUrlSegment> Consumed { get; }
 
     /// <summary>
-    /// Gets a dictionary of the positional parameters found during the
-    /// matching of a route's path to the segments in a <see cref="IUrlSegmentGroup" />.
+    /// Gets the positional parameters extracted during route matching.
     /// </summary>
     /// <remarks>
-    /// Positional parameters are specified in the route's <see cref="Path" />,
-    /// and correspond to a path segment prefixed with the ':' character
-    /// (example: in the path "/User/:id", ":id" represents a positional
-    /// parameter with the name "id").
+    /// Positional parameters are specified in the route's path using ':' prefix (e.g., in
+    /// '/users/:id', ':id' is a positional parameter). When matched, the actual URL segment value
+    /// is captured in this dictionary.
     /// </remarks>
     /// <value>
-    /// A dictionary of positional parameters, where keys are the parameter
-    /// names and values are the matching <see cref="IUrlSegment" />.
+    /// A dictionary mapping parameter names to their matched URL segments. For example, matching
+    /// '/users/123' against '/users/:id' produces a parameter entry of "id" → segment "123".
     /// </value>
-    public IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; }
+    IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; }
 }

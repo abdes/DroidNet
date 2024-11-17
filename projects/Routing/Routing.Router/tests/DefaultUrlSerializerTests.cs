@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Unit test cases for the <see cref="DefaultUrlSerializer" /> class.

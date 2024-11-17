@@ -2,12 +2,6 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <UseWinUI>true</UseWinUI>
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
@@ -38,8 +32,8 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing.Abstractions\src\Routing.Abstractions.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing.Controls\src\Routing.Controls.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

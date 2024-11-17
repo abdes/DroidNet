@@ -2,14 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 using System.Diagnostics;
 using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <summary>
 /// Implements the <see cref="IRouteActivator" /> interface for activating routes inside the internal router used by the Content
 /// Browser module.
@@ -20,6 +21,7 @@ using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 internal sealed partial class InternalRouteActivator(ILoggerFactory? loggerFactory)
     : AbstractRouteActivator(loggerFactory)
 {
+    /// <inheritdoc/>
     protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)
     {
         if (route.ViewModel is null)

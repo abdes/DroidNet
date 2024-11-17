@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Destructurama;
@@ -12,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Contains global initialization for Verify, the IoC container and logging.
@@ -58,7 +58,16 @@ public class GlobalTestInitializer : VerifyBase
 
         Log.Information("Test session started");
 
-        container.RegisterInstance<ILoggerFactory>(new SerilogLoggerFactory(Log.Logger));
+        var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+        try
+        {
+            container.RegisterInstance<ILoggerFactory>(loggerFactory);
+            loggerFactory = null; // prevent disposal
+        }
+        finally
+        {
+            loggerFactory?.Dispose();
+        }
 
         container.Register(
             Made.Of(

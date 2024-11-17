@@ -2,12 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
+using DroidNet.Docking.Workspace;
 using FluentAssertions;
-using static TreeTraversal;
+
+using static DroidNet.Docking.Workspace.TreeTraversal;
+
+namespace DroidNet.Docking.Tests.Workspace;
 
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
@@ -21,6 +23,7 @@ public sealed partial class DockingTreeNodeTests : IDisposable
 
     private bool disposed;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)
@@ -38,7 +41,7 @@ public sealed partial class DockingTreeNodeTests : IDisposable
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void AddChildLeft_BothSlotsEmpty()
+    public void AddChildLeftBothSlotsEmpty()
     {
         // Arrange
         using var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -57,7 +60,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildLeft_EmptyLeftSlot()
+    public void AddChildLeftEmptyLeftSlot()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -77,7 +80,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildLeft_OccupiedLeftSlotEmptyRightSlot()
+    public void AddChildLeftOccupiedLeftSlotEmptyRightSlot()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -97,7 +100,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildLeft_BothSlotsOccupiedLeftIsLayoutGroup()
+    public void AddChildLeftBothSlotsOccupiedLeftIsLayoutGroup()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -125,7 +128,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildLeft_BothSlotsOccupiedLeftIsDockGroup()
+    public void AddChildLeftBothSlotsOccupiedLeftIsDockGroup()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -151,7 +154,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildLeft_ToEdgeGroup()
+    public void AddChildLeftToEdgeGroup()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -179,7 +182,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void AddChildRight_BothSlotsEmpty()
+    public void AddChildRightBothSlotsEmpty()
     {
         // Arrange
         var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -198,7 +201,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildRight_EmptyRightSlot()
+    public void AddChildRightEmptyRightSlot()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -218,7 +221,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildRight_OccupiedRightSlotEmptyLeftSlot()
+    public void AddChildRightOccupiedRightSlotEmptyLeftSlot()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -238,7 +241,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildRight_BothSlotsOccupiedRightIsLayoutGroup()
+    public void AddChildRightBothSlotsOccupiedRightIsLayoutGroup()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -266,7 +269,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildRight_BothSlotsOccupiedRightIsDockGroup()
+    public void AddChildRightBothSlotsOccupiedRightIsDockGroup()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -293,7 +296,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildRight_ToEdgeGroup()
+    public void AddChildRightToEdgeGroup()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -321,7 +324,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void AddChildBefore_BothSlotsEmpty()
+    public void AddChildBeforeBothSlotsEmpty()
     {
         // Arrange
         var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -336,7 +339,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_SiblingIsNotChild()
+    public void AddChildBeforeSiblingIsNotChild()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -358,7 +361,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_SiblingIsLeft_RightIsFree()
+    public void AddChildBeforeSiblingIsLeftRightIsFree()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -378,7 +381,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_SiblingIsLeft_RightIsFull()
+    public void AddChildBeforeSiblingIsLeftRightIsFull()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -401,7 +404,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_SiblingIsRight_LeftIsFree()
+    public void AddChildBeforeSiblingIsRightLeftIsFree()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -419,7 +422,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_SiblingIsRight_LeftIsFull()
+    public void AddChildBeforeSiblingIsRightLeftIsFull()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -442,7 +445,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildBefore_ToEdgeGroup()
+    public void AddChildBeforeToEdgeGroup()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -467,7 +470,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void AddChildAfter_BothSlotsEmpty()
+    public void AddChildAfterBothSlotsEmpty()
     {
         // Arrange
         var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -482,7 +485,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_SiblingIsNotChild()
+    public void AddChildAfterSiblingIsNotChild()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -504,7 +507,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_SiblingIsLeft_RightIsFree()
+    public void AddChildAfterSiblingIsLeftRightIsFree()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -524,7 +527,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_SiblingIsLeft_RightIsFull()
+    public void AddChildAfterSiblingIsLeftRightIsFull()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -547,7 +550,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_SiblingIsRight_LeftIsFree()
+    public void AddChildAfterSiblingIsRightLeftIsFree()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -565,7 +568,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_SiblingIsRight_LeftIsFull()
+    public void AddChildAfterSiblingIsRightLeftIsFull()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -588,7 +591,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AddChildAfter_ToEdgeGroup()
+    public void AddChildAfterToEdgeGroup()
     {
         // Arrange
         var rightChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -613,7 +616,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void RemoveChild_NotAChild()
+    public void RemoveChildNotAChild()
     {
         // Arrange
         var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -627,7 +630,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void RemoveChild_CenterGroup()
+    public void RemoveChildCenterGroup()
     {
         // Arrange
         var child = new DockingTreeNode(this.docker, new CenterGroup(this.docker));
@@ -641,7 +644,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void RemoveChild_Left()
+    public void RemoveChildLeft()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -661,7 +664,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void RemoveChild_Right()
+    public void RemoveChildRight()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -685,7 +688,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void MergeLeafParts_NullPart_Throws()
+    public void MergeLeafPartsNullPartThrows()
     {
         // Arrange
         var root = new MockDockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -698,7 +701,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void MergeLeafParts_NonLeafPart_Throws()
+    public void MergeLeafPartsNonLeafPartThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -724,7 +727,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void MergeLeafParts_LeftIsCenterGroup_Throws()
+    public void MergeLeafPartsLeftIsCenterGroupThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new CenterGroup(this.docker));
@@ -743,7 +746,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void MergeLeafParts_RightIsCenterGroup_Throws()
+    public void MergeLeafPartsRightIsCenterGroupThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -762,7 +765,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void MergeLeafParts_MergesDocks()
+    public void MergeLeafPartsMergesDocks()
     {
         // Arrange
         var leftSegment = new LayoutDockGroup(this.docker);
@@ -801,7 +804,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void AssimilateChild_NotLoneChild_Throws()
+    public void AssimilateChildNotLoneChildThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -820,7 +823,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AssimilateChild_NotChild_Throws()
+    public void AssimilateChildNotChildThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -838,7 +841,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AssimilateChild_ChildIsCenterGroup_Throws()
+    public void AssimilateChildChildIsCenterGroupThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new CenterGroup(this.docker));
@@ -855,7 +858,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AssimilateChild_ChildIsEdgeGroup_Throws()
+    public void AssimilateChildChildIsEdgeGroupThrows()
     {
         // Arrange
         var leftChild = new DockingTreeNode(this.docker, new EdgeGroup(this.docker, DockGroupOrientation.Horizontal));
@@ -872,7 +875,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AssimilateChild_ChildWithChildren()
+    public void AssimilateChildChildWithChildren()
     {
         // Arrange
         var leftSubChild = new DockingTreeNode(this.docker, new LayoutDockGroup(this.docker));
@@ -900,7 +903,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void AssimilateChild_ChildWithDocks()
+    public void AssimilateChildChildWithDocks()
     {
         // Arrange
         const DockGroupOrientation childOrientation = DockGroupOrientation.Horizontal;
@@ -929,7 +932,7 @@ public partial class DockingTreeNodeTests
 public partial class DockingTreeNodeTests
 {
     [TestMethod]
-    public void Repartition_NotLayoutDockGroup_Throws()
+    public void RepartitionNotLayoutDockGroupThrows()
     {
         // Arrange
         var root = new DockingTreeNode(this.docker, new LayoutGroup(this.docker));
@@ -946,7 +949,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void Repartition_RelativeDockDoesNotBelongToThisNode_Throws()
+    public void RepartitionRelativeDockDoesNotBelongToThisNodeThrows()
     {
         // Arrange
         const DockGroupOrientation existingOrientation = DockGroupOrientation.Horizontal;
@@ -965,7 +968,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void Repartition_NothingBeforeOrAfter()
+    public void RepartitionNothingBeforeOrAfter()
     {
         // Arrange
         const DockGroupOrientation existingOrientation = DockGroupOrientation.Horizontal;
@@ -991,7 +994,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void Repartition_NothingBefore()
+    public void RepartitionNothingBefore()
     {
         // Arrange
         const DockGroupOrientation existingOrientation = DockGroupOrientation.Horizontal;
@@ -1024,7 +1027,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void Repartition_NothingAfter()
+    public void RepartitionNothingAfter()
     {
         // Arrange
         const DockGroupOrientation existingOrientation = DockGroupOrientation.Horizontal;
@@ -1057,7 +1060,7 @@ public partial class DockingTreeNodeTests
     }
 
     [TestMethod]
-    public void Repartition_BeforeAndAfter()
+    public void RepartitionBeforeAndAfter()
     {
         // Arrange
         const DockGroupOrientation existingOrientation = DockGroupOrientation.Horizontal;

@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-/* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
-
-namespace DroidNet.Docking.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking.Demo.Controls;
@@ -13,6 +9,10 @@ using DroidNet.Docking.Demo.Shell;
 using DroidNet.Docking.Workspace;
 using DryIoc;
 using Microsoft.UI.Xaml;
+
+/* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
+
+namespace DroidNet.Docking.Demo;
 
 /// <summary>The User Interface's main window.</summary>
 /// <remarks>

@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Utils;
-
 using System.Collections.ObjectModel;
+
+namespace DroidNet.Routing.Utils;
 
 /// <summary>
 /// Contains extension methods for the <see cref="ReadOnlyCollection{T}" /> type.
@@ -12,24 +12,15 @@ using System.Collections.ObjectModel;
 public static class ReadOnlyCollectionExtensions
 {
     /// <summary>
-    /// Creates a shallow copy of a range of elements in the source
-    /// <see cref="ReadOnlyCollection{T}" />.
+    /// Creates a shallow copy of a range of elements in the source <see cref="ReadOnlyCollection{T}" />.
     /// </summary>
     /// <typeparam name="T">The type of elements in the collection.</typeparam>
-    /// <param name="collection">
-    /// The source <see cref="ReadOnlyCollection{T}" />.
-    /// </param>
-    /// <param name="start">
-    /// The zero-based index at which the range starts.
-    /// </param>
+    /// <param name="collection">The source <see cref="ReadOnlyCollection{T}" />.</param>
+    /// <param name="start">The zero-based index at which the range starts.</param>
     /// <param name="count">The number of elements in the range.</param>
-    /// <returns>
-    /// A shallow copy of a range of elements in the source
-    /// <see cref="ReadOnlyCollection{T}" />.
-    /// </returns>
+    /// <returns>A shallow copy of a range of elements in the source <see cref="ReadOnlyCollection{T}" />.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// index and count do not denote a valid range of elements in the
-    /// <see cref="ReadOnlyCollection{T}" />.
+    /// Thrown when index and count do not denote a valid range of elements in the <see cref="ReadOnlyCollection{T}" />.
     /// </exception>
     public static IReadOnlyList<T> GetRange<T>(this IReadOnlyList<T> collection, int start, int count)
     {

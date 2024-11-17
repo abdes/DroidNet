@@ -2,13 +2,39 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.OutputLog.Theming;
-
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 
+namespace DroidNet.Controls.OutputLog.Theming;
+
+/// <summary>
+/// Provides predefined rich text themes for styling log output.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This class contains static properties that define various rich text themes. Each theme is represented
+/// by a <see cref="RichTextTheme"/> instance, which maps <see cref="ThemeStyle"/> values to <see cref="RunStyle"/> instances.
+/// </para>
+/// <para>
+/// <strong>Usage Guidelines:</strong>
+/// Use these predefined themes to apply consistent styling to log output. You can also create custom themes
+/// by defining your own mappings of <see cref="ThemeStyle"/> to <see cref="RunStyle"/>.
+/// </para>
+/// <para>
+/// Example usage:
+/// <code><![CDATA[
+/// var theme = RichTextThemeDefinitions.Literate;
+/// var run = new Run { Text = "Information: Operation completed successfully." };
+/// theme.Apply(paragraph, ThemeStyle.Information);
+/// // The run is added to the paragraph with the specified information styling
+/// ]]></code>
+/// </para>
+/// </remarks>
 internal static class RichTextThemeDefinitions
 {
+    /// <summary>
+    /// Gets the "Literate" theme, which uses a light-on-dark color scheme.
+    /// </summary>
     public static RichTextTheme Literate { get; } = new(
         new Dictionary<ThemeStyle, RunStyle>
         {
@@ -38,6 +64,9 @@ internal static class RichTextThemeDefinitions
             },
         });
 
+    /// <summary>
+    /// Gets the "Grayscale" theme, which uses shades of gray for styling.
+    /// </summary>
     public static RichTextTheme Grayscale { get; } = new(
         new Dictionary<ThemeStyle, RunStyle>
         {
@@ -75,6 +104,9 @@ internal static class RichTextThemeDefinitions
             },
         });
 
+    /// <summary>
+    /// Gets the "Colored" theme, which uses a colorful palette for styling.
+    /// </summary>
     public static RichTextTheme Colored { get; } = new(
         new Dictionary<ThemeStyle, RunStyle>
         {

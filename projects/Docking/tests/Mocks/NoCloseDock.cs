@@ -2,16 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 
-/// <summary>
-/// A test dock class that cannot be closed.
-/// </summary>
+namespace DroidNet.Docking.Tests.Mocks;
+
 [ExcludeFromCodeCoverage]
 internal sealed partial class NoCloseDock : Dock
 {
+    /// <inheritdoc/>
     public override bool CanClose => false;
 }

@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Docking.Tests;
 
 [TestClass]
 [TestCategory(nameof(Dockable))]
@@ -16,7 +15,7 @@ public class DockableTests
 {
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void Title_Setter_ShouldTriggerPropertyChange_ForMinimizedTitle_WhenCurrentValueIsNull()
+    public void TitleSetterShouldTriggerPropertyChangeForMinimizedTitleWhenCurrentValueIsNull()
     {
         // Arrange
         using var dockable = Dockable.New("testId");
@@ -50,7 +49,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void Title_Setter_ShouldTriggerPropertyChange_ForTabbedTitle_WhenCurrentValueIsNull()
+    public void TitleSetterShouldTriggerPropertyChangeForTabbedTitleWhenCurrentValueIsNull()
     {
         // Arrange
         using var dockable = Dockable.New("testId");
@@ -84,7 +83,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void Title_Setter_ShouldNotTriggerPropertyChange_IfNotDifferentValue()
+    public void TitleSetterShouldNotTriggerPropertyChangeIfNotDifferentValue()
     {
         // Arrange
         using var dockable = Dockable.New("testId");
@@ -108,7 +107,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void All_ReturnsAllManagedDockables()
+    public void AllReturnsAllManagedDockables()
     {
         // Arrange
         using var dockable1 = Dockable.New("1");
@@ -120,7 +119,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void FromId_ReturnsDockable_WhenIdIsManaged()
+    public void FromIdReturnsDockableWhenIdIsManaged()
     {
         // Arrange
         using var dockable = Dockable.New("1");
@@ -134,7 +133,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void FromId_ReturnsNull_WhenIdIsIsNotManaged()
+    public void FromIdReturnsNullWhenIdIsIsNotManaged()
     {
         // Arrange
         using var dockable = Dockable.New("1");
@@ -148,7 +147,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Dispose")]
-    public void Dispose_InvokesOnDisposed_BeforeDisposing()
+    public void DisposeInvokesOnDisposedBeforeDisposing()
     {
         // Arrange
         var dockable = Dockable.New("1");
@@ -169,7 +168,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void IsActive_Setter_ThrowsIfNoOwner()
+    public void IsActiveSetterThrowsIfNoOwner()
     {
         var act = () =>
         {
@@ -186,7 +185,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void IsActive_Setter_ShouldTriggerPropertyChange()
+    public void IsActiveSetterShouldTriggerPropertyChange()
     {
         // Arrange
         using var dockable = Dockable.New("testId");
@@ -212,7 +211,7 @@ public class DockableTests
 
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
-    public void IsActive_Setter_ShouldNotTriggerPropertyChange_IfNotDifferentValue()
+    public void IsActiveSetterShouldNotTriggerPropertyChangeIfNotDifferentValue()
     {
         // Arrange
         using var dockable = Dockable.New("testId");

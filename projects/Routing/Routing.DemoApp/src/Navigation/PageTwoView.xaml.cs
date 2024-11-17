@@ -2,13 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Demo.Navigation;
-
 using DroidNet.Mvvm.Generators;
 
-/// <summary>A simple page for demonstration.</summary>
+namespace DroidNet.Routing.Demo.Navigation;
+
+/// <summary>
+/// A simple page for demonstration.
+/// </summary>
 [ViewModel(typeof(PageTwoViewModel))]
 public sealed partial class PageTwoView
 {
-    public PageTwoView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PageTwoView"/> class.
+    /// </summary>
+    public PageTwoView()
+    {
+        this.InitializeComponent();
+    }
 }

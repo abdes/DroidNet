@@ -5,81 +5,133 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Represents a collection of URL parameters (<see cref="Parameter" />), functioning like a dictionary where keys are
-/// parameter names and values are parameter values.
+/// Represents a collection of URL parameters, supporting both matrix parameters in path segments
+/// and query parameters in URLs.
 /// </summary>
 /// <remarks>
-/// Parameter names are treated as case-insensitive for indexing purposes. The support for multi-valued parameters is
-/// flexible, but relies on the following conventions:
 /// <para>
-/// A parameter may be specified as `<c>name</c>`, indicating that it exists, but has no value (i.e. a <see langword="null" /> value).
+/// This interface provides a flexible way to handle URL parameters, which can be either matrix
+/// parameters embedded in path segments or query parameters appended to the URL. Parameter names
+/// are case-insensitive for lookup purposes, and values follow RFC 3986 encoding rules.
 /// </para>
 /// <para>
-/// A parameter may be specified as `<c>name=</c>`, indicating that it exists and has a single value and that value is
-/// empty (i.e. <see cref="string.Empty" />).
+/// Multiple values for the same parameter can be represented in several ways:
+/// <list type="definition">
+///   <item>
+///     <term>Parameter without value</term>
+///     <description>Just the name: <c>left</c> (stored as name with <see langword="null"/> value)</description>
+///   </item>
+///   <item>
+///     <term>Parameter with empty value</term>
+///     <description>Name with equals: <c>name=</c> (stored as name with empty string)</description>
+///   </item>
+///   <item>
+///     <term>Single value</term>
+///     <description>Basic form: <c>w=300</c></description>
+///   </item>
+///   <item>
+///     <term>Multiple values as list</term>
+///     <description>Comma-separated: <c>user=John,Peter</c></description>
+///   </item>
+///   <item>
+///     <term>Multiple values as repetition</term>
+///     <description>Repeated parameters: <c>user=John&amp;user=Peter</c></description>
+///   </item>
+/// </list>
 /// </para>
 /// <para>
-/// A parameter may be specified as `<c>name=value</c>` or `<c>name=value1,value2</c>`, indicating that it exists and
-/// has a "value". That value may be interpreted as a single value, or as comma-separated multiple values. How to store
-/// the value(s) in the collection is and implementation detail, but the <see cref="TryGetValue(string,out string?)" />
-/// method will always return the value(s) as a single string, while <see cref="GetValues" /> may split a
-/// comma-separated value into individual values and always return an array of strings with a single value or multiple
-/// values.
+/// The interface provides two methods for accessing parameter values:
+/// <list type="definition">
+///   <item>
+///     <term><see cref="TryGetValue"/></term>
+///     <description>Returns the raw string value as stored. For example, with either
+///     <c>user=John,Peter</c> or <c>user=John&amp;user=Peter</c>, returns "John,Peter"</description>
+///   </item>
+///   <item>
+///     <term><see cref="GetValues"/></term>
+///     <description>Returns individual values as an array. For example, with either
+///     <c>user=John,Peter</c> or <c>user=John&amp;user=Peter</c>, returns ["John", "Peter"]</description>
+///   </item>
+/// </list>
 /// </para>
 /// <para>
-/// A parameter may appear multiple times as `<c>name=value1&amp;name=value2</c>`. In such case, its value(s) can be
-/// obtained as a single string using <see cref="TryGetValue(string,out string?)" /> or as an array of strings using
-/// <see cref="GetValues" />.
+/// The default implementation (<see cref="Parameters"/>) stores multiple values as
+/// comma-separated lists internally, but clients should not rely on this detail as
+/// other implementations may choose different storage strategies.
 /// </para>
+///
+/// <example>
+/// <strong>Example Usage</strong>
+/// <code><![CDATA[
+/// var parameters = new Parameters();
+/// parameters.Add("user", "John");
+/// parameters.Add("user", "Peter");
+///
+/// // Using TryGetValue
+/// if (parameters.TryGetValue("user", out var value))
+/// {
+///     Console.WriteLine(value); // Outputs: "John,Peter"
+/// }
+///
+/// // Using GetValues
+/// var values = parameters.GetValues("user");
+/// foreach (var val in values)
+/// {
+///     Console.WriteLine(val); // Outputs: "John" and "Peter" on separate lines
+/// }
+/// ]]></code>
+/// </example>
+///
+/// <para><strong>Implementation Guidelines</strong></para>
 /// <para>
-/// When encoding parameters and their values, an implementation may interchangeably chose to encode multiple values as
-/// a comma-separated list or as multiple occurrences of the same parameter name with a different value each time.
+/// When implementing this interface, ensure that parameter names are treated case-insensitively and
+/// that multiple values are handled correctly, either as comma-separated lists or repeated parameters.
 /// </para>
 /// </remarks>
 public interface IParameters : IEnumerable<Parameter>
 {
     /// <summary>
-    /// Gets the number of parameters in the collection.
+    /// Gets the number of distinct parameter names in the collection.
     /// </summary>
     int Count { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the collection is empty.
+    /// Gets a value indicating whether the collection contains any parameters.
     /// </summary>
     bool IsEmpty { get; }
 
     /// <summary>
-    /// Gets the value(s) associated with the specified parameter name, encoded as a comma-separated list.
+    /// Gets the value(s) associated with the specified parameter name as a single string.
     /// </summary>
-    /// <param name="name">The parameter name to retrieve the value for.</param>
+    /// <param name="name">The parameter name to retrieve (case-insensitive).</param>
     /// <param name="value">
-    /// When this method returns, contains a comma-separated list of the value(s) associated with the specified
-    /// parameter name, if the parameter exists; otherwise, <see langword="null" />. This parameter is passed
-    /// uninitialized.
+    /// When this method returns, contains either:
+    /// <list type="bullet">
+    ///   <item><see langword="null"/> if the parameter exists without a value</item>
+    ///   <item>the single value if the parameter has one value</item>
+    ///   <item>a comma-separated list of values if the parameter has multiple values</item>
+    /// </list>
     /// </param>
-    /// <returns>
-    /// <see langword="true" /> if a parameter with the specified name exists; otherwise, <see langword="false" />.
-    /// </returns>
+    /// <returns><see langword="true"/> if the parameter exists; otherwise, <see langword="false"/>.</returns>
     bool TryGetValue(string name, out string? value);
 
     /// <summary>
-    /// Gets all the values associated with the specified parameter name.
+    /// Gets all values associated with the specified parameter name as separate strings.
     /// </summary>
-    /// <param name="name">The parameter name to retrieve the value for.</param>
+    /// <param name="name">The parameter name to retrieve (case-insensitive).</param>
     /// <returns>
-    /// An array of strings, where each element represents one value of the parameter. If the parameter does not exist,
-    /// <see langword="null" /> is returned. If the parameter has no values, an empty array is returned.
+    /// <list type="bullet">
+    ///   <item><see langword="null"/> if the parameter doesn't exist</item>
+    ///   <item>empty array if the parameter exists without values</item>
+    ///   <item>array of individual values, split from either comma-separated lists or multiple parameter occurrences</item>
+    /// </list>
     /// </returns>
     string?[]? GetValues(string name);
 
     /// <summary>
-    /// Determines whether the collection contains a parameter with the specified name.
+    /// Determines whether a parameter with the specified name exists.
     /// </summary>
-    /// <param name="parameterName">The parameter name to search for.</param>
-    /// <returns><see langword="true" /> if the collection contains a parameter with the specified name; otherwise,
-    /// <see langword="false" />.</returns>
-    /// <remarks>
-    /// This method performs a case-insensitive comparison of parameter names.
-    /// </remarks>
+    /// <param name="parameterName">The parameter name to check (case-insensitive).</param>
+    /// <returns><see langword="true"/> if the parameter exists; otherwise, <see langword="false"/>.</returns>
     bool Contains(string parameterName);
 }

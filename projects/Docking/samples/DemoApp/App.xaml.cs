@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Docking.Demo;
 
 /// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 [ExcludeFromCodeCoverage]

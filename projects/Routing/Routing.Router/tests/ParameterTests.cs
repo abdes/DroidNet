@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests;
 
 [TestClass]
 [TestCategory("Parameters")]
@@ -20,8 +19,8 @@ public class ParameterTests
         var parameter = new Parameter("param1", "value1");
 
         // Assert
-        parameter.Name.Should().Be("param1");
-        parameter.Value.Should().Be("value1");
+        _ = parameter.Name.Should().Be("param1");
+        _ = parameter.Value.Should().Be("value1");
     }
 
     [TestMethod]
@@ -44,7 +43,7 @@ public class ParameterTests
         var result = parameter1.Equals(parameter2);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -58,7 +57,7 @@ public class ParameterTests
         var result = parameter1.Equals(parameter2);
 
         // Assert
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -73,7 +72,7 @@ public class ParameterTests
         var hashCode2 = parameter2.GetHashCode();
 
         // Assert
-        hashCode1.Should().Be(hashCode2);
+        _ = hashCode1.Should().Be(hashCode2);
     }
 
     [TestMethod]
@@ -86,7 +85,7 @@ public class ParameterTests
         var result = parameter.ToString();
 
         // Assert
-        result.Should().Be("param1=value1");
+        _ = result.Should().Be("param1=value1");
     }
 
     [TestMethod]
@@ -99,6 +98,6 @@ public class ParameterTests
         var result = parameter.ToString();
 
         // Assert
-        result.Should().Be("param1");
+        _ = result.Should().Be("param1");
     }
 }

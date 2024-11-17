@@ -2,15 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests.Detail;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Detail;
 using DryIoc;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Parameters = DroidNet.Routing.Parameters;
+
+namespace DroidNet.Routing.Tests.Detail;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -20,6 +18,9 @@ public class RouteActivationObserverTests
     private readonly Mock<IContainer> containerMock;
     private readonly RouteActivationObserver observer;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RouteActivationObserverTests"/> class.
+    /// </summary>
     public RouteActivationObserverTests()
     {
         this.containerMock = new Mock<IContainer>();
@@ -37,7 +38,7 @@ public class RouteActivationObserverTests
         Action act = () => this.observer.OnActivating(route, context);
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<ArgumentException>()
             .WithMessage("*Expected route `route` to be of type `*ActiveRoute`*");
     }
@@ -54,7 +55,7 @@ public class RouteActivationObserverTests
         var result = this.observer.OnActivating(route, context);
 
         // Assert
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -68,7 +69,7 @@ public class RouteActivationObserverTests
         var result = this.observer.OnActivating(route, context);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -79,14 +80,14 @@ public class RouteActivationObserverTests
         var context = new Mock<INavigationContext>().Object;
 
         var viewModelMock = new Mock<IRoutingAware>();
-        this.containerMock.Setup(c => c.GetService(It.IsAny<Type>())).Returns(viewModelMock.Object);
+        _ = this.containerMock.Setup(c => c.GetService(It.IsAny<Type>())).Returns(viewModelMock.Object);
 
         // Act
         var result = this.observer.OnActivating(route, context);
 
         // Assert
-        result.Should().BeTrue();
-        route.ViewModel.Should().Be(viewModelMock.Object);
+        _ = result.Should().BeTrue();
+        _ = route.ViewModel.Should().Be(viewModelMock.Object);
         viewModelMock.VerifySet(vm => vm.ActiveRoute = route, Times.Once);
     }
 
@@ -101,7 +102,7 @@ public class RouteActivationObserverTests
         Action act = () => this.observer.OnActivating(route, context);
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<MissingViewModelException>()
             .And.ViewModelType.Should()
             .Be(typeof(MockViewModel));
@@ -112,14 +113,14 @@ public class RouteActivationObserverTests
     {
         // Arrange
         var route = MakeActiveRouteNoViewModel();
-        route.IsActivated.Should().BeFalse();
+        _ = route.IsActivated.Should().BeFalse();
         var context = new Mock<INavigationContext>().Object;
 
         // Act
         this.observer.OnActivated(route, context);
 
         // Assert
-        route.IsActivated.Should().BeTrue();
+        _ = route.IsActivated.Should().BeTrue();
     }
 
     private static ActiveRoute MakeActiveRouteNoViewModel() =>
@@ -150,5 +151,5 @@ public class RouteActivationObserverTests
     /// Used for mocking. Must be public.
     /// </summary>
     /// ReSharper disable once MemberCanBePrivate.Global
-    public static class MockViewModel;
+    internal static class MockViewModel;
 }

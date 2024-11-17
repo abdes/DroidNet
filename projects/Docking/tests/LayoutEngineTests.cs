@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Utils;
 using DroidNet.Docking.Workspace;
 
+namespace DroidNet.Docking.Tests;
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
 [TestClass]

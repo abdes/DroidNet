@@ -4,40 +4,53 @@
 
 namespace DroidNet.Routing;
 
+/// <summary>
+/// Represents a single segment in a URL path, consisting of a path component and optional matrix parameters.
+/// </summary>
+/// <remarks>
+/// <para>
+/// URL segments form the basic components of routing paths, with each segment potentially carrying
+/// both a path value and associated matrix parameters. For example, in the URL
+/// "/users;role=admin/123;detail=full", we have two segments: "users" with its role parameter, and
+/// "123" with its detail parameter. These segments work together to create meaningful navigation
+/// paths while maintaining clear parameter scope.
+/// </para>
+/// </remarks>
 public interface IUrlSegment
 {
     /// <summary>
-    /// Gets the matrix parameters associated with a URL segment.
+    /// Gets the matrix parameters associated with this URL segment.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Segment matrix parameters can only have a single value and such value
-    /// is completely opaque to the <see cref="IRouter" />. The comma (",")
-    /// reserved character can be used as a way to enable specifying multiple
-    /// values for a parameter (e.g. <c>key=value1,value2,value3</c>).
+    /// Matrix parameters provide segment-specific metadata that remains distinct from URL query
+    /// parameters. While query parameters apply globally to a URL, matrix parameters belong
+    /// specifically to their containing segment, maintaining clear parameter scope and preventing
+    /// naming conflicts. For instance, in "/users;role=admin/123;detail=full", the role parameter
+    /// belongs exclusively to the "users" segment, while the detail parameter is scoped to "123".
     /// </para>
     /// <para>
-    /// Segment specific matrix parameters are not in conflict with url query
-    /// parameters. They help in keeping segment routing self-contained.
+    /// Multiple values for the same parameter can be specified in two ways: using comma-separated
+    /// values like "roles=admin,user,guest", or by repeating the parameter multiple times like
+    /// "roles=admin;roles=user;roles=guest". Both approaches are valid and preserve the parameter
+    /// values exactly as provided. The router treats these values as opaque strings and makes no
+    /// assumptions about their format or meaning.
     /// </para>
     /// </remarks>
-    /// <value>The matrix parameters associated with a URL segment.</value>
     IParameters Parameters { get; }
 
-    /// <summary>Gets the path part of a URL segment.</summary>
+    /// <summary>
+    /// Gets the path component of this URL segment.
+    /// </summary>
     /// <remarks>
-    /// The <see cref="Path" /> is always defined for a segment and cannot be
-    /// empty (zero length).
     /// <para>
-    /// When the <see cref="Path" /> of a segment is (".") or (".."), also
-    /// known as dot-segments, the segment is used for relative reference
-    /// within the routing hierarchy. Such segments are intended for use at the
-    /// beginning of a relative-path reference to indicate relative position
-    /// within the hierarchical tree of names. They are only interpreted within
-    /// the URL path hierarchy and are removed as part of the resolution
-    /// process.
+    /// The path component serves as the primary identifier for a segment and must always be
+    /// present. It appears before any matrix parameters and follows standard URL encoding rules.
+    /// Special meaning is given to dot-segments: "." refers to the current hierarchy level, while
+    /// ".." refers to the parent level. These dot-segments play a crucial role in relative URL
+    /// navigation, allowing for precise traversal of the routing hierarchy. They are processed
+    /// during URL resolution and do not persist in the final routing structure.
     /// </para>
     /// </remarks>
-    /// <value>The path part of a URL segment.</value>
     string Path { get; }
 }

@@ -4,26 +4,18 @@
 
 namespace DroidNet.Routing.Detail;
 
-/// <summary>
-/// Represents the current state of the application router.
-/// </summary>
-/// <param name="url">
-/// The navigation url used to create this router state.
-/// </param>
-/// <param name="urlTree">
-/// The parsed <see cref="UrlTree" /> corresponding to the <paramref name="url" />.
-/// </param>
+/// <inheritdoc cref="IRouterState" />
+/// <param name="url">The navigation url used to create this router state.</param>
+/// <param name="urlTree">The parsed <see cref="UrlTree" /> corresponding to the <paramref name="url" />.</param>
 /// <param name="root">The root <see cref="IActiveRoute" /> of the state.</param>
 internal sealed class RouterState(string url, IUrlTree urlTree, IActiveRoute root) : IRouterState
 {
-    private interface IExtendedMatchResult : IMatchResult
-    {
-        IActiveRoute? LastActiveRoute { get; }
-    }
-
+    /// <inheritdoc/>
     public string Url { get; set; } = url;
 
+    /// <inheritdoc/>
     public IActiveRoute RootNode { get; } = root;
 
+    /// <inheritdoc/>
     public IUrlTree UrlTree { get; } = urlTree;
 }

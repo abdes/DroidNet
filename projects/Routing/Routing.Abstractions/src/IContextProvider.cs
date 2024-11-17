@@ -2,59 +2,101 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Routing.Events;
+
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Defines an interface for providing navigation contexts.
+/// Defines a provider of navigation contexts used by the router during navigation.
 /// </summary>
 /// <remarks>
-/// The context provider is used by the router to obtain an <see cref="INavigationContext" /> instance for a navigation
-/// target. This context is updated with router state and other routing data as navigation progresses. It is passed to
-/// the <see cref="IRouteActivator" /> when a route is activated. After all routes are activated, the router requests
-/// the <see cref="IContextProvider" /> to activate the <see cref="INavigationContext.NavigationTargetKey">target</see> in the
-/// navigation context.
+/// The context provider is responsible for:
+/// <list type="bullet">
+///   <item>
+///     <description>Creating navigation contexts for specified targets</description>
+///   </item>
+///   <item>
+///     <description>Tracking context lifecycle (creation, changes, destruction)</description>
+///   </item>
+///   <item>
+///     <description>Activating navigation targets when route activation completes</description>
+///   </item>
+/// </list>
+/// <para>
+/// During navigation, the router obtains a context for the target, updates it with state
+/// and routing data, then passes it to the <see cref="IRouteActivator"/> for route activation.
+/// Once all routes are activated, the provider activates the context's
+/// <see cref="INavigationContext.NavigationTargetKey">target</see>.
+/// </para>
+/// <para>
+/// As an analogy, consider a web browser with multiple windows and tabs. The context provider
+/// manages windows as primary navigation targets and tabs within windows as auxiliary targets.
+/// The main window represents the default target, while additional windows and their tabs
+/// can be created on demand. When activating a context, the provider ensures the appropriate
+/// window and tab become active, similar to bringing a browser window to the front and
+/// selecting the correct tab.
+/// </para>
 /// </remarks>
 public interface IContextProvider
 {
     /// <summary>
-    /// Occurs when the current context changes due to an external action.
+    /// Notifies when the active navigation context changes.
     /// </summary>
     public event EventHandler<ContextEventArgs>? ContextChanged;
 
     /// <summary>
-    /// Occurs when a new context is created.
+    /// Notifies when a new navigation context is created.
     /// </summary>
     public event EventHandler<ContextEventArgs>? ContextCreated;
 
     /// <summary>
-    /// Occurs when a context is destroyed and should no longer be used.
+    /// Notifies when a navigation context is destroyed.
     /// </summary>
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
     /// <summary>
-    /// Gets the <see cref="INavigationContext" /> for the specified <paramref name="target" />.
+    /// Gets a navigation context for the specified target.
     /// </summary>
-    /// <param name="target">The target for which a context is needed.</param>
-    /// <param name="currentContext">
-    /// The current context used by the router, provided for optimization, but may be <see langword="null" />.
-    /// </param>
+    /// <param name="target">The navigation target requiring a context.</param>
+    /// <param name="currentContext">The currently active context, if any.</param>
     /// <returns>
-    /// A <see cref="INavigationContext" /> instance for the specified <paramref name="target" />.
+    /// A navigation context for the specified target. May return the current context
+    /// if appropriate for the target.
     /// </returns>
     INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null);
 
     /// <summary>
-    /// Activates the <see cref="INavigationContext.NavigationTargetKey">target</see> in the provided context once all routes have
-    /// been activated.
+    /// Activates the specified navigation context.
     /// </summary>
-    /// <param name="context">The context to activate.</param>
+    /// <param name="context">The navigation context to activate.</param>
+    /// <remarks>
+    /// Called by the router after all routes are activated to make the navigation target
+    /// active in the application.
+    /// </remarks>
     void ActivateContext(INavigationContext context);
 }
 
+/// <summary>
+/// Defines a generic provider of navigation contexts used by the router during navigation.
+/// </summary>
+/// <typeparam name="T">The type of the navigation context.</typeparam>
 public interface IContextProvider<T> : IContextProvider
     where T : class, INavigationContext
 {
+    /// <summary>
+    /// Gets a navigation context for the specified target.
+    /// </summary>
+    /// <param name="target">The navigation target requiring a context.</param>
+    /// <param name="currentContext">The currently active context, if any.</param>
+    /// <returns>
+    /// A navigation context of type <typeparamref name="T"/> for the specified target. May return
+    /// the current context if appropriate for the target.
+    /// </returns>
     T ContextForTarget(Target target, T? currentContext = null);
 
+    /// <summary>
+    /// Activates the specified navigation context.
+    /// </summary>
+    /// <param name="context">The navigation context to activate.</param>
     void ActivateContext(T context);
 }

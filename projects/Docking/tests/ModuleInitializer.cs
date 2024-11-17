@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Workspace;
 using VerifyTests.DiffPlex;
+
+namespace DroidNet.Docking.Tests;
 
 /// <summary>Module level initialization code for the test frameworks.</summary>
 [ExcludeFromCodeCoverage]

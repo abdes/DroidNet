@@ -7,12 +7,12 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="55c08abd-eb90-40ee-aebf-b08fca804394"
+    Name="988C0852-63A0-4EA2-81FB-DA364B2D8657"
     Publisher="CN=abdes"
     Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>AppFwkDep.Core.Tests</DisplayName>
+    <DisplayName>DroidNet Routing.WinUI Unit Tests</DisplayName>
     <PublisherDisplayName>abdes</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -31,8 +31,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="AppFwkDep.Core.Tests Package"
-        Description="AppFwkDep.Core.Tests"
+        DisplayName="DroidNet Routing.WinUI Unit Tests"
+        Description="Unit testing project for the Routing.WinUI controls and outlet container implementation."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">

@@ -2,13 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Demo.Shell;
-
 using DroidNet.Mvvm.Generators;
+
+namespace DroidNet.Routing.Demo.Shell;
 
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(ShellViewModel))]
 public sealed partial class ShellView
 {
-    public ShellView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShellView"/> class.
+    /// </summary>
+    public ShellView()
+    {
+        this.InitializeComponent();
+    }
 }

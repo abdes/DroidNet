@@ -3,12 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-
         <Title>Oxygen Editor Core</Title>
         <Description>Oxygen Editor core services and utilities, including extensions to framework classes.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

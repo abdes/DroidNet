@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls;
-
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Docking.Controls;
 
 /// <summary>
 /// A styled <see cref="PanelButton" /> used for the close button of a dock panel.
 /// </summary>
 internal sealed partial class PanelCloseButton : PanelButton
 {
-    public PanelCloseButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelCloseButton)];
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PanelCloseButton"/> class.
+    /// </summary>
+    public PanelCloseButton()
+    {
+        this.Style = (Style)Application.Current.Resources[nameof(PanelCloseButton)];
+    }
 }

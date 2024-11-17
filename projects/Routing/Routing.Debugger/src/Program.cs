@@ -2,18 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-#if !DISABLE_XAML_GENERATED_MAIN
-#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
-#endif
-
-namespace DroidNet.Routing.Debugger;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Bootstrap;
 using DroidNet.Docking.Controls;
 using DroidNet.Docking.Layouts;
-using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.Config;
 using DroidNet.Routing.Debugger.UI.Docks;
 using DroidNet.Routing.Debugger.UI.Shell;
@@ -26,6 +19,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
 
+#if !DISABLE_XAML_GENERATED_MAIN
+#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
+#endif
+
+namespace DroidNet.Routing.Debugger;
+
 /// <summary>
 /// The Main entry of the application.
 /// </summary>
@@ -36,6 +35,7 @@ using Serilog;
 /// default services (such as Configuration, Logging, etc...) and a specialized
 /// <see cref="IHostedService" /> for running the User Interface thread.
 /// </remarks>
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "generated code uses public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -54,7 +54,7 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            bootstrap.Configure()
+            _ = bootstrap.Configure()
                 .WithConfiguration((_, _, _) => [], null)
                 .WithLoggingAbstraction()
                 .WithMvvm()

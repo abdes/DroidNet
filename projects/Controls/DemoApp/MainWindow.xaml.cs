@@ -2,16 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
+using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
+
 /* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
 
 namespace DroidNet.Controls.Demo;
-
-using System.Diagnostics.CodeAnalysis;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.WinUI;
-using DroidNet.Mvvm;
-using DroidNet.Routing;
-using Microsoft.UI.Xaml;
 
 /// <summary>The User Interface's main window.</summary>
 /// <remarks>
@@ -31,64 +29,31 @@ using Microsoft.UI.Xaml;
 [ObservableObject]
 public sealed partial class MainWindow : IOutletContainer
 {
-    private readonly IViewLocator viewLocator;
+    [ObservableProperty]
     private object? contentViewModel;
 
-    [ObservableProperty]
-    private UIElement? content;
-
-    public MainWindow(IViewLocator viewLocator)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainWindow"/> class.
+    /// </summary>
+    public MainWindow()
     {
         this.InitializeComponent();
 
-        this.viewLocator = viewLocator;
-
-        this.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets/WindowIcon.ico"));
-        this.Content = null;
-        this.Title = "AppDisplayName".GetLocalized();
+        // this.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets/WindowIcon.ico"));
+        // this.Title = "AppDisplayName".GetLocalized();
     }
 
+    /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
-        if (this.contentViewModel != viewModel)
+        if (this.ContentViewModel != viewModel)
         {
-            if (this.contentViewModel is IDisposable resource)
+            if (this.ContentViewModel is IDisposable resource)
             {
                 resource.Dispose();
             }
 
-            this.contentViewModel = viewModel;
+            this.ContentViewModel = viewModel;
         }
-
-        var view = this.viewLocator.ResolveView(viewModel) ??
-                   throw new MissingViewException { ViewModelType = viewModel.GetType() };
-
-        // Set the ViewModel property of the view here, so that we don't lose
-        // the view model instance we just created and which is the one that
-        // must be associated with this view.
-        //
-        // This must be done here because the MainWindow does not have a
-        // ViewModel and does not use the ViewModelToViewConverter.
-        if (view is IViewFor hasViewModel)
-        {
-            hasViewModel.ViewModel = viewModel;
-        }
-        else
-        {
-            throw new InvalidViewTypeException($"invalid view type; not an {nameof(IViewFor)}")
-            {
-                ViewType = view.GetType(),
-            };
-        }
-
-        if (!view.GetType().IsAssignableTo(typeof(UIElement)))
-        {
-            throw new InvalidViewTypeException($"invalid view type; not a {nameof(UIElement)}")
-            {
-                ViewType = view.GetType(),
-            };
-        }
-
-        this.Content = (UIElement)view;
     }
 }

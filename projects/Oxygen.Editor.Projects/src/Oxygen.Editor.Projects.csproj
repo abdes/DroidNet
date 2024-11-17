@@ -3,20 +3,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-
         <Title>Oxygen Editor Projects</Title>
         <Description>Shared module, providing the abstractions and utilities for manipulating Oxygen projects.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;gameengine</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
         <RootNamespace>Oxygen.Editor.Projects</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>

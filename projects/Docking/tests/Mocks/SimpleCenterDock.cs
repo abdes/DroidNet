@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
+
+namespace DroidNet.Docking.Tests.Mocks;
 
 /// <summary>
 /// A test dock suitable for the center dock group.
@@ -13,7 +13,9 @@ using DroidNet.Docking.Detail;
 [ExcludeFromCodeCoverage]
 internal sealed partial class SimpleCenterDock : Dock
 {
+    /// <inheritdoc/>
     public override bool CanMinimize => false;
 
+    /// <inheritdoc/>
     public override bool CanClose => false;
 }

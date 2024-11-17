@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Diagnostics;
+
+namespace DroidNet.Docking;
 
 /// <summary>
 /// Represents an anchor point for a dockable object in a workspace.
@@ -73,6 +73,7 @@ public partial class Anchor : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <inheritdoc/>
     public override string ToString()
         => $"{this.Position} {(this.dockable == null ? "Edge" : $"of `{this.dockable.Id}` in dock `{this.dockable.Owner}`")}";
 
@@ -130,6 +131,8 @@ public partial class Anchor : IDisposable
     }
 }
 
+#pragma warning disable SA1402 // File may only contain a single type
+
 /// <summary>Represents an anchor point on the left side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public partial class AnchorLeft(IDockable? relativeTo = null) : Anchor(AnchorPosition.Left, relativeTo);
@@ -145,3 +148,5 @@ public partial class AnchorTop(IDockable? relativeTo = null) : Anchor(AnchorPosi
 /// <summary>Represents an anchor point on the bottom side of a dockable object or workspace.</summary>
 /// <param name="relativeTo">The dockable object to which this anchor is relative.</param>
 public partial class AnchorBottom(IDockable? relativeTo = null) : Anchor(AnchorPosition.Bottom, relativeTo);
+
+#pragma warning restore SA1402 // File may only contain a single type

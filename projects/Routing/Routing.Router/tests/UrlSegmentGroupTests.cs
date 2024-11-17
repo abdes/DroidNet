@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Unit test cases for the <see cref="UrlSegmentGroup" /> class.
@@ -25,8 +24,8 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var segment = MockUrlSegment("foo");
-        var group = new UrlSegmentGroup(new[] { segment });
-        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        var group = new UrlSegmentGroup([segment]);
+        var child = new UrlSegmentGroup([MockUrlSegment("qux")]);
 
         // Act
         group.AddChild("baz", child);
@@ -104,7 +103,7 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var segment = MockUrlSegment("foo");
-        var group = new UrlSegmentGroup(new[] { segment });
+        var group = new UrlSegmentGroup([segment]);
 
         // Act
         var result = group.ToString();
@@ -123,7 +122,7 @@ public class UrlSegmentGroupTests
         // Arrange
         var segment1 = MockUrlSegment("foo");
         var segment2 = MockUrlSegment("bar");
-        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
+        var group = new UrlSegmentGroup([segment1, segment2]);
 
         // Act
         var result = group.ToString();
@@ -141,8 +140,8 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var segment = MockUrlSegment("foo");
-        var group = new UrlSegmentGroup(new[] { segment });
-        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        var group = new UrlSegmentGroup([segment]);
+        var child = new UrlSegmentGroup([MockUrlSegment("qux")]);
         group.AddChild("baz", child);
 
         // Act
@@ -163,9 +162,9 @@ public class UrlSegmentGroupTests
         // Arrange
         var segment1 = MockUrlSegment("foo");
         var segment2 = MockUrlSegment("bar");
-        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
-        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
-        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("grault"), MockUrlSegment("garply") });
+        var group = new UrlSegmentGroup([segment1, segment2]);
+        var child1 = new UrlSegmentGroup([MockUrlSegment("qux")]);
+        var child2 = new UrlSegmentGroup([MockUrlSegment("grault"), MockUrlSegment("garply")]);
         group.AddChild("baz", child1);
         group.AddChild("corge", child2);
 
@@ -186,8 +185,8 @@ public class UrlSegmentGroupTests
         // Arrange
         var segment1 = MockUrlSegment("foo");
         var segment2 = MockUrlSegment("bar");
-        var group = new UrlSegmentGroup(new[] { segment1, segment2 });
-        var child = new UrlSegmentGroup(new[] { MockUrlSegment("qux") });
+        var group = new UrlSegmentGroup([segment1, segment2]);
+        var child = new UrlSegmentGroup([MockUrlSegment("qux")]);
         group.AddChild(OutletName.Primary, child);
 
         // Act
@@ -206,7 +205,7 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var group = new UrlSegmentGroup([]);
-        var child = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        var child = new UrlSegmentGroup([MockUrlSegment("foo")]);
         group.AddChild(OutletName.Primary, child);
 
         // Act
@@ -224,9 +223,9 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var group = new UrlSegmentGroup([]);
-        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        var child1 = new UrlSegmentGroup([MockUrlSegment("foo")]);
         group.AddChild("left", child1);
-        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("bar") });
+        var child2 = new UrlSegmentGroup([MockUrlSegment("bar")]);
         group.AddChild("right", child2);
 
         // Act
@@ -244,11 +243,11 @@ public class UrlSegmentGroupTests
     {
         // Arrange
         var group = new UrlSegmentGroup([]);
-        var main = new UrlSegmentGroup(new[] { MockUrlSegment("main") });
+        var main = new UrlSegmentGroup([MockUrlSegment("main")]);
         group.AddChild(OutletName.Primary, main);
-        var child1 = new UrlSegmentGroup(new[] { MockUrlSegment("foo") });
+        var child1 = new UrlSegmentGroup([MockUrlSegment("foo")]);
         group.AddChild("left", child1);
-        var child2 = new UrlSegmentGroup(new[] { MockUrlSegment("bar") });
+        var child2 = new UrlSegmentGroup([MockUrlSegment("bar")]);
         group.AddChild("right", child2);
 
         // Act

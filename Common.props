@@ -20,6 +20,15 @@
         <ProjectsRoot>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))projects</ProjectsRoot>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+        <WindowsSdkPackageVersion>10.0.22621.52</WindowsSdkPackageVersion>
+        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+        <Platforms>x64</Platforms>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    </PropertyGroup>
+
     <!-- Language Options -->
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
@@ -118,10 +127,11 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
-        <!-- Test Projects -->
+    <!-- Test Projects -->
     <Choose>
         <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
             <PropertyGroup>
+                <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
                 <IsTestProject>True</IsTestProject>
                 <IsPackable>False</IsPackable>
             </PropertyGroup>
@@ -153,12 +163,6 @@
         <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
                 <OutputType>WinExe</OutputType>
-                <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-                <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-                <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-                <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-                <Platforms>x64</Platforms>
-                <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
                 <ApplicationManifest>app.manifest</ApplicationManifest>
                 <PublishProfile>win-$(Platform).pubxml</PublishProfile>
                 <UseWinUI>true</UseWinUI>
