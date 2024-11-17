@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Bootstrap;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Abstractions;
 using System.Reflection;
+using DroidNet.Bootsrap;
 using DroidNet.Config;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Controls.OutputLog.Theming;
@@ -17,7 +16,6 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
-using DroidNet.Samples.Bootstrap;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -31,9 +29,12 @@ using Serilog.Extensions.Logging;
 using Serilog.Templates;
 using Testably.Abstractions;
 
+namespace DroidNet.Bootstrap;
+
 /// <summary>
 /// Manages the application bootstrapping process for a WinUI application.
 /// </summary>
+/// <param name="args">Command line arguments from the application entry point.</param>
 /// <remarks>
 /// The bootstrapping sequence:
 /// <list type="number">
@@ -42,8 +43,25 @@ using Testably.Abstractions;
 /// <see cref="WithConfiguration" /></item>
 /// <item>Application startup with <see cref="Build" /> and <see cref="Run" /></item>
 /// </list>
+///
+/// <para><strong>Customization</strong></para>
+/// <para>
+/// The bootstrapping process offers flexibility through various customization options. The first
+/// opportunity is when <see cref="WithConfiguration"/> isued. You might use the delegates accepted
+/// by that method to add configuration files to the host configuration, or to bind configuration
+/// sections to strongly-typed options.
+/// </para>
+/// <para>
+/// Another approach is to directly access and configure the `IHostBuilder` for additional customizations.
+/// This method is ideal when you need to perform more extensive modifications that go beyond the capabilities
+/// of delegates. By working directly with the `IHostBuilder`, you can add or replace services, configure
+/// middleware, and set up advanced hosting options. This level of customization is often necessary for
+/// complex applications that require a high degree of flexibility and control over the hosting environment.
+/// </para>
+/// </remarks>
+///
 /// <example>
-/// Example usage:
+/// <strong>Example Usage</strong>
 /// <code>
 /// var bootstrap = new Bootstrapper(args)
 ///     .Configure()
@@ -53,16 +71,6 @@ using Testably.Abstractions;
 /// bootstrap.Run();
 /// </code>
 /// </example>
-/// <para>
-/// Customization possibilities include:
-/// <list type="bullet">
-/// <item>Using `Action` and `Func` delegates to configure settings, logging, routing, MVVM, and
-/// application-specific services.</item>
-/// <item>Directly accessing and configuring the `IHostBuilder` for additional customizations.</item>
-/// </list>
-/// </para>
-/// </remarks>
-/// <param name="args">Command line arguments from the application entry point.</param>
 public sealed partial class Bootstrapper(string[] args) : IDisposable
 {
     private bool isDisposed;
@@ -95,18 +103,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// property before the host is built will throw an <see cref="InvalidOperationException" />.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if the host has not been built yet.</exception>
-    public IContainer Container
-    {
-        get
-        {
-            if (this.host is null)
-            {
-                throw new InvalidOperationException("Host not built yet");
-            }
-
-            return this.finalContainer!;
-        }
-    }
+    public IContainer Container => this.finalContainer ?? throw new InvalidOperationException("Host not built yet");
 
     /// <summary>
     /// Performs initial bootstrap configuration including logging, dependency injection, and early services.
@@ -276,7 +273,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     {
         this.EnsureConfiguredButNotBuilt();
 
-        this.builder.ConfigureServices(services => services.ConfigureWinUI<TApplication>(isLifetimeLinked));
+        _ = this.builder.ConfigureServices(services => services.ConfigureWinUI<TApplication>(isLifetimeLinked));
 
         return this;
     }
@@ -325,7 +322,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     {
         if (this.host is null)
         {
-            this.Build();
+            _ = this.Build();
         }
 
         Debug.Assert(this.host is not null, "host should be built");
@@ -524,7 +521,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                         new CultureInfo("en-US")));
             if (container is not null)
             {
-                loggerConfig.WriteTo.OutputLogView<RichTextBlockSink>(container, theme: Themes.Literate);
+                loggerConfig.WriteTo.OutputLogView<RichTextBlockSink>(container, theme: OutputLogThemes.Literate);
             }
         }
 
