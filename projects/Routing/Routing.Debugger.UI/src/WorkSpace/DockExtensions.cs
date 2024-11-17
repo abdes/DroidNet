@@ -2,12 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.WorkSpace;
-
 using System.Globalization;
 using DroidNet.Docking;
 using Microsoft.UI.Xaml;
 
+namespace DroidNet.Routing.Debugger.UI.WorkSpace;
+
+/// <summary>
+/// Extensions methods for the <see cref="IDock" /> interface.
+/// </summary>
 public static class DockExtensions
 {
     /// <summary>

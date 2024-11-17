@@ -2,10 +2,26 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls;
-
 using CommunityToolkit.Mvvm.Messaging.Messages;
 
-public class EnterDockingModeMessage(IDock value) : ValueChangedMessage<IDock>(value);
+namespace DroidNet.Docking.Controls;
 
-public class LeaveDockingModeMessage;
+/// <summary>
+/// Represents a message that indicates a request to enter docking mode for a specified dock.
+/// </summary>
+/// <param name="value">The <see cref="IDock"/> instance that is to enter docking mode.</param>
+/// <remarks>
+/// This message is used within the docking framework to signal that a dock should enter docking mode.
+/// It carries the <see cref="IDock"/> instance that is to be docked.
+/// <para>
+/// <strong>Example Usage:</strong>
+/// <code><![CDATA[
+/// IDock dock = ...;
+/// var message = new EnterDockingModeMessage(dock);
+/// StrongReferenceMessenger.Default.Send(message);
+/// ]]></code>
+/// </para>
+/// </remarks>
+public class EnterDockingModeMessage(IDock value) : ValueChangedMessage<IDock>(value)
+{
+}

@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Converters;
-
 using System.Diagnostics;
-using DroidNet.Mvvm;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Mvvm.Converters;
 
 /// <summary>
 /// Provides conversion from a ViewModel to the corresponding View using the

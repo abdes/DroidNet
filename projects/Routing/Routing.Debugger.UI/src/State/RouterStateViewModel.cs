@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.State;
-
 using System.Reactive.Linq;
 using DroidNet.Routing.Debugger.UI.TreeView;
 using DroidNet.Routing.Events;
+
+namespace DroidNet.Routing.Debugger.UI.State;
 
 /// <summary>
 /// ViewModel for the <see cref="IRouterState" />.
@@ -16,8 +16,15 @@ public partial class RouterStateViewModel : TreeViewModelBase, IDisposable
     private readonly IDisposable routerEventsSub;
 
     private string? url;
+    private bool isDisposed;
 
-    public RouterStateViewModel(IRouter router) => this.routerEventsSub = router.Events
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RouterStateViewModel"/> class.
+    /// </summary>
+    /// <param name="router">The router instance used to subscribe to router events.</param>
+    public RouterStateViewModel(IRouter router)
+    {
+        this.routerEventsSub = router.Events
         .OfType<ActivationStarted>()
         .Select(e => e.RouterState)
         .Subscribe(
@@ -34,10 +41,33 @@ public partial class RouterStateViewModel : TreeViewModelBase, IDisposable
                     Level = 0,
                 };
             });
+    }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        this.routerEventsSub.Dispose();
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="RouterStateViewModel"/> and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// true to release both managed and unmanaged resources; false to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.routerEventsSub.Dispose();
+        }
+
+        this.isDisposed = true;
     }
 }

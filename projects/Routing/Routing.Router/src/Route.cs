@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
-using System;
 using System.Collections.Immutable;
 using System.Text;
 using Destructurama.Attributed;
 using DroidNet.Routing.Detail;
+
+namespace DroidNet.Routing;
 
 /// <summary>
 /// Represents a single route definition including its corresponding view model
@@ -16,6 +15,9 @@ using DroidNet.Routing.Detail;
 /// </summary>
 public class Route : IRoute
 {
+    /// <summary>
+    /// The default <see cref="IRoute.PathMatcher" /> used by the router.
+    /// </summary>
     internal static readonly IRoute.PathMatcher DefaultMatcher = RouteMatcher.MatchRoute;
 
     /// <inheritdoc />
@@ -61,26 +63,13 @@ public class Route : IRoute
         return res.ToString();
     }
 
-    /// <summary>
-    /// Represents a successful match of a route's <see cref="Path" /> with
-    /// segments (<see cref="UrlSegment" />) from a <see cref="UrlSegmentGroup" /> .
-    /// </summary>
-    /// <remarks>
-    /// Instances of this class will always have their <see cref="IsMatch" />
-    /// property be <see langword="true" />, and will always have a non-empty collection of
-    /// <see cref="Consumed" /> segments.
-    /// </remarks>
-    /// <seealso cref="IRoute.PathMatcher" />
-    public class Match : IMatchResult
+    /// <inheritdoc />
+    internal class Match : IMatchResult
     {
         /// <inheritdoc />
         public bool IsMatch => true;
 
         /// <inheritdoc />
-        /// <remarks>
-        /// All segments in the list have been successfully matched to a
-        /// <see cref="UrlSegment" /> in the <see cref="UrlSegmentGroup" />.
-        /// </remarks>
         public required IReadOnlyList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
@@ -88,37 +77,16 @@ public class Route : IRoute
             = new Dictionary<string, IUrlSegment>(StringComparer.Ordinal);
     }
 
-    /// <summary>
-    /// Represents a failed match of a route's <see cref="Path" /> with
-    /// segments ( <see cref="UrlSegment" />) from a <see cref="UrlSegmentGroup" /> .
-    /// </summary>
-    /// <remarks>
-    /// Instances of this class will always have their <see cref="IsMatch" />
-    /// property be <see langword="false" />, and will always have an empty collection of
-    /// <see cref="PositionalParams" />. They may have segments in the
-    /// <see cref="Consumed" /> collection, representing route segments that have
-    /// been successfully matched up to until the overall match was deemed a
-    /// failure.
-    /// </remarks>
-    /// <seealso cref="IRoute.PathMatcher" />
-    public class NoMatch : IMatchResult
+    /// <inheritdoc />
+    internal class NoMatch : IMatchResult
     {
         /// <inheritdoc />
         public bool IsMatch => false;
 
         /// <inheritdoc />
-        /// <remarks>
-        /// Although the match failed, this list contains segments that have
-        /// been successfully matched to a <see cref="UrlSegment" /> in the
-        /// <see cref="UrlSegmentGroup" />, up to until the match failed.
-        /// </remarks>
         public IReadOnlyList<IUrlSegment> Consumed { get; init; } = [];
 
         /// <inheritdoc />
-        /// <remarks>
-        /// When a match fails, the list of positional parameters is not
-        /// updated, and therefore, it is always empty.
-        /// </remarks>
         public IReadOnlyDictionary<string, IUrlSegment> PositionalParams
             => ImmutableDictionary<string, IUrlSegment>.Empty;
     }

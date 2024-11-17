@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Routing;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Contains test cases for the <see cref="ResolveUrlTreeRelativeTo" /> utility
@@ -51,9 +49,9 @@ public class RelativeUrlTreeResolverTests
                 });
 
         // Set up the Children properties
-        _ = this.routeMock.Setup(m => m.Children).Returns(new List<IActiveRoute> { mockChild1.Object });
-        _ = mockChild1.Setup(m => m.Children).Returns(new List<IActiveRoute> { mockChild2.Object });
-        _ = mockChild2.Setup(m => m.Children).Returns(new List<IActiveRoute> { mockChild3.Object });
+        _ = this.routeMock.Setup(m => m.Children).Returns([mockChild1.Object]);
+        _ = mockChild1.Setup(m => m.Children).Returns([mockChild2.Object]);
+        _ = mockChild2.Setup(m => m.Children).Returns([mockChild3.Object]);
 
         // Set up the Parent properties
         _ = mockChild1.Setup(m => m.Parent).Returns(this.routeMock.Object);

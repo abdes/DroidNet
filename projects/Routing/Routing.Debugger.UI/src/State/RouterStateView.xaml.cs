@@ -2,13 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.State;
-
 using DroidNet.Mvvm.Generators;
+
+namespace DroidNet.Routing.Debugger.UI.State;
 
 /// <summary>The view for the <see cref="RouterStateViewModel" />.</summary>
 [ViewModel(typeof(RouterStateViewModel))]
 public sealed partial class RouterStateView
 {
-    public RouterStateView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RouterStateView"/> class.
+    /// </summary>
+    public RouterStateView()
+    {
+        this.InitializeComponent();
+    }
 }

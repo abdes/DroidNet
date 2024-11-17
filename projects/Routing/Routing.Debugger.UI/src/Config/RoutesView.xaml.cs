@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Config;
-
 using DroidNet.Mvvm.Generators;
+
+namespace DroidNet.Routing.Debugger.UI.Config;
 
 /// <summary>
 /// A custom view for the router's configuration.
@@ -12,5 +12,11 @@ using DroidNet.Mvvm.Generators;
 [ViewModel(typeof(RoutesViewModel))]
 public partial class RoutesView
 {
-    public RoutesView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoutesView"/> class.
+    /// </summary>
+    public RoutesView()
+    {
+        this.InitializeComponent();
+    }
 }

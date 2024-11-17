@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+
+namespace DroidNet.Docking;
 
 /// <summary>
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="IDock">dock</see>.
@@ -23,10 +23,15 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     /// Initializes a new instance of the <see cref="Dockable" /> class.
     /// </summary>
     /// <param name="id">A unique identifier for this <see cref="Dockable" />.</param>
-    protected Dockable(string id) => this.Id = id;
+    protected Dockable(string id)
+    {
+        this.Id = id;
+    }
 
+    /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <inheritdoc/>
     public string Title
     {
         get => this.title ?? this.Id;
@@ -51,26 +56,33 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
         }
     }
 
+    /// <inheritdoc/>
     public string Id { get; }
 
+    /// <inheritdoc/>
     public string MinimizedTitle
     {
         get => this.minimizedTitle ?? this.Title;
         set => this.minimizedTitle = value;
     }
 
+    /// <inheritdoc/>
     public string TabbedTitle
     {
         get => this.tabbedTitle ?? this.Title;
         set => this.tabbedTitle = value;
     }
 
+    /// <inheritdoc/>
     public Width PreferredWidth { get; set; } = new();
 
+    /// <inheritdoc/>
     public Height PreferredHeight { get; set; } = new();
 
+    /// <inheritdoc/>
     public object? ViewModel { get; set; }
 
+    /// <inheritdoc/>
     public IDock? Owner { get; set; }
 
     /// <summary>Gets or sets a value indicating whether this dockable is active.</summary>

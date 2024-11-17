@@ -2,14 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DemoBrowser;
-
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
+
+namespace DroidNet.Controls.Demo.DemoBrowser;
 
 /// <summary>
 /// The view model for the <see cref="DemoBrowserView" /> view. Mainly responsible for the navigation between the different demos
@@ -37,12 +38,14 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
 
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];
 
+    /// <inheritdoc/>
     public IActiveRoute? ActiveRoute { get; set; }
 
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
     public DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
 
+    /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         var viewModelType = viewModel.GetType();

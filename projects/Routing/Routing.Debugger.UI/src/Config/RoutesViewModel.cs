@@ -2,17 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Config;
-
-using System;
-using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.TreeView;
+
+namespace DroidNet.Routing.Debugger.UI.Config;
 
 /// <summary>
 /// ViewModel for the <see cref="RoutesView" /> view.
 /// </summary>
 public partial class RoutesViewModel : TreeViewModelBase
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoutesViewModel"/> class.
+    /// </summary>
+    /// <param name="config">The configuration object that defines the routes.</param>
     public RoutesViewModel(IRoutes config)
     {
         var configRoot = new RootNode(config);
@@ -22,6 +24,7 @@ public partial class RoutesViewModel : TreeViewModelBase
         };
     }
 
+    /// <inheritdoc/>
     public override string ToString() => nameof(RoutesViewModel);
 
     private sealed class RootNode(IRoutes config) : IRoute

@@ -6,9 +6,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Content="{x:Bind ShellView, Mode=OneWay}"
+    xmlns:router="using:DroidNet.Routing.WinUI"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
+
+    <Grid Name="ContentRoot">
+        <router:RouterOutlet Grid.Row="1" ViewModel="{x:Bind ContentViewModel, Mode=OneWay}" />
+    </Grid>
+
 </Window>

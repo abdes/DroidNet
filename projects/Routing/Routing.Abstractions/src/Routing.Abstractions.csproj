@@ -2,28 +2,29 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+	<PropertyGroup>
+		<Title>Abstractions for the ViewModel based navigation and composition using URL-based routing</Title>
+		<Description>DroidNet.Routing implements and `Angular` like router that enables navigation inside a WinUI application using a URL or by dynamically manipulating the router state.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageTags>routing;navigation;dynamic;views;viewmodel;mvvm</PackageTags>
+		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <Title>Abstractions for the ViewModel based navigation and composition using URL-based routing</Title>
-        <Description>DroidNet.Routing implements and `Angular` like router that enables navigation inside a WinUI application using a URL or by dynamically manipulating the router state.</Description>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageTags>routing;navigation;dynamic;views</PackageTags>
-        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+		<AssemblyName>DroidNet.Routing.Abstractions</AssemblyName>
+		<RootNamespace>$(RootNamespace).Routing</RootNamespace>
+	</PropertyGroup>
 
-        <AssemblyName>DroidNet.Routing.Abstractions</AssemblyName>
-        <RootNamespace>$(RootNamespace).Routing</RootNamespace>
-    </PropertyGroup>
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
 
-    <ItemGroup>
-        <None Include="..\README.md">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="Destructurama.Attributed" />
-    </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Destructurama.Attributed">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>compile; runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
 
 </Project>

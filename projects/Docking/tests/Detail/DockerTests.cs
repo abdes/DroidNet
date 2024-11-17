@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
 using DroidNet.Docking.Workspace;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 
+namespace DroidNet.Docking.Tests.Detail;
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
 /// <summary>
@@ -23,7 +22,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     private readonly Docker sut = new();
 
     [TestMethod]
-    public void Dock_Works_WhenStateIsNotUnDocked()
+    public void DockWorksWhenStateIsNotUnDocked()
     {
         // Setup
         using var dock = new SimpleDock();
@@ -38,7 +37,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void Dock_WhenAnchorNotInGroup_Throws()
+    public void DockWhenAnchorNotInGroupThrows()
     {
         var act = () =>
         {
@@ -62,7 +61,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [TestMethod]
     [DataRow(true, DockingState.Minimized)]
     [DataRow(false, DockingState.Pinned)]
-    public void Dock_WhenDone(bool minimized, DockingState state)
+    public void DockWhenDone(bool minimized, DockingState state)
     {
         // Setup
         using var anchorDock = new SimpleDock();
@@ -91,7 +90,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void DockToCenter_WhenDockCanMinimize_Asserts()
+    public void DockToCenterWhenDockCanMinimizeAsserts()
     {
         // Setup
         using var dock = new NoCloseDock();
@@ -104,7 +103,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void DockToCenter_WhenDockCanClose_Asserts()
+    public void DockToCenterWhenDockCanCloseAsserts()
     {
         // Setup
         using var dock = new NoMinimizeDock();
@@ -117,7 +116,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void DockToCenter_InvokesLayoutChanged()
+    public void DockToCenterInvokesLayoutChanged()
     {
         // Setup
         using var dock = new SimpleCenterDock();
@@ -139,7 +138,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void DockToRoot_Works_WhenStateIsNotUnDocked()
+    public void DockToRootWorksWhenStateIsNotUnDocked()
     {
         // Setup
         using var dock = new SimpleDock();
@@ -163,7 +162,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [DataRow(AnchorPosition.Top, false, DockingState.Pinned)]
     [DataRow(AnchorPosition.Bottom, false, DockingState.Pinned)]
     [DataRow(AnchorPosition.Center, false, DockingState.Pinned)]
-    public void DockToRoot_WhenDone(AnchorPosition position, bool minimized, DockingState state)
+    public void DockToRootWhenDone(AnchorPosition position, bool minimized, DockingState state)
     {
         // Setup
         using var dock = new SimpleDock();
@@ -178,7 +177,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void MinimizeDock_WhenCanMinimizeIsFalse_Throws()
+    public void MinimizeDockWhenCanMinimizeIsFalseThrows()
     {
         var act = () =>
         {
@@ -194,7 +193,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void MinimizeDock_WhenNoTray_Throws()
+    public void MinimizeDockWhenNoTrayThrows()
     {
         var act = () =>
         {
@@ -214,7 +213,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [DataRow(DockingState.Minimized)]
     [DataRow(DockingState.Floating)]
     [DataRow(DockingState.Undocked)]
-    public void MinimizeDock_MinimizesDock(DockingState currentState)
+    public void MinimizeDockMinimizesDock(DockingState currentState)
     {
         // Setup
         using var dock = new SimpleDock();
@@ -253,7 +252,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [DataRow(DockingState.Minimized)]
     [DataRow(DockingState.Floating)]
     [DataRow(DockingState.Undocked)]
-    public void PinDock_PinsDockAndRemovesFromTray(DockingState currentState)
+    public void PinDockPinsDockAndRemovesFromTray(DockingState currentState)
     {
         // Setup
         using var dock = new SimpleDock();
@@ -297,7 +296,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [DataRow(DockingState.Minimized, true)]
     [DataRow(DockingState.Floating, true)]
     [DataRow(DockingState.Undocked, true)]
-    public void ResizeDock_TriggersLayoutChanged_OnlyIfDockIsPinnedAndSizeChanges(
+    public void ResizeDockTriggersLayoutChangedOnlyIfDockIsPinnedAndSizeChanges(
         DockingState currentState,
         bool changeSize)
     {
@@ -339,7 +338,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void ResizeDock_WhenSameSize_NoLayoutChange()
+    public void ResizeDockWhenSameSizeNoLayoutChange()
     {
         // Setup
         using var dock = new SimpleDock();
@@ -359,7 +358,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void CloseDock_WhenCanCloseIsFalse_Throws()
+    public void CloseDockWhenCanCloseIsFalseThrows()
     {
         var act = () =>
         {
@@ -380,7 +379,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [DataRow(DockingState.Minimized)]
     [DataRow(DockingState.Floating)]
     [DataRow(DockingState.Undocked)]
-    public void CloseDock_ClosesDock(DockingState currentState)
+    public void CloseDockClosesDock(DockingState currentState)
     {
         // Setup
         using var dock = new SimpleDock();
@@ -417,7 +416,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [TestMethod]
     [DataRow(DockingState.Pinned)]
     [DataRow(DockingState.Undocked)]
-    public void FloatDock_WhenStateIsNotMinimizedOrFloating_Throws(DockingState currentState)
+    public void FloatDockWhenStateIsNotMinimizedOrFloatingThrows(DockingState currentState)
     {
         var act = () =>
         {
@@ -436,7 +435,7 @@ public partial class DockerTests : TestSuiteWithAssertions
     [TestMethod]
     [DataRow(DockingState.Minimized)]
     [DataRow(DockingState.Floating)]
-    public void FloatDock_FloatsDock(DockingState currentState)
+    public void FloatDockFloatsDock(DockingState currentState)
     {
         // Setup
         using var dock = new SimpleDock();
@@ -470,6 +469,7 @@ public partial class DockerTests : TestSuiteWithAssertions
         _ = layoutChangeReason.Should().Be(LayoutChangeReason.Floating);
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         this.sut.Dispose();

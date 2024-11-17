@@ -3,9 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <Platforms>x64</Platforms>
-
         <RootNamespace>$(RootNamespace).Mvvm.Generators.Tests</RootNamespace>
     </PropertyGroup>
 

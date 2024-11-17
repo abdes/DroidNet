@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators;
-
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
@@ -11,6 +9,7 @@ using DroidNet.Mvvm.Generators.Templates;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
+namespace DroidNet.Mvvm.Generators;
 /*
  * How to se tup source generator project
  * https://stackoverflow.com/questions/74915263/c-sharp-source-generator-filenotfoundexception-could-not-load-file-or-assembly

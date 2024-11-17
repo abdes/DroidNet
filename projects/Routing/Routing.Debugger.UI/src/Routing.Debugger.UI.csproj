@@ -2,20 +2,13 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-        <UseWinUI>true</UseWinUI>
-
         <Title>User Interface for the Routing Debugger App</Title>
         <Description>Provides the view, viewmodels and controls used in the UI for the Routing debugger.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>winui;routing;debugger;controls</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
+        <UseWinUI>true</UseWinUI>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <RootNamespace>$(RootNameSpace).Routing.Debugger.UI</RootNamespace>
@@ -39,8 +32,8 @@
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Controls\src\Routing.Controls.csproj" />
 
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <!-- Rererence the attributes project "treat as an analyzer"-->

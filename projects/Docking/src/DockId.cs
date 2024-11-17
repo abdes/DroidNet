@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using System.Globalization;
 
+namespace DroidNet.Docking;
 /// <summary>
 /// Represents a dock identifier, with value semantics and immutability. The underlying value type is a <see langword="uint" />.
 /// </summary>

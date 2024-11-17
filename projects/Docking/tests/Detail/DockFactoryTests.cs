@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Detail;
 using DroidNet.TestHelpers;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+namespace DroidNet.Docking.Tests.Detail;
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
 /// <summary>
@@ -20,7 +19,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public partial class DockFactoryTests : TestSuiteWithAssertions
 {
     [TestMethod]
-    public void CreateDock_NoArgumentConstructor_ReturnsInstance()
+    public void CreateDockNoArgumentConstructorReturnsInstance()
     {
         using var dock = Dock.Factory.CreateDock(typeof(CustomDock));
 
@@ -33,7 +32,7 @@ public partial class DockFactoryTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void CreateDock_NewDockId_AlwaysDifferent()
+    public void CreateDockNewDockIdAlwaysDifferent()
     {
         var ids = new List<uint>();
 
@@ -48,7 +47,7 @@ public partial class DockFactoryTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void CreateDock_ConstructorWithArgs_ReturnsInstanceUsingArgs()
+    public void CreateDockConstructorWithArgsReturnsInstanceUsingArgs()
     {
         const int intArg = 100;
         const string strArg = "arg-value";
@@ -66,7 +65,7 @@ public partial class DockFactoryTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void CreateDock_BadArgs_ReturnsNull()
+    public void CreateDockBadArgsReturnsNull()
     {
         var act = () =>
         {
@@ -77,7 +76,7 @@ public partial class DockFactoryTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void CreateDock_InvalidType_Throws()
+    public void CreateDockInvalidTypeThrows()
     {
         var act = () =>
         {

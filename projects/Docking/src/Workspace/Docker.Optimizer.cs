@@ -2,16 +2,23 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.Diagnostics;
-using DroidNet.Docking;
+
+namespace DroidNet.Docking.Workspace;
 
 /// <summary>Docking tree optimization.</summary>
 public partial class Docker
 {
     private int isConsolidating;
 
+    /// <summary>
+    /// Consolidates the docking tree upwards starting from the specified segment.
+    /// </summary>
+    /// <param name="startingSegment">The layout segment from which to start the consolidation.</param>
+    /// <remarks>
+    /// This method ensures that the docking tree is optimized by consolidating nodes upwards. If a consolidation is already in progress,
+    /// the method will not start a new consolidation. Instead, it will continue the ongoing consolidation.
+    /// </remarks>
     public void ConsolidateUp(LayoutSegment? startingSegment)
     {
         if (startingSegment is null)

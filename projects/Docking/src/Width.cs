@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking;
-
 using DroidNet.Docking.Detail;
+
+namespace DroidNet.Docking;
 
 /// <summary>
 /// A specialization of the <see cref="Length" /> type, representing the `width` of a dockable as a specific type that cannot

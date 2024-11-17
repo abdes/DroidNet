@@ -2,16 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
-
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Converters;
 
 /// <summary>
 /// A converter that will convert an <see cref="ItemClickEventArgs" /> object into the corresponding clicked item object.
 /// </summary>
 public partial class ItemClickEventArgsToClickedItemConverter : IValueConverter
 {
+    /// <inheritdoc/>
     public object Convert(object value, Type targetType, object? parameter, string language)
         => value is ItemClickEventArgs args
             ? args.ClickedItem
@@ -19,6 +20,7 @@ public partial class ItemClickEventArgsToClickedItemConverter : IValueConverter
                 $"{nameof(ItemClickEventArgsToClickedItemConverter)} can only convert {nameof(ItemClickEventArgs)} values",
                 nameof(value));
 
+    /// <inheritdoc/>
     public object ConvertBack(object value, Type targetType, object? parameter, string language)
         => throw new InvalidOperationException();
 }

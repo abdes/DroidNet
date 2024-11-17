@@ -2,28 +2,55 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
 using System.Collections;
 
+namespace DroidNet.Routing;
+
 /// <summary>
-/// Represents a collection of URL parameters (<see cref="Parameter" />).
+/// Represents a collection of URL parameters with case-insensitive names and support for multiple values.
 /// </summary>
 /// <remarks>
-/// This implementation always stores the parameter values as a single value. If multiple values are specified for a
-/// parameter, they will be stored as a comma separated list of values.
+/// <para>
+/// This class provides the default implementation of <see cref="IParameters"/>, storing parameter
+/// values internally as comma-separated strings. When multiple values are specified for the same
+/// parameter, whether through repeated parameters or comma-separated lists, they are normalized
+/// into a single comma-separated value.
+/// </para>
+/// <para>
+/// Parameter names are handled case-insensitively, making 'Filter', 'filter', and 'FILTER'
+/// equivalent. Values can be <see langword="null"/> (parameter exists without value), empty
+/// (parameter with empty value), or contain actual data.
+/// </para>
 /// </remarks>
 public class Parameters : IParameters
 {
     /// <summary>Dictionary to store parameters, with case-insensitive names.</summary>
     private readonly Dictionary<string, string?> parameters = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Gets the number of parameters in the collection.</summary>
+    /// <summary>
+    /// Gets the number of distinct parameter names in the collection.
+    /// </summary>
     public int Count => this.parameters.Count;
 
-    /// <summary>Gets a value indicating whether the collection is empty.</summary>
+    /// <summary>
+    /// Gets a value indicating whether the collection contains any parameters.
+    /// </summary>
     public bool IsEmpty => this.parameters.Count == 0;
 
+    /// <summary>
+    /// Creates a new parameter collection by combining parent and child parameters.
+    /// </summary>
+    /// <param name="parentParameters">The parent parameters to merge.</param>
+    /// <param name="childParameter">The child parameters to merge.</param>
+    /// <returns>
+    /// A new <see cref="Parameters"/> instance containing all parameters from both collections,
+    /// with child values overriding parent values for duplicate names.
+    /// </returns>
+    /// <remarks>
+    /// Child parameters take precedence over parent parameters when the same parameter name exists
+    /// in both collections. This is particularly useful when combining matrix parameters from
+    /// different levels of the URL hierarchy.
+    /// </remarks>
     public static Parameters Merge(IParameters parentParameters, IParameters childParameter)
     {
         var merged = new Parameters();
@@ -103,50 +130,69 @@ public class Parameters : IParameters
     }
 
     /// <summary>
-    /// Attempts to add a parameter with the specified name and value to the collection.
+    /// Attempts to add a new parameter to the collection.
     /// </summary>
-    /// <param name="name">The name of the parameter.</param>
+    /// <param name="name">The case-insensitive name of the parameter.</param>
     /// <param name="value">The value(s) of the parameter, encoded as a comma-separated list of values if multiple.</param>
-    /// <returns><see langword="true" /> if the parameter was added successfully; otherwise, <see langword="false" />.</returns>
+    /// <returns>
+    /// <see langword="true"/> if the parameter was added successfully; otherwise, <see langword="false"/>.
+    /// </returns>
     /// <exception cref="ArgumentException">Thrown if the parameter name is empty.</exception>
     /// <remarks>
     /// This method does not throw an exception if a parameter with the same name exists in the collection. Instead,
-    /// it returns <see langword="false" />.
+    /// it returns <see langword="false"/>.
     /// </remarks>
-    public bool TryAdd(string name, string? value)
-    {
-        if (name.Length == 0)
-        {
-            throw new ArgumentException("Segment parameters cannot have an empty name.", nameof(name));
-        }
-
-        return this.parameters.TryAdd(name, value);
-    }
+    public bool TryAdd(string name, string? value) => name.Length == 0
+            ? throw new ArgumentException("Segment parameters cannot have an empty name.", nameof(name))
+            : this.parameters.TryAdd(name, value);
 
     /// <summary>
     /// Removes the parameter with the specified name from the collection.
     /// </summary>
-    /// <param name="name">The name of the parameter to remove.</param>
+    /// <param name="name">The case-insensitive name of the parameter to remove.</param>
     /// <returns>
-    /// <see langword="true" /> if the parameter is successfully removed; otherwise, <see langword="false" />.
+    /// <see langword="true"/> if the parameter was found and removed; otherwise, <see langword="false"/>.
     /// </returns>
     public bool Remove(string name) => this.parameters.Remove(name);
 
     /// <summary>
-    /// Clears all parameters from the collection, resetting the <see cref="Count" /> property to zero.
+    /// Clears all parameters from the collection.
     /// </summary>
+    /// <remarks>
+    /// After this operation, <see cref="Count"/> will be 0 and <see cref="IsEmpty"/> will be <see langword="true"/>.
+    /// </remarks>
     public void Clear() => this.parameters.Clear();
 
     /// <summary>
-    /// Returns a read-only version of the parameters collection.
+    /// Creates an immutable view of the parameters collection.
     /// </summary>
-    /// <returns>A <see cref="ReadOnlyParameters">read-only</see> version of the parameters collection.</returns>
+    /// <returns>
+    /// A new <see cref="ReadOnlyParameters"/> instance that provides read-only access to the
+    /// current parameters. Any changes to the original collection will not be reflected in the
+    /// read-only view.
+    /// </returns>
     public ReadOnlyParameters AsReadOnly() => new(this);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Implements the generic enumeration of parameters.
+    /// </summary>
+    /// <returns>
+    /// An enumerator that yields <see cref="Parameter"/> instances representing each name-value pair
+    /// in the collection.
+    /// </returns>
     public IEnumerator<Parameter> GetEnumerator()
         => this.parameters.Select(item => new Parameter(item.Key, item.Value)).GetEnumerator();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Explicitly implements the non-generic IEnumerable interface.
+    /// </summary>
+    /// <returns>
+    /// A non-generic enumerator that iterates through the parameters collection. Uses the generic
+    /// implementation internally to maintain consistency.
+    /// </returns>
+    /// <remarks>
+    /// This explicit implementation ensures type safety while maintaining compatibility with non-generic
+    /// collection interfaces. It simply forwards to the generic <see cref="GetEnumerator"/> method.
+    /// </remarks>
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 }

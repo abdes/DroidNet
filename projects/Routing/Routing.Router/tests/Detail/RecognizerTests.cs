@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests.Detail;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Detail;
 using DryIoc;
 using FluentAssertions;
 using ILoggerFactory = Microsoft.Extensions.Logging.ILoggerFactory;
+
+namespace DroidNet.Routing.Tests.Detail;
 
 /// <summary>
 /// Unit test cases for route recognition when building a router state from a url tree.
@@ -97,7 +97,7 @@ public partial class RecognizerTests
 
         var state = recognizer.Recognize(urlTree);
 
-        state.Should().NotBeNull();
+        _ = state.Should().NotBeNull();
 
         return Verify(state)
             .UseParameters(url)
@@ -131,14 +131,7 @@ public partial class RecognizerTests
 
         var state = recognizer.Recognize(urlTree);
 
-        if (success)
-        {
-            state.Should().NotBeNull();
-        }
-        else
-        {
-            state.Should().BeNull();
-        }
+        _ = success ? state.Should().NotBeNull() : state.Should().BeNull();
     }
 
     [TestMethod]
@@ -164,20 +157,22 @@ public partial class RecognizerTests
 
         var urlTree = this.parser.Parse("/b");
         var state = recognizer.Recognize(urlTree);
-        state.Should().BeNull();
+        _ = state.Should().BeNull();
     }
 
-    public static class HomeViewModel;
+    internal static Task Recognizer_Match(Uri url) => throw new InvalidOperationException();
 
-    public static class ProjectViewModel;
+    internal static class HomeViewModel;
 
-    public static class FoldersViewModel;
+    internal static class ProjectViewModel;
 
-    public static class AssetsViewModel;
+    internal static class FoldersViewModel;
 
-    private static class ShellViewModel;
+    internal static class AssetsViewModel;
 
-    private static class UserRightsViewModel;
+    internal static class ShellViewModel;
 
-    private static class UserProfileViewModel;
+    internal static class UserRightsViewModel;
+
+    internal static class UserProfileViewModel;
 }

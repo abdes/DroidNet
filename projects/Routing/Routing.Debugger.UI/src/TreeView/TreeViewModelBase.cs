@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.TreeView;
-
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+
+namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// Base class for a view model supporting a tree-based view.
@@ -22,8 +22,14 @@ public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
 
     private ITreeItem? root;
 
+    /// <summary>
+    /// Gets the collection of tree items that are currently shown in the view.
+    /// </summary>
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
+    /// <summary>
+    /// Gets or sets the root item of the tree. When setting the root, the shown items collection is updated.
+    /// </summary>
     protected ITreeItem? Root
     {
         get => this.root;

@@ -2,14 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo;
-
 using System.Diagnostics.CodeAnalysis;
+using System.Reactive.Linq;
 using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Controls.Demo;
 
 /// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 [ExcludeFromCodeCoverage]
@@ -56,11 +58,12 @@ public partial class App
     {
         Current.Resources[VmToViewConverterResourceKey] = this.vmToViewConverter;
 
+        // We just want to exit if navigation fails for some reason
+        _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
+
         try
         {
-            this.router.Navigate(
-                "/",
-                new FullNavigation() { Target = Target.Main });
+            this.router.Navigate("/", new FullNavigation() { Target = Target.Main });
         }
         catch (NavigationFailedException)
         {

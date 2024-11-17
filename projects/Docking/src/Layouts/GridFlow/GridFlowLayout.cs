@@ -2,22 +2,32 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Layouts.GridFlow;
-
 using System.Diagnostics;
-using DroidNet.Docking;
 using DroidNet.Docking.Controls;
-using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Workspace;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
+namespace DroidNet.Docking.Layouts.GridFlow;
+
+/// <summary>
+/// Represents a layout engine that arranges dockable entities in a grid flow layout.
+/// </summary>
+/// <param name="dockViewFactory">The factory used to create views for docks.</param>
+/// <remarks>
+/// The <see cref="GridFlowLayout"/> class provides methods to start and end layouts, place docks and trays, and manage layout flows
+/// in a grid-based layout. It uses a resizable vector grid to arrange the dockable entities.
+/// </remarks>
 public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
     private readonly Dictionary<DockId, CachedView> cachedViews = [];
 
+    /// <summary>
+    /// Gets the current resizable vector grid.
+    /// </summary>
     public ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
+    /// <inheritdoc/>
     public override LayoutFlow StartLayout(ILayoutSegment segment)
         => new GridFlow(segment)
         {
@@ -25,6 +35,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             Grid = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = "Workspace Root" },
         };
 
+    /// <inheritdoc/>
     public override void PlaceDock(IDock dock)
     {
         // $"Place dock {dock} with Width={dock.Width} and Height={dock.Height}"
@@ -34,6 +45,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         this.CurrentGrid.AddResizableItem(this.GetViewForDock(dock), gridItemLength, 32);
     }
 
+    /// <inheritdoc/>
     public override void PlaceTray(TrayGroup tray)
     {
         Debug.Assert(tray.Docks.Count != 0, "don't place a tray if it is empty");
@@ -47,6 +59,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         this.CurrentGrid.AddFixedSizeItem(trayControl, GridLength.Auto, 32);
     }
 
+    /// <inheritdoc/>
     public override LayoutFlow StartFlow(ILayoutSegment segment)
     {
         // $"New Grid for: {segment}"
@@ -65,8 +78,10 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         };
     }
 
+    /// <inheritdoc/>
     public override void EndFlow() => this.CurrentGrid.AdjustSizes(); /* $"Close flow {this.CurrentGrid}" */
 
+    /// <inheritdoc/>
     public override void EndLayout()
     {
         // "Layout ended"

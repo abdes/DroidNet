@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Unit test cases for the <see cref="UrlSegment" /> class.
@@ -18,22 +17,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestCategory("URL Tree")]
 public class UrlSegmentTests
 {
-    public static IEnumerable<object?[]> SegmentData => new[]
-    {
-        new object?[]
-        {
-            // The path
-            "home",
-
-            // The dictionary of parameters
-            null,
-
-            // The expected string
-            "home",
-
-            // The test case custom display name
-            "Just a path",
-        },
+    public static IEnumerable<object?[]> SegmentData =>
+    [
+        [
+            "home", // The path
+            null, // The dictionary of parameters
+            "home", // The expected string
+            "Just a path", // The test case custom display name
+        ],
         [
             "new home",
             null,
@@ -74,12 +65,12 @@ public class UrlSegmentTests
             "home;id=42;name=Alice",
             "Path and 2 parameters, % encoding",
         ],
-    };
+    ];
 
     public static IEnumerable<object[]> PathData
-        => new[]
-        {
-            new object[] { "home", "home" },
+        =>
+        [
+            ["home", "home"],
             [
                 string.Empty,
                 string.Empty,
@@ -96,12 +87,12 @@ public class UrlSegmentTests
                 "a%20b",
                 "a%2520b",
             ],
-        };
+        ];
 
     public static IEnumerable<object[]> ParametersData
-        => new[]
-        {
-            new object[] { ReadOnlyParameters.Empty, string.Empty },
+        =>
+        [
+            [ReadOnlyParameters.Empty, string.Empty],
             [
                 new Parameters
                 {
@@ -119,7 +110,7 @@ public class UrlSegmentTests
                 },
                 ";foo=foo-value;bar=baz%3D;sp%20ace=v%20a%20lue;empty=",
             ],
-        };
+        ];
 
     /// <summary>
     /// Generate a custom display name for the test cases in <see cref="Serialize" />

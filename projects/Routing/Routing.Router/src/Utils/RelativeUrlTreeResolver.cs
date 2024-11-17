@@ -2,38 +2,45 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
+
 namespace DroidNet.Routing.Utils;
 
-using System.Diagnostics;
-using DroidNet.Routing.Detail;
-
 /// <summary>
-/// Utility class for resolving a <see cref="UrlTree" /> relative to a
-/// <see cref="ActiveRoute" />.
+/// Resolves relative URL trees within the routing system, transforming them into absolute URL trees
+/// based on the current navigation context.
 /// </summary>
+/// <remarks>
+/// The <see cref="RelativeUrlTreeResolver"/> class is responsible for interpreting and resolving
+/// relative URLs within the context of the current navigation state. It ensures that relative paths
+/// are correctly transformed into absolute paths, taking into account the current route hierarchy
+/// and any active parameters.
+/// </remarks>
 internal static class RelativeUrlTreeResolver
 {
     /// <summary>
-    /// Resolves a <see cref="UrlTree" /> relative to the given
-    /// <see cref="IActiveRoute" />.
+    /// Resolves a <see cref="UrlTree" /> relative to the given <see cref="IActiveRoute" />.
     /// </summary>
-    /// <param name="urlTree">The url tree to resolve.</param>
-    /// <param name="relativeTo">
-    /// The route relative to which the resolution will happen.
-    /// </param>
-    /// <remarks>
-    /// This method implements a simple relative resolution within the
-    /// constraints of valid routing URLs. Only the segments of the primary
-    /// top-level <see cref="UrlSegmentGroup" /> are implicated.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// if the url tree is absolute or id the resolution goes deeper than what
-    /// the <paramref name="relativeTo" /> route permits.
-    /// </exception>
+    /// <param name="urlTree">The URL tree to resolve.</param>
+    /// <param name="relativeTo">The route relative to which the resolution will happen.</param>
     /// <returns>
-    /// A new absolute <see cref="UrlTree" />, but still referencing the
-    /// original branches from <paramref name="urlTree" />.
+    /// A new absolute <see cref="UrlTree" />, but still referencing the original branches from
+    /// <paramref name="urlTree" />.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the URL tree is absolute or if the resolution goes deeper than what the
+    /// <paramref name="relativeTo" /> route permits.
+    /// </exception>
+    /// <remarks>
+    /// This method implements a simple relative resolution within the constraints of valid routing
+    /// URLs. Only the segments of the primary top-level <see cref="UrlSegmentGroup" /> are
+    /// implicated. It ensures that relative paths like ".." are correctly interpreted to navigate
+    /// up the route hierarchy.
+    /// <para>
+    /// For example, if the current route is "/users/123" and the relative URL tree is
+    /// "../settings", this method will resolve the absolute URL tree to "/settings".
+    /// </para>
+    /// </remarks>
     public static UrlTree ResolveUrlTreeRelativeTo(IUrlTree urlTree, IActiveRoute relativeTo)
     {
         if (!urlTree.IsRelative)

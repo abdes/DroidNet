@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
 using System.Diagnostics.CodeAnalysis;
+
+namespace DroidNet.Routing;
 
 /// <inheritdoc cref="INavigationContext" />
 /// <param name="targetKey">

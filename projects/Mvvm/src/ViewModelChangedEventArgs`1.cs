@@ -12,5 +12,8 @@ namespace DroidNet.Mvvm;
 public class ViewModelChangedEventArgs<T>(T? oldValue) : EventArgs
     where T : class
 {
+    /// <summary>
+    /// Gets the old value of the <see cref="IViewFor{T}.ViewModel" /> property.
+    /// </summary>
     public T? OldValue { get; } = oldValue;
 }

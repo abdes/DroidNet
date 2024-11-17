@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+
+namespace DroidNet.Docking.Detail;
 
 /// <summary>
 /// Encapsulates a length value as a <see langword="string" /> compatible with
@@ -67,7 +67,10 @@ public abstract partial class Length
     /// The number of device-independent pixels (96 pixels-per-inch), rounded to the nearest
     /// integer.
     /// </param>
-    protected Length(double pixels) => this.value = double.Round(pixels).ToString(CultureInfo.InvariantCulture);
+    protected Length(double pixels)
+    {
+        this.value = double.Round(pixels).ToString(CultureInfo.InvariantCulture);
+    }
 
     /// <summary>
     /// Gets a value indicating whether the underlying value in this <see cref="Length" /> is
@@ -84,6 +87,13 @@ public abstract partial class Length
     /// <inheritdoc />
     public override string? ToString() => this;
 
+    /// <summary>
+    /// Returns half of the length value.
+    /// </summary>
+    /// <returns>
+    /// A string representing half of the length value, or <see langword="null" /> if the
+    /// original value is <see langword="null" />.
+    /// </returns>
     public string? Half()
     {
         if (this.value is null)

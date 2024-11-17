@@ -2,17 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Shell;
-
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
+using DroidNet.Routing.WinUI;
 using Microsoft.UI.Xaml;
+
+namespace Oxygen.Editor.Shell;
 
 /// <summary>The ViewModel for the application main window's shell.</summary>
 public partial class ShellViewModel : AbstractOutletContainer
 {
     private readonly IRouter router;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShellViewModel"/> class.
+    /// </summary>
+    /// <param name="router"></param>
     public ShellViewModel(IRouter router)
     {
         this.router = router;

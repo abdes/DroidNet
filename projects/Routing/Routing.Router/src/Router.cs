@@ -2,9 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
-using System;
 using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -14,6 +11,8 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using static DroidNet.Routing.Utils.RelativeUrlTreeResolver;
+
+namespace DroidNet.Routing;
 
 /// <inheritdoc cref="IRouter" />
 public sealed partial class Router : IRouter, IDisposable
@@ -36,27 +35,16 @@ public sealed partial class Router : IRouter, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="Router" /> class.
     /// </summary>
-    /// <param name="container">
-    /// The IoC container used to resolve ViewModel instances for the routes being activated.
-    /// </param>
+    /// <param name="container">The IoC container used to resolve ViewModel instances.</param>
     /// <param name="config">The routes configuration to use.</param>
     /// <param name="states">The router state manager to use.</param>
     /// <param name="contextManager">The router context manager.</param>
-    /// <param name="routeActivator">
-    /// The route activator to use for creating contexts and activating routes.
-    /// </param>
-    /// <param name="contextProvider">
-    /// The <see cref="IContextProvider" /> to use for getting contexts for
-    /// routing targets and activating them.
-    /// </param>
-    /// <param name="urlSerializer">
-    /// The URL serializer to use for converting between url strings and
-    /// <see cref="UrlTree" />.
-    /// </param>
+    /// <param name="routeActivator">The route activator to use for creating contexts and activating routes.</param>
+    /// <param name="contextProvider">The <see cref="IContextProvider" /> to use for getting contexts.</param>
+    /// <param name="urlSerializer">The URL serializer to use for converting between url strings and<see cref="UrlTree" />.</param>
     /// <param name="loggerFactory">
-    /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a
-    /// <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" />
-    /// from the Dependency Injector.
+    /// Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+    /// process. If <see langword="null"/>, logging is disabled.
     /// </param>
     public Router(
         IContainer container,
@@ -101,6 +89,7 @@ public sealed partial class Router : IRouter, IDisposable
     /// <inheritdoc />
     public IRoutes Config { get; }
 
+    /// <inheritdoc/>
     public IObservable<RouterEvent> Events { get; }
 
     /// <inheritdoc />
@@ -113,6 +102,10 @@ public sealed partial class Router : IRouter, IDisposable
         => this.Navigate(this.urlSerializer.Parse(url), options);
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "All unhandled exceptions will be propagated via the router NavigationFailed event")]
     public void Navigate(IList<RouteChangeItem> changes, PartialNavigation options)
     {
         try
@@ -166,6 +159,7 @@ public sealed partial class Router : IRouter, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.isDisposed)
@@ -177,6 +171,12 @@ public sealed partial class Router : IRouter, IDisposable
         this.isDisposed = true;
     }
 
+    /// <summary>
+    /// Applies a list of route change items to the current router state.
+    /// </summary>
+    /// <param name="changes">The list of changes to be applied to the router state.</param>
+    /// <param name="activeRoute">The active route to which the changes will be applied.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when an unexpected change action is encountered.</exception>
     private static void ApplyChangesToRouterState(
         IList<RouteChangeItem> changes,
         ActiveRoute activeRoute)
@@ -206,6 +206,15 @@ public sealed partial class Router : IRouter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Applies the specified update change to the given active route.
+    /// </summary>
+    /// <param name="activeRoute">The active route to which the change will be applied.</param>
+    /// <param name="change">The change item containing the update details.</param>
+    /// <remarks>
+    /// This method updates the parameters of an existing route identified by the outlet name in the change item.
+    /// If the parameters in the change item are null, the method returns without making any changes.
+    /// </remarks>
     private static void ApplyUpdateChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
         if (change.Parameters is null)
@@ -213,9 +222,6 @@ public sealed partial class Router : IRouter, IDisposable
             return;
         }
 
-        Debug.Assert(
-            change.Parameters != null,
-            "change.Parameters != null when updating an existing route");
         var route = activeRoute.Children.FirstOrDefault(
             r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
         if (route is ActiveRoute myRoute)
@@ -228,6 +234,16 @@ public sealed partial class Router : IRouter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Applies the specified delete change to the given active route.
+    /// </summary>
+    /// <param name="activeRoute">The active route from which the child route will be removed.</param>
+    /// <param name="change">The change item containing the outlet name of the route to be deleted.</param>
+    /// <remarks>
+    /// This method locates the child route within the active route's children collection that
+    /// matches the outlet name specified in the change item. If the child route is found, it is
+    /// removed from the active route's children.
+    /// </remarks>
     private static void ApplyDeleteChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
         var route = activeRoute.Children.FirstOrDefault(
@@ -238,6 +254,16 @@ public sealed partial class Router : IRouter, IDisposable
         _ = activeRoute.RemoveChild(route);
     }
 
+    /// <summary>
+    /// Applies the specified add change to the given active route.
+    /// </summary>
+    /// <param name="activeRoute">The active route to which the change will be applied.</param>
+    /// <param name="change">The change item containing the add details.</param>
+    /// <remarks>
+    /// This method adds a new child route to the active route based on the view model type and the
+    /// active route configuration. It computes the path for the new route, creates a new URL
+    /// segment group, and adds the new route as a child of the active route.
+    /// </remarks>
     private static void ApplyAddChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
         // Compute the path based on the view model type and the active route config
@@ -264,6 +290,13 @@ public sealed partial class Router : IRouter, IDisposable
             });
     }
 
+    /// <summary>
+    /// Applies a list of route change items to the URL tree, modifying its structure based on the specified changes.
+    /// </summary>
+    /// <param name="changes">The list of changes to be applied to the URL tree.</param>
+    /// <param name="urlTree">The URL segment group representing the current URL tree.</param>
+    /// <param name="activeRoute">The active route to which the changes will be applied.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when an unexpected change action is encountered.</exception>
     private static void ApplyChangesToUrlTree(
         IList<RouteChangeItem> changes,
         UrlSegmentGroup urlTree,
@@ -300,9 +333,6 @@ public sealed partial class Router : IRouter, IDisposable
                         break;
                     }
 
-                    Debug.Assert(
-                        change.Parameters != null,
-                        "change.Parameters != null when updating an existing route");
                     var child = urlTree.Children.FirstOrDefault(
                         sg => sg.Key.Name.Equals(change.Outlet, StringComparison.Ordinal));
                     var mySegmentGroup = child.Value as UrlSegmentGroup;
@@ -327,9 +357,17 @@ public sealed partial class Router : IRouter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Matches the specified view model type to a route configuration.
+    /// </summary>
+    /// <param name="config">The route configuration to search within.</param>
+    /// <param name="change">The route change item containing the view model type to match.</param>
+    /// <returns>The matched route configuration.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when the view model type in the change item is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no matching route configuration is found for the specified view model type.</exception>
     private static IRoute MatchViewModelType(IRoute config, RouteChangeItem change)
     {
-        Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
+        Debug.Assert(change.ViewModelType != null, "changemust have a valid ViewModel");
 
         var childConfig
             = config.Children?.FirstOrDefault(configChild => configChild.ViewModelType == change.ViewModelType);
@@ -346,13 +384,11 @@ public sealed partial class Router : IRouter, IDisposable
     /// </summary>
     /// <param name="context">The router context in which to optimize route activation.</param>
     /// <remarks>
-    /// This method is intended to improve the efficiency of route activation by
-    /// reusing previously activated routes in the router state.
+    /// This method is intended to improve the efficiency of route activation by reusing previously
+    /// activated routes in the router state.
     /// </remarks>
-    private static void OptimizeRouteActivation(NavigationContext context) =>
-
-        // TODO(abdes) implement OptimizeRouteActivation
-        _ = context;
+    /// TODO(abdes) implement OptimizeRouteActivation
+    private static void OptimizeRouteActivation(NavigationContext context) => _ = context;
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -366,6 +402,25 @@ public sealed partial class Router : IRouter, IDisposable
         Message = "Navigation failed!")]
     private static partial void LogNavigationFailed(ILogger logger, Exception ex);
 
+    /// <summary>
+    /// Navigates to the specified URL tree with the given navigation options.
+    /// </summary>
+    /// <param name="urlTree">The URL tree representing the target navigation path.</param>
+    /// <param name="options">The navigation options that control the behavior of the navigation.</param>
+    /// <remarks>
+    /// This method initiates the navigation process by emitting a <see cref="NavigationStart"/> event,
+    /// obtaining the appropriate navigation context, resolving the URL tree if the navigation is relative,
+    /// and recognizing the URL tree to build the router state. It then optimizes route activation,
+    /// activates the routes recursively, and finally activates the context. Throughout the process,
+    /// various events are emitted to signal the progress and outcome of the navigation.
+    /// </remarks>
+    /// <exception cref="NavigationFailedException">
+    /// Thrown when the URL tree cannot be recognized or matched to the router configuration.
+    /// </exception>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "All unhandled exceptions will be wrapped inside a NavigationFailedException")]
     private void Navigate(IUrlTree urlTree, NavigationOptions options)
     {
         this.eventSource.OnNext(new NavigationStart(urlTree.ToString(), options));
@@ -388,7 +443,7 @@ public sealed partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new RoutesRecognized(urlTree));
 
-            // TODO(abdes): eventually optimize reuse of previously activated routes in the router state
+            // TODO: eventually optimize reuse of previously activated routes in the router state
             OptimizeRouteActivation(context);
 
             this.eventSource.OnNext(new ActivationStarted(options, context.State));

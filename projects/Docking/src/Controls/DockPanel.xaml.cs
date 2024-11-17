@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls;
-
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
@@ -14,6 +12,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
 using Windows.System;
+
+namespace DroidNet.Docking.Controls;
 
 /// <summary>A decorated panel that represents a dock.</summary>
 [ViewModel(typeof(DockPanelViewModel))]
@@ -30,6 +30,9 @@ public sealed partial class DockPanel
     [ObservableProperty]
     private Visibility overlayVisibility = Visibility.Collapsed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DockPanel"/> class.
+    /// </summary>
     public DockPanel()
     {
         this.InitializeComponent();
@@ -58,6 +61,7 @@ public sealed partial class DockPanel
         this.pointerExitEventHandler = (_, _) => this.HideOverlay();
     }
 
+    /// <inheritdoc/>
     public override string ToString() => $"{nameof(DockPanel)} [{this.ViewModel?.Title ?? string.Empty}]";
 
     private void OnLoaded(object o, RoutedEventArgs routedEventArgs)

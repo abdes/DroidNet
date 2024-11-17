@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Contains unit test cases for the <see cref="RouterContextManager" /> class.
@@ -22,6 +21,7 @@ public class RouterContextManagerTests : IDisposable
     private readonly Mock<IContextProvider<NavigationContext>> contextProviderMock;
     private readonly RouterContextManager contextManager;
     private readonly NavigationContext mainContext = new(Target.Main, TestTarget) { RouteActivationObserver = null };
+    private bool isDisposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouterContextManagerTests" />
@@ -114,8 +114,23 @@ public class RouterContextManagerTests : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
-        this.contextManager.Dispose();
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.contextManager.Dispose();
+        }
+
+        this.isDisposed = true;
     }
 
     private NavigationContext? SetCurrentContext(NavigationContext? context)

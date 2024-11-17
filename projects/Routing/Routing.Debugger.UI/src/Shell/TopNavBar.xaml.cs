@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Shell;
-
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Events;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
+
+namespace DroidNet.Routing.Debugger.UI.Shell;
 
 /// <summary>
 /// A custom control for the debugger top navigation bar.
@@ -28,8 +28,26 @@ public sealed partial class TopNavBar : IDisposable
 
     private IDisposable? routerEventsSub;
 
-    public TopNavBar() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TopNavBar"/> class.
+    /// </summary>
+    /// <remarks>
+    /// This constructor sets up the initial state of the TopNavBar control and calls the
+    /// <see cref="InitializeComponent"/> method to initialize the UI components defined in XAML.
+    /// </remarks>
+    public TopNavBar()
+    {
+        this.InitializeComponent();
+    }
 
+    /// <summary>
+    /// Gets or sets the router instance used for navigation.
+    /// </summary>
+    /// <remarks>
+    /// When the router is set, this property subscribes to the <see cref="IRouter.Events"/> stream
+    /// to listen for <see cref="NavigationEnd"/> events. Upon receiving such an event, it updates
+    /// the <see cref="Url"/> property with the URL from the event.
+    /// </remarks>
     public IRouter Router
     {
         get => (IRouter)this.GetValue(RouterProperty);
@@ -42,6 +60,7 @@ public sealed partial class TopNavBar : IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         this.routerEventsSub?.Dispose();

@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Mocks;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Workspace;
+
+namespace DroidNet.Docking.Tests.Mocks;
 
 /// <summary>
 /// A dummy <see cref="Docker" /> that supports optimization.
@@ -16,6 +16,7 @@ public partial class DummyOptimizingDocker : DummyDocker, IOptimizingDocker
 {
     public bool ConsolidateUpCalled { get; private set; }
 
+    /// <inheritdoc/>
     public void ConsolidateUp(IDockGroup startingGroup) => this.ConsolidateUpCalled = true;
 
     public void Reset() => this.ConsolidateUpCalled = false;

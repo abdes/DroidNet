@@ -2,12 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-#if !DISABLE_XAML_GENERATED_MAIN
-#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
-#endif
-
-namespace DroidNet.Docking.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Bootstrap;
@@ -21,6 +15,12 @@ using DroidNet.Hosting.WinUI;
 using DryIoc;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+
+#if !DISABLE_XAML_GENERATED_MAIN
+#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
+#endif
+
+namespace DroidNet.Docking.Demo;
 
 /// <summary>
 /// The Main entry of the application.
@@ -63,7 +63,7 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            bootstrap.Configure()
+            _ = bootstrap.Configure()
                 .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
                 .WithLoggingAbstraction()
                 .WithMvvm()

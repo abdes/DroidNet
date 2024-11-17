@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Docks;
-
 using DroidNet.Mvvm.Generators;
+
+namespace DroidNet.Routing.Debugger.UI.Docks;
 
 /// <summary>
 /// A simple content control that displays the embedded application content or
@@ -13,7 +13,14 @@ using DroidNet.Mvvm.Generators;
 [ViewModel(typeof(EmbeddedAppViewModel))]
 public sealed partial class EmbeddedAppView
 {
-    public EmbeddedAppView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EmbeddedAppView"/> class.
+    /// </summary>
+    public EmbeddedAppView()
+    {
+        this.InitializeComponent();
+    }
 
+    /// <inheritdoc/>
     public override string ToString() => $"{nameof(EmbeddedAppView)}]";
 }

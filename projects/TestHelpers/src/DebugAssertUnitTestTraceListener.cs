@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+
+namespace DroidNet.TestHelpers;
 
 /// <summary>
 /// TraceListener used for trapping assertion failures during unit tests.

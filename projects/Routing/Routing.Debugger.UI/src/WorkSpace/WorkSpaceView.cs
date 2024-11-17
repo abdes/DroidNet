@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.WorkSpace;
-
 using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Routing.Debugger.UI.WorkSpace;
 
 /// <summary>
 /// A custom control to represent the entire docking tree.
@@ -19,6 +19,10 @@ public partial class WorkSpaceView : UserControl
 {
     private readonly ILogger logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkSpaceView"/> class.
+    /// </summary>
+    /// <param name="loggerFactory">The factory to create logger instances.</param>
     public WorkSpaceView(ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");

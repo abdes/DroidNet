@@ -2,15 +2,37 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Utils;
-using static TreeTraversal;
+using static DroidNet.Docking.Workspace.TreeTraversal;
 
-/// <summary>The main interface to the docking workspace. Manages the docks and the workspace layout.</summary>
+namespace DroidNet.Docking.Workspace;
+
+/// <summary>
+/// The main interface to the docking workspace. Manages the docks and the workspace layout.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The <see cref="Docker"/> class is responsible for managing the docking operations and layout of dockable entities within a workspace.
+/// It provides methods to dock, undock, minimize, pin, float, and resize docks, ensuring a flexible and organized workspace.
+/// </para>
+/// <para>
+/// This class also handles the layout changes and triggers events to notify when the layout is updated.
+/// </para>
+/// </remarks>
+/// <example>
+/// <para>
+/// To create a new instance of <see cref="Docker"/> and initialize the docking workspace, use the following code:
+/// </para>
+/// <code><![CDATA[
+/// var docker = new Docker();
+/// var centerDock = CenterDock.New();
+/// var anchor = new Anchor(AnchorPosition.Center);
+/// docker.Dock(centerDock, anchor);
+/// ]]></code>
+/// </example>
 public partial class Docker : IDocker
 {
     private readonly DockingTreeNode root;
@@ -19,6 +41,9 @@ public partial class Docker : IDocker
 
     private bool isDisposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Docker"/> class.
+    /// </summary>
     public Docker()
     {
         this.root = new DockingTreeNode(this, new LayoutGroup(this));
@@ -40,8 +65,10 @@ public partial class Docker : IDocker
         this.edges.Add(AnchorPosition.Bottom, default);
     }
 
+    /// <inheritdoc/>
     public event EventHandler<LayoutChangedEventArgs>? LayoutChanged;
 
+    /// <inheritdoc/>
     public void DumpWorkspace() => this.root.Dump();
 
     /// <inheritdoc />
@@ -51,6 +78,12 @@ public partial class Docker : IDocker
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="Docker"/> and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to release only unmanaged resources.
+    /// </param>
     protected virtual void Dispose(bool disposing)
     {
         if (this.isDisposed)
@@ -74,6 +107,7 @@ public partial class Docker : IDocker
 /// <summary>Dock management.</summary>
 public partial class Docker
 {
+    /// <inheritdoc/>
     public void Dock(IDock dock, Anchor anchor, bool minimized = false)
     {
         if (dock.State != DockingState.Undocked)
@@ -137,6 +171,7 @@ public partial class Docker
         this.InitiateLayoutRefresh(LayoutChangeReason.Docking);
     }
 
+    /// <inheritdoc/>
     public void MinimizeDock(IDock dock)
     {
         if (dock.State == DockingState.Minimized)
@@ -165,6 +200,7 @@ public partial class Docker
         this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
+    /// <inheritdoc/>
     public void PinDock(IDock dock)
     {
         if (dock.State == DockingState.Pinned)
@@ -185,6 +221,7 @@ public partial class Docker
         this.FireLayoutChangedEvent(LayoutChangeReason.Docking);
     }
 
+    /// <inheritdoc/>
     public void ResizeDock(IDock dock, Width? width, Height? height)
     {
         var sizeChanged = false;
@@ -207,6 +244,7 @@ public partial class Docker
         }
     }
 
+    /// <inheritdoc/>
     public void CloseDock(IDock dock)
     {
         if (!dock.CanClose)
@@ -220,6 +258,7 @@ public partial class Docker
         this.InitiateLayoutRefresh(LayoutChangeReason.Docking);
     }
 
+    /// <inheritdoc/>
     public void FloatDock(IDock dock)
     {
         if (dock.State == DockingState.Floating)
@@ -529,6 +568,7 @@ public partial class Docker
 /// <summary>Workspace layout management.</summary>
 public partial class Docker
 {
+    /// <inheritdoc/>
     public void Layout(LayoutEngine layoutEngine)
     {
         var flow = layoutEngine.StartLayout(this.root.Value);
@@ -584,24 +624,14 @@ public partial class Docker
 
         static bool ShouldShowNodeRecursive(DockingTreeNode? node)
         {
-            if (node is null)
-            {
-                return false;
-            }
-
-            if (node.Value is DockGroup dockGroup)
-            {
-                return node.Value is TrayGroup tray
+            return node is not null
+&& (node.Value is DockGroup dockGroup
+                ? node.Value is TrayGroup tray
                     ? tray.Docks.Count != 0
-                    : dockGroup.Docks.Any(d => d.State != DockingState.Minimized);
-            }
-
-            if (node.Value is LayoutGroup)
-            {
-                return ShouldShowNodeRecursive(node.Left) || ShouldShowNodeRecursive(node.Right);
-            }
-
-            throw new UnreachableException();
+                    : dockGroup.Docks.Any(d => d.State != DockingState.Minimized)
+                : node.Value is LayoutGroup
+                ? ShouldShowNodeRecursive(node.Left) || ShouldShowNodeRecursive(node.Right)
+                : throw new UnreachableException());
         }
 
         bool ReorientFlowIfNeeded(ILayoutSegment segment)

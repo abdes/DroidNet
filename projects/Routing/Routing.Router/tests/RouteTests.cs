@@ -2,13 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Routing;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Routing.Tests;
 
 /// <summary>
 /// Contains unit test cases for the <see cref="Route" /> class.
@@ -79,7 +77,7 @@ public class RouteTests
         var route = new Route
         {
             Path = "test",
-            Children = new Routes(new List<Route> { new() { Path = "child" } }),
+            Children = new Routes([new() { Path = "child" }]),
         };
 
         var result = route.ToString();

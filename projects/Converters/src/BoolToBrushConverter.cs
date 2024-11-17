@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
-
-using System;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
+
+namespace DroidNet.Converters;
 
 /// <summary>
 /// Select a color <see cref="Brush" /> based on a <see langword="bool" /> value.
@@ -45,14 +44,12 @@ public partial class BoolToBrushConverter : IValueConverter
         _ = parameter; // unused
         _ = language; // unused
 
-        if (value is bool isActive && targetType == typeof(Brush))
-        {
-            return isActive ? this.ActiveBrush : this.InactiveBrush;
-        }
-
-        throw new InvalidOperationException("Invalid types. Expected: (bool, Brush).");
+        return value is bool isActive && targetType == typeof(Brush)
+            ? (object)(isActive ? this.ActiveBrush : this.InactiveBrush)
+            : throw new InvalidOperationException("Invalid types. Expected: (bool, Brush).");
     }
 
+    /// <inheritdoc/>
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new InvalidOperationException();
 }

@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.Diagnostics;
 using DroidNet.Docking.Detail;
+
+namespace DroidNet.Docking.Workspace;
 
 /// <summary>Represents a grouping of other groups, or <see cref="Dockable" />s.</summary>
 /// <param name="docker">The <see cref="IDocker" /> managing this group.</param>
@@ -27,6 +27,7 @@ internal sealed partial class LayoutDockGroup(
 {
     private bool disposed;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)
@@ -41,6 +42,12 @@ internal sealed partial class LayoutDockGroup(
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Clears all docks from this group, optionally disposing of them.
+    /// </summary>
+    /// <param name="dispose">
+    /// <see langword="true"/> to dispose of the docks; otherwise, <see langword="false"/>.
+    /// </param>
     internal void ClearDocks(bool dispose)
     {
         if (dispose)
@@ -57,6 +64,13 @@ internal sealed partial class LayoutDockGroup(
         this.ClearDocks();
     }
 
+    /// <summary>
+    /// Migrates all docks from this group to another <see cref="LayoutDockGroup"/>.
+    /// </summary>
+    /// <param name="toGroup">The target group to which the docks will be migrated.</param>
+    /// <remarks>
+    /// This method moves all docks from the current group to the specified target group, ensuring that the docks are properly managed within the new group.
+    /// </remarks>
     internal void MigrateDocks(LayoutDockGroup toGroup)
     {
         foreach (var dock in this.Docks)
@@ -84,6 +98,7 @@ internal partial class LayoutDockGroup
         dock.AsDock().Group = this;
     }
 
+    /// <inheritdoc/>
     internal override void AddDock(IDock dock, Anchor anchor)
     {
         // Check that the anchor dock belongs to this group.
@@ -139,6 +154,7 @@ internal partial class LayoutDockGroup
         dock.AsDock().Group = this;
     }
 
+    /// <inheritdoc/>
     internal override bool RemoveDock(IDock dock)
     {
         var found = base.RemoveDock(dock);
@@ -159,6 +175,21 @@ internal partial class LayoutDockGroup
         return true;
     }
 
+    /// <summary>
+    /// Splits the current group into multiple sub-groups around a specified dock.
+    /// </summary>
+    /// <param name="relativeTo">The dock around which the group will be split.</param>
+    /// <param name="requiredOrientation">The desired orientation for the new sub-groups.</param>
+    /// <returns>
+    /// A tuple containing the groups before, at, and after the specified dock.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the specified <paramref name="relativeTo"/> dock does not belong to this group.
+    /// </exception>
+    /// <remarks>
+    /// This method splits the current group into multiple sub-groups based on the specified dock and
+    /// orientation. It ensures that the docks are properly managed within the new sub-groups.
+    /// </remarks>
     internal (LayoutDockGroup? beforeGroup, LayoutDockGroup hostGroup, LayoutDockGroup? afterGroup) Split(
         IDock? relativeTo,
         DockGroupOrientation requiredOrientation)

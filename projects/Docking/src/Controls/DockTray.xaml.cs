@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls;
-
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Docking.Controls;
 
 /// <summary>
 /// A custom control to display the collection of dockables in minimized docks
@@ -16,7 +16,13 @@ using Microsoft.UI.Xaml.Data;
 [ViewModel(typeof(DockTrayViewModel))]
 public sealed partial class DockTray
 {
-    public DockTray() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DockTray"/> class.
+    /// </summary>
+    public DockTray()
+    {
+        this.InitializeComponent();
+    }
 
     private void ItemsView_OnItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
     {
@@ -28,6 +34,10 @@ public sealed partial class DockTray
 /// <summary>
 /// Selects a <see cref="DataTemplate" /> based on the orientation of the dock tray.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "StyleCop.CSharp.MaintainabilityRules",
+    "SA1402:File may only contain a single type",
+    Justification = "this class is only used for the DockTray. It is 'internal' because of the XAML generated code ")]
 internal sealed partial class OrientationTemplateSelector : DataTemplateSelector
 {
     /// <summary>
@@ -64,10 +74,15 @@ internal sealed partial class OrientationTemplateSelector : DataTemplateSelector
 }
 
 /// <summary>
-/// A converrter that converts an <see cref="Orientation" /> to the corresponding <see cref="StackLayout" />.
+/// A converter that converts an <see cref="Orientation" /> to the corresponding <see cref="StackLayout" />.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "StyleCop.CSharp.MaintainabilityRules",
+    "SA1402:File may only contain a single type",
+    Justification = "this class is only used for the DockTray. It is 'internal' because of the XAML generated code ")]
 internal sealed partial class OrientationToLayoutConverter : IValueConverter
 {
+    /// <inheritdoc/>
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         var orientation = (Orientation)value;
@@ -78,6 +93,7 @@ internal sealed partial class OrientationToLayoutConverter : IValueConverter
         };
     }
 
+    /// <inheritdoc/>
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new InvalidOperationException();
 }

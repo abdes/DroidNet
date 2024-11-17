@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
@@ -11,10 +9,13 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
+using DroidNet.Routing.WinUI;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 using IContainer = DryIoc.IContainer;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// The ViewModel for the <see cref="ContentBrowserView" /> view.
@@ -113,6 +114,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
 
     public object? RightPaneViewModel => this.Outlets["right"].viewModel;
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)

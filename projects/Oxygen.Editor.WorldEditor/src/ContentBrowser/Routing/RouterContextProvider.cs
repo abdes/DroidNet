@@ -2,11 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using System.ComponentModel;
 using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// The implementation of <see cref="IContextProvider" /> for the dedicated router used inside the content browser.
@@ -16,6 +17,10 @@ internal sealed partial class RouterContextProvider : IContextProvider<Navigatio
     private readonly ILocalRouterContext theContext;
     private bool disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RouterContextProvider"/> class.
+    /// </summary>
+    /// <param name="context"></param>
     public RouterContextProvider(ILocalRouterContext context)
     {
         if (context is not INotifyPropertyChanged contextNotify)
@@ -35,23 +40,31 @@ internal sealed partial class RouterContextProvider : IContextProvider<Navigatio
     }
 
 #pragma warning disable CS0067
+    /// <inheritdoc/>
     public event EventHandler<ContextEventArgs>? ContextChanged;
 #pragma warning restore
 
+    /// <inheritdoc/>
     public event EventHandler<ContextEventArgs>? ContextCreated;
 
+    /// <inheritdoc/>
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
+    /// <inheritdoc/>
     public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null)
         => this.theContext;
 
+    /// <inheritdoc/>
     public void ActivateContext(INavigationContext context) => _ = context;
 
+    /// <inheritdoc/>
     public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
         => (NavigationContext)this.theContext;
 
+    /// <inheritdoc/>
     public void ActivateContext(NavigationContext context) => _ = context;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)

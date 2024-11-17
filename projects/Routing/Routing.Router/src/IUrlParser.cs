@@ -9,11 +9,11 @@ namespace DroidNet.Routing;
 /// </summary>
 public interface IUrlParser
 {
-    /// <summary>Parses the URL string into a <see cref="IUrlTree" />.</summary>
+    /// <summary>
+    /// Parses the URL string into a <see cref="IUrlTree" />.
+    /// </summary>
     /// <param name="url">URL string to parse.</param>
-    /// <returns>
-    /// A <see cref="IUrlTree" /> representing the hierarchy of route segments
-    /// and segment groups.
+    /// <returns>A <see cref="IUrlTree" /> representing the hierarchy of route segments and segment groups.
     /// </returns>
     /// <exception cref="UriFormatException">The URL string is malformed.</exception>
     IUrlTree Parse(string url);

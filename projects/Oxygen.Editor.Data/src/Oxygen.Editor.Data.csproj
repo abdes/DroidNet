@@ -3,9 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <Platforms>x64</Platforms>
-
         <Title>Oxygen Editor Data Layer</Title>
         <Description>Contains the data model and APIs for projects and templates used by the editor.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

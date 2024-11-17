@@ -2,18 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.WorkSpace;
-
 using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Workspace;
 using DroidNet.Routing.Events;
+using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-/// <summary>The ViewModel for the docking workspace.</summary>
+namespace DroidNet.Routing.Debugger.UI.WorkSpace;
+
+/// <summary>
+/// The ViewModel for the docking workspace.
+/// </summary>
 public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisposable
 {
     private readonly ILogger logger;
@@ -21,7 +24,14 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private readonly IDisposable routerEventsSub;
     private readonly List<RoutedDockable> deferredDockables = [];
     private ApplicationDock? centerDock;
+    private bool disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkSpaceViewModel"/> class.
+    /// </summary>
+    /// <param name="router">The router instance used for navigation and event handling.</param>
+    /// <param name="dockViewFactory">The factory for creating dock views.</param>
+    /// <param name="loggerFactory">The factory for creating loggers. If null, a default logger will be used.</param>
     public WorkSpaceViewModel(IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
@@ -36,10 +46,23 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                 });
     }
 
+    /// <summary>
+    /// Gets or sets the active route associated with this view model.
+    /// </summary>
+    /// <value>
+    /// The active route that provides the parameters and context for this view model.
+    /// </value>
     public IActiveRoute? ActiveRoute { get; set; }
 
+    /// <summary>
+    /// Gets the layout of the workspace.
+    /// </summary>
+    /// <value>
+    /// The layout object that manages the docking workspace.
+    /// </value>
     public WorkSpaceLayout Layout { get; }
 
+    /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
     {
         if (outletName?.IsPrimary != false)
@@ -59,12 +82,36 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        this.Layout.Dispose();
-        this.docker.Dispose();
-        this.routerEventsSub.Dispose();
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="WorkSpaceViewModel"/> and optionally releases
+    /// the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/>
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.Layout.Dispose();
+            this.docker.Dispose();
+            this.routerEventsSub.Dispose();
+        }
+
+        this.disposed = true;
     }
 
     [LoggerMessage(
@@ -91,20 +138,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         Message = "An error occurred while loading content for route `{Path}`: {ErrorMessage}")]
     private static partial void LogDockablePlacementError(ILogger logger, string? path, string errorMessage);
 
-    private static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right)
-    {
-        if (left.DeferredDockingInfo.AnchorId != null)
-        {
-            return 1;
-        }
-
-        if (right.DeferredDockingInfo.AnchorId == null)
-        {
-            return 0;
-        }
-
-        return -1;
-    }
+    private static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right) => left.DeferredDockingInfo.AnchorId != null ? 1 : right.DeferredDockingInfo.AnchorId == null ? 0 : -1;
 
     private void LoadApp(object viewModel)
     {
@@ -126,7 +160,16 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         dockable.ViewModel = viewModel;
         this.centerDock.AdoptDockable(dockable);
 
-        this.docker.Dock(this.centerDock, new Anchor(AnchorPosition.Center));
+        var anchor = new Anchor(AnchorPosition.Center);
+        try
+        {
+            this.docker.Dock(this.centerDock, anchor);
+            anchor = null; // Disposal ownership is transferred
+        }
+        finally
+        {
+            anchor?.Dispose();
+        }
 
         LogAppLoaded(this.logger, viewModel);
     }
@@ -157,6 +200,10 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "any exception is not fatal, we just continue with other docks")]
     private void PlaceDocks(NavigationOptions options)
     {
         // Called when activation is complete. If the navigation is partial, the docking tree is already built. Only
@@ -223,10 +270,19 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     {
         var dock = ToolDock.New();
         dock.AdoptDockable(dockable);
-        this.docker.Dock(dock, new Anchor(dockingInfo.Position), dockingInfo.IsMinimized);
+        var anchor = new Anchor(dockingInfo.Position);
+        try
+        {
+            this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
+            anchor = null; // Disposal ownership is transferred
+        }
+        finally
+        {
+            anchor?.Dispose();
+        }
     }
 
-    private void DockRelativeTo(Dockable dockable, RoutedDockable.DockingInfo dockingInfo, IDockable relativeDockable)
+    private void DockRelativeTo(Dockable dockable, RoutedDockable.DockingInfo dockingInfo, Dockable relativeDockable)
     {
         if (dockingInfo.Position == AnchorPosition.Center)
         {
@@ -247,9 +303,17 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         else
         {
             var anchor = new Anchor(dockingInfo.Position, relativeDockable);
-            var dock = ToolDock.New();
-            dock.AdoptDockable(dockable);
-            this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
+            try
+            {
+                var dock = ToolDock.New();
+                dock.AdoptDockable(dockable);
+                this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
+                anchor = null;
+            }
+            finally
+            {
+                anchor?.Dispose();
+            }
         }
     }
 }

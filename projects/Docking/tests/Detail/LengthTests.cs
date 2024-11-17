@@ -2,10 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Detail;
 using FluentAssertions;
+
+namespace DroidNet.Docking.Tests.Detail;
 
 [TestClass]
 [TestCategory(nameof(Length))]
@@ -13,7 +14,7 @@ using FluentAssertions;
 public class LengthTests
 {
     [TestMethod]
-    public void Create_WithInvalidString_Throws()
+    public void CreateWithInvalidStringThrows()
     {
         // Arrange
         const string value = "xyz";

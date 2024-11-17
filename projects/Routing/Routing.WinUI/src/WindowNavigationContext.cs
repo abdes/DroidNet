@@ -2,14 +2,27 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.WinUI;
-
 using Microsoft.UI.Xaml;
 
+namespace DroidNet.Routing.WinUI;
+
 /// <summary>
-/// An extended <see cref="NavigationContext" />, which keeps track of the
-/// <see cref="Window" /> associated with it.
+/// Represents a navigation context bound to a WinUI window, providing the environment
+/// where route activation and content loading occurs.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A window navigation context associates router state and route activation with a specific WinUI
+/// window instance. Created by the <see cref="WindowContextProvider"/>, it enables the router to
+/// manage multiple independent navigation hierarchies, each tied to its own window.
+/// </para>
+/// <para>
+/// The context maintains a reference to its window, which must implement <see cref="IOutletContainer"/>
+/// to host the root-level content. During navigation, the router activates routes within this context,
+/// loading content either directly into the window (for root routes) or into outlets within view
+/// models (for child routes).
+/// </para>
+/// </remarks>
 internal sealed class WindowNavigationContext : NavigationContext
 {
     /// <summary>
@@ -22,28 +35,28 @@ internal sealed class WindowNavigationContext : NavigationContext
     private bool windowClosed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WindowNavigationContext" />
-    /// class.
+    /// Initializes a new instance of the <see cref="WindowNavigationContext"/> class.
     /// </summary>
-    /// <param name="targetKey">The context's target name.</param>
-    /// <param name="window">
-    /// The <see cref="Window" /> associated with this context.
-    /// </param>
-    public WindowNavigationContext(string targetKey, Window window)
+    /// <param name="targetKey">The target key for the navigation happening within this context.</param>
+    /// <param name="window">The window instance this context is bound to.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="window"/> is <see langword="null"/>.
+    /// </exception>
+    public WindowNavigationContext(Target targetKey, Window window)
         : base(targetKey, window)
     {
         this.windowTitle = window.Title;
-        this.Window = window;
-        this.Window.Closed += (_, _) => this.windowClosed = true;
+        window.Closed += (_, _) => this.windowClosed = true;
     }
 
     /// <summary>
-    /// Gets the <see cref="Window" /> associated with this context.
+    /// Gets the WinUI window instance associated with this navigation context.
     /// </summary>
     /// <value>
-    /// The <see cref="Window" /> associated with this context.
+    /// The window that hosts the root content for this navigation context. This window
+    /// must implement <see cref="IOutletContainer"/> to receive activated content.
     /// </value>
-    internal Window Window { get; }
+    public Window Window => (Window)this.NavigationTarget;
 
     /// <inheritdoc />
     public override string ToString()
@@ -53,6 +66,6 @@ internal sealed class WindowNavigationContext : NavigationContext
             this.windowTitle = this.Window.Title;
         }
 
-        return $"{this.NavigationTargetKey}:{this.Window.GetType().Name}('{this.windowTitle}')";
+        return $"{this.NavigationTargetKey}:{this.NavigationTarget.GetType().Name}('{this.windowTitle}')";
     }
 }

@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Detail;
+using DroidNet.Docking.Tests.Mocks;
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Docking.Tests.Detail;
 
 /// <summary>
 /// Unit test cases for the <see cref="Dock" /> class.
@@ -29,12 +29,16 @@ public sealed partial class DockTests : IDisposable
     private bool dockable1Disposed;
     private bool dockable2Disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DockTests"/> class.
+    /// </summary>
     public DockTests()
     {
         this.dockable1.PropertyChanged += this.OnDockableDisposed;
         this.dockable2.PropertyChanged += this.OnDockableDisposed;
     }
 
+    /// <inheritdoc/>
     [TestCleanup]
     public void Dispose()
     {
@@ -52,7 +56,7 @@ public sealed partial class DockTests : IDisposable
     [DataRow(DockablePlacement.Last)]
     [DataRow(DockablePlacement.AfterActiveItem)]
     [DataRow(DockablePlacement.BeforeActiveItem)]
-    public void AddDockable_WhenDockIsEmpty(DockablePlacement placement)
+    public void AddDockableWhenDockIsEmpty(DockablePlacement placement)
     {
         // Act
         this.dock.AdoptDockable(this.dockable1, placement);
@@ -71,7 +75,7 @@ public sealed partial class DockTests : IDisposable
     [DataRow(DockablePlacement.Last, 1)]
     [DataRow(DockablePlacement.AfterActiveItem, 1)]
     [DataRow(DockablePlacement.BeforeActiveItem, 0)]
-    public void AddDockable_WhenDockIsNotEmpty(DockablePlacement placement, int expectedIndex)
+    public void AddDockableWhenDockIsNotEmpty(DockablePlacement placement, int expectedIndex)
     {
         // Arrange
         this.dock.AdoptDockable(this.dockable1);
@@ -87,7 +91,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void Dispose_ShouldDisposeAllDockables()
+    public void DisposeShouldDisposeAllDockables()
     {
         // Arrange
         this.dock.AdoptDockable(this.dockable1);
@@ -102,7 +106,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void ToString_ShouldReturnDockId()
+    public void ToStringShouldReturnDockId()
     {
         // Act
         var dockIdString = this.dock.ToString();
@@ -112,7 +116,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void Width_WhenSet_SetsActiveDockableWidth()
+    public void WidthWhenSetSetsActiveDockableWidth()
     {
         // Arrange
         this.dockable1.PreferredWidth = new Width();
@@ -130,7 +134,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void Height_WhenSet_SetsActiveDockableHeight()
+    public void HeightWhenSetSetsActiveDockableHeight()
     {
         // Arrange
         this.dockable1.PreferredHeight = new Height();
@@ -148,7 +152,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void AddDockable_WhenNoWidth_And_DockableHasPreferredWidth_TakesThePreferredWidth()
+    public void AddDockableWhenNoWidthAndDockableHasPreferredWidthTakesThePreferredWidth()
     {
         // Arrange
         var width = new Width(200);
@@ -162,7 +166,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void AddDockable_WhenNoHeight_And_DockableHasPreferredHeight_TakesThePreferredHeight()
+    public void AddDockableWhenNoHeightAndDockableHasPreferredHeightTakesThePreferredHeight()
     {
         // Arrange
         var height = new Height(200);
@@ -176,13 +180,13 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void ActiveDockable_WhenDockIsEmpty_ReturnsNull() =>
+    public void ActiveDockableWhenDockIsEmptyReturnsNull() =>
 
         // Assert
         _ = this.dock.ActiveDockable.Should().BeNull();
 
     [TestMethod]
-    public void ActiveDockable_WhenDockIsNotEmpty_ReturnsActiveDockable()
+    public void ActiveDockableWhenDockIsNotEmptyReturnsActiveDockable()
     {
         // Setup
         this.dock.AdoptDockable(this.dockable1);
@@ -194,7 +198,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void ActiveDockable_WhenDockIsNotEmpty_AlwaysHasAnActiveDockable()
+    public void ActiveDockableWhenDockIsNotEmptyAlwaysHasAnActiveDockable()
     {
         // Setup
         this.dock.AdoptDockable(this.dockable1);
@@ -207,7 +211,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void ActiveDockable_WhenDockHasONlyOneDockable_ItIsAlwaysActive()
+    public void ActiveDockableWhenDockHasONlyOneDockableItIsAlwaysActive()
     {
         // Setup
         this.dock.AdoptDockable(this.dockable1);
@@ -218,7 +222,7 @@ public sealed partial class DockTests : IDisposable
     }
 
     [TestMethod]
-    public void Dock_OnlySubscribesToIsActiveChanges()
+    public void DockOnlySubscribesToIsActiveChanges()
     {
         // Setup
         this.dock.AdoptDockable(this.dockable1);

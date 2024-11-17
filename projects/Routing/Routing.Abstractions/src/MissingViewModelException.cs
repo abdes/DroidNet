@@ -5,34 +5,55 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Exception thrown when an attempt is made to resolve a ViewModel with a <see langword="null" /> type, or with a type that
-/// has not been registered with the Dependency Injector.
+/// Represents an error that occurs when a view model cannot be resolved during route activation.
 /// </summary>
+/// <remarks>
+/// <para>
+/// During navigation, when the router attempts to activate routes with associated view models, this
+/// exception indicates that the specified view model type could not be obtained from the application's
+/// service container. This typically occurs when the view model type is not properly registered with
+/// the dependency injection system.
+/// </para>
+/// <para>
+/// The exception captures the view model type that failed to resolve, providing developers with the
+/// information needed to correct service registration or route configuration issues.
+/// </para>
+/// </remarks>
 public class MissingViewModelException : Exception
 {
-    private const string DefaultMessage = "cannot resolve the Viewmodel for a router outlet";
-
-    private readonly Lazy<string> extendedMessage;
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MissingViewModelException"/> class.
+    /// </summary>
     public MissingViewModelException()
-        : this(DefaultMessage)
+        : base("Route configuration is missing the view model type")
     {
     }
 
-    public MissingViewModelException(string? message)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MissingViewModelException"/> class with a
+    /// specific error message.
+    /// </summary>
+    /// <param name="message">A detailed description of the view model resolution failure.</param>
+    public MissingViewModelException(string message)
         : base(message)
-        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
-
-    public MissingViewModelException(string? message, Exception? innerException)
-        : base(message, innerException)
-        => this.extendedMessage = new Lazy<string>(this.FormatMessage);
+    {
+    }
 
     /// <summary>
-    /// Gets the ViewModel type, which resolution attempt resulted in this exception being thrown.
+    /// Initializes a new instance of the <see cref="MissingViewModelException"/> class with a
+    /// message and inner exception.
     /// </summary>
-    public Type? ViewModelType { get; init; }
+    /// <param name="message">A detailed description of the view model resolution failure.</param>
+    /// <param name="innerException">
+    /// The exception that prevented view model resolution, if any.
+    /// </param>
+    public MissingViewModelException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 
-    public override string Message => this.extendedMessage.Value;
-
-    private string FormatMessage() => base.Message + $" (ViewModelType={this.ViewModelType}";
+    /// <summary>
+    /// Gets or sets the view model type that could not be resolved.
+    /// </summary>
+    public Type? ViewModelType { get; set; }
 }

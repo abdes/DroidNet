@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.UrlTree;
-
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Debugger.UI.TreeView;
+
+namespace DroidNet.Routing.Debugger.UI.UrlTree;
 
 /// <summary>
 /// Adapter for a <see cref="IUrlSegmentGroup" /> to be used inside a <see cref="UrlTreeView" /> control.
@@ -16,10 +16,33 @@ public partial class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAda
 {
     private readonly OutletName outlet;
 
+    /// <summary>
+    /// Gets the segments belonging to this group's primary navigation path.
+    /// </summary>
+    /// <remarks>
+    /// These segments represent the sequential parts of the URL path for this group. For instance,
+    /// in a URL path "users/123", a segment group would contain two segments. The segments maintain
+    /// their original order, which is crucial for proper route matching and parameter extraction.
+    /// </remarks>
     public ReadOnlyCollection<IUrlSegment> Segments => this.Item.Segments;
 
+    /// <summary>
+    /// Gets the index of this group in the collection of items.
+    /// </summary>
+    /// <value>
+    /// The zero-based index of this group in the collection of items.
+    /// </value>
     public required int IndexInItems { get; init; }
 
+    /// <summary>
+    /// Gets the outlet name for this URL segment group.
+    /// </summary>
+    /// <value>
+    /// A string representing the outlet name. If the outlet is primary, it returns "[primary]".
+    /// </value>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when the outlet name is set to null.
+    /// </exception>
     public required string Outlet
     {
         get => $"{(this.outlet.IsPrimary ? "[primary]" : this.outlet)}";
@@ -27,8 +50,10 @@ public partial class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAda
         init => this.outlet = value;
     }
 
+    /// <inheritdoc/>
     public IUrlSegmentGroup Item => item;
 
+    /// <inheritdoc/>
     public override string Label
     {
         get
@@ -40,8 +65,10 @@ public partial class UrlSegmentGroupAdapter(IUrlSegmentGroup item) : TreeItemAda
         }
     }
 
+    /// <inheritdoc/>
     public override bool IsRoot => this.Item.Parent is null;
 
+    /// <inheritdoc/>
     protected override List<TreeItemAdapterBase> PopulateChildren()
     {
         List<UrlSegmentGroupAdapter> value = [];

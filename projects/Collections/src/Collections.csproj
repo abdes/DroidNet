@@ -3,8 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-
         <Title>DroidNet Collections</Title>
         <Description>A lightweight .NET class library providing extension methods and custom collections to fill some gaps in .Net Collections.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

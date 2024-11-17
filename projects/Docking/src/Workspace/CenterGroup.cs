@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using DroidNet.Docking.Detail;
+
+namespace DroidNet.Docking.Workspace;
 
 /// <summary>
 /// A <see cref="DockGroup" /> intended to be used for the <see cref="CenterDock" /> and can be configured to stretch to fill all
@@ -16,6 +16,7 @@ internal sealed partial class CenterGroup(IDocker docker)
 {
     private bool disposed;
 
+    /// <inheritdoc/>
     public override bool StretchToFill
     {
         get => true;
@@ -24,8 +25,10 @@ internal sealed partial class CenterGroup(IDocker docker)
                 $"a {nameof(CenterGroup)} should always have the layout property {nameof(this.StretchToFill)} `true`");
     }
 
+    /// <inheritdoc/>
     public override string ToString() => "\u25cb " + base.ToString();
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)

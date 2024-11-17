@@ -2,18 +2,49 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.OutputLog.Output;
-
 using DroidNet.Controls.OutputLog.Theming;
 using Microsoft.UI.Xaml.Documents;
 using Serilog.Events;
 using Serilog.Formatting.Display;
 using Serilog.Parsing;
 
+namespace DroidNet.Controls.OutputLog.Output;
+
+/// <summary>
+/// Renders log events based on a specified output template, applying themed styling to each token.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This renderer processes Serilog output templates, converting them into themed text with support for
+/// various tokens such as level, message, timestamp, and properties.
+/// </para>
+/// <para>
+/// <strong>Supported Tokens:</strong>
+/// - Level
+/// - Message
+/// - Timestamp
+/// - Properties
+/// - NewLine.
+/// </para>
+/// <para>
+/// Example usage:
+/// <code><![CDATA[
+/// var renderer = new OutputTemplateRenderer(theme, "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}", formatProvider);
+/// renderer.Render(logEvent, paragraph);
+/// // Outputs: "[12:34:56 INF] Hello, World! {Property1=Value1, Property2=Value2}"
+/// ]]></code>
+/// </para>
+/// </remarks>
 internal sealed class OutputTemplateRenderer : ILogEventRenderer
 {
     private readonly TokenRenderer[] renderers;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputTemplateRenderer"/> class.
+    /// </summary>
+    /// <param name="theme">The theme to apply to the rendered output.</param>
+    /// <param name="outputTemplate">The template defining the structure and content of the log output.</param>
+    /// <param name="formatProvider">The format provider for value formatting. Can be <see langword="null"/>.</param>
     public OutputTemplateRenderer(Theme theme, string outputTemplate, IFormatProvider? formatProvider)
     {
         var template = new MessageTemplateParser().Parse(outputTemplate);
@@ -64,6 +95,17 @@ internal sealed class OutputTemplateRenderer : ILogEventRenderer
         this.renderers = [.. renderers_];
     }
 
+    /// <summary>
+    /// Renders a log event into a rich text paragraph based on the output template.
+    /// </summary>
+    /// <param name="logEvent">The log event to render.</param>
+    /// <param name="paragraph">The target paragraph for the rendered output.</param>
+    /// <remarks>
+    /// <para>
+    /// The rendering process iterates through each token renderer, applying the appropriate
+    /// formatting and theming to the log event properties.
+    /// </para>
+    /// </remarks>
     public void Render(LogEvent logEvent, Paragraph paragraph)
     {
         foreach (var renderer in this.renderers)

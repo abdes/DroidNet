@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.TreeView;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Routing.Debugger.UI.TreeView;
 
 /// <summary>
 /// A control that can be used to show any kind of item in a <see cref="TreeView" />.
@@ -39,7 +39,13 @@ public partial class TreeItemControl : Control
         typeof(TreeItemControl),
         new PropertyMetadata(defaultValue: null));
 
-    public TreeItemControl() => this.Style = (Style)Application.Current.Resources[nameof(TreeItemControl)];
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TreeItemControl"/> class.
+    /// </summary>
+    public TreeItemControl()
+    {
+        this.Style = (Style)Application.Current.Resources[nameof(TreeItemControl)];
+    }
 
     /// <summary>
     /// Gets or sets the template used to display the content of the control's header.

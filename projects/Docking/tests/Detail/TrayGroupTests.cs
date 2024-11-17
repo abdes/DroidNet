@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Detail;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
 using DroidNet.Docking.Workspace;
 using FluentAssertions;
 
+namespace DroidNet.Docking.Tests.Detail;
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
 /// <summary>
@@ -23,13 +21,17 @@ public sealed partial class TrayGroupTests : IDisposable
     private readonly DummyDocker docker = new();
     private readonly TrayGroup tray;
 
-    public TrayGroupTests() => this.tray = new TrayGroup(this.docker, AnchorPosition.Left);
+    public TrayGroupTests()
+    {
+        this.tray = new TrayGroup(this.docker, AnchorPosition.Left);
+    }
 
+    /// <inheritdoc/>
     [TestCleanup]
     public void Dispose() => this.docker.Dispose();
 
     [TestMethod]
-    public void Constructor_ShouldThrowException_WhenPositionIsWith()
+    public void ConstructorShouldThrowExceptionWhenPositionIsWith()
     {
         // Act
         var act = () => _ = new TrayGroup(this.docker, AnchorPosition.With);
@@ -43,7 +45,7 @@ public sealed partial class TrayGroupTests : IDisposable
     [DataRow(AnchorPosition.Right, DockGroupOrientation.Vertical)]
     [DataRow(AnchorPosition.Top, DockGroupOrientation.Horizontal)]
     [DataRow(AnchorPosition.Bottom, DockGroupOrientation.Horizontal)]
-    public void Orientation_ShouldBeDeterminedFromPosition(AnchorPosition position, DockGroupOrientation orientation)
+    public void OrientationShouldBeDeterminedFromPosition(AnchorPosition position, DockGroupOrientation orientation)
     {
         // Act
         var sut = new TrayGroup(this.docker, position);
@@ -53,7 +55,7 @@ public sealed partial class TrayGroupTests : IDisposable
     }
 
     [TestMethod]
-    public void AddDock_ShouldAddDockToDocks()
+    public void AddDockShouldAddDockToDocks()
     {
         // Arrange
         var dock = new SimpleDock();
@@ -66,7 +68,7 @@ public sealed partial class TrayGroupTests : IDisposable
     }
 
     [TestMethod]
-    public void RemoveDock_ShouldRemoveDockFromDocks()
+    public void RemoveDockShouldRemoveDockFromDocks()
     {
         // Arrange
         var dock = new SimpleDock();
@@ -81,7 +83,7 @@ public sealed partial class TrayGroupTests : IDisposable
     }
 
     [TestMethod]
-    public void ToString_ContainsTray()
+    public void ToStringContainsTray()
     {
         // Act
         var result = this.tray.ToString();

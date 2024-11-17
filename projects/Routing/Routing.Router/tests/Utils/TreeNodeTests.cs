@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests.Utils;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Utils;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests.Utils;
 
 /// <summary>
 /// Contains unit test cases for the <see cref="TreeNode" /> class.
@@ -25,7 +24,10 @@ public class TreeNodeTests
     /// <remarks>
     /// A new instance of the test class is created for each test case.
     /// </remarks>
-    public TreeNodeTests() => this.sut = new TestableTreeNode();
+    public TreeNodeTests()
+    {
+        this.sut = new TestableTreeNode();
+    }
 
     /// <summary>
     /// Tests the <see cref="TreeNode.Root" /> property when the node is the
@@ -245,6 +247,7 @@ public class TreeNodeTests
 }
 
 [ExcludeFromCodeCoverage]
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "class only using inside these unit tests")]
 internal sealed class TestableTreeNode : TreeNode
 {
     internal new TestableTreeNode? Parent => (TestableTreeNode?)base.Parent;

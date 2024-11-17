@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Moq.Protected;
+
+namespace DroidNet.Routing.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -20,6 +19,9 @@ public class RouteActivatorTests
     private readonly AbstractRouteActivator activator;
     private readonly Mock<NavigationContext> contextMock = new(Target.Main, TestTarget);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RouteActivatorTests"/> class.
+    /// </summary>
     public RouteActivatorTests()
     {
         this.activatorMock = new Mock<DummyRouteActivator> { CallBase = true };
@@ -34,14 +36,14 @@ public class RouteActivatorTests
         var (rootNode, childRoute) = MakeRootNodeWithChild();
 
         var observerMock = new Mock<IRouteActivationObserver>();
-        this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
-        observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Throws<InvalidOperationException>();
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
+        _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Throws<InvalidOperationException>();
 
         // Act
         var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
 
         // Assert
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
         this.activatorMock.Protected()
             .Verify("DoActivateRoute", Times.Never(), rootNode, this.contextMock.Object);
         this.activatorMock.Protected()
@@ -54,13 +56,13 @@ public class RouteActivatorTests
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
 
-        this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns((IRouteActivationObserver?)null);
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns((IRouteActivationObserver?)null);
 
         // Act
         var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
         this.activatorMock.Protected()
             .Verify("DoActivateRoute", Times.Once(), childRoute, this.contextMock.Object);
     }
@@ -72,16 +74,16 @@ public class RouteActivatorTests
         var (rootNode, childRoute) = MakeRootNodeWithChild();
 
         var observerMock = new Mock<IRouteActivationObserver>();
-        this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
-        observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
-        observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
+        _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
 
         // Act
         var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
 
         // Assert
         observerMock.VerifyAll();
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
         this.activatorMock.Protected()
             .Verify("DoActivateRoute", Times.Once(), childRoute, this.contextMock.Object);
     }
@@ -93,16 +95,16 @@ public class RouteActivatorTests
         var (rootNode, childRoute) = MakeRootNodeWithChild();
 
         var observerMock = new Mock<IRouteActivationObserver>();
-        this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
-        observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
-        observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: false);
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
+        _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: false);
 
         // Act
         var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
 
         // Assert
         observerMock.VerifyAll();
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
         this.activatorMock.Protected()
             .Verify("DoActivateRoute", Times.Never(), childRoute, this.contextMock.Object);
     }
@@ -114,17 +116,17 @@ public class RouteActivatorTests
         var (rootNode, childRoute) = MakeRootNodeWithChild();
 
         var observerMock = new Mock<IRouteActivationObserver>();
-        this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
-        observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
-        observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
-        observerMock.Setup(o => o.OnActivated(rootNode, this.contextMock.Object));
-        observerMock.Setup(o => o.OnActivated(childRoute, this.contextMock.Object));
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
+        _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnActivated(rootNode, this.contextMock.Object));
+        _ = observerMock.Setup(o => o.OnActivated(childRoute, this.contextMock.Object));
 
         // Act
         var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
         observerMock.Verify(o => o.OnActivated(rootNode, this.contextMock.Object), Times.Once());
         observerMock.Verify(o => o.OnActivated(childRoute, this.contextMock.Object), Times.Once());
     }
@@ -132,19 +134,21 @@ public class RouteActivatorTests
     private static (IActiveRoute rootNode, IActiveRoute childRoute) MakeRootNodeWithChild()
     {
         var rootNodeMock = new Mock<IActiveRoute>();
-        rootNodeMock.SetupGet(r => r.Parent).Returns((IActiveRoute?)null);
+        _ = rootNodeMock.SetupGet(r => r.Parent).Returns((IActiveRoute?)null);
 
         var childMock = new Mock<IActiveRoute>();
-        childMock.SetupGet(r => r.Parent).Returns(rootNodeMock.Object);
-        childMock.SetupGet(r => r.Children).Returns([]);
-        rootNodeMock.SetupGet(r => r.Children).Returns([childMock.Object]);
+        _ = childMock.SetupGet(r => r.Parent).Returns(rootNodeMock.Object);
+        _ = childMock.SetupGet(r => r.Children).Returns([]);
+        _ = rootNodeMock.SetupGet(r => r.Children).Returns([childMock.Object]);
         return (rootNodeMock.Object, childMock.Object);
     }
 }
 
 [ExcludeFromCodeCoverage]
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "class only using inside these unit tests")]
 public abstract class DummyRouteActivator : AbstractRouteActivator
 {
+    /// <inheritdoc/>
     protected override void DoActivateRoute(IActiveRoute route, INavigationContext context)
     {
     }

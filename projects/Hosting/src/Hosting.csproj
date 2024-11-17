@@ -3,14 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-        <WindowsSdkPackageVersion>10.0.26100.52</WindowsSdkPackageVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <Platforms>x64</Platforms>
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-        <EnableMsixTooling>true</EnableMsixTooling>
-
         <Title>Encapsulate a WinUI application resources and lifetime functionality using the Microsoft.Extensions.Hosting framework.</Title>
         <Description>A small library to easily integrate the WinUI thread as a hosted service in a Microsoft.Extensions.Hosting host which will provide configuration, DI, logging and lifetime management for free.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -5,14 +5,15 @@
 namespace DroidNet.Routing;
 
 /// <summary>
-/// Defines an observer interface for monitoring and responding to route activation lifecycle events. Allows the router
-/// to manage the activation internal logic, while keeping most of the implementation testable.
+/// Defines an observer interface for monitoring and responding to route activation lifecycle
+/// events. Allows the router to manage the activation internal logic, while keeping most of the
+/// implementation testable.
 /// </summary>
 public interface IRouteActivationObserver
 {
     /// <summary>
-    /// Invoked before attempting to activate a route. Determines if the route activation should proceed based on the
-    /// current state and conditions.
+    /// Invoked before attempting to activate a route. Determines if the route activation should
+    /// proceed based on the current state and conditions.
     /// </summary>
     /// <param name="route">The route that is being considered for activation.</param>
     /// <param name="context">The navigation context associated with the activation.</param>

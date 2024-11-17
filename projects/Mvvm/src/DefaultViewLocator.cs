@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm;
-
-using System.Diagnostics;
 using System.Reflection;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+
+namespace DroidNet.Mvvm;
 
 /// <summary>
 /// Default implementation for <see cref="IViewLocator" />.It uses a series of
@@ -128,31 +127,28 @@ public partial class DefaultViewLocator(
         var view = this.AttemptViewForResolutionFor(viewModelType);
         if (view is not null)
         {
-            LogResolutionSuccess($"using IViewFor<{viewModelType.FullName}>");
-            return view;
+            return ViewResolved($"using IViewFor<{viewModelType.FullName}>");
         }
 
         view = this.AttemptViewResolutionFor(viewModelType);
         if (view is not null)
         {
-            LogResolutionSuccess("using the view type");
-            return view;
+            return ViewResolved("using the view type");
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(viewModelType));
         if (view is not null)
         {
-            LogResolutionSuccess("using view type with toggle");
-            return view;
+            return ViewResolved("using view type with toggle");
         }
 
         LogViewResolutionFailed(this.logger, viewModelType);
         return null;
 
-        void LogResolutionSuccess(string how)
+        object ViewResolved(string how)
         {
-            Debug.Assert(view != null, nameof(view) + " != null");
             LogViewResolved(this.logger, viewModelType, view.GetType(), how);
+            return view;
         }
     }
 
@@ -163,31 +159,28 @@ public partial class DefaultViewLocator(
         var view = this.AttemptViewForResolutionFor(typeof(T));
         if (view is not null)
         {
-            LogResolutionSuccess($"using IViewFor<{typeof(T)}>");
-            return (IViewFor<T>?)view;
+            return ViewResolved($"using IViewFor<{typeof(T)}>");
         }
 
         view = this.AttemptViewResolutionFor(typeof(T));
         if (view is not null)
         {
-            LogResolutionSuccess("using the view type");
-            return (IViewFor<T>?)view;
+            return ViewResolved("using the view type");
         }
 
         view = this.AttemptViewResolutionFor(ToggleViewModelType(typeof(T)));
         if (view is not null)
         {
-            LogResolutionSuccess("using the view type with toggle");
-            return (IViewFor<T>?)view;
+            return ViewResolved("using the view type with toggle");
         }
 
         LogViewResolutionFailed(this.logger, typeof(T));
         return null;
 
-        void LogResolutionSuccess(string how)
+        IViewFor<T>? ViewResolved(string how)
         {
-            Debug.Assert(view != null, nameof(view) + " != null");
             LogViewResolved(this.logger, typeof(T), view.GetType(), how);
+            return (IViewFor<T>?)view;
         }
     }
 

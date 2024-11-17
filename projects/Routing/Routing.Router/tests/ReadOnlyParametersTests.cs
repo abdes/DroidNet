@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Tests;
-
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Routing.Tests;
 
 [TestClass]
 [TestCategory("Parameters")]
@@ -24,7 +23,7 @@ public class ReadOnlyParametersTests
         var isEmpty = parameters.IsEmpty;
 
         // Assert
-        isEmpty.Should().BeTrue();
+        _ = isEmpty.Should().BeTrue();
     }
 
     [TestMethod]
@@ -40,7 +39,7 @@ public class ReadOnlyParametersTests
         var isEmpty = parameters.IsEmpty;
 
         // Assert
-        isEmpty.Should().BeFalse();
+        _ = isEmpty.Should().BeFalse();
     }
 
     [TestMethod]
@@ -113,7 +112,7 @@ public class ReadOnlyParametersTests
         var result = parameters.GetValues("NonExistentParameter");
 
         // Assert
-        result.Should().BeNull();
+        _ = result.Should().BeNull();
     }
 
     [TestMethod]
@@ -129,7 +128,7 @@ public class ReadOnlyParametersTests
         var result = parameters.GetValues("EmptyParam");
 
         // Assert
-        result.Should().NotBeNull().And.BeEmpty();
+        _ = result.Should().NotBeNull().And.BeEmpty();
     }
 
     [TestMethod]
@@ -145,8 +144,8 @@ public class ReadOnlyParametersTests
         var result = parameters.GetValues("EmptyStringParam");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().ContainSingle().Which.Should().BeEmpty();
+        _ = result.Should().NotBeNull();
+        _ = result.Should().ContainSingle().Which.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -162,8 +161,8 @@ public class ReadOnlyParametersTests
         var result = parameters.GetValues("SingleValueParam");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().ContainSingle().Which.Should().Be("Value1");
+        _ = result.Should().NotBeNull();
+        _ = result.Should().ContainSingle().Which.Should().Be("Value1");
     }
 
     [TestMethod]
@@ -179,8 +178,8 @@ public class ReadOnlyParametersTests
         var result = parameters.GetValues("MultipleValuesParam");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().ContainInOrder("Value1", "Value2", "Value3");
+        _ = result.Should().NotBeNull();
+        _ = result.Should().ContainInOrder("Value1", "Value2", "Value3");
     }
 
     [TestMethod]

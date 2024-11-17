@@ -13,8 +13,7 @@ namespace DroidNet.Routing;
 /// /Documentation/GettingStarted;toc=true
 /// /Documentation(popup:Feedback)
 /// /Home(sidebar:Chat)
-/// ]]>
-/// </code>
+/// ]]></code>
 /// </example>
 public class DefaultUrlSerializer(IUrlParser parser) : IUrlSerializer
 {

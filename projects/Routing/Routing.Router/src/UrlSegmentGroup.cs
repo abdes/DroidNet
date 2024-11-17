@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing;
-
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Linq;
 using Destructurama.Attributed;
+
+namespace DroidNet.Routing;
 
 /// <summary>
 /// Represents a parsed sequence of URL segments, forming a path.
@@ -43,20 +42,15 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// <summary>
     /// Gets the children of this <see cref="UrlSegmentGroup" />.
     /// </summary>
-    /// <value>
-    /// A read-only dictionary of this <see cref="UrlSegmentGroup" />'s
-    /// children.
-    /// </value>
     public IReadOnlyDictionary<OutletName, IUrlSegmentGroup> Children => this.children.AsReadOnly();
 
     /// <summary>
-    /// Gets the children of this <see cref="UrlSegmentGroup" /> with the child
-    /// corresponding to the primary outlet first.
+    /// Gets the children of this <see cref="UrlSegmentGroup" /> with the child corresponding to the
+    /// primary outlet first.
     /// </summary>
     /// <value>
-    /// A read-only collection of this <see cref="UrlSegmentGroup" />'s
-    /// children, where the child corresponding to the primary outlet comes
-    /// first.
+    /// A read-only collection of this <see cref="UrlSegmentGroup" />'s children, where the child
+    /// corresponding to the primary outlet comes first.
     /// </value>
     [NotLogged]
     public ReadOnlyCollection<KeyValuePair<OutletName, IUrlSegmentGroup>> SortedChildren
@@ -80,14 +74,12 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     }
 
     /// <summary>
-    /// Gets the parent <see cref="UrlSegmentGroup" /> of this
-    /// <see cref="UrlSegmentGroup" />.
+    /// Gets the parent <see cref="UrlSegmentGroup" /> of this <see cref="UrlSegmentGroup" />.
     /// </summary>
     /// <remarks>
-    /// The parent is automatically set when this <seealso cref="UrlSegmentGroup" />
-    /// is added as a child to another <see cref="UrlSegmentGroup" />.
+    /// The parent is automatically set when this <seealso cref="UrlSegmentGroup" /> is added as a
+    /// child to another <see cref="UrlSegmentGroup" />.
     /// </remarks>
-    /// <value>The parent <see cref="UrlSegmentGroup" />.</value>
     [NotLogged]
     public IUrlSegmentGroup? Parent { get; private set; }
 
@@ -95,14 +87,12 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     /// Gets the segments of this <see cref="UrlSegmentGroup" />.
     /// </summary>
     /// <value>
-    /// A read-only collection of this <see cref="UrlSegmentGroup" />'s
-    /// segments.
+    /// A read-only collection of this <see cref="UrlSegmentGroup" />'s segments.
     /// </value>
     public ReadOnlyCollection<IUrlSegment> Segments => this.segments.AsReadOnly();
 
     /// <summary>
-    /// Adds a child <see cref="UrlSegmentGroup" /> to the current
-    /// <see cref="UrlSegmentGroup" />.
+    /// Adds a child <see cref="UrlSegmentGroup" /> to the current <see cref="UrlSegmentGroup" />.
     /// </summary>
     /// <param name="outlet">The outlet name.</param>
     /// <param name="child">The child <see cref="UrlSegmentGroup" />.</param>
@@ -113,35 +103,41 @@ public class UrlSegmentGroup : IUrlSegmentGroup
     }
 
     /// <summary>
-    /// Remove the child <see cref="UrlSegmentGroup" /> with the specified
-    /// outlet from the segment group.
+    /// Remove the child <see cref="UrlSegmentGroup" /> with the specified outlet from the segment group.
     /// </summary>
     /// <param name="outlet">The outlet name of the child to remove.</param>
     /// <returns>
-    /// <see langword="true" /> if the element is successfully removed;
-    /// otherwise, <see langword="false" />. This method also returns
-    /// <see langword="false" /> if <paramref name="outlet" /> was not found
-    /// among the children.
+    /// <see langword="true" /> if the element is successfully removed; otherwise, <see langword="false" />.
+    /// This method also returns <see langword="false" /> if <paramref name="outlet" /> was not found among
+    /// the children.
     /// </returns>
     public bool RemoveChild(string outlet) => this.children.Remove(outlet);
 
     /// <summary>
-    /// Serializes the <see cref="UrlSegmentGroup" /> into a string, making
-    /// sure that its outlet name and segments are percent-encoded as required.
-    /// required.
+    /// Serializes the <see cref="UrlSegmentGroup" /> into a string, making sure that its outlet
+    /// name and segments are percent-encoded as required. required.
     /// </summary>
     /// <returns>
-    /// A string representing the serialized form of the <see cref="UrlSegmentGroup" />
-    /// .
+    /// A string representing the serialized form of the <see cref="UrlSegmentGroup" /> .
     /// </returns>
     public override string ToString() => this.segments.Count == 0 ? this.SerializeAsRoot() : this.Serialize();
 
+    /// <summary>
+    /// Replaces the segments with an empty path segment.
+    /// </summary>
     internal void ReplaceSegmentsWithEmptyPath()
     {
         Debug.Assert(this.segments.Count == 0, "segments must be empty to insert an empty path segment");
         this.segments.Add(new UrlSegment(string.Empty));
     }
 
+    /// <summary>
+    /// Serializes the <see cref="UrlSegmentGroup"/> into a string, ensuring that its outlet
+    /// name and segments are percent-encoded as required.
+    /// </summary>
+    /// <returns>
+    /// A string representing the serialized form of the <see cref="UrlSegmentGroup"/>.
+    /// </returns>
     private string Serialize()
     {
         if (this.Children.Count == 0)
@@ -161,6 +157,12 @@ public class UrlSegmentGroup : IUrlSegmentGroup
         return $"{this.SerializeSegments()}{(hasPrimaryChild ? "/(" : '(')}{string.Join("//", childrenAsString)})";
     }
 
+    /// <summary>
+    /// Serializes the <see cref="UrlSegmentGroup"/> as the root segment group.
+    /// </summary>
+    /// <returns>
+    /// A string representing the serialized form of the root <see cref="UrlSegmentGroup"/>.
+    /// </returns>
     private string SerializeAsRoot()
     {
         Debug.Assert(
@@ -179,5 +181,11 @@ public class UrlSegmentGroup : IUrlSegmentGroup
         return nonPrimary.Length > 0 ? $"{primary}({nonPrimary})" : primary;
     }
 
+    /// <summary>
+    /// Serializes the segments of the <see cref="UrlSegmentGroup"/> into a string.
+    /// </summary>
+    /// <returns>
+    /// A string representing the serialized form of the segments.
+    /// </returns>
     private string SerializeSegments() => string.Join('/', this.Segments.Select(s => s.ToString()));
 }

@@ -2,12 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Workspace;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Mocks;
+using DroidNet.Docking.Tests.Mocks;
+using DroidNet.Docking.Workspace;
 using FluentAssertions;
-using static TreeTraversal;
+
+using static DroidNet.Docking.Workspace.TreeTraversal;
+
+namespace DroidNet.Docking.Tests.Workspace;
 
 #pragma warning disable CA2000 // Dispose objects before losing scope
 
@@ -21,6 +23,7 @@ public sealed partial class TreeTraversalTests : IDisposable
 {
     private bool disposed;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.disposed)
@@ -32,7 +35,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_EmptyTree()
+    public void InOrderTraversalEmptyTree()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(0);
@@ -45,7 +48,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_OneChildLeft()
+    public void InOrderTraversalOneChildLeft()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(2)
@@ -61,7 +64,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_OneChildRight()
+    public void InOrderTraversalOneChildRight()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(1)
@@ -77,7 +80,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_TwoChildren()
+    public void InOrderTraversalTwoChildren()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(2)
@@ -94,7 +97,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_LeftSubTree()
+    public void InOrderTraversalLeftSubTree()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(4)
@@ -116,7 +119,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_RightSubTree()
+    public void InOrderTraversalRightSubTree()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(1)
@@ -139,7 +142,7 @@ public sealed partial class TreeTraversalTests : IDisposable
     }
 
     [TestMethod]
-    public void InOrderTraversal_FullTree()
+    public void InOrderTraversalFullTree()
     {
         // Setup
         var root = new SimpleBinaryTreeNode(4)

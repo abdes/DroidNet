@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.WorkSpace;
-
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,7 +14,11 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-/// <summary>A layout strategy for the workspace.</summary>
+namespace DroidNet.Routing.Debugger.UI.WorkSpace;
+
+/// <summary>
+/// A layout strategy for the workspace.
+/// </summary>
 public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 {
     private const double LayoutSyncThrottleInMs = 150.0;
@@ -29,6 +31,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     [ObservableProperty]
     private UIElement content = new Grid();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkSpaceLayout"/> class.
+    /// </summary>
+    /// <param name="router">The router instance used for navigation and event subscription.</param>
+    /// <param name="docker">The docker instance used for managing dockable layouts.</param>
+    /// <param name="dockViewFactory">The factory used to create views for docks.</param>
+    /// <param name="logger">The logger instance used for logging debug information.</param>
     public WorkSpaceLayout(
         IRouter router,
         IDocker docker,
@@ -47,19 +56,17 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                 var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
                 switch (@event)
                 {
-                    // At the beginning of each navigation cycle, many changes
-                    // will happen to ro docker model, but we want to batch them
-                    // together and handle them at once after the navigation
-                    // completes. So we mute the LayoutChanged event from the
+                    // At the beginning of each navigation cycle, many changes will happen to ro
+                    // docker model, but we want to batch them together and handle them at once
+                    // after the navigation completes. So we mute the LayoutChanged event from the
                     // docker.
                     case NavigationStart:
                         this.layoutChangedSub?.Dispose();
                         break;
 
-                    // At the end of the navigation cycle, we need to take into
-                    // account changes that resulted from the new URL. We also
-                    // resume listening to docker layout changes that are not
-                    // the result of navigation.
+                    // At the end of the navigation cycle, we need to take into account changes that
+                    // resulted from the new URL. We also resume listening to docker layout changes
+                    // that are not the result of navigation.
                     case NavigationEnd:
                     case NavigationError:
                         var options = ((NavigationEvent)@event).Options;
@@ -82,12 +89,11 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                                 h => docker.LayoutChanged -= h)
                             .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
                             .Subscribe(
-                                eventPattern
-                                    =>
+                                eventPattern =>
                                 {
                                     Debug.WriteLine(
                                         $"Workspace layout changed because {eventPattern.EventArgs.Reason}");
-                                    dispatcherQueue.TryEnqueue(
+                                    _ = dispatcherQueue.TryEnqueue(
                                         () => this.SyncWithRouter(eventPattern.EventArgs.Reason));
                                 });
 
@@ -99,8 +105,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
             });
     }
 
+    /// <summary>
+    /// Gets or sets the active route for the workspace layout.
+    /// </summary>
+    /// <value>The active route, or <see langword="null"/> if no route is active.</value>
     public IActiveRoute? ActiveRoute { get; set; }
 
+    /// <inheritdoc/>
     public void Dispose() => this.routerEventsSub.Dispose();
 
     [LoggerMessage(
@@ -117,7 +128,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
     private static bool CheckAndSetAnchor(Anchor anchor, IParameters active, Parameters next)
     {
+#pragma warning disable CA1308 // Normalize strings to uppercase
+        // we use lowercase for the position
         var position = anchor.Position.ToString().ToLowerInvariant();
+#pragma warning restore CA1308 // Normalize strings to uppercase
         next.AddOrUpdate(position, anchor.RelativeTo?.Id);
 
         // Trigger a change if the active parameters have the same anchor key as the one we are setting next with a different
@@ -189,10 +203,17 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         {
             // The active dockable will get the dock's anchor, but any other
             // dockables will be anchored 'with' the active dockable.
-            var anchor = dockable.IsActive
-                ? dock.Anchor
-                : new Anchor(AnchorPosition.With, dock.ActiveDockable);
-            changed = CheckAndSetAnchor(anchor, activeParams, nextParams) || changed;
+            Anchor? anchor;
+            if (dockable.IsActive)
+            {
+                changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
+            }
+            else
+            {
+                anchor = new Anchor(AnchorPosition.With, dock.ActiveDockable);
+                changed = CheckAndSetAnchor(anchor, activeParams, nextParams) || changed;
+                anchor.Dispose();
+            }
         }
 
         string? width = dockable.PreferredWidth;

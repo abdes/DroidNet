@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Docking.Controls;
-
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Docking.Controls;
 
 /// <summary>
 /// A styled <see cref="PanelButton" /> used for the docking button of a dock panel.
 /// </summary>
 internal sealed partial class PanelDockButton : PanelButton
 {
-    public PanelDockButton() => this.Style = (Style)Application.Current.Resources[nameof(PanelDockButton)];
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PanelDockButton"/> class.
+    /// </summary>
+    public PanelDockButton()
+    {
+        this.Style = (Style)Application.Current.Resources[nameof(PanelDockButton)];
+    }
 }

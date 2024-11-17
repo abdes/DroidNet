@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Converters;
 
 /// <summary>Convert a <see langword="null" /> value to a <see cref="Visibility" /> value.</summary>
 public partial class NullToVisibilityConverter : IValueConverter
@@ -40,6 +40,7 @@ public partial class NullToVisibilityConverter : IValueConverter
         return value == null ? invisibility : Visibility.Visible;
     }
 
+    /// <inheritdoc/>
     public object ConvertBack(object value, Type targetType, object? parameter, string language)
         => throw new InvalidOperationException("Don't use NullToVisibilityConverter.ConvertBack; it's meaningless.");
 }

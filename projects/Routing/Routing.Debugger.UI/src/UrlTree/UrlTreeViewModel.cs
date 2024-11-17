@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.UrlTree;
-
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing;
 using DroidNet.Routing.Debugger.UI.TreeView;
 using DroidNet.Routing.Events;
+
+namespace DroidNet.Routing.Debugger.UI.UrlTree;
 
 /// <summary>ViewModel for the parsed URL tree.</summary>
 public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
@@ -23,6 +22,7 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     private ITreeItem? selectedItem;
 
     private string? url;
+    private bool isDisposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UrlTreeViewModel" /> class.
@@ -30,7 +30,9 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     /// <param name="router">
     /// The router, injected, used to fetch the current URL tree.
     /// </param>
-    public UrlTreeViewModel(IRouter router) => this.routerEventsSub = router.Events
+    public UrlTreeViewModel(IRouter router)
+    {
+        this.routerEventsSub = router.Events
         .OfType<ActivationStarted>()
         .Select(e => e.RouterState)
         .Subscribe(
@@ -50,10 +52,33 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
                 };
                 this.QueryParams = state.UrlTree.QueryParams;
             });
+    }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
-        this.routerEventsSub.Dispose();
+        this.Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="UrlTreeViewModel"/> and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.routerEventsSub.Dispose();
+        }
+
+        this.isDisposed = true;
     }
 }

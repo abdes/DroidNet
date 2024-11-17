@@ -2,13 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Routing.Debugger.UI.Docks;
-
 using DroidNet.Mvvm;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
-/// <summary>The ViewModel for the embedded application dock.</summary>
+namespace DroidNet.Routing.Debugger.UI.Docks;
+
+/// <summary>
+/// The ViewModel for the embedded application dock.
+/// </summary>
 /// <param name="appViewModel">The embedded application ViewModel.</param>
 /// <param name="viewLocator">The view locator to be used to resolve the application view model into a view.</param>
 /// <param name="logger">A logger to be used by this class.</param>
@@ -16,6 +18,11 @@ public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator vie
 {
     private UIElement? appView;
 
+    /// <summary>
+    /// Gets the application content as a UIElement. If the application view is not resolved yet,
+    /// it will attempt to resolve it using the provided view locator.
+    /// </summary>
+    /// <value>The application content as a UIElement, or null if it cannot be resolved.</value>
     public UIElement? ApplicationContent
     {
         get
@@ -29,6 +36,10 @@ public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator vie
         }
     }
 
+    /// <summary>
+    /// Gets a description of the error that occurred during the resolution of the application view.
+    /// </summary>
+    /// <value>A string describing the error, or an empty string if no error occurred.</value>
     public string ErrorDescription { get; private set; } = string.Empty;
 
     [LoggerMessage(
