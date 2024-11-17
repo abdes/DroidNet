@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config;
-
 using System.ComponentModel;
+
+namespace DroidNet.Config;
 
 /// <summary>
 /// Provides an interface for managing settings with property change notification and disposable

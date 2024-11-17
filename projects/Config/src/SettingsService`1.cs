@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Config;
-
 using System.ComponentModel;
 using System.IO.Abstractions;
 using System.Reactive.Linq;
@@ -13,6 +11,8 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
+namespace DroidNet.Config;
 
 /// <summary>
 /// Provides an abstract base class for managing settings in a configuration section corresponding
@@ -153,7 +153,7 @@ public abstract partial class SettingsService<TSettings> : ISettingsService<TSet
             var directoryPath = this.fs.Path.GetDirectoryName(configFilePath);
             if (!Directory.Exists(directoryPath))
             {
-                this.fs.Directory.CreateDirectory(configFilePath);
+                _ = this.fs.Directory.CreateDirectory(configFilePath);
             }
 
             this.fs.File.WriteAllText(configFilePath, configText);
