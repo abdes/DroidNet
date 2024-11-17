@@ -32,7 +32,7 @@ trim_trailing_whitespace = false
 
 # Xml project files
 [*.{csproj,resx,ps1xml}]
-indent_size = 2
+indent_size = 4
 
 # Xml files
 [*.{resx,ruleset,stylecop,xml,xsd,xsl}]
@@ -40,7 +40,7 @@ indent_size = 2
 
 # Xml config files
 [*.{props,targets,config,nuspec}]
-indent_size = 2
+indent_size = 4
 
 [*.tsv]
 indent_style = tab
@@ -160,6 +160,7 @@ csharp_style_prefer_utf8_string_literals = true:suggestion
 csharp_style_throw_expression = true:warning
 csharp_style_unused_value_assignment_preference = discard_variable:suggestion
 csharp_style_unused_value_expression_statement_preference = discard_variable:suggestion
+dotnet_style_prefer_conditional_expression_over_return = true:suggestion
 
 # New line preferences
 csharp_style_allow_blank_line_after_colon_in_constructor_initializer_experimental = true
@@ -287,3 +288,17 @@ dotnet_diagnostic.RCS1069.severity = none
 
 #########################################################################
 ### Stylecop.Analyzers rules
+
+
+#########################################################################
+### DotNet Code Analyzer rules
+dotnet_diagnostic.CA1062.severity = none
+# CA1515: Consider making public types internal
+dotnet_diagnostic.CA1515.severity = suggestion
+
+# don't want this to be auto-fixed because it will delete generated properties before they are generated
+
+# CA1823: Avoid unused private fields
+dotnet_diagnostic.CA1823.severity = suggestion
+# Remove unused private member (duplicate of CA1823)
+dotnet_diagnostic.IDE0051.severity = none
