@@ -7,15 +7,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Manifest Include="$(ApplicationManifest)" />
-    </ItemGroup>
-    <ItemGroup>
-        <None Include="Assets\**\*">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="..\src\Bootstrap.csproj" />
     </ItemGroup>
 
