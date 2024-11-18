@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Abstractions;
 using System.Reflection;
-using DroidNet.Bootsrap;
 using DroidNet.Config;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Controls.OutputLog.Theming;
@@ -114,7 +113,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <list type="bullet">
     /// <item>Initializes basic logging,</item>
     /// <item>Sets up the DryIoc container,</item>
-    /// <item>Configures the path finder service,</item>
+    /// <item>Configures the pathfinder service,</item>
     /// <item>Prepares early application services.</item>
     /// </list>
     /// </remarks>
@@ -268,6 +267,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// </list>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if called after Build().</exception>
+    [SuppressMessage("ReSharper", "InconsistentNaming", Justification = "stay consistent with WinUI itself")]
     public Bootstrapper WithWinUI<TApplication>(bool isLifetimeLinked = true)
         where TApplication : Application
     {
@@ -339,7 +339,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
             return;
         }
 
-        /* Dispose managed managed resources */
+        /* Dispose managed resources */
         this.host?.Dispose();
         this.finalContainer?.Dispose();
 
