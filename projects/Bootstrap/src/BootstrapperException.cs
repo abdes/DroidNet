@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Bootsrap;
+namespace DroidNet.Bootstrap;
 
 /// <summary>
 /// Represents errors that occur during the bootstrapping process.

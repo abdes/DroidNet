@@ -11,7 +11,7 @@
         <PackageTags>dependency-injection;configuration;host;lifecycle;bootstrap</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <RootNamespace>$(RootNameSpace).Bootsrap</RootNamespace>
+        <RootNamespace>$(RootNameSpace).Bootstrap</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
