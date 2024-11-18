@@ -162,26 +162,11 @@
     <Choose>
         <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
-                <OutputType>WinExe</OutputType>
-                <ApplicationManifest>app.manifest</ApplicationManifest>
-                <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-                <UseWinUI>true</UseWinUI>
-                <EnableMsixTooling>true</EnableMsixTooling>
-            </PropertyGroup>
-            <PropertyGroup>
                 <!-- Disable until https://github.com/microsoft/testfx/issues/4056 is fixed -->
                 <EnableMSTestRunner>false</EnableMSTestRunner>
                 <GenerateTestingPlatformEntryPoint Condition=" '$(EnableMSTestRunner)' == 'true' ">false</GenerateTestingPlatformEntryPoint>
                 <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
             </PropertyGroup>
-            <ItemGroup>
-                <Manifest Include="$(ApplicationManifest)" />
-            </ItemGroup>
-            <ItemGroup>
-                <None Include="Assets\**\*">
-                    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-                </None>
-            </ItemGroup>
             <ItemGroup>
                 <PackageReference Include="Microsoft.WindowsAppSDK" />
                 <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
@@ -193,6 +178,41 @@
                 <PackageReference Include="MSTest.TestAdapter" />
                 <PackageReference Include="MSTest.TestFramework" />
             </ItemGroup>
+        </When>
+    </Choose>
+
+    <!-- WinUI Application Projects -->
+    <Choose>
+        <When Condition="$(MSBuildProjectName.EndsWith('.App')) Or $(MSBuildProjectName.EndsWith('.UI.Tests'))">
+            <PropertyGroup>
+                <IsPackable>false</IsPackable>
+                <OutputType>WinExe</OutputType>
+                <UseWinUI>true</UseWinUI>
+
+                <!-- The App is Packaged, unless we're running a GitHub workflow -->
+                <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='true'">None</WindowsPackageType>
+                <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
+                <EnableMsixTooling>true</EnableMsixTooling>
+                <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+                <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+                <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+                <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+                <EnableMsixTooling>true</EnableMsixTooling>
+            </PropertyGroup>
+            <ItemGroup>
+                <Manifest Include="$(ApplicationManifest)" />
+            </ItemGroup>
+            <ItemGroup>
+                <None Include="Assets\**\*">
+                    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                </None>
+            </ItemGroup>
+        </When>
+        <When Condition="$(MSBuildProjectName.EndsWith('.App')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+            <PropertyGroup>
+                <!-- For the debug symbols package -->
+                <DebugType>portable</DebugType>
+            </PropertyGroup>
         </When>
     </Choose>
 

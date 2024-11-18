@@ -3,15 +3,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <RootNamespace>$(RootNamespace).NetClassLibrary</RootNamespace>
 
         <Title>Sample .Net Class Library</Title>
         <Description>A sample, and a template project, for creating DroidNet .Net class libraries.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>sample;library</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-
-        <RootNamespace>$(RootNamespace).NetClassLibrary</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

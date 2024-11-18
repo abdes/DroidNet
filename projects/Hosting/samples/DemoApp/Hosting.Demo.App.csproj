@@ -2,26 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <UseWinUI>true</UseWinUI>
-
-        <IsPackable>false</IsPackable>
-
-        <!-- The App is Packaged, unless we're running a GitHub workflow -->
-        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
-
-        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
-        <EnableMsixTooling>true</EnableMsixTooling>
-
-        <AssemblyName>DroidNet.Hosting.DemoApp</AssemblyName>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-        <!-- For the debug symbols package -->
-        <DebugType>portable</DebugType>
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-
         <RootNamespace>$(RootNameSpace).Hosting.Demo</RootNamespace>
+        <AssemblyName>DroidNet.Hosting.Demo</AssemblyName>
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
