@@ -22,9 +22,9 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
          TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
 
+    <!-- Read-only source tree (builds to top-level bin/obj folders) -->
     <PropertyGroup>
-        <MyTopLevelDirectory>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))</MyTopLevelDirectory>
-        <MyToolingDirectory>$(MyTopLevelDirectory)tooling</MyToolingDirectory>
+        <PackageOutputPath>$(MyTopLevelDirectory)bin\Packages\$(Configuration)\</PackageOutputPath>
     </PropertyGroup>
 
     <!--
