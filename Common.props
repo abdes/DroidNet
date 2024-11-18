@@ -3,6 +3,11 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
          TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
 
+    <PropertyGroup>
+        <MyTopLevelDirectory>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))</MyTopLevelDirectory>
+        <MyToolingDirectory>$(MyTopLevelDirectory)tooling</MyToolingDirectory>
+    </PropertyGroup>
+
     <!--
     This file is used to define properties shared across all projects within the
     monorepo. It is imported early in the build process. The properties here are
@@ -18,6 +23,12 @@
     <!-- Repo projects root : used in project references within the repo projects -->
     <PropertyGroup>
         <ProjectsRoot>$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)))projects</ProjectsRoot>
+    </PropertyGroup>
+
+    <!-- Read-only source tree (builds to top-level bin/obj folders) -->
+    <PropertyGroup>
+        <BaseIntermediateOutputPath>$(MyTopLevelDirectory)obj\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseIntermediateOutputPath>
+        <BaseOutputPath Condition=" '$(BaseOutputPath)' == '' ">$(MyTopLevelDirectory)bin\$(MSBuildProjectName)\</BaseOutputPath>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -101,6 +112,8 @@
 
     <!-- Build Options -->
     <PropertyGroup>
+        <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
 
