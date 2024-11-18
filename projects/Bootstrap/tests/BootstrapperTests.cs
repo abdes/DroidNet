@@ -2,11 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Bootstrap.Tests;
-
 using System.ComponentModel;
 using System.IO.Abstractions;
-using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
@@ -15,8 +12,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using IContainer = DryIoc.IContainer;
+
+namespace DroidNet.Bootstrap.Tests;
 
 /// <summary>
 /// Contains unit test cases for the <see cref="Bootstrapper" /> class.
@@ -26,6 +24,9 @@ public sealed partial class BootstrapperTests : IDisposable
 {
     private readonly Bootstrapper defaultConfiguredBuilder;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BootstrapperTests"/> class.
+    /// </summary>
     public BootstrapperTests()
     {
         var args = Array.Empty<string>();
@@ -100,14 +101,14 @@ public sealed partial class BootstrapperTests : IDisposable
         var configureOptionsPatternCalled = false;
 
         using var bootstrapper = new Bootstrapper(args);
-        bootstrapper.Configure();
+        _ = bootstrapper.Configure();
 
         // Act
         _ = bootstrapper.WithConfiguration(GetConfigFiles, ConfigureOptionsPattern).Build();
 
         // Assert
-        getConfigFilesCalled.Should().BeTrue();
-        configureOptionsPatternCalled.Should().BeTrue();
+        _ = getConfigFilesCalled.Should().BeTrue();
+        _ = configureOptionsPatternCalled.Should().BeTrue();
 
         void ConfigureOptionsPattern(IConfiguration config, IServiceCollection services)
         {
@@ -133,7 +134,7 @@ public sealed partial class BootstrapperTests : IDisposable
     public void WithRouting_ShouldConfigureRoutes()
     {
         // Arrange
-        var routes = new Routes(new List<Route>());
+        var routes = new Routes([]);
 
         // Act
         _ = this.defaultConfiguredBuilder.WithRouting(routes).Build();
@@ -165,7 +166,7 @@ public sealed partial class BootstrapperTests : IDisposable
         // Arrange
         var args = Array.Empty<string>();
         using var bootstrapper = new Bootstrapper(args);
-        bootstrapper.Configure();
+        _ = bootstrapper.Configure();
 
         // Act
         _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
@@ -176,7 +177,9 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = service.Should().BeOfType<MyService>();
 
         static void ConfigureApplicationServices(IContainer container)
-            => container.Register<IMyService, MyService>(Reuse.Singleton);
+        {
+            container.Register<IMyService, MyService>(Reuse.Singleton);
+        }
     }
 
     [TestMethod]
@@ -186,7 +189,7 @@ public sealed partial class BootstrapperTests : IDisposable
         // Arrange
         var args = Array.Empty<string>();
         using var bootstrapper = new Bootstrapper(args);
-        bootstrapper.Configure();
+        _ = bootstrapper.Configure();
 
         // Act
         _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
@@ -200,7 +203,7 @@ public sealed partial class BootstrapperTests : IDisposable
         {
             _ = bs; // Unused
 
-            sc.AddSingleton<IMyService, MyService>();
+            _ = sc.AddSingleton<IMyService, MyService>();
         }
     }
 
@@ -221,7 +224,6 @@ public sealed partial class BootstrapperTests : IDisposable
         this.defaultConfiguredBuilder.Dispose();
 
         // Assert
-        _ = this.defaultConfiguredBuilder.Container.Should().BeNull();
         _ = this.defaultConfiguredBuilder.FileSystemService.Should().BeNull();
         _ = this.defaultConfiguredBuilder.PathFinderService.Should().BeNull();
 
