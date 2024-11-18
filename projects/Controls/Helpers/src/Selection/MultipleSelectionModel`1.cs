@@ -2,17 +2,31 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
-using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-[SuppressMessage(
-    "ReSharper",
-    "VirtualMemberNeverOverridden.Global",
-    Justification = "methods need to be overridable for testing and extension of the class")]
+namespace DroidNet.Controls.Selection;
+
+/// <summary>
+/// A <see cref="SelectionModel{T}"/> which allows multiple indices to be selected at any given time.
+/// </summary>
+/// <typeparam name="T">
+/// The type of the item that can be selected, which is typically the type of items in the control.
+/// </typeparam>
+/// <remarks>
+/// <para>
+/// The <see cref="MultipleSelectionModel{T}"/> class provides a base implementation for managing
+/// multiple selections in controls such as lists or grids.
+/// It allows multiple items to be selected simultaneously.
+/// </para>
+/// <para>
+/// This class raises property change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/>,
+/// <see cref="SelectionModel{T}.SelectedItem"/>, and <see cref="SelectionModel{T}.IsEmpty"/> properties,
+/// allowing the UI to update automatically when the selection changes.
+/// </para>
+/// </remarks>
+[SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "methods need to be overridable for testing and extension of the class")]
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<T> selectedIndices;
@@ -23,7 +37,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     protected MultipleSelectionModel()
     {
         this.selectedIndices
-            = new SelectionObservableCollection<T>(new HashSet<int>())
+            = new SelectionObservableCollection<T>([])
             {
                 GetItemAt = this.GetItemAt,
             };
@@ -75,34 +89,14 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
     }
 
-    /// <summary>
-    /// Clears the selection model of any existing selection.
-    /// </summary>
-    /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" /> properties if their values change, and the <see cref="SelectedIndices" />
-    /// observable collection if its content changes.
-    /// </remarks>
+    /// <inheritdoc />
     public override void ClearSelection()
     {
         this.selectedIndices.Clear();
-        this.SetSelectedIndex(-1);
+        _ = this.SetSelectedIndex(-1);
     }
 
-    /// <summary>
-    /// Clear the selection of the item at the given index. If the given index is not selected or not in the valid range, nothing
-    /// will happen.
-    /// </summary>
-    /// <param name="index">
-    /// The selected item to deselect.
-    /// </param>
-    /// <remarks>
-    /// If the <see cref="SelectionModel{T}.SelectedIndex" /> is the same than the <see paramref="index" /> to be cleared, its value
-    /// is updated to the last item in the <see cref="SelectedIndices" /> collection if it's not empty or <c>-1</c> otherwise.
-    /// <para>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" />
-    /// properties if their values change, and the <see cref="SelectedIndices" /> observable collection if its content changes.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc />
     public override void ClearSelection(int index)
     {
         var removed = this.selectedIndices.Remove(index);
@@ -112,7 +106,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         var newSelectedIndex = this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1];
-        this.SetSelectedIndex(newSelectedIndex);
+        _ = this.SetSelectedIndex(newSelectedIndex);
     }
 
     /// <inheritdoc />
@@ -139,7 +133,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         this.selectedIndices.Add(index);
-        this.SetSelectedIndex(index);
+        _ = this.SetSelectedIndex(index);
     }
 
     /// <summary>
@@ -195,7 +189,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 
             if (this.selectedIndices.Count != 0)
             {
-                this.SetSelectedIndex(this.selectedIndices[0]);
+                _ = this.SetSelectedIndex(this.selectedIndices[0]);
             }
         }
     }
@@ -289,7 +283,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         // TODO: Manage focus
-        this.SetSelectedIndex(this.selectedIndices[^1]);
+        _ = this.SetSelectedIndex(this.selectedIndices[^1]);
     }
 
     /// <summary>
@@ -323,7 +317,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
                 Debug.Assert(item is not null, "InvertSelection throws if the type T does not implement ISelectable");
                 if (item.IsSelected)
                 {
-                    this.selectedIndices.Remove(index);
+                    _ = this.selectedIndices.Remove(index);
                 }
                 else
                 {
@@ -333,9 +327,10 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         }
 
         // TODO: Manage focus
-        this.SetSelectedIndex(this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1]);
+        _ = this.SetSelectedIndex(this.selectedIndices.Count == 0 ? -1 : this.selectedIndices[^1]);
     }
 
+    /// <inheritdoc/>
     public override string ToString()
     {
         var count = this.selectedIndices.Count;

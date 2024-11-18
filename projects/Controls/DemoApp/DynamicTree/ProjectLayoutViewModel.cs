@@ -10,6 +10,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
+using DroidNet.Controls.Selection;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
