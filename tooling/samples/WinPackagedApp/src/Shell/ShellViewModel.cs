@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.Shell;
-
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -14,10 +12,13 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
+using DroidNet.Routing.WinUI;
 using DroidNet.Samples.Settings;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Samples.Shell;
 
 /// <summary>
 /// The ViewModel for the application main window shell.
@@ -64,6 +65,7 @@ public partial class ShellViewModel : AbstractOutletContainer
 
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
@@ -142,7 +144,7 @@ public partial class ShellViewModel : AbstractOutletContainer
             .SelectMany(menuItem => GetAllMenuItems(menuItem, menuItem.Id))
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
 
-        IEnumerable<KeyValuePair<string, MenuItem>> GetAllMenuItems(MenuItem menuItem, string parentId)
+        static IEnumerable<KeyValuePair<string, MenuItem>> GetAllMenuItems(MenuItem menuItem, string parentId)
         {
             yield return new KeyValuePair<string, MenuItem>(parentId, menuItem);
             foreach (var subItem in menuItem.SubItems)
@@ -221,7 +223,7 @@ public partial class ShellViewModel : AbstractOutletContainer
     }
 
     [RelayCommand]
-    private void OnSettingsSelected()
+    private static void OnSettingsSelected()
     {
         // TODO: settings view and dialog
     }
