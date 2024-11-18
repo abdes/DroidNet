@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
 using System.ComponentModel;
 using System.Diagnostics;
+
+namespace DroidNet.Controls.Selection;
 
 /// <summary>
 /// An abstract class used by controls to provide a consistent interface for maintaining a selection.
@@ -13,6 +13,54 @@ using System.Diagnostics;
 /// <typeparam name="T">
 /// The type of the item that can be selected, which is typically the type of items in the control.
 /// </typeparam>
+/// <remarks>
+/// <para>
+/// The <see cref="SelectionModel{T}"/> class provides a base implementation for managing selection in controls such as lists or grids.
+/// It supports both single and multiple selection modes, depending on the derived class implementation.
+/// </para>
+/// <para>
+/// This class raises property change notifications for the <see cref="SelectedIndex"/>, <see cref="SelectedItem"/>, and <see cref="IsEmpty"/> properties,
+/// allowing the UI to update automatically when the selection changes.
+/// </para>
+/// </remarks>
+/// <example>
+/// <para><strong>Example Usage:</strong></para>
+/// <code><![CDATA[
+/// public class MySelectionModel : MultipleSelectionModel<MyItem>
+/// {
+///     private readonly List<MyItem> items;
+///
+///     public MySelectionModel(List<MyItem> items)
+///     {
+///         this.items = items;
+///     }
+///
+///     protected override MyItem GetItemAt(int index) => this.items[index];
+///
+///     protected override int IndexOf(MyItem item) => this.items.IndexOf(item);
+///
+///     protected override int GetItemCount() => this.items.Count;
+/// }
+///
+/// public class MyItem : ISelectable
+/// {
+///     public bool IsSelected { get; set; }
+///     public string Name { get; set; }
+/// }
+///
+/// // Usage
+/// var items = new List<MyItem>
+/// {
+///     new MyItem { Name = "Item 1" },
+///     new MyItem { Name = "Item 2" },
+///     new MyItem { Name = "Item 3" }
+/// };
+///
+/// var selectionModel = new MySelectionModel(items);
+/// selectionModel.SelectItemAt(1);
+/// Console.WriteLine(selectionModel.SelectedItem.Name); // Output: Item 2
+/// ]]></code>
+/// </example>
 public abstract class SelectionModel<T> : INotifyPropertyChanging, INotifyPropertyChanged
 {
     /// <inheritdoc />

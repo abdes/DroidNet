@@ -6,6 +6,7 @@ namespace DroidNet.Controls.Tests;
 
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Controls.Selection;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.CompilerServices;
-
 /*
  In SDK-style projects such as this one, several assembly attributes that were
  historically defined in this file are now automatically added during build and
@@ -12,6 +10,7 @@ using System.Runtime.CompilerServices;
  https://aka.ms/assembly-info-properties
 */
 
-[assembly: InternalsVisibleTo("DroidNet.Controls.Tests")]
+using System.Runtime.CompilerServices;
+
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 [assembly: InternalsVisibleTo("DroidNet.Controls.Helpers.Tests")]

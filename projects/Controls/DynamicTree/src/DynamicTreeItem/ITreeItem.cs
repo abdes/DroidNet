@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using DroidNet.Controls.Selection;
 
+namespace DroidNet.Controls;
 /// <summary>
 /// Represents an item in a hierarchical tree structure, providing functionality for managing child items,
 /// tracking selection state, and handling expansion and collapse states.

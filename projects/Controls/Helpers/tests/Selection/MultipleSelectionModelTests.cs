@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Tests;
-
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Controls.Selection;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Moq.Protected;
+
+namespace DroidNet.Controls.Tests.Selection;
 
 /// <summary>
 /// Unit test cases for the <see cref="MultipleSelectionModel{T}" /> class.
@@ -162,7 +162,7 @@ public partial class MultipleSelectionModelTests
         var act = () => model.ClearSelection("XXX");
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<ArgumentException>()
             .WithMessage("item not found*")
             .WithParameterName("item");
@@ -426,7 +426,7 @@ public partial class MultipleSelectionModelTests
 
             changedNotifications++;
             var changeType = e.Action;
-            changeType.Should().Be(NotifyCollectionChangedAction.Reset);
+            _ = changeType.Should().Be(NotifyCollectionChangedAction.Reset);
         };
 
         // Act
@@ -475,7 +475,7 @@ public partial class MultipleSelectionModelTests
 
             changedNotifications++;
             var changeType = e.Action;
-            changeType.Should().Be(NotifyCollectionChangedAction.Reset);
+            _ = changeType.Should().Be(NotifyCollectionChangedAction.Reset);
         };
 
         // Act
@@ -561,7 +561,7 @@ public partial class MultipleSelectionModelTests
 
             changedNotifications++;
             var changeType = e.Action;
-            changeType.Should().Be(NotifyCollectionChangedAction.Reset);
+            _ = changeType.Should().Be(NotifyCollectionChangedAction.Reset);
         };
 
         // Act
@@ -582,7 +582,7 @@ public partial class MultipleSelectionModelTests
         var act = () => model.SelectRange("XXX", "C");
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<ArgumentException>()
             .WithMessage("item not found*")
             .WithParameterName("start");
@@ -599,7 +599,7 @@ public partial class MultipleSelectionModelTests
         var act = () => model.SelectRange("A", "XXX");
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<ArgumentException>()
             .WithMessage("item not found*")
             .WithParameterName("end");
@@ -610,10 +610,10 @@ public partial class MultipleSelectionModelTests
     {
         // Arrange
         var mockModel = new Mock<MultipleSelectionModel<string>> { CallBase = true };
-        mockModel.Protected()
+        _ = mockModel.Protected()
             .Setup<int>("GetItemCount")
             .Returns(4);
-        mockModel.Protected()
+        _ = mockModel.Protected()
             .Setup<int>("IndexOf", ItExpr.IsAny<string>())
             .Returns<string>(
                 item =>
@@ -660,7 +660,7 @@ public partial class MultipleSelectionModelTests
 
         // Assert
         _ = act.Should().Throw<ArgumentOutOfRangeException>();
-        model.SelectedItems.Should().NotBeEmpty();
+        _ = model.SelectedItems.Should().NotBeEmpty();
     }
 
     [TestMethod]
@@ -670,7 +670,7 @@ public partial class MultipleSelectionModelTests
         var model = new Mock<SelectionModel<string>>();
         const string item = "A";
         const int index = 1;
-        model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(index);
+        _ = model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(index);
 
         // Act
         model.Object.ClearAndSelectItem(item);
@@ -685,13 +685,13 @@ public partial class MultipleSelectionModelTests
         // Arrange
         var model = new Mock<SelectionModel<string>>();
         const string item = "A";
-        model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(-1);
+        _ = model.Protected().Setup<int>("IndexOf", ItExpr.IsAny<string>()).Returns(-1);
 
         // Act
         var action = () => model.Object.ClearAndSelectItem(item);
 
         // Assert
-        action.Should().Throw<ArgumentException>().WithMessage("item not found*");
+        _ = action.Should().Throw<ArgumentException>().WithMessage("item not found*");
     }
 
     [TestMethod]
@@ -710,7 +710,7 @@ public partial class MultipleSelectionModelTests
         model.InvertSelection();
 
         // Assert
-        model.SelectedIndices.Should().Contain([0, 2]);
+        _ = model.SelectedIndices.Should().Contain([0, 2]);
     }
 
     [TestMethod]
@@ -723,7 +723,7 @@ public partial class MultipleSelectionModelTests
         model.InvertSelection();
 
         // Assert
-        model.SelectedIndices.Should().BeEmpty();
+        _ = model.SelectedIndices.Should().BeEmpty();
     }
 
     [TestMethod]

@@ -7,6 +7,7 @@ namespace DroidNet.Controls;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls.Selection;
 
 /// <summary>
 /// Selection functionality for <see cref="DynamicTreeViewModel" />.

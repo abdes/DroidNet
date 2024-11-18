@@ -2,26 +2,26 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using DroidNet.Controls.Selection;
 using Moq;
+
+namespace DroidNet.Controls.Tests.Selection;
 
 [TestClass]
 [TestCategory($"{nameof(Controls)} - Selection Helpers")]
 [ExcludeFromCodeCoverage]
 public class SelectionObservableCollectionTests
 {
-    private readonly SelectionObservableCollection<ISelectable> collection;
+    private readonly Controls.Selection.SelectionObservableCollection<ISelectable> collection;
     private readonly Mock<ISelectable> mockSelectable;
 
     public SelectionObservableCollectionTests()
     {
         this.mockSelectable = new Mock<ISelectable>();
-        var mockItemGetter = new Mock<SelectionObservableCollection<ISelectable>.ItemGetter>();
-        mockItemGetter.Setup(getter => getter(It.IsAny<int>())).Returns(this.mockSelectable.Object);
-        this.collection = new SelectionObservableCollection<ISelectable>([])
+        var mockItemGetter = new Mock<Controls.Selection.SelectionObservableCollection<ISelectable>.ItemGetter>();
+        _ = mockItemGetter.Setup(getter => getter(It.IsAny<int>())).Returns(this.mockSelectable.Object);
+        this.collection = new Controls.Selection.SelectionObservableCollection<ISelectable>([])
         {
             GetItemAt = mockItemGetter.Object,
         };
@@ -44,7 +44,8 @@ public class SelectionObservableCollectionTests
         const int newItem = 2;
         this.collection.Add(oldItem);
         this.collection[index] = newItem;
-        this.mockSelectable.VerifySet(selectable => selectable.IsSelected = false, Times.Exactly(2));
+        this.mockSelectable.VerifySet(selectable => selectable.IsSelected = false, Times.Exactly(1));
+        this.mockSelectable.VerifySet(selectable => selectable.IsSelected = true, Times.Exactly(2));
     }
 
     [TestMethod]

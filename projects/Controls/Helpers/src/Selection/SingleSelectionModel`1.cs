@@ -2,16 +2,29 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
-using System;
+namespace DroidNet.Controls.Selection;
 
 /// <summary>
-/// A SelectionModel which enforces the rule that only a single index be selected at any given time.
+/// A <see cref="SelectionModel{T}"/> which enforces the rule that only a single index can be selected at any given time.
 /// </summary>
-/// <inheritdoc />
+/// <typeparam name="T">
+/// The type of the item that can be selected, which is typically the type of items in the control.
+/// </typeparam>
+/// <remarks>
+/// <para>
+/// The <see cref="SingleSelectionModel{T}"/> class provides a base implementation for managing
+/// single selection in controls such as lists or grids.
+/// It ensures that only one item can be selected at a time.
+/// </para>
+/// <para>
+/// This class raises property change notifications for the <see cref="SelectionModel{T}.SelectedIndex"/>,
+/// <see cref="SelectionModel{T}.SelectedItem"/>, and <see cref="SelectionModel{T}.IsEmpty"/> properties,
+/// allowing the UI to update automatically when the selection changes.
+/// </para>
+/// </remarks>
 public abstract class SingleSelectionModel<T> : SelectionModel<T>
 {
+    /// <inheritdoc/>
     public override void ClearSelection() => this.SetSelectedIndex(-1);
 
     /// <summary>
@@ -22,7 +35,8 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
     /// The selected item to deselect.
     /// </param>
     /// <remarks>
-    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and <see cref="SelectionModel{T}.SelectedItem" />
+    /// Triggers change notifications for the <see cref="SelectionModel{T}.SelectedIndex" /> and
+    /// <see cref="SelectionModel{T}.SelectedItem" />
     /// properties if their values change.
     /// </remarks>
     public override void ClearSelection(int index)
@@ -33,19 +47,23 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
         }
     }
 
+    /// <inheritdoc/>
     public override void ClearAndSelectItemAt(int index) => this.SelectItemAt(index);
 
+    /// <inheritdoc/>
     public override bool IsSelected(int index) => this.SelectedIndex == index;
 
+    /// <inheritdoc/>
     public override void SelectItem(T item)
     {
         var index = this.IndexOf(item);
         if (index != -1)
         {
-            this.SetSelectedIndex(index);
+            _ = this.SetSelectedIndex(index);
         }
     }
 
+    /// <inheritdoc/>
     public override void SelectItemAt(int index)
     {
         if (index < 0 || index >= this.GetItemCount())
@@ -53,9 +71,10 @@ public abstract class SingleSelectionModel<T> : SelectionModel<T>
             throw new ArgumentOutOfRangeException(nameof(index));
         }
 
-        this.SetSelectedIndex(index);
+        _ = this.SetSelectedIndex(index);
     }
 
+    /// <inheritdoc/>
     public override string ToString()
         => this.SelectedIndex == -1 ? "No selection" : $"1 selected item ({this.SelectedItem})";
 }

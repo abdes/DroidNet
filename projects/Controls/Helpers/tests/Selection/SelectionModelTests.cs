@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Tests;
-
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Controls.Selection;
 using DroidNet.TestHelpers;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Controls.Tests.Selection;
 
 /// <summary>
 /// Unit test cases for the <see cref="SelectionModel{T}" /> class.
