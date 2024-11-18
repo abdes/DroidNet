@@ -53,7 +53,7 @@ This method creates a new `DynamicObservableCollection<TSource, TResult>` contai
 
 ```csharp
 var source = new ObservableCollection<int> { 1, 2, 3 };
-var result = source.Transform(x => x.ToString()).Transform();
+var result = source.Transform(x => x.ToString());
 source.Add(4); // result is now {"1", "2", "3", "4"}
 result.Dispose();
 ```
