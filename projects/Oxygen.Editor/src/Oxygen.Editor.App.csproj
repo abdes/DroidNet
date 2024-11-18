@@ -2,32 +2,12 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <UseWinUI>true</UseWinUI>
-
-        <IsPackable>false</IsPackable>
-
-        <!-- The App is Packaged, unless we're running a GitHub workflow -->
-        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
-
-        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
-        <EnableMsixTooling>true</EnableMsixTooling>
-
+        <RootNamespace>Oxygen.Editor</RootNamespace>
         <AssemblyName>Oxygen.Editor</AssemblyName>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-        <!-- For the debug symbols package -->
-        <DebugType>portable</DebugType>
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-
-        <WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>true</WindowsAppSDKBootstrapAutoInitializeOptions_OnNoMatch_ShowUI>
 
         <!-- Use our own Main entry point so we can control the HostBuilder -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-
-        <RootNamespace>Oxygen.Editor</RootNamespace>
         <StartupObject>$(RootNamespace).Program</StartupObject>
 
         <UserSecretsId>916e565c-62a3-4c25-9a26-3637faacd34b</UserSecretsId>

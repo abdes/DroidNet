@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-
         <RootNamespace>$(RootNamespace).NetClassLibrary.Tests</RootNamespace>
     </PropertyGroup>
 

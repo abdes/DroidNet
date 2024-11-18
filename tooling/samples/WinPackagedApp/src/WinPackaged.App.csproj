@@ -2,26 +2,8 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <UseWinUI>true</UseWinUI>
-
-        <IsPackable>false</IsPackable>
-
-        <!-- The App is Packaged, unless we're running a GitHub workflow -->
-        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
-
-        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
-        <EnableMsixTooling>true</EnableMsixTooling>
-
-        <AssemblyName>DroidNet.Routing.DemoApp</AssemblyName>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-        <!-- For the debug symbols package -->
-        <DebugType>portable</DebugType>
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-
-        <RootNamespace>DroidNet.Routing.Demo</RootNamespace>
+        <RootNamespace>$(RootNameSpace)</RootNamespace>
+        <AssemblyName>DroidNet.Samples.WinPackagedApp</AssemblyName>
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
@@ -29,24 +11,12 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
         <StartupObject>$(RootNamespace).Program</StartupObject>
-
-        <UserSecretsId>916e565c-62a3-4c25-9a26-3637faacd34b</UserSecretsId>
     </PropertyGroup>
 
-    <ItemGroup>
-      <AppxManifest Include="Package.appxmanifest">
-        <SubType>Designer</SubType>
-      </AppxManifest>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Manifest Include="$(ApplicationManifest)" />
-    </ItemGroup>
-    <ItemGroup>
-        <None Include="Assets\**\*">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-    </ItemGroup>
+    <!--These project properties will be included in the generated AssemblyInfo -->
+    <PropertyGroup>
+        <Product>Packaged App</Product>
+    </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Serilog.Expressions" />
@@ -54,40 +24,44 @@
         <PackageReference Include="Serilog.Extensions.Hosting" />
         <PackageReference Include="Serilog.Sinks.Console" />
         <PackageReference Include="Serilog.Sinks.Debug" />
+        <PackageReference Include="Serilog.Settings.Configuration" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
     </ItemGroup>
-
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="WinUIEx" />
     </ItemGroup>
-
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
-
-        <!-- Rererence the attributes project "treat as an analyzer"-->
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
-    <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be
-    activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
+    <!--
+        Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+        Tools extension to be activated for this project even if the Windows App SDK Nuget
+        package has not yet been restored.
+    -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <ProjectCapability Include="Msix" />
     </ItemGroup>
 
-    <!-- Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution Explorer "Package and
-    Publish" context menu entry to be enabled for this project even if the Windows App SDK Nuget package has not yet
-    been restored. -->
+    <!--
+        Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+        Explorer "Package and Publish" context menu entry to be enabled for this project even if
+        the Windows App SDK Nuget package has not yet been restored.
+    -->
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
     </PropertyGroup>
-
 </Project>
