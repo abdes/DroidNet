@@ -20,6 +20,7 @@ namespace DroidNet.Bootstrap.Tests;
 /// Contains unit test cases for the <see cref="Bootstrapper" /> class.
 /// </summary>
 [TestClass]
+[TestCategory("Bootstrapper")]
 public sealed partial class BootstrapperTests : IDisposable
 {
     private readonly Bootstrapper defaultConfiguredBuilder;
