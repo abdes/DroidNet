@@ -7,7 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:DroidNet.Samples.Shell"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:router="using:DroidNet.Routing.Controls"
+    xmlns:router="using:DroidNet.Routing.WinUI"
     mc:Ignorable="d">
 
     <UserControl.Resources>
