@@ -41,6 +41,8 @@ public sealed partial class BootstrapperTests : IDisposable
         {
             bootstrapper?.Dispose();
         }
+
+        _ = new MyService(); // Just to ensure the type is not marked as unused
     }
 
     private interface IMyService
@@ -385,7 +387,7 @@ public sealed partial class BootstrapperTests : IDisposable
         }
     }
 
-    private class MyService : IMyService
+    private sealed class MyService : IMyService
     {
         public void DoSomething()
         {
