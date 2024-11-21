@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using DroidNet.Controls.Demo.Model;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.
@@ -14,6 +14,7 @@ public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: fals
 {
     private string label = entity.Name;
 
+    /// <inheritdoc/>
     public override string Label
     {
         get => this.label;
@@ -29,11 +30,15 @@ public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: fals
         }
     }
 
+    /// <inheritdoc/>
     public Entity AttachedObject => entity;
 
+    /// <inheritdoc/>
     public override bool ValidateItemName(string name) => name.Trim().Length != 0;
 
+    /// <inheritdoc/>
     protected override int DoGetChildrenCount() => 0;
 
+    /// <inheritdoc/>
     protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
 }

@@ -13,11 +13,11 @@ using DroidNet.Routing.WinUI;
 namespace DroidNet.Controls.Demo.DemoBrowser;
 
 /// <summary>
-/// The view model for the <see cref="DemoBrowserView" /> view. Mainly responsible for the navigation between the different demos
+/// The view model for the <see cref="DemoBrowserView"/> view. Mainly responsible for the navigation between the different demos
 /// in the project.
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
-/// <param name="outputLogSink">A <see cref="DelegatingSink{T}" /> sink to be used for logs targeting the output log view.</param>
+/// <param name="outputLogSink">A <see cref="DelegatingSink{T}"/> sink to be used for logs targeting the output log view.</param>
 public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTextBlockSink> outputLogSink)
     : ObservableObject, IOutletContainer, IRoutingAware
 {
@@ -25,24 +25,42 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     private const int SettingsItemIndex = int.MaxValue;
     private const string SettingsItemPath = "settings";
 
+    /// <summary>
+    /// Gets or sets the current navigation object.
+    /// </summary>
     [ObservableProperty]
     private object? currentNavigation;
 
+    /// <summary>
+    /// Gets or sets the index of the selected navigation item.
+    /// </summary>
     [ObservableProperty]
     private int selectedItemIndex = InvalidItemIndex;
 
+    /// <summary>
+    /// Gets the list of navigation items.
+    /// </summary>
     public IList<NavigationItem> NavigationItems { get; } =
     [
         new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),
     ];
 
+    /// <summary>
+    /// Gets the list of all navigation items.
+    /// </summary>
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];
 
     /// <inheritdoc/>
     public IActiveRoute? ActiveRoute { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the settings item is selected.
+    /// </summary>
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
+    /// <summary>
+    /// Gets the output log sink.
+    /// </summary>
     public DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
 
     /// <inheritdoc/>
@@ -52,7 +70,7 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
 
         Debug.WriteLine($"Navigate to Page: {viewModelType.FullName}");
 
-        /* TODO: uncomment if  the settings page is added
+        /* TODO: uncomment if the settings page is added
         if (viewModelType == typeof(SettingsViewModel))
         {
             this.SelectedItemIndex = SettingsItemIndex;
@@ -73,6 +91,10 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
         }
     }
 
+    /// <summary>
+    /// Navigates to the specified navigation item.
+    /// </summary>
+    /// <param name="requestedItem">The navigation item to navigate to.</param>
     [RelayCommand]
     internal void NavigateToItem(NavigationItem requestedItem)
     {
@@ -85,21 +107,29 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
 
         if (index != this.SelectedItemIndex)
         {
-            // Avoid navigation if the selected item is same than before
+            // Avoid navigation if the selected item is the same as before
             router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 
+    /// <summary>
+    /// Navigates to the settings page.
+    /// </summary>
     [RelayCommand]
     internal void NavigateToSettings()
     {
         if (!this.IsSettingsSelected)
         {
-            // Avoid navigation if the selected item is same than before
+            // Avoid navigation if the selected item is the same as before
             router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
         }
     }
 
+    /// <summary>
+    /// Finds a navigation item that matches the specified predicate.
+    /// </summary>
+    /// <param name="match">The predicate to match the navigation item.</param>
+    /// <returns>A tuple containing the index and the matched navigation item, or <see langword="null"/> if no match is found.</returns>
     private (int index, NavigationItem? item) FindNavigationItem(Predicate<NavigationItem> match)
     {
         for (var index = 0; index < this.AllItems.Count; ++index)

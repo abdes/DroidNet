@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which
@@ -17,7 +17,13 @@ using Microsoft.UI.Xaml.Input;
 [ViewModel(typeof(ProjectLayoutViewModel))]
 public sealed partial class ProjectLayoutView
 {
-    public ProjectLayoutView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectLayoutView"/> class.
+    /// </summary>
+    public ProjectLayoutView()
+    {
+        this.InitializeComponent();
+    }
 
     private async void ProjectLayoutView_OnLoaded(object sender, RoutedEventArgs args)
     {

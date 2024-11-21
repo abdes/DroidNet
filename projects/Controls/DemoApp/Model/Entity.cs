@@ -4,4 +4,8 @@
 
 namespace DroidNet.Controls.Demo.Model;
 
+/// <summary>
+/// Represents an entity with a name.
+/// </summary>
+/// <param name="name">The name of the entity.</param>
 public class Entity(string name) : NamedItem(name);

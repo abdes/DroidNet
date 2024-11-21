@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// A <see cref="DataTemplateSelector" /> that can map a <see cref="TreeItemAdapter" /> to a template that can be used to display a
@@ -13,18 +13,10 @@ using Microsoft.UI.Xaml.Controls;
 /// </summary>
 public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
-    protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
-    {
-        if (item is SceneAdapter)
-        {
-            return (DataTemplate)Application.Current.Resources["SceneThumbnailTemplate"];
-        }
-
-        if (item is EntityAdapter)
-        {
-            return (DataTemplate)Application.Current.Resources["EntityThumbnailTemplate"];
-        }
-
-        return (DataTemplate)Application.Current.Resources["DefaultThumbnailTemplate"];
-    }
+    /// <inheritdoc/>
+    protected override DataTemplate SelectTemplateCore(object item, DependencyObject container) => item is SceneAdapter
+            ? (DataTemplate)Application.Current.Resources["SceneThumbnailTemplate"]
+            : item is EntityAdapter
+            ? (DataTemplate)Application.Current.Resources["EntityThumbnailTemplate"]
+            : (DataTemplate)Application.Current.Resources["DefaultThumbnailTemplate"];
 }

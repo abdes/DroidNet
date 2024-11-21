@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using System.Text.RegularExpressions;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
@@ -24,6 +24,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
 
     private string label = scene.Name;
 
+    /// <inheritdoc/>
     public override string Label
     {
         get => this.label;
@@ -39,12 +40,16 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
         }
     }
 
+    /// <inheritdoc/>
     public Scene AttachedObject => scene;
 
+    /// <inheritdoc/>
     public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);
 
+    /// <inheritdoc/>
     protected override int DoGetChildrenCount() => this.AttachedObject.Entities.Count;
 
+    /// <inheritdoc/>
     protected override async Task LoadChildren()
     {
         await ProjectLoaderService.LoadSceneAsync(this.AttachedObject).ConfigureAwait(false);
