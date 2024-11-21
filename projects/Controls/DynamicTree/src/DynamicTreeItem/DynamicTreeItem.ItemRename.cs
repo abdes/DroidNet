@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,8 +9,11 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
+namespace DroidNet.Controls;
+
 /// <summary>
-/// Contains the implementation details of the item name in-place editing.
+/// Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
+/// expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
 public partial class DynamicTreeItem
 {
@@ -142,7 +143,7 @@ public partial class DynamicTreeItem
         }
 
         // Re-focus selected list item
-        this.Focus(FocusState.Programmatic);
+        _ = this.Focus(FocusState.Programmatic);
     }
 
     private void CancelRename()

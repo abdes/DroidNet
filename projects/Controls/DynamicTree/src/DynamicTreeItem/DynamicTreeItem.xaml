@@ -27,10 +27,9 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <Thickness x:Key="DynamicTreeColumnMargin">5,0</Thickness>
-    <x:Double x:Key="DynamicTreeRowHeight">34</x:Double>
-    <x:Double x:Key="CellContentWidth">24</x:Double>
-    <x:Double x:Key="CellContentHeight">24</x:Double>
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/CommonResources.xaml" />
+    </ResourceDictionary.MergedDictionaries>
 
     <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
@@ -46,8 +45,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:DynamicTreeItem">
-                    <Border x:Name="PartBorder">
-                        <Grid x:Name="PartRootGrid">
+                    <Grid x:Name="PartRootGrid">
+                        <Grid x:Name="PartContentGrid">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="30" />
                             </Grid.RowDefinitions>
@@ -98,7 +97,6 @@
                                         <StackPanel Orientation="Horizontal" Spacing="5">
                                             <TextBox
                                                 Name="PartItemNameEdit"
-                                                Grid.Column="0"
                                                 Margin="0"
                                                 VerticalAlignment="Center"
                                                 TextAlignment="Left"
@@ -111,7 +109,6 @@
                                             </TextBox>
                                             <FontIcon
                                                 Name="PartItemNameError"
-                                                Grid.Column="1"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
@@ -126,22 +123,22 @@
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">
                                     <VisualState.Setters>
-                                        <Setter Target="PartBorder.Background" Value="{ThemeResource DynamicTreeItemBackground}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource DynamicTreeItemBackground}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="PartBorder.Background" Value="{ThemeResource DynamicTreeItemBackgroundPointerOver}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{ThemeResource DynamicTreeItemBackgroundPointerOver}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Selected">
                                     <VisualState.Setters>
-                                        <Setter Target="PartBorder.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="PointerOverSelected">
                                     <VisualState.Setters>
-                                        <Setter Target="PartBorder.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
+                                        <Setter Target="PartRootGrid.Background" Value="{StaticResource DynamicTreeItemBackgroundSelected}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -173,7 +170,7 @@
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
-                    </Border>
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

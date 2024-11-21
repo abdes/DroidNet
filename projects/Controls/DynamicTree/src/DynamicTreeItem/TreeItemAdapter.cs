@@ -2,40 +2,41 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
-using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 
+namespace DroidNet.Controls;
+
 /// <summary>
 /// Represents an abstract base class for tree items in a dynamic tree structure.
 /// </summary>
 /// <remarks>
-/// The <see cref="TreeItemAdapter" /> class provides the foundational implementation for tree items, including properties and
-/// methods for managing child items, parent references, and event handling. It extends the <see cref="ObservableObject" /> class
-/// and implements the <see cref="ITreeItem" /> interface.
+/// The <see cref="TreeItemAdapter" /> class provides the foundational implementation for tree
+/// items, including properties and methods for managing child items, parent references, and event
+/// handling. It extends the <see cref="ObservableObject" /> class and implements the
+/// <see cref="ITreeItem" /> interface.
 /// <para>
-/// The <see cref="Depth" /> property indicates the tree depth at which the item is located, and can be only set from outside for
-/// the root item to hide it. In such case, the depth should be set to `-1`. Otherwise, it will be automatically updated as the
-/// item gets placed under a parent or removed from the tree.
+/// The <see cref="Depth" /> property indicates the tree depth at which the item is located, and can
+/// be only set from outside for the root item to hide it. In such case, the depth should be set to
+/// `-1`. Otherwise, it will be automatically updated as the item gets placed under a parent or
+/// removed from the tree.
 /// </para>
 /// <para>
-/// When an item has a <see cref="Parent" />, its <see cref="Depth" /> will always be `1` more than its parent.
+/// When an item has a <see cref="Parent" />, its <see cref="Depth" /> will always be `1` more than
+/// its parent, and every item has a <see cref="Parent" />, unless it is not currently in the tree,
+/// or it is the <see cref="IsRoot">root</see> item.
 /// </para>
 /// <para>
-/// Every item has a <see cref="Parent" />, unless it is not currently in the tree, or it is the <see cref="IsRoot">root</see>
-/// item.
-/// </para>
-/// <para>
-/// The collection of the item's <see cref="Children" /> is lazily initialized on first access. This helps in implementing
-/// gradually expanding trees, and reduce the load when the tree is first displayed. Mark an item as <see cref="IsExpanded" /> to
-/// indicate that its <see cref="Children" /> collection should be populated when the item is displayed. This also applies to the
-/// <see cref="ChildrenCount" /> property. It is lazily evaluated. If the <see cref="Children" /> collection has already been
-/// populated, the count is obtained from that collection; otherwise, it is requested from the concrete class implementation via
-/// the <see cref="DoGetChildrenCount" /> abstract method.
+/// The collection of the item's <see cref="Children" /> is lazily initialized on first access. This
+/// helps in implementing gradually expanding trees, and reduce the load when the tree is first
+/// displayed. Mark an item as <see cref="IsExpanded" /> to indicate that its <see cref="Children" />
+/// collection should be populated when the item is displayed. This also applies to the
+/// <see cref="ChildrenCount" /> property. It is lazily evaluated. If the <see cref="Children" />
+/// collection has already been populated, the count is obtained from that collection; otherwise, it
+/// is requested from the concrete class implementation via the <see cref="DoGetChildrenCount" />
+/// abstract method.
 /// </para>
 /// </remarks>
 public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
@@ -103,6 +104,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         }
     }
 
+    /// <inheritdoc/>
     public bool IsLocked
     {
         get => this.isLocked;
@@ -166,6 +168,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     /// </remarks>
     public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
 
+    /// <inheritdoc/>
     public int ChildrenCount => this.childrenLazy.IsValueCreated
         ? this.children.Count
         : this.DoGetChildrenCount();
