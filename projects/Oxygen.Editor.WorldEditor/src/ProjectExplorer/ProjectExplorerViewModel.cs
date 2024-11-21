@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
-
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -14,6 +12,8 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
+
+namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectExplorerView" /> view.
@@ -48,6 +48,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
 
     private bool HasUnlockedSelectedItems { get; set; }
 
+    /// <inheritdoc/>
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
@@ -63,6 +64,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         }
     }
 
+    /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
@@ -78,7 +80,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         UndoRedo.Default[this]
             .AddChange(
                 $"RemoveItem({args.TreeItem.Label})",
-                () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
+                () => this.RemoveItemAsync(args.TreeItem).GetAwaiter().GetResult());
 
         this.LogItemAdded(args.TreeItem.Label);
     }
@@ -90,7 +92,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         UndoRedo.Default[this]
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
-                () => this.InsertItem(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
+                () => this.InsertItemAsync(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
@@ -149,24 +151,24 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         switch (args.TreeItem)
         {
             case SceneAdapter sceneAdapter:
-            {
-                var scene = sceneAdapter.AttachedObject;
-                var parentAdapter = args.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
-                var project = parentAdapter.AttachedObject;
-                project.Scenes.Add(scene);
-                break;
-            }
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    var parentAdapter = args.Parent as ProjectAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdpater must be a ProjectAdapter");
+                    var project = parentAdapter.AttachedObject;
+                    project.Scenes.Add(scene);
+                    break;
+                }
 
             case GameEntityAdapter entityAdapter:
-            {
-                var entity = entityAdapter.AttachedObject;
-                var parentAdapter = args.Parent as SceneAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                var scene = parentAdapter.AttachedObject;
-                scene.Entities.Add(entity);
-                break;
-            }
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    var parentAdapter = args.Parent as SceneAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
+                    var scene = parentAdapter.AttachedObject;
+                    scene.Entities.Add(entity);
+                    break;
+                }
 
             default:
                 // Do nothing
@@ -182,24 +184,24 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
         switch (args.TreeItem)
         {
             case SceneAdapter sceneAdapter:
-            {
-                var scene = sceneAdapter.AttachedObject;
-                var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                var project = parentAdapter.AttachedObject;
-                project.Scenes.Remove(scene);
-                break;
-            }
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
+                    var project = parentAdapter.AttachedObject;
+                    _ = project.Scenes.Remove(scene);
+                    break;
+                }
 
             case GameEntityAdapter entityAdapter:
-            {
-                var entity = entityAdapter.AttachedObject;
-                var parentAdapter = entityAdapter.Parent as SceneAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                var scene = parentAdapter.AttachedObject;
-                scene.Entities.Remove(entity);
-                break;
-            }
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    var parentAdapter = entityAdapter.Parent as SceneAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
+                    var scene = parentAdapter.AttachedObject;
+                    _ = scene.Entities.Remove(entity);
+                    break;
+                }
 
             default:
                 // Do nothing
@@ -244,7 +246,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
 
         if (selectedItem is null)
         {
-            await this.InsertItem(0, this.Project, newScene).ConfigureAwait(false);
+            await this.InsertItemAsync(0, this.Project, newScene).ConfigureAwait(false);
             return;
         }
 
@@ -253,7 +255,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             "if we reach here, we must have selected a scene or crawled up to a scene");
 
         var selectedItemRelativeIndex = (await this.Project.Children.ConfigureAwait(false)).IndexOf(selectedItem) + 1;
-        await this.InsertItem(selectedItemRelativeIndex, this.Project, newScene).ConfigureAwait(false);
+        await this.InsertItemAsync(selectedItemRelativeIndex, this.Project, newScene).ConfigureAwait(false);
     }
 
     private bool CanAddEntity()
@@ -291,7 +293,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
                     Name = $"New Entity {parent.AttachedObject.Entities.Count}",
                 });
 
-        await this.InsertItem(relativeIndex, parent, newEntity).ConfigureAwait(false);
+        await this.InsertItemAsync(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }
 
     [LoggerMessage(
