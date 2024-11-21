@@ -2,10 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Controls;
 
 /// <summary>
 /// Properties for the <see cref="Expander" /> control.
@@ -50,9 +51,7 @@ public partial class Expander
     /// <param name="newValue">The new value of the <see cref="IsExpanded" /> property.</param>
     protected virtual void OnIsExpandedChanged(bool oldValue, bool newValue)
     {
-        _ = oldValue; // unused
-        _ = newValue; // unused
-
+        Debug.Assert(oldValue != newValue, "expecting SetValue() to not call this method when the value does not change");
         this.UpdateVisualState();
     }
 }

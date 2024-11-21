@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Generators;
@@ -13,6 +11,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using Windows.UI.Core;
+
+namespace DroidNet.Controls;
 
 /// <summary>
 /// A control to display a tree as a list of expandable items.
@@ -30,6 +30,9 @@ public partial class DynamicTree : Control
     private ItemsRepeater? itemsRepeater;
     private Grid? rootGrid;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DynamicTree"/> class.
+    /// </summary>
     public DynamicTree()
     {
         this.DefaultStyleKey = typeof(DynamicTree);
@@ -52,6 +55,7 @@ public partial class DynamicTree : Control
         };
     }
 
+    /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -101,7 +105,7 @@ public partial class DynamicTree : Control
         }
 
         this.ViewModel!.SelectNoneCommand.Execute(parameter: null);
-        this.Focus(FocusState.Keyboard);
+        _ = this.Focus(FocusState.Keyboard);
     }
 
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
@@ -209,7 +213,7 @@ public partial class DynamicTree : Control
         }
 
         // Give focus to the clicked element
-        element.Focus(FocusState.Programmatic);
+        _ = element.Focus(FocusState.Programmatic);
     }
 
     private void TreeItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)

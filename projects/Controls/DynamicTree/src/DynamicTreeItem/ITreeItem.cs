@@ -7,6 +7,7 @@ using System.Collections.Specialized;
 using DroidNet.Controls.Selection;
 
 namespace DroidNet.Controls;
+
 /// <summary>
 /// Represents an item in a hierarchical tree structure, providing functionality for managing child items,
 /// tracking selection state, and handling expansion and collapse states.
@@ -17,17 +18,17 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// Occurs when the collection of child items changes.
     /// </summary>
     /// <seealso cref="ObservableCollection{T}.CollectionChanged" />
-    event EventHandler<NotifyCollectionChangedEventArgs> ChildrenCollectionChanged;
+    public event EventHandler<NotifyCollectionChangedEventArgs> ChildrenCollectionChanged;
 
     /// <summary>
     /// Gets or sets the label of the tree item, used when presenting the item content with the default styling.
     /// </summary>
-    string Label { get; set; }
+    public string Label { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the tree item is expanded.
     /// </summary>
-    bool IsExpanded { get; set; }
+    public bool IsExpanded { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the tree item is the root. Defaults to <see langword="false" />, unless otherwise set at
@@ -37,22 +38,22 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// Once an item is marked as the root of a tree, it will stay the root forever.
     /// </remarks>
     /// </summary>
-    bool IsRoot { get; init; }
+    public bool IsRoot { get; init; }
 
     /// <summary>
     /// Gets the parent tree item.
     /// </summary>
-    ITreeItem? Parent { get; }
+    public ITreeItem? Parent { get; }
 
     /// <summary>
     /// Gets the depth of the tree item in the hierarchy.
     /// </summary>
-    int Depth { get; }
+    public int Depth { get; }
 
     /// <summary>
     /// Gets the collection of child tree items.
     /// </summary>
-    Task<ReadOnlyObservableCollection<ITreeItem>> Children { get; }
+    public Task<ReadOnlyObservableCollection<ITreeItem>> Children { get; }
 
     /// <summary>
     /// Gets the count of child items under this tree item.
@@ -65,21 +66,21 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// If the collection has not been loaded yet, a pr-load count is obtained without loading the items, and is used until the
     /// collection is loaded. At that point, the count should be the number of items in the <see cref="Children" /> collection.
     /// </remarks>
-    int ChildrenCount { get; }
+    public int ChildrenCount { get; }
 
     /// <summary>
     /// Validates the given <paramref name="name" />.
     /// </summary>
     /// <param name="name">The proposed name to be validated.</param>
     /// <returns><see langword="true" /> if the <paramref name="name" /> is valid; <see langword="false" /> otherwise.</returns>
-    bool ValidateItemName(string name);
+    public bool ValidateItemName(string name);
 
     /// <summary>
     /// Adds a child tree item asynchronously.
     /// </summary>
     /// <param name="child">The child tree item to add.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task AddChildAsync(ITreeItem child);
+    public Task AddChildAsync(ITreeItem child);
 
     /// <summary>
     /// Inserts a child tree item at the specified index asynchronously.
@@ -87,7 +88,7 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// <param name="index">The zero-based index at which the child tree item should be inserted.</param>
     /// <param name="child">The child tree item to insert.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task InsertChildAsync(int index, ITreeItem child);
+    public Task InsertChildAsync(int index, ITreeItem child);
 
     /// <summary>
     /// Removes a child tree item asynchronously.
@@ -96,7 +97,7 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// <returns>
     /// A task that represents the asynchronous operation, holding the index of removed child, or `-1` if the item was not found.
     /// </returns>
-    Task<int> RemoveChildAsync(ITreeItem child);
+    public Task<int> RemoveChildAsync(ITreeItem child);
 }
 
 /// <summary>

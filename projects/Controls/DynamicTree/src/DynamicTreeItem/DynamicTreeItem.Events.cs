@@ -5,7 +5,8 @@
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Events for the <see cref="DynamicTreeItem" /> control.
+/// Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
+/// expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
 public partial class DynamicTreeItem
 {
@@ -13,7 +14,8 @@ public partial class DynamicTreeItem
     /// Fires when the contents under the <see cref="DynamicTreeItem" /> need to be expanded.
     /// </summary>
     /// <remarks>
-    /// This event should be handled by the containing tree to expand the content under this <see cref="DynamicTreeItem" />.
+    /// This event should be handled by the containing tree to expand the content under this
+    /// <see cref="DynamicTreeItem" />.
     /// </remarks>
     public event EventHandler<DynamicTreeEventArgs>? Expand;
 
@@ -21,7 +23,8 @@ public partial class DynamicTreeItem
     /// Fires when the contents under the <see cref="DynamicTreeItem" /> need to be collapsed.
     /// </summary>
     /// <remarks>
-    /// This event should be handled by the containing tree to collapse the content under this <see cref="DynamicTreeItem" />.
+    /// This event should be handled by the containing tree to collapse the content under this
+    /// <see cref="DynamicTreeItem" />.
     /// </remarks>
     public event EventHandler<DynamicTreeEventArgs>? Collapse;
 }

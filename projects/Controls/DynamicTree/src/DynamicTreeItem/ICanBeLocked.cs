@@ -4,6 +4,13 @@
 
 namespace DroidNet.Controls;
 
+/// <summary>
+/// Provides an interface for tree items that can be locked to prevent deletion or movement within the tree.
+/// </summary>
+/// <remarks>
+/// Implementing this interface allows a tree item to be marked as locked, ensuring it cannot be deleted or moved.
+/// This is useful in scenarios where certain items need to be protected from user modifications.
+/// </remarks>
 public interface ICanBeLocked
 {
     /// <summary>
@@ -12,5 +19,5 @@ public interface ICanBeLocked
     /// When <see langword="true" />, the item cannot be deleted or moved within the tree.
     /// </remarks>
     /// </summary>
-    bool IsLocked { get; set; }
+    public bool IsLocked { get; set; }
 }

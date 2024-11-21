@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Controls;
 
 /// <summary>
 /// Properties for the <see cref="DynamicTree" /> control.

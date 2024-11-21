@@ -7,6 +7,11 @@ namespace DroidNet.Controls;
 /// <summary>
 /// Provides data for the <see cref="DynamicTreeViewModel.ItemBeingRemoved" /> event.
 /// </summary>
+/// <remarks>
+/// This class contains information about the tree item that is being removed, including a flag indicating
+/// whether the removal should proceed. It extends the <see cref="DynamicTreeEventArgs"/> class to include additional
+/// details specific to the item removal event.
+/// </remarks>
 public class TreeItemBeingRemovedEventArgs : DynamicTreeEventArgs
 {
     /// <summary>
