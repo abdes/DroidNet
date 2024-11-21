@@ -2,22 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Tests;
-
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls.Selection;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Moq.Protected;
+
+namespace DroidNet.Controls.Tests;
 
 /// <summary>
 /// Unit test cases for the <see cref="SelectionModel{T}" /> class.
 /// </summary>
 [ExcludeFromCodeCoverage]
 [TestClass]
-[TestCategory($"{nameof(Controls)} - {nameof(TreeItemAdapter)}")]
+[TestCategory($"{nameof(DynamicTree)} / {nameof(TreeItemAdapter)}")]
 public class TreeItemAdapterTests
 {
     [TestMethod]
@@ -26,15 +25,15 @@ public class TreeItemAdapterTests
         var sutMock = new Mock<TreeItemAdapter>(true, false) { CallBase = true };
         var sut = sutMock.Object;
 
-        sut.IsRoot.Should().BeTrue();
+        _ = sut.IsRoot.Should().BeTrue();
 
-        sut.IsLocked.Should().BeTrue();
+        _ = sut.IsLocked.Should().BeTrue();
 
         sut.IsLocked = true;
-        sut.IsLocked.Should().BeTrue();
+        _ = sut.IsLocked.Should().BeTrue();
 
         sut.IsLocked = false;
-        sut.IsLocked.Should().BeTrue();
+        _ = sut.IsLocked.Should().BeTrue();
     }
 
     [TestMethod]
@@ -43,7 +42,7 @@ public class TreeItemAdapterTests
         var sutMock = new Mock<TreeItemAdapter>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
-        sut.IsLocked.Should().BeFalse();
+        _ = sut.IsLocked.Should().BeFalse();
     }
 
     [TestMethod]
@@ -52,11 +51,11 @@ public class TreeItemAdapterTests
         var sutMock = new Mock<TreeItemAdapter>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
-        sut.IsLocked.Should().BeFalse();
+        _ = sut.IsLocked.Should().BeFalse();
         sut.IsLocked = true;
-        sut.IsLocked.Should().BeTrue();
+        _ = sut.IsLocked.Should().BeTrue();
         sut.IsLocked = false;
-        sut.IsLocked.Should().BeFalse();
+        _ = sut.IsLocked.Should().BeFalse();
     }
 
     [TestMethod]
@@ -64,9 +63,9 @@ public class TreeItemAdapterTests
     {
         var sutMock = new Mock<TreeItemAdapter>(true, true) { CallBase = true };
         var sut = sutMock.Object;
-        sut.IsRoot.Should().BeTrue();
+        _ = sut.IsRoot.Should().BeTrue();
 
-        sut.Depth.Should().Be(-1);
+        _ = sut.Depth.Should().Be(-1);
     }
 
     [TestMethod]
@@ -74,9 +73,9 @@ public class TreeItemAdapterTests
     {
         var sutMock = new Mock<TreeItemAdapter>(true, false) { CallBase = true };
         var sut = sutMock.Object;
-        sut.IsRoot.Should().BeTrue();
+        _ = sut.IsRoot.Should().BeTrue();
 
-        sut.Depth.Should().Be(0);
+        _ = sut.Depth.Should().Be(0);
     }
 
     [TestMethod]
@@ -87,7 +86,7 @@ public class TreeItemAdapterTests
         var sut = sutMock.Object;
         var child = childMock.Object;
 
-        sutMock.Setup<Task>(a => a.LoadChildrenPublic())
+        _ = sutMock.Setup<Task>(a => a.LoadChildrenPublic())
             .Returns(
                 async () =>
                 {
@@ -95,13 +94,13 @@ public class TreeItemAdapterTests
                     await Task.CompletedTask.ConfigureAwait(false);
                 });
 
-        var children = await sut.Children;
+        var children = await sut.Children.ConfigureAwait(false);
 
-        children.Count.Should().Be(1);
-        children.Should().Contain(child);
+        _ = children.Count.Should().Be(1);
+        _ = children.Should().Contain(child);
 
         // Access the Children collection again - No initialization should happen
-        _ = await sut.Children;
+        _ = await sut.Children.ConfigureAwait(false);
 
         sutMock.Protected().Verify<Task>("LoadChildren", Times.Once());
     }
@@ -114,7 +113,7 @@ public class TreeItemAdapterTests
         var sut = sutMock.Object;
         var child = childMock.Object;
 
-        sutMock.Setup<Task>(a => a.LoadChildrenPublic())
+        _ = sutMock.Setup<Task>(a => a.LoadChildrenPublic())
             .Returns(
                 async () =>
                 {
@@ -125,7 +124,7 @@ public class TreeItemAdapterTests
         _ = await sut.Children.ConfigureAwait(false);
 
         // After initialization, GetChildrenCount should not be called anymore
-        sut.ChildrenCount.Should().Be(1);
+        _ = sut.ChildrenCount.Should().Be(1);
         sutMock.Protected().Verify("DoGetChildrenCount", Times.Never());
     }
 
@@ -136,9 +135,9 @@ public class TreeItemAdapterTests
         var sut = sutMock.Object;
 
         const int childrenCount = 1;
-        sutMock.Protected().Setup<int>("DoGetChildrenCount").Returns(childrenCount);
+        _ = sutMock.Protected().Setup<int>("DoGetChildrenCount").Returns(childrenCount);
 
-        sut.ChildrenCount.Should().Be(childrenCount);
+        _ = sut.ChildrenCount.Should().Be(childrenCount);
         sutMock.Protected().Verify<int>("DoGetChildrenCount", Times.Once());
     }
 
@@ -149,14 +148,14 @@ public class TreeItemAdapterTests
         var childMock = new Mock<TreeItemAdapter>(false, false) { CallBase = true };
         var child = childMock.Object;
         await parentMock.Object.AddChildAsync(child).ConfigureAwait(false);
-        child.Parent.Should().NotBeNull();
+        _ = child.Parent.Should().NotBeNull();
 
         var sutMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
         var act = async () => await sut.AddChildAsync(child).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -164,14 +163,14 @@ public class TreeItemAdapterTests
     {
         var childMock = new Mock<TreeItemAdapter>(true, false) { CallBase = true };
         var child = childMock.Object;
-        child.IsRoot.Should().BeTrue();
+        _ = child.IsRoot.Should().BeTrue();
 
         var sutMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
         var act = async () => await sut.AddChildAsync(child).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -182,7 +181,7 @@ public class TreeItemAdapterTests
 
         var act = async () => await sut.AddChildAsync(sut).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -195,19 +194,19 @@ public class TreeItemAdapterTests
         var child1 = child1Mock.Object;
         var child2 = child2Mock.Object;
 
-        await sut.AddChildAsync(child1);
-        await sut.AddChildAsync(child2);
+        await sut.AddChildAsync(child1).ConfigureAwait(false);
+        await sut.AddChildAsync(child2).ConfigureAwait(false);
 
-        sut.ChildrenCount.Should().Be(2);
-        var children = await sut.Children;
-        children.Count.Should().Be(2);
-        children.Should().ContainInConsecutiveOrder([child1, child2]);
+        _ = sut.ChildrenCount.Should().Be(2);
+        var children = await sut.Children.ConfigureAwait(false);
+        _ = children.Count.Should().Be(2);
+        _ = children.Should().ContainInConsecutiveOrder([child1, child2]);
 
-        child1.Depth.Should().Be(1);
-        child1.Parent.Should().Be(sut);
+        _ = child1.Depth.Should().Be(1);
+        _ = child1.Parent.Should().Be(sut);
 
-        child2.Depth.Should().Be(1);
-        child2.Parent.Should().Be(sut);
+        _ = child2.Depth.Should().Be(1);
+        _ = child2.Parent.Should().Be(sut);
     }
 
     [TestMethod]
@@ -217,14 +216,14 @@ public class TreeItemAdapterTests
         var childMock = new Mock<TreeItemAdapter>(false, false) { CallBase = true };
         var child = childMock.Object;
         await parentMock.Object.AddChildAsync(child).ConfigureAwait(false);
-        child.Parent.Should().NotBeNull();
+        _ = child.Parent.Should().NotBeNull();
 
         var sutMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
         var act = async () => await sut.InsertChildAsync(0, child).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -232,14 +231,14 @@ public class TreeItemAdapterTests
     {
         var childMock = new Mock<TreeItemAdapter>(true, false) { CallBase = true };
         var child = childMock.Object;
-        child.IsRoot.Should().BeTrue();
+        _ = child.IsRoot.Should().BeTrue();
 
         var sutMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
         var sut = sutMock.Object;
 
         var act = async () => await sut.InsertChildAsync(0, child).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -250,7 +249,7 @@ public class TreeItemAdapterTests
 
         var act = async () => await sut.InsertChildAsync(0, sut).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -263,19 +262,19 @@ public class TreeItemAdapterTests
         var child1 = child1Mock.Object;
         var child2 = child2Mock.Object;
 
-        await sut.InsertChildAsync(0, child1);
-        await sut.InsertChildAsync(0, child2);
+        await sut.InsertChildAsync(0, child1).ConfigureAwait(false);
+        await sut.InsertChildAsync(0, child2).ConfigureAwait(false);
 
-        sut.ChildrenCount.Should().Be(2);
-        var children = await sut.Children;
-        children.Count.Should().Be(2);
-        children.Should().ContainInConsecutiveOrder([child2, child1]);
+        _ = sut.ChildrenCount.Should().Be(2);
+        var children = await sut.Children.ConfigureAwait(false);
+        _ = children.Count.Should().Be(2);
+        _ = children.Should().ContainInConsecutiveOrder([child2, child1]);
 
-        child1.Depth.Should().Be(1);
-        child1.Parent.Should().Be(sut);
+        _ = child1.Depth.Should().Be(1);
+        _ = child1.Parent.Should().Be(sut);
 
-        child2.Depth.Should().Be(1);
-        child2.Parent.Should().Be(sut);
+        _ = child2.Depth.Should().Be(1);
+        _ = child2.Parent.Should().Be(sut);
     }
 
     [TestMethod]
@@ -288,7 +287,7 @@ public class TreeItemAdapterTests
 
         var act = async () => await sut.InsertChildAsync(1, child).ConfigureAwait(false);
 
-        await act.Should().ThrowAsync<ArgumentOutOfRangeException>().ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<ArgumentOutOfRangeException>().ConfigureAwait(false);
     }
 
     [TestMethod]
@@ -301,7 +300,7 @@ public class TreeItemAdapterTests
 
         var result = await sut.RemoveChildAsync(child).ConfigureAwait(false);
 
-        result.Should().Be(-1);
+        _ = result.Should().Be(-1);
     }
 
     [TestMethod]
@@ -317,10 +316,10 @@ public class TreeItemAdapterTests
         await sut.AddChildAsync(child2).ConfigureAwait(false);
 
         var result = await sut.RemoveChildAsync(child2).ConfigureAwait(false);
-        result.Should().Be(1);
+        _ = result.Should().Be(1);
 
         result = await sut.RemoveChildAsync(child1).ConfigureAwait(false);
-        result.Should().Be(0);
+        _ = result.Should().Be(0);
     }
 
     [TestMethod]
@@ -334,8 +333,8 @@ public class TreeItemAdapterTests
 
         _ = await sut.RemoveChildAsync(child).ConfigureAwait(false);
 
-        child.Depth.Should().Be(int.MinValue);
-        child.Parent.Should().BeNull();
+        _ = child.Depth.Should().Be(int.MinValue);
+        _ = child.Parent.Should().BeNull();
     }
 
     /*
@@ -350,7 +349,7 @@ public class TreeItemAdapterTests
         var sut = sutMock.Object;
         var child = childMock.Object;
 
-        sutMock.Setup<Task>(a => a.LoadChildrenPublic())
+        _ = sutMock.Setup<Task>(a => a.LoadChildrenPublic())
             .Returns(
                 async () =>
                 {
@@ -360,9 +359,9 @@ public class TreeItemAdapterTests
 
         using var monitoredSubject = sut.Monitor();
 
-        _ = await sut.Children;
+        _ = await sut.Children.ConfigureAwait(false);
 
-        monitoredSubject
+        _ = monitoredSubject
             .Should()
             .Raise("ChildrenCollectionChanged")
             .WithSender(sut)
@@ -381,7 +380,7 @@ public class TreeItemAdapterTests
 
         await sut.AddChildAsync(child).ConfigureAwait(false);
 
-        monitoredSubject
+        _ = monitoredSubject
             .Should()
             .Raise("ChildrenCollectionChanged")
             .WithSender(sut)
@@ -403,7 +402,7 @@ public class TreeItemAdapterTests
 
         await sut.InsertChildAsync(0, child).ConfigureAwait(false);
 
-        monitoredSubject
+        _ = monitoredSubject
             .Should()
             .Raise("ChildrenCollectionChanged")
             .WithSender(sut)
@@ -425,9 +424,9 @@ public class TreeItemAdapterTests
         using var monitoredSubject = sut.Monitor();
 
         var index = await sut.RemoveChildAsync(child).ConfigureAwait(false);
-        index.Should().Be(0);
+        _ = index.Should().Be(0);
 
-        monitoredSubject
+        _ = monitoredSubject
             .Should()
             .Raise("ChildrenCollectionChanged")
             .WithSender(sut)
@@ -436,16 +435,18 @@ public class TreeItemAdapterTests
             .WithArgs<NotifyCollectionChangedEventArgs>(
                 args => args.OldItems != null && args.OldItems.Count == 1 && args.OldItems.Contains(child));
     }
-}
 
-public abstract class TreeItemAdapterStub(bool isRoot = false, bool isHidden = false)
-    : TreeItemAdapter(isRoot, isHidden)
-{
-    public override required string Label { get; set; }
+    internal abstract class TreeItemAdapterStub(bool isRoot = false, bool isHidden = false)
+        : TreeItemAdapter(isRoot, isHidden)
+    {
+        /// <inheritdoc/>
+        public override required string Label { get; set; }
 
-    public abstract Task LoadChildrenPublic();
+        public abstract Task LoadChildrenPublic();
 
-    public void AddChildInternalPublic(TreeItemAdapter child) => this.AddChildInternal(child);
+        public void AddChildInternalPublic(TreeItemAdapter child) => this.AddChildInternal(child);
 
-    protected override Task LoadChildren() => this.LoadChildrenPublic();
+        /// <inheritdoc/>
+        protected override Task LoadChildren() => this.LoadChildrenPublic();
+    }
 }
