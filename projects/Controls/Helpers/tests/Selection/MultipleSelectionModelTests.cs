@@ -355,7 +355,7 @@ public partial class MultipleSelectionModelTests
 
         // Assert
         _ = model.SelectedIndices.Should().Equal(1, 3, 5);
-        _ = model.SelectedIndex.Should().Be(1);
+        _ = model.SelectedIndex.Should().Be(5);
     }
 
     [TestMethod]
@@ -384,7 +384,7 @@ public partial class MultipleSelectionModelTests
 
         // Assert
         _ = model.SelectedIndices.Should().Equal(3, 5);
-        _ = model.SelectedIndex.Should().Be(3);
+        _ = model.SelectedIndex.Should().Be(5);
     }
 
     [TestMethod]
@@ -501,7 +501,7 @@ public partial class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedItems.Should().BeEquivalentTo(expectedSelectedItems);
         _ = model.SelectedIndices.Should().BeEquivalentTo(expectedSelectedIndices);
-        _ = model.SelectedIndex.Should().Be(start);
+        _ = model.SelectedIndex.Should().Be(end);
     }
 
     [TestMethod]
@@ -520,7 +520,7 @@ public partial class MultipleSelectionModelTests
         // Assert
         _ = model.SelectedItems.Should().BeEquivalentTo(expectedSelectedItems);
         _ = model.SelectedIndices.Should().BeEquivalentTo(expectedSelectedIndices);
-        _ = model.SelectedIndex.Should().Be(start);
+        _ = model.SelectedIndex.Should().Be(end);
     }
 
     [TestMethod]
