@@ -9,7 +9,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!--  Other merged dictionaries here  -->
-                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
 
                 <!--  Other internal merged dictionaries here  -->
                 <Styles xmlns="using:DroidNet.Controls.Demo.DynamicTree" />

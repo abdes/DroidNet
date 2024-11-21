@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -15,13 +13,19 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 
+namespace DroidNet.Controls.Demo.DynamicTree;
+
 /// <summary>
-/// The ViewModel for the <see cref="ProjectLayoutView" /> view.
+/// The ViewModel for the <see cref="ProjectLayoutView"/> view.
 /// </summary>
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
+    /// </summary>
+    /// <param name="logger">The logger to use for logging.</param>
     public ProjectLayoutViewModel(ILogger<ProjectLayoutViewModel> logger)
     {
         this.logger = logger;
@@ -36,14 +40,24 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.ItemAdded += this.OnItemAdded;
     }
 
+    /// <summary>
+    /// Gets the project adapter.
+    /// </summary>
     public ProjectAdapter? Project { get; private set; }
 
+    /// <summary>
+    /// Gets the undo stack.
+    /// </summary>
     public ReadOnlyObservableCollection<IChange> UndoStack { get; }
 
+    /// <summary>
+    /// Gets the redo stack.
+    /// </summary>
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     private bool HasUnlockedSelectedItems { get; set; }
 
+    /// <inheritdoc/>
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
@@ -59,6 +73,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
+    /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     protected override async Task RemoveSelectedItems()
     {
@@ -73,8 +88,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         UndoRedo.Default[this]
             .AddChange(
-                $"RemoveItem({args.TreeItem.Label})",
-                () => this.RemoveItem(args.TreeItem).GetAwaiter().GetResult());
+                $"RemoveItemAsync({args.TreeItem.Label})",
+                () => this.RemoveItemAsync(args.TreeItem).GetAwaiter().GetResult());
 
         this.LogItemAdded(args.TreeItem.Label);
     }
@@ -86,12 +101,18 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         UndoRedo.Default[this]
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
-                () => this.InsertItem(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
+                () => this.InsertItemAsync(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
     }
 
+    /// <summary>
+    /// Undoes the last change.
+    /// </summary>
     [RelayCommand]
     private void Undo() => UndoRedo.Default[this].Undo();
 
+    /// <summary>
+    /// Redoes the last undone change.
+    /// </summary>
     [RelayCommand]
     private void Redo() => UndoRedo.Default[this].Redo();
 
@@ -143,24 +164,24 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         switch (args.TreeItem)
         {
             case SceneAdapter sceneAdapter:
-            {
-                var scene = sceneAdapter.AttachedObject;
-                var parentAdapter = args.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                var project = parentAdapter.AttachedObject;
-                project.Scenes.Add(scene);
-                break;
-            }
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    var parentAdapter = args.Parent as ProjectAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
+                    var project = parentAdapter.AttachedObject;
+                    project.Scenes.Add(scene);
+                    break;
+                }
 
             case EntityAdapter entityAdapter:
-            {
-                var entity = entityAdapter.AttachedObject;
-                var parentAdapter = args.Parent as SceneAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                var scene = parentAdapter.AttachedObject;
-                scene.Entities.Add(entity);
-                break;
-            }
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    var parentAdapter = args.Parent as SceneAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
+                    var scene = parentAdapter.AttachedObject;
+                    scene.Entities.Add(entity);
+                    break;
+                }
 
             default:
                 // Do nothing
@@ -176,24 +197,24 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         switch (args.TreeItem)
         {
             case SceneAdapter sceneAdapter:
-            {
-                var scene = sceneAdapter.AttachedObject;
-                var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                var project = parentAdapter.AttachedObject;
-                project.Scenes.Remove(scene);
-                break;
-            }
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
+                    var project = parentAdapter.AttachedObject;
+                    _ = project.Scenes.Remove(scene);
+                    break;
+                }
 
             case EntityAdapter entityAdapter:
-            {
-                var entity = entityAdapter.AttachedObject;
-                var parentAdapter = entityAdapter.Parent as SceneAdapter;
-                Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                var scene = parentAdapter.AttachedObject;
-                scene.Entities.Remove(entity);
-                break;
-            }
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    var parentAdapter = entityAdapter.Parent as SceneAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
+                    var scene = parentAdapter.AttachedObject;
+                    _ = scene.Entities.Remove(entity);
+                    break;
+                }
 
             default:
                 // Do nothing
@@ -201,6 +222,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
+    /// <summary>
+    /// Loads the project asynchronously.
+    /// </summary>
     [RelayCommand]
     private async Task LoadProjectAsync()
     {
@@ -211,6 +235,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         await this.InitializeRootAsync(this.Project).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Adds a new scene to the project.
+    /// </summary>
     [RelayCommand]
     private async Task AddScene()
     {
@@ -222,13 +249,20 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         var newScene
             = new SceneAdapter(new Scene($"New Scene {this.Project.AttachedObject.Scenes.Count}"));
 
-        await this.InsertItem(0, this.Project, newScene).ConfigureAwait(false);
+        await this.InsertItemAsync(0, this.Project, newScene).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Determines whether an entity can be added.
+    /// </summary>
+    /// <returns><see langword="true"/> if an entity can be added; otherwise, <see langword="false"/>.</returns>
     private bool CanAddEntity()
         => (this.SelectionModel is SingleSelectionModel && this.SelectionModel.SelectedIndex != -1) ||
            this.SelectionModel is MultipleSelectionModel { SelectedIndices.Count: 1 };
 
+    /// <summary>
+    /// Adds a new entity to the selected scene.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanAddEntity))]
     private async Task AddEntity()
     {
@@ -254,9 +288,13 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         var newEntity
             = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
-        await this.InsertItem(0, scene, newEntity).ConfigureAwait(false);
+        await this.InsertItemAsync(0, scene, newEntity).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Logs that an item was added.
+    /// </summary>
+    /// <param name="itemName">The name of the item that was added.</param>
     [LoggerMessage(
         EventName = $"ui-{nameof(ProjectLayoutViewModel)}-ItemRemoved",
         Level = LogLevel.Information,

@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.Services;
-
 using DroidNet.Controls.Demo.Model;
 using DryIoc.ImTools;
 
+namespace DroidNet.Controls.Demo.Services;
+
+/// <summary>
+/// Provides methods to load project and scene data.
+/// </summary>
 internal static class ProjectLoaderService
 {
     private static readonly Scene[] Data =
@@ -33,6 +36,11 @@ internal static class ProjectLoaderService
         },
     ];
 
+    /// <summary>
+    /// Loads the project data asynchronously.
+    /// </summary>
+    /// <param name="project">The project to load data into.</param>
+    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
     public static async Task LoadProjectAsync(Project project)
     {
         foreach (var scene in Data)
@@ -43,6 +51,11 @@ internal static class ProjectLoaderService
         await Task.CompletedTask.ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Loads the scene data asynchronously.
+    /// </summary>
+    /// <param name="scene">The scene to load data into.</param>
+    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
     public static async Task LoadSceneAsync(Scene scene)
     {
         var sceneData = Data.FindFirst((sceneData) => sceneData.Name.Equals(scene.Name, StringComparison.Ordinal));

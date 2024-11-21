@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DemoBrowser;
-
 using System.Diagnostics;
 using DroidNet.Converters;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
+
+namespace DroidNet.Controls.Demo.DemoBrowser;
 
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(DemoBrowserViewModel))]
@@ -15,6 +15,9 @@ public sealed partial class DemoBrowserView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DemoBrowserView"/> class.
+    /// </summary>
     public DemoBrowserView()
     {
         this.InitializeComponent();
@@ -25,6 +28,9 @@ public sealed partial class DemoBrowserView
                 () => this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
+    /// <summary>
+    /// Gets the settings item from the navigation view.
+    /// </summary>
     public object? SettingsItem => this.NavigationView.SettingsItem;
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

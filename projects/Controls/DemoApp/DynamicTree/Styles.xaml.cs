@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// A <see cref="ResourceDictionary" /> for the styles used in the <see cref="DynamicTree" /> demo. Because the
@@ -12,5 +12,11 @@ using Microsoft.UI.Xaml;
 /// </summary>
 public partial class Styles
 {
-    public Styles() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Styles"/> class.
+    /// </summary>
+    public Styles()
+    {
+        this.InitializeComponent();
+    }
 }

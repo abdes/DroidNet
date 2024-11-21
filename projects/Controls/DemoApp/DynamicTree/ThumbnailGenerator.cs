@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
-
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+
+namespace DroidNet.Controls.Demo.DynamicTree;
 
 /*
  Pathless casting
@@ -24,8 +24,17 @@ using Microsoft.UI.Xaml.Media.Imaging;
  </DataTemplate>
 */
 
+/// <summary>
+/// Provides methods to generate thumbnails for entities in the dynamic tree.
+/// </summary>
 public static class ThumbnailGenerator
 {
+    /// <summary>
+    /// Generates a random image with the specified width and height.
+    /// </summary>
+    /// <param name="width">The width of the image.</param>
+    /// <param name="height">The height of the image.</param>
+    /// <returns>A <see cref="WriteableBitmap"/> containing the generated image.</returns>
     public static WriteableBitmap GenerateRandomImage(int width, int height)
     {
         var bitmap = new WriteableBitmap(width, height);
@@ -44,13 +53,10 @@ public static class ThumbnailGenerator
         return bitmap;
     }
 
-    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
-    {
-        if (adapter is EntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1'))
-        {
-            return Symbol.Home;
-        }
-
-        return Symbol.Admin;
-    }
+    /// <summary>
+    /// Gets the thumbnail symbol for the specified entity.
+    /// </summary>
+    /// <param name="adapter">The tree item adapter representing the entity.</param>
+    /// <returns>A <see cref="Symbol"/> representing the thumbnail for the entity.</returns>
+    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter) => adapter is EntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1') ? Symbol.Home : Symbol.Admin;
 }
