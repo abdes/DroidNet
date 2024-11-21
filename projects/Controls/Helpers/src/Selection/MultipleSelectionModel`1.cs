@@ -84,7 +84,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
         {
-            this.ClearSelection();
+            this.selectedIndices.Clear();
             this.SelectItemAt(index);
         }
     }
@@ -147,7 +147,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
     /// selections - to do so it is necessary to first call <see cref="ClearSelection()" />.
     /// </para>
     /// <para>
-    /// The first valid index given will become the selected index / selected item.
+    /// The last valid index given will become the selected index / selected item.
     /// </para>
     /// </summary>
     /// <param name="indices">
@@ -174,9 +174,9 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
         // notification after we resume notifications.
         using (this.selectedIndices.SuspendNotifications())
         {
-            this.ClearSelection();
+            this.selectedIndices.Clear(); // Don't use ClearSelection() to avoid triggering property change notifications
 
-            _ = indices
+            var last = indices
                 .Where(index => index >= 0 && index < itemsCount)
                 .Select(
                     index =>
@@ -187,10 +187,7 @@ public abstract class MultipleSelectionModel<T> : SelectionModel<T>
                 .DefaultIfEmpty(-1)
                 .Last();
 
-            if (this.selectedIndices.Count != 0)
-            {
-                _ = this.SetSelectedIndex(this.selectedIndices[0]);
-            }
+            _ = this.SetSelectedIndex(last);
         }
     }
 
