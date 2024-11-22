@@ -94,6 +94,6 @@ public sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Cannot load content for route '{Route}' into outlet '{Outlet}' becaue {Because}")]
+        Message = "Cannot load content for route '{Route}' into outlet '{Outlet}' because {Because}")]
     private static partial void LogContentLoadingError(ILogger logger, IActiveRoute route, OutletName outlet, string because);
 }

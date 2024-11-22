@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
-<Application
+<tests:VisualUserInterfaceTestsApp
     x:Class="DroidNet.Routing.WinUI.Tests.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tests="using:DroidNet.Tests">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -13,4 +14,4 @@
             <!--  Other app resources here  -->
         </ResourceDictionary>
     </Application.Resources>
-</Application>
+</tests:VisualUserInterfaceTestsApp>

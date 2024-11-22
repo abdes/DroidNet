@@ -2,15 +2,16 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
+        <RootNamespace>$(RootNamespace).Routing.WinUI</RootNamespace>
+        <AssemblyName>DroidNet.Routing.WinUI</AssemblyName>
 		<UseWinUI>true</UseWinUI>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-		<Title>DroidNet Routed Navigation for WinUI</Title>
+        <Title>DroidNet Routed Navigation for WinUI</Title>
 		<Description>Provides a WinUI specific implementation of routed navigation, and a pattern of usage based on view models acting as outlet container with outlets in which target navigation content is loaded.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageTags>winui;mvvm;views;viewmodel;router;navigation</PackageTags>
 		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-
-		<RootNamespace>$(RootNamespace).Routing.WinUI</RootNamespace>
 	</PropertyGroup>
 
 	<ItemGroup>

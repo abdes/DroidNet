@@ -2,8 +2,19 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <RootNamespace>$(RootNamespace).Routing.WinUI.Tests</RootNamespace>
-  </PropertyGroup>
+    <PropertyGroup>
+        <RootNamespace>$(RootNamespace).Routing.WinUI.Tests</RootNamespace>
+        <AssemblyName>DroidNet.Routing.WinUI.UI.Tests</AssemblyName>
+    </PropertyGroup>
+
+    <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Routing.WinUI.csproj" />
+    </ItemGroup>
 
 </Project>
