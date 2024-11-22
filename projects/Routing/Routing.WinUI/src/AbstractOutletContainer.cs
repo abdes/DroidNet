@@ -18,7 +18,7 @@ namespace DroidNet.Routing.WinUI;
 /// <example>
 /// <strong>Example Implementation</strong>
 /// <para>
-/// Here's a workspace view model with primary content, sidebar, and flyout outlets:
+/// Here's a workspace view model with primary content, sidebar, and fly-out outlets:
 /// </para>
 /// <code><![CDATA[
 /// public class WorkspaceViewModel : AbstractOutletContainer

@@ -132,5 +132,5 @@ public interface IOutletContainer
     /// <exception cref="ArgumentException">
     /// Thrown when the specified outlet name is not recognized by this container.
     /// </exception>
-    void LoadContent(object viewModel, OutletName? outletName = null);
+    public void LoadContent(object viewModel, OutletName? outletName = null);
 }

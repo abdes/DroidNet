@@ -27,7 +27,7 @@ namespace DroidNet.Routing.WinUI;
 /// <para>
 /// Window instantiation behavior is controlled through the dependency container's registration. When
 /// registering window types, you can specify them as singletons to reuse the same window instance
-/// across multiple navigations, or as transient to create new windows for each navigation. This
+/// across multiple navigation requests, or as transient to create new windows for each navigation. This
 /// flexibility allows you to implement both single-window and multi-window navigation patterns.
 /// </para>
 /// <para>
