@@ -10,6 +10,6 @@
     mc:Ignorable="d">
 
     <Grid>
-        <router:RouterOutlet ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
+        <router:RouterOutlet Outlet="" ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
     </Grid>
 </UserControl>
