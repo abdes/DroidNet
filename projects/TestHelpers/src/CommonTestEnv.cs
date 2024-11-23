@@ -8,6 +8,8 @@ using Destructurama;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
 
@@ -27,6 +29,22 @@ public class CommonTestEnv : VerifyBase
     public static IContainer TestContainer { get; set; } = new Container();
 
     /// <summary>
+    /// Gets the logging level switch for the Seriog logger, which can be used to change the logging level at runtime.
+    /// </summary>
+    /// <example>
+    /// <code><![CDATA[
+    /// public void AddProject(ProjectState project)
+    /// {
+    ///     CommonTestEnv.LoggingLevelSwitch.MinimumLevel = LogEventLevel.Debug;
+    ///     _ = context.Projects.Add(project);
+    ///     _ = context.SaveChanges();
+    ///     CommonTestEnv.LoggingLevelSwitch.MinimumLevel = LogEventLevel.Warning;
+    /// }
+    /// ]]></code>
+    /// </example>
+    public static LoggingLevelSwitch LoggingLevelSwitch { get; } = new(LogEventLevel.Warning);
+
+    /// <summary>
     /// Verifies that the conventions are satisfied.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -41,7 +59,7 @@ public class CommonTestEnv : VerifyBase
     {
         Log.Logger = new LoggerConfiguration()
             .Destructure.UsingAttributes()
-            .MinimumLevel.Information()
+            .MinimumLevel.ControlledBy(LoggingLevelSwitch)
             .Enrich.FromLogContext()
             .WriteTo.Debug(
                 new ExpressionTemplate(
