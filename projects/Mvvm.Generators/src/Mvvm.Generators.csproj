@@ -10,7 +10,7 @@ https://github.com/amis92/csharp-source-generators
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.0</TargetFramework>
+        <TargetFrameworks>netstandard2.0</TargetFrameworks>
 
         <!--
         Must override this to false from the Directory.Build.props or Nuget

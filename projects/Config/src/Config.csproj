@@ -3,6 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net8.0;net8.0-windows10.0.22621.0</TargetFrameworks>
+
         <Title>DroidNet.Config</Title>
         <Description>Simplifies application configuration, in `development` and `real` environments, with persistence to Json files, on top of Microsoft.Extensions.Configuration and its recommended Options Pattern.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
