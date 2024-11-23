@@ -4,7 +4,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.0</TargetFramework>
+        <TargetFrameworks>netstandard2.0</TargetFrameworks>
 
         <Title>Attributes for DroidNet.Mvvm generators</Title>
         <Description>Contains the implementation of the annotation Attributes for DroidNet.Mvvm generators, used for View to ViewModel wiring.</Description>
