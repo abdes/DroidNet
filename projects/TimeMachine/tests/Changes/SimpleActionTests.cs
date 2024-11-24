@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests.Changes;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests.Changes;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -41,6 +40,6 @@ public class SimpleActionTests
         var simpleAction = new SimpleAction(mockAction.Object) { Key = key };
 
         // Assert
-        simpleAction.Key.Should().Be(key);
+        _ = simpleAction.Key.Should().Be(key);
     }
 }

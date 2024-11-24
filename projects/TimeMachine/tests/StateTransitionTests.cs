@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -25,7 +24,7 @@ public class StateTransitionTests
         Action act = () => _ = new StateTransition<object>(target!, newState);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>();
+        _ = act.Should().Throw<InvalidOperationException>();
     }
 
     [TestMethod]
@@ -33,14 +32,14 @@ public class StateTransitionTests
     {
         // Arrange
         var mockTarget = new Mock<IStateful>();
-        mockTarget.Setup(t => t.State).Returns((object?)null);
+        _ = mockTarget.Setup(t => t.State).Returns((object?)null);
         var newState = new object();
 
         // Act
         Action act = () => _ = new StateTransition<object>(mockTarget.Object, newState);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>();
+        _ = act.Should().Throw<InvalidOperationException>();
     }
 
     [TestMethod]
@@ -53,7 +52,7 @@ public class StateTransitionTests
         Action act = () => _ = new StateTransition<object>(new object(), newState);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>();
+        _ = act.Should().Throw<InvalidOperationException>();
     }
 
     [TestMethod]
@@ -61,14 +60,14 @@ public class StateTransitionTests
     {
         // Arrange
         var mockTarget = new Mock<IStateful>();
-        mockTarget.Setup(t => t.State).Returns(new object());
+        _ = mockTarget.Setup(t => t.State).Returns(new object());
         object? newState = null;
 
         // Act
         Action act = () => _ = new StateTransition<object>(mockTarget.Object, newState!);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>();
+        _ = act.Should().Throw<InvalidOperationException>();
     }
 
     [TestMethod]
@@ -78,7 +77,7 @@ public class StateTransitionTests
         var previousState = new object();
         var newState = new object();
         var mockTarget = new Mock<IStateful>();
-        mockTarget.SetupProperty(t => t.State, previousState);
+        _ = mockTarget.SetupProperty(t => t.State, previousState);
 
         using (new StateTransition<object>(mockTarget.Object, newState))
         {
@@ -86,7 +85,7 @@ public class StateTransitionTests
         }
 
         // Assert
-        mockTarget.Object.State.Should().Be(previousState);
+        _ = mockTarget.Object.State.Should().Be(previousState);
     }
 
     [TestMethod]
@@ -96,7 +95,7 @@ public class StateTransitionTests
         var previousState = new object();
         var newState = new object();
         var mockTarget = new Mock<IStateful>();
-        mockTarget.SetupProperty(t => t.State, previousState);
+        _ = mockTarget.SetupProperty(t => t.State, previousState);
 
         // Act
         var act = () =>
@@ -107,6 +106,6 @@ public class StateTransitionTests
         };
 
         // Assert
-        act.Should().NotThrow();
+        _ = act.Should().NotThrow();
     }
 }

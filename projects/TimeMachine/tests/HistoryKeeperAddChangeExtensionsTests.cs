@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

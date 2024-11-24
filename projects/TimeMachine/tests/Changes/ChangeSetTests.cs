@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests.Changes;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests.Changes;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -44,7 +43,7 @@ public class ChangeSetTests
         changeSet.Add(changeMock.Object);
 
         // Assert
-        changeSet.Changes.Should().Contain(changeMock.Object);
+        _ = changeSet.Changes.Should().Contain(changeMock.Object);
     }
 
     [TestMethod]
@@ -61,6 +60,6 @@ public class ChangeSetTests
         var changes = changeSet.Changes;
 
         // Assert
-        changes.Should().Contain(new[] { changeMock1.Object, changeMock2.Object });
+        _ = changes.Should().Contain([changeMock1.Object, changeMock2.Object]);
     }
 }

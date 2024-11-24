@@ -2,29 +2,56 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine;
-
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
 
-[SuppressMessage(
-    "ReSharper",
-    "ClassWithVirtualMembersNeverInherited.Global",
-    Justification = "needed for mocking in unit tests")]
+namespace DroidNet.TimeMachine;
+
+/// <summary>
+/// Manages the history of changes for undo/redo operations.
+/// </summary>
+/// <remarks>
+/// The <see cref="HistoryKeeper"/> class tracks changes and manages undo/redo operations for a specific root object.
+/// It supports nested transactions and change sets, allowing for complex scenarios where multiple changes need to be
+/// grouped and managed as a single unit.
+/// </remarks>
+/// <example>
+/// <para><strong>Example Usage:</strong></para>
+/// <code><![CDATA[
+/// var rootObject = new object();
+/// var historyKeeper = new HistoryKeeper(rootObject);
+///
+/// using (var transaction = historyKeeper.BeginTransaction("exampleTransaction"))
+/// {
+///     var change = new CustomChange { Key = "change1" };
+///     transaction.AddChange(change);
+///     transaction.Commit();
+/// }
+///
+/// historyKeeper.Undo();
+/// historyKeeper.Redo();
+/// ]]></code>
+/// </example>
+[SuppressMessage("ReSharper", "ClassWithVirtualMembersNeverInherited.Global", Justification = "needed for mocking in unit tests")]
 public class HistoryKeeper : ITransactionManager
 {
-    private readonly ObservableCollection<IChange> undoStack = [];
     private readonly ObservableCollection<IChange> redoStack = [];
-    private readonly Stack<ITransaction> transactions = new();
-
-    private readonly ITransactionFactory? transactionFactory;
     private readonly WeakReference root;
 
-    private int isCollectingChangesCounter;
+    private readonly ITransactionFactory? transactionFactory;
+    private readonly Stack<ITransaction> transactions = new();
+    private readonly ObservableCollection<IChange> undoStack = [];
     private ChangeSet? currentChangeSet;
 
+    private int isCollectingChangesCounter;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HistoryKeeper"/> class with the specified root object and optional transaction factory.
+    /// </summary>
+    /// <param name="root">The root object for which changes are tracked.</param>
+    /// <param name="transactionFactory">An optional factory for creating transactions.</param>
     public HistoryKeeper(object root, ITransactionFactory? transactionFactory = null)
     {
         this.transactionFactory = transactionFactory;
@@ -55,12 +82,12 @@ public class HistoryKeeper : ITransactionManager
         Redoing = 2,
 
         /// <summary>
-        /// Batched changes within a transcation are being committed.
+        /// Batched changes within a transaction are being committed.
         /// </summary>
         Committing = 3,
 
         /// <summary>
-        /// Batched changes within a transcation are being rolled back.
+        /// Batched changes within a transaction are being rolled back.
         /// </summary>
         RollingBack = 4,
     }
@@ -71,12 +98,18 @@ public class HistoryKeeper : ITransactionManager
     public ReadOnlyObservableCollection<IChange> UndoStack { get; }
 
     /// <summary>
-    /// Gets a collection of redoable changes for the current Root.
+    /// Gets a collection of redo-able changes for the current Root.
     /// </summary>
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether there are changes that can be undone.
+    /// </summary>
     public bool CanUndo => this.undoStack.Count > 0;
 
+    /// <summary>
+    /// Gets a value indicating whether there are changes that can be redone.
+    /// </summary>
     public bool CanRedo => this.redoStack.Count != 0;
 
     /// <summary>
@@ -89,15 +122,93 @@ public class HistoryKeeper : ITransactionManager
     /// </remarks>
     public object? Root => this.root is { IsAlive: true } ? this.root.Target : null;
 
-    [SuppressMessage(
-        "ReSharper",
-        "MemberCanBePrivate.Global",
-        Justification = "Must be accessible to the StateTransition class")]
+    /// <summary>
+    /// Gets or sets the current state of the <see cref="HistoryKeeper"/>.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="State"/> property represents the current state of the <see cref="HistoryKeeper"/>. It is used to
+    /// manage the state transitions during undo, redo, commit, and rollback operations.
+    /// </remarks>
+    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "Must be accessible to the StateTransition class")]
     internal States State { get; set; } = States.Idle;
 
+    /// <inheritdoc />
+    public ITransaction BeginTransaction(object key)
+    {
+        var transaction = this.transactionFactory is null
+            ? new Transaction(this, key)
+            : this.transactionFactory.CreateTransaction(key);
+
+        this.transactions.Push(transaction);
+
+        return transaction;
+    }
+
+    /// <inheritdoc />
+    public void CommitTransaction(ITransaction transaction)
+    {
+        // Only switch the state to Committing if we are not doing another task (e.g. undoing).
+        var currentState = this.State == States.Idle ? States.Committing : this.State;
+
+        using (new StateTransition<States>(this, currentState))
+        {
+            while (this.transactions.TryPop(out var toCommit))
+            {
+                try
+                {
+                    if (toCommit.Equals(transaction))
+                    {
+                        if (this.State == States.Undoing)
+                        {
+                            this.PushToRedoStack(transaction);
+                        }
+                        else
+                        {
+                            this.PushToUndoStack(transaction);
+                        }
+
+                        break;
+                    }
+
+                    if (this.transactions.Count != 0)
+                    {
+                        this.transactions.Peek().AddChange(toCommit);
+                    }
+
+                    toCommit = null;
+                }
+                finally
+                {
+                    toCommit?.Dispose();
+                }
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void RollbackTransaction(ITransaction transaction)
+    {
+        // Only switch the state to RollingBack if we are not doing another task (e.g. undoing).
+        var currentState = this.State == States.Idle ? States.RollingBack : this.State;
+
+        using (new StateTransition<States>(this, currentState))
+        {
+#pragma warning disable CA2000 // toRollback.Rollback() is already a Dispose method
+            while (this.transactions.TryPop(out var toRollback) && toRollback != transaction)
+#pragma warning restore CA2000
+            {
+                toRollback.Rollback();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a change to the undo stack or the current change set.
+    /// </summary>
+    /// <param name="change">The change to add.</param>
     public virtual void AddChange(IChange change)
     {
-        // A new change, unrelated to the Undo/Redo stack unqinding should reset the Redo stack
+        // A new change, unrelated to the Undo/Redo stack unwinding should reset the Redo stack
         if (this.State is not (States.Undoing or States.Redoing))
         {
             this.ClearRedoStack();
@@ -164,6 +275,10 @@ public class HistoryKeeper : ITransactionManager
         }
     }
 
+    /// <summary>
+    /// Clears the undo and redo stacks.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if the <see cref="HistoryKeeper"/> is not in the <see cref="States.Idle"/> state.</exception>
     public void Clear()
     {
         if (this.State != States.Idle)
@@ -172,7 +287,6 @@ public class HistoryKeeper : ITransactionManager
         }
 
         this.ClearUndoStack();
-
         this.ClearRedoStack();
     }
 
@@ -196,7 +310,7 @@ public class HistoryKeeper : ITransactionManager
             return;
         }
 
-        this.currentChangeSet = new ChangeSet() { Key = key };
+        this.currentChangeSet = new ChangeSet { Key = key };
 
         // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (this.State)
@@ -215,6 +329,9 @@ public class HistoryKeeper : ITransactionManager
         }
     }
 
+    /// <summary>
+    /// Ends the current change set.
+    /// </summary>
     public void EndChangeSet()
     {
         this.isCollectingChangesCounter--;
@@ -227,73 +344,6 @@ public class HistoryKeeper : ITransactionManager
         if (this.isCollectingChangesCounter == 0)
         {
             this.currentChangeSet = null;
-        }
-    }
-
-    public ITransaction BeginTransaction(object key)
-    {
-        var transaction = this.transactionFactory is null
-            ? new Transaction(this, key)
-            : this.transactionFactory.CreateTransaction(key);
-
-        this.transactions.Push(transaction);
-
-        return transaction;
-    }
-
-    public void CommitTransaction(ITransaction transaction)
-    {
-        // Only switch the state to Committing if we are not doing another task (e.g. undoing).
-        var currentState = this.State == States.Idle ? States.Committing : this.State;
-
-        using (new StateTransition<States>(this, currentState))
-        {
-            while (this.transactions.TryPop(out var toCommit))
-            {
-                try
-                {
-                    if (toCommit.Equals(transaction))
-                    {
-                        if (this.State == States.Undoing)
-                        {
-                            this.PushToRedoStack(transaction);
-                        }
-                        else
-                        {
-                            this.PushToUndoStack(transaction);
-                        }
-
-                        break;
-                    }
-
-                    if (this.transactions.Count != 0)
-                    {
-                        this.transactions.Peek().AddChange(toCommit);
-                    }
-
-                    toCommit = null;
-                }
-                finally
-                {
-                    toCommit?.Dispose();
-                }
-            }
-        }
-    }
-
-    public void RollbackTransaction(ITransaction transaction)
-    {
-        // Only switch the state to RollingBack if we are not doing another task (e.g. undoing).
-        var currentState = this.State == States.Idle ? States.RollingBack : this.State;
-
-        using (new StateTransition<States>(this, currentState))
-        {
-#pragma warning disable CA2000 // toRollback.Rollback() is already a Dispose method
-            while (this.transactions.TryPop(out var toRollback) && toRollback != transaction)
-#pragma warning restore CA2000
-            {
-                toRollback.Rollback();
-            }
         }
     }
 
