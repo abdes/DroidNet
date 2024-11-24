@@ -2,31 +2,49 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data;
-
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+
+/* Unmerged change from project 'Oxygen.Editor.Data (net8.0-windows10.0.22621.0)'
+Added:
+using Oxygen;
+using Oxygen.Editor;
+using Oxygen.Editor.Data;
+using Oxygen.Editor.Data;
+using Oxygen.Editor.Data.Models;
+*/
 using Oxygen.Editor.Data.Models;
 
-#nullable disable
+namespace Oxygen.Editor.Data;
 
+#nullable disable // These DbSet properties will be set by EF Core
+
+/* Add example usage of the PersistentState class here */
+
+/// <summary>
+/// Represents the database context for the application.
+/// </summary>
+/// <param name="options">The options to be used by the DbContext.</param>
+[SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global", Justification = "properties are set by EF Core")]
 public class PersistentState(DbContextOptions<PersistentState> options) : DbContext(options)
 {
-    public DbSet<ProjectBrowserState> ProjectBrowserStates { get; set; }
+    /// <summary>
+    /// Gets or sets the DbSet for template usage records.
+    /// </summary>
+    public DbSet<TemplateUsage> TemplatesUsageRecords { get; set; }
 
-    public ProjectBrowserState ProjectBrowserState => this.ProjectBrowserStates!.FirstOrDefault()!;
+    /// <summary>
+    /// Gets or sets the DbSet for project usage records.
+    /// </summary>
+    public DbSet<ProjectUsage> ProjectUsageRecords { get; set; }
 
-    public DbSet<RecentlyUsedProject> RecentlyUsedProjects { get; set; }
-
-    public DbSet<RecentlyUsedTemplate> RecentlyUsedTemplates { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.Entity<ProjectBrowserState>()
-        .ToTable(t => t.HasCheckConstraint("CK_Single_Row", "[Id] = 1"))
-        .HasData(
-            new
-            {
-                Id = 1,
-                LastSaveLocation = string.Empty,
-                RecentProjects = new List<RecentlyUsedProject>(),
-                RecentTemplates = new List<RecentlyUsedTemplate>(),
-            });
+    /// <summary>
+    /// Configures the model for the context.
+    /// </summary>
+    /// <param name="modelBuilder">The builder being used to construct the model for the context.</param>
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        _ = modelBuilder.ApplyConfiguration(new TemplateUsageConfiguration());
+        _ = modelBuilder.ApplyConfiguration(new ProjectUsageConfiguration());
+    }
 }

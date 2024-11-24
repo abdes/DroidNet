@@ -2,50 +2,116 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data;
-
 using System.Diagnostics.CodeAnalysis;
+using DryIoc;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Oxygen.Editor.Data.Models;
 
+namespace Oxygen.Editor.Data.Tests;
+
+/// <summary>
+/// Contains unit tests for verifying the database schema.
+/// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory(nameof(DatabaseSchemaTests))]
-public class DatabaseSchemaTests
+[TestCategory("Database Schema")]
+public partial class DatabaseSchemaTests : DatabaseTests
 {
-    private readonly IServiceProvider serviceProvider;
-
     public DatabaseSchemaTests()
     {
-        var builder = Host.CreateDefaultBuilder();
-        _ = builder.ConfigureServices(sc => sc.AddSqlite<PersistentState>("Data Source=memory"));
-        var host = builder.Build();
-
-        this.serviceProvider = host.Services;
-
-        using var scope = this.serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
-        db.Database.Migrate();
+        this.Container.Register<TestProjectService>(Reuse.Scoped);
+        this.Container.Register<TestTemplateService>(Reuse.Scoped);
     }
 
+    /// <summary>
+    /// Verifies that the database has a table called "ProjectsUsage".
+    /// </summary>
     [TestMethod]
-    public void HasRecentlyUsedTemplatesCollection()
+    public void DatabaseHasProjectsTable()
     {
-        using var scope = this.serviceProvider.CreateScope();
-        var state = scope.ServiceProvider.GetRequiredService<PersistentState>();
+        using var scope = this.Container.OpenScope();
+        var db = scope.Resolve<PersistentState>();
 
-        _ = state.RecentlyUsedTemplates.Should().NotBeNull();
+        using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name='{ProjectUsage.TableName}';";
+        var tableName = command.ExecuteScalar() as string;
+
+        _ = tableName.Should().Be(ProjectUsage.TableName);
     }
 
+    /// <summary>
+    /// Verifies that the database has a table called "TemplatesUsageRecords".
+    /// </summary>
     [TestMethod]
-    public void HasRecentlyUsedProjectsCollection()
+    public void DatabaseHasTemplatesTable()
     {
-        using var scope = this.serviceProvider.CreateScope();
-        var state = scope.ServiceProvider.GetRequiredService<PersistentState>();
+        using var scope = this.Container.OpenScope();
+        var db = scope.Resolve<PersistentState>();
 
-        _ = state.RecentlyUsedProjects.Should().NotBeNull();
+        using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name='{TemplateUsage.TableName}';";
+        var tableName = command.ExecuteScalar() as string;
+
+        _ = tableName.Should().Be(TemplateUsage.TableName);
+    }
+
+    /// <summary>
+    /// Verifies that the TestProjectService can be resolved and used.
+    /// </summary>
+    [TestMethod]
+    public void CanResolveProjectService()
+    {
+        using var scope = this.Container.OpenScope();
+        var projectService = scope.Resolve<TestProjectService>();
+
+        _ = projectService.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Verifies that the TestProjectService can add and retrieve projects.
+    /// </summary>
+    [TestMethod]
+    public void ProjectServiceCanAddAndRetrieveProjects()
+    {
+        using var scope = this.Container.OpenScope();
+        var projectService = scope.Resolve<TestProjectService>();
+
+        var project = new ProjectUsage
+        {
+            Location = "Test Location",
+            Name = "Test Project",
+            LastUsedOn = DateTime.UtcNow,
+            LastOpenedScene = "Test Scene",
+            ContentBrowserState = "Test State",
+            TimesOpened = 1,
+        };
+
+        projectService.AddProject(project);
+
+        var projects = projectService.GetAllProjects();
+        _ = projects.Should().ContainSingle(p => p.Name == "Test Project");
+    }
+
+    /// <summary>
+    /// Verifies that the TestTemplateService can add and retrieve templates.
+    /// </summary>
+    [TestMethod]
+    public void TemplateServiceCanAddAndRetrieveTemplates()
+    {
+        using var scope = this.Container.OpenScope();
+        var templateService = scope.Resolve<TestTemplateService>();
+
+        var template = new TemplateUsage
+        {
+            Location = "Test Location",
+            LastUsedOn = DateTime.UtcNow,
+            TimesUsed = 1,
+        };
+
+        templateService.AddTemplate(template);
+
+        var templates = templateService.GetAllTemplates();
+        _ = templates.Should().ContainSingle(t => t.Location == "Test Location");
     }
 }
