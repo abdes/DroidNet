@@ -2,15 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.Tests.WinUI;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Hosting.WinUI;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Hosting.Tests.WinUI;
 
 /// <summary>
 /// Uint tests for the <see cref="WinUiHostingExtensions" /> class.
@@ -22,9 +21,11 @@ public class WinUiHostingExtensionsTests
     private readonly IHost defaultHost;
 
     public WinUiHostingExtensionsTests()
-        => this.defaultHost = Host.CreateDefaultBuilder()
-            .ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true))
-            .Build();
+    {
+        this.defaultHost = Host.CreateDefaultBuilder()
+                .ConfigureServices(sc => sc.ConfigureWinUI<MyApp>(isLifetimeLinked: true))
+                .Build();
+    }
 
     /// <summary>
     /// Tests that the <c>ConfigureWinUI()</c> extension prefers to use the
@@ -108,4 +109,5 @@ public class WinUiHostingExtensionsTests
 /// A dummy <see cref="Application" /> for testing.
 /// </summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "class only used in this test suite and needs to be public")]
 public sealed partial class MyApp : Application;

@@ -2,12 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-#if !DISABLE_XAML_GENERATED_MAIN
-#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
-#endif
-
-namespace DroidNet.Hosting.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -18,6 +12,12 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Events;
 using Serilog.Templates;
+
+#if !DISABLE_XAML_GENERATED_MAIN
+#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
+#endif
+
+namespace DroidNet.Hosting.Demo;
 
 /// <summary>
 /// The Main entry of the application.

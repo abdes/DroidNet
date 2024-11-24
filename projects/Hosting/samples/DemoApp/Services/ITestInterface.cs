@@ -4,7 +4,13 @@
 
 namespace DroidNet.Hosting.Demo.Services;
 
+/// <summary>
+/// Represents a test interface with a message property.
+/// </summary>
 internal interface ITestInterface
 {
+    /// <summary>
+    /// Gets the message.
+    /// </summary>
     internal string Message { get; }
 }

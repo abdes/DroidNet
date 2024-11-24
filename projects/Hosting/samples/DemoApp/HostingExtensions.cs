@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.Demo;
-
 using DroidNet.Hosting.Demo.Services;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
@@ -13,8 +11,18 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Extensions.Logging;
 
-public static class HostingExtensions
+namespace DroidNet.Hosting.Demo;
+
+/// <summary>
+/// Provides extension methods for configuring hosting services.
+/// </summary>
+internal static class HostingExtensions
 {
+    /// <summary>
+    /// Configures logging for the host builder using Serilog.
+    /// </summary>
+    /// <param name="builder">The host builder to configure.</param>
+    /// <returns>The configured host builder.</returns>
     public static IHostBuilder ConfigureLogging(this IHostBuilder builder) =>
         builder.ConfigureContainer<DryIocServiceProvider>(
             (_, serviceProvider) =>
@@ -36,6 +44,11 @@ public static class HostingExtensions
                     setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
             });
 
+    /// <summary>
+    /// Configures demo services for the host builder.
+    /// </summary>
+    /// <param name="builder">The host builder to configure.</param>
+    /// <returns>The configured host builder.</returns>
     public static IHostBuilder ConfigureDemoServices(this IHostBuilder builder) =>
         builder.ConfigureServices(
             (_, services) =>
