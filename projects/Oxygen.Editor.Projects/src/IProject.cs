@@ -4,11 +4,28 @@
 
 namespace Oxygen.Editor.Projects;
 
-using System.Collections.Generic;
-
+/// <summary>
+/// Represents a project within the Oxygen Editor.
+/// </summary>
+/// <remarks>
+/// The <see cref="IProject"/> interface defines the structure of a project within the Oxygen Editor. It includes properties
+/// for accessing project information and the scenes associated with the project.
+/// </remarks>
 public interface IProject
 {
-    IProjectInfo ProjectInfo { get; }
+    /// <summary>
+    /// Gets the project information.
+    /// </summary>
+    /// <value>
+    /// An object implementing the <see cref="IProjectInfo"/> interface, which contains metadata about the project.
+    /// </value>
+    public IProjectInfo ProjectInfo { get; }
 
-    IList<Scene> Scenes { get; }
+    /// <summary>
+    /// Gets the list of scenes associated with the project.
+    /// </summary>
+    /// <value>
+    /// A list of <see cref="Scene"/> objects representing the scenes within the project.
+    /// </value>
+    public IList<Scene> Scenes { get; }
 }

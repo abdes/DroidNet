@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Projects;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects.Utils;
+
+namespace Oxygen.Editor.Projects;
 
 /// <summary>
 /// Represents a component of a game entity, such as transform, geometry, material, etc.
@@ -19,8 +19,11 @@ using Oxygen.Editor.Projects.Utils;
 [JsonDerivedType(typeof(GameComponent), typeDiscriminator: "Base")]
 public partial class GameComponent(GameEntity entity) : GameObject
 {
-    /// <summary>Default template for the JsonSerializer options.</summary>
-    public static readonly JsonSerializerOptions JsonOptions = new()
+    /// <summary>
+    /// JsonSerializer options for <see cref="GameComponent"/> object, internally visible to be
+    /// available when a <see cref="GameEntity"/> is manuall serializing its components.
+    /// </summary>
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         AllowTrailingCommas = true,
         WriteIndented = true,
@@ -28,6 +31,9 @@ public partial class GameComponent(GameEntity entity) : GameObject
         Converters = { new Vector3JsonConverter() },
     };
 
+    /// <summary>
+    /// Gets the owner <see cref="GameEntity"/> of this component.
+    /// </summary>
     [JsonIgnore]
     public GameEntity Entity { get; } = entity;
 
@@ -35,19 +41,28 @@ public partial class GameComponent(GameEntity entity) : GameObject
     /// Deserializes a JSON string into a <see cref="GameComponent" /> object.
     /// </summary>
     /// <param name="json">The JSON string to deserialize.</param>
-    /// <returns>The deserialized <see cref="GameEntity" /> object.</returns>
-    public static GameComponent? FromJson(string json)
-        => JsonSerializer.Deserialize<GameComponent>(json, JsonOptions);
+    /// <returns>The deserialized <see cref="GameComponent" /> object.</returns>
+    /// <remarks>
+    /// This method uses the default <see cref="JsonSerializerOptions"/> defined in <see cref="JsonOptions"/>.
+    /// </remarks>
+    public static GameComponent? FromJson(string json) => JsonSerializer.Deserialize<GameComponent>(json, JsonOptions);
 
     /// <summary>
     /// Serializes a <see cref="GameComponent" /> object into a JSON string.
     /// </summary>
     /// <param name="gameComponent">The <see cref="GameComponent" /> object to serialize.</param>
-    /// <returns>The JSON string representation of the <see cref="GameEntity" /> object.</returns>
+    /// <returns>The JSON string representation of the <see cref="GameComponent" /> object.</returns>
+    /// <remarks>
+    /// This method uses the default <see cref="JsonSerializerOptions"/> defined in <see cref="JsonOptions"/>.
+    /// </remarks>
     public static string ToJson(GameComponent gameComponent) => JsonSerializer.Serialize(gameComponent, JsonOptions);
 
+    /// <summary>
+    /// A custom JSON converter for <see cref="Vector3"/>.
+    /// </summary>
     private sealed class Vector3JsonConverter : JsonConverter<Vector3>
     {
+        /// <inheritdoc/>
         public override Vector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (reader.TokenType != JsonTokenType.StartObject)
@@ -67,7 +82,7 @@ public partial class GameComponent(GameEntity entity) : GameObject
                 if (reader.TokenType == JsonTokenType.PropertyName)
                 {
                     var propertyName = reader.GetString();
-                    reader.Read();
+                    _ = reader.Read();
                     switch (propertyName)
                     {
                         case "x":
@@ -79,9 +94,8 @@ public partial class GameComponent(GameEntity entity) : GameObject
                         case "z":
                             z = reader.GetSingle();
                             break;
-
                         default:
-                            // Ignore
+                            _ = 0; // Ignore unknown properties
                             break;
                     }
                 }
@@ -94,6 +108,7 @@ public partial class GameComponent(GameEntity entity) : GameObject
             return default;
         }
 
+        /// <inheritdoc/>
         public override void Write(Utf8JsonWriter writer, Vector3 value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
@@ -104,8 +119,16 @@ public partial class GameComponent(GameEntity entity) : GameObject
         }
     }
 
+    /// <summary>
+    /// Provides helper methods for throwing JSON-related exceptions during serialization and deserialization.
+    /// </summary>
     private abstract class Fail : JsonThrowHelper<GameEntity>
     {
+        /// <summary>
+        /// Throws a <see cref="JsonException"/> indicating that a malformed object was encountered.
+        /// </summary>
+        /// <param name="objectType">The type of the malformed object.</param>
+        /// <exception cref="JsonException">Always thrown to indicate the malformed object.</exception>
         [DoesNotReturn]
         public static void MalformedObject(string objectType)
             => throw new JsonException(FormatErrorMessage($"encountered a malformed object of type: {objectType}"));

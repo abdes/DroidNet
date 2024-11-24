@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Projects.Tests;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Oxygen.Editor.Projects.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -18,6 +17,9 @@ public class GameEntityTests
 {
     private readonly JsonSerializerOptions jsonOptions = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GameEntityTests"/> class.
+    /// </summary>
     public GameEntityTests()
     {
         this.jsonOptions.WriteIndented = false;
@@ -38,11 +40,11 @@ public class GameEntityTests
         var json = JsonSerializer.Serialize(gameEntity, this.jsonOptions);
 
         // Assert
-        json.Should().Contain("\"Name\":\"Entity Name\"");
-        json.Should().Contain("\"Components\"");
-        json.Should().Contain("\"Name\":\"Component 1\"");
-        json.Should().Contain("\"Name\":\"Component 2\"");
-        json.Should().NotContain("\"Scene\"");
+        _ = json.Should().Contain("\"Name\":\"Entity Name\"");
+        _ = json.Should().Contain("\"Components\"");
+        _ = json.Should().Contain("\"Name\":\"Component 1\"");
+        _ = json.Should().Contain("\"Name\":\"Component 2\"");
+        _ = json.Should().NotContain("\"Scene\"");
     }
 
     [TestMethod]
@@ -68,13 +70,13 @@ public class GameEntityTests
         var gameEntity = JsonSerializer.Deserialize<GameEntity>(json, this.jsonOptions);
 
         // Assert
-        gameEntity.Should().NotBeNull();
+        _ = gameEntity.Should().NotBeNull();
         Debug.Assert(gameEntity != null, nameof(gameEntity) + " != null");
-        gameEntity.Name.Should().Be("Entity Name");
-        gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
-        gameEntity.Components.Should().HaveCount(2);
-        gameEntity.Components[0].Name.Should().Be("Component 1");
-        gameEntity.Components[1].Name.Should().Be("Component 2");
+        _ = gameEntity.Name.Should().Be("Entity Name");
+        _ = gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
+        _ = gameEntity.Components.Should().HaveCount(2);
+        _ = gameEntity.Components[0].Name.Should().Be("Component 1");
+        _ = gameEntity.Components[1].Name.Should().Be("Component 2");
     }
 
     [TestMethod]
@@ -91,7 +93,7 @@ public class GameEntityTests
         var act = () => JsonSerializer.Deserialize<GameEntity>(json, this.jsonOptions);
 
         // Assert
-        act.Should().Throw<JsonException>().WithMessage($"*deserialization*required*{nameof(GameEntity.Name)}*");
+        _ = act.Should().Throw<JsonException>().WithMessage($"*deserialization*required*{nameof(GameEntity.Name)}*");
     }
 
     [TestMethod]
@@ -111,11 +113,11 @@ public class GameEntityTests
         var json = GameEntity.ToJson(gameEntity);
 
         // Assert
-        json.Should().Contain("\"Name\": \"Entity Name\"");
-        json.Should().Contain("\"Components\"");
-        json.Should().Contain("\"Name\": \"Component 1\"");
-        json.Should().Contain("\"Name\": \"Component 2\"");
-        json.Should().NotContain("\"Scene\"");
+        _ = json.Should().Contain("\"Name\": \"Entity Name\"");
+        _ = json.Should().Contain("\"Components\"");
+        _ = json.Should().Contain("\"Name\": \"Component 1\"");
+        _ = json.Should().Contain("\"Name\": \"Component 2\"");
+        _ = json.Should().NotContain("\"Scene\"");
     }
 
     [TestMethod]
@@ -151,15 +153,15 @@ public class GameEntityTests
         var gameEntity = GameEntity.FromJson(json, this.ExampleScene);
 
         // Assert
-        gameEntity.Should().NotBeNull();
+        _ = gameEntity.Should().NotBeNull();
         Debug.Assert(gameEntity != null, nameof(gameEntity) + " != null");
-        gameEntity.Name.Should().Be("Entity Name");
-        gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
-        gameEntity.Components.Should().HaveCount(2);
-        gameEntity.Components[0].Name.Should().Be("Component 1");
-        gameEntity.Components[0].Should().BeOfType<GameComponent>();
-        gameEntity.Components[1].Name.Should().Be("Component 2");
-        gameEntity.Components[1].Should().BeOfType<Transform>();
-        gameEntity.Components[1].As<Transform>().Position.Should().BeEquivalentTo(new Vector3(1, 2, 3));
+        _ = gameEntity.Name.Should().Be("Entity Name");
+        _ = gameEntity.Scene.Should().BeSameAs(this.ExampleScene);
+        _ = gameEntity.Components.Should().HaveCount(2);
+        _ = gameEntity.Components[0].Name.Should().Be("Component 1");
+        _ = gameEntity.Components[0].Should().BeOfType<GameComponent>();
+        _ = gameEntity.Components[1].Name.Should().Be("Component 2");
+        _ = gameEntity.Components[1].Should().BeOfType<Transform>();
+        _ = gameEntity.Components[1].As<Transform>().Position.Should().BeEquivalentTo(new Vector3(1, 2, 3));
     }
 }

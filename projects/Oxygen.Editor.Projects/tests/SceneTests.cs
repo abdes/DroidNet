@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Projects.Tests;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Oxygen.Editor.Projects.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -17,6 +16,9 @@ public class SceneTests
 {
     private readonly JsonSerializerOptions jsonOptions = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneTests"/> class.
+    /// </summary>
     public SceneTests()
     {
         this.jsonOptions.WriteIndented = false;
@@ -37,11 +39,11 @@ public class SceneTests
         var json = JsonSerializer.Serialize(scene, this.jsonOptions);
 
         // Assert
-        json.Should().Contain("\"Name\":\"Scene Name\"");
-        json.Should().Contain("\"Entities\"");
-        json.Should().Contain("\"Name\":\"Entity 1\"");
-        json.Should().Contain("\"Name\":\"Entity 2\"");
-        json.Should().NotContain("\"Project\"");
+        _ = json.Should().Contain("\"Name\":\"Scene Name\"");
+        _ = json.Should().Contain("\"Entities\"");
+        _ = json.Should().Contain("\"Name\":\"Entity 1\"");
+        _ = json.Should().Contain("\"Name\":\"Entity 2\"");
+        _ = json.Should().NotContain("\"Project\"");
     }
 
     [TestMethod]
@@ -68,13 +70,13 @@ public class SceneTests
         var scene = JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
 
         // Assert
-        scene.Should().NotBeNull();
+        _ = scene.Should().NotBeNull();
         Debug.Assert(scene is not null, "scene != null");
-        scene.Name.Should().Be("Scene Name");
-        scene.Project.Should().BeSameAs(this.ExampleProject);
-        scene.Entities.Should().HaveCount(2);
-        scene.Entities[0].Name.Should().Be("Entity 1");
-        scene.Entities[1].Name.Should().Be("Entity 2");
+        _ = scene.Name.Should().Be("Scene Name");
+        _ = scene.Project.Should().BeSameAs(this.ExampleProject);
+        _ = scene.Entities.Should().HaveCount(2);
+        _ = scene.Entities[0].Name.Should().Be("Entity 1");
+        _ = scene.Entities[1].Name.Should().Be("Entity 2");
     }
 
     [TestMethod]
@@ -94,11 +96,11 @@ public class SceneTests
         var scene = JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
 
         // Assert
-        scene.Should().NotBeNull();
+        _ = scene.Should().NotBeNull();
         Debug.Assert(scene is not null, "scene != null");
-        scene.Name.Should().Be("Scene Name");
-        scene.Project.Should().BeSameAs(this.ExampleProject);
-        scene.Entities.Should().BeEmpty();
+        _ = scene.Name.Should().Be("Scene Name");
+        _ = scene.Project.Should().BeSameAs(this.ExampleProject);
+        _ = scene.Entities.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -124,7 +126,7 @@ public class SceneTests
         var act = () => JsonSerializer.Deserialize<Scene>(json, this.jsonOptions);
 
         // Assert
-        act.Should().Throw<JsonException>().WithMessage($"*deserialization*required*{nameof(Scene.Name)}*");
+        _ = act.Should().Throw<JsonException>().WithMessage($"*deserialization*required*{nameof(Scene.Name)}*");
     }
 
     [TestMethod]
@@ -139,11 +141,11 @@ public class SceneTests
         var json = Scene.ToJson(scene);
 
         // Assert
-        json.Should().Contain("\"Name\": \"Scene Name\"");
-        json.Should().Contain("\"Entities\"");
-        json.Should().Contain("\"Name\": \"Entity 1\"");
-        json.Should().Contain("\"Name\": \"Entity 2\"");
-        json.Should().NotContain("\"Project\"");
+        _ = json.Should().Contain("\"Name\": \"Scene Name\"");
+        _ = json.Should().Contain("\"Entities\"");
+        _ = json.Should().Contain("\"Name\": \"Entity 1\"");
+        _ = json.Should().Contain("\"Name\": \"Entity 2\"");
+        _ = json.Should().NotContain("\"Project\"");
     }
 
     [TestMethod]
@@ -170,12 +172,12 @@ public class SceneTests
         var scene = Scene.FromJson(json, this.ExampleProject);
 
         // Assert
-        scene.Should().NotBeNull();
+        _ = scene.Should().NotBeNull();
         Debug.Assert(scene is not null, "scene != null");
-        scene.Name.Should().Be("Scene Name");
-        scene.Project.Should().BeSameAs(this.ExampleProject);
-        scene.Entities.Should().HaveCount(2);
-        scene.Entities[0].Name.Should().Be("Entity 1");
-        scene.Entities[1].Name.Should().Be("Entity 2");
+        _ = scene.Name.Should().Be("Scene Name");
+        _ = scene.Project.Should().BeSameAs(this.ExampleProject);
+        _ = scene.Entities.Should().HaveCount(2);
+        _ = scene.Entities[0].Name.Should().Be("Entity 1");
+        _ = scene.Entities[1].Name.Should().Be("Entity 2");
     }
 }

@@ -13,7 +13,7 @@
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
         <RootNamespace>Oxygen.Editor.Projects</RootNamespace>
-        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AssemblyName>Oxygen.Editor.Projects</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,20 +28,10 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="Config\Categories.config.json">
-            <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
         <None Include="..\README.md">
             <Pack>True</Pack>
             <PackagePath>\</PackagePath>
         </None>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PRIResource Update="en-US\Strings.resw" />
     </ItemGroup>
 
 </Project>
