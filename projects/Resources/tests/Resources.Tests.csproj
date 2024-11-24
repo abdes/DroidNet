@@ -4,20 +4,19 @@
     <!--https://learn.microsoft.com/en-us/windows/apps/winui/winui3/testing/#how-do-i-test-non-winui-functionality-in-my-app -->
 
     <PropertyGroup>
-        <RootNamespace>Oxygen.Editor.Projects.Tests</RootNamespace>
-        <AssemblyName>Oxygen.Editor.Projects.Tests</AssemblyName>
+        <RootNamespace>$(RootNamespace).Resources.Tests</RootNamespace>
+        <AssemblyName>$(RootNamespace).Resources.Tests</AssemblyName>
 
         <!-- Ensure that the test loads the WinAppSDK runtime -->
         <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Moq" />
-        <PackageReference Include="Testably.Abstractions.Testing" />
+        <ProjectReference Include="..\src\Resources.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\src\Oxygen.Editor.Projects.csproj" />
+        <PackageReference Include="Moq" />
     </ItemGroup>
 
 </Project>

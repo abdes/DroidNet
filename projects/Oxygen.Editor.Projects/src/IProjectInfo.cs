@@ -2,21 +2,58 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Projects;
-
 using System.Text.Json.Serialization;
 
+namespace Oxygen.Editor.Projects;
+
+/// <summary>
+/// Represents the metadata information about a project within the Oxygen Editor.
+/// </summary>
+/// <remarks>
+/// The <see cref="IProjectInfo"/> interface defines the structure for project metadata, including properties for the project's
+/// name, category, location, thumbnail, and last used date. This information is essential for managing and displaying project details within the editor.
+/// </remarks>
 public interface IProjectInfo : IEquatable<ProjectInfo?>
 {
-    string Name { get; set; }
+    /// <summary>
+    /// Gets or sets the name of the project.
+    /// </summary>
+    /// <value>
+    /// A <see cref="string"/> representing the name of the project.
+    /// </value>
+    public string Name { get; set; }
 
-    ProjectCategory Category { get; set; }
+    /// <summary>
+    /// Gets or sets the category of the project.
+    /// </summary>
+    /// <value>
+    /// A <see cref="Projects.Category"/> representing the category of the project.
+    /// </value>
+    public Category Category { get; set; }
 
+    /// <summary>
+    /// Gets or sets the location of the project.
+    /// </summary>
+    /// <value>
+    /// A <see cref="string"/> representing the location of the project. This property is ignored during JSON serialization.
+    /// </value>
     [JsonIgnore]
-    string? Location { get; set; }
+    public string? Location { get; set; }
 
-    string? Thumbnail { get; set; }
+    /// <summary>
+    /// Gets or sets the thumbnail image path of the project.
+    /// </summary>
+    /// <value>
+    /// A <see cref="string"/> representing the path to the thumbnail image of the project.
+    /// </value>
+    public string? Thumbnail { get; set; }
 
+    /// <summary>
+    /// Gets or sets the last used date of the project.
+    /// </summary>
+    /// <value>
+    /// A <see cref="DateTime"/> representing the last time the project was used. This property is ignored during JSON serialization.
+    /// </value>
     [JsonIgnore]
-    DateTime LastUsedOn { get; set; }
+    public DateTime LastUsedOn { get; set; }
 }

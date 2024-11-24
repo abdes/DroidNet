@@ -117,22 +117,22 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="PB_Category_Games" xml:space="preserve">
+  <data name="PROJ_Category_Games" xml:space="preserve">
     <value>Games</value>
   </data>
-  <data name="PB_Category_Games_Description" xml:space="preserve">
+  <data name="PROJ_Category_Games_Description" xml:space="preserve">
     <value>Start your adventure into game development with a blank project or with one of the existing templates for a specific type of game.</value>
   </data>
-  <data name="PB_Category_Misc" xml:space="preserve">
+  <data name="PROJ_Category_Misc" xml:space="preserve">
     <value>Misc</value>
   </data>
-  <data name="PB_Category_Misc_Description" xml:space="preserve">
+  <data name="PROJ_Category_Misc_Description" xml:space="preserve">
     <value>Miscellaneous project templates.</value>
   </data>
-  <data name="PB_Category_Visualization" xml:space="preserve">
+  <data name="PROJ_Category_Visualization" xml:space="preserve">
     <value>Visualization</value>
   </data>
-  <data name="PB_Category_Visualization_Description" xml:space="preserve">
+  <data name="PROJ_Category_Visualization_Description" xml:space="preserve">
     <value>Create stunning visualization for architectural models that you can import from a variety of sources.</value>
   </data>
 </root>

@@ -2,118 +2,206 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Projects;
-
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Oxygen.Editor.Projects.Config;
-using Oxygen.Editor.Projects.Storage;
-using Oxygen.Editor.Projects.Utils;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Storage;
 
+namespace Oxygen.Editor.Projects;
+
 /// <summary>
-/// Project management service.
+/// Provides methods for managing projects within the Oxygen Editor, including loading, saving, and managing
+/// project information and scenes for projects which storage is provided by the <see cref="IStorageProvider"/>
+/// specified by <paramref name="storage"/>.
 /// </summary>
-public partial class ProjectManagerService : IProjectManagerService
+/// <param name="storage">The <see cref="IStorageProvider" /> that can be used to access locally stored items.</param>
+/// <param name="loggerFactory">
+/// Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+/// process. If <see langword="null"/>, logging is disabled.
+/// </param>
+public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null) : IProjectManagerService
 {
-    private readonly ILogger<ProjectManagerService> logger;
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
 
-    private readonly IProjectSource projectSource;
-
-    public ProjectManagerService(
-        IProjectSource projectSource,
-        IOptions<ProjectsSettings> settings,
-        ILogger<ProjectManagerService> logger)
-    {
-        // Get rid of style warnings to convert to primary constructor.
-        // We need a logger field for logging source generators.
-        _ = 1;
-
-        this.logger = logger;
-
-        this.projectSource = projectSource;
-        this.CategoryJsonConverter = new CategoryJsonConverter(settings.Value);
-    }
-
-    public CategoryJsonConverter CategoryJsonConverter { get; }
-
+    /// <inheritdoc/>
     public IProject? CurrentProject { get; private set; }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "all failures reported as return value false")]
+    /// <inheritdoc/>
+    public IStorageProvider GetCurrentProjectStorageProvider() => storage;
+
+    /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as null return value")]
+    public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath)
+    {
+        try
+        {
+            var projectFolder = await storage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(false);
+            var projectFile = await projectFolder.GetDocumentAsync(Constants.ProjectFileName).ConfigureAwait(false);
+            var json = await projectFile.ReadAllTextAsync().ConfigureAwait(false);
+            var projectInfo = ProjectInfo.FromJson(json);
+            if (projectInfo != null)
+            {
+                projectInfo.Location = projectFolderPath;
+            }
+
+            return projectInfo;
+        }
+        catch (Exception ex)
+        {
+            this.CouldNotLoadProjectInfo(projectFolderPath, ex.Message);
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as false return value")]
+    public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo)
+    {
+        Debug.Assert(projectInfo.Location != null, "The project location must be valid!");
+        try
+        {
+            var json = ProjectInfo.ToJson(projectInfo);
+
+            var documentPath = storage.NormalizeRelativeTo(projectInfo.Location, Constants.ProjectFileName);
+            var document = await storage.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+
+            await document.WriteAllTextAsync(json).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception error)
+        {
+            this.CouldNotSaveProjectInfo(projectInfo.Location, error.Message);
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as false return value")]
     public async Task<bool> LoadProjectAsync(IProjectInfo projectInfo)
     {
-        this.CurrentProject = new Project(projectInfo) { Name = projectInfo.Name };
-        return await Task.FromResult(true).ConfigureAwait(false);
-    }
+        Debug.Assert(projectInfo.Location is not null, "should not load a project with an invalid project info");
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "all failures reported as return value false")]
-    public async Task<bool> LoadProjectScenesAsync(IProject project)
-    {
-        try
+        if (projectInfo.Location == null)
         {
-            await this.projectSource.LoadProjectScenesAsync(project).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            this.CouldNotLoadProject(project.ProjectInfo.Location ?? string.Empty, ex.Message);
-            return await Task.FromResult(true).ConfigureAwait(false);
-        }
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "all failures reported as return value false")]
-    public async Task<bool> LoadSceneEntitiesAsync(Scene scene)
-    {
-        if (scene.Project is not { ProjectInfo.Location: not null })
-        {
-            this.CouldNotLoadSceneEntities(scene.Name, "null project or project location");
+            this.CouldNotLoadProject("__null__", "cannot not load project from `null` location");
             return false;
         }
 
+        var project = new Project(projectInfo) { Name = projectInfo.Name };
         try
         {
-            var loadedScene = await this.projectSource.LoadSceneAsync(scene.Name, scene.Project).ConfigureAwait(false);
+            await this.LoadProjectScenesAsync(project).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            this.CouldNotLoadProject(projectInfo.Location, $"failed to load project scenes ({ex.Message})");
+            return false;
+        }
+
+        this.CurrentProject = project;
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> LoadSceneAsync(Scene scene)
+    {
+        var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(false);
+        if (loadedScene is null)
+        {
+            return false;
+        }
+
+        scene.Entities.Clear();
+        foreach (var entity in loadedScene.Entities)
+        {
+            scene.Entities.Add(entity);
+        }
+
+        return true;
+    }
+
+    private async Task LoadProjectScenesAsync(Project project)
+    {
+        Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
+
+        var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location).ConfigureAwait(false);
+        var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
+        if (!await scenesFolder.ExistsAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        var scenes = scenesFolder.GetDocumentsAsync()
+            .Where(d => d.Name.EndsWith(Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase));
+        project.Scenes.Clear();
+        await foreach (var item in scenes.ConfigureAwait(false))
+        {
+            var sceneName = item.Name[..item.Name.LastIndexOf('.')];
+            var scene = new Scene(project) { Name = sceneName };
+            project.Scenes.Add(scene);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all failures are logged and propagated as null return value")]
+    private async Task<Scene?> LoadSceneFromStorageAsync(string sceneName, IProject project)
+    {
+        Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
+
+        try
+        {
+            var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location!)
+                .ConfigureAwait(false);
+            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
+            var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
+                .ConfigureAwait(false);
+            if (!await sceneFile.ExistsAsync().ConfigureAwait(false))
+            {
+                this.CouldNotLoadScene(sceneFile.Location, "file does not exist");
+                return null;
+            }
+
+            // TODO: parsing json from UTF-8 ReadOnlySpan<Byte> is more efficient
+            var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(false);
+            var loadedScene = Scene.FromJson(json, project);
             if (loadedScene is null)
             {
-                return false;
+                this.CouldNotLoadScene(sceneFile.Location, "JSON deserialization failed");
             }
 
-            scene.Entities.Clear();
-            foreach (var entity in loadedScene.Entities)
-            {
-                scene.Entities.Add(entity);
-            }
-
-            return true;
+            return loadedScene;
         }
         catch (Exception ex)
         {
-            this.CouldNotLoadSceneEntities(scene.Project.ProjectInfo.Location, ex.Message);
-            return false;
+            var sceneLocation = storage.NormalizeRelativeTo(
+                project.ProjectInfo.Location,
+                $"{Constants.ScenesFolderName}/{sceneName}{Constants.SceneFileExtension}");
+            this.CouldNotLoadScene(sceneLocation, ex.Message);
+            return null;
         }
     }
 
-    public async Task<IProjectInfo?> LoadProjectInfoAsync(string projectFolderPath) =>
-        await this.projectSource.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not load project info from `{location}`; {error}")]
+    partial void CouldNotSaveProjectInfo(string location, string error);
 
-    public async Task<bool> SaveProjectInfoAsync(IProjectInfo projectInfo) =>
-        await this.projectSource.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
-
-    public IStorageProvider GetCurrentProjectStorageProvider() => this.projectSource.GetStorageProvider();
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not load project info from `{location}`; {error}")]
+    partial void CouldNotLoadProjectInfo(string location, string error);
 
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Could not load project info from `{location}`; {error}")]
     partial void CouldNotLoadProject(string location, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Could not load scene from `{location}`; {error}")]
+    partial void CouldNotLoadScene(string location, string error);
 
     [LoggerMessage(
         Level = LogLevel.Error,

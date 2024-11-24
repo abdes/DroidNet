@@ -12,4 +12,4 @@ using System.Runtime.CompilerServices;
  https://aka.ms/assembly-info-properties
 */
 
-[assembly: InternalsVisibleTo("DroidNet.Oxygen.Editor.Projects.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.Projects.Tests")]

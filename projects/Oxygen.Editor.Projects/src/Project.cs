@@ -10,7 +10,9 @@ namespace Oxygen.Editor.Projects;
 /// <param name="info">The metadata information about this project.</param>
 public partial class Project(IProjectInfo info) : GameObject, IProject
 {
+    /// <inheritdoc/>
     public IList<Scene> Scenes { get; } = [];
 
+    /// <inheritdoc/>
     public IProjectInfo ProjectInfo { get; } = info;
 }
