@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace DroidNet.TestHelpers;
@@ -11,7 +10,6 @@ namespace DroidNet.TestHelpers;
 /// A helper class for unit tests that need to check if a specific event handler is registered/unregistered on a specific
 /// event of an object.
 /// </summary>
-[ExcludeFromCodeCoverage]
 public static class EventHandlerTestHelper
 {
     /// <summary>
@@ -54,5 +52,5 @@ public static class EventHandlerTestHelper
         object target)
         => FindAllRegisteredDelegates(eventEmitter, eventName)
             .ToList()
-            .FindAll(del => ReferenceEquals(del.Target, target));
+            .FindAll(d => ReferenceEquals(d.Target, target));
 }

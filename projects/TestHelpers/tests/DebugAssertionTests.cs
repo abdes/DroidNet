@@ -2,17 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers.Tests;
-
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.TestHelpers.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("Assertions")]
-public class DebugAssertionTests : TestSuiteWithAssertions
+[TestCategory("Test Assertions")]
+public partial class DebugAssertionTests : TestSuiteWithAssertions
 {
     [TestMethod]
     public void AssertionFailures_AreRecorded_WhenTheyHappen()
