@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators.Tests;
-
 #if MSTEST_RUNNER
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,6 +13,8 @@ using DryIoc;
 using Microsoft.UI.Dispatching;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
+namespace DroidNet.Mvvm.Generators.Tests;
+
 /// <summary>
 /// Provides application-specific behavior to supplement the default Application class.
 /// </summary>
@@ -24,7 +24,10 @@ public partial class App
     /// Initializes a new instance of the <see cref="App" /> class. This is the first line of
     /// authored code executed, and as such is the logical equivalent of main() or WinMain().
     /// </summary>
-    public App() => this.InitializeComponent();
+    public App()
+    {
+        this.InitializeComponent();
+    }
 
     /// <summary>
     /// Invoked when the application is launched.
