@@ -6,7 +6,20 @@
         <TargetFrameworks>net8.0;net8.0-windows10.0.22621.0</TargetFrameworks>
         <RootNamespace>$(RootNamespace).TestHelpers</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <Title>DroidNet Test Helpers</Title>
+        <Description>TestHelpers is a .NET library designed to assist with unit testing by providing utilities for logging, dependency injection, assertion handling, and event handler testing. This library includes tools to enhance the testing experience and ensure comprehensive test coverage.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;gameengine;testing;mstest</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="MSTest.TestFramework" />
