@@ -2,18 +2,29 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage.Native;
-
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.Abstractions;
 
+namespace Oxygen.Editor.Storage.Native;
+
+/// <summary>
+/// Provides methods for managing storage items (folders and documents) in the file system.
+/// </summary>
 public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
 {
+    /// <summary>
+    /// Gets the file system abstraction used by this storage provider.
+    /// </summary>
     internal IFileSystem FileSystem => fs;
 
+    /// <summary>
+    /// Gets the logical drives available on the system.
+    /// </summary>
+    /// <returns>An enumerable collection of logical drive names.</returns>
     public IEnumerable<string> GetLogicalDrives() => fs.Directory.GetLogicalDrives();
 
+    /// <inheritdoc />
     public Task<IFolder> GetFolderFromPathAsync(
         string folderPath,
         CancellationToken cancellationToken = default)
@@ -46,6 +57,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         return Task.FromResult<IFolder>(folder);
     }
 
+    /// <inheritdoc />
     public Task<IDocument> GetDocumentFromPathAsync(string documentPath, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -71,6 +83,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         return Task.FromResult<IDocument>(document);
     }
 
+    /// <inheritdoc />
     public string Normalize(string path)
     {
         CheckForInvalidCharacters(path);
@@ -86,6 +99,7 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         }
     }
 
+    /// <inheritdoc />
     public string NormalizeRelativeTo(string basePath, string relativePath)
     {
         if (fs.Path.IsPathRooted(relativePath))
@@ -106,24 +120,19 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         }
     }
 
+    /// <inheritdoc />
     public Task<bool> DocumentExistsAsync(string path) => Task.FromResult(fs.File.Exists(path));
 
+    /// <inheritdoc />
     public Task<bool> FolderExistsAsync(string path) => Task.FromResult(fs.Directory.Exists(path));
 
     /// <summary>
-    /// Checks if the specified <paramref name="path" /> corresponds to an existing folder or document, and throws a
-    /// <see cref="TargetExistsException" /> if it does.
+    /// Checks if the specified <paramref name="path"/> corresponds to an existing folder or document, and throws a <see cref="TargetExistsException"/> if it does.
     /// </summary>
     /// <param name="path">The path to be checked.</param>
-    /// <param name="cancellationToken">
-    /// A cancellation token to observe while waiting for the task to complete.
-    /// </param>
-    /// <returns>
-    /// A <see cref="Task" /> representing the asynchronous operation.
-    /// </returns>
-    /// <exception cref="TargetExistsException">
-    /// If the specified <paramref name="path" /> refers to an existing document or folder.
-    /// </exception>
+    /// <param name="cancellationToken">A cancellation token to observe while waiting for the task to complete.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <exception cref="TargetExistsException">If the specified <paramref name="path"/> refers to an existing document or folder.</exception>
     internal async Task EnsureTargetDoesNotExistAsync(string path, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -137,6 +146,11 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         }
     }
 
+    /// <summary>
+    /// Checks for invalid characters in the specified path.
+    /// </summary>
+    /// <param name="path">The path to be checked.</param>
+    /// <exception cref="InvalidPathException">Thrown if the path contains invalid characters.</exception>
     private static void CheckForInvalidCharacters(string path)
     {
         // Check for invalid characters
@@ -152,6 +166,11 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
         }
     }
 
+    /// <summary>
+    /// Strips trailing separators from the specified path.
+    /// </summary>
+    /// <param name="path">The path to be stripped of trailing separators.</param>
+    /// <returns>The path without trailing separators.</returns>
     private static string StripTrailingSeparators(string path)
     {
         Debug.Assert(!string.IsNullOrEmpty(path), "expecting IsNullOrEmpty to be already checked by GetFullPath");

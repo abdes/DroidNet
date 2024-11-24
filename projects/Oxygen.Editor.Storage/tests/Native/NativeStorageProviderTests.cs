@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage.Native;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Oxygen.Editor.Storage.Native;
 using Testably.Abstractions.Testing;
+
+namespace Oxygen.Editor.Storage.Tests.Native;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

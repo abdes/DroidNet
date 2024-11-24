@@ -2,15 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage.Native;
-
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 
+namespace Oxygen.Editor.Storage.Native;
+
+/// <summary>
+/// Represents a folder in the file system, providing methods for managing folders and documents within it.
+/// </summary>
 public class NativeFolder : IFolder
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NativeFolder"/> class.
+    /// </summary>
+    /// <param name="storageProvider">The storage provider used to manage the file system operations.</param>
+    /// <param name="name">The name of the folder.</param>
+    /// <param name="path">The full path of the folder.</param>
     internal NativeFolder(NativeStorageProvider storageProvider, string name, string path)
     {
         this.StorageProvider = storageProvider;
@@ -18,14 +25,14 @@ public class NativeFolder : IFolder
         this.Location = path;
     }
 
+    /// <inheritdoc />
     public string Name { get; private set; }
 
+    /// <inheritdoc />
     public string Location { get; private set; }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "we don't want to fail on getting the LastAccessTime, instead we just use a value of `0`")]
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "we don't want to fail on getting the LastAccessTime, instead we just use a value of `0`")]
     public DateTime LastAccessTime
     {
         get
@@ -45,6 +52,7 @@ public class NativeFolder : IFolder
 
     private NativeStorageProvider StorageProvider { get; }
 
+    /// <inheritdoc />
     public async Task<IDocument> GetDocumentAsync(string documentName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -52,19 +60,17 @@ public class NativeFolder : IFolder
         var fullPath = this.StorageProvider.NormalizeRelativeTo(this.Location, documentName);
 
         // If the path refers to an existing folder (not file), then we reject it
-        if (await this.StorageProvider.FolderExistsAsync(fullPath).ConfigureAwait(false))
-        {
-            throw new InvalidPathException(
-                $"the specified name for a document [{documentName}] refers to an existing folder [{fullPath}]");
-        }
-
-        return new NativeFile(
+        return await this.StorageProvider.FolderExistsAsync(fullPath).ConfigureAwait(false)
+            ? throw new InvalidPathException(
+                $"the specified name for a document [{documentName}] refers to an existing folder [{fullPath}]")
+            : (IDocument)new NativeFile(
             this.StorageProvider,
             documentName,
             fullPath,
             this.Location);
     }
 
+    /// <inheritdoc />
     public async Task<IFolder> GetFolderAsync(string folderName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -72,19 +78,17 @@ public class NativeFolder : IFolder
         var fullPath = this.StorageProvider.NormalizeRelativeTo(this.Location, folderName);
 
         // If the path refers to an existing file (not folder), then we reject it
-        if (await this.StorageProvider.DocumentExistsAsync(fullPath).ConfigureAwait(false))
-        {
-            throw new InvalidPathException(
-                $"the specified name for a folder [{folderName}] refers to an existing file [{fullPath}]");
-        }
-
-        return new NativeNestedFolder(
+        return await this.StorageProvider.DocumentExistsAsync(fullPath).ConfigureAwait(false)
+            ? throw new InvalidPathException(
+                $"the specified name for a folder [{folderName}] refers to an existing file [{fullPath}]")
+            : (IFolder)new NativeNestedFolder(
             this.StorageProvider,
             folderName,
             fullPath,
             this.Location);
     }
 
+    /// <inheritdoc />
     public async Task CreateAsync(CancellationToken cancellationToken = default)
     {
         // Check if the directory already exists
@@ -106,8 +110,10 @@ public class NativeFolder : IFolder
         }
     }
 
+    /// <inheritdoc />
     public Task<bool> ExistsAsync() => this.StorageProvider.FolderExistsAsync(this.Location);
 
+    /// <inheritdoc />
     public async Task DeleteAsync(CancellationToken cancellationToken = default)
     {
         // Check if the folder does not exists
@@ -128,6 +134,7 @@ public class NativeFolder : IFolder
         }
     }
 
+    /// <inheritdoc />
     public async Task DeleteRecursiveAsync(CancellationToken cancellationToken = default)
     {
         // Check if the folder does not exists
@@ -149,6 +156,7 @@ public class NativeFolder : IFolder
         }
     }
 
+    /// <inheritdoc />
     public async Task RenameAsync(string desiredNewName, CancellationToken cancellationToken = default)
     {
         // Only nested folders (not root folders) can be renamed
@@ -200,10 +208,7 @@ public class NativeFolder : IFolder
         this.Location = newLocationPath;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Roslynator",
-        "RCS1227:Validate arguments correctly",
-        Justification = "does not fit well with async enumerator")]
+    /// <inheritdoc />
     public async IAsyncEnumerable<IFolder> GetFoldersAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -232,10 +237,7 @@ public class NativeFolder : IFolder
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Roslynator",
-        "RCS1227:Validate arguments correctly",
-        Justification = "does not fit well with async enumerator")]
+    /// <inheritdoc />
     public async IAsyncEnumerable<IDocument> GetDocumentsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -262,6 +264,7 @@ public class NativeFolder : IFolder
         }
     }
 
+    /// <inheritdoc />
     public async IAsyncEnumerable<IStorageItem> GetItemsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -278,6 +281,7 @@ public class NativeFolder : IFolder
         }
     }
 
+    /// <inheritdoc />
     public async Task<bool> HasItemsAsync()
     {
         // Ensure the directory exists before starting enumeration
