@@ -2,15 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Generators.Tests;
-
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Generators.Tests.Demo;
+using DroidNet.TestHelpers;
 using DryIoc;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
+
+namespace DroidNet.Mvvm.Generators.Tests;
 
 /// <summary>
 /// Integration tests for the View to ViewModel wiring source generator.
@@ -18,14 +18,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("ViewModel to View Wiring")]
+[TestCategory("UITest")]
 public class ViewModelWiringTests
 {
     [UITestMethod]
-    [TestCategory("UITest")]
     [DisplayName("Generated extensions do wire the ViewModel properly and export the ViewModel property")]
     public void GenerateViewExtensionsCorrectly()
     {
-        var view = TestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
+        var view = CommonTestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
         _ = view.Should()
             .NotBeNull(
                 $"""
@@ -43,11 +43,10 @@ public class ViewModelWiringTests
     }
 
     [UITestMethod]
-    [TestCategory("UITest")]
     [DisplayName("Generated extensions trigger the ViewModelChanged event when the ViewModel property is changed")]
     public void TriggerEventWhenViewModelIsChanged()
     {
-        var view = TestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
+        var view = CommonTestEnv.TestContainer.Resolve<IViewFor<DemoViewModel>>();
         _ = view.Should().NotBeNull();
 
         var eventTriggered = false;
