@@ -2,14 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage.Native;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Oxygen.Editor.Storage.Native;
 using Testably.Abstractions.Helpers;
 using Testably.Abstractions.Testing;
 using Testably.Abstractions.Testing.FileSystem;
+
+namespace Oxygen.Editor.Storage.Tests.Native;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -781,38 +781,26 @@ public class NativeFileTests
         IFolder targetFolder,
         string? newName,
         bool overwrite,
-        CancellationToken cancellationToken = default)
-    {
-        if (newName is null)
-        {
-            return overwrite
+        CancellationToken cancellationToken = default) => newName is null
+            ? overwrite
                 ? document.CopyOverwriteAsync(targetFolder, cancellationToken)
-                : document.CopyAsync(targetFolder, cancellationToken);
-        }
-
-        return overwrite
+                : document.CopyAsync(targetFolder, cancellationToken)
+            : overwrite
             ? document.CopyOverwriteAsync(targetFolder, newName, cancellationToken)
             : document.CopyAsync(targetFolder, newName, cancellationToken);
-    }
 
     private static Task MoveAsyncWrapper(
         IDocument document,
         IFolder targetFolder,
         string? newName,
         bool overwrite,
-        CancellationToken cancellationToken = default)
-    {
-        if (newName is null)
-        {
-            return overwrite
+        CancellationToken cancellationToken = default) => newName is null
+            ? overwrite
                 ? document.MoveOverwriteAsync(targetFolder, cancellationToken)
-                : document.MoveAsync(targetFolder, cancellationToken);
-        }
-
-        return overwrite
+                : document.MoveAsync(targetFolder, cancellationToken)
+            : overwrite
             ? document.MoveOverwriteAsync(targetFolder, newName, cancellationToken)
             : document.MoveAsync(targetFolder, newName, cancellationToken);
-    }
 
     private sealed class CustomAccessControlStrategy(Func<string, bool> accessController) : IAccessControlStrategy
     {

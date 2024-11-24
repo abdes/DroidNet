@@ -4,8 +4,6 @@
 
 namespace Oxygen.Editor.Storage;
 
-using System;
-
 /// <summary>
 /// Exception that is thrown when a storage item is created with an invalid path string or when its current location or name are
 /// modified using invalid values.

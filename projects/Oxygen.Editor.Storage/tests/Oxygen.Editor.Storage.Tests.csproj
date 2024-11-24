@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <RootNamespace>Oxygen.Editor.Storage</RootNamespace>
+        <RootNamespace>Oxygen.Editor.Storage.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
