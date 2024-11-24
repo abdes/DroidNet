@@ -3,13 +3,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <RootNamespace>$(RootNamespace).Converters</RootNamespace>
+        <AssemblyName>DroidNet.Converters</AssemblyName>
+
         <Title>Additional Value Converters</Title>
         <Description>Provides extra IValueConverter implementations, including null-to-visibility, dictionary key-to-value converters.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>xaml;converters</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <RootNamespace>$(RootNamespace).Converters</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

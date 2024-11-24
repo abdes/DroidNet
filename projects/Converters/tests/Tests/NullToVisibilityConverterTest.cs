@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.UI.Xaml;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Converters.Tests.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -39,7 +38,7 @@ public class NullToVisibilityConverterTest
         var result = this.converter.Convert(nullValue, typeof(Visibility), parameter: null, "en-US");
 
         // Assert
-        result.Should().Be(Visibility.Collapsed);
+        _ = result.Should().Be(Visibility.Collapsed);
     }
 
     [TestMethod]

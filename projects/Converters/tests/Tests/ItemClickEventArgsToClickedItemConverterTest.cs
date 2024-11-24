@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Converters.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
+
+namespace DroidNet.Converters.Tests.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
