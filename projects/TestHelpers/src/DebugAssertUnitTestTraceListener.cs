@@ -3,14 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DroidNet.TestHelpers;
 
 /// <summary>
 /// TraceListener used for trapping assertion failures during unit tests.
 /// </summary>
-[ExcludeFromCodeCoverage]
 public class DebugAssertUnitTestTraceListener : TraceListener
 {
     private readonly List<string> writes = [];

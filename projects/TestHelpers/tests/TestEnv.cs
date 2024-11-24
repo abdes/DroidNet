@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TestHelpers.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.TestHelpers;
 using Serilog;
+
+namespace DroidNet.TestHelpers.Tests;
 
 [TestClass]
 [TestCategory("Test Environment")]

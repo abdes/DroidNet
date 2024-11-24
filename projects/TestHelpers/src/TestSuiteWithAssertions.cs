@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DroidNet.TestHelpers;
 
@@ -41,7 +40,6 @@ namespace DroidNet.TestHelpers;
 /// ]]>
 /// </code>
 /// </example>
-[ExcludeFromCodeCoverage]
 public abstract class TestSuiteWithAssertions : IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
