@@ -13,7 +13,6 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;gameengine</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-
     </PropertyGroup>
 
     <ItemGroup>

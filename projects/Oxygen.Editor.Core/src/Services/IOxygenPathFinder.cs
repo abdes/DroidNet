@@ -2,13 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core.Services;
-
 using DroidNet.Config;
 
+namespace Oxygen.Editor.Core.Services;
+
+/// <summary>
+/// Provides methods to find paths for Oxygen projects.
+/// </summary>
 public interface IOxygenPathFinder : IPathFinder
 {
+    /// <summary>
+    /// Gets the path to the personal projects.
+    /// </summary>
     public string PersonalProjects { get; }
 
+    /// <summary>
+    /// Gets the path to the local projects.
+    /// </summary>
     public string LocalProjects { get; }
 }
