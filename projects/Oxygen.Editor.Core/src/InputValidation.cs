@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core;
-
 using System.Text.RegularExpressions;
+
+namespace Oxygen.Editor.Core;
 
 /// <summary>
 /// Provides input validation helpers.
@@ -19,8 +19,17 @@ public static partial class InputValidation
     private const string ValidFileNamePattern
         = @"^(?!^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CLOCK\$|\.{2,})$)(?!^\.\.)([^<>:""/\\|?*\x00-\x1F]+[^<>:""/\\|?*\x00-\x1F\ .])$";
 
+    /// <summary>
+    /// Validates if the provided name is a valid file name.
+    /// </summary>
+    /// <param name="name">The name to validate.</param>
+    /// <returns><see langword="true"/> if the name is valid; otherwise, <see langword="false"/>.</returns>
     public static bool IsValidFileName(string name) => ValidFileNameMatcher().IsMatch(name);
 
+    /// <summary>
+    /// Creates a Regex object for validating file names.
+    /// </summary>
+    /// <returns>A Regex object configured with the file name validation pattern.</returns>
     [GeneratedRegex(ValidFileNamePattern, RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ValidFileNameMatcher();
 }
