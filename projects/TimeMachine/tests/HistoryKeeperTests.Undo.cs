@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests;
 
 /// <summary>
 /// Unit test cases for the "Undo" functionality of the <see cref="HistoryKeeper" /> class.
@@ -31,7 +30,7 @@ public partial class HistoryKeeperTests
         historyKeeper.Undo();
 
         // Assert
-        historyKeeper.RedoStack.Should().ContainSingle();
+        _ = historyKeeper.RedoStack.Should().ContainSingle();
 
         void Action()
         {
@@ -69,7 +68,7 @@ public partial class HistoryKeeperTests
         // Arrange
         var mockTransactionFactory = new Mock<ITransactionFactory>();
         var mockTransaction = new Mock<ITransaction>();
-        mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
+        _ = mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
 
         var historyKeeper = new HistoryKeeper(new object(), mockTransactionFactory.Object);
         historyKeeper.AddChange(new Mock<IChange>().Object);
@@ -96,7 +95,7 @@ public partial class HistoryKeeperTests
         var act = historyKeeper.Undo;
 
         // Assert
-        act.Should().NotThrow();
+        _ = act.Should().NotThrow();
     }
 
     [TestMethod]
@@ -114,7 +113,7 @@ public partial class HistoryKeeperTests
         historyKeeper.Undo();
 
         // Assert
-        historyKeeper.State.Should().Be(initialState);
+        _ = historyKeeper.State.Should().Be(initialState);
     }
 
     [TestMethod]
@@ -124,7 +123,7 @@ public partial class HistoryKeeperTests
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
         var change = new Mock<IChange>();
-        change.Setup(cs => cs.Apply()).Throws<Exception>();
+        _ = change.Setup(cs => cs.Apply()).Throws<Exception>();
         historyKeeper.AddChange(change.Object);
 
         const HistoryKeeper.States initialState = HistoryKeeper.States.Redoing; // Set an initial state
@@ -134,10 +133,10 @@ public partial class HistoryKeeperTests
         var act = historyKeeper.Undo;
 
         // Assert
-        act.Should().Throw<Exception>();
-        historyKeeper.State.Should().Be(initialState);
+        _ = act.Should().Throw<Exception>();
+        _ = historyKeeper.State.Should().Be(initialState);
         change.Verify(cs => cs.Apply(), Times.Once);
-        historyKeeper.RedoStack.Should().BeEmpty();
+        _ = historyKeeper.RedoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -147,15 +146,15 @@ public partial class HistoryKeeperTests
         // Arrange
         var historyKeeper = UndoRedo.Default[new object()];
         var change = new Mock<IChange>();
-        change.Setup(cs => cs.Apply()).Throws<Exception>();
+        _ = change.Setup(cs => cs.Apply()).Throws<Exception>();
         historyKeeper.AddChange(change.Object);
 
         // Act
         var act = historyKeeper.Undo;
 
         // Assert
-        act.Should().Throw<Exception>();
-        historyKeeper.RedoStack.Should().BeEmpty();
+        _ = act.Should().Throw<Exception>();
+        _ = historyKeeper.RedoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -164,7 +163,7 @@ public partial class HistoryKeeperTests
         // Arrange
         var mockTransactionFactory = new Mock<ITransactionFactory>();
         var mockTransaction = new Mock<ITransaction>();
-        mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
+        _ = mockTransactionFactory.Setup(tf => tf.CreateTransaction(It.IsAny<object>())).Returns(mockTransaction.Object);
 
         var historyKeeper = new HistoryKeeper(new object(), mockTransactionFactory.Object);
         historyKeeper.AddChange(new Mock<IChange>().Object);
@@ -191,6 +190,6 @@ public partial class HistoryKeeperTests
         var act = historyKeeper.Redo;
 
         // Assert
-        act.Should().NotThrow();
+        _ = act.Should().NotThrow();
     }
 }

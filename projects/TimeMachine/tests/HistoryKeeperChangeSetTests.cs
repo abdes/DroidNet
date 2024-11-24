@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.TimeMachine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -21,14 +20,14 @@ public class HistoryKeeperChangeSetTests
     public void BeginChangeSet_GroupsSubsequentChangesInUndoStack_WhileIdle()
     {
         // Arrange
-        this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
 
         // Act
         this.BatchAction();
 
         // Assert
-        this.counter.Should().Be(3);
-        this.historyKeeper.UndoStack.Should()
+        _ = this.counter.Should().Be(3);
+        _ = this.historyKeeper.UndoStack.Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<ChangeSet>()
@@ -39,17 +38,17 @@ public class HistoryKeeperChangeSetTests
     public void BeginChangeSet_GroupsSubsequentChangesInUndoStack_WhileRedoing()
     {
         // Arrange
-        this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
         this.ActionWithBatchReverseAction();
         this.historyKeeper.Undo();
-        this.historyKeeper.RedoStack.Should().HaveCount(1);
+        _ = this.historyKeeper.RedoStack.Should().HaveCount(1);
 
         // Act
         this.historyKeeper.Redo();
 
         // Assert
-        this.counter.Should().Be(3);
-        this.historyKeeper.UndoStack.Should()
+        _ = this.counter.Should().Be(3);
+        _ = this.historyKeeper.UndoStack.Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<ChangeSet>()
@@ -60,15 +59,15 @@ public class HistoryKeeperChangeSetTests
     public void BeginChangeSet_GroupsSubsequentChangesInRedoStack_WhileUndoing()
     {
         // Arrange
-        this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
         this.BatchAction();
 
         // Act
         this.historyKeeper.Undo();
 
         // Assert
-        this.counter.Should().Be(0);
-        this.historyKeeper.RedoStack.Should()
+        _ = this.counter.Should().Be(0);
+        _ = this.historyKeeper.RedoStack.Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<ChangeSet>()
@@ -79,7 +78,7 @@ public class HistoryKeeperChangeSetTests
     public void BeginChangeSet_SupportsNesting()
     {
         // Arrange
-        this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
 
         // Act
         this.historyKeeper.BeginChangeSet("many changes");
@@ -97,8 +96,8 @@ public class HistoryKeeperChangeSetTests
         }
 
         // Assert
-        this.counter.Should().Be(3);
-        this.historyKeeper.UndoStack.Should()
+        _ = this.counter.Should().Be(3);
+        _ = this.historyKeeper.UndoStack.Should()
             .ContainSingle()
             .Which.Should()
             .BeOfType<ChangeSet>()
@@ -109,7 +108,7 @@ public class HistoryKeeperChangeSetTests
     public void EndChangeSet_CanBeCalledTooManyTimes()
     {
         // Arrange
-        this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
+        _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
         this.historyKeeper.BeginChangeSet("many changes");
         {
             this.Action();
@@ -123,7 +122,7 @@ public class HistoryKeeperChangeSetTests
         var act = this.historyKeeper.EndChangeSet;
 
         // Assert
-        act.Should().NotThrow();
+        _ = act.Should().NotThrow();
     }
 
     private void ReverseAction()

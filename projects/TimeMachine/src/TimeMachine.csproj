@@ -4,6 +4,20 @@
 
     <PropertyGroup>
         <RootNamespace>$(RootNamespace).TimeMachine</RootNamespace>
+        <AssemblyName>DroidNet.TimeMachine</AssemblyName>
+
+        <Title>TimeMachine</Title>
+        <Description>A robust and flexible undo/redo system for managing changes in applications. It is designed to handle complex scenarios, including nested transactions and change sets, making it suitable for a wide range of applications.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;gameengine;undo;redo;transactions;changeset</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
 </Project>

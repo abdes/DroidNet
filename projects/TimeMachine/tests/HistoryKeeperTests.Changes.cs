@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using DroidNet.TimeMachine.Changes;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests;
 
 /// <summary>
 /// Unit test cases for <see cref="HistoryKeeper" /> class, covering adding changes.
@@ -27,8 +26,8 @@ public partial class HistoryKeeperTests
         historyKeeper.AddChange(changeMock.Object);
 
         // Assert
-        historyKeeper.UndoStack.Should().Contain(changeMock.Object);
-        historyKeeper.RedoStack.Should().BeEmpty();
+        _ = historyKeeper.UndoStack.Should().Contain(changeMock.Object);
+        _ = historyKeeper.RedoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -44,7 +43,7 @@ public partial class HistoryKeeperTests
         historyKeeper.AddChange(changeMock.Object);
 
         // Assert
-        historyKeeper.RedoStack.Should().Contain(changeMock.Object);
+        _ = historyKeeper.RedoStack.Should().Contain(changeMock.Object);
     }
 
     [TestMethod]
@@ -61,8 +60,8 @@ public partial class HistoryKeeperTests
         historyKeeper.Clear();
 
         // Assert
-        historyKeeper.UndoStack.Should().BeEmpty();
-        historyKeeper.RedoStack.Should().BeEmpty();
+        _ = historyKeeper.UndoStack.Should().BeEmpty();
+        _ = historyKeeper.RedoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -77,7 +76,7 @@ public partial class HistoryKeeperTests
         var act = historyKeeper.Clear;
 
         // Assert
-        act.Should()
+        _ = act.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("unable to clear the undo history because we're not Idle");
     }
@@ -96,7 +95,7 @@ public partial class HistoryKeeperTests
         var canUndo = historyKeeper.CanUndo;
 
         // Assert
-        canUndo.Should().BeTrue();
+        _ = canUndo.Should().BeTrue();
     }
 
     [TestMethod]
@@ -110,7 +109,7 @@ public partial class HistoryKeeperTests
         var canUndo = historyKeeper.CanUndo;
 
         // Assert
-        canUndo.Should().BeFalse();
+        _ = canUndo.Should().BeFalse();
     }
 
     [TestMethod]
@@ -127,7 +126,7 @@ public partial class HistoryKeeperTests
         var canRedo = historyKeeper.CanRedo;
 
         // Assert
-        canRedo.Should().BeTrue();
+        _ = canRedo.Should().BeTrue();
     }
 
     [TestMethod]
@@ -141,6 +140,6 @@ public partial class HistoryKeeperTests
         var canRedo = historyKeeper.CanRedo;
 
         // Assert
-        canRedo.Should().BeFalse();
+        _ = canRedo.Should().BeFalse();
     }
 }

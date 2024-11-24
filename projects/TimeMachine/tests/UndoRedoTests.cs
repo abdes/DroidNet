@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.TimeMachine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -21,7 +20,7 @@ public class UndoRedoTests
         var instance2 = UndoRedo.Default;
 
         // Assert
-        instance1.Should().BeSameAs(instance2);
+        _ = instance1.Should().BeSameAs(instance2);
     }
 
     [TestMethod]
@@ -36,7 +35,7 @@ public class UndoRedoTests
         var historyKeeper2 = undoRedo[root];
 
         // Assert
-        historyKeeper1.Should().BeSameAs(historyKeeper2);
+        _ = historyKeeper1.Should().BeSameAs(historyKeeper2);
     }
 
     [TestMethod]
@@ -52,7 +51,7 @@ public class UndoRedoTests
         var historyKeeper2 = undoRedo[root2];
 
         // Assert
-        historyKeeper1.Should().NotBeSameAs(historyKeeper2);
+        _ = historyKeeper1.Should().NotBeSameAs(historyKeeper2);
     }
 
     [TestMethod]
@@ -69,8 +68,8 @@ public class UndoRedoTests
         UndoRedo.Clear();
 
         // Assert
-        undoRedo[root1].Should().NotBeNull();
-        undoRedo[root2].Should().NotBeNull();
+        _ = undoRedo[root1].Should().NotBeNull();
+        _ = undoRedo[root2].Should().NotBeNull();
     }
 
     [TestMethod]
@@ -89,6 +88,6 @@ public class UndoRedoTests
         thread2.Join();
 
         // Assert
-        undoRedo[root].Should().NotBeNull();
+        _ = undoRedo[root].Should().NotBeNull();
     }
 }

@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests.Transactions;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests.Transactions;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -83,7 +82,7 @@ public class TransactionTests
         transaction.AddChange(this.mockChange.Object);
 
         // Assert
-        transaction.Changes.Should().Contain(this.mockChange.Object);
+        _ = transaction.Changes.Should().Contain(this.mockChange.Object);
     }
 
     [TestMethod]
@@ -129,6 +128,6 @@ public class TransactionTests
         using var transaction = new Transaction(this.mockTransactionManager.Object, this.key);
 
         // Assert
-        transaction.Key.Should().Be(this.key);
+        _ = transaction.Key.Should().Be(this.key);
     }
 }

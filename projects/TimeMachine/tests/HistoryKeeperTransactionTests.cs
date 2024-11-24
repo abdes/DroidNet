@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Transactions;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using static DroidNet.TimeMachine.HistoryKeeper;
+
+namespace DroidNet.TimeMachine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -31,7 +30,7 @@ public class HistoryKeeperTransactionTests
     public void CommitTransaction_ShouldAddTransactionToUndoStack_WhenStateIsIdle()
     {
         // Arrange
-        this.transactionFactoryMock.Setup(f => f.CreateTransaction(It.IsAny<object>()))
+        _ = this.transactionFactoryMock.Setup(f => f.CreateTransaction(It.IsAny<object>()))
             .Returns(this.transactionMock.Object);
         var transaction = this.historyKeeper.BeginTransaction("t");
 
@@ -39,7 +38,7 @@ public class HistoryKeeperTransactionTests
         this.historyKeeper.CommitTransaction(transaction);
 
         // Assert
-        this.historyKeeper.UndoStack.Should().Contain(transaction);
+        _ = this.historyKeeper.UndoStack.Should().Contain(transaction);
     }
 
     [TestMethod]
@@ -47,7 +46,7 @@ public class HistoryKeeperTransactionTests
     {
         // Arrange
         this.historyKeeper.State = States.Undoing;
-        this.transactionFactoryMock.Setup(f => f.CreateTransaction(It.IsAny<object>()))
+        _ = this.transactionFactoryMock.Setup(f => f.CreateTransaction(It.IsAny<object>()))
             .Returns(this.transactionMock.Object);
         var transaction = this.historyKeeper.BeginTransaction("t");
 
@@ -55,7 +54,7 @@ public class HistoryKeeperTransactionTests
         this.historyKeeper.CommitTransaction(transaction);
 
         // Assert
-        this.historyKeeper.RedoStack.Should().Contain(transaction);
+        _ = this.historyKeeper.RedoStack.Should().Contain(transaction);
     }
 
     [TestMethod]
@@ -64,7 +63,7 @@ public class HistoryKeeperTransactionTests
         // Arrange
         var nestedTransactionMock = new Mock<ITransaction>();
         var parentTransactionMock = new Mock<ITransaction>();
-        this.transactionFactoryMock.SetupSequence(f => f.CreateTransaction(It.IsAny<object>()))
+        _ = this.transactionFactoryMock.SetupSequence(f => f.CreateTransaction(It.IsAny<object>()))
             .Returns(parentTransactionMock.Object)
             .Returns(nestedTransactionMock.Object);
 
@@ -75,8 +74,8 @@ public class HistoryKeeperTransactionTests
         this.historyKeeper.CommitTransaction(parentTransaction);
 
         // Assert
-        this.historyKeeper.UndoStack.Should().Contain(parentTransaction);
-        this.historyKeeper.UndoStack.Should().NotContain(nestedTransaction);
+        _ = this.historyKeeper.UndoStack.Should().Contain(parentTransaction);
+        _ = this.historyKeeper.UndoStack.Should().NotContain(nestedTransaction);
         parentTransactionMock.Verify(t => t.AddChange(nestedTransaction), Times.Once);
     }
 
@@ -86,7 +85,7 @@ public class HistoryKeeperTransactionTests
         // Arrange
         var parentTransactionMock = new Mock<ITransaction>();
         var nestedTransactionMock = new Mock<ITransaction>();
-        this.transactionFactoryMock.SetupSequence(f => f.CreateTransaction(It.IsAny<object>()))
+        _ = this.transactionFactoryMock.SetupSequence(f => f.CreateTransaction(It.IsAny<object>()))
             .Returns(parentTransactionMock.Object)
             .Returns(nestedTransactionMock.Object);
 

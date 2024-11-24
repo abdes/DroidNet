@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.TimeMachine.Tests.Changes;
-
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using DroidNet.TimeMachine.Changes;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.TimeMachine.Tests.Changes;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -42,6 +41,6 @@ public class LambdaExpressionOnTargetTests
         var change = new LambdaExpressionOnTarget<ITarget>(targetMock.Object, expression) { Key = new object() };
 
         // Assert
-        change.Target.Should().Be(targetMock.Object);
+        _ = change.Target.Should().Be(targetMock.Object);
     }
 }
