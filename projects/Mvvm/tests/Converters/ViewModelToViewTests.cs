@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Tests.Converters;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Mvvm.Tests.Converters;
 
 /// <summary>
 /// Contains test cases for the <see cref="ViewModelToView" /> class.
@@ -75,7 +73,6 @@ public class ViewModelToViewTests
     }
 }
 
-#pragma warning disable MA0048 // File name must match type name
 /// <summary>A test view model.</summary>
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "ViewModel must be public and is only used in this test suite")]
 public class TestViewModel;
-#pragma warning restore MA0048 // File name must match type name

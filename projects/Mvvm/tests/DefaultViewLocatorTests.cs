@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Mvvm.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Mvvm;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using IContainer = DryIoc.IContainer;
+
+namespace DroidNet.Mvvm.Tests;
 
 /// <summary>Test cases for the <see cref="DefaultViewLocator" /> class.</summary>
 [TestClass]
@@ -178,13 +176,15 @@ public class DefaultViewLocatorTests
 
     private sealed class MyView(MyViewModel viewModel) : BaseView(viewModel), IViewFor<MyViewModel>
     {
-#pragma warning disable CS0067 // Never used
-        public new event EventHandler<ViewModelChangedEventArgs<MyViewModel>>? ViewModelChanged;
-#pragma warning restore CS0067 // Never used
-
         public new MyViewModel? ViewModel { get; set; } = viewModel;
 
         object? IViewFor.ViewModel { get; set; } = viewModel;
+
+        event EventHandler<ViewModelChangedEventArgs<MyViewModel>>? IViewFor<MyViewModel>.ViewModelChanged
+        {
+            add { } // empty accessors so the compiler stops complaining about the event unused
+            remove { }
+        }
     }
 #pragma warning restore SA1201 // Elements should appear in the correct order
 }
@@ -194,17 +194,22 @@ internal interface IBaseViewModel;
 
 internal interface IBaseView;
 
+[ExcludeFromCodeCoverage]
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "class only used in this test suite")]
 internal class BaseViewModel;
 
 [ExcludeFromCodeCoverage]
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "class only used in this test suite")]
 internal class BaseView(IBaseViewModel viewModel) : IViewFor<IBaseViewModel>
 {
-#pragma warning disable CS0067 // Never used
-    public event EventHandler<ViewModelChangedEventArgs<IBaseViewModel>>? ViewModelChanged;
-#pragma warning restore CS0067 // Never used
-
     public IBaseViewModel? ViewModel { get; set; } = viewModel;
 
     object? IViewFor.ViewModel { get; set; } = viewModel;
+
+    public event EventHandler<ViewModelChangedEventArgs<IBaseViewModel>>? ViewModelChanged
+    {
+        add { } // empty accessors so the compiler stops complaining about the event unused
+        remove { }
+    }
 }
 #pragma warning restore SA1201 // Elements should appear in the correct order
