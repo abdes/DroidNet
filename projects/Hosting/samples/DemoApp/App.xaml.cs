@@ -2,18 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
+
+namespace DroidNet.Hosting.Demo;
 
 /// <summary>
 /// Provides application-specific behavior to supplement the default
 /// Application class.
 /// </summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Application class must be public")]
 public partial class App
 {
     private readonly IServiceProvider serviceProvider;
@@ -47,7 +48,7 @@ public partial class App
          * specific requirements due to the hosting.
          */
 
-        this.window = (Window)ActivatorUtilities.CreateInstance(this.serviceProvider, typeof(MainWindow));
+        this.window = ActivatorUtilities.CreateInstance<MainWindow>(this.serviceProvider);
         this.window.AppWindow.Resize(new SizeInt32(1600, 900));
         this.window.Activate();
     }

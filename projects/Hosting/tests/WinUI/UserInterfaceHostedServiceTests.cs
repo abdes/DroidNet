@@ -2,13 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting.Tests.WinUI;
-
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using DroidNet.Hosting.WinUI;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+
+namespace DroidNet.Hosting.Tests.WinUI;
 
 /// <summary>
 /// Unit tests for <see cref="UserInterfaceHostedService" />.

@@ -2,10 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-/* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
-
-namespace DroidNet.Hosting.Demo;
-
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Hosting.Demo.Services;
 using DryIoc;
@@ -14,9 +10,14 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
+/* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
+
+namespace DroidNet.Hosting.Demo;
+
 /// <summary>The User Interface's main window.</summary>
 [ExcludeFromCodeCoverage]
-public sealed partial class MainWindow
+[SuppressMessage("Microsoft.Performance", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "This class is instantiated via Activator in App.")]
+internal sealed partial class MainWindow
 {
     private const string BooleanFlagKey = "boolean-flag";
     private const string IntValueKey = "int-value";

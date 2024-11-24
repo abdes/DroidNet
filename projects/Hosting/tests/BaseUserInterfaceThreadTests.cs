@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Hosting;
-
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Moq.Protected;
+
+namespace DroidNet.Hosting.Tests;
 
 /// <summary>
 /// Uint tests for the <see cref="BaseUserInterfaceThread{T}" /> class.
@@ -37,9 +36,9 @@ public class BaseUserInterfaceThreadTests
         {
             CallBase = true,
         };
-        mockThread.Protected()
+        _ = mockThread.Protected()
             .Setup("BeforeStart");
-        mockThread.Protected()
+        _ = mockThread.Protected()
             .Setup("DoStart");
 
         // Start he UI thread and wait until it completes before testing for assertions.
