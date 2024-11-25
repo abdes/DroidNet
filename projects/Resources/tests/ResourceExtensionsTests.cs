@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.Windows.ApplicationModel.Resources;
 using Moq;
@@ -18,11 +19,15 @@ public class ResourceExtensionsTests
 
     public ResourceExtensionsTests()
     {
-        _ = this.mockResourceMap.Setup(m => m.TryGetValue("Hello"))
+        var thisAssembly = Assembly.GetAssembly(typeof(ResourceExtensionsTests))!.GetName();
+        _ = this.mockResourceMap.Setup(m => m.TryGetValue($"{thisAssembly}/Localized/Thanks"))
+            .Returns(new ResourceCandidate(ResourceCandidateKind.String, "Gracias"));
+
+        _ = this.mockResourceMap.Setup(m => m.TryGetValue("Localized/Hello"))
             .Returns(new ResourceCandidate(ResourceCandidateKind.String, "Hola"));
-        _ = this.mockResourceMap.Setup(m => m.TryGetValue("Goodbye"))
+        _ = this.mockResourceMap.Setup(m => m.TryGetValue("Localized/Goodbye"))
             .Returns(new ResourceCandidate(ResourceCandidateKind.String, "Adiós"));
-        _ = this.mockResourceMap.Setup(m => m.TryGetValue(It.IsNotIn("Hello", "Goodbye")))
+        _ = this.mockResourceMap.Setup(m => m.TryGetValue(It.IsNotIn($"{thisAssembly}/Localized/Thanks", "Localized/Hello", "Localized/Goodbye")))
             .Returns((ResourceCandidate?)null);
         _ = this.mockResourceMap.Setup(m => m.GetSubtree(It.IsAny<string>()))
             .Returns(this.mockResourceMap.Object);
@@ -95,16 +100,29 @@ public class ResourceExtensionsTests
     }
 
     [TestMethod]
-    public void GetLocalizedMine_ShouldReturnOriginalString_WhenSubMapIsNull()
+    public void GetLocalizedMine_ShouldReturnCallingAssemblyString_WhenNoFoundInApp()
     {
         // Arrange
-        const string originalString = "Hello";
+        const string originalString = "MSG_Thanks";
+
+        // Act
+        var localizedString = originalString.GetLocalizedMine(this.mockResourceMap.Object);
+
+        // Assert
+        _ = localizedString.Should().Be("Thanks");
+    }
+
+    [TestMethod]
+    public void GetLocalizedMine_ShouldReturnCallingAssemblyString_WhenSubMapIsNull()
+    {
+        // Arrange
+        const string originalString = "MSG_Thanks";
         _ = this.mockResourceMap.Setup(m => m.GetSubtree(It.IsAny<string>())).Returns((IResourceMap?)null);
 
         // Act
         var localizedString = originalString.GetLocalizedMine(this.mockResourceMap.Object);
 
         // Assert
-        _ = localizedString.Should().Be(originalString);
+        _ = localizedString.Should().Be("Thanks");
     }
 }
