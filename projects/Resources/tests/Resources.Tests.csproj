@@ -5,7 +5,7 @@
 
     <PropertyGroup>
         <RootNamespace>$(RootNamespace).Resources.Tests</RootNamespace>
-        <AssemblyName>$(RootNamespace).Resources.Tests</AssemblyName>
+        <AssemblyName>DroidNet.Resources.Tests</AssemblyName>
 
         <!-- Ensure that the test loads the WinAppSDK runtime -->
         <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
