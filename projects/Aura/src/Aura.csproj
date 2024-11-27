@@ -19,6 +19,11 @@
             <PackagePath>\</PackagePath>
         </None>
     </ItemGroup>
+    <ItemGroup>
+        <None Include="Assets\**\*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
