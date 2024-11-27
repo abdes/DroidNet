@@ -49,10 +49,9 @@ public class PathFinder : IPathFinder
 
         this.UserDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         this.UserHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        this.UserDownloads = KnownFolderPathHelpers.SHGetKnownFolderPath(
-            new Guid("374DE290-123F-4565-9164-39C4925E467B"),
-            0);
         this.UserDocuments = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        this.UserDownloads = KnownFolderPathHelpers.SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0);
+        this.UserOneDrive = KnownFolderPathHelpers.SHGetKnownFolderPath(new Guid("A52BBA46-E9E1-435f-B3D9-28DAA648C0F6"), 0);
 
         this.ProgramData = AppContext.BaseDirectory;
 
@@ -88,6 +87,9 @@ public class PathFinder : IPathFinder
 
     /// <inheritdoc/>
     public string SystemRoot { get; }
+
+    /// <inheritdoc/>
+    public string UserOneDrive { get; }
 
     /// <inheritdoc/>
     public string Temp { get; }
