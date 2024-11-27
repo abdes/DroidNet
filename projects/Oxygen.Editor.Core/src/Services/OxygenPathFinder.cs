@@ -26,6 +26,7 @@ public class OxygenPathFinder : IOxygenPathFinder
         this.parentFinder = parentFinder;
         this.PersonalProjects = fs.Path.GetFullPath(Path.Combine(parentFinder.UserDocuments, OxygenProjectsFolderName));
         this.LocalProjects = Path.GetFullPath(Path.Combine(parentFinder.LocalAppData, OxygenProjectsFolderName));
+        this.StateDatabasePath = Path.Combine(parentFinder.LocalAppState, "state.db");
 
         // Initialize the App Data Root if it is not already created
         _ = fs.Directory.CreateDirectory(parentFinder.Temp);
@@ -40,6 +41,9 @@ public class OxygenPathFinder : IOxygenPathFinder
 
     /// <inheritdoc/>
     public string LocalProjects { get; }
+
+    /// <inheritdoc/>
+    public string StateDatabasePath { get; }
 
     /// <inheritdoc/>
     public string Mode => this.parentFinder.Mode;
@@ -64,6 +68,9 @@ public class OxygenPathFinder : IOxygenPathFinder
 
     /// <inheritdoc/>
     public string UserDocuments => this.parentFinder.UserDocuments;
+
+    /// <inheritdoc/>
+    public string UserOneDrive => this.parentFinder.UserOneDrive;
 
     /// <inheritdoc/>
     public string ProgramData => this.parentFinder.ProgramData;

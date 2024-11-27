@@ -107,4 +107,18 @@ public class OxygenPathFinderTests
         // Assert
         _ = actualPath.Should().Be(expectedPath);
     }
+
+    [TestMethod]
+    public void StateDatabasePathShouldReturnCorrectPath()
+    {
+        // Arrange
+        const string expectedPath = @"C:\Users\TestUser\AppData\Local\TestApp\.state\state.db";
+        var sut = new OxygenPathFinder(this.mockPathFinder.Object, this.mockFileSystem.Object);
+
+        // Act
+        var actualPath = sut.StateDatabasePath;
+
+        // Assert
+        _ = actualPath.Should().Be(expectedPath);
+    }
 }

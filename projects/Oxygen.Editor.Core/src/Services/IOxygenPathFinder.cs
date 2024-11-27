@@ -20,4 +20,9 @@ public interface IOxygenPathFinder : IPathFinder
     /// Gets the path to the local projects.
     /// </summary>
     public string LocalProjects { get; }
+
+    /// <summary>
+    /// Gets the path to the database file used to store the application runtime state.
+    /// </summary>
+    public string StateDatabasePath { get; }
 }
