@@ -39,12 +39,7 @@ public class PersistentState(DbContextOptions<PersistentState> options) : DbCont
     public DbSet<ProjectUsage> ProjectUsageRecords { get; set; }
 
     /// <summary>
-    /// Configures the model for the context.
+    /// Gets or sets the DbSet for module settings.
     /// </summary>
-    /// <param name="modelBuilder">The builder being used to construct the model for the context.</param>
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        _ = modelBuilder.ApplyConfiguration(new TemplateUsageConfiguration());
-        _ = modelBuilder.ApplyConfiguration(new ProjectUsageConfiguration());
-    }
+    public DbSet<ModuleSetting> Settings { get; set; }
 }

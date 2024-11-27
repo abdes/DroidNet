@@ -29,15 +29,23 @@ dotnet ef migrations add InitialCreate --framework net8.0 --msbuildprojectextens
 
 When you make changes to your model, add a new migration to capture those changes.
 
+Using an in-memory SQLite database:
+
 ```shell
-dotnet ef migrations add <MIGRATION_NAME> -Project Data
+dotnet ef migrations add MIGRATION__NAME --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --use-in-memory-db
+```
+
+Using a file-based SQLite database in development mode:
+
+```shell
+dotnet ef migrations add MIGRATION__NAME --framework net8.0 --msbuildprojectextensionspath ..\..\..\obj\projects\Oxygen.Editor.Data\src\ -- --mode=dev
 ```
 
 ### Reviewing the Migration
 
 Review the generated migration code to ensure it accurately reflects the intended changes.
 
-```shell
+```csharp
 public partial class <MIGRATION_NAME> : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -64,7 +72,7 @@ dotnet ef database update -Project Data
 
 Ensure your model classes reflect the changes.
 
-```shell
+```csharp
 public class ProjectState
 {
     [Key]
@@ -101,7 +109,7 @@ When making changes to the model, consider how existing data will be affected:
 
 If you need to rename a column, you might write a custom migration:
 
-```shell
+```csharp
 public partial class RenameContentBrowserState : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
@@ -120,6 +128,84 @@ public partial class RenameContentBrowserState : Migration
             newName: "ContentBrowserState");
     }
 }
+```
+
+## Settings Management
+
+### SettingsManager
+
+The `SettingsManager` class manages the persistence and retrieval of module settings using a database context. It provides methods to save and load settings for different modules, using a `PersistentState` context to interact with the database and caching settings in memory to improve performance. The settings are serialized and deserialized using JSON.
+
+### Defining Settings
+
+Settings destined for the persistent state database can be defined using the `ModuleSettings` base class. Properties marked with the `PersistedAttribute` will be saved and loaded by the `SettingsManager`.
+
+```csharp
+public class MyModuleSettings : ModuleSettings
+{
+    [Persisted]
+    public int MySetting { get; set; }
+
+    public MyModuleSettings(SettingsManager settingsManager, string moduleName)
+        : base(settingsManager, moduleName)
+    {
+    }
+}
+```
+
+### Loading and Saving Settings
+
+To load and save settings, use the `LoadAsync` and `SaveAsync` methods provided by the `ModuleSettings` class.
+
+```csharp
+// Initialize the PersistentState context
+var options = new DbContextOptionsBuilder<PersistentState>()
+    .UseSqlite("Data Source=app.db")
+    .Options;
+var context = new PersistentState(options);
+
+// Create the SettingsManager
+var settingsManager = new SettingsManager(context);
+
+// Create the module settings
+var mySettings = new MyModuleSettings(settingsManager, "MyModule");
+
+// Load the settings
+await mySettings.LoadAsync();
+
+// Modify a setting
+mySettings.MySetting = 42;
+
+// Save the settings
+await mySettings.SaveAsync();
+```
+
+### Example Usage
+
+Here is an example of how to use the `SettingsManager` and `ModuleSettings` classes:
+
+```csharp
+public class MyModuleSettings : ModuleSettings
+{
+    [Persisted]
+    public int MySetting { get; set; }
+
+    public MyModuleSettings(SettingsManager settingsManager, string moduleName)
+        : base(settingsManager, moduleName)
+    {
+    }
+}
+
+// Usage
+var options = new DbContextOptionsBuilder<PersistentState>()
+    .UseSqlite("Data Source=app.db")
+    .Options;
+var context = new PersistentState(options);
+var settingsManager = new SettingsManager(context);
+var mySettings = new MyModuleSettings(settingsManager, "MyModule");
+await mySettings.LoadAsync();
+mySettings.MySetting = 42;
+await mySettings.SaveAsync();
 ```
 
 ### Summary

@@ -114,4 +114,46 @@ public partial class DatabaseSchemaTests : DatabaseTests
         var templates = templateService.GetAllTemplates();
         _ = templates.Should().ContainSingle(t => t.Location == "Test Location");
     }
+
+    /// <summary>
+    /// Verifies that the database has a table called "ModuleSettings".
+    /// </summary>
+    [TestMethod]
+    public void DatabaseHasModuleSettingsTable()
+    {
+        using var scope = this.Container.OpenScope();
+        var db = scope.Resolve<PersistentState>();
+
+        using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name='{ModuleSetting.TableName}';";
+        var tableName = command.ExecuteScalar() as string;
+
+        _ = tableName.Should().Be(ModuleSetting.TableName);
+    }
+
+    /// <summary>
+    /// Verifies that a ModuleSetting can be added and retrieved.
+    /// </summary>
+    [TestMethod]
+    public void CanAddAndRetrieveModuleSetting()
+    {
+        using var scope = this.Container.OpenScope();
+        var db = scope.Resolve<PersistentState>();
+
+        var moduleSetting = new ModuleSetting
+        {
+            ModuleName = "TestModule",
+            Key = "TestKey",
+            JsonValue = "{\"setting\":\"value\"}",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        _ = db.Settings.Add(moduleSetting);
+        _ = db.SaveChanges();
+
+        var retrievedSetting = db.Settings.Single(ms => ms.ModuleName == "TestModule" && ms.Key == "TestKey");
+        _ = retrievedSetting.Should().NotBeNull();
+        _ = retrievedSetting.JsonValue.Should().Be("{\"setting\":\"value\"}");
+    }
 }
