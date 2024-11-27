@@ -219,7 +219,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        this.Project = new ProjectAdapter(project, this.projectManager);
+        this.Project = new ProjectAdapter(project);
         await this.InitializeRootAsync(this.Project).ConfigureAwait(true);
     }
 
@@ -235,8 +235,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
             new Scene(this.Project.AttachedObject)
             {
                 Name = $"New Scene {this.Project.AttachedObject.Scenes.Count}",
-            },
-            this.projectManager);
+            });
 
         var selectedItem = this.SelectionModel?.SelectedItem;
         while (selectedItem is not null && selectedItem is not SceneAdapter && selectedItem.Parent is not null)

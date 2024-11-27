@@ -2,20 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
-
 using DroidNet.Controls;
 using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
+
+namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Project" /> model class.
 /// </summary>
 /// <param name="project">The <see cref="GameEntity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-/// <param name="projectManager">The configured project manager service.</param>
-public partial class ProjectAdapter(Project project, IProjectManagerService projectManager)
-    : TreeItemAdapter(isRoot: true, isHidden: true), ITreeItem<Project>
+public partial class ProjectAdapter(Project project) : TreeItemAdapter(isRoot: true, isHidden: true), ITreeItem<Project>
 {
+    /// <inheritdoc/>
     public override string Label
     {
         get => this.AttachedObject.Name;
@@ -31,25 +30,24 @@ public partial class ProjectAdapter(Project project, IProjectManagerService proj
         }
     }
 
+    /// <inheritdoc/>
     public Project AttachedObject => project;
 
+    /// <inheritdoc/>
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
+    /// <inheritdoc/>
     protected override int DoGetChildrenCount() => project.Scenes.Count;
 
+    /// <inheritdoc/>
     protected override async Task LoadChildren()
     {
         this.ClearChildren();
 
-        if (!await projectManager.LoadProjectScenesAsync(project).ConfigureAwait(false))
-        {
-            return;
-        }
-
         foreach (var scene in project.Scenes)
         {
             this.AddChildInternal(
-                new SceneAdapter(scene, projectManager)
+                new SceneAdapter(scene)
                 {
                     IsExpanded = true,
                 });
