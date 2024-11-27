@@ -27,6 +27,9 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
     [ObservableProperty]
     private int selectedItemIndex = InvalidItemIndex;
 
+    /// <summary>
+    /// Gets the list of navigation items.
+    /// </summary>
     public IList<NavigationItem> NavigationItems { get; } =
     [
         new("home", "Home", "\uE80F", "H", typeof(HomeViewModel)),
@@ -34,11 +37,17 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         new("open", "Open", "\uE8B7", "O", typeof(OpenProjectViewModel)),
     ];
 
+    /// <summary>
+    /// Gets the list of all navigation items.
+    /// </summary>
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];
 
     /// <inheritdoc/>
     public IActiveRoute? ActiveRoute { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the settings item is selected.
+    /// </summary>
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
     /// <inheritdoc/>
@@ -69,6 +78,10 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         }
     }
 
+    /// <summary>
+    /// Navigates to the specified navigation item.
+    /// </summary>
+    /// <param name="requestedItem">The navigation item to navigate to.</param>
     [RelayCommand]
     internal void NavigateToItem(NavigationItem requestedItem)
     {
@@ -86,6 +99,9 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         }
     }
 
+    /// <summary>
+    /// Navigates to the settings view.
+    /// </summary>
     [RelayCommand]
     internal void NavigateToSettings()
     {
@@ -96,6 +112,11 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         }
     }
 
+    /// <summary>
+    /// Finds the navigation item that matches the specified predicate.
+    /// </summary>
+    /// <param name="match">The predicate to match the navigation item.</param>
+    /// <returns>A tuple containing the index and the navigation item if found; otherwise, a tuple with <see cref="InvalidItemIndex"/> and <see langword="null"/>.</returns>
     private (int index, NavigationItem? item) FindNavigationItem(Predicate<NavigationItem> match)
     {
         for (var index = 0; index < this.AllItems.Count; ++index)

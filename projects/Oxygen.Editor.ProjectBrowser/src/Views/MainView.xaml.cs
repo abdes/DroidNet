@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
-
 using System.Diagnostics;
 using DroidNet.Converters;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
+
+namespace Oxygen.Editor.ProjectBrowser.Views;
 
 /// <summary>
 /// The project browser main view; which uses a <see cref="NavigationView" />, but instead of relying on a <see cref="Frame" />
@@ -19,6 +19,9 @@ public sealed partial class MainView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainView"/> class.
+    /// </summary>
     public MainView()
     {
         this.InitializeComponent();

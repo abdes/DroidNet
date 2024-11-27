@@ -54,14 +54,4 @@
         </Content>
     </ItemGroup>
 
-    <ItemGroup>
-        <Content Include="Config\ProjectBrowser.config.json">
-        <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-        </Content>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PRIResource Update="en-US\Strings.resw" />
-    </ItemGroup>
-
 </Project>

@@ -2,15 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
-
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 
-/// <summary>ViewModel for the dialog used to create a new project.</summary>
+namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+
+/// <summary>
+/// ViewModel for the New Project dialog in the Oxygen Editor's Project Browser.
+/// </summary>
 public partial class NewProjectDialogViewModel : ObservableObject
 {
     [ObservableProperty]
@@ -26,20 +27,31 @@ public partial class NewProjectDialogViewModel : ObservableObject
     [ObservableProperty]
     private ITemplateInfo template;
 
-    public NewProjectDialogViewModel(ITemplateInfo template)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NewProjectDialogViewModel"/> class.
+    /// </summary>
+    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="template">The template information for the new project.</param>
+    public NewProjectDialogViewModel(IProjectBrowserService projectBrowser, ITemplateInfo template)
     {
         this.Template = template;
 
-        var projectsService = Ioc.Default.GetRequiredService<IProjectBrowserService>();
-        this.PinnedLocations = projectsService.GetQuickSaveLocations();
+        this.PinnedLocations = projectBrowser.GetQuickSaveLocations();
         this.SelectedLocation = this.PinnedLocations[0];
 
         this.ProjectName = string.Empty;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the project name is valid.
+    /// </summary>
     public bool IsProjectNameValid
-        => this.ProjectName != string.Empty; // TODO(abdes) validate project name, use CanCreateProject
+        => !string.IsNullOrEmpty(this.ProjectName); // TODO: validate project name, use CanCreateProject
 
+    /// <summary>
+    /// Sets the selected location.
+    /// </summary>
+    /// <param name="location">The location to set as selected.</param>
     [RelayCommand]
     private void SetLocation(QuickSaveLocation location)
         => this.SelectedLocation = location;

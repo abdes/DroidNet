@@ -4,11 +4,46 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
+/// <summary>
+/// Defines a service for managing and accessing project templates in the Oxygen Editor.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The service supports both built-in templates shipped with the editor and custom templates
+/// stored in user-defined locations.
+/// </para>
+/// </remarks>
 public interface ITemplatesService
 {
-    IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync();
+    /// <summary>
+    /// Gets an asynchronous enumerable of all available local templates.
+    /// </summary>
+    /// <returns>
+    /// An asynchronous enumerable of <see cref="ITemplateInfo"/> objects representing available templates.
+    /// </returns>
+    /// <remarks>
+    /// Templates that fail to load are skipped and errors are logged without interrupting enumeration.
+    /// </remarks>
+    public IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync();
 
-    bool HasRecentlyUsedTemplates();
+    /// <summary>
+    /// Checks if there are any recently used templates in the history.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> if there are templates in the usage history;
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool HasRecentlyUsedTemplates();
 
-    IObservable<ITemplateInfo> GetRecentlyUsedTemplates();
+    /// <summary>
+    /// Gets an observable sequence of recently used templates.
+    /// </summary>
+    /// <returns>
+    /// An <see cref="IObservable{T}"/> of <see cref="ITemplateInfo"/> representing
+    /// recently used templates, ordered by most recent usage.
+    /// </returns>
+    /// <remarks>
+    /// Invalid templates are automatically removed from history during enumeration.
+    /// </remarks>
+    public IObservable<ITemplateInfo> GetRecentlyUsedTemplates();
 }

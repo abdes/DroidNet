@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
-
 using System.Diagnostics;
 using System.Globalization;
 using DroidNet.Mvvm.Generators;
@@ -14,15 +12,27 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Storage;
 using WinRT;
 
+namespace Oxygen.Editor.ProjectBrowser.Views;
+
 /// <summary>
-/// An empty page that can be used on its own or navigated to within a
-/// Frame.
+/// A page that can be used on its own or navigated to within a Frame to open projects.
 /// </summary>
 [ViewModel(typeof(OpenProjectViewModel))]
 public sealed partial class OpenProjectView
 {
-    public OpenProjectView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OpenProjectView"/> class.
+    /// </summary>
+    public OpenProjectView()
+    {
+        this.InitializeComponent();
+    }
 
+    /// <summary>
+    /// Handles the click event on a known location button.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="e">The known location that was clicked.</param>
     private void KnownLocationButton_OnClick(object? sender, KnownLocation e)
     {
         _ = sender;
@@ -30,6 +40,11 @@ public sealed partial class OpenProjectView
         this.ViewModel!.SelectLocation(e);
     }
 
+    /// <summary>
+    /// Handles the item click event in the list view asynchronously.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="e">The event data.</param>
     private async void ListView_OnItemClickAsync(object sender, ItemClickEventArgs e)
     {
         _ = sender;
@@ -43,10 +58,15 @@ public sealed partial class OpenProjectView
         }
         else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
-            await this.ViewModel!.OpenProjectFile((item as INestedItem)!.ParentPath).ConfigureAwait(false);
+            _ = await this.ViewModel!.OpenProjectFile((item as INestedItem)!.ParentPath).ConfigureAwait(false);
         }
     }
 
+    /// <summary>
+    /// Handles the text changed event in the filter box.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
     private void FilterBox_OnTextChanged(object sender, TextChangedEventArgs args)
     {
         _ = sender;
@@ -55,6 +75,11 @@ public sealed partial class OpenProjectView
         this.ViewModel!.ApplyFilter(this.FilterBox.Text);
     }
 
+    /// <summary>
+    /// Handles the loaded event of the page.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
         _ = sender; // unused
@@ -62,27 +87,4 @@ public sealed partial class OpenProjectView
 
         await this.ViewModel!.Initialize().ConfigureAwait(true);
     }
-}
-
-/// <summary>
-/// A <see cref="DataTemplateSelector" /> that can return the correct template to be used based on whether the item being displayed
-/// is an <see cref="IFolder" /> or an <see cref="IDocument" />.
-/// </summary>
-internal sealed partial class FileListDataTemplateSelector : DataTemplateSelector
-{
-    // Initialized as static resource in the XAML
-#pragma warning disable CS8618
-    public DataTemplate FolderTemplate { get; set; }
-#pragma warning restore CS8618
-
-    // Initialized as static resource in the XAML
-#pragma warning disable CS8618
-    public DataTemplate FileTemplate { get; set; }
-#pragma warning restore CS8618
-
-    protected override DataTemplate SelectTemplateCore(object item)
-        => this.SelectTemplateCore(item, container: null);
-
-    protected override DataTemplate SelectTemplateCore(object item, DependencyObject? container)
-        => item is IFolder ? this.FolderTemplate : this.FileTemplate;
 }
