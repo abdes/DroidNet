@@ -2,13 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor;
-
-using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
@@ -22,19 +18,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Models;
-using Oxygen.Editor.ProjectBrowser.Config;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Projects.Config;
-using Oxygen.Editor.Projects.Storage;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Storage;
@@ -44,6 +38,8 @@ using Oxygen.Editor.WorldEditor.ProjectExplorer;
 using Oxygen.Editor.WorldEditor.ViewModels;
 using Oxygen.Editor.WorldEditor.Views;
 using Serilog;
+
+namespace Oxygen.Editor;
 
 /// <summary>
 /// The Main entry of the application.
@@ -88,22 +84,20 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            bootstrap.Configure()
+            _ = bootstrap.Configure()
                 .WithConfiguration(AddConfigurationFiles, ConfigureOptionsPattern)
                 .WithLoggingAbstraction()
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
+                .WithAppServices(ConfigureApplicationServices)
                 .WithAppServices(ConfigurePersistentStateDatabase)
-                .WithAppServices(RegisterViewsAndViewModels)
-                .WithAppServices(ConfigureApplicationServices);
+                .WithAppServices(RegisterViewsAndViewModels);
 
-            var host = bootstrap.Build();
-            using (var scope = host.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<PersistentState>();
-                db.Database.Migrate();
-            }
+            _ = bootstrap.Build();
+
+            var db = bootstrap.Container.Resolve<PersistentState>();
+            db.Database.Migrate();
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -115,8 +109,8 @@ public static partial class Program
         }
         finally
         {
-            Log.CloseAndFlush();
             bootstrap.Dispose();
+            Log.CloseAndFlush();
         }
     }
 
@@ -181,41 +175,30 @@ public static partial class Program
     {
         Debug.Assert(finder is not null, "must setup the PathFinderService before adding config files");
 
-        /* TODO: use the settings service */
-        /* TODO: this path is plain wrong - need to embed the configs or find a way to copy them to the app root folder */
-
-        var projectBrowserConfigPath = finder.GetProgramConfigFilePath(
-            $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}/Config/ProjectBrowser.config.json");
-
-        var categoriesConfigPath = finder.GetProgramConfigFilePath(
-            $"{Assembly.GetAssembly(typeof(ProjectsSettings))!.GetName().Name}/Config/Categories.config.json");
-
         return
         [
             /* TODO: PathFinderService.GetConfigFilePath(AppearanceSettings.ConfigFileName),*/
 
             finder.GetConfigFilePath("LocalSettings.json"),
-            projectBrowserConfigPath,
-            categoriesConfigPath,
         ];
     }
 
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-    {
-        _ = sc.Configure<ProjectBrowserSettings>(config.GetSection(ProjectBrowserSettings.ConfigSectionName));
-        _ = sc.Configure<ProjectsSettings>(config.GetSection(ProjectsSettings.ConfigSectionName));
+    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc) =>
 
         // TODO: use the new appearance settings service
         _ = sc.Configure<ThemeSettings>(config.GetSection(nameof(ThemeSettings)));
-    }
 
-    private static void ConfigurePersistentStateDatabase(IServiceCollection sc, Bootstrapper bs)
+    private static void ConfigurePersistentStateDatabase(IContainer container)
     {
-        Debug.Assert(bs.PathFinderService is not null, "must setup the PathFinderService before adding config files");
-
-        var localStateFolder = bs.PathFinderService.LocalAppState;
-        var dbPath = Path.Combine(localStateFolder, "state.db");
-        _ = sc.AddSqlite<PersistentState>($"Data Source={dbPath}; Mode=ReadWriteCreate");
+        container.RegisterInstance(
+            new DbContextOptionsBuilder<PersistentState>()
+                .UseLoggerFactory(container.Resolve<ILoggerFactory>())
+                .EnableDetailedErrors()
+                .EnableSensitiveDataLogging()
+                .UseSqlite(
+                    $"Data Source={container.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
+                .Options);
+        container.Register<PersistentState>(Reuse.Singleton);
     }
 
     private static void ConfigureApplicationServices(this IContainer container)
@@ -232,19 +215,19 @@ public static partial class Program
          * Register domain specific services.
          */
 
+        // TODO: use keyed registration and parameter name to key mappings
+        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
+        container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
+
         // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
         // Register specific template source implementations KEYED. They are injected only as a collection of implementation
         // instances, only by the universal source.
         container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
-        container.Register<ITemplatesService, TemplatesService>(Reuse.Singleton);
+        container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
-        // TODO: use keyed registration and parameter name to key mappings
-        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
-        container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
-        container.Register<LocalProjectsSource>(Reuse.Singleton);
-        container.Register<IProjectSource, UniversalProjectSource>(Reuse.Singleton);
-        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+        container.Register<ISettingsManager, SettingsManager>(Reuse.Singleton);
+        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Transient);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 
         // Register the project instance using a delegate that will request the currently open project from the project
@@ -271,7 +254,7 @@ public static partial class Program
 
         // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
         // corresponding to name of the special target <see cref="Target.Main" />.
-        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+        container.Register<Window, MainWindow>(Reuse.Transient, serviceKey: Target.Main);
 
         // Views and ViewModels
         RegisterViewsAndViewModels(container);
@@ -279,8 +262,8 @@ public static partial class Program
 
     private static void RegisterViewsAndViewModels(IContainer container)
     {
-        container.Register<ShellViewModel>(Reuse.Singleton);
-        container.Register<ShellView>(Reuse.Singleton);
+        container.Register<ShellViewModel>(Reuse.Transient);
+        container.Register<ShellView>(Reuse.Transient);
 
         container.Register<MainViewModel>(Reuse.Transient);
         container.Register<MainView>(Reuse.Transient);

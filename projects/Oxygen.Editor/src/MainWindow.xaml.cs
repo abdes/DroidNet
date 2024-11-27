@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Mvvm;
+using DroidNet.Resources;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
-using Oxygen.Editor.Helpers;
 
 namespace Oxygen.Editor;
 
@@ -20,7 +19,7 @@ public sealed partial class MainWindow : IOutletContainer
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
     /// </summary>
-    public MainWindow(IViewLocator viewLocator)
+    public MainWindow()
     {
         this.InitializeComponent();
 
