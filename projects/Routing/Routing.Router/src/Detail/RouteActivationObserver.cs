@@ -73,7 +73,7 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
             return true;
         }
 
-        var viewModel = container.GetService(viewModelType) ??
+        var viewModel = container.Resolve(viewModelType) ??
             throw new MissingViewModelException { ViewModelType = viewModelType };
         routeImpl.ViewModel = viewModel;
         if (viewModel is IRoutingAware injectable)
