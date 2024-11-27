@@ -10,4 +10,6 @@ namespace DroidNet.Routing;
 /// </summary>
 public class RouterStateManager() : IRouterStateManager
 {
+    /// <inheritdoc/>
+    public void ToDo() => throw new InvalidOperationException();
 }

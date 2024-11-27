@@ -9,4 +9,8 @@ namespace DroidNet.Routing;
 /// </summary>
 public interface IRouterStateManager
 {
+    /// <summary>
+    /// TODO: Design the interface for the router state management.
+    /// </summary>
+    public void ToDo();
 }
