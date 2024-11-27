@@ -2,19 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples;
-
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Runtime.InteropServices;
+using DroidNet.Aura;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
-using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
-using DroidNet.Samples.Services;
-using DroidNet.Samples.Settings;
-using DroidNet.Samples.Shell;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
 using Microsoft.Extensions.Configuration;
@@ -23,22 +17,22 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
 
+namespace DroidNet.Samples;
+
 /// <summary>The Main entry of the application.</summary>
 /// <remarks>
 /// <para>
 /// Overrides the usual WinUI XAML entry point in order to be able to control what exactly happens
 /// at the entry point of the application. Customized here to build an application <see cref="Host" />
 /// and populate it with the default services (such as Configuration, Logging, etc...) and a
-/// specialized <see cref="IHostedService" /> for running the User Interface thread.
+/// specialized service for running the User Interface thread.
 /// </para>
 /// <para>
-/// Convenience hosting extension methods are used to simplify the setup of services needed for the
+/// Convenience container extension methods are used to simplify the setup of services needed for the
 /// User Interface, logging, etc.
 /// </para>
 /// <para>
-/// The WinUI service configuration supports customization, through a <see cref="HostingContext" />
-/// object placed in the <see cref="IHostApplicationBuilder.Properties" /> of the host builder.
-/// Currently, the IsLifetimeLinked property allows to specify if the User Interface thread lifetime
+/// The WinUI service configuration allows to specify if the User Interface thread lifetime
 /// is linked to the application lifetime or not. When the two lifetimes are linked, terminating
 /// either of them will result in terminating the other.
 /// </para>
@@ -64,7 +58,7 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            bootstrap.Configure()
+            _ = bootstrap.Configure()
                 .WithLoggingAbstraction()
                 .WithConfiguration(
                     MakeConfigFiles,
@@ -107,7 +101,7 @@ public static partial class Program
             // consume a segment.
             Path = string.Empty,
             MatchMethod = PathMatch.Prefix,
-            ViewModelType = typeof(ShellViewModel),
+            ViewModelType = typeof(MainShellViewModel),
         },
     ]);
 
@@ -134,7 +128,7 @@ public static partial class Program
         container.Register<IAppThemeModeService, AppThemeModeService>();
 
         // Views and ViewModels
-        container.Register<ShellView>(Reuse.Singleton);
-        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<MainShellView>(Reuse.Singleton);
+        container.Register<MainShellViewModel>(Reuse.Singleton);
     }
 }
