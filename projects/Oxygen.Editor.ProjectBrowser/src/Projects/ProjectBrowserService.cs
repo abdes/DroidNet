@@ -2,12 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
-
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using DroidNet.Resources;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
@@ -17,7 +14,27 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 
-/// <summary>Provides method to access and manipulate projects.</summary>
+namespace Oxygen.Editor.ProjectBrowser.Projects;
+
+/* TODO: better error reporting to the caller */
+
+/// <summary>
+/// Implements the <see cref="IProjectBrowserService"/> interface to provide project management functionality
+/// in the Oxygen Editor environment.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The ProjectBrowserService handles project creation, browsing, and management operations while maintaining
+/// state for recently used projects and known locations.
+/// </para>
+/// <para>
+/// Key responsibilities include:
+/// - Managing project templates and creation
+/// - Handling project storage locations
+/// - Tracking recently used projects
+/// - Managing project browser settings.
+/// </para>
+/// </remarks>
 public class ProjectBrowserService : IProjectBrowserService
 {
     private readonly IOxygenPathFinder finder;
@@ -26,16 +43,43 @@ public class ProjectBrowserService : IProjectBrowserService
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
     private readonly PersistentState state;
+    private readonly Lazy<Task<ProjectBrowserSettings>> lazySettings;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
+    /// </summary>
+    /// <param name="state">Persistent state storage for maintaining project usage history.</param>
+    /// <param name="projectManager">Service for managing project operations.</param>
+    /// <param name="finder">Service for locating system paths.</param>
+    /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
+    /// <param name="settingsManager">Manager for handling project browser settings.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="localStorage"/> is not an instance of <see cref="NativeStorageProvider"/>.
+    /// </exception>
+    /// <remarks>
+    /// The constructor initializes lazy-loaded components:
+    /// <para>- Project browser settings.</para>
+    /// <para>- Known locations for project storage.</para>
+    /// </remarks>
     public ProjectBrowserService(
         PersistentState state,
         IProjectManagerService projectManager,
         IOxygenPathFinder finder,
-        IStorageProvider localStorage)
+        IStorageProvider localStorage,
+        ISettingsManager settingsManager)
     {
         this.state = state;
         this.projectManager = projectManager;
         this.finder = finder;
+
+        this.lazySettings = new Lazy<Task<ProjectBrowserSettings>>(
+            async () =>
+            {
+                var settings = new ProjectBrowserSettings(settingsManager);
+                await settings.LoadAsync().ConfigureAwait(false);
+                return settings;
+            });
+
         this.localStorage = localStorage as NativeStorageProvider ?? throw new ArgumentException(
             $"{nameof(ProjectBrowserService)} requires a {nameof(NativeStorageProvider)}",
             nameof(localStorage));
@@ -43,6 +87,15 @@ public class ProjectBrowserService : IProjectBrowserService
         this.lazyLocations = new Lazy<Task<KnownLocation[]>>(this.InitializeKnownLocationsAsync);
     }
 
+    /// <summary>
+    /// Gets the current project browser settings.
+    /// </summary>
+    /// <remarks>
+    /// Accesses the lazily-loaded settings instance. The settings are loaded only when first accessed.
+    /// </remarks>
+    private ProjectBrowserSettings Settings => this.lazySettings.Value.Result;
+
+    /// <inheritdoc/>
     public async Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath)
     {
         // Containing folder must exist
@@ -58,11 +111,14 @@ public class ProjectBrowserService : IProjectBrowserService
                !await projectFolder.HasItemsAsync().ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<bool> NewProjectFromTemplate(
         ITemplateInfo templateInfo,
         string projectName,
         string atLocationPath)
     {
+        Debug.WriteLine($"New project from template: {templateInfo.Category.Name}/{templateInfo.Name} with name `{projectName}` in location `{atLocationPath}`");
+
         if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(false))
         {
             Debug.WriteLine($"Cannot create a new project with name `{projectName}` at: {atLocationPath}");
@@ -75,7 +131,7 @@ public class ProjectBrowserService : IProjectBrowserService
             return false;
         }
 
-        var templateDirInfo = new DirectoryInfo(templateInfo.Location!);
+        var templateDirInfo = new DirectoryInfo(templateInfo.Location);
 
         IFolder? projectFolder = null;
         try
@@ -108,9 +164,9 @@ public class ProjectBrowserService : IProjectBrowserService
                 }
             }
         }
-        catch (Exception copyError)
+        catch (Exception ex)
         {
-            Debug.WriteLine($"Project creation failed: {copyError.Message}");
+            Debug.WriteLine($"Project creation failed: {ex.Message}");
         }
 
         RemoveFailedProject(projectFolder);
@@ -157,12 +213,42 @@ public class ProjectBrowserService : IProjectBrowserService
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
+    {
+        try
+        {
+            var success = await this.projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(false);
+            if (success)
+            {
+                // Update the recently used project entry for the project being saved
+                await this.TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Open project  failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> OpenProjectAsync(string location)
+    {
+        var projectInfo = await this.projectManager.LoadProjectInfoAsync(location!).ConfigureAwait(false);
+        return projectInfo is not null
+            && await this.OpenProjectAsync(projectInfo).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public IList<QuickSaveLocation> GetQuickSaveLocations()
     {
         var locations = new List<QuickSaveLocation>();
 
-        var lastSaveLocation = this.state.ProjectBrowserState.LastSaveLocation;
-        if (lastSaveLocation != string.Empty)
+        var lastSaveLocation = this.Settings.LastSaveLocation;
+        if (!string.IsNullOrEmpty(lastSaveLocation))
         {
             locations.Add(new QuickSaveLocation("Recently Used", lastSaveLocation));
         }
@@ -173,78 +259,59 @@ public class ProjectBrowserService : IProjectBrowserService
         return locations;
     }
 
-    public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    /// <inheritdoc/>
+    public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await using (this.state.ConfigureAwait(false))
+        foreach (var item in this.state.ProjectUsageRecords)
         {
-            foreach (var item in this.state.RecentlyUsedProjects)
+            if (cancellationToken.IsCancellationRequested)
             {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-
-                var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
-                if (projectInfo != null)
-                {
-                    projectInfo.LastUsedOn = item.LastUsedOn;
-                    yield return projectInfo;
-                }
-                else
-                {
-                    try
-                    {
-                        _ = this.state.RecentlyUsedProjects!.Remove(item);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to remove entry from the most recently used projects: {ex.Message}");
-                    }
-                }
+                break;
             }
 
-            _ = await this.state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
+            if (projectInfo != null)
+            {
+                projectInfo.LastUsedOn = item.LastUsedOn;
+                yield return projectInfo;
+            }
+            else
+            {
+                _ = this.state.ProjectUsageRecords!.Remove(item);
+            }
         }
+
+        _ = await this.state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
         => await this.lazyLocations.Value.ConfigureAwait(false);
-
-#pragma warning disable SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]
-    private static extern string SHGetKnownFolderPath(
-        [MarshalAs(UnmanagedType.LPStruct)] Guid refToGuid,
-        uint dwFlags,
-        nint hToken = default);
-#pragma warning restore SYSLIB1054 // Use 'LibraryImportAttribute' instead of 'DllImportAttribute' to generate P/Invoke marshalling code at compile time
 
     private async Task TryUpdateRecentUsageAsync(string location)
     {
         try
         {
-            await using (this.state.ConfigureAwait(false))
+            var recentProjectEntry = this.state.ProjectUsageRecords.ToList()
+                .SingleOrDefault(
+                    p => string.Equals(p.Location, location, StringComparison.Ordinal),
+                    new ProjectUsage { LastUsedOn = DateTime.MinValue, Location = location });
+            if (recentProjectEntry.Id != 0)
             {
-                var recentProjectEntry = this.state.RecentlyUsedProjects.ToList()
-                    .SingleOrDefault(
-                        p => string.Equals(p.Location, location, StringComparison.Ordinal),
-                        new RecentlyUsedProject(0, location));
-                if (recentProjectEntry.Id != 0)
-                {
-                    recentProjectEntry.LastUsedOn = DateTime.Now;
-                    _ = this.state.RecentlyUsedProjects!.Update(recentProjectEntry);
-                }
-                else
-                {
-                    this.state.ProjectBrowserState.RecentProjects.Add(recentProjectEntry);
-                }
-
-                _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
+                recentProjectEntry.LastUsedOn = DateTime.Now;
+                _ = this.state.ProjectUsageRecords!.Update(recentProjectEntry);
             }
+            else
+            {
+                _ = this.state.ProjectUsageRecords.Add(recentProjectEntry);
+            }
+
+            _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
+            throw;
         }
     }
 
@@ -252,15 +319,13 @@ public class ProjectBrowserService : IProjectBrowserService
     {
         try
         {
-            await using (this.state.ConfigureAwait(false))
-            {
-                this.state.ProjectBrowserState.LastSaveLocation = location;
-                _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
-            }
+            this.Settings.LastSaveLocation = location;
+            await this.Settings.SaveAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
+            throw;
         }
     }
 
@@ -286,36 +351,36 @@ public class ProjectBrowserService : IProjectBrowserService
         {
             KnownLocations.RecentProjects => new KnownLocation(
                 locationKey,
-                "Recent Projects".TryGetLocalizedMine(),
+                "Recent Projects".GetLocalizedMine(),
                 string.Empty,
                 this.localStorage,
                 this),
 
             KnownLocations.ThisComputer => new KnownLocation(
                 locationKey,
-                "This Computer".TryGetLocalizedMine(),
+                "This Computer".GetLocalizedMine(),
                 string.Empty,
                 this.localStorage,
                 this),
 
             KnownLocations.OneDrive => await LocationFromLocalFolderPathAsync(
                     locationKey,
-                    SHGetKnownFolderPath(new Guid("A52BBA46-E9E1-435f-B3D9-28DAA648C0F6"), 0))
+                    this.finder.UserOneDrive)
                 .ConfigureAwait(false),
 
             KnownLocations.Downloads => await LocationFromLocalFolderPathAsync(
                     locationKey,
-                    SHGetKnownFolderPath(new Guid("374DE290-123F-4565-9164-39C4925E467B"), 0))
+                    this.finder.UserDownloads)
                 .ConfigureAwait(false),
 
             KnownLocations.Documents => await LocationFromLocalFolderPathAsync(
                     locationKey,
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments))
+                    this.finder.UserDocuments)
                 .ConfigureAwait(false),
 
             KnownLocations.Desktop => await LocationFromLocalFolderPathAsync(
                     locationKey,
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop))
+                    this.finder.UserDesktop)
                 .ConfigureAwait(false),
             _ => throw new InvalidEnumArgumentException(nameof(locationKey), (int)locationKey, typeof(KnownLocations)),
         };

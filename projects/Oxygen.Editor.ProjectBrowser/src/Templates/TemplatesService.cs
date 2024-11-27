@@ -2,65 +2,105 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
-
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Reactive.Linq;
 using System.Reflection;
 using DroidNet.Config;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
-using Oxygen.Editor.ProjectBrowser.Config;
+
+namespace Oxygen.Editor.ProjectBrowser.Templates;
 
 /// <summary>
-/// A service that can be used to access project templates.
+/// Provides services for managing and accessing project templates in the Oxygen Editor.
 /// </summary>
-public partial class TemplatesService : ITemplatesService
+/// <remarks>
+/// <para>
+/// TemplatesService manages both built-in and custom project templates, providing functionality for:
+/// - Loading and validation of templates from the filesystem
+/// - Tracking template usage history
+/// - Managing recently used templates list
+/// - Logging template operations.
+/// </para>
+/// <para>
+/// The service uses abstracted filesystem operations through <see cref="IFileSystem"/> and
+/// supports detailed operation logging when a logger factory is provided.
+/// </para>
+/// <para>
+/// Built-in templates are stored in predefined locations under the program data directory,
+/// organized by categories like Games and Visualization.
+/// </para>
+/// </remarks>
+/// <param name="state">Persistent storage for template usage history.</param>
+/// <param name="fs">Abstracted filesystem operations provider.</param>
+/// <param name="pathFinder">Service for resolving system and application paths.</param>
+/// <param name="templatesSource">Provider for loading template information.</param>
+/// <param name="loggerFactory">Optional factory for creating operation loggers.</param>
+/// <example>
+/// <para><strong>Example Usage</strong></para>
+/// <code><![CDATA[
+/// // Create the service with dependencies
+/// var templatesService = new TemplatesService(
+///     new PersistentState(),
+///     new FileSystem(),
+///     new PathFinder(),
+///     new LocalTemplatesSource(new FileSystem()),
+///     LoggerFactory.Create(builder => builder.AddConsole())
+/// );
+///
+/// // Enumerate available templates
+/// await foreach (var template in templatesService.GetLocalTemplatesAsync())
+/// {
+///     Console.WriteLine($"Found template: {template.Name}");
+///     Console.WriteLine($"Category: {template.Category}");
+///     Console.WriteLine($"Last used: {template.LastUsedOn}");
+/// }
+///
+/// // Access recently used templates
+/// if (templatesService.HasRecentlyUsedTemplates())
+/// {
+///     templatesService.GetRecentlyUsedTemplates()
+///         .Subscribe(template =>
+///         {
+///             Console.WriteLine($"Recent template: {template.Name}");
+///         });
+/// }
+/// ]]></code>
+/// </example>
+public partial class TemplatesService(
+    PersistentState state,
+    IFileSystem fs,
+    IPathFinder pathFinder,
+    ITemplatesSource templatesSource,
+    ILoggerFactory? loggerFactory = null) : ITemplatesService
 {
-    private readonly ILogger<TemplatesService> logger;
-    private readonly IFileSystem fs;
-    private readonly ProjectBrowserSettings settings;
-    private readonly ITemplatesSource templatesSource;
-    private readonly PersistentState state;
+    private static readonly List<string> Templates =
+    [
+        "Games/Blank/Template.json",
+        "Games/First Person/Template.json",
+        "Visualization/Blank/Template.json",
+    ];
 
-    [SuppressMessage(
-        "ReSharper",
-        "ConvertToPrimaryConstructor",
-        Justification = "keep explicit constructor so we have ILogger member for logging code generation")]
-    [SuppressMessage(
-        "Style",
-        "IDE0290:Use primary constructor",
-        Justification = "keep explicit constructor so we have ILogger member for logging code generation")]
-    public TemplatesService(
-        ILogger<TemplatesService> logger,
-        PersistentState state,
-        IFileSystem fs,
-        IPathFinder pathFinder,
-        IOptions<ProjectBrowserSettings> settings,
-        ITemplatesSource templatesSource)
-    {
-        this.logger = logger;
-        this.state = state;
-        this.fs = fs;
-        this.settings = settings.Value;
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TemplatesService>() ?? NullLoggerFactory.Instance.CreateLogger<TemplatesService>();
 
-        // This is the non-keyed implementation of ITemplateSource registered with the DI container.
-        this.templatesSource = templatesSource;
+    private List<string> BuiltinTemplates { get; } = Templates.ConvertAll(
+                location => fs.Path.Combine(
+                    pathFinder.ProgramData,
+                    $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
+                    "Assets",
+                    "Templates",
+                    location));
 
-        this.BuiltinTemplates = fs.Path.Combine(
-            pathFinder.ProgramData,
-            $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
-            "Assets",
-            "Templates");
-    }
-
-    private string BuiltinTemplates { get; }
-
-    public async Task TryClearRecentUsageAsync(RecentlyUsedTemplate template)
+    /// <summary>
+    /// Attempts to clear the recent usage of a template asynchronously.
+    /// </summary>
+    /// <param name="template">The template usage record to clear.</param>
+    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
+    public async Task TryClearRecentUsageAsync(TemplateUsage template)
     {
         try
         {
@@ -69,35 +109,41 @@ public partial class TemplatesService : ITemplatesService
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to remove entry from the most recently used templates: {ex.Message}");
+            throw;
         }
     }
 
-    public async Task ClearRecentUsageAsync(RecentlyUsedTemplate template)
+    /// <summary>
+    /// Clears the recent usage of a template asynchronously.
+    /// </summary>
+    /// <param name="template">The template usage record to clear.</param>
+    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
+    public async Task ClearRecentUsageAsync(TemplateUsage template)
     {
-        await using (this.state.ConfigureAwait(true))
+        await using (state.ConfigureAwait(true))
         {
-            _ = this.state.RecentlyUsedTemplates!.Remove(template);
-            _ = await this.state.SaveChangesAsync().ConfigureAwait(true);
+            _ = state.TemplatesUsageRecords!.Remove(template);
+            _ = await state.SaveChangesAsync().ConfigureAwait(true);
         }
     }
 
+    /// <inheritdoc/>
     public async IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync()
     {
         // Load builtin templates
-        foreach (var template in this.settings.BuiltinTemplates)
+        foreach (var template in this.BuiltinTemplates)
         {
-            var templateFullPath = this.fs.Path.Combine(this.BuiltinTemplates, template);
-            var templateUri = new Uri($"{Uri.UriSchemeFile}:///{templateFullPath}");
+            var templateUri = new Uri($"{Uri.UriSchemeFile}:///{template}");
 
             ITemplateInfo? templateInfo;
             try
             {
-                templateInfo = await this.templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
+                templateInfo = await templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 // Log the error, but continue with the rest of templates
-                this.CouldNotLoadTemplate(templateFullPath, ex.Message);
+                this.CouldNotLoadTemplate(template, ex.Message);
                 continue;
             }
 
@@ -111,8 +157,10 @@ public partial class TemplatesService : ITemplatesService
         }
     }
 
-    public bool HasRecentlyUsedTemplates() => this.state.RecentlyUsedTemplates?.Any() == true;
+    /// <inheritdoc/>
+    public bool HasRecentlyUsedTemplates() => state.TemplatesUsageRecords?.Any() == true;
 
+    /// <inheritdoc/>
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates()
         => Observable.Create<ITemplateInfo>(
             async (observer) =>
@@ -123,8 +171,8 @@ public partial class TemplatesService : ITemplatesService
                 {
                     try
                     {
-                        var templateDescriptor = this.fs.Path.Combine(template.Key, "Template.json");
-                        var templateInfo = await this.templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
+                        var templateDescriptor = fs.Path.Combine(template.Key, "Template.json");
+                        var templateInfo = await templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
                             .ConfigureAwait(true);
 
                         templateInfo.LastUsedOn = template.Value.LastUsedOn;
@@ -138,25 +186,19 @@ public partial class TemplatesService : ITemplatesService
                 }
             });
 
-    private Dictionary<string, RecentlyUsedTemplate> LoadUsageData()
-    {
-        if (this.state.RecentlyUsedProjects?.Any() == true)
-        {
-            return this.state.RecentlyUsedTemplates!.ToDictionary(t => t.Location!, StringComparer.Ordinal);
-        }
-
-        return new Dictionary<string, RecentlyUsedTemplate>(StringComparer.Ordinal);
-    }
+    private Dictionary<string, TemplateUsage> LoadUsageData() => state.TemplatesUsageRecords?.Any() == true
+            ? state.TemplatesUsageRecords!.ToDictionary(t => t.Location!, StringComparer.Ordinal)
+            : new Dictionary<string, TemplateUsage>(StringComparer.Ordinal);
 
     [LoggerMessage(
         EventId = 1000,
         Level = LogLevel.Error,
         Message = "Could not load template at `{templatePath}`; {error}")]
-    partial void CouldNotLoadTemplate(string templatePath, string error);
+    private partial void CouldNotLoadTemplate(string templatePath, string error);
 
     [LoggerMessage(
         EventId = 1001,
         Level = LogLevel.Error,
         Message = "Could not load templates MRU at `{mruPath}`; {error}")]
-    partial void CouldNotLoadTemplatesMru(string mruPath, string error);
+    private partial void CouldNotLoadTemplatesMru(string mruPath, string error);
 }

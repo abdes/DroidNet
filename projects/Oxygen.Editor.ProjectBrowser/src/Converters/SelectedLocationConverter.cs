@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Converters;
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.ProjectBrowser.Projects;
+
+namespace Oxygen.Editor.ProjectBrowser.Converters;
 
 /// <summary>
 /// A converter used to determine whether an item containing a <see cref="KnownLocation" /> is selected or not by comparing the
@@ -34,20 +34,11 @@ public partial class SelectedLocationConverter : IValueConverter
     /// <see cref="KnownLocations" /> enum value of the <see cref="KnownLocation.Key" /> of currently selected
     /// <see cref="KnownLocation" /> in <paramref name="value" />.
     /// </returns>
-    public object Convert(object? value, Type targetType, object? parameter, string language)
-    {
-        if (value == null || parameter == null || value is not KnownLocation location)
-        {
-            return false;
-        }
-
-        if (!Enum.TryParse(typeof(KnownLocations), parameter.ToString(), ignoreCase: true, out var locationKey))
-        {
-            return false;
-        }
-
-        return (KnownLocations)locationKey == location.Key;
-    }
+    public object Convert(object? value, Type targetType, object? parameter, string language) => value == null || parameter == null || value is not KnownLocation location
+            ? false
+            : !Enum.TryParse(typeof(KnownLocations), parameter.ToString(), ignoreCase: true, out var locationKey)
+            ? false
+            : (object)((KnownLocations)locationKey == location.Key);
 
     /// <inheritdoc />
     /// <remarks>

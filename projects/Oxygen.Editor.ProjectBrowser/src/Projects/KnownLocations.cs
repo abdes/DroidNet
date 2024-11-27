@@ -4,23 +4,39 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 
+/// <summary>
+/// Represents known locations that can be used to categorize or identify specific directories
+/// within the project browser.
+/// </summary>
 public enum KnownLocations
 {
-    /// <summary>A location which children are the recently used projects.</summary>
+    /// <summary>
+    /// A location which children are the recently used projects.
+    /// </summary>
     RecentProjects = 0,
 
-    /// <summary>A location which children are the local drives on this computer.</summary>
+    /// <summary>
+    /// A location which children are the local drives on this computer.
+    /// </summary>
     ThisComputer = 1,
 
-    /// <summary>Root of the OneDrive online storage if the user has one.</summary>
+    /// <summary>
+    /// Root of the OneDrive online storage if the user has one.
+    /// </summary>
     OneDrive = 2,
 
-    /// <summary>The user Downloads  folder.</summary>
+    /// <summary>
+    /// The user Downloads folder.
+    /// </summary>
     Downloads = 3,
 
-    /// <summary>The user documents local folder.</summary>
+    /// <summary>
+    /// The user documents local folder.
+    /// </summary>
     Documents = 4,
 
-    /// <summary>The user Desktop folder.</summary>
+    /// <summary>
+    /// The user Desktop folder.
+    /// </summary>
     Desktop = 5,
 }

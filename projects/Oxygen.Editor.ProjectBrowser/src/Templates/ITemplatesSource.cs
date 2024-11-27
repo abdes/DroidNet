@@ -4,22 +4,41 @@
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
+/// <summary>
+/// Defines the contract for loading project templates from various storage locations.
+/// </summary>
+/// <remarks>
+/// <para>
+/// ITemplatesSource provides abstract access to project template loading functionality,
+/// allowing templates to be loaded from different storage backends like local filesystem,
+/// network locations, or cloud storage.
+/// </para>
+/// <para>
+/// Implementations must validate template locations and handle loading of all template
+/// assets including descriptor files, icons, and preview images.
+/// </para>
+/// </remarks>
 public interface ITemplatesSource
 {
-    /// <summary>Check if this template source can load templates from the given location.</summary>
-    /// <param name="fromUri">The template location.</param>
-    /// <returns><see langword="true" /> if the location is supported by this template source; <see langword="false" /> if not.</returns>
+    /// <summary>
+    /// Checks if this template source can load templates from the given location.
+    /// </summary>
+    /// <param name="fromUri">The URI pointing to the template location.</param>
+    /// <returns>
+    /// <see langword="true"/> if the location scheme is supported by this source; <see langword="false"/> otherwise.
+    /// </returns>
+    /// <remarks>
+    /// Implementations should validate the URI scheme to determine if they can handle
+    /// loading from that type of location (e.g., `file://`, `http://`, etc.).
+    /// </remarks>
     bool CanLoad(Uri fromUri);
 
-    /// <summary>Load a project template from the given <paramref name="fromUri">location</paramref>.</summary>
-    /// <param name="fromUri">The location from which the template should be loaded.</param>
-    /// <returns>The template information if successful.</returns>
-    /// <exception cref="ArgumentException">
-    /// If the given <paramref name="fromUri">location</paramref> is not supported or is not valid.
-    /// </exception>
-    /// <exception cref="TemplateLoadingException">
-    /// If an error occurs while loading the template from the given <paramref name="fromUri">location</paramref>. The exception
-    /// message, and any attached inner exception to it, can provide additional details on the nature of the error.
-    /// </exception>
+    /// <summary>
+    /// Loads a project template from the specified location.
+    /// </summary>
+    /// <param name="fromUri">The URI pointing to the template location.</param>
+    /// <returns>The loaded template information if successful.</returns>
+    /// <exception cref="ArgumentException">Thrown when the given location is not supported or is invalid.</exception>
+    /// <exception cref="TemplateLoadingException">Thrown when an error occurs while loading the template or its assets.</exception>
     Task<ITemplateInfo> LoadTemplateAsync(Uri fromUri);
 }

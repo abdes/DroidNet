@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Converters;
-
 using DroidNet.Converters;
 using Oxygen.Editor.ProjectBrowser.Projects;
+
+namespace Oxygen.Editor.ProjectBrowser.Converters;
 
 /// <summary>
 /// A specialized <see cref="DictionaryValueConverter{T}" /> converter for
 /// <see cref="KnownLocation" />.
 /// </summary>
-public partial class KnownLocationByKeyConverter : DictionaryValueConverter<KnownLocation>;
+internal sealed partial class KnownLocationByKeyConverter : DictionaryValueConverter<KnownLocation>;

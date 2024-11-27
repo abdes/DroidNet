@@ -2,21 +2,39 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
-
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Controls;
+using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
-/// <summary>Start Home page.</summary>
+namespace Oxygen.Editor.ProjectBrowser.Views;
+
+/// <summary>
+/// Start Home page.
+/// </summary>
 [ViewModel(typeof(HomeViewModel))]
 public sealed partial class HomeView
 {
-    public HomeView() => this.InitializeComponent();
+    private readonly IProjectBrowserService projectBrowser;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HomeView"/> class.
+    /// </summary>
+    /// <param name="projectBrowser">The project browser service.</param>
+    public HomeView(IProjectBrowserService projectBrowser)
+    {
+        this.projectBrowser = projectBrowser;
+        this.InitializeComponent();
+    }
+
+    /// <summary>
+    /// Handles the loaded event of the page.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
         _ = sender; // unused
@@ -26,7 +44,12 @@ public sealed partial class HomeView
         await this.ViewModel!.LoadRecentProjectsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
     }
 
-    private async void OnRecentProjectOpenAsync(object sender, RecentProjectsList.ItemActivatedEventArgs args)
+    /// <summary>
+    /// Handles the event when a recent project is opened.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
+    private async void OnRecentProjectOpenAsync(object sender, ProjectItemActivatedEventArgs args)
     {
         _ = sender;
 
@@ -37,11 +60,16 @@ public sealed partial class HomeView
         }
     }
 
-    private async void OnNewProjectFromTemplateAsync(object? sender, ProjectTemplatesGrid.ItemActivatedEventArgs args)
+    /// <summary>
+    /// Handles the event when a new project is created from a template.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
+    private async void OnNewProjectFromTemplateAsync(object? sender, TemplateItemActivatedEventArgs args)
     {
         _ = sender;
 
-        var dialog = new NewProjectDialog(args.TemplateInfo) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(this.projectBrowser, args.TemplateInfo) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 
@@ -57,7 +85,7 @@ public sealed partial class HomeView
             {
                 Debug.WriteLine("Project successfully created");
 
-                // TODO(abdes) navigate to project workspace for newly created project
+                // TODO: navigate to project workspace for newly created project
             }
         }
     }

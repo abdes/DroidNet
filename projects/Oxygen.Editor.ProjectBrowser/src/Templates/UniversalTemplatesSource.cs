@@ -11,6 +11,7 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 /// </param>
 public class UniversalTemplatesSource(ITemplatesSource[] sources) : ITemplatesSource
 {
+    /// <inheritdoc/>
     public bool CanLoad(Uri fromUri) => sources.Any(source => source.CanLoad(fromUri));
 
     /// <summary>
