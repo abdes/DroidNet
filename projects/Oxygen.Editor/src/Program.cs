@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Runtime.InteropServices;
+using DroidNet.Aura;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Docking.Controls;
@@ -23,14 +24,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
-using Oxygen.Editor.Models;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Services;
-using Oxygen.Editor.Shell;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
@@ -120,7 +119,7 @@ public static partial class Program
         {
             Path = string.Empty,
             MatchMethod = PathMatch.Prefix,
-            ViewModelType = typeof(ShellViewModel),
+            ViewModelType = typeof(MainShellViewModel),
             Children = new Routes(
             [
                 new Route()
@@ -177,16 +176,13 @@ public static partial class Program
 
         return
         [
-            /* TODO: PathFinderService.GetConfigFilePath(AppearanceSettings.ConfigFileName),*/
-
+            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
             finder.GetConfigFilePath("LocalSettings.json"),
         ];
     }
 
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc) =>
-
-        // TODO: use the new appearance settings service
-        _ = sc.Configure<ThemeSettings>(config.GetSection(nameof(ThemeSettings)));
+    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
+        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
 
     private static void ConfigurePersistentStateDatabase(IContainer container)
     {
@@ -215,6 +211,8 @@ public static partial class Program
          * Register domain specific services.
          */
 
+        container.Register<AppearanceSettingsService>(Reuse.Singleton);
+
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
         container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
@@ -233,6 +231,8 @@ public static partial class Program
         // Register the project instance using a delegate that will request the currently open project from the project
         // browser service.
         container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
+
+        container.Register<IAppThemeModeService, AppThemeModeService>();
 
         /*
          * Set up the view model to view converters. We're using the standard converter, and a custom one with fall back
@@ -262,8 +262,8 @@ public static partial class Program
 
     private static void RegisterViewsAndViewModels(IContainer container)
     {
-        container.Register<ShellViewModel>(Reuse.Transient);
-        container.Register<ShellView>(Reuse.Transient);
+        container.Register<MainShellViewModel>(Reuse.Transient);
+        container.Register<MainShellView>(Reuse.Transient);
 
         container.Register<MainViewModel>(Reuse.Transient);
         container.Register<MainView>(Reuse.Transient);

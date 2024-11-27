@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Services;
-
 using System.Reactive.Subjects;
+
+namespace Oxygen.Editor.Services;
 
 /// <summary>
 /// Handle registration and chain invocation during activation.
@@ -21,9 +21,11 @@ public sealed partial class ActivationService : IActivationService, IDisposable
     private readonly Func<Task> beforeActivation = () => Task.CompletedTask;
     private readonly Subject<object> subject = new();
 
+    /// <inheritdoc/>
     public IDisposable Subscribe(IObserver<object> observer)
         => this.subject.Subscribe(observer);
 
+    /// <inheritdoc/>
     public async Task ActivateAsync(object activationData)
     {
         await this.beforeActivation().ConfigureAwait(false);
@@ -31,5 +33,6 @@ public sealed partial class ActivationService : IActivationService, IDisposable
         await this.afterActivation(activationData).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public void Dispose() => this.subject.Dispose();
 }
