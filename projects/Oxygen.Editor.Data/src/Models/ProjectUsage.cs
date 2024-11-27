@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore;
 
 namespace Oxygen.Editor.Data.Models;
 
@@ -12,6 +13,7 @@ namespace Oxygen.Editor.Data.Models;
 /// Represents the usage data of a project, including its location, name, last used date, last opened scene, and content browser state.
 /// </summary>
 [Table(TableName)]
+[Index(nameof(Location), nameof(Name), IsUnique = true)]
 public class ProjectUsage
 {
     /// <summary>

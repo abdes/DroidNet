@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore;
 
 namespace Oxygen.Editor.Data.Models;
 
@@ -12,6 +13,7 @@ namespace Oxygen.Editor.Data.Models;
 /// Represents the usage data of a template, including its location and last used date.
 /// </summary>
 [Table(TableName)]
+[Index(nameof(Location), IsUnique = true)]
 public class TemplateUsage
 {
     /// <summary>
