@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.WinPackagedApp;
-
 using System.Reactive.Linq;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -11,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+
+namespace DroidNet.Samples.WinPackagedApp;
 
 /// <summary>
 /// Provides application-specific behavior to supplement the default <see cref="Application" /> class.
