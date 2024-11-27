@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor;
-
 using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
@@ -15,6 +13,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
 using Oxygen.Editor.Services;
+
+namespace Oxygen.Editor;
 
 /// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 public partial class App
@@ -50,6 +50,7 @@ public partial class App
         this.InitializeComponent();
     }
 
+    /// <inheritdoc/>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         base.OnLaunched(args);
@@ -60,7 +61,7 @@ public partial class App
         AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
 
         // We just want to exit if navigation fails for some reason
-        this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
+        _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
         _ = this.activationService
             .Where(data => data is LaunchActivatedEventArgs)
@@ -99,7 +100,7 @@ public partial class App
         this.activationService.ActivateAsync(activationData).GetAwaiter().GetResult();
     }
 
-    private static void OnAppUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    private static void OnAppUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         => OnUnhandledException(e.Exception);
 
     private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)

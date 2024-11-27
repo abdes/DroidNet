@@ -67,7 +67,7 @@
     </Capabilities>
 
     <genTemplate:Metadata>
-        <genTemplate:Item Name="generator" Value="Template Studio"/>
+        <genTemplate:Item Name="generator" Value="TemplateInfo Studio"/>
         <genTemplate:Item Name="wizardVersion" Version="v5.4" />
         <genTemplate:Item Name="projectType" Value="MenuBar" />
         <genTemplate:Item Name="framework" Value="MVVMToolkit" />

@@ -1,12 +1,13 @@
 {
-    "profiles": {
-        "Oxygen Editor (Package)": {
-            "commandName": "MsixPackage",
-            "commandLineArgs": "--mode dev"
-        },
-        "Oxygen Editor (Unpackaged)": {
-            "commandName": "Project",
-            "commandLineArgs": "--mode dev"
-        }
+  "profiles": {
+    "Oxygen Editor (Package)": {
+      "commandName": "MsixPackage",
+      "commandLineArgs": "--mode dev",
+      "nativeDebugging": true
+    },
+    "Oxygen Editor (Unpackaged)": {
+      "commandName": "Project",
+      "commandLineArgs": "--mode dev"
     }
+  }
 }

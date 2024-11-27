@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Models;
-
 using Microsoft.UI.Xaml;
+
+namespace Oxygen.Editor.Models;
 
 public class ThemeSettings
 {
