@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using DryIoc;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.Data.Tests;
@@ -15,9 +16,15 @@ namespace Oxygen.Editor.Data.Tests;
 [TestCategory(nameof(ProjectUsageService))]
 public partial class ProjectUsageServiceTests : DatabaseTests
 {
+    private const string CacheKeyPrefix = "ProjectUsage_";
+
     public ProjectUsageServiceTests()
     {
         this.Container.Register<ProjectUsageService>(Reuse.Scoped);
+#pragma warning disable CA2000 // Dispose objects before losing scope
+        // DryIoc will properly dispose of this instance when the container is disposed
+        this.Container.RegisterInstance<IMemoryCache>(new MemoryCache(new MemoryCacheOptions()));
+#pragma warning restore CA2000 // Dispose objects before losing scope
     }
 
     [TestMethod]
@@ -281,6 +288,76 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             // Assert
             _ = await act.Should().ThrowAsync<ValidationException>().WithMessage("*project location cannot be empty*").ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
+    public async Task GetProjectUsageAsync_ShouldReturnFromCacheIfAvailable()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            // Arrange
+            var service = scope.Resolve<ProjectUsageService>();
+            var memoryCache = scope.Resolve<IMemoryCache>();
+
+            var project = new ProjectUsage { Name = "Project1", Location = "Location1", TimesOpened = 1 };
+            _ = memoryCache.Set($"{CacheKeyPrefix}Project1_Location1", project);
+
+            // Act
+            var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
+
+            // Assert
+            _ = result.Should().NotBeNull();
+            _ = result!.Name.Should().Be("Project1");
+            _ = result!.Location.Should().Be("Location1");
+            _ = result!.TimesOpened.Should().Be(1);
+        }
+    }
+
+    [TestMethod]
+    public async Task UpdateProjectUsageAsync_ShouldUpdateCache()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            // Arrange
+            var service = scope.Resolve<ProjectUsageService>();
+            var memoryCache = scope.Resolve<IMemoryCache>();
+
+            var project = new ProjectUsage { Name = "Project1", Location = "Location1", TimesOpened = 1 };
+            _ = memoryCache.Set($"{CacheKeyPrefix}Project1_Location1", project);
+
+            // Act
+            await service.UpdateProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
+
+            // Assert
+            var result = memoryCache.Get<ProjectUsage>($"{CacheKeyPrefix}Project1_Location1");
+            _ = result.Should().NotBeNull();
+            _ = result!.TimesOpened.Should().Be(2);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteProjectUsageAsync_ShouldRemoveProjectUsage()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            // Arrange
+            var context = scope.Resolve<PersistentState>();
+            var service = scope.Resolve<ProjectUsageService>();
+
+            var project = new ProjectUsage { Name = "Project1", Location = "Location1" };
+            _ = context.ProjectUsageRecords.Add(project);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+
+            // Act
+            await service.DeleteProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
+
+            // Assert
+            var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
+            _ = result.Should().BeNull();
         }
     }
 }
