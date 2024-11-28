@@ -4,14 +4,14 @@
 
     <PropertyGroup>
         <TargetFrameworks>net8.0;net8.0-windows10.0.22621.0</TargetFrameworks>
+        <RootNamespace>Oxygen.Editor.Data</RootNamespace>
+        <AssemblyName>Oxygen.Editor.Data</AssemblyName>
+
         <Title>Oxygen Editor Data Layer</Title>
         <Description>Contains the data model and APIs for projects and templates used by the editor.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;editor;projects;data;persistence</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-
-        <RootNamespace>Oxygen.Editor.Data</RootNamespace>
-        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -36,10 +36,6 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Migrations\" />
     </ItemGroup>
 
 </Project>
