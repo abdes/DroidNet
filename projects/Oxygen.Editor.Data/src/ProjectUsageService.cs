@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.Data;
@@ -12,10 +13,12 @@ namespace Oxygen.Editor.Data;
 /// <summary>
 /// Provides services for managing project usage data, including retrieving, updating, and validating project usage records.
 /// </summary>
-/// <param name="context">The database context to be used by the service.</param>
 /// <remarks>
 /// This service is designed to work with the <see cref="PersistentState"/> context to manage project usage data.
+/// It uses an <see cref="IMemoryCache"/> to cache project usage data for improved performance.
 /// </remarks>
+/// <param name="context">The database context to be used by the service.</param>
+/// <param name="cache">The memory cache to be used by the service.</param>
 /// <example>
 /// <para><strong>Example Usage:</strong></para>
 /// <code><![CDATA[
@@ -23,7 +26,8 @@ namespace Oxygen.Editor.Data;
 ///     .UseInMemoryDatabase(databaseName: "TestDatabase")
 ///     .Options;
 /// var context = new PersistentState(contextOptions);
-/// var service = new ProjectUsageService(context);
+/// var cache = new MemoryCache(new MemoryCacheOptions());
+/// var service = new ProjectUsageService(context, cache);
 ///
 /// // Add or update a project usage record
 /// await service.UpdateProjectUsageAsync("Project1", "Location1");
@@ -42,33 +46,43 @@ namespace Oxygen.Editor.Data;
 /// await service.UpdateProjectNameAndLocationAsync("Project1", "Location1", "NewProject1", "NewLocation1");
 /// ]]></code>
 /// </example>
-public class ProjectUsageService(PersistentState context)
+public class ProjectUsageService(PersistentState context, IMemoryCache cache) : IProjectUsageService
 {
     /// <summary>
-    /// Gets the 10 most recently used projects, sorted in descending order by the last used date.
+    /// The prefix to be used for cache keys related to project usage data.
     /// </summary>
-    /// <returns>A list of the 10 most recently used projects.</returns>
-    public async Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync() => await context.ProjectUsageRecords
+    internal const string CacheKeyPrefix = "ProjectUsage_";
+
+    /// <inheritdoc />
+    public async Task<bool> HasRecentlyUsedProjectsAsync() => await context.ProjectUsageRecords.AnyAsync().ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10) => await context.ProjectUsageRecords
             .OrderByDescending(p => p.LastUsedOn)
-            .Take(10)
+            .Take((int)sizeLimit > 0 ? (int)sizeLimit : 10)
             .ToListAsync().ConfigureAwait(false);
 
-    /// <summary>
-    /// Gets the project usage data for a project given its name and location.
-    /// </summary>
-    /// <param name="name">The name of the project.</param>
-    /// <param name="location">The location of the project.</param>
-    /// <returns>The project usage data if found; otherwise, <see langword="null"/>.</returns>
-    public async Task<ProjectUsage?> GetProjectUsageAsync(string name, string location) => await context.ProjectUsageRecords
+    /// <inheritdoc />
+    public async Task<ProjectUsage?> GetProjectUsageAsync(string name, string location)
+    {
+        var cacheKey = CacheKeyPrefix + name + "_" + location;
+        if (cache.TryGetValue(cacheKey, out ProjectUsage? projectUsage))
+        {
+            return projectUsage;
+        }
+
+        projectUsage = await context.ProjectUsageRecords
             .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
 
-    /// <summary>
-    /// Updates a project usage record given the project name and location. If the project record already exists, increments its <see cref="ProjectUsage.TimesOpened"/> counter. If the record does not exist, creates a new record with <see cref="ProjectUsage.TimesOpened"/> set to 1.
-    /// </summary>
-    /// <param name="name">The name of the project.</param>
-    /// <param name="location">The location of the project.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <exception cref="ValidationException">Thrown when the project name or location is invalid.</exception>
+        if (projectUsage != null)
+        {
+            _ = cache.Set(cacheKey, projectUsage);
+        }
+
+        return projectUsage;
+    }
+
+    /// <inheritdoc />
     public async Task UpdateProjectUsageAsync(string name, string location)
     {
         var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
@@ -92,18 +106,10 @@ public class ProjectUsageService(PersistentState context)
         }
 
         _ = await context.SaveChangesAsync().ConfigureAwait(false);
+        _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
     }
 
-    /// <summary>
-    /// Updates the content browser state of a project usage record given the project name and location.
-    /// </summary>
-    /// <param name="name">The name of the project.</param>
-    /// <param name="location">The location of the project.</param>
-    /// <param name="contentBrowserState">The new content browser state.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <remarks>
-    /// This method expects the project usage record to already exist. If the record does not exist, a debug assertion will fire.
-    /// </remarks>
+    /// <inheritdoc />
     public async Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState)
     {
         var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
@@ -112,21 +118,13 @@ public class ProjectUsageService(PersistentState context)
         {
             projectUsage.ContentBrowserState = contentBrowserState;
             _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
         }
 
         Debug.Assert(projectUsage != null, "Project usage record must exist before updating content browser state (did you call UpdateProjectUsageAsync() before).");
     }
 
-    /// <summary>
-    /// Updates the last opened scene of a project usage record given the project name and location.
-    /// </summary>
-    /// <param name="name">The name of the project.</param>
-    /// <param name="location">The location of the project.</param>
-    /// <param name="lastOpenedScene">The new last opened scene.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <remarks>
-    /// This method expects the project usage record to already exist. If the record does not exist, a debug assertion will fire.
-    /// </remarks>
+    /// <inheritdoc />
     public async Task UpdateLastOpenedSceneAsync(string name, string location, string lastOpenedScene)
     {
         var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
@@ -135,20 +133,13 @@ public class ProjectUsageService(PersistentState context)
         {
             projectUsage.LastOpenedScene = lastOpenedScene;
             _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
         }
 
         Debug.Assert(projectUsage != null, "Project usage record must exist before updating last opened scene (did you call UpdateProjectUsageAsync() before).");
     }
 
-    /// <summary>
-    /// Updates a project usage record's name and location when the project has been renamed or moved.
-    /// </summary>
-    /// <param name="oldName">The old name of the project.</param>
-    /// <param name="oldLocation">The old location of the project.</param>
-    /// <param name="newName">The new name of the project.</param>
-    /// <param name="newLocation">The new location of the project (optional).</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <exception cref="ValidationException">Thrown when the new project name or location is invalid.</exception>
+    /// <inheritdoc />
     public async Task UpdateProjectNameAndLocationAsync(string oldName, string oldLocation, string newName, string? newLocation = null)
     {
         ValidateProjectNameAndLocation(newName, newLocation ?? oldLocation);
@@ -163,6 +154,20 @@ public class ProjectUsageService(PersistentState context)
             }
 
             _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = cache.Set(CacheKeyPrefix + newName + "_" + (newLocation ?? oldLocation), projectUsage);
+            cache.Remove(CacheKeyPrefix + oldName + "_" + oldLocation);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteProjectUsageAsync(string name, string location)
+    {
+        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
+        if (projectUsage != null)
+        {
+            _ = context.ProjectUsageRecords.Remove(projectUsage);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            cache.Remove(CacheKeyPrefix + name + "_" + location);
         }
     }
 
