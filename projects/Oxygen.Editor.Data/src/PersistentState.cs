@@ -31,15 +31,15 @@ public class PersistentState(DbContextOptions<PersistentState> options) : DbCont
     /// <summary>
     /// Gets or sets the DbSet for template usage records.
     /// </summary>
-    public DbSet<TemplateUsage> TemplatesUsageRecords { get; set; }
+    internal DbSet<TemplateUsage> TemplatesUsageRecords { get; set; }
 
     /// <summary>
     /// Gets or sets the DbSet for project usage records.
     /// </summary>
-    public DbSet<ProjectUsage> ProjectUsageRecords { get; set; }
+    internal DbSet<ProjectUsage> ProjectUsageRecords { get; set; }
 
     /// <summary>
     /// Gets or sets the DbSet for module settings.
     /// </summary>
-    public DbSet<ModuleSetting> Settings { get; set; }
+    internal DbSet<ModuleSetting> Settings { get; set; }
 }

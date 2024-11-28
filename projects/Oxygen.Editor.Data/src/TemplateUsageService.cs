@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.Data;
@@ -12,9 +13,11 @@ namespace Oxygen.Editor.Data;
 /// Provides services for managing template usage data, including retrieving, updating, and validating template usage records.
 /// </summary>
 /// <remarks>
-/// <param name="context">The database context to be used by the service.</param>
 /// This service is designed to work with the <see cref="PersistentState"/> context to manage template usage data.
+/// It uses an <see cref="IMemoryCache"/> to cache template usage data for improved performance.
 /// </remarks>
+/// <param name="context">The database context to be used by the service.</param>
+/// <param name="cache">The memory cache to be used by the service.</param>
 /// <example>
 /// <para><strong>Example Usage:</strong></para>
 /// <code><![CDATA[
@@ -22,7 +25,8 @@ namespace Oxygen.Editor.Data;
 ///     .UseInMemoryDatabase(databaseName: "TestDatabase")
 ///     .Options;
 /// var context = new PersistentState(contextOptions);
-/// var service = new TemplateUsageService(context);
+/// var cache = new MemoryCache(new MemoryCacheOptions());
+/// var service = new TemplateUsageService(context, cache);
 ///
 /// // Add or update a template usage record
 /// await service.UpdateTemplateUsageAsync("Location1");
@@ -46,31 +50,39 @@ namespace Oxygen.Editor.Data;
 /// }
 /// ]]></code>
 /// </example>
-public class TemplateUsageService(PersistentState context)
+public class TemplateUsageService(PersistentState context, IMemoryCache cache) : ITemplateUsageService
 {
     /// <summary>
-    /// Gets the 10 most recently used templates, sorted in descending order by the last used date.
+    /// The prefix to be used for cache keys related to template usage data.
     /// </summary>
-    /// <returns>A list of the 10 most recently used templates.</returns>
-    public async Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync() => await context.TemplatesUsageRecords
+    internal const string CacheKeyPrefix = "TemplateUsage_";
+
+    /// <inheritdoc />
+    public async Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync(int sizeLimit = 10) => await context.TemplatesUsageRecords
             .OrderByDescending(t => t.LastUsedOn)
-            .Take(10)
+            .Take(sizeLimit > 0 ? sizeLimit : 10)
             .ToListAsync().ConfigureAwait(false);
 
-    /// <summary>
-    /// Gets the template usage data for a template given its location.
-    /// </summary>
-    /// <param name="location">The location of the template.</param>
-    /// <returns>The template usage data if found; otherwise, <see langword="null"/>.</returns>
-    public async Task<TemplateUsage?> GetTemplateUsageAsync(string location) => await context.TemplatesUsageRecords
+    /// <inheritdoc />
+    public async Task<TemplateUsage?> GetTemplateUsageAsync(string location)
+    {
+        if (cache.TryGetValue(CacheKeyPrefix + location, out TemplateUsage? templateUsage))
+        {
+            return templateUsage;
+        }
+
+        templateUsage = await context.TemplatesUsageRecords
             .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
 
-    /// <summary>
-    /// Updates a template usage record given the template location. If the template record already exists, increments its <see cref="TemplateUsage.TimesUsed"/> counter. If the record does not exist, creates a new record with <see cref="TemplateUsage.TimesUsed"/> set to 1.
-    /// </summary>
-    /// <param name="location">The location of the template.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    /// <exception cref="ValidationException">Thrown when the template location is invalid.</exception>
+        if (templateUsage != null)
+        {
+            _ = cache.Set(CacheKeyPrefix + location, templateUsage);
+        }
+
+        return templateUsage;
+    }
+
+    /// <inheritdoc />
     public async Task UpdateTemplateUsageAsync(string location)
     {
         var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(false);
@@ -93,6 +105,22 @@ public class TemplateUsageService(PersistentState context)
         }
 
         _ = await context.SaveChangesAsync().ConfigureAwait(false);
+        _ = cache.Set(CacheKeyPrefix + location, templateUsage);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> HasRecentlyUsedTemplatesAsync() => await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task DeleteTemplateUsageAsync(string location)
+    {
+        var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(false);
+        if (templateUsage != null)
+        {
+            _ = context.TemplatesUsageRecords.Remove(templateUsage);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            cache.Remove(CacheKeyPrefix + location);
+        }
     }
 
     /// <summary>
