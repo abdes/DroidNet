@@ -180,37 +180,73 @@ mySettings.MySetting = 42;
 await mySettings.SaveAsync();
 ```
 
+## Template Usage Data Service
+
+The `TemplateUsageService` class provides services for managing template usage data, including retrieving, updating, and validating template usage records. It uses an `IMemoryCache` to cache template usage data for improved performance.
+
 ### Example Usage
 
-Here is an example of how to use the `SettingsManager` and `ModuleSettings` classes:
+Here is an example of how to use the `TemplateUsageService`:
 
 ```csharp
-public class MyModuleSettings : ModuleSettings
-{
-    [Persisted]
-    public int MySetting { get; set; }
+var contextOptions = new DbContextOptionsBuilder<PersistentState>()
+    .UseInMemoryDatabase(databaseName: "TestDatabase")
+    .Options;
+var context = new PersistentState(contextOptions);
+var cache = new MemoryCache(new MemoryCacheOptions());
+var service = new TemplateUsageService(context, cache);
 
-    public MyModuleSettings(SettingsManager settingsManager, string moduleName)
-        : base(settingsManager, moduleName)
-    {
-    }
+// Add or update a template usage record
+await service.UpdateTemplateUsageAsync("Location1");
+
+// Retrieve the most recently used templates
+var recentTemplates = await service.GetMostRecentlyUsedTemplatesAsync();
+foreach (var template in recentTemplates)
+{
+    Console.WriteLine($"Template Location: {template.Location}, Last Used: {template.LastUsedOn}");
 }
 
-// Usage
-var options = new DbContextOptionsBuilder<PersistentState>()
-    .UseSqlite("Data Source=app.db")
-    .Options;
-var context = new PersistentState(options);
-var settingsManager = new SettingsManager(context);
-var mySettings = new MyModuleSettings(settingsManager, "MyModule");
-await mySettings.LoadAsync();
-mySettings.MySetting = 42;
-await mySettings.SaveAsync();
+// Get a specific template usage record
+var templateUsage = await service.GetTemplateUsageAsync("Location1");
+if (templateUsage != null)
+{
+    Console.WriteLine($"Template Location: {templateUsage.Location}, Times Used: {templateUsage.TimesUsed}");
+}
+else
+{
+    Console.WriteLine("Template not found.");
+}
 ```
 
-### Summary
+## Project Usage Data Service
 
-- **Migrations**: Use EF Core migrations to manage schema changes.
-- **Version Control**: Keep migrations in version control.
-- **Backward Compatibility**: Plan changes to avoid breaking existing functionality.
-- **Data Seeding**: Use data seeding to manage initial and updated data.
+The `ProjectUsageService` class provides services for managing project usage data, including retrieving, updating, and validating project usage records. It uses an `IMemoryCache` to cache project usage data for improved performance.
+
+### Example Usage
+
+Here is an example of how to use the `ProjectUsageService`:
+
+```csharp
+var contextOptions = new DbContextOptionsBuilder<PersistentState>()
+    .UseInMemoryDatabase(databaseName: "TestDatabase")
+    .Options;
+var context = new PersistentState(contextOptions);
+var cache = new MemoryCache(new MemoryCacheOptions());
+var service = new ProjectUsageService(context, cache);
+
+// Add or update a project usage record
+await service.UpdateProjectUsageAsync("Project1", "Location1");
+
+// Retrieve the most recently used projects
+var recentProjects = await service.GetMostRecentlyUsedProjectsAsync();
+foreach (var project in recentProjects)
+{
+    Console.WriteLine($"Project: {project.Name}, Last Used: {project.LastUsedOn}");
+}
+
+// Update the content browser state
+await service.UpdateContentBrowserStateAsync("Project1", "Location1", "NewState");
+
+// Rename or move a project
+await service.UpdateProjectNameAndLocationAsync("Project1", "Location1", "NewProject1", "NewLocation1");
+```
