@@ -111,6 +111,13 @@ public partial class Thumbnail : ContentControl
     {
         this.DefaultStyleKey = typeof(Thumbnail);
         this.Loaded += this.OnLoaded;
+
+        // Merge the resource dictionary containing the DefaultThumbnailTemplate
+        var resourceDictionary = new ResourceDictionary
+        {
+            Source = new Uri("ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml"),
+        };
+        this.Resources.MergedDictionaries.Add(resourceDictionary);
     }
 
     /// <inheritdoc/>
@@ -170,11 +177,14 @@ public partial class Thumbnail : ContentControl
             return;
         }
 
-        if (this.ContentTemplate == null)
+        if (this.ContentTemplate is null)
         {
-            this.ContentTemplate = this.ContentTemplateSelector != null
-                ? this.ContentTemplateSelector.SelectTemplate(this.Content, this)
-                : (DataTemplate)Application.Current.Resources["DefaultThumbnailTemplate"];
+            if (this.ContentTemplateSelector is not null)
+            {
+                this.ContentTemplate = this.ContentTemplateSelector.SelectTemplate(this.Content, this);
+            }
+
+            this.ContentTemplate ??= (DataTemplate)this.Resources["DefaultThumbnailTemplate"];
         }
     }
 }
