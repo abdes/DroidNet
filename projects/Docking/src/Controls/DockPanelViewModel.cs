@@ -97,11 +97,13 @@ public partial class DockPanelViewModel : ObservableRecipient
         }
 
         var (widthChanged, heightChanged) = this.SizeReallyChanged(newSize);
-
-        this.docker.ResizeDock(
-            this.dock,
-            widthChanged ? new Width(newSize.Width) : null,
-            heightChanged ? new Height(newSize.Height) : null);
+        if (widthChanged || heightChanged)
+        {
+            this.docker.ResizeDock(
+                this.dock,
+                widthChanged ? new Width(newSize.Width) : null,
+                heightChanged ? new Height(newSize.Height) : null);
+        }
     }
 
     /// <summary>
@@ -215,8 +217,21 @@ public partial class DockPanelViewModel : ObservableRecipient
     }
 
     private (bool widthChanged, bool heightChanged) SizeReallyChanged(Size newSize)
-        => (Math.Abs(newSize.Width - this.previousSize.Width) > 0.5,
-            Math.Abs(newSize.Height - this.previousSize.Height) > 0.5);
+    {
+        var widthChanged = Math.Abs(newSize.Width - this.previousSize.Width) > 0.5;
+        if (widthChanged)
+        {
+            this.previousSize.Width = newSize.Width;
+        }
+
+        var heightChanged = Math.Abs(newSize.Height - this.previousSize.Height) > 0.5;
+        if (heightChanged)
+        {
+            this.previousSize.Height = newSize.Height;
+        }
+
+        return (widthChanged, heightChanged);
+    }
 
     private bool CanToggleDockingMode() => !this.IsInDockingMode || this.IsBeingDocked;
 
