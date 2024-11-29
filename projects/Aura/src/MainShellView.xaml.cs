@@ -4,8 +4,11 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reactive;
+using System.Reactive.Linq;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml;
 using Windows.Foundation;
 using WinUIEx;
 using GridLength = Microsoft.UI.Xaml.GridLength;
@@ -31,8 +34,24 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     {
         this.InitializeComponent();
 
-        this.CustomTitleBar.Loaded += (_, _) => this.SetupCustomTitleBar();
-        this.CustomTitleBar.SizeChanged += (_, _) => this.SetupCustomTitleBar();
+        // Convert Loaded and SizeChanged events to observables
+        var loadedObservable = Observable.FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
+            h => this.CustomTitleBar.Loaded += h,
+            h => this.CustomTitleBar.Loaded -= h)
+            .Select(_ => Unit.Default);
+
+        var sizeChangedObservable = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
+            h => this.CustomTitleBar.SizeChanged += h,
+            h => this.CustomTitleBar.SizeChanged -= h)
+            .Select(_ => Unit.Default);
+
+        // Merge the observables and throttle the events
+        var throttledObservable = loadedObservable
+            .Merge(sizeChangedObservable)
+            .Throttle(TimeSpan.FromMilliseconds(100));
+
+        // Subscribe to the throttled observable to call SetupCustomTitleBar
+        _ = throttledObservable.Subscribe(_ => this.DispatcherQueue.TryEnqueue(this.SetupCustomTitleBar));
 
         this.SettingsButton.Loaded += (_, _) => this.SettingsButton.Flyout = this.ViewModel!.MenuBuilder.BuildMenuFlyout();
     }
