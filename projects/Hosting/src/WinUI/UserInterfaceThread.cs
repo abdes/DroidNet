@@ -66,10 +66,10 @@ public partial class UserInterfaceThread(
         _ =>
         {
             this.HostingContext.Dispatcher = DispatcherQueue.GetForCurrentThread();
+            this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
+
             DispatcherQueueSynchronizationContext synchronizationContext = new(this.HostingContext.Dispatcher);
             SynchronizationContext.SetSynchronizationContext(synchronizationContext);
-
-            this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
 
             /*
              * Here we can add code that initializes the UI before the main window is created and activated For example:
