@@ -36,9 +36,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
 
         <!--

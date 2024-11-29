@@ -6,12 +6,9 @@ using DroidNet.Docking.Controls;
 using DroidNet.Docking.Demo.Controls;
 using DroidNet.Docking.Layouts;
 using DryIoc;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
-namespace DroidNet.Docking.Demo;
+namespace DroidNet.Docking.Demo.Workspace;
 
 /// <summary>
 /// Provides a factory for creating views for docks within the docking framework.
@@ -46,13 +43,8 @@ public class DockViewFactory(IResolver container) : IDockViewFactory
         {
             ViewModel = container.Resolve<WelcomeViewModel>(),
         }
-        : new Border()
+        : new DockPanel()
         {
-            BorderThickness = new Thickness(0.5),
-            BorderBrush = new SolidColorBrush(Colors.Bisque),
-            Child = new DockPanel()
-            {
-                ViewModel = container.Resolve<Func<IDock, DockPanelViewModel>>()(dock),
-            },
+            ViewModel = container.Resolve<Func<IDock, DockPanelViewModel>>()(dock),
         };
 }
