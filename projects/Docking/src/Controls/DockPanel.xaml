@@ -185,10 +185,7 @@
             BorderThickness="3"
             Canvas.ZIndex="100"
             Opacity="0" />
-        <Grid
-            Name="PanelRoot"
-            BorderBrush="Bisque"
-            BorderThickness="0.5">
+        <Grid Name="PanelRoot">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -213,23 +210,11 @@
                 </s:PanelButtonRow>
             </Grid>
 
-            <TabView
+            <ListView
                 Grid.Row="1"
                 VerticalAlignment="Stretch"
                 VerticalContentAlignment="Stretch"
-                IsAddTabButtonVisible="False"
-                TabItemsSource="{x:Bind ViewModel.Dockables}"
-                TabWidthMode="SizeToContent">
-                <TabView.TabItemTemplate>
-                    <DataTemplate x:Key="DockableContentTemplate" x:DataType="docking:Dockable">
-                        <!--  ReSharper disable once Xaml.StaticResourceNotResolved  -->
-                        <TabViewItem
-                            Content="{Binding Path=ViewModel, Converter={StaticResource VmToViewConverter}}"
-                            Header="{Binding Path=TabbedTitle}"
-                            IsClosable="False" />
-                    </DataTemplate>
-                </TabView.TabItemTemplate>
-            </TabView>
+                ItemsSource="{x:Bind ViewModel.Dockables}" />
 
             <Border
                 Grid.Row="1"
