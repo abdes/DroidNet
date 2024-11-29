@@ -130,6 +130,7 @@
                                 <VisualState x:Name="Error">
                                     <VisualState.Setters>
                                         <Setter Target="PartContentPresenter.ContentTemplate" Value="{StaticResource ErrorTemplate}" />
+                                        <Setter Target="PartContentPresenter.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>

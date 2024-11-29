@@ -144,6 +144,7 @@ public sealed partial class RouterOutlet : ContentControl
             new PropertyMetadata(default(UIElement)));
 
     private string? outlet;
+    private Grid? rootGrid;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouterOutlet"/> class.
@@ -221,8 +222,10 @@ public sealed partial class RouterOutlet : ContentControl
             this.UseDefaultVmToViewConverter();
         }
 
+        this.rootGrid = this.GetTemplateChild(RootGrid) as Grid
+            ?? throw new InvalidOperationException($"using an invalid template (missing {RootGrid}) for the {nameof(RouterOutlet)} control");
+
         this.UpdateContent();
-        this.UpdateVisualStates();
 
         base.OnApplyTemplate();
     }
@@ -231,7 +234,14 @@ public sealed partial class RouterOutlet : ContentControl
     {
         if (d is RouterOutlet outlet && !Equals(args.OldValue, args.NewValue))
         {
-            outlet.UpdateContent();
+            if (outlet.DispatcherQueue.HasThreadAccess)
+            {
+                outlet.UpdateContent();
+            }
+            else
+            {
+                _ = outlet.DispatcherQueue.TryEnqueue(outlet.UpdateContent);
+            }
         }
     }
 
@@ -256,7 +266,12 @@ public sealed partial class RouterOutlet : ContentControl
             typeof(object),
             parameter: null,
             language: null) as UIElement;
-        this.UpdateVisualStates();
+
+        // Visual states are defined under the root grid, which is only there once the template is applied.
+        if (this.rootGrid is not null)
+        {
+            this.UpdateVisualStates();
+        }
     }
 
     /// <summary>
@@ -273,10 +288,7 @@ public sealed partial class RouterOutlet : ContentControl
         try
         {
             var result = VisualStateManager.GoToState(this, state, useTransitions: true);
-            if (!result)
-            {
-                Debug.WriteLine($"Failed to go to visual state `{state}`.");
-            }
+            Debug.Assert(result, $"Failed to go to visual state `{state}`.");
         }
         catch (Exception ex)
         {
