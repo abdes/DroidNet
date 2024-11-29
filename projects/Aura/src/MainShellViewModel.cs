@@ -89,7 +89,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
         if (disposing)
         {
-            this.routerEventsSubscription.Dispose();
             this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
         }
 
@@ -172,7 +171,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         Debug.Assert(this.Window is not null, "an activated ViewModel must always have a Window");
 
         this.Window.ExtendsContentIntoTitleBar = true;
-        this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
     }
 
     /// <summary>
