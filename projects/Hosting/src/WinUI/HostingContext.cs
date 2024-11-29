@@ -24,7 +24,7 @@ public class HostingContext(bool lifeTimeLinked = true) : BaseHostingContext(lif
     /// <value>
     /// The dispatcher queue used to manage the execution of work items on the UI thread.
     /// </value>
-    public DispatcherQueue? Dispatcher { get; set; }
+    public required DispatcherQueue Dispatcher { get; set; }
 
     /// <summary>
     /// Gets or sets the WinUI Application instance.
@@ -32,5 +32,5 @@ public class HostingContext(bool lifeTimeLinked = true) : BaseHostingContext(lif
     /// <value>
     /// The instance of the WinUI <see cref="Application" /> that represents the running application.
     /// </value>
-    public Application? Application { get; set; }
+    public required Application Application { get; set; }
 }
