@@ -27,7 +27,6 @@ namespace DroidNet.Aura;
 public partial class MainShellViewModel : AbstractOutletContainer
 {
     private readonly DispatcherQueue dispatcherQueue;
-    private readonly IDisposable routerEventsSubscription;
     private readonly AppearanceSettingsService appearanceSettings;
 
     private bool isDisposed;
@@ -55,7 +54,8 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
         this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
 
-        this.routerEventsSubscription = router.Events.OfType<ActivationComplete>()
+        _ = router.Events.OfType<ActivationComplete>()
+            .Take(1) // Do this only on the first activation and then unsubscribe
             .Subscribe(
                 @event =>
                 {
