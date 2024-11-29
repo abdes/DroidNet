@@ -43,9 +43,8 @@
             </Grid.ColumnDefinitions>
             <ImageIcon
                 Grid.Column="1"
-                Height="26"
-                Margin="8,0,4,0"
-                VerticalAlignment="Center"
+                Margin="4"
+                VerticalAlignment="Stretch"
                 Source="/Assets/DroidNet.png" />
             <StackPanel
                 x:Name="PrimaryCommands"
@@ -67,7 +66,7 @@
                 Orientation="Horizontal"
                 Visibility="Collapsed">
                 <Button x:Name="SettingsButton">
-                    <FontIcon Glyph="&#xE713;" />
+                    <FontIcon FontSize="16" Glyph="&#xE713;" />
                     <!--  The Settings Button has a MenuFlyout created in code behind  -->
                 </Button>
             </StackPanel>
@@ -75,7 +74,10 @@
 
         <!--  Main Content Area  -->
         <Grid Name="ContentLayer" Grid.Row="1">
-            <router:RouterOutlet x:Name="OutletContent" ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
+            <router:RouterOutlet
+                x:Name="OutletContent"
+                Outlet=""
+                ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
         </Grid>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="WindowWidthStates">
