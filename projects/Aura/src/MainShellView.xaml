@@ -22,7 +22,7 @@
         <local:IsSelectedToIconConverter x:Key="IsSelectedToIconConverter" />
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid" Background="{StaticResource LayerOnMicaBaseAltFillColorDefaultBrush}">
+    <Grid x:Name="RootGrid" Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

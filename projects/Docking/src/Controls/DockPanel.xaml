@@ -178,7 +178,7 @@
 
     </UserControl.Resources>
 
-    <Grid>
+    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
         <Border
             x:Name="AnimatedBorder"
             BorderBrush="Red"
@@ -190,11 +190,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid
-                Name="TitleBar"
-                Grid.Row="0"
-                Padding="4,2"
-                Background="{ThemeResource SystemControlBackgroundChromeMediumLowBrush}">
+            <Grid Name="TitleBar" Padding="4,2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />

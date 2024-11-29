@@ -23,7 +23,7 @@
                     </tkc:LayoutTransformControl.Transform>
 
                     <TextBlock
-                        Padding="10"
+                        Padding="10,4"
                         FontWeight="ExtraLight"
                         Text="{x:Bind MinimizedTitle}" />
                 </tkc:LayoutTransformControl>
@@ -33,7 +33,7 @@
         <DataTemplate x:Key="HorizontalTemplate" x:DataType="docking:IDockable">
             <ItemContainer>
                 <TextBlock
-                    Padding="10"
+                    Padding="10,4"
                     FontWeight="ExtraLight"
                     Text="{x:Bind MinimizedTitle}" />
             </ItemContainer>
@@ -48,7 +48,7 @@
             VerticalTemplate="{StaticResource VerticalTemplate}" />
     </UserControl.Resources>
 
-    <Border Background="{ThemeResource SystemControlBackgroundChromeMediumBrush}">
+    <Border Background="Transparent">
         <ItemsView
             IsItemInvokedEnabled="True"
             ItemInvoked="ItemsView_OnItemInvoked"
