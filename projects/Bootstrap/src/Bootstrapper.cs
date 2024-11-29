@@ -241,12 +241,12 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         _ = this.builder.ConfigureContainer<DryIocServiceProvider>(
             provider =>
             {
+                var container = provider.Container;
+
                 // Set up the view model to view converters. We're using the standard converter.
-                provider.Container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-                provider.Container.Register<ViewModelToView>(Reuse.Singleton);
-                provider.Container.RegisterDelegate<IValueConverter>(
-                    c => c.Resolve<ViewModelToView>(),
-                    serviceKey: "VmToView");
+                container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+                container.Register<ViewModelToView>(Reuse.Singleton);
+                container.RegisterDelegate((Func<IResolverContext, IValueConverter>)(c => c.Resolve<ViewModelToView>()), serviceKey: "VmToView");
             });
         return this;
     }
