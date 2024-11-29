@@ -10,8 +10,6 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Name="ContentRoot">
-        <router:RouterOutlet ViewModel="{x:Bind ContentViewModel, Mode=OneWay}" />
-    </Grid>
+    <router:RouterOutlet Outlet="" ViewModel="{x:Bind ContentViewModel, Mode=OneWay}" />
 
 </Window>
