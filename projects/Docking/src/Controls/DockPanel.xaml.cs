@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
 using Windows.System;
@@ -20,6 +21,16 @@ namespace DroidNet.Docking.Controls;
 [ObservableObject]
 public sealed partial class DockPanel
 {
+    /// <summary>
+    /// Identifies the <see cref="IconConverter"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty IconConverterProperty =
+        DependencyProperty.Register(
+            nameof(IconConverter),
+            typeof(IValueConverter),
+            typeof(DockableTabsBar),
+            new PropertyMetadata(defaultValue: null));
+
     private const double ResizeThrottleInMs = 50.0;
 
     private readonly PointerEventHandler pointerEnterEventHandler;
@@ -61,6 +72,15 @@ public sealed partial class DockPanel
         this.pointerExitEventHandler = (_, _) => this.HideOverlay();
     }
 
+    /// <summary>
+    /// Gets or sets the converter used to get an icon for the dockable entity.
+    /// </summary>
+    public IValueConverter IconConverter
+    {
+        get => (IValueConverter)this.GetValue(IconConverterProperty);
+        set => this.SetValue(IconConverterProperty, value);
+    }
+
     /// <inheritdoc/>
     public override string ToString() => $"{nameof(DockPanel)} [{this.ViewModel?.Title ?? string.Empty}]";
 
@@ -98,65 +118,6 @@ public sealed partial class DockPanel
 
         this.UpdateViewModelWithInitialSize();
     }
-
-    // TODO: Rework tabs for DockPanel dockables
-#if false
-    private void InitializeTabView()
-    {
-        this.DockablesTabView.TabItems.Clear();
-
-        if (this.ViewModel is null)
-        {
-            return;
-        }
-
-        foreach (var dockable in this.ViewModel.Dockables)
-        {
-            this.AddTab(dockable);
-        }
-    }
-
-    private void Dockables_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e is { Action: NotifyCollectionChangedAction.Add, NewItems: not null })
-        {
-            foreach (var newItem in e.NewItems)
-            {
-                this.AddTab((IDockable)newItem);
-            }
-        }
-        else if (e is { Action: NotifyCollectionChangedAction.Remove, OldItems: not null })
-        {
-            foreach (var oldItem in e.OldItems)
-            {
-                this.RemoveTab((IDockable)oldItem);
-            }
-        }
-    }
-
-    private void AddTab(IDockable dockable)
-    {
-        var tabItem = new TabViewItem
-        {
-            Header = dockable.Title,
-            ContentTemplate = (DataTemplate)this.Resources["DockableContentTemplate"],
-            Content = dockable,
-            IsClosable = false,
-        };
-        this.DockablesTabView.TabItems.Add(tabItem);
-    }
-
-    private void RemoveTab(IDockable dockable)
-    {
-        var tabItem = this.DockablesTabView.TabItems
-            .OfType<TabViewItem>()
-            .FirstOrDefault(ti => string.Equals(ti.Header as string, dockable.Title, StringComparison.Ordinal));
-        if (tabItem != null)
-        {
-            this.DockablesTabView.TabItems.Remove(tabItem);
-        }
-    }
-#endif
 
     private void UpdateViewModelWithInitialSize()
         => this.ViewModel?.OnSizeChanged(this.GetActualSize());

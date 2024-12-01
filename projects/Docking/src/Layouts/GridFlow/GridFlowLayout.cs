@@ -20,6 +20,7 @@ namespace DroidNet.Docking.Layouts.GridFlow;
 /// </remarks>
 public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEngine
 {
+    private const int MinDockPanelLength = 90;
     private readonly Dictionary<DockId, CachedView> cachedViews = [];
 
     /// <summary>
@@ -42,7 +43,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
         var gridItemLength = this.GetGridLengthForDock(dock);
 
         // $"GridLength for dock {dock}: {gridItemLength} (orientation is {this.CurrentGrid.Orientation}"
-        this.CurrentGrid.AddResizableItem(this.GetViewForDock(dock), gridItemLength, 32);
+        this.CurrentGrid.AddResizableItem(this.GetViewForDock(dock), gridItemLength, MinDockPanelLength);
     }
 
     /// <inheritdoc/>
@@ -69,7 +70,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             ? new GridLength(1, GridUnitType.Star)
             : GetGridLengthForSegment(segment, newVector.VectorOrientation);
 
-        this.CurrentGrid.AddResizableItem(newVector, length, 32);
+        this.CurrentGrid.AddResizableItem(newVector, length, MinDockPanelLength);
 
         return new GridFlow(segment)
         {

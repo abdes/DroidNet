@@ -5,6 +5,8 @@
     <ResourceDictionary.MergedDictionaries>
         <!--  ReSharper disable Xaml.PathError  -->
         <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Controls/DockPanel/Styles.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Controls/DockableTab.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Controls/DockableTabsBar.xaml" />
         <!--  TODO(abdes): review this if the style application issue on SizerBase is resolved  -->
         <!--  https://github.com/CommunityToolkit/Windows/issues/273  -->
         <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Styles/SizerBase.xaml" />

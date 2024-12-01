@@ -190,15 +190,16 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid Name="TitleBar" Padding="4,2">
+            <Grid Name="TitleBar" Height="24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
+                <s:DockableTabsBar
                     Grid.Column="0"
-                    Style="{StaticResource PanelTitle}"
-                    Text="{x:Bind ViewModel.Title}" />
+                    ActiveDockable="{x:Bind ViewModel.ActiveDockable, Mode=TwoWay}"
+                    Dockables="{x:Bind ViewModel.Dockables, Mode=OneWay}"
+                    IconConverter="{x:Bind IconConverter, Mode=OneWay}" />
                 <s:PanelButtonRow Grid.Column="1">
                     <s:PanelDockButton Command="{x:Bind ViewModel.ToggleDockingModeCommand}" />
                     <s:PanelMinimizeButton Command="{x:Bind ViewModel.MinimizeCommand}" />
@@ -206,11 +207,7 @@
                 </s:PanelButtonRow>
             </Grid>
 
-            <ListView
-                Grid.Row="1"
-                VerticalAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
-                ItemsSource="{x:Bind ViewModel.Dockables}" />
+            <ContentPresenter Grid.Row="1" Content="{x:Bind ViewModel.ActiveDockable.ViewModel, Mode=OneWay, Converter={StaticResource VmToViewConverter}}" />
 
             <Border
                 Grid.Row="1"

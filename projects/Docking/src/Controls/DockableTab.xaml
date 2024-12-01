@@ -1,0 +1,85 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctk_cvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:local="using:DroidNet.Docking.Controls">
+
+    <ctk_cvt:BoolToVisibilityConverter x:Key="IsCompactConverter" />
+
+    <Style x:Key="TabTitleStyle" TargetType="TextBlock">
+        <Setter Property="Margin" Value="4,0,4,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="ExtraLight" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+    <Style x:Key="TabIconStyle" TargetType="ContentPresenter">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style BasedOn="{StaticResource DefaultDockableTabStyle}" TargetType="local:DockableTab" />
+
+    <Style x:Key="DefaultDockableTabStyle" TargetType="local:DockableTab">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DockableTab">
+                    <Grid Name="PartRootGrid" Background="Transparent">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="2" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Name="PartTabIcon" Style="{StaticResource TabIconStyle}" />
+                        <TextBlock
+                            Name="PartTabTitle"
+                            Grid.Column="1"
+                            Style="{StaticResource TabTitleStyle}"
+                            Text="{Binding Dockable.TabbedTitle, RelativeSource={RelativeSource TemplatedParent}}"
+                            TextTrimming="{Binding TextTrimming, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                            Visibility="{Binding IsCompact, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay, Converter={StaticResource IsCompactConverter}, ConverterParameter=True}" />
+                        <Border
+                            Name="PartSelectionBar"
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                            Visibility="Collapsed" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="PointerStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartRootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartTabIcon" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemControlHighlightBaseHighBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartTabTitle" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemControlHighlightBaseHighBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="SelectionStates">
+                                <VisualState x:Name="Unselected" />
+                                <VisualState x:Name="Selected">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartSelectionBar" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>
