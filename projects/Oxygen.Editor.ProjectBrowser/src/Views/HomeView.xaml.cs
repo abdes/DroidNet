@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -72,6 +73,17 @@ public sealed partial class HomeView
 
                 // TODO: navigate to project workspace for newly created project
             }
+        }
+    }
+
+    private async void OnHomeViewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        _ = sender; // Unused
+
+        if (args.Key == Windows.System.VirtualKey.F5)
+        {
+            await this.ViewModel!.LoadRecentTemplatesCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+            await this.ViewModel!.LoadRecentProjectsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         }
     }
 }

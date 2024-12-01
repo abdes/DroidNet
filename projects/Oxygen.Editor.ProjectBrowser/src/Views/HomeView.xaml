@@ -8,6 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
+    KeyDown="OnHomeViewKeyDown"
     mc:Ignorable="d">
 
     <!--  ViewModel will never be null under standard operation conditions  -->
