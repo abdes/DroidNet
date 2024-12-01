@@ -66,12 +66,13 @@ public partial class App
         _ = this.activationService
             .Where(data => data is LaunchActivatedEventArgs)
             .Select(data => data as LaunchActivatedEventArgs)
-            .Subscribe(
-                _ =>
-                {
-                    Debug.WriteLine("Launch activation ==> navigate to project browser");
-                    this.router.Navigate("/pb/home", new FullNavigation() { Target = Target.Main });
-                });
+            .Select(_ => Observable.FromAsync(async () =>
+            {
+                Debug.WriteLine("Launch activation ==> navigate to project browser");
+                await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(false);
+            }))
+            .Concat()
+            .Subscribe();
 
         /* TODO(abdes) add subscriptions for other supported activations */
 

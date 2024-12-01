@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -28,20 +27,6 @@ public sealed partial class HomeView
     {
         this.projectBrowser = projectBrowser;
         this.InitializeComponent();
-    }
-
-    /// <summary>
-    /// Handles the loaded event of the page.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private async void OnLoaded(object sender, RoutedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        await this.ViewModel!.LoadTemplatesCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        await this.ViewModel!.LoadRecentProjectsCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
     }
 
     /// <summary>

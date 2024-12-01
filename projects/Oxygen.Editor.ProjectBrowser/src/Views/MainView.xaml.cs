@@ -31,7 +31,7 @@ public sealed partial class MainView
             () => this.ViewModel!.AllItems.Cast<object>().ToList());
     }
 
-    private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    private async void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         _ = sender; // unused
 
@@ -41,11 +41,11 @@ public sealed partial class MainView
 
         if (args.IsSettingsSelected)
         {
-            this.ViewModel.NavigateToSettings();
+            await this.ViewModel.NavigateToSettingsAsync().ConfigureAwait(true);
         }
         else if (args.SelectedItem is not null)
         {
-            this.ViewModel.NavigateToItem((NavigationItem)args.SelectedItem);
+            await this.ViewModel.NavigateToItemAsync((NavigationItem)args.SelectedItem).ConfigureAwait(true);
         }
     }
 }

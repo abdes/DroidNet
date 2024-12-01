@@ -21,6 +21,8 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
     private const int SettingsItemIndex = int.MaxValue;
     private const string SettingsItemPath = "settings";
 
+    private IActiveRoute? activeRoute;
+
     [ObservableProperty]
     private object? currentNavigation;
 
@@ -41,9 +43,6 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
     /// Gets the list of all navigation items.
     /// </summary>
     public IList<NavigationItem> AllItems => [.. this.NavigationItems];
-
-    /// <inheritdoc/>
-    public IActiveRoute? ActiveRoute { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the settings item is selected.
@@ -78,12 +77,20 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         }
     }
 
+    /// <inheritdoc/>
+    public async Task OnNavigatedToAsync(IActiveRoute route)
+    {
+        this.activeRoute = route;
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Navigates to the specified navigation item.
     /// </summary>
     /// <param name="requestedItem">The navigation item to navigate to.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    internal void NavigateToItem(NavigationItem requestedItem)
+    internal async Task NavigateToItemAsync(NavigationItem requestedItem)
     {
         var (index, navItem) = this.FindNavigationItem(item => item == requestedItem);
         if (navItem is null)
@@ -95,20 +102,21 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            await router.NavigateAsync(navItem.Path, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
         }
     }
 
     /// <summary>
     /// Navigates to the settings view.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    internal void NavigateToSettings()
+    internal async Task NavigateToSettingsAsync()
     {
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            await router.NavigateAsync(SettingsItemPath, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
         }
     }
 
