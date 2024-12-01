@@ -90,11 +90,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             anchor = new Anchor(AnchorPosition.Center);
             newDocker.Dock(CenterDock.New(), anchor);
 
-            var left1 = MakeDockWithVerticalDockable(resolver, "left1");
+            var left1 = MakeDockWithVerticalDockable(resolver, "A long left1");
             anchor = new AnchorLeft();
             newDocker.Dock(left1, anchor);
 
-            var left2 = MakeDockWithVerticalDockable(resolver, "left2");
+            var left2 = MakeDockWithVerticalDockable(resolver, "Very long title for left 2");
             anchor = new AnchorBottom(left1.Dockables[0]);
             newDocker.Dock(left2, anchor);
             anchor = new AnchorLeft();

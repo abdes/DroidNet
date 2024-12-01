@@ -40,6 +40,9 @@ public partial class DockPanelViewModel : ObservableRecipient
 
     private IDock? dockBeingDocked;
 
+    [ObservableProperty]
+    private IDockable? activeDockable; // Add this line
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DockPanelViewModel"/> class.
     /// </summary>
@@ -62,6 +65,7 @@ public partial class DockPanelViewModel : ObservableRecipient
         this.docker = dock.Docker;
         this.title = dock.ToString() ?? "EMPTY";
         this.Dockables = dock.Dockables;
+        this.activeDockable = dock.ActiveDockable; // Initialize active dockable
     }
 
     /// <summary>
