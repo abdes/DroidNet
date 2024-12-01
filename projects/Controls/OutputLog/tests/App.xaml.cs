@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Tests;
-
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
+namespace DroidNet.Controls.Tests;
 #if MSTEST_RUNNER
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -31,7 +30,10 @@ public partial class TestApp
     /// <summary>
     /// Initializes a new instance of the <see cref="TestApp" /> class.
     /// </summary>
-    public TestApp() => this.InitializeComponent();
+    public TestApp()
+    {
+        this.InitializeComponent();
+    }
 
     /// <summary>
     /// Invoked when the application is launched normally by the end user.  Other entry
