@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
@@ -66,7 +67,14 @@ public partial class HomeViewModel(
     /// <param name="location">The location where the project will be created.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was created successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> NewProjectFromTemplate(ITemplateInfo template, string projectName, string location)
-        => await projectBrowser.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+    {
+        Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
+
+        this.preloadedProjects = false; // Refresh recent projects next time we are activated
+        this.preloadedTemplates = false; // Refresh recent templates next time we are activated
+
+        return await projectBrowser.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+    }
 
     /// <summary>
     /// Opens an existing project.
@@ -75,11 +83,15 @@ public partial class HomeViewModel(
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
     {
+        Debug.WriteLine($"Opening project with name `{projectInfo.Name}` in location `{projectInfo.Location}`");
+
         var result = await projectBrowser.OpenProjectAsync(projectInfo).ConfigureAwait(true);
         if (!result)
         {
             return false;
         }
+
+        this.preloadedProjects = false; // Refresh recent projects next time we are activated
 
         await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
         return true;
