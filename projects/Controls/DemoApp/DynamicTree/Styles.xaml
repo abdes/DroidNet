@@ -7,10 +7,6 @@
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:DroidNet.Controls.Demo.DynamicTree">
 
-    <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/DynamicTree.xaml" />
-    </ResourceDictionary.MergedDictionaries>
-
     <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
         <Image Source="{x:Bind local:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />
     </DataTemplate>

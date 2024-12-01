@@ -6,6 +6,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.DynamicTree;
+using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -35,13 +36,21 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     /// Gets or sets the index of the selected navigation item.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedItem), nameof(IsSettingsSelected))]
     private int selectedItemIndex = InvalidItemIndex;
+
+    /// <summary>
+    /// Gets the selected navigation item.
+    /// </summary>
+    /// <value>The selected navigation item, or <see langword="null"/> if no item is selected.</value>
+    public NavigationItem? SelectedItem => this.SelectedItemIndex == InvalidItemIndex ? default : this.AllItems[this.SelectedItemIndex];
 
     /// <summary>
     /// Gets the list of navigation items.
     /// </summary>
     public IList<NavigationItem> NavigationItems { get; } =
     [
+        new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
         new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),
     ];
 

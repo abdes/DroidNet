@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.OutputLog.OutputLogDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:DroidNet.Controls.Demo.OutputLog"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Name="page"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <Style x:Key="LogItemStyle" TargetType="GridViewItem">
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="MinWidth" Value="100" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Margin" Value="10" />
+        </Style>
+    </Page.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" MinHeight="80" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <GridView
+            Padding="0"
+            VerticalAlignment="Stretch"
+            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+            IsItemClickEnabled="True"
+            ItemClick="GridView_ItemClick"
+            ItemContainerStyle="{StaticResource LogItemStyle}"
+            SelectionMode="None">
+            <GridView.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Text="{Binding}" />
+                </DataTemplate>
+            </GridView.ItemTemplate>
+            <x:String>Verbose</x:String>
+            <x:String>Debug</x:String>
+            <x:String>Information</x:String>
+            <x:String>Warning</x:String>
+            <x:String>Error</x:String>
+        </GridView>
+        <Border
+            Grid.Row="1"
+            Padding="4"
+            Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <ScrollViewer Grid.Row="1">
+                <dnc:OutputLogView OutputLogSink="{x:Bind ViewModel.OutputLogSink}" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Page>
