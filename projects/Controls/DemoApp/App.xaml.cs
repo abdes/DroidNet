@@ -63,7 +63,7 @@ public partial class App
 
         try
         {
-            this.router.Navigate("/", new FullNavigation() { Target = Target.Main });
+            this.router.Navigate("/demos", new FullNavigation() { Target = Target.Main });
         }
         catch (NavigationFailedException)
         {
