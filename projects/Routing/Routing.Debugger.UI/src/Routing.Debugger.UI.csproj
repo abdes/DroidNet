@@ -15,6 +15,13 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="..\README.md">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
@@ -30,7 +37,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />

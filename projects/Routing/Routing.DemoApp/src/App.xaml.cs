@@ -49,13 +49,13 @@ public partial class App
     /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
 
         // We just want to exit if navigation fails for some reason
         _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
-        this.router.Navigate("/nav/1", new FullNavigation() { Target = Target.Main });
+        await this.router.NavigateAsync("/nav/1", new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
     }
 }

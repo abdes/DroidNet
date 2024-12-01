@@ -10,16 +10,14 @@ namespace DroidNet.Routing;
 /// outlets.
 /// </summary>
 /// <remarks>
-/// <para>
 /// When navigation occurs, the router builds a state tree from the URL and hands it to the route
 /// activator. The activator orchestrates three crucial steps in the routing lifecycle:
-/// </para>
 /// <list type="number">
 ///   <item>Creates view model instances using dependency injection.</item>
-///   <item>Injects the <see cref="IActiveRoute"/> into view models that implement <see cref="IRoutingAware"/></item>
-///   <item>Loads the corresponding views into their designated outlets in the visual tree</item>
+///   <item>Injects the <see cref="IActiveRoute"/> into view models that implement <see cref="IRoutingAware"/>.</item>
+///   <item>Loads the corresponding views into their designated outlets in the visual tree.</item>
 /// </list>
-///
+/// </remarks>
 /// <example>
 /// <strong>Example Usage</strong>
 /// <para>
@@ -36,12 +34,10 @@ namespace DroidNet.Routing;
 /// // And a navigation to "/users/123"
 /// // The activator will:
 /// 1. Resolve UserDetailsViewModel from the DI container
-/// 2. If UserDetailsViewModel implements IRoutingAware:
-///    - Inject the IActiveRoute (containing id="123")
+/// 2. If UserDetailsViewModel implements IRoutingAware, call its OnNavigatedTo method with the active route.
 /// 3. Load the view into the "primary" outlet
 /// ]]></code>
 /// </example>
-///
 /// <para><strong>Implementation Guidelines:</strong></para>
 /// <para>
 /// The <see cref="IRouteActivator"/> and <see cref="IRouteActivationObserver"/> work together to
@@ -60,7 +56,6 @@ namespace DroidNet.Routing;
 /// prevents duplicate activations and manages view model creation, while leaving the actual view
 /// loading to platform-specific activators.
 /// </para>
-/// </remarks>
 public interface IRouteActivator
 {
     /// <summary>
@@ -72,18 +67,17 @@ public interface IRouteActivator
     /// will be loaded.
     /// </param>
     /// <returns>
+    /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The task result is
     /// <see langword="true"/> if activation succeeded; <see langword="false"/> if any step failed.
     /// </returns>
     /// <remarks>
-    /// <para>
     /// Works in collaboration with an <see cref="IRouteActivationObserver"/> to manage the view model
     /// lifecycle and activation state. The observer gets opportunities to participate in the activation
     /// process through its lifecycle hooks, enabling view model creation via dependency injection and
     /// proper state tracking. This design allows for flexible, platform-specific view loading while
     /// maintaining a consistent activation model across different implementations.
-    /// </para>
     /// </remarks>
-    bool ActivateRoute(IActiveRoute route, INavigationContext context);
+    Task<bool> ActivateRouteAsync(IActiveRoute route, INavigationContext context);
 
     /// <summary>
     /// Recursively activates a tree of routes, starting from the specified root.
@@ -93,16 +87,15 @@ public interface IRouteActivator
     /// The navigation context containing the target where views will be loaded.
     /// </param>
     /// <returns>
+    /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The task result is
     /// <see langword="true"/> if all routes in the tree were activated successfully;
     /// <see langword="false"/> if any activation failed.
     /// </returns>
     /// <remarks>
-    /// <para>
     /// Ensures proper activation order in hierarchical routing scenarios by activating parent routes
     /// before their children. This ordering is crucial as parent routes often provide the outlet
     /// containers needed by their children's views. The method tracks activation success across the
     /// entire tree, allowing the router to handle partial activation failures appropriately.
-    /// </para>
     /// </remarks>
-    bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context);
+    Task<bool> ActivateRoutesRecursiveAsync(IActiveRoute root, INavigationContext context);
 }

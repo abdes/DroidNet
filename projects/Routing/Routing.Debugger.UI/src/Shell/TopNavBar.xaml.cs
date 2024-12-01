@@ -67,24 +67,24 @@ public sealed partial class TopNavBar : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private void UrlTextBox_KeyUp(object sender, KeyRoutedEventArgs e)
+    private async void UrlTextBox_KeyUp(object sender, KeyRoutedEventArgs e)
     {
         _ = sender;
 
         if (e.Key == VirtualKey.Enter && this.Url != null)
         {
-            this.Router.Navigate(this.Url, new FullNavigation());
+            await this.Router.NavigateAsync(this.Url, new FullNavigation()).ConfigureAwait(true);
         }
     }
 
-    private void Reload(object sender, RoutedEventArgs args)
+    private async void Reload(object sender, RoutedEventArgs args)
     {
         _ = sender;
         _ = args;
 
         if (this.Url != null)
         {
-            this.Router.Navigate(this.Url, new FullNavigation());
+            await this.Router.NavigateAsync(this.Url, new FullNavigation()).ConfigureAwait(true);
         }
     }
 }

@@ -58,15 +58,15 @@ public partial class App
     /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
 
         try
         {
-            this.router.Navigate(
+            await this.router.NavigateAsync(
                 "/(dock:(app:Welcome//routes:Config;bottom=url-tree//url-tree:Parser;left;w=300//router-state:Recognizer;right;w=400))",
-                new FullNavigation() { Target = Target.Main });
+                new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
         }
         catch (NavigationFailedException)
         {

@@ -93,20 +93,20 @@ public sealed partial class Router : IRouter, IDisposable
     public IObservable<RouterEvent> Events { get; }
 
     /// <inheritdoc />
-    public void Navigate(string url, FullNavigation? options = null)
-        => this.Navigate(this.urlSerializer.Parse(url), options ?? new FullNavigation());
+    public Task NavigateAsync(string url, FullNavigation? options = null)
+        => this.NavigateAsync(this.urlSerializer.Parse(url), options ?? new FullNavigation());
 
     /// <inheritdoc />
     /// TODO: implement partial navigation with a URL
-    public void Navigate(string url, PartialNavigation options)
-        => this.Navigate(this.urlSerializer.Parse(url), options);
+    public Task NavigateAsync(string url, PartialNavigation options)
+        => this.NavigateAsync(this.urlSerializer.Parse(url), options);
 
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "All unhandled exceptions will be propagated via the router NavigationFailed event")]
-    public void Navigate(IList<RouteChangeItem> changes, PartialNavigation options)
+    public async Task NavigateAsync(IList<RouteChangeItem> changes, PartialNavigation options)
     {
         try
         {
@@ -138,7 +138,7 @@ public sealed partial class Router : IRouter, IDisposable
             this.eventSource.OnNext(new ActivationStarted(options, currentState));
 
             // TODO: Activate only the new routes
-            var success = this.routeActivator.ActivateRoutesRecursive(activeRoute.Root, currentContext);
+            var success = await this.routeActivator.ActivateRoutesRecursiveAsync(activeRoute.Root, currentContext).ConfigureAwait(false);
             this.contextProvider.ActivateContext(currentContext);
 
             this.eventSource.OnNext(new ActivationComplete(options, currentContext));
@@ -421,7 +421,7 @@ public sealed partial class Router : IRouter, IDisposable
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "All unhandled exceptions will be wrapped inside a NavigationFailedException")]
-    private void Navigate(IUrlTree urlTree, NavigationOptions options)
+    private async Task NavigateAsync(IUrlTree urlTree, NavigationOptions options)
     {
         this.eventSource.OnNext(new NavigationStart(urlTree.ToString(), options));
 
@@ -450,7 +450,7 @@ public sealed partial class Router : IRouter, IDisposable
 
             // Activate routes in the router state that still need activation after the optimization.
             context.RouteActivationObserver = this.routeActivationObserver;
-            var success = this.routeActivator.ActivateRoutesRecursive(context.State.RootNode, context);
+            var success = await this.routeActivator.ActivateRoutesRecursiveAsync(context.State.RootNode, context).ConfigureAwait(true);
 
             // Finally activate the context.
             this.contextProvider.ActivateContext(context);

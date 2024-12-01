@@ -25,6 +25,8 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     private const int SettingsItemIndex = int.MaxValue;
     private const string SettingsItemPath = "settings";
 
+    private IActiveRoute? activeRoute;
+
     [ObservableProperty]
     private object? currentNavigation;
 
@@ -53,9 +55,6 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     /// </summary>
     public IList<NavigationItem> AllItems => [.. this.NavigationItems, .. this.FooterItems];
 
-    /// <inheritdoc/>
-    public IActiveRoute? ActiveRoute { get; set; }
-
     /// <summary>
     /// Gets a value indicating whether the settings item is selected.
     /// </summary>
@@ -63,6 +62,13 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     /// <see langword="true"/> if the settings item is selected; otherwise, <see langword="false"/>.
     /// </value>
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
+
+    /// <inheritdoc/>
+    public Task OnNavigatedToAsync(IActiveRoute route)
+    {
+        this.activeRoute = route;
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
@@ -99,8 +105,9 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     /// This method finds the index of the requested navigation item and navigates to it if it is
     /// not already selected. If the item is unknown, a debug message is logged.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    internal void NavigateToItem(NavigationItem requestedItem)
+    internal async Task NavigateToItemAsync(NavigationItem requestedItem)
     {
         var (index, navItem) = this.FindNavigationItem(item => item == requestedItem);
         if (navItem is null)
@@ -112,7 +119,7 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            router.Navigate(navItem.Path, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            await router.NavigateAsync(navItem.Path, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
         }
     }
 
@@ -124,13 +131,14 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     /// settings page using the router. This avoids unnecessary navigation if the settings item is
     /// already selected.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    internal void NavigateToSettings()
+    internal async Task NavigateToSettingsAsync()
     {
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            router.Navigate(SettingsItemPath, new PartialNavigation() { RelativeTo = this.ActiveRoute });
+            await router.NavigateAsync(SettingsItemPath, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
         }
     }
 

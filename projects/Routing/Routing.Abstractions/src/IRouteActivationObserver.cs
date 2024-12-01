@@ -31,5 +31,6 @@ public interface IRouteActivationObserver
     /// </summary>
     /// <param name="route">The route that has been activated.</param>
     /// <param name="context">The navigation context associated with the activation.</param>
-    void OnActivated(IActiveRoute route, INavigationContext context);
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    Task OnActivatedAsync(IActiveRoute route, INavigationContext context);
 }

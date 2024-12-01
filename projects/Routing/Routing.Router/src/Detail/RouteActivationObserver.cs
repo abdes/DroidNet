@@ -45,14 +45,11 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
     /// verifies that the route is of the correct type and that it has not already been activated.
     /// If the route requires a view model, the method resolves the view model from the IoC
     /// container and assigns it to the route.
-    /// <para>
-    /// If the view model implements <see cref="IRoutingAware"/>, it also sets the
-    /// <see cref="IRoutingAware.ActiveRoute"/> property to the activated route. This provides the
-    /// view model with the data inside the active route, including the route's parameters.
-    /// </para>
     /// </remarks>
     public bool OnActivating(IActiveRoute route, INavigationContext context)
     {
+        _ = context; // Unused
+
         if (route is not ActiveRoute routeImpl)
         {
             throw new ArgumentException(
@@ -76,10 +73,6 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
         var viewModel = container.Resolve(viewModelType) ??
             throw new MissingViewModelException { ViewModelType = viewModelType };
         routeImpl.ViewModel = viewModel;
-        if (viewModel is IRoutingAware injectable)
-        {
-            injectable.ActiveRoute = routeImpl;
-        }
 
         return true;
     }
@@ -95,9 +88,21 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
     /// route is now active. This method ensures that any additional logic that needs to be executed
     /// after activation is performed, such as updating the state of the route or notifying other
     /// components of the activation.
+    /// <para>
+    /// If the view model implements <see cref="IRoutingAware"/>, its <see cref="IRoutingAware.OnNavigatedToAsync(IActiveRoute)"/>
+    /// method is invoked called, providing the view model with the data inside the active route, including the route's parameters.
+    /// </para>
     /// </remarks>
-    public void OnActivated(IActiveRoute route, INavigationContext context)
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task OnActivatedAsync(IActiveRoute route, INavigationContext context)
     {
+        _ = context; // Unused
+
+        if (route.ViewModel is IRoutingAware routingAware)
+        {
+            await routingAware.OnNavigatedToAsync(route).ConfigureAwait(true);
+        }
+
         if (route is ActiveRoute routeImpl)
         {
             routeImpl.IsActivated = true;

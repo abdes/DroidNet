@@ -8,13 +8,17 @@ namespace DroidNet.Routing;
 /// Enables a view model to receive and interact with its corresponding route during navigation.
 /// </summary>
 /// <remarks>
-/// <para>
 /// When implementing this interface, view models gain access to their active route, providing
 /// crucial navigation context such as URL parameters and segment information. The router
 /// automatically injects the route during activation, enabling view models to respond to navigation
 /// state changes and access routing data.
+/// <para>
+/// The <see cref="OnNavigatedToAsync"/> method is called during the view model's activation, providing
+/// an opportunity to preload data or perform other initialization tasks. View models can access URL
+/// parameters and query strings through <see cref="IActiveRoute.Params"/>, parent and child routes
+/// in the navigation hierarchy, and the outlet where their view is rendered.
 /// </para>
-///
+/// </remarks>
 /// <example>
 /// <strong>Example Usage</strong>
 /// <code><![CDATA[
@@ -25,44 +29,36 @@ namespace DroidNet.Routing;
 ///     public IActiveRoute? ActiveRoute
 ///     {
 ///         get => activeRoute;
-///         set
+///         set => activeRoute = value;
+///     }
+///
+///     public async Task OnActivatingAsync(IActiveRoute route)
+///     {
+///         ActiveRoute = route;
+///         if (route.Params.TryGetValue("id", out var userId))
 ///         {
-///             activeRoute = value;
-///             if (value?.Params.TryGetValue("id", out var userId) == true)
-///             {
-///                 LoadUserDetails(userId);
-///             }
+///             await LoadUserDetailsAsync(userId);
 ///         }
+///     }
+///
+///     private async Task LoadUserDetailsAsync(string userId)
+///     {
+///         // Load user details asynchronously
 ///     }
 /// }
 /// ]]></code>
 /// </example>
-///
-/// <para><strong>Implementation Guidelines</strong></para>
-/// <para>
-/// View models implementing this interface participate in the routing lifecycle and can access URL
-/// parameters and query strings through <see cref="IActiveRoute.Params"/>, parent and child routes
-/// in the navigation hierarchy, and the outlet where their view is rendered. The <see cref="ActiveRoute"/>
-/// property setter may be called multiple times during the view model's lifetime as navigation occurs.
-/// Implementations should handle <see langword="null"/> values gracefully, as the route reference
-/// may be cleared during deactivation.
-/// </para>
-/// <para>
-/// The <see cref="ActiveRoute"/> property setter may be called multiple times during the view
-/// model's lifetime as navigation occurs. Implementations should handle <see langword="null"/>
-/// values gracefully, as the route reference may be cleared during deactivation.
-/// </para>
-/// </remarks>
 public interface IRoutingAware
 {
     /// <summary>
-    /// Gets or sets the active route associated with this view model.
+    /// Called by the router when the component, which implements <see cref="IRoutingAware"/>, is being activated.
     /// </summary>
     /// <remarks>
-    /// The router injects this property during route activation. View models can use it to access
-    /// navigation parameters, query the route hierarchy, or participate in navigation state changes.
-    /// The value may be <see langword="null"/> when the view model is not currently active in
-    /// the routing system.
+    /// The router calls this method during route activation, just after the ViewModel is resolved.
+    /// View models can use it to access navigation parameters, query the route hierarchy, preload
+    /// data, or participate in navigation state changes.
     /// </remarks>
-    IActiveRoute? ActiveRoute { get; set; }
+    /// <param name="route">The active route associated with this view model.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    Task OnNavigatedToAsync(IActiveRoute route);
 }
