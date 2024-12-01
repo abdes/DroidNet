@@ -149,13 +149,4 @@ public partial class HomeViewModel(
             }
         }
     }
-
-    /// <summary>
-    /// Compares <see cref="DateTime"/> values in descending order.
-    /// </summary>
-    private sealed class DateTimeComparerDescending : Comparer<DateTime>
-    {
-        /// <inheritdoc/>
-        public override int Compare(DateTime x, DateTime y) => y.CompareTo(x);
-    }
 }
