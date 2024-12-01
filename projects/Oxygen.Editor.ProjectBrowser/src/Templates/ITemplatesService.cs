@@ -30,10 +30,10 @@ public interface ITemplatesService
     /// Checks if there are any recently used templates in the history.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> if there are templates in the usage history;
-    /// otherwise, <see langword="false"/>.
+    /// A <see cref="Task{TResult}"/> representing the asynchronous operation. The task result contains
+    /// <see langword="true"/> if there are templates in the usage history; otherwise, <see langword="false"/>.
     /// </returns>
-    public bool HasRecentlyUsedTemplates();
+    public Task<bool> HasRecentlyUsedTemplatesAsync();
 
     /// <summary>
     /// Gets an observable sequence of recently used templates.
@@ -42,8 +42,5 @@ public interface ITemplatesService
     /// An <see cref="IObservable{T}"/> of <see cref="ITemplateInfo"/> representing
     /// recently used templates, ordered by most recent usage.
     /// </returns>
-    /// <remarks>
-    /// Invalid templates are automatically removed from history during enumeration.
-    /// </remarks>
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates();
 }

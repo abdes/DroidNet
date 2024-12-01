@@ -8,7 +8,6 @@ using System.Runtime.CompilerServices;
 using DroidNet.Resources;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
-using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
@@ -42,13 +41,12 @@ public class ProjectBrowserService : IProjectBrowserService
     private readonly NativeStorageProvider localStorage;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
-    private readonly PersistentState state;
+    private readonly IProjectUsageService projectUsage;
     private readonly Lazy<Task<ProjectBrowserSettings>> lazySettings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
     /// </summary>
-    /// <param name="state">Persistent state storage for maintaining project usage history.</param>
     /// <param name="projectManager">Service for managing project operations.</param>
     /// <param name="finder">Service for locating system paths.</param>
     /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
@@ -62,13 +60,13 @@ public class ProjectBrowserService : IProjectBrowserService
     /// <para>- Known locations for project storage.</para>
     /// </remarks>
     public ProjectBrowserService(
-        PersistentState state,
+        IProjectUsageService projectUsage,
         IProjectManagerService projectManager,
         IOxygenPathFinder finder,
         IStorageProvider localStorage,
         ISettingsManager settingsManager)
     {
-        this.state = state;
+        this.projectUsage = projectUsage;
         this.projectManager = projectManager;
         this.finder = finder;
 
@@ -154,7 +152,7 @@ public class ProjectBrowserService : IProjectBrowserService
                 if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
                 {
                     // Update the recently used project entry for the project being saved
-                    await this.TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
+                    await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(false);
 
                     // Update the last save location
                     await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName)
@@ -222,7 +220,7 @@ public class ProjectBrowserService : IProjectBrowserService
             if (success)
             {
                 // Update the recently used project entry for the project being saved
-                await this.TryUpdateRecentUsageAsync(projectInfo.Location!).ConfigureAwait(false);
+                await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(false);
             }
 
             return success;
@@ -262,7 +260,7 @@ public class ProjectBrowserService : IProjectBrowserService
     /// <inheritdoc/>
     public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        foreach (var item in this.state.ProjectUsageRecords)
+        foreach (var item in await this.projectUsage.GetMostRecentlyUsedProjectsAsync().ConfigureAwait(false))
         {
             if (cancellationToken.IsCancellationRequested)
             {
@@ -277,43 +275,14 @@ public class ProjectBrowserService : IProjectBrowserService
             }
             else
             {
-                _ = this.state.ProjectUsageRecords!.Remove(item);
+                await this.projectUsage.DeleteProjectUsageAsync(item.Name, item.Location).ConfigureAwait(false);
             }
         }
-
-        _ = await this.state.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
         => await this.lazyLocations.Value.ConfigureAwait(false);
-
-    private async Task TryUpdateRecentUsageAsync(string location)
-    {
-        try
-        {
-            var recentProjectEntry = this.state.ProjectUsageRecords.ToList()
-                .SingleOrDefault(
-                    p => string.Equals(p.Location, location, StringComparison.Ordinal),
-                    new ProjectUsage { LastUsedOn = DateTime.MinValue, Location = location });
-            if (recentProjectEntry.Id != 0)
-            {
-                recentProjectEntry.LastUsedOn = DateTime.Now;
-                _ = this.state.ProjectUsageRecords!.Update(recentProjectEntry);
-            }
-            else
-            {
-                _ = this.state.ProjectUsageRecords.Add(recentProjectEntry);
-            }
-
-            _ = await this.state.SaveChangesAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
-            throw;
-        }
-    }
 
     private async Task TryUpdateLastSaveLocation(string location)
     {

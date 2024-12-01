@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Reactive.Linq;
 using System.Reflection;
@@ -10,7 +9,6 @@ using DroidNet.Config;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data;
-using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 
@@ -34,7 +32,6 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 /// organized by categories like Games and Visualization.
 /// </para>
 /// </remarks>
-/// <param name="state">Persistent storage for template usage history.</param>
 /// <param name="fs">Abstracted filesystem operations provider.</param>
 /// <param name="pathFinder">Service for resolving system and application paths.</param>
 /// <param name="templatesSource">Provider for loading template information.</param>
@@ -71,7 +68,7 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 /// ]]></code>
 /// </example>
 public partial class TemplatesService(
-    PersistentState state,
+    ITemplateUsageService templateUsage,
     IFileSystem fs,
     IPathFinder pathFinder,
     ITemplatesSource templatesSource,
@@ -95,38 +92,6 @@ public partial class TemplatesService(
                     "Templates",
                     location));
 
-    /// <summary>
-    /// Attempts to clear the recent usage of a template asynchronously.
-    /// </summary>
-    /// <param name="template">The template usage record to clear.</param>
-    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
-    public async Task TryClearRecentUsageAsync(TemplateUsage template)
-    {
-        try
-        {
-            await this.ClearRecentUsageAsync(template).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to remove entry from the most recently used templates: {ex.Message}");
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Clears the recent usage of a template asynchronously.
-    /// </summary>
-    /// <param name="template">The template usage record to clear.</param>
-    /// <returns>A <see cref="Task"/> representing the result of the asynchronous operation.</returns>
-    public async Task ClearRecentUsageAsync(TemplateUsage template)
-    {
-        await using (state.ConfigureAwait(true))
-        {
-            _ = state.TemplatesUsageRecords!.Remove(template);
-            _ = await state.SaveChangesAsync().ConfigureAwait(true);
-        }
-    }
-
     /// <inheritdoc/>
     public async IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync()
     {
@@ -148,17 +113,14 @@ public partial class TemplatesService(
             }
 
             // Update template last used time
-            templateInfo.LastUsedOn = this.LoadUsageData()
-                .TryGetValue(templateInfo.Location!, out var recentlyUsedTemplate)
-                ? recentlyUsedTemplate.LastUsedOn
-                : DateTime.MaxValue;
+            templateInfo.LastUsedOn = (await templateUsage.GetTemplateUsageAsync(templateInfo.Location).ConfigureAwait(false))?.LastUsedOn ?? DateTime.MaxValue;
 
             yield return templateInfo;
         }
     }
 
     /// <inheritdoc/>
-    public bool HasRecentlyUsedTemplates() => state.TemplatesUsageRecords?.Any() == true;
+    public Task<bool> HasRecentlyUsedTemplatesAsync() => templateUsage.HasRecentlyUsedTemplatesAsync();
 
     /// <inheritdoc/>
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates()
@@ -166,29 +128,24 @@ public partial class TemplatesService(
             async (observer) =>
             {
                 // Load builtin templates
-                foreach (var template in this.LoadUsageData()
-                             .OrderByDescending(item => item.Value.LastUsedOn))
+                foreach (var template in await templateUsage.GetMostRecentlyUsedTemplatesAsync().ConfigureAwait(false))
                 {
                     try
                     {
-                        var templateDescriptor = fs.Path.Combine(template.Key, "Template.json");
+                        var templateDescriptor = fs.Path.Combine(template.Location, "Template.json");
                         var templateInfo = await templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
                             .ConfigureAwait(true);
 
-                        templateInfo.LastUsedOn = template.Value.LastUsedOn;
+                        templateInfo.LastUsedOn = template.LastUsedOn;
                         observer.OnNext(templateInfo);
                     }
                     catch (Exception ex)
                     {
-                        this.CouldNotLoadTemplate(template.Key, ex.Message);
-                        await this.TryClearRecentUsageAsync(template.Value).ConfigureAwait(true);
+                        this.CouldNotLoadTemplate(template.Location, ex.Message);
+                        await templateUsage.DeleteTemplateUsageAsync(template.Location).ConfigureAwait(false);
                     }
                 }
             });
-
-    private Dictionary<string, TemplateUsage> LoadUsageData() => state.TemplatesUsageRecords?.Any() == true
-            ? state.TemplatesUsageRecords!.ToDictionary(t => t.Location!, StringComparer.Ordinal)
-            : new Dictionary<string, TemplateUsage>(StringComparer.Ordinal);
 
     [LoggerMessage(
         EventId = 1000,
