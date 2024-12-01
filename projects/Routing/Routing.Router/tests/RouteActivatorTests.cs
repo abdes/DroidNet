@@ -30,7 +30,7 @@ public class RouteActivatorTests
     }
 
     [TestMethod]
-    public void ActivateRoutesRecursive_WhenOneActivationFails_ShouldFail()
+    public async Task ActivateRoutesRecursive_WhenOneActivationFails_ShouldFail()
     {
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
@@ -40,7 +40,7 @@ public class RouteActivatorTests
         _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Throws<InvalidOperationException>();
 
         // Act
-        var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
+        var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeFalse();
@@ -51,7 +51,7 @@ public class RouteActivatorTests
     }
 
     [TestMethod]
-    public void ActivateRoutesRecursive_ShouldActivateChildRoutes()
+    public async Task ActivateRoutesRecursive_ShouldActivateChildRoutes()
     {
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
@@ -59,7 +59,7 @@ public class RouteActivatorTests
         _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns((IRouteActivationObserver?)null);
 
         // Act
-        var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
+        var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeTrue();
@@ -68,7 +68,7 @@ public class RouteActivatorTests
     }
 
     [TestMethod]
-    public void ActivateRoute_WithObserverAcceptsActivation_ShouldProceed()
+    public async Task ActivateRoute_WithObserverAcceptsActivation_ShouldProceed()
     {
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
@@ -79,7 +79,7 @@ public class RouteActivatorTests
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
 
         // Act
-        var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
+        var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         observerMock.VerifyAll();
@@ -89,7 +89,7 @@ public class RouteActivatorTests
     }
 
     [TestMethod]
-    public void ActivateRoute_WithObserverRejectsActivation_ShouldNotProceed()
+    public async Task ActivateRoute_WithObserverRejectsActivation_ShouldNotProceed()
     {
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
@@ -100,7 +100,7 @@ public class RouteActivatorTests
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: false);
 
         // Act
-        var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
+        var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         observerMock.VerifyAll();
@@ -110,7 +110,7 @@ public class RouteActivatorTests
     }
 
     [TestMethod]
-    public void ActivateRoute_WithObserverAcceptsActivation_ShouldInvokeObserverOnActivated()
+    public async Task ActivateRoute_WithObserverAcceptsActivation_ShouldInvokeObserverOnActivated()
     {
         // Arrange
         var (rootNode, childRoute) = MakeRootNodeWithChild();
@@ -119,16 +119,16 @@ public class RouteActivatorTests
         _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
         _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
-        _ = observerMock.Setup(o => o.OnActivated(rootNode, this.contextMock.Object));
-        _ = observerMock.Setup(o => o.OnActivated(childRoute, this.contextMock.Object));
+        _ = observerMock.Setup(o => o.OnActivatedAsync(rootNode, this.contextMock.Object));
+        _ = observerMock.Setup(o => o.OnActivatedAsync(childRoute, this.contextMock.Object));
 
         // Act
-        var result = this.activator.ActivateRoutesRecursive(rootNode, this.contextMock.Object);
+        var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeTrue();
-        observerMock.Verify(o => o.OnActivated(rootNode, this.contextMock.Object), Times.Once());
-        observerMock.Verify(o => o.OnActivated(childRoute, this.contextMock.Object), Times.Once());
+        observerMock.Verify(o => o.OnActivatedAsync(rootNode, this.contextMock.Object), Times.Once());
+        observerMock.Verify(o => o.OnActivatedAsync(childRoute, this.contextMock.Object), Times.Once());
     }
 
     private static (IActiveRoute rootNode, IActiveRoute childRoute) MakeRootNodeWithChild()

@@ -10,14 +10,16 @@ namespace DroidNet.Routing.Demo.Navigation;
 /// A ViewModel for a simple page which has the ability to navigate to other pages with the same navigation view.
 /// </summary>
 /// <param name="router">The router used for navigation.</param>
-[System.Diagnostics.CodeAnalysis.SuppressMessage(
-    "Maintainability",
-    "CA1515:Consider making public types internal",
-    Justification = "ViewModel classes must be public because the ViewModel property in the generated code for the view is public")]
 public partial class PageTwoViewModel(IRouter router) : IRoutingAware
 {
+    private IActiveRoute? activeRoute;
+
     /// <inheritdoc/>
-    public IActiveRoute? ActiveRoute { get; set; }
+    public Task OnNavigatedToAsync(IActiveRoute route)
+    {
+        this.activeRoute = route;
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// Navigates to the previous page in the navigation stack.
@@ -25,12 +27,13 @@ public partial class PageTwoViewModel(IRouter router) : IRoutingAware
     /// <remarks>
     /// This method uses the router to navigate to the previous page relative to the current active route's parent.
     /// </remarks>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    public void PreviousPage()
+    public async Task PreviousPageAsync()
     {
-        if (this.ActiveRoute is not null)
+        if (this.activeRoute is not null)
         {
-            router.Navigate("1", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+            await router.NavigateAsync("1", new PartialNavigation() { RelativeTo = this.activeRoute.Parent }).ConfigureAwait(true);
         }
     }
 }

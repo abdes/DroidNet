@@ -5,12 +5,13 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.WinUI;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Layouts.GridFlow;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -34,11 +35,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkSpaceLayout"/> class.
     /// </summary>
+    /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="router">The router instance used for navigation and event subscription.</param>
     /// <param name="docker">The docker instance used for managing dockable layouts.</param>
     /// <param name="dockViewFactory">The factory used to create views for docks.</param>
     /// <param name="logger">The logger instance used for logging debug information.</param>
     public WorkSpaceLayout(
+        HostingContext hostingContext,
         IRouter router,
         IDocker docker,
         IDockViewFactory dockViewFactory,
@@ -50,59 +53,57 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         var layout = new GridFlowLayout(dockViewFactory);
 
-        this.routerEventsSub = router.Events.Subscribe(
-            @event =>
+        this.routerEventsSub = router.Events.Subscribe(HandleRouterEvent);
+
+        void HandleRouterEvent(RouterEvent @event)
+        {
+            switch (@event)
             {
-                var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-                switch (@event)
-                {
-                    // At the beginning of each navigation cycle, many changes will happen to ro
-                    // docker model, but we want to batch them together and handle them at once
-                    // after the navigation completes. So we mute the LayoutChanged event from the
-                    // docker.
-                    case NavigationStart:
-                        this.layoutChangedSub?.Dispose();
-                        break;
+                // At the beginning of each navigation cycle, many changes will happen to ro
+                // docker model, but we want to batch them together and handle them at once
+                // after the navigation completes. So we mute the LayoutChanged event from the
+                // docker.
+                case NavigationStart:
+                    this.layoutChangedSub?.Dispose();
+                    break;
 
-                    // At the end of the navigation cycle, we need to take into account changes that
-                    // resulted from the new URL. We also resume listening to docker layout changes
-                    // that are not the result of navigation.
-                    case NavigationEnd:
-                    case NavigationError:
-                        var options = ((NavigationEvent)@event).Options;
-                        if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
+                // At the end of the navigation cycle, we need to take into account changes that
+                // resulted from the new URL. We also resume listening to docker layout changes
+                // that are not the result of navigation.
+                case NavigationEnd:
+                case NavigationError:
+                    var options = ((NavigationEvent)@event).Options;
+                    if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
+                    {
+                        docker.Layout(layout);
+                        this.Content = layout.CurrentGrid;
+                    }
+                    else
+                    {
+                        Debug.WriteLine(
+                            $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
+                    }
+
+                    // Layout changes can happen in a burst because a change to one panel can trigger changes in
+                    // other panels. We throttle the burst and only sync with router after the burst is finished.
+                    this.layoutChangedSub = Observable
+                        .FromEventPattern<EventHandler<LayoutChangedEventArgs>, LayoutChangedEventArgs>(
+                            h => docker.LayoutChanged += h,
+                            h => docker.LayoutChanged -= h)
+                        .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
+                        .Select(eventPattern => Observable.FromAsync(async () =>
                         {
-                            docker.Layout(layout);
-                            this.Content = layout.CurrentGrid;
-                        }
-                        else
-                        {
-                            Debug.WriteLine(
-                                $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
-                        }
+                            Debug.WriteLine($"Workspace layout changed because {eventPattern.EventArgs.Reason}");
+                            await hostingContext.Dispatcher.EnqueueAsync(() => this.SyncWithRouterAsync(eventPattern.EventArgs.Reason)).ConfigureAwait(true);
+                        }))
+                        .Concat()
+                        .Subscribe();
+                    break;
 
-                        // Layout changes can happen in a burst because a change to one panel can trigger changes in
-                        // other panels. We throttle the burst and only sync with router after the burst is finished.
-                        this.layoutChangedSub = Observable
-                            .FromEventPattern<EventHandler<LayoutChangedEventArgs>, LayoutChangedEventArgs>(
-                                h => docker.LayoutChanged += h,
-                                h => docker.LayoutChanged -= h)
-                            .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
-                            .Subscribe(
-                                eventPattern =>
-                                {
-                                    Debug.WriteLine(
-                                        $"Workspace layout changed because {eventPattern.EventArgs.Reason}");
-                                    _ = dispatcherQueue.TryEnqueue(
-                                        () => this.SyncWithRouter(eventPattern.EventArgs.Reason));
-                                });
-
-                        break;
-
-                    default: // Ignore
-                        break;
-                }
-            });
+                default: // Ignore
+                    break;
+            }
+        }
     }
 
     /// <summary>
@@ -231,7 +232,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         return changed ? nextParams : null;
     }
 
-    private void SyncWithRouter(LayoutChangeReason reason)
+    private async Task SyncWithRouterAsync(LayoutChangeReason reason)
     {
         LogSyncWithRouter(this.logger);
 
@@ -246,13 +247,13 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         // Once the change set is built, request a partial navigation using it. If the layout change reason is anything but
         // Resize, we need to trigger a layout rebuild by setting the AdditionalInfo accordingly.
-        this.router.Navigate(
+        await this.router.NavigateAsync(
             changes,
             new PartialNavigation()
             {
                 RelativeTo = this.ActiveRoute,
                 AdditionalInfo = new AdditionalInfo(reason != LayoutChangeReason.Resize),
-            });
+            }).ConfigureAwait(true);
     }
 
     private void TrackChangedAndAddedDocks(List<RouteChangeItem> changes)

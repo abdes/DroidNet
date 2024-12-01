@@ -81,6 +81,7 @@ public interface IRouter
     /// </summary>
     /// <param name="url">The target URL that defines the desired application state.</param>
     /// <param name="options">Optional settings that control navigation behavior.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     /// <remarks>
     /// A full navigation reconstructs the entire view model tree based on the provided URL. The
     /// router parses the URL, matches it against the route configuration, and activates the
@@ -88,13 +89,14 @@ public interface IRouter
     /// any point, the router emits appropriate error events while maintaining the application in a
     /// consistent state.
     /// </remarks>
-    void Navigate(string url, FullNavigation? options = null);
+    Task NavigateAsync(string url, FullNavigation? options = null);
 
     /// <summary>
     /// Performs a partial navigation that surgically updates the current application state.
     /// </summary>
     /// <param name="url">A relative URL that describes the desired state changes.</param>
     /// <param name="options">Settings that specify the scope and behavior of the partial update.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     /// <remarks>
     /// Partial navigation provides fine-grained control over the view model tree, allowing updates
     /// to specific branches while preserving the rest of the application state. This is
@@ -102,7 +104,7 @@ public interface IRouter
     /// a full navigation cycle. The navigation context from the options determines the scope of the
     /// update.
     /// </remarks>
-    void Navigate(string url, PartialNavigation options);
+    Task NavigateAsync(string url, PartialNavigation options);
 
     /// <summary>
     /// Request a partial navigation using the specified changes, which need to
@@ -117,6 +119,7 @@ public interface IRouter
     /// are to be applied. The options provide context for resolving relative URLs and determining
     /// where state changes should be applied.
     /// </param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     /// <remarks>
     /// This method allows for fine-grained control over the router state by applying specific
     /// changes to the current navigation context. It is particularly useful for dynamic UI updates,
@@ -158,5 +161,5 @@ public interface IRouter
     /// router.Navigate(changes, options);
     /// ]]></code>
     /// </example>
-    void Navigate(IList<RouteChangeItem> changes, PartialNavigation options);
+    Task NavigateAsync(IList<RouteChangeItem> changes, PartialNavigation options);
 }

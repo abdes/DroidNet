@@ -38,14 +38,18 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
                                         NullLoggerFactory.Instance.CreateLogger<IRouteActivator>();
 
     /// <inheritdoc/>
-    public bool ActivateRoutesRecursive(IActiveRoute root, INavigationContext context)
+    public async Task<bool> ActivateRoutesRecursiveAsync(IActiveRoute root, INavigationContext context)
     {
         // Activate the root node
-        var activationSuccessful = this.ActivateRoute(root, context);
+        var activationSuccessful = await this.ActivateRouteAsync(root, context).ConfigureAwait(true);
 
-        return root.Children.Aggregate(
-            activationSuccessful,
-            (currentStatus, route) => this.ActivateRoutesRecursive(route, context) && currentStatus);
+        foreach (var child in root.Children)
+        {
+            var childActivationSuccessful = await this.ActivateRoutesRecursiveAsync(child, context).ConfigureAwait(true);
+            activationSuccessful = activationSuccessful && childActivationSuccessful;
+        }
+
+        return activationSuccessful;
     }
 
     /// <summary>
@@ -67,7 +71,7 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
         "Design",
         "CA1031:Do not catch general exception types",
         Justification = "activation failures cannot be fixed, all failures are returned as false")]
-    public bool ActivateRoute(IActiveRoute route, INavigationContext context)
+    public async Task<bool> ActivateRouteAsync(IActiveRoute route, INavigationContext context)
     {
         Debug.Assert(context is NavigationContext, "expecting the context to use my implementation as a base");
         var activationObserver = ((NavigationContext)context).RouteActivationObserver;
@@ -82,7 +86,10 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
                 this.DoActivateRoute(route, context);
 
                 // Notify observer post-activation if it exists.
-                activationObserver?.OnActivated(route, context);
+                if (activationObserver is not null)
+                {
+                    await activationObserver.OnActivatedAsync(route, context).ConfigureAwait(true);
+                }
 
                 LogRouteActivated(this.Logger, route);
                 return true;

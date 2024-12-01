@@ -7,6 +7,7 @@ using System.Reactive.Linq;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Workspace;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
@@ -23,36 +24,31 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private readonly Docker docker = new();
     private readonly IDisposable routerEventsSub;
     private readonly List<RoutedDockable> deferredDockables = [];
+
+    private IActiveRoute? activeRoute;
     private ApplicationDock? centerDock;
     private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkSpaceViewModel"/> class.
     /// </summary>
+    /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="router">The router instance used for navigation and event handling.</param>
     /// <param name="dockViewFactory">The factory for creating dock views.</param>
     /// <param name="loggerFactory">The factory for creating loggers. If null, a default logger will be used.</param>
-    public WorkSpaceViewModel(IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
+    public WorkSpaceViewModel(HostingContext hostingContext, IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
-        this.Layout = new WorkSpaceLayout(router, this.docker, dockViewFactory, this.logger);
+        this.Layout = new WorkSpaceLayout(hostingContext, router, this.docker, dockViewFactory, this.logger);
 
         this.routerEventsSub = router.Events.OfType<ActivationComplete>()
             .Subscribe(
                 @event =>
                 {
-                    this.Layout.ActiveRoute = this.ActiveRoute;
+                    this.Layout.ActiveRoute = this.activeRoute;
                     this.PlaceDocks(@event.Options);
                 });
     }
-
-    /// <summary>
-    /// Gets or sets the active route associated with this view model.
-    /// </summary>
-    /// <value>
-    /// The active route that provides the parameters and context for this view model.
-    /// </value>
-    public IActiveRoute? ActiveRoute { get; set; }
 
     /// <summary>
     /// Gets the layout of the workspace.
@@ -80,6 +76,13 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
             // Any other name is interpreted as the dockable ID
             this.LoadDockable(viewModel, outletName);
         }
+    }
+
+    /// <inheritdoc/>
+    public Task OnNavigatedToAsync(IActiveRoute route)
+    {
+        this.activeRoute = route;
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -143,7 +146,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     private void LoadApp(object viewModel)
     {
         this.centerDock = ApplicationDock.New() ?? throw new ContentLoadingException(
-            $"could not create a dock to load content for route `{this.ActiveRoute!.Config.Path}`")
+            $"could not create a dock to load content for route `{this.activeRoute!.Config.Path}`")
         {
             OutletName = DebuggerConstants.AppOutletName,
             ViewModel = viewModel,
@@ -152,7 +155,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         // Dock at the center
         var dockable = Dockable.New(DebuggerConstants.AppOutletName) ??
                        throw new ContentLoadingException(
-                           $"could not create a dockable object while loading content for route `{this.ActiveRoute!.Config.Path}`")
+                           $"could not create a dockable object while loading content for route `{this.activeRoute!.Config.Path}`")
                        {
                            OutletName = DebuggerConstants.AppOutletName,
                            ViewModel = viewModel,
@@ -183,7 +186,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
              * will be deferred, as we can only do the docking once all dockables have been loaded.
              */
 
-            var dockableActiveRoute = this.ActiveRoute!.Children.First(c => c.Outlet == dockableId);
+            var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
 
             this.deferredDockables.Add(dockable);
@@ -191,7 +194,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         catch (Exception ex)
         {
             throw new ContentLoadingException(
-                $"an exception occurred while loading content for route `{this.ActiveRoute!.Config.Path}`",
+                $"an exception occurred while loading content for route `{this.activeRoute!.Config.Path}`",
                 ex)
             {
                 OutletName = dockableId,
@@ -230,7 +233,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
                 catch (Exception ex)
                 {
                     // Log an error and continue with the other docks
-                    LogDockablePlacementError(this.logger, this.ActiveRoute!.Config.Path, ex.Message);
+                    LogDockablePlacementError(this.logger, this.activeRoute!.Config.Path, ex.Message);
                 }
             }
         }

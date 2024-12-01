@@ -73,25 +73,6 @@ public class RouteActivationObserverTests
     }
 
     [TestMethod]
-    public void OnActivating_WithRoutingAwareViewModelType_SetsViewModelAndInjectsActiveRoute()
-    {
-        // Arrange
-        var route = MakeActiveRouteWithViewModel(typeof(MockViewModel));
-        var context = new Mock<INavigationContext>().Object;
-
-        var viewModelMock = new Mock<IRoutingAware>();
-        _ = this.containerMock.Setup(c => c.GetService(It.IsAny<Type>())).Returns(viewModelMock.Object);
-
-        // Act
-        var result = this.observer.OnActivating(route, context);
-
-        // Assert
-        _ = result.Should().BeTrue();
-        _ = route.ViewModel.Should().Be(viewModelMock.Object);
-        viewModelMock.VerifySet(vm => vm.ActiveRoute = route, Times.Once);
-    }
-
-    [TestMethod]
     public void OnActivating_WithMissingViewModel_ThrowsMissingViewModelException()
     {
         // Arrange
@@ -109,7 +90,7 @@ public class RouteActivationObserverTests
     }
 
     [TestMethod]
-    public void OnActivated_SetsRouteAsActivated()
+    public async Task OnActivated_SetsRouteAsActivated()
     {
         // Arrange
         var route = MakeActiveRouteNoViewModel();
@@ -117,7 +98,7 @@ public class RouteActivationObserverTests
         var context = new Mock<INavigationContext>().Object;
 
         // Act
-        this.observer.OnActivated(route, context);
+        await this.observer.OnActivatedAsync(route, context).ConfigureAwait(false);
 
         // Assert
         _ = route.IsActivated.Should().BeTrue();
