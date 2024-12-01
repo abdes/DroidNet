@@ -9,6 +9,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -97,15 +98,26 @@ public partial class DynamicTree : Control
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        // Detect pointer events not originating from an Item control, which will have a
-        // non null DataContext
-        if (args.OriginalSource is FrameworkElement { DataContext: not null })
+        if (this.rootGrid is null)
         {
             return;
         }
 
-        this.ViewModel!.SelectNoneCommand.Execute(parameter: null);
-        _ = this.Focus(FocusState.Keyboard);
+        // Get the point where the pointer was pressed
+        var point = args.GetCurrentPoint(this.rootGrid).Position;
+
+        // Transform the point to the root visual
+        var transform = this.rootGrid.TransformToVisual(visual: null);
+        var transformedPoint = transform.TransformPoint(point);
+
+        // Check if the visual tree has an items repeater at the point where the pointer was pressed
+        var elements = VisualTreeHelper.FindElementsInHostCoordinates(transformedPoint, this.itemsRepeater);
+        if (!elements.Any())
+        {
+            // Pointer pressed outside the items => clear selection
+            this.ViewModel!.SelectNoneCommand.Execute(parameter: null);
+            _ = this.Focus(FocusState.Keyboard);
+        }
     }
 
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
