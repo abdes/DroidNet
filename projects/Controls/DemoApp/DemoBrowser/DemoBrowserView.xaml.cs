@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using DroidNet.Converters;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.DemoBrowser;
@@ -26,12 +27,24 @@ public sealed partial class DemoBrowserView
             = new IndexToNavigationItemConverter(
                 this.NavigationView,
                 () => this.ViewModel!.AllItems.Cast<object>().ToList());
+
+        this.NavigationView.DisplayModeChanged += this.OnPaneDisplayModeChanged;
     }
 
     /// <summary>
     /// Gets the settings item from the navigation view.
     /// </summary>
     public object? SettingsItem => this.NavigationView.SettingsItem;
+
+    /// <summary>
+    /// Converts the NavigationViewPaneDisplayMode to Visibility.
+    /// </summary>
+    /// <param name="mode">The NavigationViewPaneDisplayMode.</param>
+    /// <returns>Visibility.Visible if the mode is LeftMinimal, otherwise Visibility.Collapsed.</returns>
+    private static Visibility GetHeaderSpacerVisibility(NavigationViewPaneDisplayMode mode) => mode == NavigationViewPaneDisplayMode.LeftMinimal ? Visibility.Visible : Visibility.Collapsed;
+
+    private void OnPaneDisplayModeChanged(NavigationView sender, object args) => this.Header.Margin = new Thickness(
+            sender.DisplayMode == NavigationViewDisplayMode.Minimal ? 50 : 8, 8, 8, 8);
 
     private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {

@@ -7,31 +7,39 @@
 
     <!--  ViewModel will never be null under standard operation conditions  -->
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="300" />
-        </Grid.RowDefinitions>
-        <!--  IndexToNavigationItemConverter is defined in the code behind  -->
-        <NavigationView
-            x:Name="NavigationView"
-            IsPaneToggleButtonVisible="False"
-            IsSettingsVisible="False"
-            MenuItemsSource="{x:Bind ViewModel.NavigationItems, Mode=OneWay, FallbackValue={}}"
-            SelectedItem="{x:Bind ViewModel.SelectedItemIndex, Mode=OneWay, Converter={StaticResource IndexToNavigationItemConverter}}"
-            SelectionChanged="OnSelectionChanged"
-            SelectionFollowsFocus="Enabled">
+    <NavigationView
+        x:Name="NavigationView"
+        CompactModeThresholdWidth="800"
+        ExpandedModeThresholdWidth="800"
+        IsBackButtonVisible="Collapsed"
+        IsPaneToggleButtonVisible="true"
+        IsSettingsVisible="False"
+        MenuItemsSource="{x:Bind ViewModel.NavigationItems, Mode=OneWay, FallbackValue={}}"
+        PaneDisplayMode="Auto"
+        SelectedItem="{x:Bind ViewModel.SelectedItemIndex, Mode=OneWay, Converter={StaticResource IndexToNavigationItemConverter}}"
+        SelectionChanged="OnSelectionChanged"
+        SelectionFollowsFocus="Enabled">
 
-            <NavigationView.MenuItemTemplate>
-                <DataTemplate x:DataType="local:NavigationItem">
-                    <NavigationViewItem Content="{x:Bind Text}" Tag="{x:Bind TargetViewModel.FullName}" />
-                </DataTemplate>
-            </NavigationView.MenuItemTemplate>
+        <NavigationView.MenuItemTemplate>
+            <DataTemplate x:DataType="local:NavigationItem">
+                <NavigationViewItem Content="{x:Bind Text}" Tag="{x:Bind TargetViewModel.FullName}" />
+            </DataTemplate>
+        </NavigationView.MenuItemTemplate>
 
-            <ContentPresenter Padding="5" Content="{x:Bind ViewModel.CurrentNavigation, Mode=OneWay, Converter={StaticResource VmToViewConverter}}" />
-        </NavigationView>
-        <ScrollViewer Grid.Row="1">
-            <dnc:OutputLogView OutputLogSink="{x:Bind ViewModel.OutputLogSink}" />
-        </ScrollViewer>
-    </Grid>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock
+                x:Name="Header"
+                FontSize="20"
+                FontWeight="Medium"
+                Text="{x:Bind ViewModel.SelectedItem.Text, Mode=OneWay}" />
+            <ContentPresenter
+                Grid.Row="1"
+                Margin="5,0,5,5"
+                Content="{x:Bind ViewModel.CurrentNavigation, Mode=OneWay, Converter={StaticResource VmToViewConverter}}" />
+        </Grid>
+    </NavigationView>
 </Page>

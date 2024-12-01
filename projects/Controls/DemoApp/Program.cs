@@ -10,6 +10,7 @@ using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.DynamicTree;
+using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -116,8 +117,10 @@ public static partial class Program
 
         container.Register<DemoBrowserView>(Reuse.Singleton);
         container.Register<DemoBrowserViewModel>(Reuse.Singleton);
-        container.Register<ProjectLayoutView>(Reuse.Singleton);
-        container.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+        container.Register<OutputLogDemoView>(Reuse.Transient);
+        container.Register<OutputLogDemoViewModel>(Reuse.Transient);
+        container.Register<ProjectLayoutView>(Reuse.Transient);
+        container.Register<ProjectLayoutViewModel>(Reuse.Transient);
     }
 
     private static Routes MakeRoutes() => new(
@@ -141,7 +144,11 @@ public static partial class Program
                     [
                         new Route()
                         {
-                            // The project browser is the root of a navigation view with multiple pages.
+                            Path = "output-log",
+                            ViewModelType = typeof(OutputLogDemoViewModel),
+                        },
+                        new Route()
+                        {
                             Path = "dynamic-tree",
                             ViewModelType = typeof(ProjectLayoutViewModel),
                         },

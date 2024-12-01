@@ -54,8 +54,8 @@ internal static class RichTextThemeDefinitions
             [ThemeStyle.LevelWarning] = new() { Foreground = new SolidColorBrush(Colors.Yellow) },
             [ThemeStyle.LevelError] = new()
             {
-                Foreground = new SolidColorBrush(Colors.White),
-                Background = new SolidColorBrush(Colors.Red),
+                Foreground = new SolidColorBrush(Colors.Red),
+                Background = new SolidColorBrush(Colors.Transparent),
             },
             [ThemeStyle.LevelFatal] = new()
             {
@@ -142,7 +142,7 @@ internal static class RichTextThemeDefinitions
             },
             [ThemeStyle.LevelError] = new()
             {
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = new SolidColorBrush(Colors.Red),
                 Background = new SolidColorBrush(Colors.Red),
             },
             [ThemeStyle.LevelFatal] = new()
