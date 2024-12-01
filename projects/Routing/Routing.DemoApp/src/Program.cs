@@ -3,12 +3,16 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Abstractions;
 using System.Runtime.InteropServices;
+using DroidNet.Aura;
 using DroidNet.Bootstrap;
+using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing.Demo.Navigation;
-using DroidNet.Routing.Demo.Shell;
 using DryIoc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
@@ -54,8 +58,10 @@ public static partial class Program
         try
         {
             _ = bootstrap.Configure()
-                .WithConfiguration((_, _, _) => [], configureOptionsPattern: null)
                 .WithLoggingAbstraction()
+                .WithConfiguration(
+                    MakeConfigFiles,
+                    ConfigureOptionsPattern)
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
@@ -76,15 +82,29 @@ public static partial class Program
         }
     }
 
+    private static IEnumerable<string> MakeConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
+        =>
+        [
+            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
+        ];
+
+    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
+        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
+
     private static void ConfigureApplicationServices(this IContainer container)
     {
         // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
         // corresponding to name of the special target <see cref="Target.Main" />.
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
+        // UI Services
+        container.Register<IAppThemeModeService, AppThemeModeService>();
+        container.Register<AppearanceSettingsService>(Reuse.Singleton);
+
         // Views and ViewModels
-        container.Register<ShellView>(Reuse.Singleton);
-        container.Register<ShellViewModel>(Reuse.Singleton);
+        container.Register<MainShellView>(Reuse.Singleton);
+        container.Register<MainShellViewModel>(Reuse.Singleton);
+
         container.Register<PageOneView>(Reuse.Singleton);
         container.Register<PageOneViewModel>(Reuse.Singleton);
         container.Register<PageTwoView>(Reuse.Singleton);
@@ -105,7 +125,7 @@ public static partial class Program
             // empty path with a Prefix matching type, which will always match and not consume a segment.
             Path = string.Empty,
             MatchMethod = PathMatch.Prefix,
-            ViewModelType = typeof(ShellViewModel),
+            ViewModelType = typeof(MainShellViewModel),
             Children = new Routes(
             [
                 new Route
