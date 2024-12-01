@@ -16,6 +16,7 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -212,6 +213,10 @@ public static partial class Program
          */
 
         container.Register<AppearanceSettingsService>(Reuse.Singleton);
+
+        container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
+        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);
+        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Singleton);
 
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key

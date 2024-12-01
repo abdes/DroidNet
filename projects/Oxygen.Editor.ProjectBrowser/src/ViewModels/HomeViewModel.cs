@@ -94,7 +94,7 @@ public partial class HomeViewModel(
     {
         this.Templates.Clear();
 
-        if (templateService.HasRecentlyUsedTemplates())
+        if (await templateService.HasRecentlyUsedTemplatesAsync().ConfigureAwait(false))
         {
             _ = templateService.GetRecentlyUsedTemplates()
                 .Subscribe(template => this.Templates.InsertInPlace(template, x => x.LastUsedOn));
