@@ -43,8 +43,9 @@
             </Grid.ColumnDefinitions>
             <ImageIcon
                 Grid.Column="1"
+                Height="20"
                 Margin="4"
-                VerticalAlignment="Stretch"
+                VerticalAlignment="Center"
                 Source="/Assets/DroidNet.png" />
             <StackPanel
                 x:Name="PrimaryCommands"
