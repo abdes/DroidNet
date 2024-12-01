@@ -7,7 +7,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
 using DroidNet.Routing;
-using Microsoft.UI.Dispatching;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
@@ -20,18 +21,24 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// <param name="router">The router for navigating between views.</param>
 /// <param name="templateService">The service for managing project templates.</param>
 /// <param name="projectBrowser">The service for managing projects.</param>
+/// <param name="loggerFactory">
+/// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+/// cannot be obtained, a <see cref="NullLogger" /> is used silently.
+/// </param>
 public partial class HomeViewModel(
     IRouter router,
     ITemplatesService templateService,
-    IProjectBrowserService projectBrowser) : ObservableObject, IRoutingAware
+    IProjectBrowserService projectBrowser,
+    ILoggerFactory? loggerFactory = null) : ObservableObject, IRoutingAware
 {
-    private readonly DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
+
+    private IActiveRoute? activeRoute;
+    private bool preloadedTemplates;
+    private bool preloadedProjects;
 
     [ObservableProperty]
     private ITemplateInfo? selectedTemplate;
-
-    /// <inheritdoc/>
-    public IActiveRoute? ActiveRoute { get; set; }
 
     /// <summary>
     /// Gets the collection of project templates.
@@ -42,6 +49,14 @@ public partial class HomeViewModel(
     /// Gets the collection of recent projects.
     /// </summary>
     public ObservableCollection<IProjectInfo> RecentProjects { get; } = [];
+
+    /// <inheritdoc/>
+    public async Task OnNavigatedToAsync(IActiveRoute route)
+    {
+        this.activeRoute = route;
+        await this.PreloadRecentTemplatesAsync().ConfigureAwait(true);
+        await this.PreloadRecentProjectsAsync().ConfigureAwait(true);
+    }
 
     /// <summary>
     /// Creates a new project from the specified template.
@@ -59,18 +74,26 @@ public partial class HomeViewModel(
     /// <param name="projectInfo">The information of the project to open.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
-        => await projectBrowser.OpenProjectAsync(projectInfo).ConfigureAwait(true)
-           && this.dispatcherQueue.TryEnqueue(() => router.Navigate("/we", new FullNavigation()));
+    {
+        var result = await projectBrowser.OpenProjectAsync(projectInfo).ConfigureAwait(true);
+        if (!result)
+        {
+            return false;
+        }
+
+        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        return true;
+    }
 
     /// <summary>
     /// Navigates to the view for more templates.
     /// </summary>
     [RelayCommand]
-    private void MoreTemplates()
+    private async Task MoreTemplatesAsync()
     {
-        if (this.ActiveRoute is not null)
+        if (this.activeRoute is not null)
         {
-            router.Navigate("new", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+            await router.NavigateAsync("new", new PartialNavigation() { RelativeTo = this.activeRoute.Parent }).ConfigureAwait(true);
         }
     }
 
@@ -78,11 +101,49 @@ public partial class HomeViewModel(
     /// Navigates to the view for more projects.
     /// </summary>
     [RelayCommand]
-    private void MoreProjects()
+    private async Task MoreProjectsAsync()
     {
-        if (this.ActiveRoute is not null)
+        if (this.activeRoute is not null)
         {
-            router.Navigate("open", new PartialNavigation() { RelativeTo = this.ActiveRoute.Parent });
+            await router.NavigateAsync("open", new PartialNavigation() { RelativeTo = this.activeRoute.Parent }).ConfigureAwait(true);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    private async Task PreloadRecentTemplatesAsync()
+    {
+        if (this.preloadedTemplates)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.LoadRecentTemplatesAsync().ConfigureAwait(true);
+            this.preloadedTemplates = true;
+        }
+        catch (Exception ex)
+        {
+            this.LogPreloadingRecentTemplatesError(ex);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    private async Task PreloadRecentProjectsAsync()
+    {
+        if (this.preloadedProjects)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.LoadRecentProjectsAsync().ConfigureAwait(true);
+            this.preloadedProjects = true;
+        }
+        catch (Exception ex)
+        {
+            this.LogPreloadingRecentProjectsError(ex);
         }
     }
 
@@ -90,7 +151,7 @@ public partial class HomeViewModel(
     /// Loads the project templates asynchronously.
     /// </summary>
     [RelayCommand]
-    private async Task LoadTemplates()
+    private async Task LoadRecentTemplatesAsync()
     {
         this.Templates.Clear();
 
@@ -117,7 +178,7 @@ public partial class HomeViewModel(
     /// Loads the recent projects asynchronously.
     /// </summary>
     [RelayCommand]
-    private async Task LoadRecentProjects()
+    private async Task LoadRecentProjectsAsync()
     {
         // Track the recent projects loaded from the project browser service in
         // a dictionary for fast lookup.
@@ -149,4 +210,16 @@ public partial class HomeViewModel(
             }
         }
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to preload recently used templates during ViewModel activation")]
+    private partial void LogPreloadingRecentTemplatesError(Exception ex);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to preload recently used projects during ViewModel activation")]
+    private partial void LogPreloadingRecentProjectsError(Exception ex);
 }

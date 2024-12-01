@@ -9,7 +9,6 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:pbdata="using:Oxygen.Editor.ProjectBrowser.Templates"
-    Loaded="OnLoaded"
     mc:Ignorable="d">
 
     <Page.Resources>

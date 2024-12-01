@@ -68,44 +68,47 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
         this.routerEventsSub = globalRouter.Events.OfType<ActivationComplete>()
-            .Subscribe(
-                @event =>
-                {
-                    // Create a scoped child container for resolutions local to this content browser.
-                    var childContainer = container.WithRegistrationsCopy();
+             .Select(evt => Observable.FromAsync(() => SetupChildContainerAsync(evt)))
+             .Concat()
+             .Subscribe();
 
-                    var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
+        async Task SetupChildContainerAsync(ActivationComplete @event)
+        {
+            // Create a scoped child container for resolutions local to this content browser.
+            var childContainer = container.WithRegistrationsCopy();
 
-                    // Register all local ViewModels and services in the child container
-                    childContainer.RegisterInstance<IViewLocator>(viewLocator);
-                    childContainer.RegisterInstance(new ViewModelToView(viewLocator));
-                    childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
-                    childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
-                    childContainer.Register<AssetsViewModel>(Reuse.Singleton);
-                    childContainer.Register<AssetsView>(Reuse.Singleton);
-                    childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
-                    childContainer.Register<TilesLayoutView>(Reuse.Singleton);
+            var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
 
-                    var context = new LocalRouterContext(@event.Context.NavigationTarget) { RootViewModel = this };
-                    var routerContextProvider = new RouterContextProvider(context);
-                    var router = new Router(
-                        childContainer,
-                        RoutesConfig,
-                        new RouterStateManager(),
-                        new RouterContextManager(routerContextProvider),
-                        new InternalRouteActivator(loggerFactory),
-                        routerContextProvider,
-                        new DefaultUrlSerializer(new DefaultUrlParser()),
-                        loggerFactory);
+            // Register all local ViewModels and services in the child container
+            childContainer.RegisterInstance<IViewLocator>(viewLocator);
+            childContainer.RegisterInstance(new ViewModelToView(viewLocator));
+            childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+            childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+            childContainer.Register<AssetsViewModel>(Reuse.Singleton);
+            childContainer.Register<AssetsView>(Reuse.Singleton);
+            childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
+            childContainer.Register<TilesLayoutView>(Reuse.Singleton);
 
-                    context.Router = router;
-                    context.GlobalRouter = container.Resolve<IRouter>();
-                    childContainer.RegisterInstance<ILocalRouterContext>(context);
+            var context = new LocalRouterContext(@event.Context.NavigationTarget) { RootViewModel = this };
+            var routerContextProvider = new RouterContextProvider(context);
+            var router = new Router(
+                childContainer,
+                RoutesConfig,
+                new RouterStateManager(),
+                new RouterContextManager(routerContextProvider),
+                new InternalRouteActivator(loggerFactory),
+                routerContextProvider,
+                new DefaultUrlSerializer(new DefaultUrlParser()),
+                loggerFactory);
 
-                    this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
+            context.Router = router;
+            context.GlobalRouter = container.Resolve<IRouter>();
+            childContainer.RegisterInstance<ILocalRouterContext>(context);
 
-                    router.Navigate("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder");
-                });
+            this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
+
+            await router.NavigateAsync("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder").ConfigureAwait(true);
+        }
     }
 
     public ViewModelToView? VmToViewConverter { get; private set; }

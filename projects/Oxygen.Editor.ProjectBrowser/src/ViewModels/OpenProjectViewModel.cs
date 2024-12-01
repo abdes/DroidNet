@@ -154,9 +154,17 @@ public partial class OpenProjectViewModel : ObservableObject
     /// </summary>
     /// <param name="location">The location of the project file to open.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
-    public async Task<bool> OpenProjectFile(string location)
-        => await this.projectBrowser.OpenProjectAsync(location).ConfigureAwait(true)
-           && this.dispatcherQueue.TryEnqueue(() => this.router.Navigate("/we", new FullNavigation()));
+    public async Task<bool> OpenProjectFileAsync(string location)
+    {
+        var result = await this.projectBrowser.OpenProjectAsync(location).ConfigureAwait(true);
+        if (!result)
+        {
+            return false;
+        }
+
+        await this.router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        return true;
+    }
 
     /// <summary>
     /// Applies the specified filter to the file list.

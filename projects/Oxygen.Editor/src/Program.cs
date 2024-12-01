@@ -267,16 +267,16 @@ public static partial class Program
 
     private static void RegisterViewsAndViewModels(IContainer container)
     {
-        container.Register<MainShellViewModel>(Reuse.Transient);
-        container.Register<MainShellView>(Reuse.Transient);
+        container.Register<MainShellViewModel>(Reuse.Singleton);
+        container.Register<MainShellView>(Reuse.Singleton);
 
-        container.Register<MainViewModel>(Reuse.Transient);
+        container.Register<MainViewModel>(Reuse.Singleton);
         container.Register<MainView>(Reuse.Transient);
-        container.Register<HomeViewModel>(Reuse.Transient);
+        container.Register<HomeViewModel>(Reuse.Singleton);
         container.Register<HomeView>(Reuse.Transient);
-        container.Register<NewProjectViewModel>(Reuse.Transient);
+        container.Register<NewProjectViewModel>(Reuse.Singleton);
         container.Register<NewProjectView>(Reuse.Transient);
-        container.Register<OpenProjectViewModel>(Reuse.Transient);
+        container.Register<OpenProjectViewModel>(Reuse.Singleton);
         container.Register<OpenProjectView>(Reuse.Transient);
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);

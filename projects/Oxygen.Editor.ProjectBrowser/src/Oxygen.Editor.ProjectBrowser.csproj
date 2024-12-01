@@ -26,6 +26,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />

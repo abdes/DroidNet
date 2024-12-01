@@ -31,19 +31,6 @@ public sealed partial class NewProjectView
     }
 
     /// <summary>
-    /// Handles the loaded event of the page.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private async void OnLoaded(object sender, RoutedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        await this.ViewModel!.LoadTemplates().ConfigureAwait(true);
-    }
-
-    /// <summary>
     /// Handles the event when a template is selected.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
@@ -52,7 +39,7 @@ public sealed partial class NewProjectView
     {
         _ = sender;
 
-        this.ViewModel!.SelectItem(args.TemplateInfo);
+        this.ViewModel!.SelectItemCommand.Execute(args.TemplateInfo);
     }
 
     /// <summary>
