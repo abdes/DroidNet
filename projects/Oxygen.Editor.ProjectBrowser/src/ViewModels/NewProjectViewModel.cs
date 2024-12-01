@@ -33,20 +33,23 @@ public partial class NewProjectViewModel(
     /// <summary>
     /// Loads the project templates.
     /// </summary>
+    /// <returns>>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [RelayCommand]
-    public void LoadTemplates()
+    public async Task LoadTemplates()
     {
         this.Templates.Clear();
+        await foreach (var template in templateService.GetLocalTemplatesAsync().ConfigureAwait(true))
+        {
+            this.Templates.InsertInPlace(
+                template,
+                x => x.LastUsedOn!,
+                new DateTimeComparerDescending());
+        }
 
-        _ = templateService.GetLocalTemplatesAsync()
-            .ToObservable()
-            .Subscribe(
-                template => this.Templates.InsertInPlace(template, x => x.LastUsedOn),
-                _ =>
-                {
-                    // Ignore and continue
-                },
-                () => this.SelectedItem = this.Templates[0]);
+        if (this.Templates.Count > 0)
+        {
+            this.SelectedItem = this.Templates[0];
+        }
     }
 
     /// <summary>

@@ -35,12 +35,12 @@ public sealed partial class NewProjectView
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
-    private void OnLoaded(object sender, RoutedEventArgs args)
+    private async void OnLoaded(object sender, RoutedEventArgs args)
     {
         _ = sender; // unused
         _ = args; // unused
 
-        this.ViewModel!.LoadTemplates();
+        await this.ViewModel!.LoadTemplates().ConfigureAwait(true);
     }
 
     /// <summary>
