@@ -18,7 +18,7 @@
         PaneDisplayMode="Auto"
         SelectedItem="{x:Bind ViewModel.SelectedItemIndex, Mode=OneWay, Converter={StaticResource IndexToNavigationItemConverter}}"
         SelectionChanged="OnSelectionChanged"
-        SelectionFollowsFocus="Enabled">
+        SelectionFollowsFocus="Disabled">
 
         <NavigationView.MenuItemTemplate>
             <DataTemplate x:DataType="local:NavigationItem">
