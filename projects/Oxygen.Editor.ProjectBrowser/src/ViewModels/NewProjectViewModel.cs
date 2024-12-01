@@ -53,8 +53,7 @@ public partial class NewProjectViewModel(
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was created successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> NewProjectFromTemplate(ITemplateInfo template, string projectName, string location)
     {
-        Debug.WriteLine(
-            $"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
+        Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
         return await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
     }
