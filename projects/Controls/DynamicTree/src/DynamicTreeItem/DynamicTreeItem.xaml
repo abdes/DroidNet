@@ -31,8 +31,6 @@
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/CommonResources.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-
     <Style x:Key="DynamicTreeItemText" TargetType="TextBlock">
         <Setter Property="Margin" Value="{StaticResource DynamicTreeColumnMargin}" />
         <Setter Property="VerticalAlignment" Value="Center" />
