@@ -9,7 +9,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
 using DroidNet.Routing;
-using Microsoft.UI.Dispatching;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
@@ -22,13 +23,13 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// <summary>
 /// ViewModel for the Open Project view in the Oxygen Editor's Project Browser.
 /// </summary>
-public partial class OpenProjectViewModel : ObservableObject
+public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 {
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
+    private readonly ILogger logger;
     private readonly object fileListLock = new();
     private readonly IProjectBrowserService projectBrowser;
-    private readonly DispatcherQueue dispatcherQueue;
     private readonly IRouter router;
 
 #pragma warning disable CA1859 // Use concrete types when possible for improved performance
@@ -52,18 +53,25 @@ public partial class OpenProjectViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CurrentFolder))]
     private KnownLocation? selectedLocation;
 
+    private bool knownLocationLoaded;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="OpenProjectViewModel"/> class.
     /// </summary>
     /// <param name="router">The router for navigating between views.</param>
     /// <param name="storageProvider">The storage provider for accessing storage items.</param>
     /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="loggerFactory">
+    /// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+    /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
+    /// </param>
     public OpenProjectViewModel(
         IRouter router,
         NativeStorageProvider storageProvider,
-        IProjectBrowserService projectBrowser)
+        IProjectBrowserService projectBrowser,
+        ILoggerFactory? loggerFactory = null)
     {
-        this.dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        this.logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
         this.router = router;
 
         this.storageProvider = storageProvider;
@@ -72,11 +80,11 @@ public partial class OpenProjectViewModel : ObservableObject
         BindingOperations.EnableCollectionSynchronization(this.FileList, this.fileListLock);
 
         this.AdvancedFileList = new AdvancedCollectionView(this.FileList, isLiveShaping: true);
-
-        this.AdvancedFileList.SortDescriptions.Add(
-            new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
+        this.AdvancedFileList.SortDescriptions.Add(new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(DefaultSortDirection, new ByNameComparer()));
     }
+
+    public IList<KnownLocation> KnownLocations { get; private set; } = [];
 
     /// <summary>
     /// Gets the advanced collection view for the file list.
@@ -85,53 +93,15 @@ public partial class OpenProjectViewModel : ObservableObject
 
     private ObservableCollection<IStorageItem> FileList { get; } = [];
 
-    /// <summary>
-    /// Selects the specified known location.
-    /// </summary>
-    /// <param name="location">The known location to select.</param>
-    public async void SelectLocation(KnownLocation location)
-    {
-        this.SelectedLocation = location;
-        this.FileList.Clear();
-        await foreach (var item in location.GetItems().ConfigureAwait(true))
-        {
-            this.FileList.Add(item);
-        }
-
-        this.CurrentFolder =
-            location.Location.Length == 0
-                ? null
-                : await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
-    }
-
-    /// <summary>
-    /// Initializes the view model by loading known locations and selecting the first one.
-    /// </summary>
-    /// <returns>A task that represents the asynchronous operation.</returns>
-    public async Task Initialize()
-    {
-        this.OnPropertyChanging(nameof(this.Locations));
-
-        foreach (var location in await this.projectBrowser.GetKnownLocationsAsync().ConfigureAwait(true))
-        {
-            this.Locations[location.Key.ToString()] = location;
-        }
-
-        this.OnPropertyChanged(nameof(this.Locations));
-
-        var knownLocation = this.Locations.First()
-            .Value;
-        if (knownLocation != null)
-        {
-            this.SelectLocation(knownLocation);
-        }
-    }
+    /// <inheritdoc/>
+    public async Task OnNavigatedToAsync(IActiveRoute route) => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
 
     /// <summary>
     /// Changes the current folder to the specified path.
     /// </summary>
     /// <param name="path">The path of the folder to change to.</param>
-    public async void ChangeFolder(string path)
+    [RelayCommand]
+    private async Task ChangeFolderAsync(string path)
     {
         this.CurrentFolder = await this.storageProvider.GetFolderFromPathAsync(path).ConfigureAwait(true);
         this.FileList.Clear();
@@ -154,7 +124,8 @@ public partial class OpenProjectViewModel : ObservableObject
     /// </summary>
     /// <param name="location">The location of the project file to open.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
-    public async Task<bool> OpenProjectFileAsync(string location)
+    [RelayCommand]
+    private async Task<bool> OpenProjectFileAsync(string location)
     {
         var result = await this.projectBrowser.OpenProjectAsync(location).ConfigureAwait(true);
         if (!result)
@@ -170,7 +141,8 @@ public partial class OpenProjectViewModel : ObservableObject
     /// Applies the specified filter to the file list.
     /// </summary>
     /// <param name="pattern">The filter pattern to apply.</param>
-    public void ApplyFilter(string pattern)
+    [RelayCommand]
+    private void ApplyFilter(string pattern)
         => this.AdvancedFileList.Filter = x => ((IStorageItem)x).Name.Contains(
             pattern,
             StringComparison.CurrentCultureIgnoreCase);
@@ -223,7 +195,58 @@ public partial class OpenProjectViewModel : ObservableObject
         }
 
         var parentPath = asNested.ParentPath;
-        this.ChangeFolder(parentPath);
+        this.ChangeFolderCommand.Execute(parentPath);
+    }
+
+    /// <summary>
+    /// Selects the specified known location.
+    /// </summary>
+    /// <param name="location">The known location to select.</param>
+    [RelayCommand]
+    private async Task SelectLocationAsync(KnownLocation location)
+    {
+        this.SelectedLocation = location;
+        this.FileList.Clear();
+        await foreach (var item in location.GetItems().ConfigureAwait(true))
+        {
+            this.FileList.Add(item);
+        }
+
+        this.CurrentFolder =
+            location.Location.Length == 0
+                ? null
+                : await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Called when the SelectedLocation property changes.
+    /// </summary>
+    /// <param name="value">The new value of the SelectedLocation property.</param>
+    partial void OnSelectedLocationChanged(KnownLocation? value)
+    {
+        if (value != null)
+        {
+            SelectLocationCommand.Execute(value);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    private async Task LoadKnownLocationsAsync()
+    {
+        if (this.knownLocationLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            this.KnownLocations = await this.projectBrowser.GetKnownLocationsAsync().ConfigureAwait(true);
+            this.knownLocationLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            this.LogLoadingKnownLocationsError(ex);
+        }
     }
 
     /// <summary>
@@ -232,6 +255,12 @@ public partial class OpenProjectViewModel : ObservableObject
     /// <returns><see langword="true"/> if the current folder has a parent folder; otherwise, <see langword="false"/>.</returns>
     private bool CurrentFolderHasParent()
         => this.CurrentFolder is INestedItem;
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to preload known locations during ViewModel activation")]
+    private partial void LogLoadingKnownLocationsError(Exception ex);
 
     /// <summary>
     /// Compares storage items by whether they are folders or files.

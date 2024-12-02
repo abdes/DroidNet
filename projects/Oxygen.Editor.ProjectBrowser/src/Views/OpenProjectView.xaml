@@ -10,14 +10,15 @@
     xmlns:local="using:Oxygen.Editor.ProjectBrowser.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls"
+    xmlns:pbp="using:Oxygen.Editor.ProjectBrowser.Projects"
     xmlns:storage="using:Oxygen.Editor.Storage"
     xmlns:vm="using:Oxygen.Editor.ProjectBrowser.ViewModels"
     d:DataContext="{d:DesignInstance Type=vm:OpenProjectViewModel}"
-    Loaded="OnLoaded"
     mc:Ignorable="d">
 
     <UserControl.Resources>
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+
         <Style x:Key="HorizontalSeparator" TargetType="Border">
             <Setter Property="Height" Value="1" />
             <Setter Property="Margin" Value="10" />
@@ -90,9 +91,6 @@
             </Grid>
         </DataTemplate>
 
-        <converters1:SelectedLocationConverter x:Key="SelectedLocationConverter" />
-        <converters1:KnownLocationByKeyConverter x:Key="KnownLocationConverter" />
-
         <local:FileListDataTemplateSelector
             x:Key="FileListDataTemplateSelector"
             FileTemplate="{StaticResource FileTemplate}"
@@ -119,52 +117,14 @@
             Style="{ThemeResource TitleTextBlockStyle}"
             Text="Open" />
 
-        <!--  The left navigation list of known locations  -->
-        <StackPanel
+        <pbc:KnownLocationsListView
             Grid.Row="1"
             Grid.Column="0"
-            Width="300"
-            HorizontalAlignment="Left">
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='RecentProjects'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='RecentProjects'}" />
-
-            <Border Style="{StaticResource HorizontalSeparator}" />
-
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='Desktop'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='Desktop'}" />
-
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='Documents'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='Documents'}" />
-
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='Downloads'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='Downloads'}" />
-
-            <Border Style="{StaticResource HorizontalSeparator}" />
-
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='ThisComputer'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='ThisComputer'}" />
-
-            <pbc:KnownLocationButton
-                HorizontalAlignment="Stretch"
-                Click="KnownLocationButton_OnClick"
-                IsSelected="{x:Bind ViewModel.SelectedLocation, Mode=OneWay, Converter={StaticResource ResourceKey=SelectedLocationConverter}, ConverterParameter='OneDrive'}"
-                Location="{x:Bind ViewModel.Locations, Mode=OneWay, Converter={StaticResource ResourceKey=KnownLocationConverter}, ConverterParameter='OneDrive'}" />
-        </StackPanel>
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Background="Green"
+            ItemsSource="{x:Bind ViewModel.KnownLocations, Mode=OneWay}"
+            SelectedItem="{x:Bind ViewModel.SelectedLocation, Mode=TwoWay}" />
 
         <Border
             Grid.Row="1"

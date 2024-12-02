@@ -5,9 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Storage;
 using WinRT;
@@ -29,18 +27,6 @@ public sealed partial class OpenProjectView
     }
 
     /// <summary>
-    /// Handles the click event on a known location button.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="e">The known location that was clicked.</param>
-    private void KnownLocationButton_OnClick(object? sender, KnownLocation e)
-    {
-        _ = sender;
-
-        this.ViewModel!.SelectLocation(e);
-    }
-
-    /// <summary>
     /// Handles the item click event in the list view asynchronously.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
@@ -54,11 +40,11 @@ public sealed partial class OpenProjectView
 
         if (item is IFolder)
         {
-            this.ViewModel!.ChangeFolder(item.Location);
+            this.ViewModel!.ChangeFolderCommand.Execute(item.Location);
         }
         else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
-            _ = await this.ViewModel!.OpenProjectFileAsync((item as INestedItem)!.ParentPath).ConfigureAwait(false);
+            await this.ViewModel!.OpenProjectFileCommand.ExecuteAsync((item as INestedItem)!.ParentPath).ConfigureAwait(false);
         }
     }
 
@@ -72,19 +58,6 @@ public sealed partial class OpenProjectView
         _ = sender;
         _ = args;
 
-        this.ViewModel!.ApplyFilter(this.FilterBox.Text);
-    }
-
-    /// <summary>
-    /// Handles the loaded event of the page.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private async void OnLoaded(object sender, RoutedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        await this.ViewModel!.Initialize().ConfigureAwait(true);
+        this.ViewModel!.ApplyFilterCommand.Execute(this.FilterBox.Text);
     }
 }

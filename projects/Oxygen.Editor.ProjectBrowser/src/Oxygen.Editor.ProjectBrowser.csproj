@@ -12,6 +12,7 @@
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Collections" />
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
@@ -53,6 +54,16 @@
         <Content Include="Assets\Images\**\*">
         <CopyToOutputDirectory>Never</CopyToOutputDirectory>
         </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Controls\KnownLocationsListView.xaml" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Page Update="Controls\KnownLocationsListView.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </Page>
     </ItemGroup>
 
 </Project>
