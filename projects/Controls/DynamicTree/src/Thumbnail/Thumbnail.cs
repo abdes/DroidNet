@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
@@ -113,9 +114,10 @@ public partial class Thumbnail : ContentControl
         this.Loaded += this.OnLoaded;
 
         // Merge the resource dictionary containing the DefaultThumbnailTemplate
+        var assemblyName = Assembly.GetExecutingAssembly().GetName().Name;
         var resourceDictionary = new ResourceDictionary
         {
-            Source = new Uri("ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml"),
+            Source = new Uri($"ms-appx:///{assemblyName}/Thumbnail/Thumbnail.xaml"),
         };
         this.Resources.MergedDictionaries.Add(resourceDictionary);
     }
