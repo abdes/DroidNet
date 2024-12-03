@@ -56,11 +56,11 @@ public sealed partial class DemoBrowserView
 
         if (args.IsSettingsSelected)
         {
-            this.ViewModel.NavigateToSettings();
+            this.ViewModel.NavigateToSettingsCommand.Execute(parameter: null);
         }
         else if (args.SelectedItem is not null)
         {
-            this.ViewModel.NavigateToItem((NavigationItem)args.SelectedItem);
+            this.ViewModel.NavigateToItemCommand.Execute((NavigationItem)args.SelectedItem);
         }
     }
 }
