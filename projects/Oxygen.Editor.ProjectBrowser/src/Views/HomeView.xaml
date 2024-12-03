@@ -36,16 +36,18 @@
                 </Grid.RowDefinitions>
 
                 <!--  Project Templates Area  -->
+                <!--  TODO: Use measure to estimate the height of a single row  -->
                 <Border
                     Grid.Row="0"
                     BorderBrush="{ThemeResource ControlStrokeColorDefault}"
                     BorderThickness="0,0,0,1">
-                    <pb:ProjectTemplatesGrid
-                        Height="{x:Bind pb:ProjectTemplatesGrid.SingleRowHeight}"
+                    <pb:TemplatesGridView
+                        Height="165"
                         VerticalAlignment="Top"
-                        ItemActivated="OnNewProjectFromTemplateAsync"
-                        ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedTemplate, Mode=TwoWay}" />
+                        IsItemClickEnabled="True"
+                        ItemClick="OnNewProjectFromTemplateAsync"
+                        ItemsSource="{x:Bind ViewModel.RecentTemplates}"
+                        SelectionMode="None" />
 
                     <!--  Bottom Border Only  -->
                 </Border>

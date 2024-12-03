@@ -78,10 +78,10 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
     }
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route)
+    public Task OnNavigatedToAsync(IActiveRoute route)
     {
         this.activeRoute = route;
-        await Task.CompletedTask.ConfigureAwait(false);
+        return Task.CompletedTask;
     }
 
     /// <summary>

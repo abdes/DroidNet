@@ -44,7 +44,7 @@ public sealed partial class OpenProjectView
         }
         else if (item.Name.EndsWith(".oxy", ignoreCase: true, CultureInfo.InvariantCulture))
         {
-            await this.ViewModel!.OpenProjectFileCommand.ExecuteAsync((item as INestedItem)!.ParentPath).ConfigureAwait(false);
+            await this.ViewModel!.OpenProjectFileCommand.ExecuteAsync((item as INestedItem)!.ParentPath).ConfigureAwait(true);
         }
     }
 

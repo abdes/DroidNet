@@ -58,7 +58,7 @@ public class KnownLocation(
 
                     if (item.Location is not null)
                     {
-                        yield return await storage.GetFolderFromPathAsync(item.Location, cancellationToken).ConfigureAwait(false);
+                        yield return await storage.GetFolderFromPathAsync(item.Location, cancellationToken).ConfigureAwait(true);
                     }
                 }
 
@@ -72,7 +72,7 @@ public class KnownLocation(
                         yield break;
                     }
 
-                    yield return await storage.GetFolderFromPathAsync(drive, cancellationToken).ConfigureAwait(false);
+                    yield return await storage.GetFolderFromPathAsync(drive, cancellationToken).ConfigureAwait(true);
                 }
 
                 break;
@@ -82,8 +82,8 @@ public class KnownLocation(
             case KnownLocations.Documents:
             case KnownLocations.Desktop:
             default:
-                var thisFolder = await storage.GetFolderFromPathAsync(this.Location, cancellationToken).ConfigureAwait(false);
-                await foreach (var item in thisFolder.GetItemsAsync(cancellationToken).ConfigureAwait(false))
+                var thisFolder = await storage.GetFolderFromPathAsync(this.Location, cancellationToken).ConfigureAwait(true);
+                await foreach (var item in thisFolder.GetItemsAsync(cancellationToken).ConfigureAwait(true))
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {

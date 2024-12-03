@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.ProjectBrowser.Controls"
+    xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Templates">
+
+    <Style
+        x:Key="TemplatesGridViewItemName"
+        BasedOn="{StaticResource SubtitleTextBlockStyle}"
+        TargetType="TextBlock">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="Margin" Value="8,0,0,8" />
+    </Style>
+
+    <Style
+        x:Key="TemplatesGridViewItemCategory"
+        BasedOn="{StaticResource CaptionTextBlockStyle}"
+        TargetType="TextBlock">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="Margin" Value="8,0,0,8" />
+    </Style>
+
+    <Thickness x:Key="TemplatesGridViewItemMargin">20</Thickness>
+    <x:Double x:Key="TemplatesGridViewIconHeight">100</x:Double>
+
+    <Style BasedOn="{StaticResource DefaultTemplatesGridViewStyle}" TargetType="local:TemplatesGridView" />
+
+    <Style x:Key="DefaultTemplatesGridViewStyle" TargetType="local:TemplatesGridView">
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="AllowDrop" Value="False" />
+        <Setter Property="CanDragItems" Value="False" />
+        <Setter Property="CanReorderItems" Value="False" />
+        <Setter Property="IsSynchronizedWithCurrentItem" Value="False" />
+        <Setter Property="ItemTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <Grid Width="220" Margin="{StaticResource TemplatesGridViewItemMargin}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border CornerRadius="5">
+                            <Image
+                                Height="{StaticResource TemplatesGridViewIconHeight}"
+                                VerticalAlignment="Top"
+                                Source="{Binding Icon}"
+                                Stretch="Fill" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Style="{StaticResource TemplatesGridViewItemName}" Text="{Binding Name}" />
+                            <TextBlock Style="{StaticResource TemplatesGridViewItemCategory}" Text="{Binding Category.Name, FallbackValue=''}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <ItemsWrapGrid Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="ShowsScrollingPlaceholders" Value="False" />
+    </Style>
+
+</ResourceDictionary>

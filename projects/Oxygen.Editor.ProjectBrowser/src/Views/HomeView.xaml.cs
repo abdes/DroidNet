@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
@@ -39,7 +39,7 @@ public sealed partial class HomeView
     {
         _ = sender;
 
-        var success = await this.ViewModel!.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(false);
+        var success = await this.ViewModel!.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(true);
         if (!success)
         {
             // TODO: display an error message
@@ -51,27 +51,30 @@ public sealed partial class HomeView
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
-    private async void OnNewProjectFromTemplateAsync(object? sender, TemplateItemActivatedEventArgs args)
+    private async void OnNewProjectFromTemplateAsync(object? sender, ItemClickEventArgs args)
     {
         _ = sender;
 
-        var dialog = new NewProjectDialog(this.projectBrowser, args.TemplateInfo) { XamlRoot = this.XamlRoot };
+        if (args.ClickedItem is not ITemplateInfo templateInfo)
+        {
+            return;
+        }
+
+        var dialog = new NewProjectDialog(this.projectBrowser, templateInfo) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 
         if (result == ContentDialogResult.Primary)
         {
             var success = await this.ViewModel!.NewProjectFromTemplate(
-                    args.TemplateInfo,
+                    templateInfo,
                     dialog.ViewModel.ProjectName,
                     dialog.ViewModel.SelectedLocation.Path)
                 .ConfigureAwait(true);
 
-            if (success)
+            if (!success)
             {
-                Debug.WriteLine("Project successfully created");
-
-                // TODO: navigate to project workspace for newly created project
+                // TODO: display an error message
             }
         }
     }

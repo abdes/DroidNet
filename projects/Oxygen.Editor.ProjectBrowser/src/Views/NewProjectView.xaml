@@ -44,12 +44,12 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <pb:ProjectTemplatesGrid
+                <pb:TemplatesGridView
                     VerticalAlignment="Top"
-                    DataContext="{x:Bind ViewModel}"
-                    ItemActivated="OnTemplateSelected"
-                    ProjectTemplates="{x:Bind ViewModel.Templates, FallbackValue={}}"
-                    SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}" />
+                    IsItemClickEnabled="False"
+                    ItemsSource="{x:Bind ViewModel.Templates}"
+                    SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
+                    SelectionMode="Single" />
 
                 <!--  Eventually we will add online templates here  -->
 

@@ -101,7 +101,7 @@ public abstract class ModuleSettings(ISettingsManager settingsManager, string mo
                     var value = propertyInfo.GetValue(this);
                     if (value != null)
                     {
-                        await settingsManager.SaveSettingAsync(this.ModuleName, property, value).ConfigureAwait(false);
+                        await settingsManager.SaveSettingAsync(this.ModuleName, property, value).ConfigureAwait(true);
                     }
                 }
                 catch (Exception ex) when (ex is ArgumentException or TargetException or MethodAccessException or TargetInvocationException)
@@ -139,7 +139,7 @@ public abstract class ModuleSettings(ISettingsManager settingsManager, string mo
                 {
                     var genericMethod = loadSettingMethod.MakeGenericMethod(property.PropertyType);
                     var task = genericMethod.Invoke(settingsManager, [this.ModuleName, property.Name, defaultValue]) as Task;
-                    await task!.ConfigureAwait(false);
+                    await task!.ConfigureAwait(true);
 
                     var resultProperty = task.GetType().GetProperty("Result");
                     if (resultProperty != null)

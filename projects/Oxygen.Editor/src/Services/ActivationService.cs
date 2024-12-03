@@ -28,9 +28,9 @@ public sealed partial class ActivationService : IActivationService, IDisposable
     /// <inheritdoc/>
     public async Task ActivateAsync(object activationData)
     {
-        await this.beforeActivation().ConfigureAwait(false);
+        await this.beforeActivation().ConfigureAwait(true);
         this.subject.OnNext(activationData);
-        await this.afterActivation(activationData).ConfigureAwait(false);
+        await this.afterActivation(activationData).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>

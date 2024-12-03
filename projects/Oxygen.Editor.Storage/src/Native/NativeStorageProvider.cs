@@ -137,8 +137,8 @@ public class NativeStorageProvider(IFileSystem fs) : IStorageProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var maybeDocument = await this.DocumentExistsAsync(path).ConfigureAwait(false);
-        var maybeFolder = await this.FolderExistsAsync(path).ConfigureAwait(false);
+        var maybeDocument = await this.DocumentExistsAsync(path).ConfigureAwait(true);
+        var maybeFolder = await this.FolderExistsAsync(path).ConfigureAwait(true);
 
         if (maybeDocument || maybeFolder)
         {

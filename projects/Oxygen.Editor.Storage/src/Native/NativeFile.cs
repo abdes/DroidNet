@@ -93,7 +93,7 @@ public class NativeFile : IDocument
     public async Task DeleteAsync(CancellationToken cancellationToken = default)
     {
         // Check if the file does not exist
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -102,7 +102,7 @@ public class NativeFile : IDocument
         try
         {
             var fs = this.StorageProvider.FileSystem;
-            await Task.Run(() => fs.File.Delete(this.Location), cancellationToken).ConfigureAwait(false);
+            await Task.Run(() => fs.File.Delete(this.Location), cancellationToken).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -265,7 +265,7 @@ public class NativeFile : IDocument
         try
         {
             return await fs.File.ReadAllTextAsync(this.Location, Encoding.UTF8, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
         }
         catch (FileNotFoundException ex)
         {
@@ -290,7 +290,7 @@ public class NativeFile : IDocument
         try
         {
             await fs.File.WriteAllTextAsync(this.Location, text, Encoding.UTF8, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -329,14 +329,14 @@ public class NativeFile : IDocument
 
         // The new location should not correspond to an existing folder or file
         await this.StorageProvider.EnsureTargetDoesNotExistAsync(newLocationPath, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
-        if (await this.ExistsAsync().ConfigureAwait(false))
+        if (await this.ExistsAsync().ConfigureAwait(true))
         {
             var parent = await this.StorageProvider.GetFolderFromPathAsync(this.ParentPath, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
 
-            await this.MoveAsync(parent, desiredNewName, cancellationToken).ConfigureAwait(false);
+            await this.MoveAsync(parent, desiredNewName, cancellationToken).ConfigureAwait(true);
         }
         else
         {
@@ -354,7 +354,7 @@ public class NativeFile : IDocument
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             throw new ItemNotFoundException($"attempt to move a file that does not exist [{this.Location}]");
         }
@@ -377,7 +377,7 @@ public class NativeFile : IDocument
         }
 
         // Ensure destination directory exists, create if necessary
-        await destinationFolder.CreateAsync(cancellationToken).ConfigureAwait(false);
+        await destinationFolder.CreateAsync(cancellationToken).ConfigureAwait(true);
 
         try
         {
@@ -405,7 +405,7 @@ public class NativeFile : IDocument
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             throw new ItemNotFoundException($"attempt to copy a file that does not exist [{this.Location}]");
         }
@@ -428,13 +428,13 @@ public class NativeFile : IDocument
         }
 
         // Ensure destination directory exists, create if necessary
-        await destinationFolder.CreateAsync(cancellationToken).ConfigureAwait(false);
+        await destinationFolder.CreateAsync(cancellationToken).ConfigureAwait(true);
 
         try
         {
             // Use the overload of File.Copy that supports the overwrite flag
             await Task.Run(() => fs.File.Copy(this.Location, destinationFilePath, overwrite), cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
         }
         catch (TaskCanceledException)
         {
@@ -451,7 +451,7 @@ public class NativeFile : IDocument
         }
 
         return await this.StorageProvider.GetDocumentFromPathAsync(destinationFilePath, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
         void TryDeleteFile(string filePath)
         {

@@ -84,6 +84,9 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(DefaultSortDirection, new ByNameComparer()));
     }
 
+    /// <summary>
+    /// Gets the list of known locations.
+    /// </summary>
     public IList<KnownLocation> KnownLocations { get; private set; } = [];
 
     /// <summary>

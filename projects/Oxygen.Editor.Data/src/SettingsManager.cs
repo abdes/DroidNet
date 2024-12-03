@@ -65,7 +65,7 @@ public class SettingsManager(PersistentState context) : ISettingsManager
         var cacheKey = $"{moduleName}:{key}";
 
         var setting = await context.Settings
-            .FirstOrDefaultAsync(ms => ms.ModuleName == moduleName && ms.Key == key).ConfigureAwait(false);
+            .FirstOrDefaultAsync(ms => ms.ModuleName == moduleName && ms.Key == key).ConfigureAwait(true);
 
         if (setting == null)
         {
@@ -86,7 +86,7 @@ public class SettingsManager(PersistentState context) : ISettingsManager
             _ = context.Settings.Update(setting);
         }
 
-        _ = await context.SaveChangesAsync().ConfigureAwait(false);
+        _ = await context.SaveChangesAsync().ConfigureAwait(true);
 
         this.cache[cacheKey] = value;
         this.NotifyChange(cacheKey, jsonValue);
@@ -112,7 +112,7 @@ public class SettingsManager(PersistentState context) : ISettingsManager
         }
 
         var setting = await context.Settings
-            .FirstOrDefaultAsync(ms => ms.ModuleName == moduleName && ms.Key == key).ConfigureAwait(false);
+            .FirstOrDefaultAsync(ms => ms.ModuleName == moduleName && ms.Key == key).ConfigureAwait(true);
 
         if (setting is null)
         {
@@ -137,7 +137,7 @@ public class SettingsManager(PersistentState context) : ISettingsManager
     /// </remarks>
     public async Task<T> LoadSettingAsync<T>(string moduleName, string key, T defaultValue)
     {
-        var value = await this.LoadSettingAsync<T>(moduleName, key).ConfigureAwait(false);
+        var value = await this.LoadSettingAsync<T>(moduleName, key).ConfigureAwait(true);
         return value is null ? defaultValue : value;
     }
 

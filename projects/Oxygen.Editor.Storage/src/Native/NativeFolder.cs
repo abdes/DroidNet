@@ -60,7 +60,7 @@ public class NativeFolder : IFolder
         var fullPath = this.StorageProvider.NormalizeRelativeTo(this.Location, documentName);
 
         // If the path refers to an existing folder (not file), then we reject it
-        return await this.StorageProvider.FolderExistsAsync(fullPath).ConfigureAwait(false)
+        return await this.StorageProvider.FolderExistsAsync(fullPath).ConfigureAwait(true)
             ? throw new InvalidPathException(
                 $"the specified name for a document [{documentName}] refers to an existing folder [{fullPath}]")
             : (IDocument)new NativeFile(
@@ -78,7 +78,7 @@ public class NativeFolder : IFolder
         var fullPath = this.StorageProvider.NormalizeRelativeTo(this.Location, folderName);
 
         // If the path refers to an existing file (not folder), then we reject it
-        return await this.StorageProvider.DocumentExistsAsync(fullPath).ConfigureAwait(false)
+        return await this.StorageProvider.DocumentExistsAsync(fullPath).ConfigureAwait(true)
             ? throw new InvalidPathException(
                 $"the specified name for a folder [{folderName}] refers to an existing file [{fullPath}]")
             : (IFolder)new NativeNestedFolder(
@@ -92,7 +92,7 @@ public class NativeFolder : IFolder
     public async Task CreateAsync(CancellationToken cancellationToken = default)
     {
         // Check if the directory already exists
-        if (await this.ExistsAsync().ConfigureAwait(false))
+        if (await this.ExistsAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -117,7 +117,7 @@ public class NativeFolder : IFolder
     public async Task DeleteAsync(CancellationToken cancellationToken = default)
     {
         // Check if the folder does not exists
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -126,7 +126,7 @@ public class NativeFolder : IFolder
         try
         {
             var fs = this.StorageProvider.FileSystem;
-            await Task.Run(() => fs.Directory.Delete(this.Location), cancellationToken).ConfigureAwait(false);
+            await Task.Run(() => fs.Directory.Delete(this.Location), cancellationToken).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -138,7 +138,7 @@ public class NativeFolder : IFolder
     public async Task DeleteRecursiveAsync(CancellationToken cancellationToken = default)
     {
         // Check if the folder does not exists
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -148,7 +148,7 @@ public class NativeFolder : IFolder
         {
             var fs = this.StorageProvider.FileSystem;
             await Task.Run(() => fs.Directory.Delete(this.Location, recursive: true), cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -184,16 +184,16 @@ public class NativeFolder : IFolder
 
         // The new location should not correspond to an existing folder or file
         await this.StorageProvider.EnsureTargetDoesNotExistAsync(newLocationPath, cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
-        if (await this.ExistsAsync().ConfigureAwait(false))
+        if (await this.ExistsAsync().ConfigureAwait(true))
         {
             // Physically rename the directory
             try
             {
                 // Run asynchronously because it could take a long time
                 await Task.Run(() => fs.Directory.Move(this.Location, newLocationPath), cancellationToken)
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(true);
             }
             catch (Exception ex)
             {
@@ -213,7 +213,7 @@ public class NativeFolder : IFolder
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Ensure the directory exists before starting enumeration
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             throw new StorageException($"cannot enumerate folder at [{this.Location}] if it does not exist");
         }
@@ -242,7 +242,7 @@ public class NativeFolder : IFolder
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Ensure the directory exists before starting enumeration
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             throw new StorageException($"cannot enumerate folder at [{this.Location}] if it does not exist");
         }
@@ -269,13 +269,13 @@ public class NativeFolder : IFolder
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var folderItem in this.GetFoldersAsync(cancellationToken)
-                           .ConfigureAwait(false))
+                           .ConfigureAwait(true))
         {
             yield return folderItem;
         }
 
         await foreach (var fileItem in this.GetDocumentsAsync(cancellationToken)
-                           .ConfigureAwait(false))
+                           .ConfigureAwait(true))
         {
             yield return fileItem;
         }
@@ -285,7 +285,7 @@ public class NativeFolder : IFolder
     public async Task<bool> HasItemsAsync()
     {
         // Ensure the directory exists before starting enumeration
-        if (!await this.ExistsAsync().ConfigureAwait(false))
+        if (!await this.ExistsAsync().ConfigureAwait(true))
         {
             throw new StorageException($"cannot enumerate folder at [{this.Location}] if it does not exist");
         }

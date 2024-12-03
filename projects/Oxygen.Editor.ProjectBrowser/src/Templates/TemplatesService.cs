@@ -93,29 +93,39 @@ public partial class TemplatesService(
                     location));
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "all exceptions are logged, but we gracefully continue with other items")]
     public async IAsyncEnumerable<ITemplateInfo> GetLocalTemplatesAsync()
     {
-        // Load builtin templates
-        foreach (var template in this.BuiltinTemplates)
+        var tasks = this.BuiltinTemplates.Select(async template =>
         {
             var templateUri = new Uri($"{Uri.UriSchemeFile}:///{template}");
 
             ITemplateInfo? templateInfo;
             try
             {
-                templateInfo = await templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(true);
+                templateInfo = await templatesSource.LoadTemplateAsync(templateUri).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 // Log the error, but continue with the rest of templates
                 this.CouldNotLoadTemplate(template, ex.Message);
-                continue;
+                return null;
             }
 
-            // Update template last used time
-            templateInfo.LastUsedOn = (await templateUsage.GetTemplateUsageAsync(templateInfo.Location).ConfigureAwait(false))?.LastUsedOn ?? DateTime.MaxValue;
+            return templateInfo;
+        });
 
-            yield return templateInfo;
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        foreach (var templateInfo in results)
+        {
+            if (templateInfo != null)
+            {
+                // Update template last used time
+                templateInfo.LastUsedOn = (await templateUsage.GetTemplateUsageAsync(templateInfo.Location).ConfigureAwait(false))?.LastUsedOn ?? DateTime.MaxValue;
+
+                yield return templateInfo;
+            }
         }
     }
 
@@ -123,6 +133,7 @@ public partial class TemplatesService(
     public Task<bool> HasRecentlyUsedTemplatesAsync() => templateUsage.HasRecentlyUsedTemplatesAsync();
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "no exception is worth reporting, just remove the erroneous template usage data")]
     public IObservable<ITemplateInfo> GetRecentlyUsedTemplates()
         => Observable.Create<ITemplateInfo>(
             async (observer) =>
@@ -133,8 +144,7 @@ public partial class TemplatesService(
                     try
                     {
                         var templateDescriptor = fs.Path.Combine(template.Location, "Template.json");
-                        var templateInfo = await templatesSource.LoadTemplateAsync(new Uri(templateDescriptor))
-                            .ConfigureAwait(true);
+                        var templateInfo = await templatesSource.LoadTemplateAsync(new Uri(templateDescriptor)).ConfigureAwait(true);
 
                         templateInfo.LastUsedOn = template.LastUsedOn;
                         observer.OnNext(templateInfo);
@@ -142,7 +152,7 @@ public partial class TemplatesService(
                     catch (Exception ex)
                     {
                         this.CouldNotLoadTemplate(template.Location, ex.Message);
-                        await templateUsage.DeleteTemplateUsageAsync(template.Location).ConfigureAwait(false);
+                        await templateUsage.DeleteTemplateUsageAsync(template.Location).ConfigureAwait(true);
                     }
                 }
             });
