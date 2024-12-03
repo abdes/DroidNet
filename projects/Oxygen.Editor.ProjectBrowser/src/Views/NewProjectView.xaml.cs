@@ -2,11 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 
@@ -26,20 +24,9 @@ public sealed partial class NewProjectView
     /// <param name="projectBrowser">The project browser service.</param>
     public NewProjectView(IProjectBrowserService projectBrowser)
     {
-        this.projectBrowser = projectBrowser;
         this.InitializeComponent();
-    }
 
-    /// <summary>
-    /// Handles the event when a template is selected.
-    /// </summary>
-    /// <param name="sender">The source of the event.</param>
-    /// <param name="args">The event data.</param>
-    private void OnTemplateSelected(object? sender, TemplateItemActivatedEventArgs args)
-    {
-        _ = sender;
-
-        this.ViewModel!.SelectItemCommand.Execute(args.TemplateInfo);
+        this.projectBrowser = projectBrowser;
     }
 
     /// <summary>
@@ -67,9 +54,7 @@ public sealed partial class NewProjectView
 
             if (success)
             {
-                Debug.WriteLine("Project successfully created");
-
-                // TODO: navigate to project workspace for newly created project
+                // TODO: display an error message
             }
         }
     }

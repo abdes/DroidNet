@@ -4,9 +4,11 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Collections;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,6 +29,7 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
 /// </param>
 public partial class HomeViewModel(
+    HostingContext hostingContext,
     IRouter router,
     ITemplatesService templateService,
     IProjectBrowserService projectBrowser,
@@ -44,7 +47,7 @@ public partial class HomeViewModel(
     /// <summary>
     /// Gets the collection of project templates.
     /// </summary>
-    public ObservableCollection<ITemplateInfo> Templates { get; } = [];
+    public ObservableCollection<ITemplateInfo> RecentTemplates { get; } = [];
 
     /// <summary>
     /// Gets the collection of recent projects.
@@ -73,7 +76,16 @@ public partial class HomeViewModel(
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
         this.preloadedTemplates = false; // Refresh recent templates next time we are activated
 
-        return await projectBrowser.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        var result = await projectBrowser.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        if (!result)
+        {
+            return false;
+        }
+
+        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+
+        // TODO: returning a bool here is weird. we should through on error and retrun void
+        return true;
     }
 
     /// <summary>
@@ -94,6 +106,8 @@ public partial class HomeViewModel(
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
 
         await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+
+        // TODO: returning a bool here is weird. we should through on error and retrun void
         return true;
     }
 
@@ -165,24 +179,22 @@ public partial class HomeViewModel(
     [RelayCommand]
     private async Task LoadRecentTemplatesAsync()
     {
-        this.Templates.Clear();
-
-        if (await templateService.HasRecentlyUsedTemplatesAsync().ConfigureAwait(false))
+        this.RecentTemplates.Clear();
+        if (await templateService.HasRecentlyUsedTemplatesAsync().ConfigureAwait(true))
         {
             _ = templateService.GetRecentlyUsedTemplates()
-                .Subscribe(template => this.Templates.InsertInPlace(template, x => x.LastUsedOn));
+                .ObserveOn(hostingContext.DispatcherScheduler)
+                .Subscribe(template => this.RecentTemplates.InsertInPlace(template, x => x.LastUsedOn));
         }
         else
         {
             await foreach (var template in templateService.GetLocalTemplatesAsync().ConfigureAwait(true))
             {
-                this.Templates.InsertInPlace(
+                this.RecentTemplates.InsertInPlace(
                     template,
                     x => x.LastUsedOn!,
                     new DateTimeComparerDescending());
             }
-
-            this.SelectedTemplate = this.Templates.FirstOrDefault();
         }
     }
 
@@ -197,8 +209,7 @@ public partial class HomeViewModel(
         var recentlyUsedProjectDict = new Dictionary<IProjectInfo, IProjectInfo>();
 
         // Update existing items and add new items in the RecentProjects collection
-        await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync()
-                           .ConfigureAwait(true))
+        await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
             recentlyUsedProjectDict.Add(projectInfo, projectInfo);
 

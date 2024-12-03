@@ -99,7 +99,7 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
         try
         {
             var json = await filesystem.File.ReadAllTextAsync(templatePath, CancellationToken.None)
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
 
             var templateInfo = JsonSerializer.Deserialize<TemplateInfo>(json, this.jsonSerializerOptions);
             Debug.Assert(templateInfo != null, $"Json content of template at `{templatePath}` is not valid");

@@ -6,9 +6,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DroidNet.Resources;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
@@ -34,8 +37,10 @@ namespace Oxygen.Editor.ProjectBrowser.Projects;
 /// - Managing project browser settings.
 /// </para>
 /// </remarks>
-public class ProjectBrowserService : IProjectBrowserService
+public partial class ProjectBrowserService : IProjectBrowserService
 {
+    private readonly ILogger logger;
+
     private readonly IOxygenPathFinder finder;
     private readonly IProjectManagerService projectManager;
     private readonly NativeStorageProvider localStorage;
@@ -47,10 +52,12 @@ public class ProjectBrowserService : IProjectBrowserService
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
     /// </summary>
+    /// <param name="projectUsage">Service for reading and updating project usage data.</param>
     /// <param name="projectManager">Service for managing project operations.</param>
     /// <param name="finder">Service for locating system paths.</param>
     /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
     /// <param name="settingsManager">Manager for handling project browser settings.</param>
+    /// <param name="loggerFactory">The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger cannot be obtained, a <see cref="NullLogger" /> is used silently.</param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="localStorage"/> is not an instance of <see cref="NativeStorageProvider"/>.
     /// </exception>
@@ -64,8 +71,10 @@ public class ProjectBrowserService : IProjectBrowserService
         IProjectManagerService projectManager,
         IOxygenPathFinder finder,
         IStorageProvider localStorage,
-        ISettingsManager settingsManager)
+        ISettingsManager settingsManager,
+        ILoggerFactory? loggerFactory = null)
     {
+        this.logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
         this.projectUsage = projectUsage;
         this.projectManager = projectManager;
         this.finder = finder;
@@ -74,7 +83,7 @@ public class ProjectBrowserService : IProjectBrowserService
             async () =>
             {
                 var settings = new ProjectBrowserSettings(settingsManager);
-                await settings.LoadAsync().ConfigureAwait(false);
+                await settings.LoadAsync().ConfigureAwait(true);
                 return settings;
             });
 
@@ -97,16 +106,16 @@ public class ProjectBrowserService : IProjectBrowserService
     public async Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath)
     {
         // Containing folder must exist
-        if (!await this.localStorage.FolderExistsAsync(atLocationPath).ConfigureAwait(false))
+        if (!await this.localStorage.FolderExistsAsync(atLocationPath).ConfigureAwait(true))
         {
             return false;
         }
 
         // Project folder should not exist, but if it does, it should be empty
         var projectFolderPath = this.localStorage.NormalizeRelativeTo(atLocationPath, projectName);
-        var projectFolder = await this.localStorage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(false);
-        return !await projectFolder.ExistsAsync().ConfigureAwait(false) ||
-               !await projectFolder.HasItemsAsync().ConfigureAwait(false);
+        var projectFolder = await this.localStorage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(true);
+        return !await projectFolder.ExistsAsync().ConfigureAwait(true) ||
+               !await projectFolder.HasItemsAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -117,7 +126,7 @@ public class ProjectBrowserService : IProjectBrowserService
     {
         Debug.WriteLine($"New project from template: {templateInfo.Category.Name}/{templateInfo.Name} with name `{projectName}` in location `{atLocationPath}`");
 
-        if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(false))
+        if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(true))
         {
             Debug.WriteLine($"Cannot create a new project with name `{projectName}` at: {atLocationPath}");
             return false;
@@ -137,37 +146,37 @@ public class ProjectBrowserService : IProjectBrowserService
             // Create project folder
             projectFolder = await this.localStorage
                 .GetFolderFromPathAsync(this.localStorage.NormalizeRelativeTo(atLocationPath, projectName))
-                .ConfigureAwait(false);
-            await projectFolder.CreateAsync().ConfigureAwait(false);
+                .ConfigureAwait(true);
+            await projectFolder.CreateAsync().ConfigureAwait(true);
 
             // Copy all content from template to the new project folder
             CopyTemplateAssetsToProject();
 
             // Load the project info, update it, and save it
-            var projectInfo
-                = await this.projectManager.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(false);
+            var projectInfo = await this.projectManager.LoadProjectInfoAsync(projectFolder.Location).ConfigureAwait(true);
             if (projectInfo != null)
             {
                 projectInfo.Name = projectName;
-                if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false))
+                if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
                 {
                     // Update the recently used project entry for the project being saved
-                    await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(false);
+                    await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
 
                     // Update the last save location
-                    await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName)
-                        .ConfigureAwait(false);
+                    await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName).ConfigureAwait(true);
 
-                    return true;
+                    // Open the project
+                    return await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
                 }
             }
+
+            RemoveFailedProject(projectFolder);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Project creation failed: {ex.Message}");
         }
 
-        RemoveFailedProject(projectFolder);
         return false;
 
         void CopyTemplateAssetsToProject()
@@ -192,7 +201,7 @@ public class ProjectBrowserService : IProjectBrowserService
                 });
         }
 
-        static void RemoveFailedProject(IFolder? storageLocation)
+        void RemoveFailedProject(IFolder? storageLocation)
         {
             if (storageLocation == null)
             {
@@ -203,10 +212,10 @@ public class ProjectBrowserService : IProjectBrowserService
             {
                 Directory.Delete(storageLocation.Location, recursive: true);
             }
-            catch (Exception deleteError)
+            catch (Exception ex)
             {
-                Debug.WriteLine(
-                    $"An error occurred while trying to delete a failed project folder at `{storageLocation.Location}`: {deleteError.Message}");
+                this.LogFailedProjectCleanupError(storageLocation.Location, ex);
+                throw;
             }
         }
     }
@@ -216,11 +225,11 @@ public class ProjectBrowserService : IProjectBrowserService
     {
         try
         {
-            var success = await this.projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(false);
+            var success = await this.projectManager.LoadProjectAsync(projectInfo).ConfigureAwait(true);
             if (success)
             {
                 // Update the recently used project entry for the project being saved
-                await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(false);
+                await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
             }
 
             return success;
@@ -235,9 +244,9 @@ public class ProjectBrowserService : IProjectBrowserService
     /// <inheritdoc/>
     public async Task<bool> OpenProjectAsync(string location)
     {
-        var projectInfo = await this.projectManager.LoadProjectInfoAsync(location!).ConfigureAwait(false);
+        var projectInfo = await this.projectManager.LoadProjectInfoAsync(location!).ConfigureAwait(true);
         return projectInfo is not null
-            && await this.OpenProjectAsync(projectInfo).ConfigureAwait(false);
+            && await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -260,14 +269,14 @@ public class ProjectBrowserService : IProjectBrowserService
     /// <inheritdoc/>
     public async IAsyncEnumerable<IProjectInfo> GetRecentlyUsedProjectsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        foreach (var item in await this.projectUsage.GetMostRecentlyUsedProjectsAsync().ConfigureAwait(false))
+        foreach (var item in await this.projectUsage.GetMostRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(false);
+            var projectInfo = await this.projectManager.LoadProjectInfoAsync(item.Location!).ConfigureAwait(true);
             if (projectInfo != null)
             {
                 projectInfo.LastUsedOn = item.LastUsedOn;
@@ -275,21 +284,21 @@ public class ProjectBrowserService : IProjectBrowserService
             }
             else
             {
-                await this.projectUsage.DeleteProjectUsageAsync(item.Name, item.Location).ConfigureAwait(false);
+                await this.projectUsage.DeleteProjectUsageAsync(item.Name, item.Location).ConfigureAwait(true);
             }
         }
     }
 
     /// <inheritdoc/>
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
-        => await this.lazyLocations.Value.ConfigureAwait(false);
+        => await this.lazyLocations.Value.ConfigureAwait(true);
 
     private async Task TryUpdateLastSaveLocation(string location)
     {
         try
         {
             this.Settings.LastSaveLocation = location;
-            await this.Settings.SaveAsync().ConfigureAwait(false);
+            await this.Settings.SaveAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -304,7 +313,7 @@ public class ProjectBrowserService : IProjectBrowserService
 
         foreach (var locationKey in Enum.GetValues<KnownLocations>())
         {
-            var location = await this.GetLocationForKeyAsync(locationKey).ConfigureAwait(false);
+            var location = await this.GetLocationForKeyAsync(locationKey).ConfigureAwait(true);
             if (location != null)
             {
                 locations.Add(location);
@@ -335,29 +344,35 @@ public class ProjectBrowserService : IProjectBrowserService
             KnownLocations.OneDrive => await LocationFromLocalFolderPathAsync(
                     locationKey,
                     this.finder.UserOneDrive)
-                .ConfigureAwait(false),
+                .ConfigureAwait(true),
 
             KnownLocations.Downloads => await LocationFromLocalFolderPathAsync(
                     locationKey,
                     this.finder.UserDownloads)
-                .ConfigureAwait(false),
+                .ConfigureAwait(true),
 
             KnownLocations.Documents => await LocationFromLocalFolderPathAsync(
                     locationKey,
                     this.finder.UserDocuments)
-                .ConfigureAwait(false),
+                .ConfigureAwait(true),
 
             KnownLocations.Desktop => await LocationFromLocalFolderPathAsync(
                     locationKey,
                     this.finder.UserDesktop)
-                .ConfigureAwait(false),
+                .ConfigureAwait(true),
             _ => throw new InvalidEnumArgumentException(nameof(locationKey), (int)locationKey, typeof(KnownLocations)),
         };
 
         async Task<KnownLocation?> LocationFromLocalFolderPathAsync(KnownLocations key, string path)
         {
-            var folder = await this.localStorage.GetFolderFromPathAsync(path).ConfigureAwait(false);
+            var folder = await this.localStorage.GetFolderFromPathAsync(path).ConfigureAwait(true);
             return new KnownLocation(key, folder.Name, folder.Location, this.localStorage, this);
         }
     }
+
+    [LoggerMessage(
+        EventId = 1000,
+        Level = LogLevel.Error,
+        Message = "Could not cleanup after failed project creation at: {Location}")]
+    private partial void LogFailedProjectCleanupError(string location, Exception ex);
 }

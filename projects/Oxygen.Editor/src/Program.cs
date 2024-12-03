@@ -123,6 +123,27 @@ public static partial class Program
             ViewModelType = typeof(MainShellViewModel),
             Children = new Routes(
             [
+
+                // TODO: temporary for testing
+                new Route()
+                {
+                    Path = "home",
+                    MatchMethod = PathMatch.Prefix,
+                    ViewModelType = typeof(HomeViewModel),
+                },
+                new Route()
+                {
+                    Path = "new",
+                    MatchMethod = PathMatch.Prefix,
+                    ViewModelType = typeof(NewProjectViewModel),
+                },
+                new Route()
+                {
+                    Path = "open",
+                    MatchMethod = PathMatch.Prefix,
+                    ViewModelType = typeof(OpenProjectViewModel),
+                },
+
                 new Route()
                 {
                     // The project browser is the root of a navigation view with multiple pages.

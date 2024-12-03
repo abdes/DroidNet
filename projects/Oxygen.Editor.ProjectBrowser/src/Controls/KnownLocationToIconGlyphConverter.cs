@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 /// <summary>
 /// Converts a <see cref="KnownLocations"/> value to a corresponding icon glyph.
 /// </summary>
-internal partial class KnownLocationToIconGlyphConverter : IValueConverter
+internal sealed partial class KnownLocationToIconGlyphConverter : IValueConverter
 {
     /// <summary>
     /// Converts a <see cref="KnownLocations"/> value to a corresponding icon glyph.

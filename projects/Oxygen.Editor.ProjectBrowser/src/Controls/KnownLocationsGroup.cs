@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 /// Represents a group of known locations within the project browser.
 /// </summary>
 /// <param name="items">The collection of <see cref="KnownLocation"/> items in this group.</param>
-internal partial class KnownLocationsGroup(IEnumerable<KnownLocation> items) : List<KnownLocation>(items)
+internal sealed partial class KnownLocationsGroup(IEnumerable<KnownLocation> items) : List<KnownLocation>(items)
 {
     /// <summary>
     /// Gets or sets the order of the group.

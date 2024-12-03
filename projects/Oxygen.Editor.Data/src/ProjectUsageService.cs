@@ -54,13 +54,13 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     internal const string CacheKeyPrefix = "ProjectUsage_";
 
     /// <inheritdoc />
-    public async Task<bool> HasRecentlyUsedProjectsAsync() => await context.ProjectUsageRecords.AnyAsync().ConfigureAwait(false);
+    public async Task<bool> HasRecentlyUsedProjectsAsync() => await context.ProjectUsageRecords.AnyAsync().ConfigureAwait(true);
 
     /// <inheritdoc />
     public async Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10) => await context.ProjectUsageRecords
             .OrderByDescending(p => p.LastUsedOn)
             .Take((int)sizeLimit > 0 ? (int)sizeLimit : 10)
-            .ToListAsync().ConfigureAwait(false);
+            .ToListAsync().ConfigureAwait(true);
 
     /// <inheritdoc />
     public async Task<ProjectUsage?> GetProjectUsageAsync(string name, string location)
@@ -72,7 +72,7 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
         }
 
         projectUsage = await context.ProjectUsageRecords
-            .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
+            .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(true);
 
         if (projectUsage != null)
         {
@@ -85,7 +85,7 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     /// <inheritdoc />
     public async Task UpdateProjectUsageAsync(string name, string location)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
+        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
         if (projectUsage != null)
         {
             projectUsage.TimesOpened++;
@@ -105,19 +105,19 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
             _ = context.ProjectUsageRecords.Add(projectUsage);
         }
 
-        _ = await context.SaveChangesAsync().ConfigureAwait(false);
+        _ = await context.SaveChangesAsync().ConfigureAwait(true);
         _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
     }
 
     /// <inheritdoc />
     public async Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
+        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
 
         if (projectUsage != null)
         {
             projectUsage.ContentBrowserState = contentBrowserState;
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync().ConfigureAwait(true);
             _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
         }
 
@@ -127,12 +127,12 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     /// <inheritdoc />
     public async Task UpdateLastOpenedSceneAsync(string name, string location, string lastOpenedScene)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
+        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
 
         if (projectUsage != null)
         {
             projectUsage.LastOpenedScene = lastOpenedScene;
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync().ConfigureAwait(true);
             _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
         }
 
@@ -144,7 +144,7 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     {
         ValidateProjectNameAndLocation(newName, newLocation ?? oldLocation);
 
-        var projectUsage = await this.GetProjectUsageAsync(oldName, oldLocation).ConfigureAwait(false);
+        var projectUsage = await this.GetProjectUsageAsync(oldName, oldLocation).ConfigureAwait(true);
         if (projectUsage != null)
         {
             projectUsage.Name = newName;
@@ -153,7 +153,7 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
                 projectUsage.Location = newLocation;
             }
 
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync().ConfigureAwait(true);
             _ = cache.Set(CacheKeyPrefix + newName + "_" + (newLocation ?? oldLocation), projectUsage);
             cache.Remove(CacheKeyPrefix + oldName + "_" + oldLocation);
         }
@@ -162,11 +162,11 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     /// <inheritdoc />
     public async Task DeleteProjectUsageAsync(string name, string location)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(false);
+        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
         if (projectUsage != null)
         {
             _ = context.ProjectUsageRecords.Remove(projectUsage);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync().ConfigureAwait(true);
             cache.Remove(CacheKeyPrefix + name + "_" + location);
         }
     }

@@ -61,7 +61,7 @@ public class TemplateUsageService(PersistentState context, IMemoryCache cache) :
     public async Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync(int sizeLimit = 10) => await context.TemplatesUsageRecords
             .OrderByDescending(t => t.LastUsedOn)
             .Take(sizeLimit > 0 ? sizeLimit : 10)
-            .ToListAsync().ConfigureAwait(false);
+            .ToListAsync().ConfigureAwait(true);
 
     /// <inheritdoc />
     public async Task<TemplateUsage?> GetTemplateUsageAsync(string location)
@@ -72,7 +72,7 @@ public class TemplateUsageService(PersistentState context, IMemoryCache cache) :
         }
 
         templateUsage = await context.TemplatesUsageRecords
-            .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
+            .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(true);
 
         if (templateUsage != null)
         {
@@ -85,7 +85,7 @@ public class TemplateUsageService(PersistentState context, IMemoryCache cache) :
     /// <inheritdoc />
     public async Task UpdateTemplateUsageAsync(string location)
     {
-        var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(false);
+        var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(true);
         if (templateUsage != null)
         {
             templateUsage.TimesUsed++;
@@ -104,21 +104,21 @@ public class TemplateUsageService(PersistentState context, IMemoryCache cache) :
             _ = context.TemplatesUsageRecords.Add(templateUsage);
         }
 
-        _ = await context.SaveChangesAsync().ConfigureAwait(false);
+        _ = await context.SaveChangesAsync().ConfigureAwait(true);
         _ = cache.Set(CacheKeyPrefix + location, templateUsage);
     }
 
     /// <inheritdoc />
-    public async Task<bool> HasRecentlyUsedTemplatesAsync() => await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(false);
+    public async Task<bool> HasRecentlyUsedTemplatesAsync() => await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(true);
 
     /// <inheritdoc />
     public async Task DeleteTemplateUsageAsync(string location)
     {
-        var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(false);
+        var templateUsage = await this.GetTemplateUsageAsync(location).ConfigureAwait(true);
         if (templateUsage != null)
         {
             _ = context.TemplatesUsageRecords.Remove(templateUsage);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync().ConfigureAwait(true);
             cache.Remove(CacheKeyPrefix + location);
         }
     }

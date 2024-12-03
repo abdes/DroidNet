@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public partial class App
     private readonly IRouter router;
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
+    private readonly HostingContext hostingContext;
     private readonly IActivationService activationService;
 
     /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
@@ -37,12 +39,15 @@ public partial class App
     /// resource after the application is <see cref="OnLaunched">launched</see>.
     /// </remarks>
     public App(
+        HostingContext hostingContext,
         IActivationService activationService,
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter)
     {
+        // Create the DispatcherScheduler for the UI thread
+        this.hostingContext = hostingContext;
         this.activationService = activationService;
         this.lifetime = lifetime;
         this.router = router;
@@ -54,6 +59,10 @@ public partial class App
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         base.OnLaunched(args);
+#if DEBUG
+        this.DebugSettings.BindingFailed += (_, args) => System.Diagnostics.Debug.WriteLine(args.Message);
+        this.DebugSettings.XamlResourceReferenceFailed += (_, args) => System.Diagnostics.Debug.WriteLine(args.Message);
+#endif
 
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
 
@@ -64,13 +73,14 @@ public partial class App
         _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
         _ = this.activationService
-            .Where(data => data is LaunchActivatedEventArgs)
-            .Select(data => data as LaunchActivatedEventArgs)
-            .Select(_ => Observable.FromAsync(async () =>
-            {
-                Debug.WriteLine("Launch activation ==> navigate to project browser");
-                await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(false);
-            }))
+            .ObserveOn(this.hostingContext.DispatcherScheduler)
+            .OfType<LaunchActivatedEventArgs>()
+            .Select(
+                _ => Observable.FromAsync(async () =>
+                {
+                    Debug.WriteLine("Launch activation ==> navigate to project browser");
+                    await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
+                }))
             .Concat()
             .Subscribe();
 

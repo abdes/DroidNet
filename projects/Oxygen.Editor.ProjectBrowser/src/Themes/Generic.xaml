@@ -4,6 +4,7 @@
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectBrowser/Controls/KnownLocationsListView.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectBrowser/Controls/TemplatesGridView.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

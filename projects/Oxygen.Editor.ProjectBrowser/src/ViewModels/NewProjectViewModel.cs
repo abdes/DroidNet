@@ -6,7 +6,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Collections;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -32,9 +31,10 @@ public partial class NewProjectViewModel(
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
 
+    private bool preloaded;
+
     [ObservableProperty]
     private ITemplateInfo? selectedItem;
-    private bool preloaded;
 
     /// <summary>
     /// Gets the collection of project templates.
@@ -87,24 +87,9 @@ public partial class NewProjectViewModel(
         this.Templates.Clear();
         await foreach (var template in templateService.GetLocalTemplatesAsync().ConfigureAwait(true))
         {
-            this.Templates.InsertInPlace(
-                template,
-                x => x.LastUsedOn!,
-                new DateTimeComparerDescending());
-        }
-
-        if (this.Templates.Count > 0)
-        {
-            this.SelectedItem = this.Templates[0];
+            this.Templates.Add(template);
         }
     }
-
-    /// <summary>
-    /// Selects the specified template item.
-    /// </summary>
-    /// <param name="item">The template item to select.</param>
-    [RelayCommand]
-    private void SelectItem(ITemplateInfo item) => this.SelectedItem = item;
 
     [LoggerMessage(
         SkipEnabledCheck = true,

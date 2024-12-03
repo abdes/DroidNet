@@ -36,9 +36,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     {
         try
         {
-            var projectFolder = await storage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(false);
-            var projectFile = await projectFolder.GetDocumentAsync(Constants.ProjectFileName).ConfigureAwait(false);
-            var json = await projectFile.ReadAllTextAsync().ConfigureAwait(false);
+            var projectFolder = await storage.GetFolderFromPathAsync(projectFolderPath).ConfigureAwait(true);
+            var projectFile = await projectFolder.GetDocumentAsync(Constants.ProjectFileName).ConfigureAwait(true);
+            var json = await projectFile.ReadAllTextAsync().ConfigureAwait(true);
             var projectInfo = ProjectInfo.FromJson(json);
             if (projectInfo != null)
             {
@@ -65,7 +65,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var json = ProjectInfo.ToJson(projectInfo);
 
             var documentPath = storage.NormalizeRelativeTo(projectInfo.Location, Constants.ProjectFileName);
-            var document = await storage.GetDocumentFromPathAsync(documentPath).ConfigureAwait(false);
+            var document = await storage.GetDocumentFromPathAsync(documentPath).ConfigureAwait(true);
 
             await document.WriteAllTextAsync(json).ConfigureAwait(true);
             return true;
@@ -93,7 +93,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         try
         {
-            await this.LoadProjectScenesAsync(project).ConfigureAwait(false);
+            await this.LoadProjectScenesAsync(project).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -108,7 +108,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     /// <inheritdoc/>
     public async Task<bool> LoadSceneAsync(Scene scene)
     {
-        var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(false);
+        var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(true);
         if (loadedScene is null)
         {
             return false;
@@ -127,9 +127,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     {
         Debug.Assert(project.ProjectInfo.Location is not null, "should not load scenes for an invalid project");
 
-        var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location).ConfigureAwait(false);
-        var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
-        if (!await scenesFolder.ExistsAsync().ConfigureAwait(false))
+        var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location).ConfigureAwait(true);
+        var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
+        if (!await scenesFolder.ExistsAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -137,7 +137,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         var scenes = scenesFolder.GetDocumentsAsync()
             .Where(d => d.Name.EndsWith(Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase));
         project.Scenes.Clear();
-        await foreach (var item in scenes.ConfigureAwait(false))
+        await foreach (var item in scenes.ConfigureAwait(true))
         {
             var sceneName = item.Name[..item.Name.LastIndexOf('.')];
             var scene = new Scene(project) { Name = sceneName };
@@ -153,18 +153,18 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         try
         {
             var projectFolder = await storage.GetFolderFromPathAsync(project.ProjectInfo.Location!)
-                .ConfigureAwait(false);
-            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(false);
+                .ConfigureAwait(true);
+            var scenesFolder = await projectFolder.GetFolderAsync(Constants.ScenesFolderName).ConfigureAwait(true);
             var sceneFile = await scenesFolder.GetDocumentAsync(sceneName + Constants.SceneFileExtension)
-                .ConfigureAwait(false);
-            if (!await sceneFile.ExistsAsync().ConfigureAwait(false))
+                .ConfigureAwait(true);
+            if (!await sceneFile.ExistsAsync().ConfigureAwait(true))
             {
                 this.CouldNotLoadScene(sceneFile.Location, "file does not exist");
                 return null;
             }
 
             // TODO: parsing json from UTF-8 ReadOnlySpan<Byte> is more efficient
-            var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(false);
+            var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(true);
             var loadedScene = Scene.FromJson(json, project);
             if (loadedScene is null)
             {
