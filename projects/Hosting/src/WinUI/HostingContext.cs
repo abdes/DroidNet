@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Concurrency;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -19,18 +20,17 @@ namespace DroidNet.Hosting.WinUI;
 public class HostingContext(bool lifeTimeLinked = true) : BaseHostingContext(lifeTimeLinked)
 {
     /// <summary>
-    /// Gets or sets the WinUI dispatcher queue.
+    /// Gets or sets the WinUI dispatcher queue, used to manage the execution of work items on the UI thread.
     /// </summary>
-    /// <value>
-    /// The dispatcher queue used to manage the execution of work items on the UI thread.
-    /// </value>
     public required DispatcherQueue Dispatcher { get; set; }
 
     /// <summary>
     /// Gets or sets the WinUI Application instance.
     /// </summary>
-    /// <value>
-    /// The instance of the WinUI <see cref="Application" /> that represents the running application.
-    /// </value>
     public required Application Application { get; set; }
+
+    /// <summary>
+    /// Gets or sets the scheduler associated with the WinUI dispatcher queue.
+    /// </summary>
+    public required DispatcherQueueScheduler DispatcherScheduler { get; set; }
 }
