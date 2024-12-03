@@ -67,6 +67,7 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
                 this.OnCompletion();
             })
         {
+            Name = "User Interface Thread",
             IsBackground = true,
         };
 

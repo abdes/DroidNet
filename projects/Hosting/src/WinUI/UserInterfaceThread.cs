@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Reactive.Concurrency;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -65,7 +66,11 @@ public partial class UserInterfaceThread(
     protected override void DoStart() => Application.Start(
         _ =>
         {
+            // Setup the HostingContext with the UI dispatcher queue, a
+            // scheduler that can be used to observe observables on the UI
+            // thread, and the application instance
             this.HostingContext.Dispatcher = DispatcherQueue.GetForCurrentThread();
+            this.HostingContext.DispatcherScheduler = DispatcherQueueScheduler.Current;
             this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
 
             DispatcherQueueSynchronizationContext synchronizationContext = new(this.HostingContext.Dispatcher);

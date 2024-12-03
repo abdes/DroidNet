@@ -55,8 +55,14 @@ public static class WinUiHostingExtensions
     public static void ConfigureWinUI<TApplication>(this IServiceCollection services, bool isLifetimeLinked)
         where TApplication : Application
     {
-        // The HostingContext will have a valid Application and Dispatcher once the UIThread is started.
-        var hostingContext = new HostingContext { IsLifetimeLinked = isLifetimeLinked, Application = null!, Dispatcher = null! };
+        // The HostingContext will have a valid Application, a Dispatcher and its Scheduler, once the UIThread is started.
+        var hostingContext = new HostingContext
+        {
+            IsLifetimeLinked = isLifetimeLinked,
+            Application = null!,
+            Dispatcher = null!,
+            DispatcherScheduler = null!,
+        };
 
         _ = services
             .AddSingleton(hostingContext)

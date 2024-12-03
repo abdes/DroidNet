@@ -41,16 +41,12 @@ namespace DroidNet.Hosting.WinUI;
 /// The <see cref="HostingContext" /> instance.
 /// </param>
 public partial class UserInterfaceHostedService(
-    ILoggerFactory? loggerFactory,
+    HostingContext context,
     IUserInterfaceThread uiThread,
-    HostingContext context) : IHostedService
+    ILoggerFactory? loggerFactory = null) : IHostedService
 {
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Performance",
-        "CA1823:Avoid unused private fields",
-        Justification = "used in generated code for the logging methods")]
-    private readonly ILogger logger = loggerFactory?.CreateLogger<UserInterfaceHostedService>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<UserInterfaceHostedService>();
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
+    private readonly ILogger logger = loggerFactory?.CreateLogger<UserInterfaceHostedService>() ?? NullLoggerFactory.Instance.CreateLogger<UserInterfaceHostedService>();
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
