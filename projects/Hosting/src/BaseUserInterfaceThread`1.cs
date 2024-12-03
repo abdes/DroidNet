@@ -64,6 +64,7 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
                 _ = this.serviceManualResetEvent.WaitOne(); // wait for the signal to actually start
                 this.HostingContext.IsRunning = true;
                 this.DoStart();
+                this.LogUserInterfaceThreadCompleted();
                 this.OnCompletion();
             })
         {
@@ -154,6 +155,11 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
     protected abstract void DoStart();
 
     /// <summary>
+    /// Immediately requests the User Interface thread to stop.
+    /// </summary>
+    protected abstract void StopUserInterface();
+
+    /// <summary>
     /// Called upon completion of the UI thread (i.e. no more UI). Will eventually request the
     /// hosted application to stop depending on whether the UI lifecycle and the application
     /// lifecycle are linked or not.
@@ -161,13 +167,14 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
     /// <seealso cref="BaseHostingContext.IsLifetimeLinked" />
     private void OnCompletion()
     {
-        Debug.Assert(
-            this.HostingContext.IsRunning,
-            "Expecting the `IsRunning` flag to be set when `OnCompletion()` is called");
-        this.HostingContext.IsRunning = false;
+        Debug.Assert(this.HostingContext.IsRunning, "Expecting the `IsRunning` flag to be set when `OnCompletion()` is called");
+
+        this.StopUserInterface();
+        _ = this.uiThreadCompletion.Set();
+
         if (this.HostingContext.IsLifetimeLinked)
         {
-            this.StoppingHostApplication();
+            this.LogStoppingHostApplication();
 
             if (!this.hostApplicationLifetime.ApplicationStopped.IsCancellationRequested &&
                 !this.hostApplicationLifetime.ApplicationStopping.IsCancellationRequested)
@@ -175,13 +182,17 @@ public abstract partial class BaseUserInterfaceThread<T> : IDisposable, IUserInt
                 this.hostApplicationLifetime.StopApplication();
             }
         }
-
-        _ = this.uiThreadCompletion.Set();
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "User interface thread completed.")]
+    private partial void LogUserInterfaceThreadCompleted();
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Stopping hosted application due to user interface thread exit.")]
-    partial void StoppingHostApplication();
+        Message = "Requesting application shutdown due to user interface completion and linked lifetimes...")]
+    private partial void LogStoppingHostApplication();
 }

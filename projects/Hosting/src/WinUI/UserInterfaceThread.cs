@@ -45,15 +45,18 @@ public partial class UserInterfaceThread(
     /// <inheritdoc />
     public override Task StopUserInterfaceAsync()
     {
-        Debug.Assert(
-            this.HostingContext.Application is not null,
-            "Expecting the `Application` in the context to not be null.");
+        Debug.Assert(this.HostingContext.Application is not null, "Expecting the `Application` in the context to not be null.");
+
+        if (!this.HostingContext.IsRunning)
+        {
+            return Task.CompletedTask;
+        }
 
         TaskCompletionSource completion = new();
         _ = this.HostingContext.Dispatcher!.TryEnqueue(
             () =>
             {
-                this.HostingContext.Application?.Exit();
+                this.StopUserInterface();
                 completion.SetResult();
             });
         return completion.Task;
@@ -63,26 +66,31 @@ public partial class UserInterfaceThread(
     protected override void BeforeStart() => ComWrappersSupport.InitializeComWrappers();
 
     /// <inheritdoc />
-    protected override void DoStart() => Application.Start(
-        _ =>
-        {
-            // Setup the HostingContext with the UI dispatcher queue, a
-            // scheduler that can be used to observe observables on the UI
-            // thread, and the application instance
-            this.HostingContext.Dispatcher = DispatcherQueue.GetForCurrentThread();
-            this.HostingContext.DispatcherScheduler = DispatcherQueueScheduler.Current;
-            this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
+    protected override void DoStart() => Application.Start(_ =>
+    {
+        // Setup the HostingContext with the UI dispatcher queue, a scheduler that can be used
+        // to observe observables on the UI thread, and the application instance
+        this.HostingContext.Dispatcher = DispatcherQueue.GetForCurrentThread();
+        this.HostingContext.DispatcherScheduler = DispatcherQueueScheduler.Current;
+        this.HostingContext.Application = serviceProvider.GetRequiredService<Application>();
 
-            DispatcherQueueSynchronizationContext synchronizationContext = new(this.HostingContext.Dispatcher);
-            SynchronizationContext.SetSynchronizationContext(synchronizationContext);
+        DispatcherQueueSynchronizationContext synchronizationContext = new(this.HostingContext.Dispatcher);
+        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
 
-            /*
-             * Here we can add code that initializes the UI before the main window is created and activated For example:
-             * unhandled exception handlers, maybe instancing, activation, etc...
-             */
+        /*
+         * Here we can add code that initializes the UI before the main window is created and activated For example:
+         * unhandled exception handlers, maybe instancing, activation, etc...
+         */
 
-            // NOTE: First window creation is to be handled in Application.OnLaunched()
-        });
+        // NOTE: First window creation is to be handled in Application.OnLaunched()
+    });
+
+    /// <inheritdoc/>
+    protected override void StopUserInterface()
+    {
+        this.HostingContext.Application?.Exit();
+        this.HostingContext.IsRunning = false;
+    }
 
     private static ILogger MakeNullLogger() => NullLoggerFactory.Instance.CreateLogger<UserInterfaceThread>();
 }

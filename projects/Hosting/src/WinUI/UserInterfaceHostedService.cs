@@ -69,13 +69,13 @@ public partial class UserInterfaceHostedService(
             return Task.CompletedTask;
         }
 
-        this.StoppingUserInterfaceThread();
+        this.LogStoppingUserInterfaceThread();
         return uiThread.StopUserInterfaceAsync();
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Information,
         Message = "Stopping user interface thread due to application exiting.")]
-    partial void StoppingUserInterfaceThread();
+    partial void LogStoppingUserInterfaceThread();
 }
