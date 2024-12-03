@@ -138,7 +138,7 @@ public sealed partial class Router : IRouter, IDisposable
             this.eventSource.OnNext(new ActivationStarted(options, currentState));
 
             // TODO: Activate only the new routes
-            var success = await this.routeActivator.ActivateRoutesRecursiveAsync(activeRoute.Root, currentContext).ConfigureAwait(false);
+            var success = await this.routeActivator.ActivateRoutesRecursiveAsync(activeRoute.Root, currentContext).ConfigureAwait(true);
             this.contextProvider.ActivateContext(currentContext);
 
             this.eventSource.OnNext(new ActivationComplete(options, currentContext));
