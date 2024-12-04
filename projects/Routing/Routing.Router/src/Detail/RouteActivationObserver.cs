@@ -89,8 +89,9 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
     /// after activation is performed, such as updating the state of the route or notifying other
     /// components of the activation.
     /// <para>
-    /// If the view model implements <see cref="IRoutingAware"/>, its <see cref="IRoutingAware.OnNavigatedToAsync(IActiveRoute)"/>
-    /// method is invoked called, providing the view model with the data inside the active route, including the route's parameters.
+    /// If the view model implements <see cref="IRoutingAware"/>, its <see cref="IRoutingAware.OnNavigatedToAsync(IActiveRoute, INavigationContext)"/>
+    /// method is invoked, providing the view model with the data inside the active route, including
+    /// the route's parameters, and the navigation context.
     /// </para>
     /// </remarks>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
@@ -100,7 +101,10 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
 
         if (route.ViewModel is IRoutingAware routingAware)
         {
-            await routingAware.OnNavigatedToAsync(route).ConfigureAwait(true);
+            // Provide the activated route as well as the context to the view model, so that the
+            // view model does not have to listen for router events, to get access to the context,
+            // if it does not need to.
+            await routingAware.OnNavigatedToAsync(route, context).ConfigureAwait(true);
         }
 
         if (route is ActiveRoute routeImpl)

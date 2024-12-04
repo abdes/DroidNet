@@ -64,7 +64,7 @@ public partial class RoutedNavigationViewModel(IRouter router) : ObservableObjec
     public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
     /// <inheritdoc/>
-    public Task OnNavigatedToAsync(IActiveRoute route)
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
         return Task.CompletedTask;

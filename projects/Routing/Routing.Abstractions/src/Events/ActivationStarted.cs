@@ -13,14 +13,19 @@ namespace DroidNet.Routing.Events;
 /// activated.
 /// </remarks>
 /// <param name="options">The navigation options used during activation.</param>
-/// <param name="state">The router state containing the routes that will be activated.</param>
-public class ActivationStarted(NavigationOptions options, IRouterState state) : NavigationEvent(options)
+/// <param name="context">The navigation context containing the activated routes.</param>
+public class ActivationStarted(NavigationOptions options, INavigationContext context) : NavigationEvent(options)
 {
-    /// <summary>
-    /// Gets the router state containing the routes that will be activated.
+    /// <summary> Gets the navigation context.
+    /// Can be used to obtain the current <see cref="INavigationContext.State">router state</see>
+    /// and the <see cref="INavigationContext.NavigationTarget">navigation target</see>.
     /// </summary>
-    public IRouterState RouterState { get; } = state;
+    /// <remarks>
+    /// When this event is fired, the <see cref="INavigationContext.State"/> property is guaranteed
+    /// not to be null.
+    /// </remarks>
+    public INavigationContext Context { get; } = context;
 
     /// <inheritdoc />
-    public override string ToString() => $"Routes activation started -> {this.RouterState.RootNode}";
+    public override string ToString() => $"Routes activation started -> {this.Context.State?.RootNode}";
 }

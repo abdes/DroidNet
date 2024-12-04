@@ -20,6 +20,10 @@ public class ActivationComplete(NavigationOptions options, INavigationContext co
     /// Can be used to obtain the current <see cref="INavigationContext.State">router state</see>
     /// and the <see cref="INavigationContext.NavigationTarget">navigation target</see>.
     /// </summary>
+    /// <remarks>
+    /// When this event is fired, the <see cref="INavigationContext.State"/> property is guaranteed
+    /// not to be null.
+    /// </remarks>
     public INavigationContext Context { get; } = context;
 
     /// <inheritdoc />
