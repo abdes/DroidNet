@@ -31,6 +31,16 @@ public sealed partial class DockPanel
             typeof(DockableTabsBar),
             new PropertyMetadata(defaultValue: null));
 
+    /// <summary>
+    /// Identifies the <see cref="VmToViewConverter"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty VmToViewConverterProperty =
+        DependencyProperty.Register(
+            nameof(VmToViewConverter),
+            typeof(IValueConverter),
+            typeof(DockPanel),
+            new PropertyMetadata(defaultValue: null, OnVmToViewConverterChange));
+
     private const double ResizeThrottleInMs = 50.0;
 
     private readonly PointerEventHandler pointerEnterEventHandler;
@@ -81,8 +91,41 @@ public sealed partial class DockPanel
         set => this.SetValue(IconConverterProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the converter used to get an icon for the dockable entity.
+    /// </summary>
+    /// <remarks>
+    /// Setting this property on a DockPanel is particularly important when the docking workspace uses
+    /// a child IoC container, in which the view models and views are registered. The global converter
+    /// in this situation will not be able to resolve view models to views correctly.
+    /// <para>
+    /// When a value is set, it is also set as a resource in the control's resources dictionary with
+    /// the key "VmToViewConverter". If the value set is <see langword="null"/>, the resource falls
+    /// back to the Application resource with the same key.
+    /// </para>
+    /// </remarks>
+    public IValueConverter VmToViewConverter
+    {
+        get => (IValueConverter)this.GetValue(VmToViewConverterProperty);
+        set => this.SetValue(VmToViewConverterProperty, value);
+    }
+
     /// <inheritdoc/>
     public override string ToString() => $"{nameof(DockPanel)} [{this.ViewModel?.Title ?? string.Empty}]";
+
+    private static void OnVmToViewConverterChange(DependencyObject d, DependencyPropertyChangedEventArgs args)
+    {
+        if (d is not DockPanel dockPanel)
+        {
+            return;
+        }
+
+        var converter = args.NewValue as IValueConverter ?? Application.Current.Resources["VmToViewConverter"];
+        if (converter is not null)
+        {
+            dockPanel.Resources["VmToViewConverter"] = converter;
+        }
+    }
 
     private void OnLoaded(object o, RoutedEventArgs routedEventArgs)
     {
@@ -256,18 +299,17 @@ public sealed partial class DockPanel
                 this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.With));
                 break;
 
+            // ReSharper disable once RedundantEmptySwitchSection
             default:
                 /* Do nothing */
                 break;
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Style",
-        "IDE0010:Add missing cases",
-        Justification = "We're only interested in the keys we manage")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "We're only interested in the keys we manage")]
     private void HandleRootDockingAccelerator(KeyboardAccelerator accelerator)
     {
+        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (accelerator.Key)
         {
             case VirtualKey.Escape:
@@ -290,6 +332,7 @@ public sealed partial class DockPanel
                 this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Right));
                 break;
 
+            // ReSharper disable once RedundantEmptySwitchSection
             default:
                 /* Do nothing */
                 break;
