@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Debugger.UI.TreeView;
@@ -34,10 +35,11 @@ public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
     {
         this.routerEventsSub = router.Events
         .OfType<ActivationStarted>()
-        .Select(e => e.RouterState)
+        .Select(e => e.Context.State)
         .Subscribe(
             state =>
             {
+                Debug.Assert(state is not null, "router state guanrateed not to be null when ActivationStarted event is fired");
                 if (string.Equals(state.Url, this.url, StringComparison.OrdinalIgnoreCase))
                 {
                     return;

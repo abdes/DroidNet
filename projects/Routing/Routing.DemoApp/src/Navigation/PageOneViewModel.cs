@@ -15,7 +15,7 @@ public partial class PageOneViewModel(IRouter router) : IRoutingAware
     private IActiveRoute? activeRoute;
 
     /// <inheritdoc/>
-    public Task OnNavigatedToAsync(IActiveRoute route)
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
         return Task.CompletedTask;

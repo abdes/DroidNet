@@ -32,7 +32,7 @@ public interface IRouterState
     /// to reconstruct the same view model hierarchy in a new navigation context or to restore
     /// the application state during history navigation.
     /// </remarks>
-    string Url { get; }
+    public string Url { get; }
 
     /// <summary>
     /// Gets the root of the active route tree.
@@ -42,7 +42,7 @@ public interface IRouterState
     /// corresponding to a view model in the application. This tree structure mirrors the
     /// nesting of views in the user interface.
     /// </remarks>
-    IActiveRoute RootNode { get; }
+    public IActiveRoute RootNode { get; }
 
     /// <summary>
     /// Gets the parsed representation of the navigation URL.
@@ -52,5 +52,5 @@ public interface IRouterState
     /// segments and parameters that can be matched against route configurations. It serves as
     /// the bridge between the string URL and the route hierarchy.
     /// </remarks>
-    IUrlTree UrlTree { get; }
+    public IUrlTree UrlTree { get; }
 }

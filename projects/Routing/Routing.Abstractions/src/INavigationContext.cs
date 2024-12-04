@@ -23,7 +23,7 @@ public interface INavigationContext
     /// Can be a special value (<see cref="Target.Main"/>, <see cref="Target.Self"/>)
     /// or a key registered with the IoC container (e.g., for specific <c>Window</c> instances).
     /// </remarks>
-    Target NavigationTargetKey { get; }
+    public Target NavigationTargetKey { get; }
 
     /// <summary>
     /// Gets an opaque reference to the actual navigation target.
@@ -33,7 +33,7 @@ public interface INavigationContext
     /// The <c>Window</c>'s lifecycle (creation, activation, closing) affects the context's lifecycle
     /// through the context provider.
     /// </remarks>
-    object NavigationTarget { get; }
+    public object NavigationTarget { get; }
 
     /// <summary>
     /// Gets the <see cref="IRouterState">router state</see> for this navigation context.
@@ -42,5 +42,5 @@ public interface INavigationContext
     /// Contains the current tree of active routes and their view models within this
     /// navigation target (e.g., within a specific <c>Window</c>).
     /// </remarks>
-    IRouterState? State { get; }
+    public IRouterState? State { get; }
 }

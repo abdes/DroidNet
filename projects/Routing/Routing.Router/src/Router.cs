@@ -135,7 +135,7 @@ public sealed partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new RoutesRecognized(currentState.UrlTree));
 
-            this.eventSource.OnNext(new ActivationStarted(options, currentState));
+            this.eventSource.OnNext(new ActivationStarted(options, currentContext));
 
             // TODO: Activate only the new routes
             var success = await this.routeActivator.ActivateRoutesRecursiveAsync(activeRoute.Root, currentContext).ConfigureAwait(true);
@@ -446,7 +446,7 @@ public sealed partial class Router : IRouter, IDisposable
             // TODO: eventually optimize reuse of previously activated routes in the router state
             OptimizeRouteActivation(context);
 
-            this.eventSource.OnNext(new ActivationStarted(options, context.State));
+            this.eventSource.OnNext(new ActivationStarted(options, context));
 
             // Activate routes in the router state that still need activation after the optimization.
             context.RouteActivationObserver = this.routeActivationObserver;
