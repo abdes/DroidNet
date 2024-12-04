@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ViewModels;
-
 using DroidNet.Controls.OutputLog;
+
+namespace Oxygen.Editor.WorldEditor.ViewModels;
 
 public class LogsViewModel(DelegatingSink<RichTextBlockSink> outputLogSink)
 {

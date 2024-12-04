@@ -42,7 +42,7 @@ public partial class NewProjectViewModel(
     public ObservableCollection<ITemplateInfo> Templates { get; } = [];
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route) => await this.PreloadTemplatesAsync().ConfigureAwait(true);
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => await this.PreloadTemplatesAsync().ConfigureAwait(true);
 
     /// <summary>
     /// Creates a new project from the specified template.

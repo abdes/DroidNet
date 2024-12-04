@@ -33,10 +33,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
-using Oxygen.Editor.WorldEditor.ViewModels;
-using Oxygen.Editor.WorldEditor.Views;
+using Oxygen.Editor.WorldEditor.Workspace;
 using Serilog;
 
 namespace Oxygen.Editor;
@@ -302,15 +299,5 @@ public static partial class Program
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);
         container.Register<WorkspaceView>(Reuse.Transient);
-        container.Register<SceneDetailsView>(Reuse.Transient);
-        container.Register<SceneDetailsViewModel>(Reuse.Transient);
-        container.Register<RendererView>(Reuse.Transient);
-        container.Register<RendererViewModel>(Reuse.Transient);
-        container.Register<LogsView>(Reuse.Transient);
-        container.Register<LogsViewModel>(Reuse.Transient);
-        container.Register<ProjectExplorerView>(Reuse.Transient);
-        container.Register<ProjectExplorerViewModel>(Reuse.Transient);
-        container.Register<ContentBrowserView>(Reuse.Transient);
-        container.Register<ContentBrowserViewModel>(Reuse.Transient);
     }
 }

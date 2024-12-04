@@ -7,7 +7,6 @@
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Loaded="OnLoaded"
     mc:Ignorable="d">
 
     <UserControl.Resources>

@@ -5,23 +5,22 @@
 using System.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
-using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.WorldEditor.Routing;
 
 /// <summary>
 /// The implementation of <see cref="IContextProvider" /> for the dedicated router used inside the content browser.
 /// </summary>
-internal sealed partial class RouterContextProvider : IContextProvider<NavigationContext>, IDisposable
+internal sealed partial class LocalRouterContextProvider : IContextProvider<NavigationContext>, IDisposable
 {
     private readonly ILocalRouterContext theContext;
     private bool disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="RouterContextProvider"/> class.
+    /// Initializes a new instance of the <see cref="LocalRouterContextProvider"/> class.
     /// </summary>
     /// <param name="context"></param>
-    public RouterContextProvider(ILocalRouterContext context)
+    public LocalRouterContextProvider(ILocalRouterContext context)
     {
         if (context is not INotifyPropertyChanged contextNotify)
         {
@@ -32,7 +31,7 @@ internal sealed partial class RouterContextProvider : IContextProvider<Navigatio
         contextNotify.PropertyChanged += (sender, args)
             =>
         {
-            if (args.PropertyName!.Equals(nameof(ILocalRouterContext.Router), StringComparison.Ordinal))
+            if (args.PropertyName!.Equals(nameof(ILocalRouterContext.LocalRouter), StringComparison.Ordinal))
             {
                 this.ContextCreated?.Invoke(this, new ContextEventArgs(this.theContext));
             }

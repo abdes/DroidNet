@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
-
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
+namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /*
  Pathless casting
  ----------------
@@ -46,13 +45,5 @@ public static class ThumbnailGenerator
         return bitmap;
     }
 
-    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
-    {
-        if (adapter is GameEntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1'))
-        {
-            return Symbol.Home;
-        }
-
-        return Symbol.Admin;
-    }
+    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter) => adapter is GameEntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1') ? Symbol.Home : Symbol.Admin;
 }

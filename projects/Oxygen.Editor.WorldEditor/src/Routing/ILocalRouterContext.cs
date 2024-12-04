@@ -2,15 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
-
 using DroidNet.Routing;
+
+namespace Oxygen.Editor.WorldEditor.Routing;
 
 public interface ILocalRouterContext : INavigationContext
 {
-    public ContentBrowserViewModel RootViewModel { get; }
+    public object RootViewModel { get; }
 
-    public IRouter Router { get; }
+    public IRouter LocalRouter { get; }
 
-    public IRouter GlobalRouter { get; }
+    public IRouter ParentRouter { get; }
 }

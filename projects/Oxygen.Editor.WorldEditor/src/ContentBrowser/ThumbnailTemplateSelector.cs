@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// A <see cref="DataTemplateSelector" /> that can map a <see cref="FolderTreeItemAdapter" /> to a template that can be used to
@@ -17,6 +17,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? DefaultTemplate { get; set; }
 
+    /// <inheritdoc/>
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
         => this.DefaultTemplate;
 }

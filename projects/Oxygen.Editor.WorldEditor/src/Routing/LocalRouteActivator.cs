@@ -2,15 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-
 using System.Diagnostics;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.WorldEditor.Routing;
+
 /// <summary>
 /// Implements the <see cref="IRouteActivator" /> interface for activating routes inside the internal router used by the Content
 /// Browser module.
@@ -18,7 +17,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
-internal sealed partial class InternalRouteActivator(ILoggerFactory? loggerFactory)
+internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
     : AbstractRouteActivator(loggerFactory)
 {
     /// <inheritdoc/>
