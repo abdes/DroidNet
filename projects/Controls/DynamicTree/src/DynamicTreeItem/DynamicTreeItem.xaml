@@ -3,7 +3,6 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:local="using:DroidNet.Controls">
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
@@ -58,7 +57,7 @@
                                 Height="{StaticResource CellContentHeight}"
                                 Margin="{StaticResource DynamicTreeColumnMargin}"
                                 BorderThickness="0">
-                                <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue=Visibility.Collapsed}" />
+                                <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='Collapsed'}" />
                             </Border>
                             <Viewbox
                                 Grid.Column="1"
