@@ -100,7 +100,7 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     }
 
     /// <inheritdoc/>
-    public Task OnNavigatedToAsync(IActiveRoute route)
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
         return Task.CompletedTask;
