@@ -2,13 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
-
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Projects;
+
+namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
 /// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which
@@ -18,22 +17,12 @@ using Oxygen.Editor.Projects;
 [ViewModel(typeof(ProjectExplorerViewModel))]
 public sealed partial class ProjectExplorerView
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectExplorerView"/> class.
+    /// </summary>
     public ProjectExplorerView()
     {
         this.InitializeComponent();
-
-        this.Loaded += this.OnLoaded;
-    }
-
-    private async void OnLoaded(object sender, RoutedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        if (this.ViewModel is not null)
-        {
-            await this.ViewModel.LoadProjectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        }
     }
 
     private void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)

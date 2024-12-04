@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Views;
-
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
+namespace Oxygen.Editor.WorldEditor.Views;
+
 [ViewModel(typeof(RendererViewModel))]
 public sealed partial class RendererView : UserControl
 {
-    public RendererView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RendererView"/> class.
+    /// </summary>
+    public RendererView()
+    {
+        this.InitializeComponent();
+    }
 }

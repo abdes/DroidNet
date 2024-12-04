@@ -18,7 +18,6 @@
       <None Remove="Views\ProjectExplorerView.xaml" />
       <None Remove="Views\RendererView.xaml" />
       <None Remove="Views\SceneDetailsView.xaml" />
-      <None Remove="Views\WorkspaceView.xaml" />
     </ItemGroup>
 
     <ItemGroup>
@@ -32,21 +31,22 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
 
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />

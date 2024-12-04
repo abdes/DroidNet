@@ -2,21 +2,27 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.WorldEditor.ContentBrowser.Routing;
+using Oxygen.Editor.WorldEditor.Routing;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     private readonly ILogger logger;
     private readonly ILocalRouterContext routerContext;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
+    /// </summary>
+    /// <param name="projectManager"></param>
+    /// <param name="routerContext"></param>
+    /// <param name="loggerFactory"></param>
     public ProjectLayoutViewModel(
         IProjectManagerService projectManager,
         ILocalRouterContext routerContext,

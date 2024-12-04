@@ -8,6 +8,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
@@ -18,7 +19,7 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// <summary>
 /// The ViewModel for the <see cref="ProjectExplorerView" /> view.
 /// </summary>
-public partial class ProjectExplorerViewModel : DynamicTreeViewModel
+public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAware
 {
     private readonly ILogger<ProjectExplorerViewModel> logger;
     private readonly IProjectManagerService projectManager;
@@ -47,6 +48,9 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     private bool HasUnlockedSelectedItems { get; set; }
+
+    /// <inheritdoc/>
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => this.LoadProjectAsync();
 
     /// <inheritdoc/>
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)

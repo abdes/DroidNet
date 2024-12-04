@@ -97,7 +97,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     private ObservableCollection<IStorageItem> FileList { get; } = [];
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route) => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
 
     /// <summary>
     /// Changes the current folder to the specified path.

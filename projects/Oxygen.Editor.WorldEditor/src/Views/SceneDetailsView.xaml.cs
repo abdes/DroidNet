@@ -2,14 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Views;
-
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
+namespace Oxygen.Editor.WorldEditor.Views;
+
 [ViewModel(typeof(SceneDetailsViewModel))]
 public sealed partial class SceneDetailsView : UserControl
 {
-    public SceneDetailsView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneDetailsView"/> class.
+    /// </summary>
+    public SceneDetailsView()
+    {
+        this.InitializeComponent();
+    }
 }

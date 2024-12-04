@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Controls;
@@ -11,12 +9,22 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Core;
 using Oxygen.Editor.Storage;
 
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+
 public partial class FolderTreeItemAdapter : TreeItemAdapter
 {
     private readonly ILogger logger;
     private readonly Task<IFolder> folderAsync;
     private string label;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FolderTreeItemAdapter"/> class.
+    /// </summary>
+    /// <param name="logger"></param>
+    /// <param name="folderAsync"></param>
+    /// <param name="label"></param>
+    /// <param name="isRoot"></param>
+    /// <param name="isHidden"></param>
     public FolderTreeItemAdapter(
         ILogger logger,
         Task<IFolder> folderAsync,
@@ -32,6 +40,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
 
+    /// <inheritdoc/>
     public override string Label
     {
         get => this.IsRoot ? $"{this.label} (Project Root)" : this.label;
@@ -49,8 +58,10 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
 
     public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
 
+    /// <inheritdoc/>
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
+    /// <inheritdoc/>
     protected override int DoGetChildrenCount()
     {
         Debug.Fail("should never be called");
@@ -62,6 +73,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         return 1;
     }
 
+    /// <inheritdoc/>
     protected override async Task LoadChildren()
     {
         var folder = await this.folderAsync.ConfigureAwait(true);
@@ -87,6 +99,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         }
     }
 
+    /// <inheritdoc/>
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);

@@ -55,7 +55,7 @@ public partial class HomeViewModel(
     public ObservableCollection<IProjectInfo> RecentProjects { get; } = [];
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route)
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.activeRoute = route;
         await this.PreloadRecentTemplatesAsync().ConfigureAwait(true);
