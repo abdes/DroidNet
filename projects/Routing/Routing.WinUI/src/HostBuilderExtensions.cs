@@ -101,16 +101,17 @@ public static class HostBuilderExtensions
         container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         container.Register<ViewModelToView>(Reuse.Singleton);
 
+        container.RegisterInstance<IRoutes>(config);
+
         container.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
         container.Register<IUrlParser, DefaultUrlParser>(Reuse.Singleton);
-        container.RegisterInstance<IRoutes>(config);
+
         container.Register<IRouterStateManager, RouterStateManager>(Reuse.Singleton);
         container.Register<RouterContextManager>(Reuse.Singleton);
-        container.Register<IRouter, Router>(Reuse.Singleton);
-
-        var contextProvider = new WindowContextProvider(container);
-        container.RegisterInstance<IContextProvider>(contextProvider);
-        container.RegisterInstance<IContextProvider<NavigationContext>>(contextProvider);
+        container.Register<IContextProvider<NavigationContext>, WindowContextProvider>(Reuse.Singleton);
+        container.RegisterDelegate<IContextProvider>(r => r.Resolve<IContextProvider<NavigationContext>>());
         container.Register<IRouteActivator, WindowRouteActivator>(Reuse.Singleton);
+
+        container.Register<IRouter, Router>(Reuse.Singleton);
     }
 }
