@@ -57,7 +57,7 @@
                                 Height="{StaticResource CellContentHeight}"
                                 Margin="{StaticResource DynamicTreeColumnMargin}"
                                 BorderThickness="0">
-                                <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='Collapsed'}" />
+                                <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue=False}" />
                             </Border>
                             <Viewbox
                                 Grid.Column="1"
