@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
@@ -35,13 +34,11 @@ internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
         var parent = route.Parent;
         while (parent is not null && parent.ViewModel is null)
         {
-            Debug.WriteLine("Skipping parent with null ViewModel");
             parent = parent.Parent;
         }
 
         var parentViewModel = parent is null ? ((ILocalRouterContext)context).RootViewModel : parent.ViewModel;
-
-        Debug.WriteLine($"Effective parent ViewModel for '{route}' is: {parentViewModel}");
+        LogEffectiveParentViewModel(this.Logger, route, parentViewModel);
 
         if (parentViewModel is IOutletContainer outletContainer)
         {
@@ -53,9 +50,7 @@ internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
                 ? $"I could not find an {nameof(IOutletContainer)} parent for it"
                 : $"the view model of its parent ({parentViewModel}) is not an {nameof(IOutletContainer)}";
             LogContentLoadingError(this.Logger, route.Outlet, because);
-
-            throw new InvalidOperationException(
-                $"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
+            throw new InvalidOperationException($"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
         }
     }
 
@@ -64,4 +59,10 @@ internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
         Level = LogLevel.Error,
         Message = "Cannot load content into {Outlet} {Because}")]
     private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Effective parent for route '{Route}' is {ParentViewModel}")]
+    private static partial void LogEffectiveParentViewModel(ILogger logger, IActiveRoute route, object? parentViewmodel);
 }

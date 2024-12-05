@@ -59,7 +59,7 @@ public sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
 
         // Content for the activated route will be loaded in the navigation context's target for a root route,
         // and in the nearest parent that has ViewModel that is an IOutletContainer for child routes.
-        var contentLoader = route.IsRoot ? context.NavigationTarget : GetNearestContentLoader(route);
+        var contentLoader = route.IsRoot ? context.NavigationTarget : GetNearestContentLoader();
 
         if (contentLoader is IOutletContainer outletContainer)
         {
@@ -67,26 +67,24 @@ public sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
         }
         else
         {
-            var reason = $"the {(route.IsRoot ? "window" : "parent view model")} of type '{contentLoader?.GetType().Name ?? "Unknown"}' does not implement {nameof(IOutletContainer)}.";
-
+            var reason = $"the {(route.IsRoot
+                ? "window"
+                : "parent view model")} of type '{contentLoader?.GetType().Name ?? "Unknown"}' does not implement {nameof(IOutletContainer)}.";
             LogContentLoadingError(this.Logger, route, route.Outlet, reason);
-
-            throw new InvalidOperationException(
-                $"cannot find a suitable {nameof(IOutletContainer)} for route '{route}'; {reason}");
+            throw new InvalidOperationException($"cannot find a suitable {nameof(IOutletContainer)} for route '{route}'; {reason}");
         }
 
-        static object? GetNearestContentLoader(IActiveRoute route)
+        return;
+
+        object? GetNearestContentLoader()
         {
             var parent = route.Parent;
-
             while (parent is not null && parent.ViewModel is null)
             {
-                Debug.WriteLine("Skipping parent with null ViewModel");
                 parent = parent.Parent;
             }
 
-            Debug.WriteLine($"Effective parent for '{route}' is: {parent}");
-
+            LogEffectiveParentViewModel(this.Logger, route, parent?.ViewModel);
             return parent?.ViewModel;
         }
     }
@@ -96,4 +94,10 @@ public sealed partial class WindowRouteActivator(ILoggerFactory? loggerFactory)
         Level = LogLevel.Error,
         Message = "Cannot load content for route '{Route}' into outlet '{Outlet}' because {Because}")]
     private static partial void LogContentLoadingError(ILogger logger, IActiveRoute route, OutletName outlet, string because);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Effective parent for route '{Route}' is {ParentViewModel}")]
+    private static partial void LogEffectiveParentViewModel(ILogger logger, IActiveRoute route, object? parentViewmodel);
 }

@@ -62,7 +62,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
         {
             switch (routerEvent)
             {
-                // At the beginning of each navigation cycle, many changes will happen to ro
+                // At the beginning of each navigation cycle, many changes will happen to the
                 // docker model, but we want to batch them together and handle them at once
                 // after the navigation completes. So we mute the LayoutChanged event from the
                 // docker.
@@ -83,8 +83,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
                     }
                     else
                     {
-                        Debug.WriteLine(
-                            $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
+                        Debug.WriteLine($"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
                     }
 
                     // Layout changes can happen in a burst because a change to one panel can trigger changes in
@@ -210,14 +209,13 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
         {
             // The active dockable will get the dock's anchor, but any other
             // dockables will be anchored 'with' the active dockable.
-            Anchor? anchor;
             if (dockable.IsActive)
             {
                 changed = CheckAndSetAnchor(dock.Anchor, activeParams, nextParams) || changed;
             }
             else
             {
-                anchor = new Anchor(AnchorPosition.With, dock.ActiveDockable);
+                var anchor = new Anchor(AnchorPosition.With, dock.ActiveDockable);
                 changed = CheckAndSetAnchor(anchor, activeParams, nextParams) || changed;
                 anchor.Dispose();
             }
