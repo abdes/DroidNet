@@ -16,22 +16,30 @@ using Oxygen.Editor.WorldEditor.Views;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
+/// <summary>
+/// A custom factory to create views for the docks in the docking workspace.
+/// </summary>
+/// <param name="container">The IoC container to use for resolution of view models and other services.</param>
 internal sealed class DockViewFactory(IResolver container) : IDockViewFactory
 {
     /// <inheritdoc/>
-    public UIElement CreateViewForDock(IDock dock) => dock is CenterDock
-        ? new RendererView()
-        {
-            ViewModel = container.Resolve<RendererViewModel>(),
-        }
-        : new Border()
-        {
-            BorderThickness = new Thickness(0.5),
-            BorderBrush = new SolidColorBrush(Colors.Bisque),
-            Child = new DockPanel()
+    public UIElement CreateViewForDock(IDock dock)
+        => dock is CenterDock
+            ? new RendererView() { ViewModel = container.Resolve<RendererViewModel>(), }
+            : new Border()
             {
-                VmToViewConverter = container.Resolve<ViewModelToView>(),
-                ViewModel = container.Resolve<Func<IDock, DockPanelViewModel>>()(dock),
-            },
-        };
+                BorderThickness = new Thickness(0.5),
+                BorderBrush = new SolidColorBrush(Colors.Bisque),
+                Child = new DockPanel()
+                {
+                    // We explicitly set the VmToViewConverter property of the DockPanel to ensure that
+                    // its view will use our own converter, resolved through the child IoC container of
+                    // the docking workspace.
+                    VmToViewConverter = container.Resolve<ViewModelToView>(),
+
+                    // We manually resolve the DockPanel ViewModel, using a factory function, yo pass
+                    // the specific dock we are docking.
+                    ViewModel = container.Resolve<Func<IDock, DockPanelViewModel>>()(dock),
+                },
+            };
 }

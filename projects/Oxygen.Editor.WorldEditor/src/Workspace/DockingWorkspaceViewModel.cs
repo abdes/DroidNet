@@ -22,103 +22,116 @@ using Oxygen.Editor.WorldEditor.Routing;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
+/// <summary>
+/// Base ViewModel for managing the docking workspace.
+/// </summary>
 public abstract partial class DockingWorkspaceViewModel(
     IContainer container,
     IRouter router,
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware, IOutletContainer, IDisposable
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "logging code is source generated")]
     private readonly ILogger logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
-    private readonly Docker docker = new();
+
+    private readonly IContainer childContainer = container.WithRegistrationsCopy();
     private readonly List<RoutedDockable> deferredDockables = [];
 
+    private CompositeDisposable? localRouterEventsSub;
     private bool disposed;
+
     private CenterDock? centerDock;
-    private IDisposable? localRouterEventsSub;
     private IActiveRoute? activeRoute;
+
+    /// <summary>
+    /// Gets the Docker instance.
+    /// </summary>
+    public IDocker? Docker { get; private set; }
 
     /// <summary>
     /// Gets the layout of the workspace.
     /// </summary>
-    /// <value>
-    /// The layout object that manages the docking workspace.
-    /// </value>
     public DockingWorkspaceLayout? Layout { get; private set; }
 
+    /// <summary>
+    /// Gets the name of the center outlet.
+    /// </summary>
     protected abstract string CenterOutletName { get; }
+
+    /// <summary>
+    /// Gets the ViewModel instance.
+    /// </summary>
+    protected abstract object ThisViewModel { get; }
+
+    /// <summary>
+    /// Gets the routes configuration.
+    /// </summary>
+    protected abstract IRoutes RoutesConfig { get; }
 
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        // Create a scoped child container for resolutions local to this content browser.
-        var childContainer = container.WithRegistrationsCopy();
+        SetupMvvm();
+        SetupLocalRouter(out var localRouter);
+        SetupDocking();
 
-        var context = new LocalRouterContext(navigationContext.NavigationTarget)
-        {
-            ParentRouter = router,
-            RootViewModel = this.ThisViewModel,
-        };
+        this.OnSetupChildContainer(this.childContainer);
 
-        var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
-        childContainer.RegisterInstance<IViewLocator>(viewLocator);
-        childContainer.RegisterInstance(new ViewModelToView(viewLocator));
-        childContainer.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
-        childContainer.Register<DockingWorkspaceLayout>(Reuse.Singleton);
-        childContainer.RegisterInstance<IDocker>(this.docker);
+        this.Docker = this.childContainer.Resolve<IDocker>();
+        this.Layout = this.childContainer.Resolve<DockingWorkspaceLayout>();
 
-        // TODO: Review dispose of all routing classes - inconsitent dispose ownership
-        var localRouterContextProvider = new LocalRouterContextProvider(context);
-        var localRouterContextManager = new RouterContextManager(localRouterContextProvider);
-        IRouter localRouter;
-        try
-        {
-            localRouter = new Router(
-               childContainer,
-               this.RoutesConfig,
-               new RouterStateManager(),
-               localRouterContextManager,
-               new LocalRouteActivator(loggerFactory),
-               localRouterContextProvider,
-               new DefaultUrlSerializer(new DefaultUrlParser()),
-               loggerFactory);
-
-            context.LocalRouter = localRouter;
-
-            localRouterContextManager = null; // Disposal ownership is transferred
-            localRouterContextProvider = null; // Disposal ownership is transferred
-        }
-        finally
-        {
-            localRouterContextManager?.Dispose();
-            localRouterContextProvider?.Dispose();
-        }
-
-        childContainer.RegisterInstance<ILocalRouterContext>(context);
-        childContainer.RegisterInstance(context.LocalRouter);
-
-        this.OnSetupChildContainer(childContainer);
-
-        this.Layout = childContainer.Resolve<DockingWorkspaceLayout>();
         this.localRouterEventsSub = new CompositeDisposable(
             localRouter.Events.OfType<ActivationComplete>()
-                .Subscribe(@event => this.PlaceDocks(@event.Options)),
+                .Subscribe(
+                    @event =>
+                        this.PlaceDocks(@event.Options)),
             localRouter.Events.OfType<ActivationStarted>()
-                .Subscribe(@event =>
-                {
-                    this.activeRoute = @event.Context.State?.RootNode ?? throw new InvalidOperationException("bad local router state");
-                    this.Layout.ActiveRoute = this.activeRoute;
-                }));
+                .Subscribe(
+                    @event =>
+                    {
+                        this.activeRoute = @event.Context.State?.RootNode ?? throw new InvalidOperationException("bad local router state");
+                        this.Layout.ActiveRoute = this.activeRoute;
+                    }));
 
-        await this.OnInitialNavigationAsync(context).ConfigureAwait(true);
+        await this.OnInitialNavigationAsync(this.childContainer.Resolve<ILocalRouterContext>()).ConfigureAwait(true);
+        return;
+
+        void SetupMvvm()
+        {
+            this.childContainer.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+            this.childContainer.Register<ViewModelToView>(Reuse.Singleton);
+        }
+
+        void SetupLocalRouter(out IRouter localRouter1)
+        {
+            this.childContainer.RegisterInstance(this.RoutesConfig);
+            var localRouterContext = new LocalRouterContext(navigationContext.NavigationTarget)
+            {
+                ParentRouter = router,
+                RootViewModel = this.ThisViewModel,
+            };
+            this.childContainer.RegisterInstance<ILocalRouterContext>(localRouterContext);
+            this.childContainer.RegisterInstance<INavigationContext>(localRouterContext);
+            this.childContainer.Register<IRouterStateManager, RouterStateManager>(Reuse.Singleton);
+            this.childContainer.Register<IRouteActivator, LocalRouteActivator>(Reuse.Singleton);
+            this.childContainer.Register<IUrlParser, DefaultUrlParser>(Reuse.Singleton);
+            this.childContainer.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
+            this.childContainer.Register<IContextProvider<NavigationContext>, LocalRouterContextProvider>(Reuse.Singleton);
+            this.childContainer.RegisterDelegate<IContextProvider>(r => r.Resolve<IContextProvider<NavigationContext>>());
+            this.childContainer.Register<RouterContextManager>(Reuse.Singleton);
+            this.childContainer.Register<IRouter, Router>(Reuse.Singleton);
+
+            localRouter1 = this.childContainer.Resolve<IRouter>();
+            localRouterContext.LocalRouter = localRouter1;
+        }
+
+        void SetupDocking()
+        {
+            this.childContainer.Register<IDocker, Docker>(Reuse.Singleton);
+            this.childContainer.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
+            this.childContainer.Register<DockingWorkspaceLayout>(Reuse.Singleton);
+        }
     }
-
-    protected abstract Task OnInitialNavigationAsync(LocalRouterContext context);
-
-    public abstract object ThisViewModel { get; }
-
-    public abstract IRoutes RoutesConfig { get; }
-
-    protected abstract void OnSetupChildContainer(IContainer childContainer);
 
     /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)
@@ -147,7 +160,7 @@ public abstract partial class DockingWorkspaceViewModel(
     }
 
     /// <summary>
-    /// Releases the unmanaged resources used by the <see cref="WorkspaceViewModel"/> and optionally releases
+    /// Releases the unmanaged resources used by the <see cref="DockingWorkspaceViewModel"/> and optionally releases
     /// the managed resources.
     /// </summary>
     /// <param name="disposing">
@@ -163,37 +176,54 @@ public abstract partial class DockingWorkspaceViewModel(
 
         if (disposing)
         {
-            this.Layout?.Dispose();
-            this.docker.Dispose();
+            this.childContainer.Dispose();
             this.localRouterEventsSub?.Dispose();
+
+            // Should be disposed by the Docker, but we do it here in case something
+            // went wrong during setup
+            this.centerDock?.Dispose();
         }
 
         this.disposed = true;
     }
 
+    /// <summary>
+    /// Called during initial navigation to perform any necessary setup.
+    /// </summary>
+    /// <param name="context">The local router context.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    protected abstract Task OnInitialNavigationAsync(ILocalRouterContext context);
+
+    /// <summary>
+    /// Called to set up the child container with additional registrations.
+    /// </summary>
+    /// <param name="childContainer">The child container to set up.</param>
+    protected abstract void OnSetupChildContainer(IContainer childContainer);
+
     private void LoadCenterDock(object viewModel)
     {
-        this.centerDock = CenterDock.New() ?? throw new ContentLoadingException(
-            $"could not create a dock to load content for route `{this.activeRoute!.Config.Path}`")
-        {
-            OutletName = this.CenterOutletName,
-            ViewModel = viewModel,
-        };
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
 
-        // Dock at the center
-        var dockable = Dockable.New(this.CenterOutletName) ??
-                       throw new ContentLoadingException($"could not create a dockable object while loading content for route `{this.activeRoute!.Config.Path}`")
-                       {
-                           OutletName = this.CenterOutletName,
-                           ViewModel = viewModel,
-                       };
-        dockable.ViewModel = viewModel;
-        this.centerDock.AdoptDockable(dockable);
+        try
+        {
+            this.centerDock = CenterDock.New();
+            var dockable = Dockable.New(this.CenterOutletName);
+            dockable.ViewModel = viewModel;
+            this.centerDock.AdoptDockable(dockable);
+        }
+        catch (Exception)
+        {
+            throw new ContentLoadingException($"could not create the center dock and its dockable to load content for route `{this.activeRoute!.Config.Path}`")
+            {
+                OutletName = this.CenterOutletName,
+                ViewModel = viewModel,
+            };
+        }
 
         var anchor = new Anchor(AnchorPosition.Center);
         try
         {
-            this.docker.Dock(this.centerDock, anchor);
+            this.Docker.Dock(this.centerDock, anchor);
             anchor = null; // Disposal ownership is transferred
         }
         finally
@@ -206,13 +236,13 @@ public abstract partial class DockingWorkspaceViewModel(
 
     private void LoadDockable(object viewModel, string dockableId)
     {
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
+
+        // From the dockable corresponding ActiveRoute, we get the parameters
+        // and reconstruct the dockable.Docking will be deferred, as we can only
+        // do the docking once all dockables have been loaded.
         try
         {
-            /*
-             * From the dockable corresponding ActiveRoute, we get the parameters and reconstruct the dockable. Docking
-             * will be deferred, as we can only do the docking once all dockables have been loaded.
-             */
-
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
 
@@ -228,12 +258,11 @@ public abstract partial class DockingWorkspaceViewModel(
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "any exception is not fatal, we just continue with other docks")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "any exception is not fatal, we just continue with other docks")]
     private void PlaceDocks(NavigationOptions options)
     {
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
+
         // Called when activation is complete. If the navigation is partial, the docking tree is already built. Only
         // changes will be applied. if the navigation mode is Full, all dockables and docks are created but no docks
         // have been created yet and no docking took place.
@@ -265,8 +294,10 @@ public abstract partial class DockingWorkspaceViewModel(
         finally
         {
             this.deferredDockables.Clear();
-            this.docker.DumpWorkspace();
+            this.Docker.DumpWorkspace();
         }
+
+        return;
 
         static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right)
         {
@@ -301,12 +332,14 @@ public abstract partial class DockingWorkspaceViewModel(
 
     private void DockToRoot(Dockable dockable, RoutedDockable.DockingInfo dockingInfo)
     {
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
+
         var dock = ToolDock.New();
         dock.AdoptDockable(dockable);
         var anchor = new Anchor(dockingInfo.Position);
         try
         {
-            this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
+            this.Docker.Dock(dock, anchor, dockingInfo.IsMinimized);
             anchor = null; // Disposal ownership is transferred
         }
         finally
@@ -317,6 +350,8 @@ public abstract partial class DockingWorkspaceViewModel(
 
     private void DockRelativeTo(Dockable dockable, RoutedDockable.DockingInfo dockingInfo, Dockable relativeDockable)
     {
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
+
         if (dockingInfo.Position == AnchorPosition.Center)
         {
             this.centerDock?.AdoptDockable(dockable);
@@ -330,7 +365,7 @@ public abstract partial class DockingWorkspaceViewModel(
             dock.AdoptDockable(dockable);
             if (dockingInfo.IsMinimized)
             {
-                this.docker.MinimizeDock(dock);
+                this.Docker.MinimizeDock(dock);
             }
         }
         else
@@ -340,7 +375,7 @@ public abstract partial class DockingWorkspaceViewModel(
             {
                 var dock = ToolDock.New();
                 dock.AdoptDockable(dockable);
-                this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
+                this.Docker.Dock(dock, anchor, dockingInfo.IsMinimized);
                 anchor = null;
             }
             finally

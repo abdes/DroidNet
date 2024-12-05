@@ -41,6 +41,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     /// <param name="router">The router instance used for navigation and event subscription.</param>
     /// <param name="docker">The docker instance used for managing dockable layouts.</param>
     /// <param name="dockViewFactory">The factory used to create views for docks.</param>
+    /// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled. </param>
     public DockingWorkspaceLayout(
         HostingContext hostingContext,
         IRouter router,
@@ -55,10 +56,11 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
         var layout = new GridFlowLayout(dockViewFactory);
 
         this.routerEventsSub = router.Events.Subscribe(HandleRouterEvent);
+        return;
 
-        void HandleRouterEvent(RouterEvent @event)
+        void HandleRouterEvent(RouterEvent routerEvent)
         {
-            switch (@event)
+            switch (routerEvent)
             {
                 // At the beginning of each navigation cycle, many changes will happen to ro
                 // docker model, but we want to batch them together and handle them at once
@@ -73,7 +75,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
                 // that are not the result of navigation.
                 case NavigationEnd:
                 case NavigationError:
-                    var options = ((NavigationEvent)@event).Options;
+                    var options = ((NavigationEvent)routerEvent).Options;
                     if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
                     {
                         docker.Layout(layout);
@@ -92,15 +94,18 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
                             h => docker.LayoutChanged += h,
                             h => docker.LayoutChanged -= h)
                         .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
-                        .Select(eventPattern => Observable.FromAsync(async () =>
-                        {
-                            Debug.WriteLine($"Workspace layout changed because {eventPattern.EventArgs.Reason}");
-                            await hostingContext.Dispatcher.EnqueueAsync(() => this.SyncWithRouterAsync(eventPattern.EventArgs.Reason)).ConfigureAwait(true);
-                        }))
+                        .Select(
+                            layoutChangeEvent => Observable.FromAsync(
+                                async () =>
+                                {
+                                    Debug.WriteLine($"Workspace layout changed because {layoutChangeEvent.EventArgs.Reason}");
+                                    await hostingContext.Dispatcher.EnqueueAsync(() => this.SyncWithRouterAsync(layoutChangeEvent.EventArgs.Reason)).ConfigureAwait(true);
+                                }))
                         .Concat()
                         .Subscribe();
                     break;
 
+                // ReSharper disable once RedundantEmptySwitchSection
                 default: // Ignore
                     break;
             }

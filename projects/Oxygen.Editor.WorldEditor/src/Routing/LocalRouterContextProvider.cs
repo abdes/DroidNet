@@ -2,46 +2,45 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
+using System.Diagnostics;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
+using Oxygen.Editor.WorldEditor.ContentBrowser;
 
 namespace Oxygen.Editor.WorldEditor.Routing;
 
 /// <summary>
-/// The implementation of <see cref="IContextProvider" /> for the dedicated router used inside the content browser.
+/// The implementation of <see cref="IContextProvider{NavigationContext}"/> for the a local child router.
 /// </summary>
 internal sealed partial class LocalRouterContextProvider : IContextProvider<NavigationContext>, IDisposable
 {
-    private readonly ILocalRouterContext theContext;
+    private readonly LocalRouterContext theContext;
     private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalRouterContextProvider"/> class.
     /// </summary>
-    /// <param name="context"></param>
+    /// <param name="context">The local router context.</param>
     public LocalRouterContextProvider(ILocalRouterContext context)
     {
-        if (context is not INotifyPropertyChanged contextNotify)
-        {
-            throw new ArgumentException("context must implement INotifyPropertyChanged", nameof(context));
-        }
+        var localContext = context as LocalRouterContext;
+        Debug.Assert(localContext is not null, "expecting a context provided by me");
 
-        this.theContext = context;
-        contextNotify.PropertyChanged += (sender, args)
-            =>
+        this.theContext = localContext;
+        this.theContext.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName!.Equals(nameof(ILocalRouterContext.LocalRouter), StringComparison.Ordinal))
             {
+                // We consider the context fully created when its LocalRouter is set.
                 this.ContextCreated?.Invoke(this, new ContextEventArgs(this.theContext));
             }
         };
     }
 
-#pragma warning disable CS0067
+#pragma warning disable CS0067 // The event is never used, because the context is always the same.
     /// <inheritdoc/>
     public event EventHandler<ContextEventArgs>? ContextChanged;
-#pragma warning restore
+#pragma warning restore CS0067
 
     /// <inheritdoc/>
     public event EventHandler<ContextEventArgs>? ContextCreated;
@@ -58,7 +57,7 @@ internal sealed partial class LocalRouterContextProvider : IContextProvider<Navi
 
     /// <inheritdoc/>
     public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
-        => (NavigationContext)this.theContext;
+        => this.theContext;
 
     /// <inheritdoc/>
     public void ActivateContext(NavigationContext context) => _ = context;
