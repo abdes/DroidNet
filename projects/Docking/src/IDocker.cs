@@ -16,21 +16,13 @@ public interface IDocker : IDisposable
     /// <summary>
     /// Occurs when the layout of the docker changes.
     /// </summary>
-    event EventHandler<LayoutChangedEventArgs> LayoutChanged;
+    public event EventHandler<LayoutChangedEventArgs> LayoutChanged;
 
     /// <summary>
     /// Closes the specified dock.
     /// </summary>
     /// <param name="dock">The dock to close.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// docker.CloseDock(dock);
-    /// ]]></code>
-    /// </example>
-    void CloseDock(IDock dock);
+    public void CloseDock(IDock dock);
 
     /// <summary>
     /// Docks the specified dock at the given anchor point.
@@ -38,58 +30,25 @@ public interface IDocker : IDisposable
     /// <param name="dock">The dock to dock.</param>
     /// <param name="anchor">The anchor point where the dock will be docked.</param>
     /// <param name="minimized">A value indicating whether the dock should be minimized. The default is <see langword="false"/>.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> or <paramref name="anchor"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// Anchor anchor = new Anchor(AnchorPosition.Left);
-    /// docker.Dock(dock, anchor, minimized: true);
-    /// ]]></code>
-    /// </example>
-    void Dock(IDock dock, Anchor anchor, bool minimized = false);
+    public void Dock(IDock dock, Anchor anchor, bool minimized = false);
 
     /// <summary>
     /// Floats the specified dock, making it a floating dock.
     /// </summary>
     /// <param name="dock">The dock to float.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// docker.FloatDock(dock);
-    /// ]]></code>
-    /// </example>
-    void FloatDock(IDock dock);
+    public void FloatDock(IDock dock);
 
     /// <summary>
     /// Minimizes the specified dock.
     /// </summary>
     /// <param name="dock">The dock to minimize.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// docker.MinimizeDock(dock);
-    /// ]]></code>
-    /// </example>
-    void MinimizeDock(IDock dock);
+    public void MinimizeDock(IDock dock);
 
     /// <summary>
     /// Pins the specified dock, making it always visible.
     /// </summary>
     /// <param name="dock">The dock to pin.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// docker.PinDock(dock);
-    /// ]]></code>
-    /// </example>
-    void PinDock(IDock dock);
+    public void PinDock(IDock dock);
 
     /// <summary>
     /// Resizes the specified dock to the given width and height.
@@ -97,17 +56,7 @@ public interface IDocker : IDisposable
     /// <param name="dock">The dock to resize.</param>
     /// <param name="width">The new width of the dock. If <see langword="null"/>, the width remains unchanged.</param>
     /// <param name="height">The new height of the dock. If <see langword="null"/>, the height remains unchanged.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dock"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// IDock dock = ...;
-    /// Width newWidth = new Width(300);
-    /// Height newHeight = new Height(200);
-    /// docker.ResizeDock(dock, newWidth, newHeight);
-    /// ]]></code>
-    /// </example>
-    void ResizeDock(IDock dock, Width? width, Height? height);
+    public void ResizeDock(IDock dock, Width? width, Height? height);
 
     /// <summary>
     /// Dumps the current state of the workspace for debugging purposes.
@@ -118,21 +67,13 @@ public interface IDocker : IDisposable
     /// docker.DumpWorkspace();
     /// ]]></code>
     /// </example>
-    void DumpWorkspace();
+    public void DumpWorkspace();
 
     /// <summary>
     /// Applies the specified layout engine to the docker.
     /// </summary>
     /// <param name="layoutEngine">The layout engine to apply.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="layoutEngine"/> is <see langword="null"/>.</exception>
-    /// <example>
-    /// <code><![CDATA[
-    /// IDocker docker = ...;
-    /// LayoutEngine layoutEngine = new CustomLayoutEngine();
-    /// docker.Layout(layoutEngine);
-    /// ]]></code>
-    /// </example>
-    void Layout(LayoutEngine layoutEngine);
+    public void Layout(LayoutEngine layoutEngine);
 }
 
 /// <summary>
