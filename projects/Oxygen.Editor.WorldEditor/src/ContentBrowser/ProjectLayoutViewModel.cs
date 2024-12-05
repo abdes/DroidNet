@@ -5,48 +5,52 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
+using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.WorldEditor.Routing;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-public partial class ProjectLayoutViewModel : DynamicTreeViewModel
+public partial class ProjectLayoutViewModel(IProjectManagerService projectManager, ILoggerFactory? loggerFactory) : DynamicTreeViewModel, IRoutingAware
 {
-    private readonly ILogger logger;
-    private readonly ILocalRouterContext routerContext;
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
-    /// </summary>
-    /// <param name="projectManager"></param>
-    /// <param name="routerContext"></param>
-    /// <param name="loggerFactory"></param>
-    public ProjectLayoutViewModel(
-        IProjectManagerService projectManager,
-        ILocalRouterContext routerContext,
-        ILoggerFactory? loggerFactory)
+    private FolderTreeItemAdapter? projectRoot;
+
+    /// <inheritdoc/>
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => this.PreloadRecentTemplatesAsync();
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    private async Task PreloadRecentTemplatesAsync()
     {
-        this.routerContext = routerContext;
-        this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ??
-                      NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();
-
-        // The following method will do sanity checks on the current project and its info. On successful return, we have
-        // guarantee the project info is valid and has a valid location for the project root folder.
-        var projectInfo = this.GetCurrentProjectInfo(projectManager) ??
-                          throw new InvalidOperationException("Project Layout used with no CurrentProject");
-
-        // Create the root TreeItem for the project root folder.
-        var storage = projectManager.GetCurrentProjectStorageProvider();
-        var folder = storage.GetFolderFromPathAsync(projectInfo.Location!);
-        this.ProjectRoot = new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true)
+        if (this.projectRoot is not null)
         {
-            IsExpanded = true,
-        };
-    }
+            return;
+        }
 
-    private FolderTreeItemAdapter ProjectRoot { get; }
+        try
+        {
+            // The following method will do sanity checks on the current project and its info. On successful return, we have
+            // guarantee the project info is valid and has a valid location for the project root folder.
+            var projectInfo = this.GetCurrentProjectInfo() ?? throw new InvalidOperationException("Project Layout used with no CurrentProject");
+
+            // Create the root TreeItem for the project root folder.
+            var storage = projectManager.GetCurrentProjectStorageProvider();
+            var folder = storage.GetFolderFromPathAsync(projectInfo.Location!);
+            this.projectRoot = new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true)
+            {
+                IsExpanded = true,
+            };
+
+            // Preload the project folders
+            await this.LoadProjectAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            this.LogPreloadingProjectFoldersError(ex);
+        }
+    }
 
     /// <summary>
     /// Loads the project asynchronously, starting with the project root folder, and continuing with children that are part of the
@@ -58,14 +62,15 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     [RelayCommand]
     private async Task LoadProjectAsync()
     {
+        Debug.Assert(this.projectRoot is not null, "project root node should be initialized");
+
         // We will expand the entire project tree
-        this.ProjectRoot.IsExpanded = true;
-        await this.InitializeRootAsync(this.ProjectRoot, skipRoot: false).ConfigureAwait(false);
+        await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
 
         // TODO: Then we will check the selected items in the ActiveRoute query params
     }
 
-    private IProjectInfo? GetCurrentProjectInfo(IProjectManagerService projectManager)
+    private IProjectInfo? GetCurrentProjectInfo()
     {
         var projectInfo = projectManager.CurrentProject?.ProjectInfo;
 
@@ -90,4 +95,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         Level = LogLevel.Error,
         Message = "The project manager service does not have a currently loaded project.")]
     private partial void LogNoCurrentProject();
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to preload project folders during ViewModel activation.")]
+    private partial void LogPreloadingProjectFoldersError(Exception ex);
 }

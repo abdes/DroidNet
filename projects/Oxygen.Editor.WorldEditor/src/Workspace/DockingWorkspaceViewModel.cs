@@ -7,10 +7,6 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
-using DroidNet.Docking.Layouts;
-using DroidNet.Docking.Workspace;
-using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
@@ -71,15 +67,23 @@ public abstract partial class DockingWorkspaceViewModel(
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        SetupMvvm();
-        SetupLocalRouter(out var localRouter);
-        SetupDocking();
+        _ = this.childContainer
+            .WithMvvm()
+            .WithLocalRouting(
+                this.RoutesConfig,
+                new LocalRouterContext(navigationContext.NavigationTarget)
+                {
+                    ParentRouter = router,
+                    RootViewModel = this.ThisViewModel,
+                })
+            .WithDocking();
 
         this.OnSetupChildContainer(this.childContainer);
 
         this.Docker = this.childContainer.Resolve<IDocker>();
         this.Layout = this.childContainer.Resolve<DockingWorkspaceLayout>();
 
+        var localRouter = this.childContainer.Resolve<IRouter>();
         this.localRouterEventsSub = new CompositeDisposable(
             localRouter.Events.OfType<ActivationComplete>()
                 .Subscribe(
@@ -94,43 +98,6 @@ public abstract partial class DockingWorkspaceViewModel(
                     }));
 
         await this.OnInitialNavigationAsync(this.childContainer.Resolve<ILocalRouterContext>()).ConfigureAwait(true);
-        return;
-
-        void SetupMvvm()
-        {
-            this.childContainer.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-            this.childContainer.Register<ViewModelToView>(Reuse.Singleton);
-        }
-
-        void SetupLocalRouter(out IRouter localRouter1)
-        {
-            this.childContainer.RegisterInstance(this.RoutesConfig);
-            var localRouterContext = new LocalRouterContext(navigationContext.NavigationTarget)
-            {
-                ParentRouter = router,
-                RootViewModel = this.ThisViewModel,
-            };
-            this.childContainer.RegisterInstance<ILocalRouterContext>(localRouterContext);
-            this.childContainer.RegisterInstance<INavigationContext>(localRouterContext);
-            this.childContainer.Register<IRouterStateManager, RouterStateManager>(Reuse.Singleton);
-            this.childContainer.Register<IRouteActivator, LocalRouteActivator>(Reuse.Singleton);
-            this.childContainer.Register<IUrlParser, DefaultUrlParser>(Reuse.Singleton);
-            this.childContainer.Register<IUrlSerializer, DefaultUrlSerializer>(Reuse.Singleton);
-            this.childContainer.Register<IContextProvider<NavigationContext>, LocalRouterContextProvider>(Reuse.Singleton);
-            this.childContainer.RegisterDelegate<IContextProvider>(r => r.Resolve<IContextProvider<NavigationContext>>());
-            this.childContainer.Register<RouterContextManager>(Reuse.Singleton);
-            this.childContainer.Register<IRouter, Router>(Reuse.Singleton);
-
-            localRouter1 = this.childContainer.Resolve<IRouter>();
-            localRouterContext.LocalRouter = localRouter1;
-        }
-
-        void SetupDocking()
-        {
-            this.childContainer.Register<IDocker, Docker>(Reuse.Singleton);
-            this.childContainer.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
-            this.childContainer.Register<DockingWorkspaceLayout>(Reuse.Singleton);
-        }
     }
 
     /// <inheritdoc/>
