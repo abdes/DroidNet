@@ -79,7 +79,6 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         var folder = await this.folderAsync.ConfigureAwait(true);
         await foreach (var child in folder.GetFoldersAsync().ConfigureAwait(true))
         {
-#pragma warning disable CA1031 // Do not catch general exception types
             try
             {
                 this.AddChildInternal(
@@ -95,7 +94,6 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
                 // Log the failure, but continue with the rest
                 CouldNotLoadProjectFolders(this.logger, folder.Location, ex.Message);
             }
-#pragma warning restore CA1031 // Do not catch general exception types
         }
     }
 

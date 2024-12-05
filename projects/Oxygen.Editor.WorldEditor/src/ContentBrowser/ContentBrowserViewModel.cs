@@ -2,27 +2,23 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Linq;
-using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
-using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using DryIoc;
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.Routing;
 using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// The ViewModel for the <see cref="ContentBrowserView" /> view.
+/// The ViewModel for the <see cref="ContentBrowserView"/> view.
 /// </summary>
 /// <remarks>
-/// This is an <see cref="IOutletContainer" /> with two outlets, the "left" outlet for the left pane, and the "right" outlet for
+/// This is an <see cref="IOutletContainer"/> with two outlets, the "left" outlet for the left pane, and the "right" outlet for
 /// the right pane.
 /// </remarks>
-public partial class ContentBrowserViewModel : AbstractOutletContainer
+public sealed partial class ContentBrowserViewModel(IContainer container, IRouter parentRouter) : AbstractOutletContainer, IRoutingAware
 {
     private static readonly Routes RoutesConfig = new(
     [
@@ -32,12 +28,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
             MatchMethod = PathMatch.Prefix,
             Children = new Routes(
             [
-                new Route()
-                {
-                    Outlet = "left",
-                    Path = "project",
-                    ViewModelType = typeof(ProjectLayoutViewModel),
-                },
+                new Route() { Outlet = "left", Path = "project", ViewModelType = typeof(ProjectLayoutViewModel), },
                 new Route()
                 {
                     Path = string.Empty,
@@ -47,9 +38,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
                     [
                         new Route()
                         {
-                            Path = "assets/tiles",
-                            Outlet = "right",
-                            ViewModelType = typeof(TilesLayoutViewModel),
+                            Path = "assets/tiles", Outlet = "right", ViewModelType = typeof(TilesLayoutViewModel),
                         },
                     ]),
                 },
@@ -57,63 +46,54 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         },
     ]);
 
-    private readonly IDisposable routerEventsSub;
     private bool isDisposed;
+    private IContainer? childContainer;
 
-    public ContentBrowserViewModel(IContainer container, IRouter globalRouter, ILoggerFactory? loggerFactory)
+    /// <summary>
+    /// Gets the local ViewModel to View converter. Guaranteed to be not <see langword="null"/> when the view is loaded.
+    /// </summary>
+    public ViewModelToView? VmToViewConverter { get; private set; }
+
+    /// <summary>
+    /// Gets the ViewModel for the left pane.
+    /// </summary>
+    public object? LeftPaneViewModel => this.Outlets["left"].viewModel;
+
+    /// <summary>
+    /// Gets the ViewModel for the right pane.
+    /// </summary>
+    public object? RightPaneViewModel => this.Outlets["right"].viewModel;
+
+    /// <inheritdoc/>
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
         this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
-        this.routerEventsSub = globalRouter.Events.OfType<ActivationComplete>()
-             .Select(evt => Observable.FromAsync(() => SetupChildContainerAsync(evt)))
-             .Concat()
-             .Subscribe();
-
-        async Task SetupChildContainerAsync(ActivationComplete @event)
-        {
-            // Create a scoped child container for resolutions local to this content browser.
-            var childContainer = container.WithRegistrationsCopy();
-
-            var viewLocator = new DefaultViewLocator(childContainer, loggerFactory);
-
-            // Register all local ViewModels and services in the child container
-            childContainer.RegisterInstance<IViewLocator>(viewLocator);
-            childContainer.RegisterInstance(new ViewModelToView(viewLocator));
-            childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
-            childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
-            childContainer.Register<AssetsViewModel>(Reuse.Singleton);
-            childContainer.Register<AssetsView>(Reuse.Singleton);
-            childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
-            childContainer.Register<TilesLayoutView>(Reuse.Singleton);
-
-            var context = new LocalRouterContext(@event.Context.NavigationTarget) { RootViewModel = this };
-            var routerContextProvider = new LocalRouterContextProvider(context);
-            var router = new Router(
-                childContainer,
+        this.childContainer = container
+            .WithRegistrationsCopy()
+            .WithMvvm()
+            .WithLocalRouting(
                 RoutesConfig,
-                new RouterStateManager(),
-                new RouterContextManager(routerContextProvider),
-                new LocalRouteActivator(loggerFactory),
-                routerContextProvider,
-                new DefaultUrlSerializer(new DefaultUrlParser()),
-                loggerFactory);
+                new LocalRouterContext(navigationContext.NavigationTarget)
+                {
+                    ParentRouter = parentRouter,
+                    RootViewModel = this,
+                });
 
-            context.LocalRouter = router;
-            context.ParentRouter = container.Resolve<IRouter>();
-            childContainer.RegisterInstance<ILocalRouterContext>(context);
+        this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
+        this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+        this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
+        this.childContainer.Register<AssetsView>(Reuse.Singleton);
+        this.childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
+        this.childContainer.Register<TilesLayoutView>(Reuse.Singleton);
 
-            this.VmToViewConverter = childContainer.Resolve<ViewModelToView>();
+        // Make sure to use our own ViewModel to View converter
+        this.VmToViewConverter = this.childContainer.Resolve<ViewModelToView>();
 
-            await router.NavigateAsync("/(left:project//right:assets/tiles)?path=Scenes&path=Media&filter=!folder").ConfigureAwait(true);
-        }
+        var localRouter = this.childContainer.Resolve<IRouter>();
+        await localRouter.NavigateAsync("/(left:project//right:assets/tiles)?path=Scenes&path=Media").ConfigureAwait(true);
     }
-
-    public ViewModelToView? VmToViewConverter { get; private set; }
-
-    public object? LeftPaneViewModel => this.Outlets["left"].viewModel;
-
-    public object? RightPaneViewModel => this.Outlets["right"].viewModel;
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
@@ -126,7 +106,7 @@ public partial class ContentBrowserViewModel : AbstractOutletContainer
         if (disposing)
         {
             this.isDisposed = true;
-            this.routerEventsSub.Dispose();
+            this.childContainer?.Dispose();
         }
 
         base.Dispose(disposing);
