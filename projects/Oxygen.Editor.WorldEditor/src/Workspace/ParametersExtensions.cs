@@ -8,7 +8,7 @@ using DroidNet.Routing;
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
 /// <summary>
-/// Extension methods for <see cref="IParameters"/>.
+/// Extension methods yo help converting between <see cref="IParameters">url parameters</see> and properties of docks and dockables.
 /// </summary>
 internal static class ParametersExtensions
 {
@@ -18,7 +18,8 @@ internal static class ParametersExtensions
     /// <param name="parameters">The parameters to check.</param>
     /// <param name="name">The name of the flag.</param>
     /// <returns><see langword="true"/> if the flag is set; otherwise, <see langword="false"/>.</returns>
-    internal static bool FlagIsSet(this IParameters parameters, string name) => parameters.TryGetValue(name, out var value) && (value is null || bool.Parse(value));
+    internal static bool FlagIsSet(this IParameters parameters, string name)
+        => parameters.TryGetValue(name, out var value) && (value is null || bool.Parse(value));
 
     /// <summary>
     /// Sets or unsets a flag in the parameters.
@@ -46,8 +47,8 @@ internal static class ParametersExtensions
     /// <param name="value">The value to check against.</param>
     /// <returns><see langword="true"/> if the parameter has the specified value; otherwise, <see langword="false"/>.</returns>
     internal static bool ParameterHasValue(this IParameters parameters, string name, string? value)
-        => parameters.TryGetValue(name, out var parameterValue) &&
-           string.Equals(parameterValue, value, StringComparison.Ordinal);
+        => parameters.TryGetValue(name, out var parameterValue)
+           && string.Equals(parameterValue, value, StringComparison.Ordinal);
 
     /// <summary>
     /// Gets the width from the parameters or returns a default width.
@@ -83,13 +84,11 @@ internal static class ParametersExtensions
             }
 
             // Check that no other anchor position is specified in the parameters
-            foreach (var other in Enum.GetNames<AnchorPosition>()
-                         .Where(n => !string.Equals(n, anchor, StringComparison.OrdinalIgnoreCase)))
+            foreach (var other in Enum.GetNames<AnchorPosition>().Where(n => !string.Equals(n, anchor, StringComparison.OrdinalIgnoreCase)))
             {
                 if (parameters.Contains(other))
                 {
-                    throw new InvalidOperationException(
-                        $"you can only specify an anchor position for a dockable once. We first found `{anchor}`, then `{other}`");
+                    throw new InvalidOperationException($"you can only specify an anchor position for a dockable once. We first found `{anchor}`, then `{other}`");
                 }
             }
 
@@ -97,9 +96,7 @@ internal static class ParametersExtensions
             _ = parameters.TryGetValue(anchor, out var relativeDockableId);
 
             return anchorPosition == AnchorPosition.With && relativeDockableId is null
-                ? throw new ArgumentException(
-                    "you must specify the relative dockable ID when you use 'with'",
-                    nameof(parameters))
+                ? throw new ArgumentException("you must specify the relative dockable ID when you use 'with'", nameof(parameters))
                 : (anchorPosition, relativeDockableId);
         }
 

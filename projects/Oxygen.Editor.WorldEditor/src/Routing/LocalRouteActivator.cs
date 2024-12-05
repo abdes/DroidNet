@@ -11,8 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Oxygen.Editor.WorldEditor.Routing;
 
 /// <summary>
-/// Implements the <see cref="IRouteActivator" /> interface for activating routes inside the internal router used by the Content
-/// Browser module.
+/// Implements the <see cref="IRouteActivator" /> interface for activating routes inside a local child router.
 /// </summary>
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.

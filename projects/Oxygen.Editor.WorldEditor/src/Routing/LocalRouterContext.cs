@@ -9,8 +9,23 @@ using Oxygen.Editor.WorldEditor.Routing;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-public partial class LocalRouterContext(object targetObject)
-    : NavigationContext(Target.Self, targetObject), ILocalRouterContext, INotifyPropertyChanged
+/// <summary>
+/// Represents the router context for a local child router.
+/// </summary>
+/// <param name="target">The navigation target.</param>
+/// <remarks>
+/// The <see cref="LocalRouterContext"/> class extends the <see cref="NavigationContext"/> class and implements
+/// the <see cref="ILocalRouterContext"/> and <see cref="INotifyPropertyChanged"/> interfaces. It provides additional
+/// properties specific to the local routing context, including references to the root ViewModel, the local router,
+/// and the parent router.
+/// <para>
+/// Local routing is always done in the same target then the parent navigation context. Therefore,
+/// it will always use <see cref="Target.Self"/> as a target key. If you need to navigate to a
+/// different target, you must use the global or parent router.
+/// </para>
+/// </remarks>
+public partial class LocalRouterContext(object target)
+    : NavigationContext(Target.Self, target), ILocalRouterContext, INotifyPropertyChanged
 {
     private readonly object? rootViewModel;
     private IRouter? router;
@@ -40,9 +55,21 @@ public partial class LocalRouterContext(object targetObject)
         internal set => _ = this.SetField(ref this.globalRouter, value);
     }
 
+    /// <summary>
+    /// Raises the <see cref="PropertyChanged"/> event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that changed.</param>
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+    /// <summary>
+    /// Sets the field to the specified value and raises the <see cref="PropertyChanged"/> event if the value changes.
+    /// </summary>
+    /// <typeparam name="T">The type of the field.</typeparam>
+    /// <param name="field">The field to set.</param>
+    /// <param name="value">The value to set.</param>
+    /// <param name="propertyName">The name of the property that changed.</param>
+    /// <returns><see langword="true"/> if the value was changed; otherwise, <see langword="false"/>.</returns>
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))

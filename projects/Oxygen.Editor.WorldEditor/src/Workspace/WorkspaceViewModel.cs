@@ -7,19 +7,33 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
+using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.ViewModels;
 using Oxygen.Editor.WorldEditor.Views;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
+/// <summary>
+/// The ViewModel of the world editor docking workspace.
+/// </summary>
+/// <param name="container">The IoC container that should be used for resolving view models, views, and service.</param>
+/// <param name="router">The router using to navigate within the docking workspace.</param>
+/// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled. </param>
+/// <remarks>
+/// The world editor uses a child IoC container and a child router. This gurantees that routes and
+/// resolutions are isolated from the rest of the application, and that the workspace can be easily
+/// replaced or extended by other modules. In the other hand, this also requires that resolutions
+/// inside the workspace must always use the child container, and that navigations, even the absolute
+/// ones, will always be relative to the workspace.
+/// </remarks>
 public partial class WorkspaceViewModel(IContainer container, IRouter router, ILoggerFactory? loggerFactory = null)
     : DockingWorkspaceViewModel(container, router, loggerFactory)
 {
     /// <inheritdoc/>
-    public override object ThisViewModel => this;
+    protected override object ThisViewModel => this;
 
     /// <inheritdoc/>
-    public override IRoutes RoutesConfig { get; } = new Routes(
+    protected override IRoutes RoutesConfig { get; } = new Routes(
         [
         new Route
         {
@@ -83,6 +97,6 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     }
 
     /// <inheritdoc/>
-    protected override Task OnInitialNavigationAsync(LocalRouterContext context)
+    protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync("/(renderer:dx//pe:pe;right;w=300//props:props;bottom=pe//cb:cb;bottom;h=300//log:log;with=cb)");
 }
