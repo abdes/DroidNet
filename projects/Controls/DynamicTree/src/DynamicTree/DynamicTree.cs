@@ -142,7 +142,7 @@ public partial class DynamicTree : Control
 
     private void ItemsRepeater_OnElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {
-        if (args.Element is not FrameworkElement element)
+        if (args.Element is not DynamicTreeItem element)
         {
             return;
         }
@@ -161,10 +161,12 @@ public partial class DynamicTree : Control
 
     private void ItemsRepeater_OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
-        if (args.Element is not Control element)
+        if (args.Element is not DynamicTreeItem element)
         {
             return;
         }
+
+        element.OnElementPrepared();
 
         element.PointerPressed += this.TreeItem_PointerPressed;
 
