@@ -15,28 +15,9 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// </summary>
 public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
-#if false
-    public ThumbnailTemplateSelector()
-    {
-        const string xaml = """
-                            <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
-                                <Border
-                                    Width='{StaticResource CellContentWidth}'
-                                    Height='{StaticResource CellContentHeight}'
-                                    BorderBrush='{ThemeResource EmptyThumbnailBorderColor}'
-                                    BorderThickness='1' />
-                            </DataTemplate>
-                            """;
-
-        this.DefaultTemplate = (DataTemplate)XamlReader.Load(xaml);
-    }
-#endif
-
     public DataTemplate? SceneTemplate { get; set; }
 
     public DataTemplate? EntityTemplate { get; set; }
-
-    public DataTemplate? DefaultTemplate { get; set; }
 
     /// <inheritdoc/>
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
@@ -44,6 +25,6 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
         {
             SceneAdapter => this.SceneTemplate,
             GameEntityAdapter => this.EntityTemplate,
-            _ => this.DefaultTemplate,
+            _ => null,
         };
 }

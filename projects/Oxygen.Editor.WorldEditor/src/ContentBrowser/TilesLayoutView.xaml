@@ -36,6 +36,7 @@
             x:Name="BasicGridView"
             IsItemClickEnabled="True"
             ItemTemplate="{StaticResource GameAssetTemplate}"
+            ItemsSource="{x:Bind ViewModel.Assets}"
             SelectionMode="Single" />
     </Grid>
 </UserControl>

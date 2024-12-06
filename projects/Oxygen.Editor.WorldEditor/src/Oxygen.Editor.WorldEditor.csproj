@@ -8,17 +8,6 @@
         <RootNamespace>Oxygen.Editor.WorldEditor</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
-    <ItemGroup>
-      <None Remove="AssetsView.xaml" />
-      <None Remove="ContentBrowser\ProjectLayoutView.xaml" />
-      <None Remove="ContentBrowser\TilesLayoutView.xaml" />
-      <None Remove="Themes\Generic.xaml" />
-      <None Remove="Views\ContentBrowserView.xaml" />
-      <None Remove="Views\LogsView.xaml" />
-      <None Remove="Views\ProjectExplorerView.xaml" />
-      <None Remove="Views\RendererView.xaml" />
-      <None Remove="Views\SceneDetailsView.xaml" />
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />

@@ -2,12 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
-
 using DroidNet.Mvvm.Generators;
+
+namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 [ViewModel(typeof(TilesLayoutViewModel))]
 public sealed partial class TilesLayoutView
 {
-    public TilesLayoutView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TilesLayoutView"/> class.
+    /// </summary>
+    public TilesLayoutView()
+    {
+        this.InitializeComponent();
+    }
 }

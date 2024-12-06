@@ -40,6 +40,10 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
                         {
                             Path = "assets/tiles", Outlet = "right", ViewModelType = typeof(TilesLayoutViewModel),
                         },
+                        new Route()
+                        {
+                            Path = "assets/list", Outlet = "right", ViewModelType = typeof(ListLayoutViewModel),
+                        },
                     ]),
                 },
             ]),
@@ -81,10 +85,15 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
                     RootViewModel = this,
                 });
 
+        this.childContainer.Register<ContentBrowserState>(Reuse.Singleton);
+        this.childContainer.Register<AssetsIndexingService>(Reuse.Singleton);
+
         this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
         this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
         this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
         this.childContainer.Register<AssetsView>(Reuse.Singleton);
+        this.childContainer.Register<ListLayoutViewModel>(Reuse.Singleton);
+        this.childContainer.Register<ListLayoutView>(Reuse.Singleton);
         this.childContainer.Register<TilesLayoutViewModel>(Reuse.Singleton);
         this.childContainer.Register<TilesLayoutView>(Reuse.Singleton);
 
@@ -92,7 +101,7 @@ public sealed partial class ContentBrowserViewModel(IContainer container, IRoute
         this.VmToViewConverter = this.childContainer.Resolve<ViewModelToView>();
 
         var localRouter = this.childContainer.Resolve<IRouter>();
-        await localRouter.NavigateAsync("/(left:project//right:assets/tiles)?path=Scenes&path=Media").ConfigureAwait(true);
+        await localRouter.NavigateAsync("/(left:project//right:assets/list)?selected=Scenes&selected=Media").ConfigureAwait(true);
     }
 
     /// <inheritdoc/>

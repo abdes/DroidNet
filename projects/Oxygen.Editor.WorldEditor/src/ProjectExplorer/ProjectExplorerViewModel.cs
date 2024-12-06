@@ -3,15 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
@@ -19,15 +23,28 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// <summary>
 /// The ViewModel for the <see cref="ProjectExplorerView" /> view.
 /// </summary>
-public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAware
+public sealed partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAware, IDisposable
 {
     private readonly ILogger<ProjectExplorerViewModel> logger;
+    private readonly IProject currentProject;
+
+    private bool isDisposed;
+    private readonly DispatcherQueue dispatcher;
     private readonly IProjectManagerService projectManager;
 
-    public ProjectExplorerViewModel(ILogger<ProjectExplorerViewModel> logger, IProjectManagerService projectManager)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectExplorerViewModel"/> class.
+    /// </summary>
+    /// <param name="logger"></param>
+    public ProjectExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager, ILogger<ProjectExplorerViewModel> logger)
     {
         this.logger = logger;
+        this.dispatcher = hostingContext.Dispatcher;
         this.projectManager = projectManager;
+
+        Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
+        this.currentProject = projectManager.CurrentProject;
+        this.currentProject.PropertyChanged += this.OnCurrentProjectPropertyChangedAsync;
 
         /* TODO: subscribe to CurrentProject property changes */
 
@@ -41,7 +58,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
         this.ItemAdded += this.OnItemAdded;
     }
 
-    public ProjectAdapter? Project { get; private set; }
+    public SceneAdapter? Scene { get; private set; }
 
     public ReadOnlyObservableCollection<IChange> UndoStack { get; }
 
@@ -50,21 +67,59 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
     private bool HasUnlockedSelectedItems { get; set; }
 
     /// <inheritdoc/>
-    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => this.LoadProjectAsync();
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => await this.LoadActiveSceneAsync().ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.isDisposed = true;
+
+        this.currentProject.PropertyChanged -= this.OnCurrentProjectPropertyChangedAsync;
+    }
+
+    private void OnCurrentProjectPropertyChangedAsync(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is not nameof(IProject.ActiveScene))
+        {
+            return;
+        }
+
+        _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync).ConfigureAwait(true);
+    }
 
     /// <inheritdoc/>
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
 
-        if (oldValue is not null)
+        if (this.SelectionMode == SelectionMode.Single)
         {
-            oldValue.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
-        }
+            if (oldValue is not null)
+            {
+                oldValue.PropertyChanged -= this.OnSingleSelectionChanged;
+            }
 
-        if (this.SelectionModel is not null)
+            if (this.SelectionModel is not null)
+            {
+                this.SelectionModel.PropertyChanged += this.OnSingleSelectionChanged;
+            }
+        }
+        else if (this.SelectionMode == SelectionMode.Multiple)
         {
-            this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
+            if (oldValue is MultipleSelectionModel<ITreeItem> oldSelectionModel)
+            {
+                ((INotifyCollectionChanged)oldSelectionModel.SelectedItems).CollectionChanged -= this.OnMultipleSelectionChanged;
+            }
+
+            if (this.SelectionModel is MultipleSelectionModel<ITreeItem> currentSelectionModel)
+            {
+                ((INotifyCollectionChanged)currentSelectionModel.SelectedIndices).CollectionChanged += this.OnMultipleSelectionChanged;
+            }
         }
     }
 
@@ -75,6 +130,23 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
         UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
         await base.RemoveSelectedItems().ConfigureAwait(false);
         UndoRedo.Default[this].EndChangeSet();
+    }
+
+    private async Task LoadActiveSceneAsync()
+    {
+        var scene = this.currentProject.ActiveScene;
+        if (scene is null)
+        {
+            return;
+        }
+
+        if (!await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
+        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -107,9 +179,28 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
     [RelayCommand]
     private void Redo() => UndoRedo.Default[this].Redo();
 
-    private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.SelectedIndex), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.AddEntityCommand.NotifyCanExecuteChanged();
+
+        var hasUnlockedSelectedItems = this.SelectionModel?.SelectedItem?.IsLocked == false;
+        if (hasUnlockedSelectedItems == this.HasUnlockedSelectedItems)
+        {
+            return;
+        }
+
+        this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
+        this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelectionModel)
         {
             return;
         }
@@ -117,35 +208,23 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
         this.AddEntityCommand.NotifyCanExecuteChanged();
 
         var hasUnlockedSelectedItems = false;
-        switch (this.SelectionModel)
+        foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
         {
-            case SingleSelectionModel:
-                hasUnlockedSelectedItems = this.SelectionModel.SelectedItem?.IsLocked == false;
+            var item = this.ShownItems[selectedIndex];
+            hasUnlockedSelectedItems = !item.IsLocked;
+            if (hasUnlockedSelectedItems)
+            {
                 break;
-
-            case MultipleSelectionModel multipleSelectionModel:
-                foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
-                {
-                    var item = this.ShownItems[selectedIndex];
-                    hasUnlockedSelectedItems = !item.IsLocked;
-                    if (hasUnlockedSelectedItems)
-                    {
-                        break;
-                    }
-                }
-
-                break;
-
-            default:
-                // Keep it false
-                break;
+            }
         }
 
-        if (hasUnlockedSelectedItems != this.HasUnlockedSelectedItems)
+        if (hasUnlockedSelectedItems == this.HasUnlockedSelectedItems)
         {
-            this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
-            this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
+            return;
         }
+
+        this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
+        this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
     }
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
@@ -213,20 +292,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
         }
     }
 
-    [RelayCommand]
-    private async Task LoadProjectAsync()
-    {
-        var currentProject = this.projectManager.CurrentProject;
-        if (currentProject is not Project project)
-        {
-            this.Project = null;
-            return;
-        }
-
-        this.Project = new ProjectAdapter(project);
-        await this.InitializeRootAsync(this.Project).ConfigureAwait(true);
-    }
-
+#if false
     [RelayCommand]
     private async Task AddScene()
     {
@@ -260,6 +326,7 @@ public partial class ProjectExplorerViewModel : DynamicTreeViewModel, IRoutingAw
         var selectedItemRelativeIndex = (await this.Project.Children.ConfigureAwait(false)).IndexOf(selectedItem) + 1;
         await this.InsertItemAsync(selectedItemRelativeIndex, this.Project, newScene).ConfigureAwait(false);
     }
+#endif
 
     private bool CanAddEntity()
         => (this.SelectionModel is SingleSelectionModel && this.SelectionModel.SelectedIndex != -1) ||

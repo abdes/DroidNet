@@ -11,7 +11,6 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
-            <local:ExpandedToIconGlyphConverter x:Key="IconGlyphConverter" />
 
             <!--  Templates an template selector for Folder  -->
             <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="local:FolderTreeItemAdapter">

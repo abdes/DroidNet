@@ -45,5 +45,5 @@ public static class ThumbnailGenerator
         return bitmap;
     }
 
-    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter) => adapter is GameEntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1') ? Symbol.Home : Symbol.Admin;
+    public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter) => adapter is GameEntityAdapter entityAdapter && entityAdapter.AttachedObject.Name.EndsWith('1') ? Symbol.Camera : Symbol.Calculator;
 }
