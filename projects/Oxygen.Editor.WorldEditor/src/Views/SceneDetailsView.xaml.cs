@@ -8,6 +8,9 @@ using Oxygen.Editor.WorldEditor.ViewModels;
 
 namespace Oxygen.Editor.WorldEditor.Views;
 
+/// <summary>
+/// Represents the view for displaying scene details in the World Editor.
+/// </summary>
 [ViewModel(typeof(SceneDetailsViewModel))]
 public sealed partial class SceneDetailsView : UserControl
 {

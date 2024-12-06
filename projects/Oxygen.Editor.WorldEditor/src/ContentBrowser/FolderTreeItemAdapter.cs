@@ -11,20 +11,26 @@ using Oxygen.Editor.Storage;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+/// <summary>
+/// Represents a folder item in the content browser's tree structure.
+/// </summary>
 public partial class FolderTreeItemAdapter : TreeItemAdapter
 {
     private readonly ILogger logger;
-    private readonly IFolder folder;
-    private string label;
     private readonly ContentBrowserState contentBrowserState;
+    private readonly IFolder folder;
+
+    private string label;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FolderTreeItemAdapter"/> class.
     /// </summary>
-    /// <param name="logger"></param>
-    /// <param name="label"></param>
-    /// <param name="isRoot"></param>
-    /// <param name="isHidden"></param>
+    /// <param name="logger">The logger to use for logging errors.</param>
+    /// <param name="contentBrowserState">The state of the content browser.</param>
+    /// <param name="folder">The folder represented by this adapter.</param>
+    /// <param name="label">The label for the folder.</param>
+    /// <param name="isRoot">Indicates if this folder is the root folder.</param>
+    /// <param name="isHidden">Indicates if this folder is hidden.</param>
     public FolderTreeItemAdapter(
         ILogger logger,
         ContentBrowserState contentBrowserState,
@@ -44,8 +50,6 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
 
-    private void RestoreFromContentBrowserState() => this.IsSelected = this.contentBrowserState.ContainsSelectedFolder(this.folder);
-
     /// <inheritdoc/>
     public override string Label
     {
@@ -62,6 +66,9 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         }
     }
 
+    /// <summary>
+    /// Gets the icon glyph for the folder.
+    /// </summary>
     public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
 
     /// <inheritdoc/>
@@ -94,11 +101,13 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
                         IsExpanded = true,
                     });
             }
+#pragma warning disable CA1031 // exceptions will not stop the loading of the rest of the folders
             catch (Exception ex)
             {
                 // Log the failure, but continue with the rest
-                CouldNotLoadProjectFolders(this.logger, this.folder.Location, ex.Message);
+                this.CouldNotLoadProjectFolders(this.folder.Location, ex.Message);
             }
+#pragma warning restore CA1031
         }
     }
 
@@ -124,8 +133,11 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         }
     }
 
+    private void RestoreFromContentBrowserState()
+        => this.IsSelected = this.contentBrowserState.ContainsSelectedFolder(this.folder);
+
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "An error occurred while loading project folders from `{location}`: {error}")]
-    private static partial void CouldNotLoadProjectFolders(ILogger logger, string location, string error);
+    private partial void CouldNotLoadProjectFolders(string location, string error);
 }

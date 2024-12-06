@@ -12,13 +12,25 @@ using Oxygen.Editor.Storage;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-public class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext) : IDisposable
+/// <summary>
+/// Provides services for indexing game assets in the project.
+/// </summary>
+/// <param name="projectManager">The project manager service.</param>
+/// <param name="hostingContext">The hosting context for the application.</param>
+public sealed class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext) : IDisposable
 {
     private readonly Subject<GameAsset> assetSubject = new();
     private IDisposable? subscription;
 
+    /// <summary>
+    /// Gets the collection of indexed game assets.
+    /// </summary>
     public ObservableCollection<GameAsset> Assets { get; } = [];
 
+    /// <summary>
+    /// Starts the asynchronous indexing of game assets.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public Task IndexAssetsAsync()
     {
         this.subscription = this.assetSubject
@@ -33,12 +45,24 @@ public class AssetsIndexingService(IProjectManagerService projectManager, Hostin
                         this.Assets.Add(asset);
                     }
                 },
-                this.HandleError);
+                HandleError);
 
         _ = Task.Run(this.BackgroundIndexerAsync);
 
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.subscription?.Dispose();
+        this.assetSubject.Dispose();
+    }
+
+    private static void HandleError(Exception ex) =>
+
+        // Handle the error (e.g., log it, show a message to the user, etc.)
+        Debug.WriteLine($"Error occurred: {ex.Message}");
 
     private async Task BackgroundIndexerAsync()
     {
@@ -79,21 +103,11 @@ public class AssetsIndexingService(IProjectManagerService projectManager, Hostin
 
             this.assetSubject.OnCompleted();
         }
+#pragma warning disable CA1031 // exceptions forwarded to subscribers via OnError
         catch (Exception ex)
         {
             this.assetSubject.OnError(ex);
         }
-    }
-
-    private void HandleError(Exception ex) =>
-
-        // Handle the error (e.g., log it, show a message to the user, etc.)
-        Debug.WriteLine($"Error occurred: {ex.Message}");
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.subscription?.Dispose();
-        this.assetSubject.Dispose();
+#pragma warning restore CA1031
     }
 }

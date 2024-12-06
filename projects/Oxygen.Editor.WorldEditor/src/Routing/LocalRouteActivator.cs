@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,7 @@ namespace Oxygen.Editor.WorldEditor.Routing;
 /// <param name="loggerFactory">
 /// We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to obtain a <see cref="ILogger" /> from the Dependency Injector.
 /// </param>
+[SuppressMessage("Microsoft.Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "This class is instantiated by dependency injection.")]
 internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
     : AbstractRouteActivator(loggerFactory)
 {

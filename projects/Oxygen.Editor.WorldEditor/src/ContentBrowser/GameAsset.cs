@@ -4,16 +4,49 @@
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+/// <summary>
+/// Specifies the type of a game asset.
+/// </summary>
 public enum AssetType
 {
+    /// <summary>
+    /// Represents an image asset.
+    /// </summary>
     Image,
+
+    /// <summary>
+    /// Represents a scene asset.
+    /// </summary>
     Scene,
+
+    /// <summary>
+    /// Represents a mesh asset.
+    /// </summary>
     Mesh,
+
+    /// <summary>
+    /// Represents an unknown asset type.
+    /// </summary>
     Unknown,
 }
 
+/// <summary>
+/// Represents a game asset with a name, location, and type.
+/// </summary>
 public class GameAsset
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GameAsset"/> class.
+    /// </summary>
+    /// <param name="name">The name of the asset.</param>
+    /// <param name="location">The path, relative to the project root, where the asset is located.</param>
+    public GameAsset(string name, string location)
+    {
+        this.Name = name;
+        this.Location = location;
+        this.AssetType = GetAssetType(name);
+    }
+
     /// <summary>
     /// Gets or sets the name of the asset.
     /// </summary>
@@ -29,21 +62,19 @@ public class GameAsset
     /// </summary>
     public AssetType AssetType { get; init; }
 
-    public GameAsset(string name, string location)
-    {
-        this.Name = name;
-        this.Location = location;
-        this.AssetType = GetAssetType(name);
-    }
-
+    /// <summary>
+    /// Determines the asset type based on the file extension.
+    /// </summary>
+    /// <param name="fileName">The name of the file.</param>
+    /// <returns>The <see cref="AssetType"/> corresponding to the file extension.</returns>
     public static AssetType GetAssetType(string fileName)
     {
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        var extension = Path.GetExtension(fileName).ToUpperInvariant();
         return extension switch
         {
-            ".png" => AssetType.Image,
-            ".scene" => AssetType.Scene,
-            ".mesh" => AssetType.Mesh,
+            ".PNG" => AssetType.Image,
+            ".SCENE" => AssetType.Scene,
+            ".MESH" => AssetType.Mesh,
             _ => AssetType.Unknown,
         };
     }

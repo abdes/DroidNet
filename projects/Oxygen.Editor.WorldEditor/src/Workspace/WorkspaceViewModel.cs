@@ -51,7 +51,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                     Outlet = "pe",
                     Path = "pe",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(ProjectExplorerViewModel),
+                    ViewModelType = typeof(SceneExplorerViewModel),
                 },
                 new Route
                 {
@@ -86,8 +86,8 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     {
         childContainer.Register<RendererViewModel>(Reuse.Transient);
         childContainer.Register<RendererView>(Reuse.Singleton);
-        childContainer.Register<ProjectExplorerViewModel>(Reuse.Transient);
-        childContainer.Register<ProjectExplorerView>(Reuse.Transient);
+        childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
+        childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
         childContainer.Register<SceneDetailsViewModel>(Reuse.Transient);

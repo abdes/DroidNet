@@ -12,10 +12,13 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-public partial class ProjectLayoutViewModel(
-    IProjectManagerService projectManager,
-    ContentBrowserState contentBrowserState,
-    ILoggerFactory? loggerFactory)
+/// <summary>
+/// Represents the ViewModel for the project layout in the content browser.
+/// </summary>
+/// <param name="projectManager">The project manager service.</param>
+/// <param name="contentBrowserState">The state of the content browser.</param>
+/// <param name="loggerFactory">The logger factory to create loggers.</param>
+public partial class ProjectLayoutViewModel(IProjectManagerService projectManager, ContentBrowserState contentBrowserState, ILoggerFactory? loggerFactory)
     : DynamicTreeViewModel, IRoutingAware
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectLayoutViewModel>();

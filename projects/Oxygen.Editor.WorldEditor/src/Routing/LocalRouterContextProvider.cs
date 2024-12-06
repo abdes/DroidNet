@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
@@ -12,6 +13,7 @@ namespace Oxygen.Editor.WorldEditor.Routing;
 /// <summary>
 /// The implementation of <see cref="IContextProvider{NavigationContext}"/> for the a local child router.
 /// </summary>
+[SuppressMessage("Microsoft.Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "This class is instantiated by dependency injection.")]
 internal sealed partial class LocalRouterContextProvider : IContextProvider<NavigationContext>, IDisposable
 {
     private readonly LocalRouterContext theContext;

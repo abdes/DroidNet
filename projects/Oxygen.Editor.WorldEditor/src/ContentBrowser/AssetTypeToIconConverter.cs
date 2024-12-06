@@ -6,7 +6,10 @@ using Microsoft.UI.Xaml.Data;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
-public class AssetTypeToIconConverter : IValueConverter
+/// <summary>
+/// Converts an <see cref="AssetType"/> to a corresponding icon glyph.
+/// </summary>
+public partial class AssetTypeToIconConverter : IValueConverter
 {
     /// <inheritdoc/>
     public object Convert(object value, Type targetType, object parameter, string language)
@@ -27,5 +30,6 @@ public class AssetTypeToIconConverter : IValueConverter
     }
 
     /// <inheritdoc/>
-    public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+        => throw new InvalidOperationException();
 }

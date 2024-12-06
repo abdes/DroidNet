@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking;
 using DroidNet.Docking.Controls;
 using DroidNet.Docking.Layouts;
@@ -20,6 +21,7 @@ namespace Oxygen.Editor.WorldEditor.Workspace;
 /// A custom factory to create views for the docks in the docking workspace.
 /// </summary>
 /// <param name="container">The IoC container to use for resolution of view models and other services.</param>
+[SuppressMessage("Microsoft.Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "This class is instantiated by dependency injection.")]
 internal sealed class DockViewFactory(IResolver container) : IDockViewFactory
 {
     /// <inheritdoc/>

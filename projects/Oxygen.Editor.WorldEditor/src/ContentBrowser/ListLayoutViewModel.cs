@@ -3,31 +3,33 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Windows.Foundation;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// The ViewModel for the <see cref="ListLayoutView"/> view.
 /// </summary>
-public partial class ListLayoutViewModel(AssetsIndexingService assetsIndexingService) : AssetsLayoutViewModel
+public partial class ListLayoutViewModel : AssetsLayoutViewModel
 {
-    public ObservableCollection<GameAsset> Assets { get; } = assetsIndexingService.Assets;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ListLayoutViewModel"/> class.
+    /// </summary>
+    /// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
+    public ListLayoutViewModel(AssetsIndexingService assetsIndexingService)
+    {
+        this.Assets = assetsIndexingService.Assets;
+    }
 
+    /// <summary>
+    /// Gets the collection of game assets.
+    /// </summary>
+    public ObservableCollection<GameAsset> Assets { get; }
+
+    /// <summary>
+    /// Invokes the item.
+    /// </summary>
+    /// <param name="item">The game asset to invoke.</param>
     [RelayCommand]
     private void InvokeItem(GameAsset item) => this.OnItemInvoked(item);
-}
-
-public class AssetsLayoutViewModel : ObservableObject
-{
-    public event TypedEventHandler<AssetsLayoutViewModel, AssetsViewItemInvokedEventArgs>? ItemInvoked;
-
-    protected void OnItemInvoked(GameAsset item) => this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(item));
-}
-
-public class AssetsViewItemInvokedEventArgs(GameAsset invokedItem)
-{
-    public GameAsset InvokedItem { get; } = invokedItem;
 }

@@ -10,11 +10,14 @@ using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// A <see cref="DataTemplateSelector" /> that can map a <see cref="FolderTreeItemAdapter" /> to a template that can be used to
-/// display a <see cref="Thumbnail" /> for it.
+/// A <see cref="DataTemplateSelector"/> that can map a <see cref="FolderTreeItemAdapter"/> to a template that can be used to
+/// display a <see cref="Thumbnail"/> for it.
 /// </summary>
 public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
+    /// <summary>
+    /// Gets or sets the default template to use when no specific template is selected.
+    /// </summary>
     public DataTemplate? DefaultTemplate { get; set; }
 
     /// <inheritdoc/>
