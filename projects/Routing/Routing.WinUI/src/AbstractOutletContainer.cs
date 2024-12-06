@@ -15,6 +15,14 @@ namespace DroidNet.Routing.WinUI;
 /// outlet registration, content loading, and view model lifecycle. Derived classes only need to
 /// initialize the outlets dictionary and expose properties for binding to views.
 /// </para>
+/// <para><strong>Implementation Notes</strong></para>
+/// <para>
+/// The base class handles view model disposal, property change notifications, and outlet validation.
+/// Derived classes only need to focus on defining outlets and exposing their content through
+/// properties. The outlet dictionary maps outlet names to property names, enabling automatic
+/// property updates when content changes.
+/// </para>
+/// </remarks>
 /// <example>
 /// <strong>Example Implementation</strong>
 /// <para>
@@ -94,14 +102,6 @@ namespace DroidNet.Routing.WinUI;
 /// router.Navigate("/workspace/(docs//sidebar:properties//flyout:search)");
 /// ]]></code>
 /// </example>
-/// <para><strong>Implementation Notes</strong></para>
-/// <para>
-/// The base class handles view model disposal, property change notifications, and outlet validation.
-/// Derived classes only need to focus on defining outlets and exposing their content through
-/// properties. The outlet dictionary maps outlet names to property names, enabling automatic
-/// property updates when content changes.
-/// </para>
-/// </remarks>
 public abstract class AbstractOutletContainer : ObservableObject, IOutletContainer, IDisposable
 {
     /// <summary>
@@ -142,6 +142,7 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
             resource.Dispose();
         }
 
+        this.OnPropertyChanging(outlet.propertyName);
         this.Outlets[outletName] = (outlet.propertyName, viewModel);
         this.OnPropertyChanged(outlet.propertyName);
     }
