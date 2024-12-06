@@ -82,4 +82,11 @@ public interface IFolder : IStorageItem
     /// <returns>When this method completes successfully, it returns <see langword="true"/> if the folder has any documents or folders; otherwise <see langword="false"/>.</returns>
     /// <exception cref="StorageException">The current folder does not exist, or the enumeration of the folder content failed. The <see cref="Exception.InnerException"/> property of the exception will indicate the root cause of the failure.</exception>
     public Task<bool> HasItemsAsync();
+
+    /// <summary>
+    /// Gets a relative path representing the path of this folder relative to the specified path.
+    /// </summary>
+    /// <param name="relativeTo">The source path the result should be relative to. This path is always considered to be a directory.</param>
+    /// <returns>This folder's path relative to the specified source path, or the folder's path as-is if the paths don't share a root.</returns>
+    public string GetPathRelativeTo(string relativeTo);
 }

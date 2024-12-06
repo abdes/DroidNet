@@ -311,4 +311,8 @@ public class NativeFolder : IFolder
             throw new StorageException($"could not check if folder at location [{this.Location}] has items", ex);
         }
     }
+
+    /// <inheritdoc/>
+    public string GetPathRelativeTo(string relativeTo) =>
+        this.StorageProvider.FileSystem.Path.GetRelativePath(relativeTo, this.Location);
 }
