@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
@@ -11,21 +13,20 @@ namespace Oxygen.Editor.Projects;
 /// The <see cref="IProject"/> interface defines the structure of a project within the Oxygen Editor. It includes properties
 /// for accessing project information and the scenes associated with the project.
 /// </remarks>
-public interface IProject
+public interface IProject : INotifyPropertyChanging, INotifyPropertyChanged
 {
     /// <summary>
     /// Gets the project information.
     /// </summary>
-    /// <value>
-    /// An object implementing the <see cref="IProjectInfo"/> interface, which contains metadata about the project.
-    /// </value>
     public IProjectInfo ProjectInfo { get; }
 
     /// <summary>
     /// Gets the list of scenes associated with the project.
     /// </summary>
-    /// <value>
-    /// A list of <see cref="Scene"/> objects representing the scenes within the project.
-    /// </value>
     public IList<Scene> Scenes { get; }
+
+    /// <summary>
+    /// Gets or sets the active scene for the project.
+    /// </summary>
+    public Scene? ActiveScene { get; set; }
 }
