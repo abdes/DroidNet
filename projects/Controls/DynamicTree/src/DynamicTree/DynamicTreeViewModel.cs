@@ -191,6 +191,7 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     /// </remarks>
     protected async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
     {
+        this.SelectionModel?.ClearSelection();
         this.ShownItems.Clear();
 
         if (!skipRoot)
@@ -207,6 +208,8 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
         {
             await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
         }
+
+        this.SyncSelectionModelWithItems();
     }
 
     /// <summary>
@@ -756,7 +759,9 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     {
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
-            this.ShownItems.Insert(insertIndex++, (TreeItemAdapter)child);
+            this.ShownItems.Insert(insertIndex, (TreeItemAdapter)child);
+            ++insertIndex;
+
             if (child.IsExpanded)
             {
                 insertIndex = await this.RestoreExpandedChildrenRecursive(child, insertIndex).ConfigureAwait(true);

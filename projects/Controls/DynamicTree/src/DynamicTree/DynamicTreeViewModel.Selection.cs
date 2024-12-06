@@ -94,8 +94,7 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     /// <param name="oldValue">The old selection model.</param>
     protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
-    {
-    }
+        => this.SyncSelectionModelWithItems();
 
     /// <summary>
     /// Clears the current selection in the tree view.
@@ -146,6 +145,28 @@ public abstract partial class DynamicTreeViewModel
         };
 
         this.OnSelectionModelChanged(oldValue);
+    }
+
+    /// <summary>
+    /// If we have a selection model, ensure that all shown items that are marked as selected, are
+    /// selected in the selection model. Should be called after the shown items collection is
+    /// initialized for the first time, or when the selection model has changed.
+    /// </summary>
+    private void SyncSelectionModelWithItems()
+    {
+        // selection state of items
+        if (this.SelectionModel is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < this.ShownItems.Count; index++)
+        {
+            if (this.ShownItems[index].IsSelected)
+            {
+                this.SelectionModel.SelectItemAt(index);
+            }
+        }
     }
 
     /// <summary>
