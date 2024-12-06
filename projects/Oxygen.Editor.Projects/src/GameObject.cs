@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Projects;
 /// The <see cref="GameObject"/> class serves as a base class for all game objects, providing common functionality such as
 /// property change notification and value validation. It includes a <see cref="Name"/> property that must be set and validated.
 /// </remarks>
-public partial class GameObject : INotifyPropertyChanged
+public partial class GameObject : INotifyPropertyChanged, INotifyPropertyChanging
 {
     private string name;
 
@@ -28,6 +28,9 @@ public partial class GameObject : INotifyPropertyChanged
 
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <inheritdoc/>
+    public event PropertyChangingEventHandler? PropertyChanging;
 
     /// <summary>
     /// Gets or sets the name of the game object.
@@ -56,6 +59,13 @@ public partial class GameObject : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Raises the <see cref="PropertyChanging"/> event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that is changing.</param>
+    protected virtual void OnPropertyChanging([CallerMemberName] string? propertyName = null)
+        => this.PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
+
+    /// <summary>
     /// Raises the <see cref="PropertyChanged"/> event.
     /// </summary>
     /// <param name="propertyName">The name of the property that changed.</param>
@@ -77,6 +87,7 @@ public partial class GameObject : INotifyPropertyChanged
             return false;
         }
 
+        this.OnPropertyChanging(propertyName);
         field = value;
         this.OnPropertyChanged(propertyName);
         return true;
