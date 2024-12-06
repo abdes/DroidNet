@@ -17,7 +17,9 @@ using Oxygen.Editor.Services;
 
 namespace Oxygen.Editor;
 
-/// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
+/// <summary>
+/// Provides application-specific behavior to supplement the default Application class.
+/// </summary>
 public partial class App
 {
     private readonly IRouter router;
@@ -26,15 +28,16 @@ public partial class App
     private readonly HostingContext hostingContext;
     private readonly IActivationService activationService;
 
-    /// <summary>Initializes a new instance of the <see cref="App" /> class.</summary>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="App"/> class.
+    /// </summary>
+    /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="activationService">The activation service.</param>
-    /// In this project architecture, the single instance of the application is created by the User Interface hosted service as
-    /// part of the application host initialization. Its lifecycle is managed together with the rest of the services.
     /// <param name="lifetime">The host application lifetime, used to imperatively exit the application when needed.</param>
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter to be used to set the content inside the content control.</param>
     /// <remarks>
-    /// The <paramref name="converter" /> needs to be available in the XAML as a static resource. However, because it has
+    /// The <paramref name="converter"/> needs to be available in the XAML as a static resource. However, because it has
     /// dependencies injected via the Dependency Injector, we create it in the code behind and programmatically add it as a static
     /// resource after the application is <see cref="OnLaunched">launched</see>.
     /// </remarks>
@@ -59,9 +62,10 @@ public partial class App
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         base.OnLaunched(args);
+
 #if DEBUG
-        this.DebugSettings.BindingFailed += (_, args) => System.Diagnostics.Debug.WriteLine(args.Message);
-        this.DebugSettings.XamlResourceReferenceFailed += (_, args) => System.Diagnostics.Debug.WriteLine(args.Message);
+        this.DebugSettings.BindingFailed += (_, e) => Debug.WriteLine(e.Message);
+        this.DebugSettings.XamlResourceReferenceFailed += (_, e) => Debug.WriteLine(e.Message);
 #endif
 
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
@@ -76,11 +80,12 @@ public partial class App
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .OfType<LaunchActivatedEventArgs>()
             .Select(
-                _ => Observable.FromAsync(async () =>
-                {
-                    Debug.WriteLine("Launch activation ==> navigate to project browser");
-                    await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
-                }))
+                _ => Observable.FromAsync(
+                    async () =>
+                    {
+                        Debug.WriteLine("Launch activation ==> navigate to project browser");
+                        await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
+                    }))
             .Concat()
             .Subscribe();
 

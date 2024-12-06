@@ -21,6 +21,9 @@ namespace Oxygen.Editor.WorldEditor.Workspace;
 /// <summary>
 /// Base ViewModel for managing the docking workspace.
 /// </summary>
+/// <param name="container">The parent IoC container to be used to create a child container for this workspace.</param>
+/// <param name="router">The parent router, will only be used for navigation out of the workspace. A local router will be created and used for local navigation inside the workspace.</param>
+/// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled. </param>
 public abstract partial class DockingWorkspaceViewModel(
     IContainer container,
     IRouter router,

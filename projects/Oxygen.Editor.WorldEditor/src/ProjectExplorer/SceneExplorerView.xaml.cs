@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Projects;
@@ -10,17 +9,16 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 /// <summary>
-/// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which
-/// in turn can hold multiple <see cref="GameEntity">entities</see>. It demonstrates the flexibility of the <see cref="DynamicTree" />
-/// in representing hierarchical layouts of mixed types which can be loaded dynamically.
+/// A View that shows a hierarchical layout of a <see cref="Scene">scene</see>, which
+/// in turn can hold multiple <see cref="GameEntity">entities</see>.
 /// </summary>
-[ViewModel(typeof(ProjectExplorerViewModel))]
-public sealed partial class ProjectExplorerView
+[ViewModel(typeof(SceneExplorerViewModel))]
+public sealed partial class SceneExplorerView
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectExplorerView"/> class.
+    /// Initializes a new instance of the <see cref="SceneExplorerView"/> class.
     /// </summary>
-    public ProjectExplorerView()
+    public SceneExplorerView()
     {
         this.InitializeComponent();
     }
@@ -41,11 +39,11 @@ public sealed partial class ProjectExplorerView
         this.ViewModel!.RedoCommand.Execute(parameter: null);
     }
 
-    private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        this.ViewModel!.RemoveSelectedItemsCommand.Execute(parameter: null);
     }
 }

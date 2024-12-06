@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
-using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+/// <summary>
+/// Represents the view for displaying assets in the World Editor.
+/// </summary>
 [ViewModel(typeof(AssetsViewModel))]
-public sealed partial class AssetsView : UserControl
+public sealed partial class AssetsView
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="AssetsView"/> class.

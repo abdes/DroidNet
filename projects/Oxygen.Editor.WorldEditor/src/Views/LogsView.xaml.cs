@@ -2,14 +2,23 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Views;
-
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.ViewModels;
 
+namespace Oxygen.Editor.WorldEditor.Views;
+
+/// <summary>
+/// Represents the view for displaying logs in the World Editor.
+/// </summary>
 [ViewModel(typeof(LogsViewModel))]
 public sealed partial class LogsView : UserControl
 {
-    public LogsView() => this.InitializeComponent();
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LogsView"/> class.
+    /// </summary>
+    public LogsView()
+    {
+        this.InitializeComponent();
+    }
 }

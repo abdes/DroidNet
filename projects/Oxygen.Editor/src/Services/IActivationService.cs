@@ -4,13 +4,15 @@
 
 namespace Oxygen.Editor.Services;
 
-/// <summary>Handle the activation.</summary>
-/// Only the following 4 activation types are supported as of now (
+/// <summary>
+/// Handles the activation of the application.
+/// </summary>
+/// <remarks>
+/// Only the following activation types are supported as of now:
 /// <see href="https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/applifecycle/applifecycle-rich-activation#activation-details-for-unpackaged-apps">
-/// Activation
-/// details for unpackaged apps.
-/// </see>
-/// ).
+/// Activation details for unpackaged apps.
+/// </see>.
+/// </remarks>
 /// <list type="table">
 /// <item>
 /// <term>Launch</term>
@@ -57,5 +59,10 @@ namespace Oxygen.Editor.Services;
 /// </list>
 public interface IActivationService : IObservable<object>
 {
+    /// <summary>
+    /// Activates the application with the specified activation data.
+    /// </summary>
+    /// <param name="activationData">The data used to activate the application.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public Task ActivateAsync(object activationData);
 }

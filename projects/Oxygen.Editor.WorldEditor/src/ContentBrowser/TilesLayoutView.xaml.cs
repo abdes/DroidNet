@@ -6,6 +6,9 @@ using DroidNet.Mvvm.Generators;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+/// <summary>
+/// Represents the view for displaying assets in a tiles layout in the World Editor.
+/// </summary>
 [ViewModel(typeof(TilesLayoutViewModel))]
 public sealed partial class TilesLayoutView
 {

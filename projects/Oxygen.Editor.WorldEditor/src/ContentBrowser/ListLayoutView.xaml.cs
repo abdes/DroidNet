@@ -11,6 +11,9 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
+/// <summary>
+/// Represents the view for displaying assets in a list layout in the World Editor.
+/// </summary>
 [ViewModel(typeof(ListLayoutViewModel))]
 public sealed partial class ListLayoutView
 {
@@ -22,6 +25,11 @@ public sealed partial class ListLayoutView
         this.InitializeComponent();
     }
 
+    /// <summary>
+    /// Handles the double-tap event on the ListView.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
     private void ListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
         if (sender is not ListView { SelectedItem: GameAsset selectedItem })
@@ -34,6 +42,11 @@ public sealed partial class ListLayoutView
         args.Handled = true;
     }
 
+    /// <summary>
+    /// Handles the pointer pressed event on the ListView.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
     private void ListView_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
         if (sender is not ListView listView)
@@ -46,7 +59,7 @@ public sealed partial class ListLayoutView
         {
             if (originalSource is ListViewItem)
             {
-                return; // Clicked on an item, do not clear selection
+                return;
             }
 
             originalSource = VisualTreeHelper.GetParent(originalSource);

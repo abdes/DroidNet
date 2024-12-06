@@ -2,6 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.WorldEditor.Views;
+
 namespace Oxygen.Editor.WorldEditor.ViewModels;
 
+/// <summary>
+/// The ViewModel for the <see cref="RendererView"/> view.
+/// </summary>
 public class RendererViewModel;
