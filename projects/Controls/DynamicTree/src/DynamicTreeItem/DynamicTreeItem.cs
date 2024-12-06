@@ -226,6 +226,19 @@ public partial class DynamicTreeItem : ContentControl
         rootGrid.Margin = new Thickness(extraLeftMargin, 0, 0, 0);
     }
 
+    /// <summary>
+    /// Handles recycling of the tree items inside the tree control to properly reset the tree item. In particular,
+    /// this works around the issue where the thumbnail ContentTemplateSelector is not applied when a tree item
+    /// is recycled, resulting in the thumbnail using the wrong template.
+    /// </summary>
+    internal void OnElementPrepared()
+    {
+        if (this.GetTemplateChild(ThumbnailPresenterPart) is ContentPresenter { Content: Thumbnail thumbnail })
+        {
+            thumbnail.ContentTemplate = thumbnail.ContentTemplateSelector?.SelectTemplate(thumbnail.Content);
+        }
+    }
+
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
@@ -235,7 +248,6 @@ public partial class DynamicTreeItem : ContentControl
         this.SetupItemNameParts();
 
         this.OnThumbnailTemplateSelectorChanged();
-
         this.UpdateItemMargin();
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
@@ -351,7 +363,7 @@ public partial class DynamicTreeItem : ContentControl
     private void UpdateHasChildrenVisualState()
         => VisualStateManager.GoToState(
             this,
-            (this.ItemAdapter?.ChildrenCount > 0) ? WithChildrenVisualState : NoChildrenVisualState,
+            this.ItemAdapter?.ChildrenCount > 0 ? WithChildrenVisualState : NoChildrenVisualState,
             useTransitions: true);
 
     private DynamicTree? FindParentTreeControl()
