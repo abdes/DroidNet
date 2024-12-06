@@ -12,10 +12,6 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/DynamicTree.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-
             <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
                 <Image Source="{x:Bind local:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />
             </DataTemplate>
@@ -27,17 +23,8 @@
                     Symbol="{x:Bind local:ThumbnailGenerator.GetThumbnailForEntity((dnc:TreeItemAdapter))}" />
             </DataTemplate>
 
-            <DataTemplate x:Key="DefaultThumbnailTemplate">
-                <Border
-                    Width="{StaticResource CellContentWidth}"
-                    Height="{StaticResource CellContentHeight}"
-                    BorderBrush="{ThemeResource EmptyThumbnailBorderColor}"
-                    BorderThickness="1" />
-            </DataTemplate>
-
             <local:ThumbnailTemplateSelector
                 x:Key="ThumbnailTemplateSelector"
-                DefaultTemplate="{StaticResource DefaultThumbnailTemplate}"
                 EntityTemplate="{StaticResource EntityThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
 
@@ -105,11 +92,11 @@
                         <FontIcon Glyph="&#xECC8;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton
+                <!--<AppBarButton
                     Command="{x:Bind ViewModel.AddSceneCommand}"
                     Icon="Add"
                     IsCompact="True"
-                    Label="Create New Scene" />
+                    Label="Create New Scene" />-->
                 <AppBarButton
                     Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
                     Icon="Delete"

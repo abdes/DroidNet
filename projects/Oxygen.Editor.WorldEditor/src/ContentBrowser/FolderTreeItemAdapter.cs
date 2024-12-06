@@ -14,31 +14,37 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 public partial class FolderTreeItemAdapter : TreeItemAdapter
 {
     private readonly ILogger logger;
-    private readonly Task<IFolder> folderAsync;
+    private readonly IFolder folder;
     private string label;
+    private readonly ContentBrowserState contentBrowserState;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FolderTreeItemAdapter"/> class.
     /// </summary>
     /// <param name="logger"></param>
-    /// <param name="folderAsync"></param>
     /// <param name="label"></param>
     /// <param name="isRoot"></param>
     /// <param name="isHidden"></param>
     public FolderTreeItemAdapter(
         ILogger logger,
-        Task<IFolder> folderAsync,
+        ContentBrowserState contentBrowserState,
+        IFolder folder,
         string label,
         bool isRoot = false,
         bool isHidden = false)
         : base(isRoot, isHidden)
     {
         this.logger = logger;
-        this.folderAsync = folderAsync;
+        this.contentBrowserState = contentBrowserState;
+        this.folder = folder;
         this.label = label;
+
+        this.RestoreFromContentBrowserState();
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
+
+    private void RestoreFromContentBrowserState() => this.IsSelected = this.contentBrowserState.ContainsSelectedFolder(this.folder);
 
     /// <inheritdoc/>
     public override string Label
@@ -76,13 +82,12 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
     /// <inheritdoc/>
     protected override async Task LoadChildren()
     {
-        var folder = await this.folderAsync.ConfigureAwait(true);
-        await foreach (var child in folder.GetFoldersAsync().ConfigureAwait(true))
+        await foreach (var child in this.folder.GetFoldersAsync().ConfigureAwait(true).ConfigureAwait(false).ConfigureAwait(false))
         {
             try
             {
                 this.AddChildInternal(
-                    new FolderTreeItemAdapter(this.logger, Task.FromResult(child), child.Name)
+                    new FolderTreeItemAdapter(this.logger, this.contentBrowserState, child, child.Name)
                     {
                         // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
                         // To mark selected items specified in the ActiveRoute query params
@@ -92,7 +97,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
             catch (Exception ex)
             {
                 // Log the failure, but continue with the rest
-                CouldNotLoadProjectFolders(this.logger, folder.Location, ex.Message);
+                CouldNotLoadProjectFolders(this.logger, this.folder.Location, ex.Message);
             }
         }
     }
@@ -104,6 +109,18 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter
         if (e.PropertyName?.Equals(nameof(this.IsExpanded), StringComparison.Ordinal) == true)
         {
             this.OnPropertyChanged(nameof(this.IconGlyph));
+        }
+
+        if (e.PropertyName?.Equals(nameof(this.IsSelected), StringComparison.Ordinal) == true)
+        {
+            if (this.IsSelected)
+            {
+                this.contentBrowserState.AddSelectedFolder(this.folder);
+            }
+            else
+            {
+                this.contentBrowserState.RemoveSelectedFolder(this.folder);
+            }
         }
     }
 
