@@ -7,6 +7,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.ProjectExplorer;
+using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.ViewModels;
 using Oxygen.Editor.WorldEditor.Views;
@@ -65,7 +66,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                     Outlet = "props",
                     Path = "props",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(SceneDetailsViewModel),
+                    ViewModelType = typeof(PropertiesEditorViewModel),
                 },
                 new Route
                 {
@@ -90,10 +91,13 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
-        childContainer.Register<SceneDetailsViewModel>(Reuse.Transient);
-        childContainer.Register<SceneDetailsView>(Reuse.Transient);
         childContainer.Register<LogsViewModel>(Reuse.Singleton);
         childContainer.Register<LogsView>(Reuse.Singleton);
+
+        childContainer.Register<PropertiesEditorViewModel>(Reuse.Transient);
+        childContainer.Register<PropertiesEditorView>(Reuse.Transient);
+        childContainer.Register<TransformViewModel>(Reuse.Transient);
+        childContainer.Register<TransformView>(Reuse.Transient);
     }
 
     /// <inheritdoc/>

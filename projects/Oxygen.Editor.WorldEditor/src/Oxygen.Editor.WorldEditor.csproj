@@ -17,6 +17,7 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Testably.Abstractions" />
+        <PackageReference Include="CommunityToolkit.WinUI.Triggers" />
     </ItemGroup>
 
     <ItemGroup>

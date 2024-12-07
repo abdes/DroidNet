@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
     <ResourceDictionary.MergedDictionaries>
-        <!--  ReSharper disable once Xaml.PathError  -->
+        <!--  ReSharper disable Xaml.PathError  -->
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Styles/CommandBarStyles.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/PropertiesEditor/ThemeResources.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/PropertiesEditor/PropertiesExpander.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/PropertiesEditor/PropertyCard.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>
