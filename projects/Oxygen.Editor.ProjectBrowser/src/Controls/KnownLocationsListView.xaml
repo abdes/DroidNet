@@ -1,14 +1,13 @@
-﻿<ResourceDictionary
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:ctk_converters="using:CommunityToolkit.WinUI.Converters"
-    xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls"
-    xmlns:pbp="using:Oxygen.Editor.ProjectBrowser.Projects">
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls">
 
 
     <CollectionViewSource x:Key="GroupedLocationsSource" IsSourceGrouped="True" />
     <pbc:KnownLocationToIconGlyphConverter x:Key="KnownLocationToIconGlyphConverter" />
-    <ctk_converters:EmptyStringToObjectConverter
+    <ctkcvt:EmptyStringToObjectConverter
         x:Key="EmptyStringToVisibilityConverter"
         EmptyValue="Collapsed"
         NotEmptyValue="Visible" />
@@ -21,7 +20,7 @@
             VerticalAlignment="Center"
             Stroke="{ThemeResource ListViewHeaderItemDividerStroke}"
             StrokeThickness="0.5"
-            Visibility="{Binding SeparatorVisibility}" />
+            Visibility="{Binding Path=SeparatorVisibility}" />
     </DataTemplate>
 
     <ItemsPanelTemplate x:Key="KnownLocationsItemsPanelTemplate">
@@ -80,19 +79,20 @@
                             Grid.RowSpan="2"
                             Margin="0,0,0,0"
                             HorizontalAlignment="Left"
-                            Glyph="{Binding Key, Converter={StaticResource KnownLocationToIconGlyphConverter}}" />
+                            Glyph="{Binding Path=Key, Converter={StaticResource KnownLocationToIconGlyphConverter}}" />
                         <TextBlock
+                            Grid.Row="0"
                             Grid.Column="1"
                             Margin="10,0"
                             VerticalAlignment="Center"
-                            Text="{Binding Name}" />
+                            Text="{Binding Path=Name}" />
                         <TextBlock
                             Grid.Row="1"
                             Grid.Column="1"
                             Margin="10,0"
                             Foreground="{ThemeResource SystemColorGrayTextColor}"
-                            Text="{Binding Location}"
-                            Visibility="{Binding Location, Converter={StaticResource EmptyStringToVisibilityConverter}}" />
+                            Text="{Binding Path=Location}"
+                            Visibility="{Binding Path=Location, Converter={StaticResource EmptyStringToVisibilityConverter}}" />
                     </Grid>
                 </DataTemplate>
             </Setter.Value>
