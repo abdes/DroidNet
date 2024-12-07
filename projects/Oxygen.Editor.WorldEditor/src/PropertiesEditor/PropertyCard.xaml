@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.PropertiesEditor">
+
+    <Style BasedOn="{StaticResource DefaultPropertyCardStyle}" TargetType="local:PropertyCard" />
+
+    <Style x:Key="DefaultPropertyCardStyle" TargetType="local:PropertyCard">
+        <Setter Property="Background" Value="{ThemeResource PropertyCardBackground}" />
+        <Setter Property="Foreground" Value="{ThemeResource PropertyCardForeground}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource PropertyCardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="{ThemeResource PropertyCardBorderThickness}" />
+        <Setter Property="MinWidth" Value="{ThemeResource PropertyCardMinWidth}" />
+        <Setter Property="MinHeight" Value="{ThemeResource PropertyCardMinHeight}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:PropertyCard">
+                    <Grid x:Name="RootGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="PropertyName"
+                            Margin="10,0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            FontSize="{ThemeResource PropertyCardHeaderFontSize}"
+                            Text="{TemplateBinding PropertyName}"
+                            TextTrimming="CharacterEllipsis" />
+                        <Border
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="{ThemeResource ControlFillColorTertiaryBrush}" />
+                        <ContentPresenter
+                            Grid.Column="2"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource PropertyCardBackgroundPointerOver}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PropertyName" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource PropertyCardForegroundDisabled}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>
