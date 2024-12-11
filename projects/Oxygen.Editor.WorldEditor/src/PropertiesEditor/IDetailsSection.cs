@@ -4,9 +4,11 @@
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-public interface IPropertiesViewModel
+public interface IDetailsSection
 {
     public string Header { get; }
 
     public string Description { get; }
+
+    public bool IsExpanded { get; }
 }

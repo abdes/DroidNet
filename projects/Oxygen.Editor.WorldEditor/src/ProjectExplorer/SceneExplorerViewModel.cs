@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
@@ -19,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 
@@ -30,6 +32,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly DispatcherQueue dispatcher;
     private readonly IProjectManagerService projectManager;
+    private readonly IMessenger messenger;
     private readonly IProject currentProject;
 
     private bool isDisposed;
@@ -44,11 +47,12 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="projectManager">The project manager service.</param>
     /// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled.</param>
-    public SceneExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager, ILoggerFactory? loggerFactory = null)
+    public SceneExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager, IMessenger messenger, ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.dispatcher = hostingContext.Dispatcher;
         this.projectManager = projectManager;
+        this.messenger = messenger;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -62,6 +66,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemAdded += this.OnItemAdded;
+
+        messenger.Register<EntitySeletionRequestMessage>(this, this.OnEntitySeletionRequested);
     }
 
     /// <summary>
@@ -92,6 +98,9 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         }
 
         this.currentProject.PropertyChanged -= this.OnCurrentProjectPropertyChanged;
+
+        this.messenger.UnregisterAll(this);
+
         this.isDisposed = true;
     }
 
@@ -230,6 +239,26 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.LogItemRemoved(args.TreeItem.Label);
     }
 
+    private void OnEntitySeletionRequested(object recipient, EntitySeletionRequestMessage message)
+    {
+        switch (this.SelectionModel)
+        {
+            case SingleSelectionModel singleSelection:
+                var selectedItem = singleSelection.SelectedItem;
+                message.Reply(selectedItem is null ? [] : [((GameEntityAdapter)selectedItem).AttachedObject]);
+                break;
+
+            case MultipleSelectionModel<ITreeItem> multipleSelection:
+                var selection = multipleSelection.SelectedItems.Where(item => item is GameEntityAdapter).Select(adapter => ((GameEntityAdapter)adapter).AttachedObject).ToList();
+                message.Reply(selection);
+                break;
+
+            default:
+                message.Reply([]);
+                break;
+        }
+    }
+
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.SelectedIndex), StringComparison.Ordinal))
@@ -240,6 +269,12 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.AddEntityCommand.NotifyCanExecuteChanged();
 
         this.HasUnlockedSelectedItems = this.SelectionModel?.SelectedItem?.IsLocked == false;
+
+        _ = this.messenger.Send(
+            new EntitySelectionChangedMessage(
+                this.SelectionModel?.SelectedItem is not GameEntityAdapter adapter
+                    ? []
+                    : [adapter.AttachedObject]));
     }
 
     private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -263,6 +298,12 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         }
 
         this.HasUnlockedSelectedItems = unlockedSelectedItems;
+
+        var selection = multipleSelectionModel.SelectedItems
+            .Where(item => item is GameEntityAdapter)
+            .Select(adapter => ((GameEntityAdapter)adapter).AttachedObject)
+            .ToList();
+        _ = this.messenger.Send(new EntitySelectionChangedMessage(selection));
     }
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
