@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.PropertiesEditor.EntityComponentsEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.PropertiesEditor"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <local:ItemsTypeToIconConverter x:Key="ItemsTypeToIconConverter" />
+        <ctkcvt:BoolToVisibilityConverter x:Key="HasSelectionToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.Resources>
+            <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+        </Grid.Resources>
+        <TextBlock
+            Margin="10,40"
+            VerticalAlignment="Top"
+            FontStyle="Italic"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            Style="{ThemeResource CaptionTextBlockStyle}"
+            Text="Select an object to view and edit its properties"
+            TextAlignment="Center"
+            TextWrapping="WrapWholeWords"
+            Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}" />
+        <StackPanel Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+            <Grid
+                Height="44"
+                Padding="8"
+                HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" MinWidth="100" />
+                </Grid.ColumnDefinitions>
+                <ContentPresenter
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    Content="{x:Bind ViewModel.ItemsType, Mode=OneWay, Converter={StaticResource ItemsTypeToIconConverter}}" />
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="5">
+                    <TextBlock
+                        x:Name="EntityNameTextBlock"
+                        Margin="0"
+                        VerticalAlignment="Center"
+                        DoubleTapped="EntityNameTextBlock_DoubleTapped"
+                        Text="{x:Bind ViewModel.Name, Mode=OneWay, TargetNullValue='Multiple Values'}"
+                        TextAlignment="Left"
+                        TextWrapping="NoWrap" />
+                    <TextBox
+                        x:Name="RenameTextBox"
+                        Margin="0"
+                        VerticalAlignment="Center"
+                        GotFocus="RenameTextBox_GotFocus"
+                        KeyDown="RenameTextBox_KeyDown"
+                        LostFocus="RenameTextBox_LostFocus"
+                        Text="{x:Bind ViewModel.Name, Mode=OneWay}"
+                        TextAlignment="Left"
+                        TextChanged="RenameTextBox_TextChanged"
+                        TextWrapping="NoWrap"
+                        Visibility="Collapsed" />
+                    <FontIcon
+                        Name="EntityNameError"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Glyph="&#xEA39;"
+                        Visibility="Collapsed" />
+                </StackPanel>
+                <Button
+                    Grid.Column="2"
+                    Margin="20,0,0,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <FontIcon FontSize="14" Glyph="&#xE710;" />
+                        <TextBlock Text="Add" />
+                    </StackPanel>
+                </Button>
+                <TextBlock
+                    Grid.Column="2"
+                    Margin="20,0,4,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+                    <Run Text="{x:Bind ViewModel.ItemsCount, Mode=OneWay}" />
+                    <Run Text="Objects" />
+                </TextBlock>
+            </Grid>
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.PropertyEditors}">
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="local:IDetailsSection">
+                        <!--  ReSharper disable once Xaml.StaticResourceNotResolved (created in code behind)  -->
+                        <ContentPresenter Content="{x:Bind Converter={StaticResource VmToViewConverter}}" />
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </StackPanel>
+    </Grid>
+</UserControl>

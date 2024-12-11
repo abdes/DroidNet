@@ -21,31 +21,27 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
     /// <inheritdoc/>
     public override Scene Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        var scene = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
+        var sceneElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
 
-        if (!scene.TryGetProperty(nameof(GameObject.Name), out var nameElement))
+        if (!sceneElement.TryGetProperty(nameof(GameObject.Name), out var nameElement))
         {
             Fail.MissingRequiredProperty(nameof(GameObject.Name));
         }
 
         var name = nameElement.ToString();
+        var scene = new Scene(project) { Name = name, };
 
-        var entities = new List<GameEntity>();
-
-        if (scene.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
+        if (sceneElement.TryGetProperty(nameof(Scene.Entities), out var entitiesElement) &&
             entitiesElement.ValueKind == JsonValueKind.Array)
         {
-            entities.AddRange(
+            scene.Entities.Clear();
+            scene.Entities.AddRange(
                 entitiesElement.EnumerateArray()
-                    .Select(entityElement => JsonSerializer.Deserialize<GameEntity>(entityElement.GetRawText()))
+                    .Select(entityElement => GameEntity.FromJson(entityElement.GetRawText(), scene))
                     .OfType<GameEntity>());
         }
 
-        return new Scene(project)
-        {
-            Name = name,
-            Entities = entities,
-        };
+        return scene;
     }
 
     /// <inheritdoc/>

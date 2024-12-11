@@ -11,12 +11,11 @@ namespace Oxygen.Editor.Projects;
 /// <summary>
 /// Represents a game entity with a name and an associated scene.
 /// </summary>
-/// <param name="scene">The scene associated with the game entity.</param>
 /// <remarks>
 /// The <see cref="GameEntity"/> class represents an entity within a game, which is associated with a specific scene.
 /// It provides methods for JSON serialization and deserialization, allowing game entities to be easily saved and loaded.
 /// </remarks>
-public partial class GameEntity(Scene scene) : GameObject
+public partial class GameEntity : GameObject
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,15 +25,25 @@ public partial class GameEntity(Scene scene) : GameObject
     };
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="GameEntity"/> class.
+    /// </summary>
+    /// <param name="scene">The scene associated with the game entity.</param>
+    public GameEntity(Scene scene)
+    {
+        this.Scene = scene;
+        this.Components = [new Transform(this) { Name = nameof(Transform) }];
+    }
+
+    /// <summary>
     /// Gets the scene associated with the game entity.
     /// </summary>
     [JsonIgnore]
-    public Scene Scene { get; } = scene;
+    public Scene Scene { get; }
 
     /// <summary>
     /// Gets the list of components associated with the game entity.
     /// </summary>
-    public IList<GameComponent> Components { get; private init; } = [];
+    public List<GameComponent> Components { get; private init; }
 
     /// <summary>
     /// Deserializes a JSON string into a <see cref="GameEntity" /> object.
@@ -76,31 +85,33 @@ public partial class GameEntity(Scene scene) : GameObject
         /// <inheritdoc/>
         public override GameEntity Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var entity = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
+            var entityElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
 
-            if (!entity.TryGetProperty(nameof(GameObject.Name), out var nameElement))
+            if (!entityElement.TryGetProperty(nameof(GameObject.Name), out var nameElement))
             {
                 Fail.MissingRequiredProperty(nameof(GameObject.Name));
             }
 
             var name = nameElement.ToString();
+            var entity = new GameEntity(scene) { Name = name, };
 
-            var components = new List<GameComponent>();
-
-            if (entity.TryGetProperty(nameof(GameEntity.Components), out var elComponents) &&
+            if (entityElement.TryGetProperty(nameof(GameEntity.Components), out var elComponents) &&
                 elComponents.ValueKind == JsonValueKind.Array)
             {
-                components.AddRange(
+                entity.Components.Clear();
+                entity.Components.AddRange(
                     elComponents.EnumerateArray()
                         .Select(elComponent => GameComponent.FromJson(elComponent.GetRawText()))
                         .OfType<GameComponent>());
             }
 
-            return new GameEntity(scene)
+            // Ensure the Components list contains a Transform element
+            if (!entity.Components.OfType<Transform>().Any())
             {
-                Name = name,
-                Components = components,
-            };
+                entity.Components.Add(new Transform(entity) { Name = nameof(Transform) });
+            }
+
+            return entity;
         }
 
         /// <inheritdoc/>

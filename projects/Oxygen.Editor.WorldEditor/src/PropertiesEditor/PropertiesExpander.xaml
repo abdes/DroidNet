@@ -151,13 +151,13 @@
                                     <!--  Default  -->
                                     <VisualState x:Name="Right" />
 
-                                    <!--  Whenever the control width is less than SettingsCardWrapThreshold, the Content is below the Header/Description  -->
+                                    <!--  Whenever the control width is less than PropertiesExpanderWrapThreshold, the Content is below the Header/Description  -->
                                     <VisualState x:Name="RightWrapped">
                                         <VisualState.StateTriggers>
                                             <ui:ControlSizeTrigger
                                                 MinWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}"
                                                 MaxWidth="{ThemeResource PropertiesExpanderWrapThreshold}"
-                                                TargetElement="{Binding ElementName=PART_RootGrid}" />
+                                                TargetElement="{Binding ElementName=PartRootGrid}" />
                                         </VisualState.StateTriggers>
                                         <VisualState.Setters>
                                             <Setter Target="PartContentPresenter.(Grid.Row)" Value="1" />
@@ -171,7 +171,7 @@
                                     <!--  For even smaller widths: the HeaderIcon is collapsed.  -->
                                     <VisualState x:Name="RightWrappedNoIcon">
                                         <VisualState.StateTriggers>
-                                            <ui:ControlSizeTrigger MaxWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}" TargetElement="{Binding ElementName=PART_RootGrid}" />
+                                            <ui:ControlSizeTrigger MaxWidth="{ThemeResource PropertiesExpanderWrapNoIconThreshold}" TargetElement="{Binding ElementName=PartRootGrid}" />
                                         </VisualState.StateTriggers>
                                         <VisualState.Setters>
                                             <Setter Target="PartHeaderIconPresenterHolder.Visibility" Value="Collapsed" />

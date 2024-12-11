@@ -62,9 +62,9 @@
     <x:Double x:Key="PropertiesExpanderChevronButtonWidth">32</x:Double>
     <x:Double x:Key="PropertiesExpanderChevronButtonHeight">32</x:Double>
     <x:Double x:Key="PropertyCardMinWidth">148</x:Double>
-    <x:Double x:Key="PropertyCardMinHeight">40</x:Double>
+    <x:Double x:Key="PropertyCardMinHeight">30</x:Double>
     <x:Double x:Key="PropertiesExpanderDescriptionFontSize">12</x:Double>
-    <x:Double x:Key="PropertyCardHeaderFontSize">14</x:Double>
+    <x:Double x:Key="PropertyCardHeaderFontSize">12</x:Double>
     <x:Double x:Key="PropertyCardLeftIndention">0</x:Double>
     <x:Double x:Key="PropertiesExpanderHeaderIconMaxSize">20</x:Double>
     <Thickness x:Key="PropertiesExpanderHeaderIconMargin">12,0, 20, 0</Thickness>

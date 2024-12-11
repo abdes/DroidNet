@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
@@ -66,7 +67,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                     Outlet = "props",
                     Path = "props",
                     MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(PropertiesEditorViewModel),
+                    ViewModelType = typeof(EntityComponentsEditorViewModel),
                 },
                 new Route
                 {
@@ -85,6 +86,8 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     /// <inheritdoc/>
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
+        childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
+
         childContainer.Register<RendererViewModel>(Reuse.Transient);
         childContainer.Register<RendererView>(Reuse.Singleton);
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
@@ -94,8 +97,8 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<LogsViewModel>(Reuse.Singleton);
         childContainer.Register<LogsView>(Reuse.Singleton);
 
-        childContainer.Register<PropertiesEditorViewModel>(Reuse.Transient);
-        childContainer.Register<PropertiesEditorView>(Reuse.Transient);
+        childContainer.Register<EntityComponentsEditorViewModel>(Reuse.Transient);
+        childContainer.Register<EntityComponentsEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
     }
