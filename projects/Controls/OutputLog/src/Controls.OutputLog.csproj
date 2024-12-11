@@ -2,6 +2,9 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <RootNamespace>$(RootNamespace).Controls.OutputLog</RootNamespace>
+        <RootNamespace>DroidNet.Controls.OutputLog</RootNamespace>
+
         <UseWinUI>true</UseWinUI>
 
         <Title>OutputLog Control</Title>
@@ -10,7 +13,6 @@
         <PackageTags>winui;controls;logging;richtext;colored;logview;custom</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
 
-        <RootNamespace>$(RootNamespace).Controls.OutputLog</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
