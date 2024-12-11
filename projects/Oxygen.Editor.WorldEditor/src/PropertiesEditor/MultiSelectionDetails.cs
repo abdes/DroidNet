@@ -10,19 +10,17 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
-public abstract class MultiSelectionDetails<T> : ObservableObject
+public abstract partial class MultiSelectionDetails<T> : ObservableObject
     where T : GameObject
 {
     private IList<T> items = [];
+
+    [ObservableProperty]
     private string? name;
 
-    public ObservableCollection<IPropertyEditor<T>> PropertyEditors { get; } = [];
+    private bool internalNameUpdate;
 
-    public string? Name
-    {
-        get => this.name;
-        protected set => this.SetProperty(ref this.name, value);
-    }
+    public ObservableCollection<IPropertyEditor<T>> PropertyEditors { get; } = [];
 
     public bool HasItems => this.Items.Count > 0;
 
@@ -31,8 +29,23 @@ public abstract class MultiSelectionDetails<T> : ObservableObject
     public IList<T> Items
     {
         get => this.items;
-        protected set => this.SetProperty(ref this.items, value);
+        protected set
+        {
+            foreach (var item in this.Items)
+            {
+                item.PropertyChanged -= this.Items_OnPropertyChanged;
+            }
+
+            _ = this.SetProperty(ref this.items, value);
+
+            foreach (var item in this.Items)
+            {
+                item.PropertyChanged += this.Items_OnPropertyChanged;
+            }
+        }
     }
+
+    private void Items_OnPropertyChanged(object? sender, PropertyChangedEventArgs e) => this.UpdateProperties();
 
     public bool HasMultipleItems => this.Items.Count > 1;
 
@@ -122,10 +135,25 @@ public abstract class MultiSelectionDetails<T> : ObservableObject
 
     protected virtual void UpdateProperties()
     {
+        this.internalNameUpdate = true;
         this.Name = GetMixedValue(this.Items, e => e.Name);
+        this.internalNameUpdate = false;
 
         this.OnPropertyChanged(nameof(this.ItemsCount));
         this.OnPropertyChanged(nameof(this.HasItems));
         this.OnPropertyChanged(nameof(this.HasMultipleItems));
+    }
+
+    partial void OnNameChanged(string? value)
+    {
+        if (value is null || this.internalNameUpdate)
+        {
+            return;
+        }
+
+        foreach (var entity in this.Items)
+        {
+            entity.Name = value;
+        }
     }
 }

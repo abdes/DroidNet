@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Mvvm.Converters;
 using Oxygen.Editor.Projects;
@@ -70,16 +69,5 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
         }
 
         return filteredEditors;
-    }
-
-    [RelayCommand]
-    private void RenameItems(string newName)
-    {
-        foreach (var entity in this.Items)
-        {
-            entity.Name = newName;
-        }
-
-        this.Name = newName;
     }
 }
