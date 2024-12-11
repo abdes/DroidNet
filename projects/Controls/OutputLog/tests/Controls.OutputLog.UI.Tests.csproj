@@ -4,6 +4,7 @@
 
     <PropertyGroup>
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
+        <RootNamespace>DroidNet.Controls.OutputLog.UI.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

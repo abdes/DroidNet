@@ -4,12 +4,12 @@
 
     <PropertyGroup>
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
-        <AssemblyName>DroidNet.Controls.DynamicTree.UI.Tests</AssemblyName>
+        <AssemblyName>DroidNet.Controls.InPlaceEdit.UI.Tests</AssemblyName>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\InPLaceEdit\src\Controls.InPLaceEdit.csproj" />
     </ItemGroup>
 
     <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
