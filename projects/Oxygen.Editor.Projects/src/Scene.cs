@@ -33,7 +33,7 @@ public partial class Scene(IProject project) : GameObject
     /// <summary>
     /// Gets the list of entities within the scene.
     /// </summary>
-    public List<GameEntity> Entities { get; init; } = [];
+    public ICollection<GameEntity> Entities { get; init; } = [];
 
     /// <summary>
     /// Deserializes a JSON string into a <see cref="Scene" /> object.

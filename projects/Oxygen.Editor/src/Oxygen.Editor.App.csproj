@@ -82,6 +82,28 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
+        <!-- Reference the wrapped native project so that its DLL gets copied to our output directory -->
+        <!--
+        Visual Studio doesn't support referencing an unmanaged C++ project from a managed C# one,
+        but MSBuild supports referencing any project from any other project.
+
+        When you perform the build, the reference will cause MSBuild to build the referenced project
+        first. The ReferenceOutputAssembly value tells MSBuild not to copy the output assembly of
+        the build (since the C++ project does not produce one), but the OutputItemType and
+        CopyToOutputDirectory values instruct it to copy the output content to the referencing
+        project's output folder.
+        https://learn.microsoft.com/en-us/archive/blogs/kirillosenkov/how-to-have-a-project-reference-without-referencing-the-actual-binary
+        -->
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\Oxygen\Oxygen.vcxproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <OutputItemType>Content</OutputItemType>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </ProjectReference>
+    </ItemGroup>
+
+
+    <ItemGroup>
         <None Update="appsettings.json">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>

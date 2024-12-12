@@ -1,0 +1,5 @@
+build:asan --strip=never
+build:asan --copt /fsanitize=address
+build:asan --copt -DADDRESS_SANITIZER
+build:asan --linkopt /fsanitize=address
+build:vs2022 --cxxopt=/Zc:__cplusplus

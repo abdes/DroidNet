@@ -142,7 +142,7 @@ public partial class InPlaceEditableLabel : ContentControl
     /// </summary>
     internal void StartEdit()
     {
-        if (this.editTextBox is null)
+        if (this.entityNameTextBlock is null || this.editTextBox is null)
         {
             return;
         }
@@ -153,6 +153,7 @@ public partial class InPlaceEditableLabel : ContentControl
 
         this.UpdateVisualState();
 
+        this.editTextBox.MinWidth = this.entityNameTextBlock.ActualWidth;
         _ = this.editTextBox.Focus(FocusState.Programmatic);
     }
 

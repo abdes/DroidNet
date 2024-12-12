@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="oxygen::ResourceHandle">
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFFFFFF) != 0xFFFFFFFFFFFF">
+      Handle={handle_,x} (Index={Index()}, Type={ResourceType()}, Gen={Generation()}, {IsFree()})
+    </DisplayString>
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFFFFFF) == 0xFFFFFFFFFFFF">Invalid Handle</DisplayString>
+    <Expand>
+      <Item Name="Raw Handle">handle_,x</Item>
+      <Item Name="Index">Index()</Item>
+      <Item Name="ResourceType">ResourceType()</Item>
+      <Item Name="Generation">Generation()</Item>
+      <Item Name="IsFree">IsFree()</Item>
+      <Item Name="IsValid">IsValid()</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>

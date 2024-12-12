@@ -61,7 +61,7 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
 
         foreach (var entity in this.Items)
         {
-            foreach (var key in keysToCheck.ToList().Where(key => entity.Components.TrueForAll(component => component.GetType() != key)))
+            foreach (var key in keysToCheck.ToList().Where(key => !entity.Components.Any(component => component.GetType() == key)))
             {
                 _ = filteredEditors.Remove(key);
                 _ = keysToCheck.Remove(key);

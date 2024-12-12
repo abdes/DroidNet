@@ -1,0 +1,193 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+    <None Include="vcpkg.json" />
+    <None Include="vcpkg-configuration.json" />
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="base\compilers.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\macros.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\platform.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\resource.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\resource_handle.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\resource_table.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\time.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\types.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="core\engine.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\fwd.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\input_handler.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\module.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\system.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\version.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="input\action.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\action_triggers.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\action_value.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\fwd.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\input_action_mapping.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\input_mapping_context.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\input_system.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="input\types.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="world\entity.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="world\types.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\display.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\fwd.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\input.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\input_event.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\platform.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\types.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\window.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="platform\detail\base_window.h">
+      <Filter>Platform\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="base\signal.hpp">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\loguru.hpp">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="base\logging.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="api_export.h" />
+    <ClInclude Include="world\transform.h">
+      <Filter>World</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Base">
+      <UniqueIdentifier>{6faae2b5-fc79-4c1c-a06d-0d3b4103f0f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{f60db237-8cd8-41ed-af3b-fdbc2b3fcbb6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{9c56b8b4-cf66-48e1-bc7a-55e6dc5628c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{67e40c7d-9331-4b50-8aff-dd84c886cedf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="World">
+      <UniqueIdentifier>{ea17142e-6843-4583-9073-0cd3ef2a7499}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform\detail">
+      <UniqueIdentifier>{a5f22fd2-f635-4064-bb33-fd2f121458b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Debug">
+      <UniqueIdentifier>{6d7f893b-bb31-4d3d-bee4-71c3b1d7363b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="core\engine.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="core\version.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="input\action.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="input\action_triggers.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="input\input_action_mapping.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="input\input_mapping_context.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="input\input_system.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="world\entity.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\display.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\input.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\platform.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\window.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\detail\base_window.cpp">
+      <Filter>Platform\detail</Filter>
+    </ClCompile>
+    <ClCompile Include="base\loguru.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="base\ResourceHandle.natvis">
+      <Filter>Debug</Filter>
+    </Natvis>
+  </ItemGroup>
+</Project>

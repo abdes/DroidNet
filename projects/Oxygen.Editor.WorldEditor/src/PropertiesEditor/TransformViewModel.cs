@@ -39,7 +39,7 @@ public partial class TransformViewModel : ComponentPropertyEditor
             items,
             e =>
             {
-                var transform = e.Components.Find(c => c is Transform) as Transform;
+                var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
                 return transform?.Position.X ?? 0;
             });
 
@@ -47,7 +47,7 @@ public partial class TransformViewModel : ComponentPropertyEditor
             items,
             e =>
             {
-                var transform = e.Components.Find(c => c is Transform) as Transform;
+                var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
                 return transform?.Position.Y ?? 0;
             });
 
@@ -55,7 +55,7 @@ public partial class TransformViewModel : ComponentPropertyEditor
             items,
             e =>
             {
-                var transform = e.Components.Find(c => c is Transform) as Transform;
+                var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
                 return transform?.Position.Z ?? 0;
             });
     }
