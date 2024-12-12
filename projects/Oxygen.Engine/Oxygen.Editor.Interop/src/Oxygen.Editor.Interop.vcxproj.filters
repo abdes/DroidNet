@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+    <None Include="vcpkg-configuration.json" />
+    <None Include="vcpkg.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="OxygenWorld.cpp" />
+    <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="OxygenWrapper.cpp" />
+    <ClCompile Include="Base\LoguruWrapper.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="OxygenWorld.h" />
+    <ClInclude Include="OxygenWrapper.h" />
+    <ClInclude Include="Base\LoguruWrapper.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="World">
+      <UniqueIdentifier>{7722c63e-a5e7-450d-b97b-aa52bc8a891b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base">
+      <UniqueIdentifier>{3187e374-ea51-469d-8e36-92d80e02fc13}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

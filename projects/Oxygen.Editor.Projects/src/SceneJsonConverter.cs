@@ -35,10 +35,14 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
             entitiesElement.ValueKind == JsonValueKind.Array)
         {
             scene.Entities.Clear();
-            scene.Entities.AddRange(
-                entitiesElement.EnumerateArray()
-                    .Select(entityElement => GameEntity.FromJson(entityElement.GetRawText(), scene))
-                    .OfType<GameEntity>());
+            foreach (var entityElement in entitiesElement.EnumerateArray())
+            {
+                var entity = GameEntity.FromJson(entityElement.GetRawText(), scene);
+                if (entity != null)
+                {
+                    scene.Entities.Add(entity);
+                }
+            }
         }
 
         return scene;

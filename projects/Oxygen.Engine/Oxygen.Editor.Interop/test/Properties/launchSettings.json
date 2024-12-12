@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Oxygen.Editor.Interop.Tests": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

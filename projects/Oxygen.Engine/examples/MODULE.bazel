@@ -1,0 +1,15 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+"""
+Examples and demos for the Oxygen Game Engine.
+"""
+
+module(
+    name = "examples",
+    version = "1.0.0",
+    compatibility_level = 1,
+)

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="api_export.h" />
+    <ClInclude Include="base\compilers.h" />
+    <ClInclude Include="base\logging.h" />
+    <ClInclude Include="base\loguru.hpp" />
+    <ClInclude Include="base\macros.h" />
+    <ClInclude Include="base\platform.h" />
+    <ClInclude Include="base\resource.h" />
+    <ClInclude Include="base\resource_handle.h" />
+    <ClInclude Include="base\resource_table.h" />
+    <ClInclude Include="base\signal.hpp" />
+    <ClInclude Include="base\time.h" />
+    <ClInclude Include="base\types.h" />
+    <ClInclude Include="core\engine.h" />
+    <ClInclude Include="core\fwd.h" />
+    <ClInclude Include="core\input_handler.h" />
+    <ClInclude Include="core\module.h" />
+    <ClInclude Include="core\system.h" />
+    <ClInclude Include="core\version.h" />
+    <ClInclude Include="input\action.h" />
+    <ClInclude Include="input\action_triggers.h" />
+    <ClInclude Include="input\action_value.h" />
+    <ClInclude Include="input\fwd.h" />
+    <ClInclude Include="input\input_action_mapping.h" />
+    <ClInclude Include="input\input_mapping_context.h" />
+    <ClInclude Include="input\input_system.h" />
+    <ClInclude Include="input\types.h" />
+    <ClInclude Include="platform\detail\base_window.h" />
+    <ClInclude Include="platform\display.h" />
+    <ClInclude Include="platform\fwd.h" />
+    <ClInclude Include="platform\input.h" />
+    <ClInclude Include="platform\input_event.h" />
+    <ClInclude Include="platform\platform.h" />
+    <ClInclude Include="platform\types.h" />
+    <ClInclude Include="platform\window.h" />
+    <ClInclude Include="world\entity.h" />
+    <ClInclude Include="world\transform.h" />
+    <ClInclude Include="world\types.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="base\loguru.cpp" />
+    <ClCompile Include="core\engine.cpp" />
+    <ClCompile Include="core\version.cpp" />
+    <ClCompile Include="input\action.cpp" />
+    <ClCompile Include="input\action_triggers.cpp" />
+    <ClCompile Include="input\input_action_mapping.cpp" />
+    <ClCompile Include="input\input_mapping_context.cpp" />
+    <ClCompile Include="input\input_system.cpp" />
+    <ClCompile Include="platform\detail\base_window.cpp" />
+    <ClCompile Include="platform\display.cpp" />
+    <ClCompile Include="platform\input.cpp" />
+    <ClCompile Include="platform\platform.cpp" />
+    <ClCompile Include="platform\window.cpp" />
+    <ClCompile Include="world\entity.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
+    <None Include="vcpkg-configuration.json" />
+    <None Include="vcpkg.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="base\ResourceHandle.natvis">
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
+    </Natvis>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{1e967650-3973-4151-b313-ab8f3fbac717}</ProjectGuid>
+    <RootNamespace>oxygen</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <ProjectName>Oxygen</ProjectName>
+    <PlatformToolset>v143</PlatformToolset>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="..\Properties\LinkerFlags.props" />
+    <Import Project="..\Properties\CompilerDefines.props" />
+    <Import Project="..\Properties\CompilerFlags.props" />
+    <Import Project="..\Properties\OutputDirs.props" />
+    <Import Project="..\Properties\VcpkgConfig.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="..\Properties\LinkerFlags.props" />
+    <Import Project="..\Properties\CompilerDefines.props" />
+    <Import Project="..\Properties\CompilerFlags.props" />
+    <Import Project="..\Properties\OutputDirs.props" />
+    <Import Project="..\Properties\VcpkgConfig.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>DroidNet.Oxygen</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <ClCompile>
+      <PreprocessorDefinitions>OXYGEN_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup>
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

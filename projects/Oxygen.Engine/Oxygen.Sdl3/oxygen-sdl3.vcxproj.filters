@@ -1,0 +1,55 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+    <None Include="vcpkg.json" />
+    <None Include="vcpkg-configuration.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{6e893a2d-8c05-488c-af86-280f1b234c4c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform\detail">
+      <UniqueIdentifier>{030b8b77-10ea-4e72-bbf3-7d2d7f63eb3e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Oxygen\platform-sdl\display.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\event_utils.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\window.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\detail\wrapper.cpp">
+      <Filter>Platform\detail</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\platform.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\detail\platform_impl.cpp">
+      <Filter>Platform\detail</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\platform-sdl\display.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\platform.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\window.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\detail\wrapper.h">
+      <Filter>Platform\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="api_export.h" />
+    <ClInclude Include="..\Oxygen\platform-sdl\detail\platform_impl.h">
+      <Filter>Platform\detail</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

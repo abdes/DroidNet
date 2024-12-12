@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="base\test\macros_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\platform_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\resource_handle_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\resource_table_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\time_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\types_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\lib\native\src\gtest\gtest-all.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\lib\native\src\gmock\gmock-all.cc" />
+    <ClCompile Include="core\test\input_handler_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="core\test\system_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="core\test\version_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="core\test\main.cpp" />
+    <ClCompile Include="platform\test\input_test.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="platform\test\window_test.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="world\test\entity_component_test.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\resource_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Base">
+      <UniqueIdentifier>{1b6b7b63-671e-47d9-adcb-2580c20cff3e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{bf9f0dba-53f8-4f37-b725-f784b7025026}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{8ae04400-af2a-40b4-9add-43ed33c55f8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="World">
+      <UniqueIdentifier>{af1bc3aa-ea32-4221-8039-d9e6c079112e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
