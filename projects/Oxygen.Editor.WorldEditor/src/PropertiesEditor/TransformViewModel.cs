@@ -5,8 +5,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Projects;
 
-using static Oxygen.Editor.WorldEditor.PropertiesEditor.MultiSelectionDetails<Oxygen.Editor.Projects.GameEntity>;
-
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
 public partial class TransformViewModel : ComponentPropertyEditor
@@ -33,9 +31,9 @@ public partial class TransformViewModel : ComponentPropertyEditor
     public PropertyDescriptor ScaleProperty { get; } = new() { Name = "Scale" };
 
     /// <inheritdoc/>
-    public override void UpdateValues(IList<GameEntity> items)
+    public override void UpdateValues(ICollection<GameEntity> items)
     {
-        this.PositionX = GetMixedValue(
+        this.PositionX = MixedValues.GetMixedValue(
             items,
             e =>
             {
@@ -43,7 +41,7 @@ public partial class TransformViewModel : ComponentPropertyEditor
                 return transform?.Position.X ?? 0;
             });
 
-        this.PositionY = GetMixedValue(
+        this.PositionY = MixedValues.GetMixedValue(
             items,
             e =>
             {
@@ -51,7 +49,7 @@ public partial class TransformViewModel : ComponentPropertyEditor
                 return transform?.Position.Y ?? 0;
             });
 
-        this.PositionZ = GetMixedValue(
+        this.PositionZ = MixedValues.GetMixedValue(
             items,
             e =>
             {

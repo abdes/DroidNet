@@ -16,6 +16,7 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
         { typeof(Transform), new TransformViewModel() },
     };
 
+    private ICollection<GameEntity> items;
     private bool isDisposed;
     private readonly IMessenger messenger;
 
@@ -29,8 +30,13 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;
 
-        this.Items = this.messenger.Send(new EntitySeletionRequestMessage()).SelectedEntities;
-        this.messenger.Register<EntitySelectionChangedMessage>(this, (_, message) => this.Items = message.SelectedEntities);
+        this.items = this.messenger.Send(new EntitySeletionRequestMessage()).SelectedEntities;
+        this.UpdateItemsCollection(this.items);
+        this.messenger.Register<EntitySelectionChangedMessage>(this, (_, message) =>
+        {
+            this.items = message.SelectedEntities;
+            this.UpdateItemsCollection(this.items);
+        });
     }
 
     /// <summary>
@@ -54,20 +60,21 @@ public sealed partial class EntityComponentsEditorViewModel : MultiSelectionDeta
     }
 
     /// <inheritdoc/>
-    protected override Dictionary<Type, IPropertyEditor<GameEntity>> FilterPropertyEditors()
+    protected override ICollection<IPropertyEditor<GameEntity>> FilterPropertyEditors()
     {
         var filteredEditors = new Dictionary<Type, IPropertyEditor<GameEntity>>(AllPropertyEditors);
         var keysToCheck = new HashSet<Type>(AllPropertyEditors.Keys);
 
-        foreach (var entity in this.Items)
+        foreach (var entity in this.items)
         {
-            foreach (var key in keysToCheck.ToList().Where(key => !entity.Components.Any(component => component.GetType() == key)))
+            // Filter out keys for which the entity does not have a component
+            foreach (var key in keysToCheck.ToList().Where(key => entity.Components.All(component => component.GetType() != key)))
             {
                 _ = filteredEditors.Remove(key);
                 _ = keysToCheck.Remove(key);
             }
         }
 
-        return filteredEditors;
+        return filteredEditors.Values;
     }
 }
