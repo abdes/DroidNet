@@ -9,5 +9,5 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 public interface IPropertyEditor<T>
     where T : GameObject
 {
-    public void UpdateValues(IList<T> items);
+    public void UpdateValues(ICollection<T> items);
 }

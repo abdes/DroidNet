@@ -5,100 +5,133 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.Core;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+/// Represents the details of multiple selected items in the properties editor.
+/// </summary>
+/// <typeparam name="T">The type of the items being edited, which must be a <see cref="GameObject"/>.</typeparam>
+/// <remarks>
+/// This class provides the base functionality for handling multiple selected items in the properties editor.
+/// It includes properties and methods for managing the collection of items, updating property editors, and
+/// propagating changes to the items.
+/// </remarks>
 public abstract partial class MultiSelectionDetails<T> : ObservableObject
     where T : GameObject
 {
-    private IList<T> items = [];
+    private readonly ICollection<T> items = [];
 
+    /// <summary>
+    /// Flag indicating whether the rename operation should be propagated to the items. Set to true
+    /// when the name change is originating from the item itself, for example when the item is
+    /// renamed in the scene explorer tree.
+    /// </summary>
+    private bool doNotPropagateRename;
+
+    /// <summary>
+    /// Observable property bound to the editable text box used to rename the item(s).
+    /// </summary>
     [ObservableProperty]
     private string? name;
 
-    private bool internalNameUpdate;
+    /// <summary>
+    /// Gets the type of the items being edited. Can be used to show a custom icon or othe indication in the UI.
+    /// </summary>
+    public Type? ItemsType { get; } = typeof(T);
 
+    /// <summary>
+    /// Gets a value indicating whether there are any items at all.
+    /// </summary>
+    public bool HasItems => this.items.Count > 0;
+
+    /// <summary>
+    /// Gets a value indicating whether multiple items are being edited.
+    /// </summary>
+    public bool HasMultipleItems => this.items.Count > 1;
+
+    /// <summary>
+    /// Gets the number of items being edited.
+    /// </summary>
+    public int ItemsCount => this.items.Count;
+
+    /// <summary>
+    /// Gets an <see cref="ObservableCollection{T}"/> of <see cref="IPropertyEditor{T}"/> instances
+    /// to be displayed in the UI for the items being edited. The content of the collection depends
+    /// on the items being edited. Only property editors that are applicable to all the items will
+    /// be included.
+    /// </summary>
     public ObservableCollection<IPropertyEditor<T>> PropertyEditors { get; } = [];
 
-    public bool HasItems => this.Items.Count > 0;
+    /// <summary>
+    /// Filters the property editors to be displayed in the UI for the items being edited.
+    /// </summary>
+    /// <returns>
+    /// A collection of <see cref="IPropertyEditor{T}"/> instances that are applicable to all the items being edited.
+    /// </returns>
+    /// <remarks>
+    /// This method is called to determine which property editors should be shown based on the
+    /// current selection of items. Derived classes should implement this method to provide the
+    /// appropriate filtering logic.
+    /// </remarks>
+    protected abstract ICollection<IPropertyEditor<T>> FilterPropertyEditors();
 
-    public Type? ItemsType { get; }
-
-    public IList<T> Items
+    /// <summary>
+    /// Resets the collection of items being edited.
+    /// </summary>
+    /// <param name="newCollection">The new collection of items being edited.</param>
+    /// <remarks>
+    /// This method is typically used when the items being edited change, for example when the user
+    /// selects a different set of items somewhere else in the UI. This base class has no knowledge
+    /// of the source of the items, so it is up to the derived class to provide the new collection.
+    /// </remarks>>
+    protected void UpdateItemsCollection(IEnumerable<T> newCollection)
     {
-        get => this.items;
-        protected set
+        foreach (var item in this.items)
         {
-            foreach (var item in this.Items)
-            {
-                item.PropertyChanged -= this.Items_OnPropertyChanged;
-            }
+            item.PropertyChanged -= OnItemPropertyExternallyChanged;
+        }
 
-            _ = this.SetProperty(ref this.items, value);
+        this.items.Clear();
 
-            foreach (var item in this.Items)
-            {
-                item.PropertyChanged += this.Items_OnPropertyChanged;
-            }
+        foreach (var item in newCollection)
+        {
+            item.PropertyChanged += OnItemPropertyExternallyChanged;
+            this.items.Add(item);
+        }
+
+        this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.ItemsCount)));
+        this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasItems)));
+        this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasMultipleItems)));
+
+        this.RefreshOwnProperties();
+        this.UpdatePropertyEditors();
+        this.UpdatePropertyEditorsValues();
+        return;
+
+        void OnItemPropertyExternallyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            this.RefreshOwnProperties();
         }
     }
 
-    private void Items_OnPropertyChanged(object? sender, PropertyChangedEventArgs e) => this.UpdateProperties();
-
-    public bool HasMultipleItems => this.Items.Count > 1;
-
-    public int ItemsCount => this.Items.Count;
-
-    internal static string? GetMixedValue(IList<T> entities, Func<T, string> getProperty)
+    /// <summary>
+    /// Refreshes the properties of the view model that are based on the items being edited.
+    /// </summary>
+    /// <remarks>
+    /// Derived classes, which provide additional properties based on the items being edited, should
+    /// override this method to update those properties.
+    /// </remarks>
+    protected virtual void RefreshOwnProperties()
     {
-        if (entities.Count == 0)
-        {
-            return null;
-        }
+        this.doNotPropagateRename = true;
+        this.Name = MixedValues.GetMixedValue(this.items, e => e.Name);
+        this.doNotPropagateRename = false;
 
-        var value = getProperty(entities[0]);
-        return entities.Skip(1).Any(entity => !string.Equals(getProperty(entity), value, StringComparison.Ordinal)) ? null : value;
-    }
-
-    internal static bool? GetMixedValue(IList<T> entities, Func<T, bool> getProperty)
-    {
-        if (entities.Count == 0)
-        {
-            return null;
-        }
-
-        var value = getProperty(entities[0]);
-        return entities.Skip(1).Any(entity => getProperty(entity) != value) ? null : value;
-    }
-
-    internal static float? GetMixedValue(IList<T> entities, Func<T, float> getProperty)
-    {
-        if (entities.Count == 0)
-        {
-            return null;
-        }
-
-        var value = getProperty(entities[0]);
-        return entities.Skip(1).Any(entity => !getProperty(entity).IsSameAs(value)) ? null : value;
-    }
-
-    /// <inheritdoc/>
-    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
-    {
-        base.OnPropertyChanged(e);
-
-        if (string.Equals(e.PropertyName, nameof(this.Items), StringComparison.Ordinal))
-        {
-            this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.ItemsCount)));
-            this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasItems)));
-            this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasMultipleItems)));
-
-            this.UpdateProperties();
-            this.UpdatePropertyEditors();
-            this.UpdatePropertyEditorsValues();
-        }
+        this.OnPropertyChanged(nameof(this.ItemsCount));
+        this.OnPropertyChanged(nameof(this.HasItems));
+        this.OnPropertyChanged(nameof(this.HasMultipleItems));
     }
 
     private void UpdatePropertyEditors()
@@ -109,49 +142,44 @@ public abstract partial class MultiSelectionDetails<T> : ObservableObject
         for (var i = this.PropertyEditors.Count - 1; i >= 0; i--)
         {
             var editor = this.PropertyEditors[i];
-            if (!filteredEditors.ContainsValue(editor))
+            if (!filteredEditors.Contains(editor))
             {
                 this.PropertyEditors.RemoveAt(i);
             }
         }
 
         // Add new items
-        foreach (var editor in filteredEditors.Values.Where(editor => !this.PropertyEditors.Contains(editor)))
+        foreach (var editor in filteredEditors.Where(editor => !this.PropertyEditors.Contains(editor)))
         {
             this.PropertyEditors.Add(editor);
         }
     }
-
-    protected abstract Dictionary<Type, IPropertyEditor<T>> FilterPropertyEditors();
 
     private void UpdatePropertyEditorsValues()
     {
         // Update values
         foreach (var editor in this.PropertyEditors)
         {
-            editor.UpdateValues(this.Items);
+            editor.UpdateValues(this.items);
         }
     }
 
-    protected virtual void UpdateProperties()
-    {
-        this.internalNameUpdate = true;
-        this.Name = GetMixedValue(this.Items, e => e.Name);
-        this.internalNameUpdate = false;
-
-        this.OnPropertyChanged(nameof(this.ItemsCount));
-        this.OnPropertyChanged(nameof(this.HasItems));
-        this.OnPropertyChanged(nameof(this.HasMultipleItems));
-    }
-
+    /// <summary>
+    /// Called when the <see cref="Name"/> property changes.
+    /// </summary>
+    /// <param name="value">The new name value.</param>
+    /// <remarks>
+    /// This method propagates the name change to all items being edited, unless the change originated
+    /// from one of the items itself (indicated by <see cref="doNotPropagateRename"/> being true).
+    /// </remarks>
     partial void OnNameChanged(string? value)
     {
-        if (value is null || this.internalNameUpdate)
+        if (value is null || this.doNotPropagateRename)
         {
             return;
         }
 
-        foreach (var entity in this.Items)
+        foreach (var entity in this.items)
         {
             entity.Name = value;
         }

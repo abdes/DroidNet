@@ -19,5 +19,5 @@ public abstract partial class ComponentPropertyEditor : ObservableObject, IDetai
     public abstract string Description { get; }
 
     /// <inheritdoc/>
-    public abstract void UpdateValues(IList<GameEntity> items);
+    public abstract void UpdateValues(ICollection<GameEntity> items);
 }
