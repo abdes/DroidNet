@@ -19,12 +19,17 @@ public sealed partial class InPlaceEditDemoView
     {
         this.InitializeComponent();
 
-        this.Loaded += (_, _) => this.ValidatedInput.Validate += (_, e) =>
+        this.Loaded += (_, _) =>
         {
-            if (e.Text.Contains('a', StringComparison.OrdinalIgnoreCase))
+            this.ValidatedInput.Validate += (_, e) =>
             {
-                e.IsValid = false;
-            }
+                if (e.NewValue?.Contains('a', StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    e.IsValid = false;
+                }
+            };
+
+            this.NumberBoxWithValidation.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
         };
     }
 }

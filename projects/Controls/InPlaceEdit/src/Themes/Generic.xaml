@@ -2,8 +2,10 @@
 
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
+    <!--  ReSharper disable Xaml.PathError  -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/InPlaceEditableLabel.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/Label/InPlaceEditableLabel.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/NumberBox/NumberBox.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

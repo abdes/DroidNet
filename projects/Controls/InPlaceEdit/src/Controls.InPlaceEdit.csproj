@@ -27,4 +27,8 @@
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Label\" />
+    </ItemGroup>
+
 </Project>
