@@ -17,17 +17,46 @@
                             HorizontalAlignment="{TemplateBinding HorizontalLabelAlignment}"
                             VerticalAlignment="Center"
                             Text="{TemplateBinding Label}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap"
                             Visibility="{TemplateBinding ShowLabel}" />
-                        <TextBlock
-                            x:Name="PartValueTextBlock"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            VerticalAlignment="Center"
-                            HorizontalTextAlignment="{TemplateBinding HorizontalValueAlignment}"
-                            Text="{TemplateBinding DisplayText}" />
-
+                        <Border
+                            x:Name="PartBackgroundBorder"
+                            Margin="1"
+                            Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                            BackgroundSizing="OuterBorderEdge"
+                            BorderBrush="Transparent"
+                            BorderThickness="0">
+                            <Grid>
+                                <TextBlock
+                                    x:Name="PartValueTextBlock"
+                                    MinHeight="26"
+                                    Padding="10,2,10,0"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    FontSize="14"
+                                    HorizontalTextAlignment="{TemplateBinding HorizontalValueAlignment}"
+                                    Text="{TemplateBinding DisplayText}" />
+                                <TextBox
+                                    x:Name="PartEditBox"
+                                    MinHeight="26"
+                                    Margin="0"
+                                    Padding="10,2,10,0"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                                    BackgroundSizing="OuterBorderEdge"
+                                    CornerRadius="0"
+                                    FontSize="14"
+                                    InputScope="Number"
+                                    IsSpellCheckEnabled="False"
+                                    IsTextPredictionEnabled="False"
+                                    Text="{Binding Path=NumberValue, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=TwoWay}"
+                                    TextAlignment="{TemplateBinding HorizontalValueAlignment}"
+                                    TextWrapping="Wrap"
+                                    Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
                         <VisualStateManager.VisualStateGroups>
-                            <!--  Common states  -->
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="Hover">
@@ -35,15 +64,50 @@
                                         <Setter Target="PartValueTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="Pressed" />
                             </VisualStateGroup>
-
-                            <!--  Validation states  -->
-                            <VisualStateGroup x:Name="ValidationStates">
-                                <VisualState x:Name="Valid" />
-                                <VisualState x:Name="Invalid">
-                                    <VisualState.Setters>
-                                        <Setter Target="PartValueTextBlock.Foreground" Value="Red" />
-                                    </VisualState.Setters>
+                            <VisualStateGroup x:Name="ValueStates">
+                                <VisualState x:Name="ShowingValidValue" />
+                                <VisualState x:Name="ShowingInvalidValue">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartBackgroundBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartBackgroundBorder"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="0.5"
+                                            Duration="0:0:0.4" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="EditingValidValue">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartEditBox" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="EditingInvalidValue">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartValueTextBlock" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Collapsed" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartEditBox" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartBackgroundBorder" Storyboard.TargetProperty="BorderThickness">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="1" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartBackgroundBorder" Storyboard.TargetProperty="BorderBrush">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartBackgroundBorder" Storyboard.TargetProperty="Margin">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
