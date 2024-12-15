@@ -9,12 +9,10 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
 public partial class TransformViewModel : ComponentPropertyEditor
 {
-    /// <inheritdoc/>
-    public override string Header => "Transform";
-
-    /// <inheritdoc/>
-    public override string Description => "Description of Transform properties";
-
+    /// <summary>
+    /// Gets or sets the X position of the game object in the scene. The position can be abosulte
+    /// (relative to the scene) or relative to the parent object.
+    /// </summary>
     [ObservableProperty]
     private float? positionX;
 
@@ -23,6 +21,30 @@ public partial class TransformViewModel : ComponentPropertyEditor
 
     [ObservableProperty]
     private float? positionZ;
+
+    [ObservableProperty]
+    private float? rotationX;
+
+    [ObservableProperty]
+    private float? rotationY;
+
+    [ObservableProperty]
+    private float? rotationZ;
+
+    [ObservableProperty]
+    private float? scaleX;
+
+    [ObservableProperty]
+    private float? scaleY;
+
+    [ObservableProperty]
+    private float? scaleZ;
+
+    /// <inheritdoc/>
+    public override string Header => "Transform";
+
+    /// <inheritdoc/>
+    public override string Description => "Defines the position, rotation and scale of a Game Object along the X, Y and Z axis.";
 
     public PropertyDescriptor PositionProperty { get; } = new() { Name = "Position" };
 
