@@ -105,7 +105,11 @@ public class InPlaceEditableLabelTests : VisualUserInterfaceTests
         _ = EnqueueAsync(
             async () =>
             {
-                this.inPlaceEditableLabel = new InPlaceEditableLabel() { Text = "Test" };
+                this.inPlaceEditableLabel = new InPlaceEditableLabel()
+                {
+                    Text = "Test",
+                    Content = new TextBlock() { Name = "Label", },
+                };
                 await LoadTestContentAsync(this.inPlaceEditableLabel).ConfigureAwait(true);
 
                 this.vsm = new TestVisualStateManager();
