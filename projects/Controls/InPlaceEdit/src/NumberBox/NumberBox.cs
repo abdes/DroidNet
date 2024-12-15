@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
+using System.Globalization;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -50,39 +52,52 @@ namespace DroidNet.Controls;
 /// the top, and it uses a custom mask for formatting.
 /// </example>
 [TemplatePart(Name = RootGridPartName, Type = typeof(CustomGrid))]
+[TemplatePart(Name = BackgroundBorderPartName, Type = typeof(Border))]
 [TemplatePart(Name = ValueTextBlockPartName, Type = typeof(TextBlock))]
 [TemplatePart(Name = LabelTextBlockPartName, Type = typeof(TextBlock))]
+[TemplatePart(Name = EditBoxPartName, Type = typeof(TextBox))]
 [TemplateVisualState(Name = NormalStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = HoverStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = PressedStateName, GroupName = CommonStatesGroupName)]
-[TemplateVisualState(Name = ValidStateName, GroupName = ValidationStatesGroupName)]
-[TemplateVisualState(Name = InvalidStateName, GroupName = ValidationStatesGroupName)]
+[TemplateVisualState(Name = ShowingValidValueStateName, GroupName = ValueStatesGroupName)]
+[TemplateVisualState(Name = ShowingInvalidValueStateName, GroupName = ValueStatesGroupName)]
+[TemplateVisualState(Name = EditingValidValueStateName, GroupName = ValueStatesGroupName)]
+[TemplateVisualState(Name = EditingInvalidValueStateName, GroupName = ValueStatesGroupName)]
+
 public partial class NumberBox : Control
 {
+    private const string EditBoxPartName = "PartEditBox";
+    private const string ValueTextBlockPartName = "PartValueTextBlock";
+    private const string LabelTextBlockPartName = "PartLabelTextBlock";
+    private const string RootGridPartName = "PartRootGrid";
+    private const string BackgroundBorderPartName = "PartBackgroundBorder";
+
     private const string CommonStatesGroupName = "CommonStates";
     private const string NormalStateName = "Normal";
     private const string HoverStateName = "Hover";
     private const string PressedStateName = "Pressed";
 
-    private const string ValidationStatesGroupName = "ValidationStates";
-    private const string ValidStateName = "Valid";
-    private const string InvalidStateName = "Invalid";
-
-    private const string ValueTextBlockPartName = "PartValueTextBlock";
-    private const string LabelTextBlockPartName = "PartLabelTextBlock";
-    private const string RootGridPartName = "PartRootGrid";
+    private const string ValueStatesGroupName = "ValueStates";
+    private const string ShowingValidValueStateName = "ShowingValidValue";
+    private const string ShowingInvalidValueStateName = "ShowingInvalidValue";
+    private const string EditingValidValueStateName = "EditingValidValue";
+    private const string EditingInvalidValueStateName = "EditingInvalidValue";
 
     private readonly InputSystemCursor defaultCursor;
     private readonly InputSystemCursor dragCursor;
     private InputCursor? originalCursor;
     private MaskParser maskParser;
 
+    private Border? backgroundBorder;
+    private TextBox? editTextBox;
     private TextBlock? valueTextBlock;
     private TextBlock? labelTextBlock;
     private CustomGrid? rootGrid;
     private Point? capturePoint;
     private bool isPointerOver;
     private bool newValueIsValid = true;
+    private bool isEditing;
+    private string? originalValue;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NumberBox"/> class.
@@ -108,6 +123,7 @@ public partial class NumberBox : Control
     protected override void OnApplyTemplate()
     {
         var oldValueTextBlock = this.valueTextBlock;
+        var oldEditTextBox = this.editTextBox;
 
         if (oldValueTextBlock != null)
         {
@@ -117,12 +133,23 @@ public partial class NumberBox : Control
             oldValueTextBlock.PointerWheelChanged -= this.OnValueTextBlockPointerWheelChanged;
             oldValueTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldValueTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
+            oldValueTextBlock.Tapped -= this.OnValueTextBlockTapped;
+        }
+
+        if (oldEditTextBox != null)
+        {
+            oldEditTextBox.GotFocus -= this.OnEditBoxGotFocus;
+            oldEditTextBox.KeyDown -= this.OnEditBoxKeyDown;
+            oldEditTextBox.LostFocus -= this.OnEditBoxLostFocus;
+            oldEditTextBox.TextChanged -= this.OnTextChanged;
         }
 
         base.OnApplyTemplate();
 
         this.rootGrid = this.GetTemplateChild(RootGridPartName) as CustomGrid;
+        this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
         this.valueTextBlock = this.GetTemplateChild(ValueTextBlockPartName) as TextBlock;
+        this.editTextBox = this.GetTemplateChild(EditBoxPartName) as TextBox;
         this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
 
         if (this.valueTextBlock != null)
@@ -133,8 +160,18 @@ public partial class NumberBox : Control
             this.valueTextBlock.PointerWheelChanged += this.OnValueTextBlockPointerWheelChanged;
             this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
             this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
+            this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
         }
 
+        if (this.editTextBox != null)
+        {
+            this.editTextBox.GotFocus += this.OnEditBoxGotFocus;
+            this.editTextBox.KeyDown += this.OnEditBoxKeyDown;
+            this.editTextBox.LostFocus += this.OnEditBoxLostFocus;
+            this.editTextBox.TextChanged += this.OnTextChanged;
+        }
+
+        _ = this.ValidateValue(this.NumberValue);
         this.UpdateDisplayText();
         this.UpdateMinimumWidth();
         this.UpdateLabelPosition(); // After UpdateMinimumWidth()
@@ -143,10 +180,21 @@ public partial class NumberBox : Control
 
     private void UpdateVisualState(bool useTransitions = true)
     {
-        _ = VisualStateManager.GoToState(
-            this,
-            this.newValueIsValid ? ValidStateName : InvalidStateName,
-            useTransitions);
+        if (this.isEditing)
+        {
+            _ = 1;
+            _ = VisualStateManager.GoToState(
+                this,
+                this.newValueIsValid ? EditingValidValueStateName : EditingInvalidValueStateName,
+                useTransitions);
+        }
+        else
+        {
+            _ = VisualStateManager.GoToState(
+                this,
+                this.newValueIsValid ? ShowingValidValueStateName : ShowingInvalidValueStateName,
+                useTransitions);
+        }
 
         _ = VisualStateManager.GoToState(
             this,
@@ -274,7 +322,108 @@ public partial class NumberBox : Control
         this.originalCursor = null;
     }
 
-    private bool TryUpdateValue(float newValue)
+    private void StartEdit()
+    {
+        if (this.valueTextBlock is null || this.editTextBox is null)
+        {
+            return;
+        }
+
+        this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
+        this.isEditing = true;
+
+        this.UpdateVisualState();
+
+        this.editTextBox.MinWidth = this.valueTextBlock.ActualWidth;
+        _ = this.editTextBox.Focus(FocusState.Programmatic);
+    }
+
+    private void CommitEdit()
+    {
+        if (this.TryUpdateValue(float.Parse(this.editTextBox!.Text, CultureInfo.CurrentCulture)))
+        {
+            this.EndEdit();
+        }
+    }
+
+    private void CancelEdit()
+    {
+        this.editTextBox!.Text = this.originalValue;
+        this.EndEdit();
+    }
+
+    private void OnTextChanged(object sender, TextChangedEventArgs textChangedEventArgs)
+    {
+        if (this.editTextBox != null)
+        {
+            _ = this.ValidateValue(this.editTextBox.Text);
+            this.UpdateVisualState(useTransitions: false);
+        }
+    }
+
+    private void OnEditBoxLostFocus(object sender, RoutedEventArgs routedEventArgs)
+    {
+        if (this.newValueIsValid)
+        {
+            this.CommitEdit();
+        }
+        else
+        {
+            this.CancelEdit();
+        }
+    }
+
+    private void OnEditBoxGotFocus(object sender, RoutedEventArgs routedEventArgs) => this.editTextBox?.SelectAll();
+
+    private void EndEdit()
+    {
+        this.isEditing = false;
+        this.UpdateVisualState();
+    }
+
+    private bool ValidateValue(string value) =>
+          float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedValue)
+                               && this.ValidateValue(parsedValue);
+
+    private bool ValidateValue(float value)
+    {
+        if (!this.maskParser.IsValidValue(value))
+        {
+            this.newValueIsValid = false;
+            return false;
+        }
+
+        var args = new ValidationEventArgs<float>(this.NumberValue, value);
+        this.OnValidate(args);
+        Debug.Assert(this.newValueIsValid == args.IsValid, "should be updated by the OnValidate method");
+        return this.newValueIsValid;
+    }
+
+    private void OnEditBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Enter when !this.newValueIsValid:
+                return;
+            case Windows.System.VirtualKey.Enter:
+                this.CommitEdit();
+                e.Handled = true;
+                break;
+
+            case Windows.System.VirtualKey.Escape:
+                this.CancelEdit();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnValueTextBlockTapped(object sender, TappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        this.StartEdit();
+    }
+
+    private bool TryUpdateValue(float newValue, bool updateDisplayText = true)
     {
         if (!this.maskParser.IsValidValue(newValue))
         {
@@ -287,6 +436,10 @@ public partial class NumberBox : Control
         if (args.IsValid)
         {
             this.NumberValue = newValue;
+            if (updateDisplayText)
+            {
+                this.DisplayText = this.maskParser.FormatValue(newValue);
+            }
         }
 
         return args.IsValid;
@@ -299,7 +452,12 @@ public partial class NumberBox : Control
         this.UpdateDisplayText();
     }
 
-    private void OnValueChanged() => this.UpdateDisplayText();
+    private void OnValueChanged()
+    {
+        _ = this.ValidateValue(this.NumberValue);
+        this.UpdateDisplayText();
+        this.UpdateVisualState();
+    }
 
     private void OnLabelPositionChanged() => this.UpdateLabelPosition();
 
@@ -343,14 +501,20 @@ public partial class NumberBox : Control
                 this.rootGrid.ColumnDefinitions.Add(labelColumn);
                 this.rootGrid.ColumnDefinitions.Add(valueColumn);
                 Grid.SetColumn(this.labelTextBlock, 0);
-                Grid.SetColumn(this.valueTextBlock, 1);
+
+                // Grid.SetColumn(this.valueTextBlock, 1);
+                // Grid.SetColumn(this.editTextBox, 1);
+                Grid.SetColumn(this.backgroundBorder, 1);
             }
             else
             {
                 this.rootGrid.ColumnDefinitions.Add(valueColumn);
                 this.rootGrid.ColumnDefinitions.Add(labelColumn);
                 Grid.SetColumn(this.labelTextBlock, 1);
-                Grid.SetColumn(this.valueTextBlock, 0);
+
+                // Grid.SetColumn(this.valueTextBlock, 0);
+                // Grid.SetColumn(this.editTextBox, 0);
+                Grid.SetColumn(this.backgroundBorder, 0);
             }
         }
 
@@ -368,16 +532,25 @@ public partial class NumberBox : Control
             if (this.LabelPosition == LabelPosition.Top)
             {
                 Grid.SetRow(this.labelTextBlock, 0);
-                Grid.SetRow(this.valueTextBlock, 1);
+
+                // Grid.SetRow(this.valueTextBlock, 1);
+                // Grid.SetRow(this.editTextBox, 1);
+                Grid.SetRow(this.backgroundBorder, 1);
             }
             else
             {
                 Grid.SetRow(this.labelTextBlock, 1);
-                Grid.SetRow(this.valueTextBlock, 0);
+
+                // Grid.SetRow(this.valueTextBlock, 0);
+                // Grid.SetRow(this.editTextBox, 0);
+                Grid.SetRow(this.backgroundBorder, 0);
             }
 
             Grid.SetColumn(this.labelTextBlock, 0);
-            Grid.SetColumn(this.valueTextBlock, 0);
+
+            // Grid.SetColumn(this.valueTextBlock, 0);
+            // Grid.SetColumn(this.editTextBox, 0);
+            Grid.SetColumn(this.backgroundBorder, 0);
         }
     }
 

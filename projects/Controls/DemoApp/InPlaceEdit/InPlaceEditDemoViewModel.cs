@@ -16,5 +16,5 @@ public partial class InPlaceEditDemoViewModel : ObservableObject
     private string label = "Hello World!";
 
     [ObservableProperty]
-    private float numberValue = 0.0f;
+    private float numberValue = -20.0f;
 }

@@ -99,7 +99,7 @@ public partial class MaskParser
         // Ensure proper handling of 0 value
         if (value == 0 && !result.StartsWith('0'))
         {
-            result = "0" + result;
+            result = result.StartsWith('-') ? "0" + result[1..] : "0" + result;
         }
 
         if (this.hasSpace)
