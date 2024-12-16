@@ -10,22 +10,27 @@ namespace DroidNet.Controls;
 public enum LabelPosition
 {
     /// <summary>
+    /// The label is not displayed.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
     /// The label is positioned to the left of the control.
     /// </summary>
-    Left = 0,
+    Left = 1,
 
     /// <summary>
     /// The label is positioned above the control.
     /// </summary>
-    Top = 1,
+    Top = 2,
 
     /// <summary>
     /// The label is positioned to the right of the control.
     /// </summary>
-    Right = 2,
+    Right = 3,
 
     /// <summary>
     /// The label is positioned below the control.
     /// </summary>
-    Bottom = 3,
+    Bottom = 4,
 }

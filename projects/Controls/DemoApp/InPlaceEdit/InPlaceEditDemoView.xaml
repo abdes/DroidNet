@@ -9,64 +9,71 @@
     mc:Ignorable="d">
 
     <Grid>
-        <StackPanel
-            Margin="20"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Spacing="20">
-            <TextBlock FontSize="16" Text="No validation" />
-            <controls:InPlaceEditableLabel Height="44" Text="{x:Bind ViewModel.Label, Mode=TwoWay}">
-                <TextBlock FontSize="14" Foreground="Coral" />
-            </controls:InPlaceEditableLabel>
+        <ScrollViewer>
+            <StackPanel
+                Margin="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Spacing="20">
+                <TextBlock FontSize="16" Text="No validation" />
+                <controls:InPlaceEditableLabel Height="44" Text="{x:Bind ViewModel.Label, Mode=TwoWay}">
+                    <TextBlock FontSize="14" Foreground="Coral" />
+                </controls:InPlaceEditableLabel>
 
-            <TextBlock
-                Margin="0,40,0,0"
-                FontSize="16"
-                Text="With validation, does not allow the letters 'a' or 'A'" />
-            <controls:InPlaceEditableLabel x:Name="ValidatedInput" Text="{x:Bind ViewModel.Label, Mode=TwoWay}">
-                <TextBlock FontSize="14" Foreground="Coral" />
-            </controls:InPlaceEditableLabel>
+                <TextBlock
+                    Margin="0,40,0,0"
+                    FontSize="16"
+                    Text="With validation, does not allow the letters 'a' or 'A'" />
+                <controls:InPlaceEditableLabel x:Name="ValidatedInput" Text="{x:Bind ViewModel.Label, Mode=TwoWay}">
+                    <TextBlock FontSize="14" Foreground="Coral" />
+                </controls:InPlaceEditableLabel>
 
-            <TextBlock
-                Margin="0,40,0,0"
-                FontSize="16"
-                Text="No validation, default mask" />
-            <controls:NumberBox
-                HorizontalLabelAlignment="Right"
-                Label="Label Right Aligned"
-                NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
-            <TextBlock FontSize="16" Text="No validation, Label Top, Mask='###.#°'" />
-            <controls:NumberBox
-                HorizontalLabelAlignment="Center"
-                HorizontalValueAlignment="Center"
-                Label="Label Center Aligned"
-                LabelPosition="Top"
-                Mask="###.#°"
-                NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}"
-                ShowLabel="True" />
-            <TextBlock FontSize="16" Text="Faster increment with Multiplier=10" />
-            <controls:NumberBox
-                HorizontalLabelAlignment="Left"
-                Label="Label Left Aligned"
-                Mask="###.#°"
-                Multiplier="10"
-                NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}"
-                ShowLabel="True" />
-            <TextBlock FontSize="16" Text="With Validation (Max Value=180, Min Value=-180), Aligned Center" />
-            <controls:NumberBox
-                x:Name="NumberBoxWithValidation"
-                HorizontalLabelAlignment="Stretch"
-                HorizontalValueAlignment="Right"
-                Label="LabelStretch"
-                Mask="###.###°"
-                NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
-            <TextBlock FontSize="16" Text="Must be negative" />
-            <controls:NumberBox
-                HorizontalLabelAlignment="Stretch"
-                HorizontalValueAlignment="Right"
-                Label="Negative Only"
-                Mask="-###.##"
-                NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
-        </StackPanel>
+                <TextBlock
+                    Margin="0,40,0,0"
+                    FontSize="16"
+                    Text="No validation, default mask" />
+                <controls:NumberBox
+                    HorizontalLabelAlignment="Right"
+                    Label="Label Right Aligned"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <TextBlock FontSize="16" Text="No validation, Label Top, Mask='###.#°'" />
+                <controls:NumberBox
+                    HorizontalLabelAlignment="Center"
+                    HorizontalValueAlignment="Center"
+                    Label="Label Center Aligned"
+                    LabelPosition="Top"
+                    Mask="###.#°"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <TextBlock FontSize="16" Text="Faster increment with Multiplier=10" />
+                <controls:NumberBox
+                    HorizontalLabelAlignment="Left"
+                    Label="Label Left Aligned"
+                    Mask="###.#°"
+                    Multiplier="10"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <TextBlock FontSize="16" Text="With Validation (Max Value=180, Min Value=-180), Aligned Center" />
+                <controls:NumberBox
+                    x:Name="NumberBoxWithValidation"
+                    HorizontalLabelAlignment="Stretch"
+                    HorizontalValueAlignment="Right"
+                    Label="LabelStretch"
+                    Mask="###.###°"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <TextBlock FontSize="16" Text="Must be negative" />
+                <controls:NumberBox
+                    HorizontalLabelAlignment="Stretch"
+                    HorizontalValueAlignment="Right"
+                    Label="Negative Only, -###.##"
+                    Mask="-###.##"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <TextBlock FontSize="16" Text="No Label" />
+                <controls:NumberBox
+                    HorizontalLabelAlignment="Stretch"
+                    HorizontalValueAlignment="Right"
+                    LabelPosition="None"
+                    Mask="~.##"
+                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Page>

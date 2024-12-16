@@ -95,7 +95,7 @@ public partial class NumberBox : Control
     private CustomGrid? rootGrid;
     private Point? capturePoint;
     private bool isPointerOver;
-    private bool newValueIsValid = true;
+    private bool valueIsValid = true;
     private bool isEditing;
     private string? originalValue;
 
@@ -171,7 +171,7 @@ public partial class NumberBox : Control
             this.editTextBox.TextChanged += this.OnTextChanged;
         }
 
-        _ = this.ValidateValue(this.NumberValue);
+        this.ValidateValue(this.NumberValue);
         this.UpdateDisplayText();
         this.UpdateMinimumWidth();
         this.UpdateLabelPosition(); // After UpdateMinimumWidth()
@@ -185,14 +185,14 @@ public partial class NumberBox : Control
             _ = 1;
             _ = VisualStateManager.GoToState(
                 this,
-                this.newValueIsValid ? EditingValidValueStateName : EditingInvalidValueStateName,
+                this.valueIsValid ? EditingValidValueStateName : EditingInvalidValueStateName,
                 useTransitions);
         }
         else
         {
             _ = VisualStateManager.GoToState(
                 this,
-                this.newValueIsValid ? ShowingValidValueStateName : ShowingInvalidValueStateName,
+                this.valueIsValid ? ShowingValidValueStateName : ShowingInvalidValueStateName,
                 useTransitions);
         }
 
@@ -247,12 +247,9 @@ public partial class NumberBox : Control
 
         // Calculate the increment
         var increment = this.CalculateIncrement(delta, e.KeyModifiers);
+        var newValue = this.NumberValue + increment;
 
-        if (increment != 0 && this.TryUpdateValue(this.NumberValue + increment))
-        {
-            this.capturePoint = currentPoint;
-        }
-
+        this.ApplyNewValueIfValid(newValue);
         e.Handled = true;
     }
 
@@ -265,12 +262,27 @@ public partial class NumberBox : Control
         }
 
         var delta = properties.MouseWheelDelta;
-
-        // Calculate the increment
         var increment = this.CalculateIncrement(Math.Sign(delta) * 10, e.KeyModifiers);
+        var newValue = this.NumberValue + increment;
 
-        _ = this.TryUpdateValue(this.NumberValue + increment);
+        this.ApplyNewValueIfValid(newValue);
         e.Handled = true;
+    }
+
+    private void ApplyNewValueIfValid(float newValue)
+    {
+        // If our value before change is not valid, we should apply the change to the value anyway.
+        // But if our current value is valid, we only apply valid changes.
+        var oldValueIsValid = this.valueIsValid;
+        this.ValidateValue(newValue);
+        if (oldValueIsValid && !this.valueIsValid)
+        {
+            // Cancel the change
+            this.valueIsValid = true;
+            return;
+        }
+
+        this.NumberValue = newValue;
     }
 
     private float CalculateIncrement(double delta, Windows.System.VirtualKeyModifiers keyModifiers)
@@ -340,10 +352,9 @@ public partial class NumberBox : Control
 
     private void CommitEdit()
     {
-        if (this.TryUpdateValue(float.Parse(this.editTextBox!.Text, CultureInfo.CurrentCulture)))
-        {
-            this.EndEdit();
-        }
+        Debug.Assert(this.valueIsValid, "commit onlky when newValueIsValid is true");
+        this.NumberValue = float.Parse(this.editTextBox!.Text, CultureInfo.CurrentCulture);
+        this.EndEdit();
     }
 
     private void CancelEdit()
@@ -354,16 +365,13 @@ public partial class NumberBox : Control
 
     private void OnTextChanged(object sender, TextChangedEventArgs textChangedEventArgs)
     {
-        if (this.editTextBox != null)
-        {
-            _ = this.ValidateValue(this.editTextBox.Text);
-            this.UpdateVisualState(useTransitions: false);
-        }
+        this.ValidateValue(this.editTextBox!.Text);
+        this.UpdateVisualState(useTransitions: false);
     }
 
     private void OnEditBoxLostFocus(object sender, RoutedEventArgs routedEventArgs)
     {
-        if (this.newValueIsValid)
+        if (this.valueIsValid)
         {
             this.CommitEdit();
         }
@@ -381,32 +389,43 @@ public partial class NumberBox : Control
         this.UpdateVisualState();
     }
 
-    private bool ValidateValue(string value) =>
-          float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedValue)
-                               && this.ValidateValue(parsedValue);
+    private void ValidateValue(string value)
+    {
+        this.valueIsValid = float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedValue);
+        if (!this.valueIsValid)
+        {
+            return;
+        }
 
-    private bool ValidateValue(float value)
+        this.ValidateValue(parsedValue);
+    }
+
+    private void ValidateValue(float value)
     {
         if (!this.maskParser.IsValidValue(value))
         {
-            this.newValueIsValid = false;
-            return false;
+            this.valueIsValid = false;
+            return;
         }
 
         var args = new ValidationEventArgs<float>(this.NumberValue, value);
         this.OnValidate(args);
-        Debug.Assert(this.newValueIsValid == args.IsValid, "should be updated by the OnValidate method");
-        return this.newValueIsValid;
+        Debug.Assert(this.valueIsValid == args.IsValid, "should be updated by the OnValidate method");
     }
 
     private void OnEditBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
         switch (e.Key)
         {
-            case Windows.System.VirtualKey.Enter when !this.newValueIsValid:
+            case Windows.System.VirtualKey.Enter when !this.valueIsValid:
                 return;
             case Windows.System.VirtualKey.Enter:
-                this.CommitEdit();
+                if (this.valueIsValid)
+                {
+                    this.CommitEdit();
+                }
+
                 e.Handled = true;
                 break;
 
@@ -423,28 +442,6 @@ public partial class NumberBox : Control
         this.StartEdit();
     }
 
-    private bool TryUpdateValue(float newValue, bool updateDisplayText = true)
-    {
-        if (!this.maskParser.IsValidValue(newValue))
-        {
-            return false;
-        }
-
-        var args = new ValidationEventArgs<float>(this.NumberValue, newValue);
-        this.OnValidate(args);
-
-        if (args.IsValid)
-        {
-            this.NumberValue = newValue;
-            if (updateDisplayText)
-            {
-                this.DisplayText = this.maskParser.FormatValue(newValue);
-            }
-        }
-
-        return args.IsValid;
-    }
-
     private void OnMaskChanged()
     {
         this.maskParser = new MaskParser(this.Mask);
@@ -454,7 +451,7 @@ public partial class NumberBox : Control
 
     private void OnValueChanged()
     {
-        _ = this.ValidateValue(this.NumberValue);
+        this.ValidateValue(this.NumberValue);
         this.UpdateDisplayText();
         this.UpdateVisualState();
     }
@@ -476,13 +473,20 @@ public partial class NumberBox : Control
         this.valueTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var valueWidth = Math.Max(this.valueTextBlock.MinWidth, this.valueTextBlock.DesiredSize.Width);
 
-        if (this.LabelPosition is LabelPosition.Left or LabelPosition.Right)
+        switch (this.LabelPosition)
         {
-            LayoutHorizontally();
-        }
-        else if (this.LabelPosition is LabelPosition.Top or LabelPosition.Bottom)
-        {
-            LayoutVertically();
+            case LabelPosition.Left or LabelPosition.Right:
+                this.labelTextBlock.Visibility = Visibility.Visible;
+                LayoutHorizontally();
+                break;
+            case LabelPosition.Top or LabelPosition.Bottom:
+                this.labelTextBlock.Visibility = Visibility.Visible;
+                LayoutVertically();
+                break;
+            default:
+                // No label
+                this.labelTextBlock.Visibility = Visibility.Collapsed;
+                break;
         }
 
         return;
