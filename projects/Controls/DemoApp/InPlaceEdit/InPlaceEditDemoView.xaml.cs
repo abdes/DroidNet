@@ -29,7 +29,9 @@ public sealed partial class InPlaceEditDemoView
                 }
             };
 
-            this.NumberBoxWithValidation.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
+            this.RotationX.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
+            this.RotationY.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
+            this.RotationZ.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
         };
     }
 }

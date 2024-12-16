@@ -17,4 +17,13 @@ public partial class InPlaceEditDemoViewModel : ObservableObject
 
     [ObservableProperty]
     private float numberValue = -20.0f;
+
+    [ObservableProperty]
+    private float rotationX = 0.0f;
+
+    [ObservableProperty]
+    private float rotationY = 0.0f;
+
+    [ObservableProperty]
+    private float rotationZ = 0.0f;
 }
