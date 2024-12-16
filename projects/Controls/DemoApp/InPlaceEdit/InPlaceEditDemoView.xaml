@@ -51,14 +51,6 @@
                     Mask="###.#°"
                     Multiplier="10"
                     NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
-                <TextBlock FontSize="16" Text="With Validation (Max Value=180, Min Value=-180), Aligned Center" />
-                <controls:NumberBox
-                    x:Name="NumberBoxWithValidation"
-                    HorizontalLabelAlignment="Stretch"
-                    HorizontalValueAlignment="Right"
-                    Label="LabelStretch"
-                    Mask="###.###°"
-                    NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
                 <TextBlock FontSize="16" Text="Must be negative" />
                 <controls:NumberBox
                     HorizontalLabelAlignment="Stretch"
@@ -73,6 +65,46 @@
                     LabelPosition="None"
                     Mask="~.##"
                     NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                <Grid Width="600">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Text="Rotation Vector" />
+                    <Grid Grid.Column="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:NumberBox
+                            x:Name="RotationX"
+                            HorizontalLabelAlignment="Right"
+                            Label="X"
+                            LabelPosition="Left"
+                            Mask="###.##°"
+                            NumberValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            x:Name="RotationY"
+                            Grid.Column="1"
+                            HorizontalLabelAlignment="Right"
+                            Label="Y"
+                            LabelPosition="Left"
+                            Mask="###.##°"
+                            NumberValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}" />
+                        <controls:NumberBox
+                            x:Name="RotationZ"
+                            Grid.Column="2"
+                            HorizontalLabelAlignment="Right"
+                            Label="Z"
+                            LabelPosition="Left"
+                            Mask="###.##°"
+                            NumberValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                    </Grid>
+                </Grid>
             </StackPanel>
         </ScrollViewer>
     </Grid>

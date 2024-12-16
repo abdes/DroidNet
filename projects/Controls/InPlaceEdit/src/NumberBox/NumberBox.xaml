@@ -13,7 +13,7 @@
                     <local:CustomGrid x:Name="PartRootGrid">
                         <TextBlock
                             x:Name="PartLabelTextBlock"
-                            Margin="0,0,10,0"
+                            Margin="0,0,5,0"
                             HorizontalAlignment="{TemplateBinding HorizontalLabelAlignment}"
                             VerticalAlignment="Center"
                             Text="{TemplateBinding Label}"
