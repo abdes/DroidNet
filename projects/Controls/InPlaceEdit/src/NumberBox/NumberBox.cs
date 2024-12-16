@@ -122,9 +122,24 @@ public partial class NumberBox : Control
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
     {
-        var oldValueTextBlock = this.valueTextBlock;
-        var oldEditTextBox = this.editTextBox;
+        base.OnApplyTemplate();
 
+        this.rootGrid = this.GetTemplateChild(RootGridPartName) as CustomGrid;
+        this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
+        this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
+        this.SetupValueTextBlockPart();
+        this.SetupEditTextBoxPart();
+
+        this.ValidateValue(this.NumberValue);
+        this.UpdateDisplayText();
+        this.UpdateMinimumWidth();
+        this.UpdateLabelPosition(); // After UpdateMinimumWidth()
+        this.UpdateVisualState();
+    }
+
+    private void SetupValueTextBlockPart()
+    {
+        var oldValueTextBlock = this.valueTextBlock;
         if (oldValueTextBlock != null)
         {
             oldValueTextBlock.PointerPressed -= this.OnValueTextBlockPointerPressed;
@@ -136,6 +151,26 @@ public partial class NumberBox : Control
             oldValueTextBlock.Tapped -= this.OnValueTextBlockTapped;
         }
 
+        this.valueTextBlock = this.GetTemplateChild(ValueTextBlockPartName) as TextBlock;
+
+        if (this.valueTextBlock == null)
+        {
+            return;
+        }
+
+        this.valueTextBlock.PointerPressed += this.OnValueTextBlockPointerPressed;
+        this.valueTextBlock.PointerMoved += this.OnValueTextBlockPointerMoved;
+        this.valueTextBlock.PointerReleased += this.OnValueTextBlockPointerReleased;
+        this.valueTextBlock.PointerWheelChanged += this.OnValueTextBlockPointerWheelChanged;
+        this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
+        this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
+        this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
+    }
+
+    private void SetupEditTextBoxPart()
+    {
+        var oldEditTextBox = this.editTextBox;
+
         if (oldEditTextBox != null)
         {
             oldEditTextBox.GotFocus -= this.OnEditBoxGotFocus;
@@ -144,38 +179,17 @@ public partial class NumberBox : Control
             oldEditTextBox.TextChanged -= this.OnTextChanged;
         }
 
-        base.OnApplyTemplate();
-
-        this.rootGrid = this.GetTemplateChild(RootGridPartName) as CustomGrid;
-        this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
-        this.valueTextBlock = this.GetTemplateChild(ValueTextBlockPartName) as TextBlock;
         this.editTextBox = this.GetTemplateChild(EditBoxPartName) as TextBox;
-        this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
 
-        if (this.valueTextBlock != null)
+        if (this.editTextBox == null)
         {
-            this.valueTextBlock.PointerPressed += this.OnValueTextBlockPointerPressed;
-            this.valueTextBlock.PointerMoved += this.OnValueTextBlockPointerMoved;
-            this.valueTextBlock.PointerReleased += this.OnValueTextBlockPointerReleased;
-            this.valueTextBlock.PointerWheelChanged += this.OnValueTextBlockPointerWheelChanged;
-            this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
-            this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
-            this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
+            return;
         }
 
-        if (this.editTextBox != null)
-        {
-            this.editTextBox.GotFocus += this.OnEditBoxGotFocus;
-            this.editTextBox.KeyDown += this.OnEditBoxKeyDown;
-            this.editTextBox.LostFocus += this.OnEditBoxLostFocus;
-            this.editTextBox.TextChanged += this.OnTextChanged;
-        }
-
-        this.ValidateValue(this.NumberValue);
-        this.UpdateDisplayText();
-        this.UpdateMinimumWidth();
-        this.UpdateLabelPosition(); // After UpdateMinimumWidth()
-        this.UpdateVisualState();
+        this.editTextBox.GotFocus += this.OnEditBoxGotFocus;
+        this.editTextBox.KeyDown += this.OnEditBoxKeyDown;
+        this.editTextBox.LostFocus += this.OnEditBoxLostFocus;
+        this.editTextBox.TextChanged += this.OnTextChanged;
     }
 
     private void UpdateVisualState(bool useTransitions = true)
