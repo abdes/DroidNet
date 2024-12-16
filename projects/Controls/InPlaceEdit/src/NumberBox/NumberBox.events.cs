@@ -21,6 +21,6 @@ public partial class NumberBox
     protected virtual void OnValidate(ValidationEventArgs<float> e)
     {
         this.Validate?.Invoke(this, e);
-        this.newValueIsValid = e.IsValid;
+        this.valueIsValid = e.IsValid;
     }
 }

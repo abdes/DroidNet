@@ -18,8 +18,7 @@
                             VerticalAlignment="Center"
                             Text="{TemplateBinding Label}"
                             TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap"
-                            Visibility="{TemplateBinding ShowLabel}" />
+                            TextWrapping="NoWrap" />
                         <Border
                             x:Name="PartBackgroundBorder"
                             Margin="1"

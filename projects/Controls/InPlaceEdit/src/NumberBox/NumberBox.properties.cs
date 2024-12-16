@@ -52,16 +52,6 @@ public partial class NumberBox
             new PropertyMetadata(LabelPosition.Left, OnLabelPositionPropertyChanged));
 
     /// <summary>
-    /// Identifies the <see cref="ShowLabel"/> dependency property.
-    /// </summary>
-    public static readonly DependencyProperty ShowLabelProperty =
-        DependencyProperty.Register(
-            nameof(ShowLabel),
-            typeof(bool),
-            typeof(NumberBox),
-            new PropertyMetadata(defaultValue: true));
-
-    /// <summary>
     /// Identifies the <see cref="Multiplier"/> dependency property.
     /// </summary>
     public static readonly DependencyProperty MultiplierProperty =
@@ -136,15 +126,6 @@ public partial class NumberBox
     {
         get => (LabelPosition)this.GetValue(LabelPositionProperty);
         set => this.SetValue(LabelPositionProperty, value);
-    }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the label is shown.
-    /// </summary>
-    public bool ShowLabel
-    {
-        get => (bool)this.GetValue(ShowLabelProperty);
-        set => this.SetValue(ShowLabelProperty, value);
     }
 
     /// <summary>
