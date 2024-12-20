@@ -24,7 +24,10 @@ namespace oxygen {
   class Renderer
   {
   public:
-    virtual ~Renderer() = default;
+    virtual ~Renderer()
+    {
+      if (!IsShutdown()) Shutdown();
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(Renderer);
     OXYGEN_MAKE_NON_MOVEABLE(Renderer);
@@ -33,7 +36,7 @@ namespace oxygen {
 
     virtual void Init(PlatformPtr platform, const RendererProperties& props) = 0;
     virtual void Render() = 0;
-    virtual void Shutdown()
+    void Shutdown()
     {
       if (is_shutdown_) return;
       DoShutdown();

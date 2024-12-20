@@ -68,7 +68,7 @@ void MainModule::Render() {
   // Create a random number core.
   static std::random_device rd;
   static std::mt19937 gen(rd());
-  static std::uniform_int_distribution<> distribution(200, 500);
+  static std::uniform_int_distribution<> distribution(20, 100);
 
   renderer_->Render();
 
