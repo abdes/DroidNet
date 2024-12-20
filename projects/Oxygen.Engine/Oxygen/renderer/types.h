@@ -6,22 +6,12 @@
 
 #pragma once
 
+#include <memory>
+
 namespace oxygen {
 
-  class Platform;
-  // class Engine;
-  // class Camera;
+  class Renderer;
 
-  namespace platform {
-    class Display;
-    class Window;
-    class InputEvent;
-    class KeyEvent;
-    class MouseButtonEvent;
-    class MouseWheelEvent;
-    class MouseMotionEvent;
-    class InputSlot;
-    class InputSlots;
-  }  // namespace platform
+  using RendererPtr = std::shared_ptr<Renderer>;
 
-}  // namespace oxygen
+}

@@ -14,7 +14,7 @@
 
 #include "oxygen/api_export.h"
 #include "oxygen/base/time.h"
-#include "oxygen/platform/fwd.h"
+#include "oxygen/platform/types.h"
 
 namespace oxygen {
 
@@ -81,7 +81,7 @@ namespace oxygen {
       Duration max_fixed_update_duration{ kDefaultFixedUpdateDuration };
     };
 
-    OXYGEN_API Engine(Platform& platform, Properties props);
+    OXYGEN_API Engine(PlatformPtr platform, Properties props);
     OXYGEN_API ~Engine();
 
     // Non-copyable
@@ -121,8 +121,8 @@ namespace oxygen {
     auto DiscoverDevices() -> void;
 #endif
 
+    PlatformPtr platform_;
     Properties props_;
-    Platform& platform_;
 
     DeltaTimeCounter engine_clock_{};
 

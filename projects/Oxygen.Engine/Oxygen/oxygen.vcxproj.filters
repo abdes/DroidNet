@@ -83,9 +83,6 @@
     <ClInclude Include="platform\display.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="platform\fwd.h">
-      <Filter>Platform</Filter>
-    </ClInclude>
     <ClInclude Include="platform\input.h">
       <Filter>Platform</Filter>
     </ClInclude>
@@ -117,6 +114,18 @@
     <ClInclude Include="world\transform.h">
       <Filter>World</Filter>
     </ClInclude>
+    <ClInclude Include="renderer\renderer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\renderer_module.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\types.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="base\win_errors.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -139,6 +148,9 @@
     </Filter>
     <Filter Include="Debug">
       <UniqueIdentifier>{6d7f893b-bb31-4d3d-bee4-71c3b1d7363b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Renderer">
+      <UniqueIdentifier>{cf3a60d9-7cd4-47da-9949-e6e59d2640f5}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -182,6 +194,9 @@
       <Filter>Platform\detail</Filter>
     </ClCompile>
     <ClCompile Include="base\loguru.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="base\win_errors.cpp">
       <Filter>Base</Filter>
     </ClCompile>
   </ItemGroup>

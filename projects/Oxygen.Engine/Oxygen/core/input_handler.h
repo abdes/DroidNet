@@ -7,7 +7,7 @@
 #pragma once
 
 #include "oxygen/base/macros.h"
-#include "oxygen/platform/fwd.h"
+#include "oxygen/platform/types.h"
 
 namespace oxygen::engine {
 

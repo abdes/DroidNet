@@ -23,6 +23,7 @@
     <ClInclude Include="base\signal.hpp" />
     <ClInclude Include="base\time.h" />
     <ClInclude Include="base\types.h" />
+    <ClInclude Include="base\win_errors.h" />
     <ClInclude Include="core\engine.h" />
     <ClInclude Include="core\fwd.h" />
     <ClInclude Include="core\input_handler.h" />
@@ -39,18 +40,21 @@
     <ClInclude Include="input\types.h" />
     <ClInclude Include="platform\detail\base_window.h" />
     <ClInclude Include="platform\display.h" />
-    <ClInclude Include="platform\fwd.h" />
     <ClInclude Include="platform\input.h" />
     <ClInclude Include="platform\input_event.h" />
     <ClInclude Include="platform\platform.h" />
     <ClInclude Include="platform\types.h" />
     <ClInclude Include="platform\window.h" />
+    <ClInclude Include="renderer\renderer.h" />
+    <ClInclude Include="renderer\renderer_module.h" />
+    <ClInclude Include="renderer\types.h" />
     <ClInclude Include="world\entity.h" />
     <ClInclude Include="world\transform.h" />
     <ClInclude Include="world\types.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="base\loguru.cpp" />
+    <ClCompile Include="base\win_errors.cpp" />
     <ClCompile Include="core\engine.cpp" />
     <ClCompile Include="core\version.cpp" />
     <ClCompile Include="input\action.cpp" />

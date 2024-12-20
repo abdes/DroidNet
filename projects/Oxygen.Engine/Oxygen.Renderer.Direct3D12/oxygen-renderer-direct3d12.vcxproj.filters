@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+    <None Include="vcpkg.json" />
+    <None Include="vcpkg-configuration.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\renderer_impl.h">
+      <Filter>Renderer\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\detail\renderer_Impl.cpp">
+      <Filter>Renderer\detail</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Renderer">
+      <UniqueIdentifier>{0ac0d72d-5105-4eae-818f-7ff59ac387ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Renderer\detail">
+      <UniqueIdentifier>{c1f1df9c-4cd5-4d78-aa64-086fb4c9cbaa}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

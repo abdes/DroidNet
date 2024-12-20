@@ -11,36 +11,31 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\platform-sdl\detail\platform_impl.cpp" />
-    <ClCompile Include="..\Oxygen\platform-sdl\detail\wrapper.cpp" />
-    <ClCompile Include="..\Oxygen\platform-sdl\display.cpp" />
-    <ClCompile Include="..\Oxygen\platform-sdl\event_utils.cpp" />
-    <ClCompile Include="..\Oxygen\platform-sdl\platform.cpp" />
-    <ClCompile Include="..\Oxygen\platform-sdl\window.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\Oxygen\platform-sdl\detail\platform_impl.h" />
-    <ClInclude Include="..\Oxygen\platform-sdl\detail\wrapper.h" />
-    <ClInclude Include="..\Oxygen\platform-sdl\display.h" />
-    <ClInclude Include="..\Oxygen\platform-sdl\platform.h" />
-    <ClInclude Include="..\Oxygen\platform-sdl\window.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\renderer_impl.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Oxygen\oxygen.vcxproj">
-      <Project>{1e967650-3973-4151-b313-ab8f3fbac717}</Project>
+      <Project>{1680AC1F-6F96-448E-BCAB-DFC899A9B4EE}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg-configuration.json" />
     <None Include="vcpkg.json" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\detail\renderer_Impl.cpp" />
+    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp" />
+    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{8a898eba-52eb-4af9-9d83-d27adc6397b8}</ProjectGuid>
+    <ProjectGuid>{2430309D-E904-4272-ABA7-8F4EEF1F3A0C}</ProjectGuid>
     <RootNamespace>oxygen</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Oxygen-Sdl3</ProjectName>
+    <ProjectName>Oxygen-Renderer-Direct3D12</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -79,24 +74,26 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>DroidNet.Oxygen.Sdl3</TargetName>
+    <TargetName>DroidNet.Oxygen.Renderer.Direct3D12</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_SDL3_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_RENDERER_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Imm32.lib;Version.lib;Cfgmgr32.lib;Setupapi.lib;Winmm.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_SDL3_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_RENDERER_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Imm32.lib;Version.lib;Cfgmgr32.lib;Setupapi.lib;Winmm.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
