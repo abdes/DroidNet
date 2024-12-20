@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <d3d12.h>
+
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
 
@@ -43,7 +45,7 @@ namespace oxygen::renderer::direct3d12 {
   {
 #ifdef _DEBUG
     CheckResult(object->SetName(name.c_str()));
-    LOG_F(1, "+D3D12 object created: {}", ToNarrow(name));
+    LOG_F(1, "+D3D12 named object created: {}", ToNarrow(name));
 #endif
   }
 

@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/renderer/renderer_module.h"
-#include "oxygen/renderer-d3d12/detail/renderer_impl.h"
+#include "oxygen/renderer/renderer_module.h"
+
+#include "oxygen/renderer-d3d12/renderer.h"
 
 using oxygen::renderer::direct3d12::Renderer;
 
