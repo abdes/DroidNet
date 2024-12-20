@@ -10,9 +10,6 @@
     <ClInclude Include="..\Oxygen\renderer-loader\renderer_loader.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-loader\api_export.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Renderer">

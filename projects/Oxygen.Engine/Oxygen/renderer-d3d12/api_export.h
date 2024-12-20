@@ -6,20 +6,20 @@
 
 #pragma once
 
-#ifdef OXYGEN_RENDERER_D3D12_STATIC_DEFINE
-#  define OXYGEN_RENDERER_D3D12_API
-#  define OXYGEN_RENDERER_D3D12_NO_EXPORT
+#ifdef OXYGEN_D3D12_STATIC_DEFINE
+#  define OXYGEN_D3D12_API
+#  define OXYGEN_D3D12_NO_EXPORT
 #else
-#  ifndef OXYGEN_RENDERER_D3D12_API
-#    ifdef OXYGEN_RENDERER_D3D12_EXPORTS
+#  ifndef OXYGEN_D3D12_API
+#    ifdef OXYGEN_D3D12_EXPORTS
 /* We are building this library */
-#      define OXYGEN_RENDERER_D3D12_API __declspec(dllexport)
+#      define OXYGEN_D3D12_API __declspec(dllexport)
 #    else
 /* We are using this library */
-#      define OXYGEN_RENDERER_D3D12_API __declspec(dllimport)
+#      define OXYGEN_D3D12_API __declspec(dllimport)
 #    endif
 #  endif
-#  ifndef OXYGEN_RENDERER_D3D12_NO_EXPORT
-#    define OXYGEN_RENDERER_D3D12_NO_EXPORT
+#  ifndef OXYGEN_D3D12_NO_EXPORT
+#    define OXYGEN_D3D12_NO_EXPORT
 #  endif
 #endif

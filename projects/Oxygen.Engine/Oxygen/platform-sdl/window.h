@@ -45,6 +45,7 @@ namespace oxygen::platform::sdl {
 
     [[nodiscard]] auto Id() const->WindowIdType override;
     [[nodiscard]] auto NativeWindow() const->NativeWindowInfo override;
+    [[nodiscard]] auto IsValid() const->bool override { return Id() != kInvalidWindowId; }
 
     // Visibility
     auto Show() -> void override;

@@ -35,4 +35,5 @@ public:
 private:
   oxygen::PlatformPtr platform_;
   oxygen::RendererPtr renderer_;
+  oxygen::SurfaceId surface_id_;
 };

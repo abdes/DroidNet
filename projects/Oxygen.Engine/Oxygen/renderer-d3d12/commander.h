@@ -31,10 +31,12 @@ namespace oxygen::renderer::direct3d12 {
 
     [[nodiscard]] ID3D12CommandQueue* CommandQueue() const noexcept;
     [[nodiscard]] ID3D12GraphicsCommandList7* CommandList() const noexcept;
-    [[nodiscard]] size_t FrameIndex() const noexcept;
+    [[nodiscard]] size_t CurrentFrameIndex() const noexcept;
 
     void BeginFrame() const;
-    void EndFrame();
+    void EndFrame() const;
+
+    void Flush() const;
 
   private:
     std::unique_ptr<detail::CommanderImpl> pimpl_;

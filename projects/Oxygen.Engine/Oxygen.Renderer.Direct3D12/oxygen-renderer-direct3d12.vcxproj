@@ -13,8 +13,12 @@
   <ItemGroup>
     <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h" />
     <ClInclude Include="..\Oxygen\renderer-d3d12\commander.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\deferred_release.h" />
     <ClInclude Include="..\Oxygen\renderer-d3d12\detail\dx12_utils.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\resources.h" />
     <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\surface.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\types.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Oxygen\oxygen.vcxproj">
@@ -27,8 +31,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Oxygen\renderer-d3d12\commander.cpp" />
+    <ClCompile Include="..\Oxygen\renderer-d3d12\detail\resources.cpp" />
     <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp" />
     <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp" />
+    <ClCompile Include="..\Oxygen\renderer-d3d12\surface.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -79,7 +85,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_RENDERER_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -89,7 +95,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_RENDERER_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>

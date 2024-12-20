@@ -8,60 +8,60 @@
 
 #include <cassert>
 
-#include "SDL3/SDL.h"
 #include "detail/wrapper.h"
 #include "oxygen/base/logging.h"
+#include "SDL3/SDL.h"
 
 using oxygen::platform::sdl::Window;
 
 namespace {
-constexpr oxygen::platform::sdl::detail::Wrapper kSdl;
+  constexpr oxygen::platform::sdl::detail::Wrapper kSdl;
 }  // namespace
 
-Window::Window(const std::string &title, const PixelExtent &extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-                                  SDL_WINDOWPOS_CENTERED,
-                                  SDL_WINDOWPOS_CENTERED,
-                                  extent.width,
-                                  extent.height,
-                                  {})) {
+Window::Window(const std::string& title, const PixelExtent& extent)
+  : sdl_window_(kSdl.MakeWindow(title.c_str(),
+                                SDL_WINDOWPOS_CENTERED,
+                                SDL_WINDOWPOS_CENTERED,
+                                extent.width,
+                                extent.height,
+                                {})) {
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string &title,
-               const PixelPosition &position,
-               const PixelExtent &extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-                                  position.x,
-                                  position.y,
-                                  extent.width,
-                                  extent.height,
-                                  {})) {
+Window::Window(const std::string& title,
+               const PixelPosition& position,
+               const PixelExtent& extent)
+  : sdl_window_(kSdl.MakeWindow(title.c_str(),
+                                position.x,
+                                position.y,
+                                extent.width,
+                                extent.height,
+                                {})) {
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string &title,
-               const PixelExtent &extent,
-               const InitialFlags &flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-                                  SDL_WINDOWPOS_CENTERED,
-                                  SDL_WINDOWPOS_CENTERED,
-                                  extent.width,
-                                  extent.height,
-                                  flags)) {
+Window::Window(const std::string& title,
+               const PixelExtent& extent,
+               const InitialFlags& flags)
+  : sdl_window_(kSdl.MakeWindow(title.c_str(),
+                                SDL_WINDOWPOS_CENTERED,
+                                SDL_WINDOWPOS_CENTERED,
+                                extent.width,
+                                extent.height,
+                                flags)) {
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string &title,
-               const PixelPosition &position,
-               const PixelExtent &extent,
-               const InitialFlags &flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-                                  position.x,
-                                  position.y,
-                                  extent.width,
-                                  extent.height,
-                                  flags)) {
+Window::Window(const std::string& title,
+               const PixelPosition& position,
+               const PixelExtent& extent,
+               const InitialFlags& flags)
+  : sdl_window_(kSdl.MakeWindow(title.c_str(),
+                                position.x,
+                                position.y,
+                                extent.width,
+                                extent.height,
+                                flags)) {
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
@@ -74,12 +74,12 @@ Window::~Window() {
 
 auto Window::Id() const -> oxygen::platform::WindowIdType {
   return sdl_window_ == nullptr ? kInvalidWindowId
-                                : kSdl.GetWindowId(sdl_window_);
+    : kSdl.GetWindowId(sdl_window_);
 }
 
 auto Window::NativeWindow() const -> oxygen::platform::NativeWindowInfo {
   return sdl_window_ == nullptr ? NativeWindowInfo{}
-                                : kSdl.GetNativeWindow(sdl_window_);
+  : kSdl.GetNativeWindow(sdl_window_);
 }
 
 void Window::Show() {
@@ -137,7 +137,7 @@ void Window::DoRestore() {
   kSdl.RestoreWindow(sdl_window_);
 }
 
-void Window::DoResize(const PixelExtent &extent) {
+void Window::DoResize(const PixelExtent& extent) {
   kSdl.SetWindowSize(sdl_window_, extent.width, extent.height);
 }
 
@@ -147,11 +147,11 @@ auto Window::Size() const -> oxygen::PixelExtent {
   return extent;
 }
 
-void Window::MinimumSize(const PixelExtent &extent) {
+void Window::MinimumSize(const PixelExtent& extent) {
   kSdl.SetWindowMinimumSize(sdl_window_, extent.width, extent.height);
 }
 
-void Window::MaximumSize(const PixelExtent &extent) {
+void Window::MaximumSize(const PixelExtent& extent) {
   kSdl.SetWindowMaximumSize(sdl_window_, extent.width, extent.height);
 }
 
@@ -173,7 +173,7 @@ auto Window::IsBorderLess() const -> bool {
   return (flag & SDL_WINDOW_BORDERLESS) != 0U;
 }
 
-void Window::DoPosition(const PixelPosition &position) {
+void Window::DoPosition(const PixelPosition& position) {
   kSdl.SetWindowPosition(sdl_window_, position.x, position.y);
 }
 
@@ -183,7 +183,7 @@ auto Window::Position() const -> oxygen::PixelPosition {
   return position;
 }
 
-void Window::Title(const std::string &title) {
+void Window::Title(const std::string& title) {
   kSdl.SetWindowTitle(sdl_window_, title);
 }
 
@@ -199,7 +199,7 @@ void Window::AlwaysOnTop(const bool always_on_top) {
   kSdl.SetWindowAlwaysOnTop(sdl_window_, always_on_top);
 }
 
-auto Window::CreateRenderer() const -> SDL_Renderer * {
+auto Window::CreateRenderer() const -> SDL_Renderer* {
   return kSdl.CreateRenderer(sdl_window_);
 }
 
@@ -218,8 +218,8 @@ void Window::ProcessCloseRequest(bool force) {
 }
 
 auto Window::GetFrameBufferSize() const -> oxygen::PixelExtent {
-  int width{0};
-  int height{0};
+  int width{ 0 };
+  int height{ 0 };
   kSdl.GetWindowSizeInPixels(sdl_window_, &width, &height);
-  return {width, height};
+  return { width, height };
 }

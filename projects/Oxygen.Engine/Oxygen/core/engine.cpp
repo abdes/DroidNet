@@ -223,21 +223,27 @@ auto Engine::Run() -> void {
   bool continue_running{ true };
 
   // Listen for the last window closed event
-  auto lastWindowClosedCon = GetPlatform().OnLastWindowClosed().connect(
+  auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
     [&continue_running]() { continue_running = false; });
 
-  std::ranges::for_each(modules_, [](auto& module) {
-    if (auto the_module = module.module.lock()) {
-      the_module->Initialize();
-    }
-                        });
+  std::ranges::for_each(
+    modules_,
+    [](auto& module) {
+      if (auto the_module = module.module.lock()) {
+        the_module->Initialize();
+      }
+    });
 
   // Start the master clock
   engine_clock_.Reset();
 
   // https://gafferongames.com/post/fix_your_timestep/
-  std::ranges::for_each(modules_,
-                        [](auto& module) { module.frame_time.Reset(); });
+  std::ranges::for_each(
+    modules_,
+    [](auto& module)
+    {
+      module.frame_time.Reset();
+    });
 
   while (continue_running) {
     auto event = GetPlatform().PollEvent();
@@ -277,9 +283,11 @@ auto Engine::Run() -> void {
             the_module->Render();
             module.fps.Update();
 
-            // TODO: replace this log using spdlog
-            // VLOG(1) << "FPS: " << module.fps.Value()
-            //         << " UPS: " << module.ups.Value();
+            // Log FPS and UPS once every second
+            if (module.log_timer.ElapsedTime() >= std::chrono::seconds(1)) {
+              LOG_F(1, "FPS: {} UPS: {}", module.fps.Value(), module.ups.Value());
+              module.log_timer = {};
+            }
           }
         }
       });
@@ -296,7 +304,7 @@ auto Engine::Run() -> void {
     });
 
   // Stop listening for the last window closed event
-  lastWindowClosedCon.disconnect();
+  last_window_closed_con.disconnect();
 }
 
 auto oxygen::Engine::Name() -> const std::string& {

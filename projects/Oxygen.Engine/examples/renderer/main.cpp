@@ -15,10 +15,14 @@
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"
 #include "oxygen/platform-sdl/platform.h"
+#include "oxygen/renderer-loader/renderer_loader.h"
 
 using namespace std::chrono_literals;
 
 using oxygen::Engine;
+using oxygen::graphics::CreateRenderer;
+using oxygen::graphics::DestroyRenderer;
+using oxygen::graphics::GraphicsBackendType;
 
 auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
   auto status{ EXIT_SUCCESS };
@@ -51,6 +55,15 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
         .max_fixed_update_duration = 10ms,
     };
 
+
+    constexpr oxygen::RendererProperties renderer_props{
+#ifdef _DEBUG
+        .enable_debug = true,
+#endif
+        .enable_validation = false,
+    };
+    CreateRenderer(GraphicsBackendType::kDirect3D12, platform, renderer_props);
+
     engine = std::make_shared<Engine>(platform, props);
 
     const auto my_module = std::make_shared<MainModule>(platform);
@@ -59,6 +72,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
     engine->Run();
 
     LOG_F(INFO, "Exiting application");
+    DestroyRenderer();
   }
   catch (std::exception const& err) {
     LOG_F(ERROR, "A fatal error occurred: {}", err.what());
