@@ -10,7 +10,7 @@
 #include <oxygen/platform/types.h>
 #include <oxygen/platform/window.h>
 
-#include "Oxygen.Sdl3/api_export.h"
+#include "oxygen/platform-sdl/api_export.h"
 
 struct SDL_Window;
 struct SDL_Renderer;

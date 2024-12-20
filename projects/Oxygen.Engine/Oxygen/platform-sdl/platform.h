@@ -9,9 +9,9 @@
 #include <memory>
 #include <vector>
 
-#include "Oxygen.Sdl3/api_export.h"
 #include "oxygen/base/macros.h"
 #include "oxygen/platform/platform.h"
+#include "oxygen/platform-sdl/api_export.h"
 
 namespace oxygen::platform::sdl {
 

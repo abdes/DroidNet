@@ -47,7 +47,6 @@
     <ClInclude Include="..\Oxygen\platform-sdl\detail\wrapper.h">
       <Filter>Platform\detail</Filter>
     </ClInclude>
-    <ClInclude Include="api_export.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\detail\platform_impl.h">
       <Filter>Platform\detail</Filter>
     </ClInclude>

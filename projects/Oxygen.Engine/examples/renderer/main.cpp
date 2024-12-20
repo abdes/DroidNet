@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 
+#include "oxygen/base/compilers.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"
@@ -21,6 +22,10 @@ using oxygen::Engine;
 
 auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
   auto status{ EXIT_SUCCESS };
+
+#if defined(_DEBUG) && defined(OXYGEN_MSVC_VERSION)
+  _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
 
   // Optional, but useful to time-stamp the start of the log.
   // Will also detect verbosity level on command line as -v.
@@ -48,7 +53,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
 
     engine = std::make_shared<Engine>(platform, props);
 
-    auto my_module = std::make_shared<MainModule>(*engine);
+    const auto my_module = std::make_shared<MainModule>(platform);
     engine->AddModule(my_module);
 
     engine->Run();
