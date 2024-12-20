@@ -12,20 +12,30 @@ using oxygen::renderer::direct3d12::Renderer;
 
 namespace {
 
-  void* CreateRenderer()
-  {
-    return new Renderer();
+  std::shared_ptr<Renderer>& GetRendererInternal() {
+    static auto renderer = std::make_shared<Renderer>();
+    return renderer;
   }
 
-  void DestroyRenderer(void* object)
+  void* CreateRenderer()
   {
-    if (!object) return;
-    auto* renderer = static_cast<Renderer*>(object);
-    renderer->Shutdown();
-    delete renderer;
+    return GetRendererInternal().get();
+  }
+
+  void DestroyRenderer()
+  {
+    auto& renderer = GetRendererInternal();
+    renderer.reset();
   }
 
 } // namespace
+
+namespace oxygen::renderer::direct3d12 {
+  auto GetRenderer() -> RendererPtr
+  {
+    return GetRendererInternal();
+  }
+}  // namespace oxygen::renderer::direct3d12
 
 extern "C" __declspec(dllexport) void* GetRendererModuleApi()
 {

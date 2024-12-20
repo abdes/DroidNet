@@ -8,10 +8,10 @@
 
 #include <stdexcept>
 
-#include "detail/dx12_utils.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
 #include "oxygen/renderer/types.h"
+#include "oxygen/renderer-d3d12/detail/dx12_utils.h"
 
 using namespace oxygen::renderer::direct3d12;
 using oxygen::CheckResult;
@@ -89,14 +89,18 @@ namespace {
 
     void Release() noexcept
     {
-      if (command_allocator) {
-        command_allocator->Release();
-        command_allocator = nullptr;
-      }
+      ObjectRelease(command_allocator);
+      fence_value = 0;
     }
   };
 
+  size_t current_frame_index{ 0 };
+
 }  // namespace
+
+namespace oxygen::renderer::direct3d12 {
+  [[nodiscard]] auto CurrentFrameIndex() -> size_t { return current_frame_index; }
+}  // namespace oxygen::renderer::direct3d12
 
 // Commander implementation details
 namespace oxygen::renderer::direct3d12::detail {
@@ -114,27 +118,25 @@ namespace oxygen::renderer::direct3d12::detail {
 
     [[nodiscard]] auto CommandQueue() const noexcept -> ID3D12CommandQueue* { return command_queue_; }
     [[nodiscard]] auto CommandList() const noexcept -> ID3D12GraphicsCommandList7* { return command_list_; }
-    [[nodiscard]] auto FrameIndex() const noexcept -> size_t { return frame_index_; }
 
     void BeginFrame() const;
     void EndFrame();
 
-  private:
     void Flush();
 
+  private:
     bool is_released_{ false };
 
     ID3D12CommandQueue* command_queue_{ nullptr };
     ID3D12GraphicsCommandList7* command_list_{ nullptr };
-    CommandFrame frames_[oxygen::kFrameBufferCount]{};
-    size_t frame_index_{ 0 };
+    CommandFrame frames_[kFrameBufferCount]{};
 
     ID3D12Fence1* fence_{ nullptr };
     uint64_t fence_value_{ 0 };
     HANDLE fence_event_{ nullptr };
   };
 
-  CommanderImpl::CommanderImpl(ID3D12Device9* device, D3D12_COMMAND_LIST_TYPE type)
+  CommanderImpl::CommanderImpl(ID3D12Device9* device, const D3D12_COMMAND_LIST_TYPE type)
   {
     CHECK_NOTNULL_F(device);
 
@@ -184,25 +186,16 @@ namespace oxygen::renderer::direct3d12::detail {
 
     Flush();
 
-    if (command_queue_) {
-      command_queue_->Release();
-      command_queue_ = nullptr;
-    }
-    if (command_list_) {
-      command_list_->Release();
-      command_list_ = nullptr;
-    }
-    for (auto& frame : frames_) {
-      frame.Release();
-    }
-    if (fence_) {
-      fence_->Release();
-      fence_ = nullptr;
-    }
+    ObjectRelease(command_queue_);
+    ObjectRelease(command_list_);
+    ObjectRelease(fence_);
     fence_value_ = 0;
     if (fence_event_) {
       CloseHandle(fence_event_);
       fence_event_ = nullptr;
+    }
+    for (auto& frame : frames_) {
+      frame.Release();
     }
 
     is_released_ = true;
@@ -210,8 +203,15 @@ namespace oxygen::renderer::direct3d12::detail {
 
   void CommanderImpl::BeginFrame() const
   {
-    const auto& frame = frames_[frame_index_];
+    static bool first_time{ true };
+
+    const auto& frame = frames_[current_frame_index];
     frame.Wait(fence_event_, fence_);
+    if (!first_time) {
+      CheckResult(frame.command_allocator->Reset());
+      CheckResult(command_list_->Reset(frame.command_allocator, nullptr));
+    }
+    first_time = false;
   }
 
   void CommanderImpl::EndFrame()
@@ -220,21 +220,18 @@ namespace oxygen::renderer::direct3d12::detail {
     ID3D12CommandList* command_lists[]{ command_list_ };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 
+    const CommandFrame& frame = frames_[current_frame_index];
     const uint64_t fence_value{ fence_value_ };
     ++fence_value_;
-    const CommandFrame& frame = frames_[frame_index_];
     CheckResult(command_queue_->Signal(fence_, fence_value));
 
-    frame_index_ = (frame_index_ + 1) % oxygen::kFrameBufferCount;
-
-    CheckResult(frame.command_allocator->Reset());
-    CheckResult(command_list_->Reset(frame.command_allocator, nullptr));
+    current_frame_index = (current_frame_index + 1) % oxygen::kFrameBufferCount;
   }
 
   void CommanderImpl::Flush()
   {
     for (auto& frame : frames_) frame.Wait(fence_event_, fence_);
-    frame_index_ = 0;
+    current_frame_index = 0;
   }
 
 }  // namespace
@@ -263,9 +260,10 @@ namespace oxygen::renderer::direct3d12 {
     return pimpl_->CommandList();
   }
 
-  size_t Commander::FrameIndex() const noexcept
+  // ReSharper disable once CppMemberFunctionMayBeStatic
+  auto Commander::CurrentFrameIndex() const noexcept -> size_t
   {
-    return pimpl_->FrameIndex();
+    return current_frame_index;
   }
 
   void Commander::BeginFrame() const
@@ -273,9 +271,14 @@ namespace oxygen::renderer::direct3d12 {
     pimpl_->BeginFrame();
   }
 
-  void Commander::EndFrame()
+  void Commander::EndFrame() const
   {
     pimpl_->EndFrame();
+  }
+
+  void Commander::Flush() const
+  {
+    pimpl_->Flush();
   }
 
 }  // namespace oxygen::renderer::direct3d12

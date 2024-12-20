@@ -12,6 +12,8 @@
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/types.h"
 #include "oxygen/platform/platform.h"
+#include "oxygen/renderer/renderer.h"
+#include "Oxygen/renderer-d3d12/surface.h"
 #include "oxygen/renderer-loader/renderer_loader.h"
 
 using oxygen::input::Action;
@@ -22,6 +24,10 @@ using oxygen::input::InputActionMapping;
 using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
+using oxygen::graphics::GetRenderer;
+using oxygen::renderer::direct3d12::CreateWindowSurface;
+using oxygen::renderer::direct3d12::DestroyWindowSurface;
+using oxygen::renderer::direct3d12::GetSurface;
 
 MainModule::MainModule(oxygen::PlatformPtr platform)
   : platform_(std::move(platform)) {
@@ -44,15 +50,13 @@ void MainModule::Initialize() {
         .borderless = false,
     });
 
-    constexpr oxygen::RendererProperties renderer_props{
-#ifdef _DEBUG
-        .enable_debug = true,
-#endif
-        .enable_validation = false,
-    };
+    renderer_ = GetRenderer();
+    auto renderer = renderer_.lock();
+    DCHECK_NOTNULL_F(renderer, "renderer not initialized");
 
-    renderer_ = CreateRenderer(oxygen::graphics::GraphicsBackendType::kDirect3D12, platform_, renderer_props);
-
+    auto surface = CreateWindowSurface(my_window);
+    surface_id_ = surface.GetId();
+    renderer->CreateSwapChain(surface_id_);
 }
 
 void MainModule::ProcessInput(const oxygen::platform::InputEvent& event) {
@@ -68,16 +72,25 @@ void MainModule::Render() {
   // Create a random number core.
   static std::random_device rd;
   static std::mt19937 gen(rd());
-  static std::uniform_int_distribution<> distribution(20, 100);
+  static std::uniform_int_distribution<> distribution(4, 8);
 
-  renderer_->Render();
+  const auto renderer = renderer_.lock();
+  DCHECK_NOTNULL_F(renderer, "renderer destroyed before the module is shutdown");
+  if (renderer) {
+    renderer->Render(surface_id_);
+  }
 
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
 }
 
 void MainModule::Shutdown() noexcept
 {
-  renderer_->Shutdown();
+  if (auto surface = GetSurface(surface_id_); surface.IsValid())
+  {
+    surface.Release();
+    DestroyWindowSurface(surface_id_);
+  }
+  surface_id_.Invalidate();
 
   renderer_.reset();
   platform_.reset();

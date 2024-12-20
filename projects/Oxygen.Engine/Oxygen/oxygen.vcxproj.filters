@@ -126,6 +126,9 @@
     <ClInclude Include="base\win_errors.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="renderer\surface.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">

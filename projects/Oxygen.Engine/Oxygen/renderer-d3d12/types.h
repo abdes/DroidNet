@@ -6,14 +6,13 @@
 
 #pragma once
 
-#include "Oxygen/platform/types.h"
-#include "oxygen/renderer/renderer_module.h"
-#include "oxygen/renderer/types.h"
+#include <memory>
 
-namespace oxygen::graphics {
+namespace oxygen::renderer::direct3d12 {
 
-  void CreateRenderer(GraphicsBackendType backend, PlatformPtr platform, const RendererProperties& renderer_props);
-  void DestroyRenderer();
-  auto GetRenderer() -> RendererPtr;
+  class WindowSurface;
+  class Renderer;
 
-}  // namespace oxygen::renderer
+  using RendererPtr = std::shared_ptr<Renderer>;
+
+}  // namespace oxygen::renderer::direct3d12

@@ -36,6 +36,7 @@ public:
   // clang-format off
   MOCK_METHOD(WindowIdType, Id, (), (const, override));
   MOCK_METHOD(NativeWindowInfo, NativeWindow, (), (const, override));
+  MOCK_METHOD(bool, IsValid, (), (const, override));
   MOCK_METHOD(bool, IsBorderLess, (), (const, override));
   MOCK_METHOD(bool, IsFullScreen, (), (const, override));
   MOCK_METHOD(bool, IsMaximized, (), (const, override));

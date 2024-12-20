@@ -50,6 +50,7 @@ namespace oxygen::platform {
 
     [[nodiscard]] virtual auto Id() const->WindowIdType = 0;
     [[nodiscard]] virtual auto NativeWindow() const->NativeWindowInfo = 0;
+    [[nodiscard]] virtual auto IsValid() const->bool = 0;
 
     // Visibility
     virtual auto Show() -> void = 0;

@@ -36,7 +36,7 @@ namespace oxygen::graphics {
     typedef void* (*GetRendererModuleInterfaceFunc)();
 
     typedef void* (*CreateRendererFunc)();
-    typedef void (*DestroyRendererFunc)(void*);
+    typedef void (*DestroyRendererFunc)();
 
     struct RendererModuleInterface
     {

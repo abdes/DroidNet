@@ -10,8 +10,14 @@
 
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
+#include "oxygen/renderer-d3d12/api_export.h"
+#include "oxygen/renderer-d3d12/detail/resources.h"
 
 namespace oxygen::renderer::direct3d12 {
+
+  OXYGEN_D3D12_API [[nodiscard]] ID3D12Device9* GetMainDevice();
+  OXYGEN_D3D12_API [[nodiscard]] RendererPtr GetRenderer();
+  OXYGEN_D3D12_API [[nodiscard]] auto CurrentFrameIndex() -> size_t;
 
   inline auto ToNarrow(const std::wstring& wide_string) -> std::string
   {
@@ -47,6 +53,31 @@ namespace oxygen::renderer::direct3d12 {
     CheckResult(object->SetName(name.c_str()));
     LOG_F(1, "+D3D12 named object created: {}", ToNarrow(name));
 #endif
+  }
+
+  template<typename T>
+  void ObjectRelease(T*& resource) noexcept
+  {
+    if (resource) {
+      resource->Release();
+      resource = nullptr;
+    }
+  }
+
+  template<typename T>
+  void DeferredObjectRelease(T*& resource) noexcept
+  {
+    if (resource) {
+      auto& instance = detail::DeferredResourceReleaseTracker::Instance();
+      try {
+        instance.DeferRelease(resource);
+      }
+      catch (const std::exception& e) {
+        LOG_F(ERROR, "Failed to defer release of resource: {}", e.what());
+        resource->Release();
+      }
+      resource = nullptr;
+    }
   }
 
 }  // namespace oxygen::renderer::direct3d12

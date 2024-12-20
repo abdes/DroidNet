@@ -135,6 +135,7 @@ namespace oxygen {
       DeltaTimeCounter frame_time{};
       ChangePerSecondCounter fps{};
       ChangePerSecondCounter ups{};
+      ElapsedTimeCounter log_timer{}; // Add this timer
     };
     std::vector<ModuleContext> modules_;
   };

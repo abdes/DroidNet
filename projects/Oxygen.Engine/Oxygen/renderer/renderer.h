@@ -9,17 +9,9 @@
 #include "oxygen/base/macros.h"
 #include "oxygen/base/types.h"
 #include "oxygen/platform/types.h"
+#include "oxygen/renderer/types.h"
 
 namespace oxygen {
-
-  struct RendererProperties
-  {
-    // Debugging support
-    bool enable_debug{ false };
-
-    // Validation and validation fine-grained control
-    bool enable_validation{ false };
-  };
 
   class Renderer
   {
@@ -33,9 +25,10 @@ namespace oxygen {
     OXYGEN_MAKE_NON_MOVEABLE(Renderer);
 
     [[nodiscard]] virtual auto Name() const->std::string = 0;
+    [[nodiscard]] virtual auto CurrentFrameIndex() const->size_t = 0;
 
     virtual void Init(PlatformPtr platform, const RendererProperties& props) = 0;
-    virtual void Render() = 0;
+    virtual void Render(const SurfaceId& surface_id) = 0;
     void Shutdown()
     {
       if (is_shutdown_) return;
@@ -44,6 +37,8 @@ namespace oxygen {
     }
 
     [[nodiscard]] auto IsShutdown() const -> bool { return is_shutdown_; }
+
+    virtual void CreateSwapChain(const SurfaceId& surface_id) const = 0;
 
   protected:
     Renderer() = default;

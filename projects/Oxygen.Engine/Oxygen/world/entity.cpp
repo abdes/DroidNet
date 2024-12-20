@@ -160,7 +160,7 @@ auto oxygen::world::entity::RemoveGameEntity(GameEntity& entity) -> size_t
 
   std::unique_lock lock(entity_mutex);
 
-  auto entity_id = entity.GetId().ToString();
+  const auto entity_id = entity.GetId().ToString(); // keep for logging later
   const auto entity_removed = entities.Erase(entity.GetId());
   if (entity_removed != 0) {
     auto transform = entity.GetTransform();

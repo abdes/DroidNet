@@ -29,6 +29,8 @@ namespace oxygen {
     class InputSlot;
     class InputSlots;
 
+    using WindowPtr = std::weak_ptr<Window>;
+
     using WindowIdType = uint32_t;
     [[maybe_unused]] constexpr WindowIdType kInvalidWindowId = 0;
 

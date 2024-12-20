@@ -4,23 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <unordered_map>
-#include <utility>
+#include "oxygen/renderer-loader/renderer_loader.h"
 
 #include <windows.h>
 
 #include "oxygen/base/logging.h"
-#include "oxygen/renderer-loader/renderer_loader.h"
+#include "oxygen/renderer/renderer.h"
 
+namespace {
+  std::shared_ptr<oxygen::Renderer> renderer{};
+}
 
-auto oxygen::graphics::CreateRenderer(
+void oxygen::graphics::CreateRenderer(
   GraphicsBackendType backend,
   PlatformPtr platform,
   const RendererProperties& renderer_props)
-  -> std::shared_ptr<Renderer>
 {
-  static std::unordered_map<GraphicsBackendType, std::shared_ptr<Renderer>> renderers;
-
   constexpr auto kGetRendererModuleApi = "GetRendererModuleApi";
 
   std::string module_name;
@@ -57,14 +56,28 @@ auto oxygen::graphics::CreateRenderer(
   if (!backend_api) {
     throw std::runtime_error("failed to get the renderer backend api");
   }
-  auto renderer = std::shared_ptr<Renderer>(static_cast<Renderer*>(backend_api->CreateRenderer()));
+
+  // Create the renderer instance, wrap it in a shared_ptr that calls the
+  // backend's destroy function when no longer referenced.
+  renderer = std::shared_ptr<Renderer>(
+    static_cast<Renderer*>(backend_api->CreateRenderer()),
+    [backend_api](Renderer* ptr) {
+      backend_api->DestroyRenderer();
+    });
   if (!renderer) {
-    throw std::runtime_error(
-      "failed to get an instance of the renderer backend");
+    throw std::runtime_error("failed to get an instance of the renderer backend");
   }
 
   renderer->Init(std::move(platform), renderer_props);
-  renderers[backend] = renderer;
+}
 
+void oxygen::graphics::DestroyRenderer()
+{
+  renderer->Shutdown();
+  renderer.reset();
+}
+
+oxygen::RendererPtr oxygen::graphics::GetRenderer()
+{
   return renderer;
 }

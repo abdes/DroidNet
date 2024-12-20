@@ -47,6 +47,7 @@
     <ClInclude Include="platform\window.h" />
     <ClInclude Include="renderer\renderer.h" />
     <ClInclude Include="renderer\renderer_module.h" />
+    <ClInclude Include="renderer\surface.h" />
     <ClInclude Include="renderer\types.h" />
     <ClInclude Include="world\entity.h" />
     <ClInclude Include="world\transform.h" />
