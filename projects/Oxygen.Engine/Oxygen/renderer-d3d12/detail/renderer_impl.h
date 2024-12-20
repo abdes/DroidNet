@@ -9,6 +9,7 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include "Oxygen/renderer-d3d12/command.h"
 #include "oxygen/renderer-d3d12/renderer.h"
 
 namespace oxygen::renderer::direct3d12::detail {
@@ -22,11 +23,13 @@ namespace oxygen::renderer::direct3d12::detail {
 
     void Init();
     void Shutdown();
+    void Render() const;
 
   private:
     PlatformPtr platform_;
     RendererProperties props_;
-    Microsoft::WRL::ComPtr<ID3D12Device> device_;
+    Microsoft::WRL::ComPtr<ID3D12Device9> device_;
+    std::unique_ptr<Command> command_{ nullptr };
   };
 
 }  // namespace oxygen::renderer::direct3d12::detail

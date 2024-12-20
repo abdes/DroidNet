@@ -25,3 +25,8 @@ void Renderer::DoShutdown()
   pimpl_->Shutdown();
   LOG_F(INFO, "Renderer `{}` shut down", Name());
 }
+
+void Renderer::Render()
+{
+  pimpl_->Render();
+}

@@ -31,10 +31,10 @@ namespace oxygen::renderer::direct3d12 {
     }
 
     OXYGEN_RENDERER_D3D12_API void Init(PlatformPtr platform, const RendererProperties& props) override;
+    OXYGEN_RENDERER_D3D12_API void Render() override;
 
   protected:
     void DoShutdown() override;
-
 
   private:
     std::unique_ptr<detail::RendererImpl> pimpl_;

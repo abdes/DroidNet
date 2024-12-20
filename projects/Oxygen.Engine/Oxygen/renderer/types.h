@@ -10,6 +10,9 @@
 
 namespace oxygen {
 
+  // The number of frame buffers we manage
+  constexpr size_t kFrameBufferCount{ 3 };
+
   class Renderer;
 
   using RendererPtr = std::shared_ptr<Renderer>;

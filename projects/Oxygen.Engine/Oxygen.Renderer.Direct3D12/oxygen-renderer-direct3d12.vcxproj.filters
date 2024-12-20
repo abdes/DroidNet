@@ -16,6 +16,12 @@
     <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h">
       <Filter>Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="..\Oxygen\renderer-d3d12\command.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\dx12_utils.h">
+      <Filter>Renderer\detail</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Oxygen\renderer-d3d12\detail\renderer_Impl.cpp">
@@ -25,6 +31,9 @@
       <Filter>Renderer</Filter>
     </ClCompile>
     <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\command.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>

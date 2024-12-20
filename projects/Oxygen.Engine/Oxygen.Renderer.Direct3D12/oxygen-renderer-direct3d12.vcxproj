@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\command.h" />
+    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\dx12_utils.h" />
     <ClInclude Include="..\Oxygen\renderer-d3d12\detail\renderer_impl.h" />
     <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h" />
   </ItemGroup>
@@ -25,6 +27,7 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\Oxygen\renderer-d3d12\command.cpp" />
     <ClCompile Include="..\Oxygen\renderer-d3d12\detail\renderer_Impl.cpp" />
     <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp" />
     <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp" />
