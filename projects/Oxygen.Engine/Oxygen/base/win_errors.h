@@ -46,7 +46,7 @@ namespace oxygen {
 
   // Factory functions to create std::system_error from HRESULT
   auto ComToSystemError(HRESULT hr, const std::string& msg) -> std::system_error;
-  auto ComToSystemError(HRESULT hr, const char* msg) -> std::system_error;
+  auto ComToSystemError(HRESULT hr, const char* msg = "") -> std::system_error;
   auto ComToSystemError(HRESULT hr, const wchar_t* msg) -> std::system_error;
   auto ComToSystemError(HRESULT hr, const std::wstring& msg) -> std::system_error;
   auto ComToSystemError(const _com_error& e) -> std::system_error;

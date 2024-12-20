@@ -13,7 +13,8 @@
 
 #include <dxgi1_6.h>
 
-#include "oxygen/base/win_errors.h"
+#include "oxygen/renderer-d3d12/command.h"
+#include "oxygen/renderer-d3d12/detail/dx12_utils.h"
 
 // Note that while ComPtr is used to manage the lifetime of resources on the
 // CPU, it has no understanding of the lifetime of resources on the GPU. Apps
@@ -23,6 +24,7 @@ using Microsoft::WRL::ComPtr;
 
 using oxygen::CheckResult;
 using oxygen::renderer::direct3d12::detail::RendererImpl;
+using oxygen::renderer::direct3d12::ToNarrow;
 
 namespace {
 
@@ -40,21 +42,6 @@ namespace {
   std::vector<AdapterDesc> adapters;
   ComPtr<IDXGIFactory7> dxgi_factory;
 
-  auto ConvertToUTF8(const WCHAR* wide_string) -> std::string
-  {
-    char utf8_string[128];
-    WideCharToMultiByte(
-      CP_UTF8,
-      0,
-      wide_string,
-      -1,
-      utf8_string,
-      sizeof(utf8_string),
-      nullptr,
-      nullptr);
-    return { utf8_string };
-  }
-
   bool CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter)
   {
     ComPtr<IDXGIOutput> output;
@@ -64,7 +51,7 @@ namespace {
   AdapterDesc CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter)
   {
     AdapterDesc adapter_info{
-      .name = ConvertToUTF8(desc.Description),
+      .name = ToNarrow(desc.Description),
       .vendor_id = desc.VendorId,
       .device_id = desc.DeviceId,
       .dedicated_memory = desc.DedicatedVideoMemory,
@@ -201,14 +188,6 @@ RendererImpl::RendererImpl(PlatformPtr platform, const RendererProperties& props
 {
 }
 
-#ifdef _DEBUG
-#define NAME_OBJECT(device, name)               \
-  CheckResult((device)->SetName(L##name));      \
-  LOG_F(1, "+D3D12 object created: {}", name)
-#else
-#define NAME_OBJECT(device, name)
-#endif
-
 void RendererImpl::Init()
 {
   if (device_) Shutdown();
@@ -245,7 +224,9 @@ void RendererImpl::Init()
         best_adapter_desc.max_feature_level,
         IID_PPV_ARGS(&device_)));
 
-    NAME_OBJECT(device_, "MAIN DEVICE");
+    NameObject(device_.Get(), L"MAIN DEVICE");
+
+    command_.reset(new Command(device_.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT));
 
 #ifdef _DEBUG
     ComPtr<ID3D12InfoQueue> info_queue;
@@ -264,6 +245,9 @@ void RendererImpl::Init()
 
 void RendererImpl::Shutdown()
 {
+  command_->Release();
+  dxgi_factory.Reset();
+
 #ifdef _DEBUG
   ComPtr<ID3D12InfoQueue> info_queue;
   if (SUCCEEDED(device_->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
@@ -284,4 +268,24 @@ void RendererImpl::Shutdown()
 #endif
 
   device_.Reset();
+}
+
+void RendererImpl::Render() const
+{
+  DCHECK_NOTNULL_F(command_);
+
+  LOG_SCOPE_FUNCTION(INFO);
+  // Wait for the GPU to finish executing the previous frame, reset the
+  // allocator once the GPU is done with it to free the memory we allocated to
+  // store the commands.
+  command_->BeginFrame();
+
+  ID3D12GraphicsCommandList7* command_list{ command_->CommandList() };
+  // Record commands
+  //...
+
+  // Done with recording -> execute the commands, signal and increment the fence
+  // value for the next frame.
+  command_->EndFrame();
+
 }

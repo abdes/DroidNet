@@ -32,7 +32,7 @@ namespace oxygen {
     [[nodiscard]] virtual auto Name() const->std::string = 0;
 
     virtual void Init(PlatformPtr platform, const RendererProperties& props) = 0;
-
+    virtual void Render() = 0;
     virtual void Shutdown()
     {
       if (is_shutdown_) return;
