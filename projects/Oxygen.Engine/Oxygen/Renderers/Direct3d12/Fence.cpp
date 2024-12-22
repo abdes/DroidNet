@@ -8,6 +8,7 @@
 
 #include <stdexcept>
 
+#include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h" // for GetMainDevice()
 
 using namespace oxygen::renderer::d3d12;
@@ -24,7 +25,7 @@ void Fence::Initialize(const uint64_t initial_value)
   current_value_ = initial_value;
 
   FenceType* raw_fence = nullptr;
-  CheckResult(GetMainDevice()->CreateFence(current_value_, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&raw_fence)));
+  ThrowOnFailed(GetMainDevice()->CreateFence(current_value_, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&raw_fence)));
   fence_.reset(raw_fence);
 
   fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -54,14 +55,14 @@ void Fence::Signal(const uint64_t value)
     DLOG_F(WARNING, "New value {} must be greater than the current value {}", value, current_value_);
     throw std::invalid_argument("New value must be greater than the current value");
   }
-  CheckResult(fence_->Signal(value));
+  ThrowOnFailed(fence_->Signal(value));
   current_value_ = value;
 }
 
 void Fence::Wait(const uint64_t value) const
 {
   if (fence_->GetCompletedValue() < value) {
-    CheckResult(fence_->SetEventOnCompletion(value, fence_event_));
+    ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_));
     WaitForSingleObject(fence_event_, INFINITE);
   }
 }
@@ -74,5 +75,5 @@ auto Fence::GetCompletedValue() const->uint64_t
 void Fence::Reset(const uint64_t value)
 {
   current_value_ = value;
-  CheckResult(fence_->Signal(current_value_));
+  ThrowOnFailed(fence_->Signal(current_value_));
 }

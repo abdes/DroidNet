@@ -10,13 +10,13 @@
 
 #include "Fence.h"
 #include "oxygen/base/logging.h"
-#include "oxygen/base/win_errors.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
-using oxygen::CheckResult;
+using oxygen::windows::ThrowOnFailed;
 using oxygen::renderer::d3d12::DeviceType;
 
 // Anonymous namespace for object naming helper functions
@@ -80,16 +80,6 @@ namespace {
     ID3D12CommandAllocator* command_allocator{ nullptr };
     uint64_t fence_value{ 0 };
 
-    void Wait(const HANDLE fence_event, FenceType* fence) const
-    {
-      DCHECK_F(fence && fence_event);
-
-      if (fence->GetCompletedValue() < fence_value) {
-        CheckResult(fence->SetEventOnCompletion(fence_value, fence_event));
-        WaitForSingleObject(fence_event, INFINITE);
-      }
-    }
-
     void Release() noexcept
     {
       ObjectRelease(command_allocator);
@@ -148,16 +138,16 @@ namespace oxygen::renderer::d3d12::detail {
       .NodeMask = 0,
     };
     try {
-      CheckResult(device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)));
+      ThrowOnFailed(device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)));
       NameObject(command_queue_, GetNameForType(type, ObjectType::kCommandQueue));
 
       for (size_t index = 0; index < kFrameBufferCount; ++index) {
         auto& command_allocator = frames_[index].command_allocator;
-        CheckResult(device->CreateCommandAllocator(type, IID_PPV_ARGS(&command_allocator)));
+        ThrowOnFailed(device->CreateCommandAllocator(type, IID_PPV_ARGS(&command_allocator)));
         NameObject(command_allocator, GetIndexNameForType(type, ObjectType::kCommandAllocator, index));
       }
 
-      CheckResult(device->CreateCommandList(
+      ThrowOnFailed(device->CreateCommandList(
         0,
         type,
         frames_[0].command_allocator,
@@ -201,8 +191,8 @@ namespace oxygen::renderer::d3d12::detail {
     if (!first_time) {
       try {
         LOG_F(1, "BEGIN [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, completed_value);
-        CheckResult(command_allocator->Reset());
-        CheckResult(command_list_->Reset(command_allocator, nullptr));
+        ThrowOnFailed(command_allocator->Reset());
+        ThrowOnFailed(command_list_->Reset(command_allocator, nullptr));
       }
       catch (const std::runtime_error& e) {
         LOG_F(WARNING, "Commander reset error: {}", e.what());
@@ -215,12 +205,12 @@ namespace oxygen::renderer::d3d12::detail {
 
   void CommanderImpl::EndFrame()
   {
-    CheckResult(command_list_->Close());
+    ThrowOnFailed(command_list_->Close());
     ID3D12CommandList* command_lists[]{ command_list_ };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 
     const uint64_t fence_value{ fence_.GetCompletedValue() + 1 };
-    CheckResult(command_queue_->Signal(fence_.GetFenceObject(), fence_value));
+    ThrowOnFailed(command_queue_->Signal(fence_.GetFenceObject(), fence_value));
     LOG_F(1, "END   [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, fence_.GetCompletedValue());
 
     frames_[current_frame_index].fence_value = fence_value;

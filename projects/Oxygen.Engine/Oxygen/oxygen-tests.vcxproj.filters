@@ -43,6 +43,15 @@
     <ClCompile Include="base\test\resource_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
+    <ClCompile Include="base\test\StringUtils_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\Exceptions_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="base\test\ComError_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
@@ -60,6 +69,9 @@
     </Filter>
     <Filter Include="World">
       <UniqueIdentifier>{af1bc3aa-ea32-4221-8039-d9e6c079112e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base\Windows">
+      <UniqueIdentifier>{5cdaabf6-8b32-41d3-8f3f-8ebfb60c1788}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

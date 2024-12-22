@@ -23,7 +23,9 @@
     <ClInclude Include="base\signal.hpp" />
     <ClInclude Include="base\time.h" />
     <ClInclude Include="base\types.h" />
-    <ClInclude Include="base\win_errors.h" />
+    <ClInclude Include="base\Windows\ComError.h" />
+    <ClInclude Include="base\Windows\Exceptions.h" />
+    <ClInclude Include="base\Windows\StringUtils.h" />
     <ClInclude Include="core\engine.h" />
     <ClInclude Include="core\fwd.h" />
     <ClInclude Include="core\input_handler.h" />
@@ -57,7 +59,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="base\loguru.cpp" />
-    <ClCompile Include="base\win_errors.cpp" />
+    <ClCompile Include="base\Windows\ComError.cpp" />
+    <ClCompile Include="base\Windows\Exceptions.cpp" />
     <ClCompile Include="core\engine.cpp" />
     <ClCompile Include="core\version.cpp" />
     <ClCompile Include="input\action.cpp" />
@@ -126,7 +129,7 @@
       <SubSystem>Windows</SubSystem>
     </Link>
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_EXPORTS;_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ImportGroup Label="Shared">

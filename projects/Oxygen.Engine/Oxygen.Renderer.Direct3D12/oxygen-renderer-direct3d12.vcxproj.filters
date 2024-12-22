@@ -17,6 +17,9 @@
     <Filter Include="Renderer\Detail">
       <UniqueIdentifier>{c1f1df9c-4cd5-4d78-aa64-086fb4c9cbaa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Renderer\Shaders">
+      <UniqueIdentifier>{859303b5-1511-4fc8-95d2-11f99040d03f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp">
@@ -48,6 +51,12 @@
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp">
       <Filter>Renderer\Detail</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Shaders.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp">
+      <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -93,10 +102,24 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h">
       <Filter>Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Shaders.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.natvis">
       <Filter>Renderer\Debug</Filter>
     </Natvis>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="..\Oxygen\Renderers\Direct3d12\Shaders\FullScreenTriangle.hlsl">
+      <Filter>Renderer\Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="..\Oxygen\Renderers\Direct3d12\Shaders\FillColor.hlsl">
+      <Filter>Renderer\Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
