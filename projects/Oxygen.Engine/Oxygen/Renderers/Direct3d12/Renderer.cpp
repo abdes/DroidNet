@@ -30,14 +30,14 @@ using oxygen::CheckResult;
 using oxygen::renderer::d3d12::ToNarrow;
 
 namespace {
-  auto GetMainDeviceInternal() -> ComPtr<ID3D12Device9>&
+  auto GetMainDeviceInternal() -> ComPtr<ID3D12Device12>&
   {
-    static ComPtr<ID3D12Device9> main_device;
+    static ComPtr<ID3D12Device12> main_device;
     return main_device;
   }
-}  // namesape
+}  // namespace
 namespace oxygen::renderer::d3d12 {
-  auto GetMainDevice() -> ID3D12Device9*
+  auto GetMainDevice() -> ID3D12Device12*
   {
     return GetMainDeviceInternal().Get();
   }
