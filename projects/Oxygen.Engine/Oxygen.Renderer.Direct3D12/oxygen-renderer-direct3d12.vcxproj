@@ -32,6 +32,7 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Surface.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h" />

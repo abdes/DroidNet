@@ -43,6 +43,9 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Texture.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">

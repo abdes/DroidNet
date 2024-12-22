@@ -15,8 +15,20 @@
 
 namespace oxygen::renderer::d3d12 {
 
-  OXYGEN_D3D12_API [[nodiscard]] ID3D12Device9* GetMainDevice();
+  OXYGEN_D3D12_API [[nodiscard]] ID3D12Device12* GetMainDevice();
   OXYGEN_D3D12_API [[nodiscard]] auto CurrentFrameIndex() -> size_t;
+
+  constexpr struct
+  {
+    D3D12_HEAP_PROPERTIES default_hep_props
+    {
+      .Type = D3D12_HEAP_TYPE_DEFAULT,
+      .CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+      .MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+      .CreationNodeMask = 0,
+      .VisibleNodeMask = 0,
+    };
+  } kHeapProperties;
 
   inline auto ToNarrow(const std::wstring& wide_string) -> std::string
   {
