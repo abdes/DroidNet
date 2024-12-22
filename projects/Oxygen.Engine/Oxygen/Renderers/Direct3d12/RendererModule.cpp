@@ -4,16 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/renderer/renderer_module.h"
-
-#include "oxygen/renderer-d3d12/renderer.h"
-
-using oxygen::renderer::direct3d12::Renderer;
+#include "Oxygen/Base/logging.h"
+#include "Oxygen/Renderers/Common/RendererModule.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 namespace {
 
-  std::shared_ptr<Renderer>& GetRendererInternal() {
-    static auto renderer = std::make_shared<Renderer>();
+  std::shared_ptr<oxygen::renderer::d3d12::Renderer>& GetRendererInternal() {
+    static auto renderer = std::make_shared<oxygen::renderer::d3d12::Renderer>();
     return renderer;
   }
 
@@ -30,16 +28,17 @@ namespace {
 
 } // namespace
 
-namespace oxygen::renderer::direct3d12 {
-  auto GetRenderer() -> RendererPtr
+namespace oxygen::renderer::d3d12::detail {
+  auto GetRenderer() -> Renderer&
   {
-    return GetRendererInternal();
+    CHECK_NOTNULL_F(GetRendererInternal());
+    return *GetRendererInternal();
   }
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12
 
 extern "C" __declspec(dllexport) void* GetRendererModuleApi()
 {
-  static oxygen::graphics::RendererModuleInterface render_module;
+  static oxygen::graphics::RendererModuleApi render_module;
   render_module.CreateRenderer = CreateRenderer;
   render_module.DestroyRenderer = DestroyRenderer;
   return &render_module;

@@ -13,10 +13,10 @@
 #include <vector>
 
 #include "oxygen/base/macros.h"
-#include "oxygen/renderer/types.h"
-#include "Oxygen/renderer-d3d12/deferred_release.h"
+#include "Oxygen/Renderers/Common/Types.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
-namespace oxygen::renderer::direct3d12::detail {
+namespace oxygen::renderer::d3d12::detail {
 
   class DeferredResourceReleaseTracker
   {
@@ -30,7 +30,7 @@ namespace oxygen::renderer::direct3d12::detail {
     void DeferRelease(IUnknown* resource);
     void ProcessDeferredReleases(size_t frame_index);
 
-    void Initialize(std::weak_ptr<IDeferredReleaseCoordinator> renderer)
+    void Initialize(DeferredReleaseControllerPtr renderer)
     {
       renderer_ = std::move(renderer);
     }
@@ -43,7 +43,7 @@ namespace oxygen::renderer::direct3d12::detail {
     OXYGEN_MAKE_NON_MOVEABLE(DeferredResourceReleaseTracker);
 
     std::vector<IUnknown*> deferred_releases_[kFrameBufferCount]{};
-    std::weak_ptr<IDeferredReleaseCoordinator> renderer_;
+    DeferredReleaseControllerPtr renderer_;
     std::mutex mutex_;
   };
 
@@ -81,7 +81,7 @@ namespace oxygen::renderer::direct3d12::detail {
     void Initialize(
       size_t capacity,
       bool is_shader_visible, ID3D12Device* device,
-      std::weak_ptr<IDeferredReleaseCoordinator> renderer);
+      DeferredReleaseControllerPtr renderer);
 
     void Release();
 
@@ -117,6 +117,6 @@ namespace oxygen::renderer::direct3d12::detail {
     // Remember what indices for handles that are to be freed but still referred
     // to in the corresponding frame slot.
     std::vector<size_t> deferred_release_indices_[kFrameBufferCount]{};
-    std::weak_ptr<IDeferredReleaseCoordinator> renderer_;
+    DeferredReleaseControllerPtr renderer_;
   };
 }

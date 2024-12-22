@@ -7,18 +7,18 @@
     <None Include="vcpkg-configuration.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Oxygen\renderer-loader\renderer_loader.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="Renderer">
+    <Filter Include="Loader">
       <UniqueIdentifier>{fc86464d-61d5-4bd1-9804-54c80b6deadb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\renderer-loader\renderer_loader.cpp">
-      <Filter>Renderer</Filter>
+    <ClCompile Include="..\Oxygen\Renderers\Loader\RendererLoader.cpp">
+      <Filter>Loader</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Renderers\Loader\RendererLoader.h">
+      <Filter>Loader</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

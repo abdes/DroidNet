@@ -4,18 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/renderer-d3d12/detail/resources.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/resources.h"
 
 #include <utility>
 
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
-#include "oxygen/renderer-d3d12/detail/dx12_utils.h"
-#include "oxygen/renderer-d3d12/renderer.h"
-#include "Oxygen/renderer-d3d12/types.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
-using namespace oxygen::renderer::direct3d12::detail;
-using  oxygen::renderer::direct3d12::Renderer;
+using namespace oxygen::renderer::d3d12::detail;
+using  oxygen::renderer::d3d12::Renderer;
 
 void DeferredResourceReleaseTracker::DeferRelease(IUnknown* resource)
 {
@@ -55,7 +55,7 @@ void DescriptorHeap::Initialize(
   const size_t capacity,
   bool is_shader_visible,
   ID3D12Device* device,
-  std::weak_ptr<IDeferredReleaseCoordinator> renderer)
+  DeferredReleaseControllerPtr renderer)
 {
   Release();
 

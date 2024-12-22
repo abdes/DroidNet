@@ -15,7 +15,7 @@
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"
 #include "oxygen/platform-sdl/platform.h"
-#include "oxygen/renderer-loader/renderer_loader.h"
+#include "oxygen/Renderers/Loader/RendererLoader.h"
 
 using namespace std::chrono_literals;
 

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/renderer-d3d12/surface.h"
+#include "Oxygen/Renderers/Direct3d12/Surface.h"
 
 #include <shared_mutex>
 
@@ -13,14 +13,14 @@
 #include "oxygen/base/resource_table.h"
 #include "oxygen/base/win_errors.h"
 #include "oxygen/platform/window.h"
-#include "oxygen/renderer-d3d12/renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
-using oxygen::SurfaceId;
+using oxygen::renderer::resources::SurfaceId;
 using oxygen::platform::WindowPtr;
 using oxygen::renderer::Surface;
-using oxygen::renderer::direct3d12::WindowSurface;
+using oxygen::renderer::d3d12::WindowSurface;
 
-namespace oxygen::renderer::direct3d12::detail {
+namespace oxygen::renderer::d3d12::detail {
 
   class WindowSurfaceImpl
   {
@@ -58,12 +58,13 @@ namespace oxygen::renderer::direct3d12::detail {
     RenderTargetData render_targets_[kFrameBufferCount]{};
   };
 
-}  // namespace oxygen::renderer::direct3d12::detail
+}  // namespace oxygen::renderer::d3d12::detail
 
-using oxygen::renderer::direct3d12::detail::WindowSurfaceImpl;
+using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
 
 namespace {
-  oxygen::ResourceTable<WindowSurfaceImpl> surfaces(oxygen::resources::kSurface, 256);
+  using oxygen::renderer::resources::kSurface;
+  oxygen::ResourceTable<WindowSurfaceImpl> surfaces(kSurface, 256);
 
   std::shared_mutex entity_mutex;
 
@@ -143,10 +144,8 @@ void WindowSurfaceImpl::CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQue
 
   current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 
-  const auto d3d12_renderer = std::dynamic_pointer_cast<Renderer>(GetRenderer().lock());
-  DCHECK_NOTNULL_F(d3d12_renderer);
   for (auto& [resource, rtv] : render_targets_) {
-    rtv = d3d12_renderer->RtvHeap().Allocate();
+    rtv = GetRenderer().RtvHeap().Allocate();
   }
   Finalize();
 }
@@ -197,9 +196,7 @@ void WindowSurfaceImpl::DoRelease()
 {
   for (auto& [resource, rtv] : render_targets_) {
     ObjectRelease(resource);
-    const auto d3d12_renderer = std::dynamic_pointer_cast<Renderer>(GetRenderer().lock());
-    DCHECK_NOTNULL_F(d3d12_renderer);
-    d3d12_renderer->RtvHeap().Free(rtv);
+    GetRenderer().RtvHeap().Free(rtv);
   }
   ObjectRelease(swap_chain_);
 }
@@ -249,14 +246,14 @@ WindowSurface::~WindowSurface() = default;
     LOG_F(WARNING, "WindowSurface resource with Id `{}` does not exist anymore", GetId().ToString()); \
     return; \
   } \
-  impl_->statement;
+  impl_->statement
 
 #define RETURN_IMPL(statement, error_value) \
   if (!surfaces.Contains(GetId())) { \
     LOG_F(WARNING, "WindowSurface resource with Id `{}` does not exist anymore", GetId().ToString()); \
     return error_value; \
   } \
-  return impl_->statement;
+  return impl_->statement
 
 void WindowSurface::SetSize(const int width, const int height)
 {
@@ -317,7 +314,7 @@ void WindowSurface::DoRelease()
 #undef CALL_IMPL
 #undef RETURN_IMPL
 
-auto oxygen::renderer::direct3d12::CreateWindowSurface(WindowPtr window) -> WindowSurface
+auto oxygen::renderer::d3d12::CreateWindowSurface(WindowPtr window) -> WindowSurface
 {
   DCHECK_NOTNULL_F(window.lock());
   DCHECK_F(window.lock()->IsValid());
@@ -332,7 +329,7 @@ auto oxygen::renderer::direct3d12::CreateWindowSurface(WindowPtr window) -> Wind
   return WindowSurface(surface_id, &impl);
 }
 
-auto oxygen::renderer::direct3d12::DestroyWindowSurface(SurfaceId& surface_id) -> size_t
+auto oxygen::renderer::d3d12::DestroyWindowSurface(SurfaceId& surface_id) -> size_t
 {
   DCHECK_F(GetSurface(surface_id).IsValid());
 
@@ -345,7 +342,7 @@ auto oxygen::renderer::direct3d12::DestroyWindowSurface(SurfaceId& surface_id) -
   return surface_removed;
 }
 
-auto oxygen::renderer::direct3d12::GetSurface(const SurfaceId& surface_id) -> WindowSurface
+auto oxygen::renderer::d3d12::GetSurface(const SurfaceId& surface_id) -> WindowSurface
 {
   try {
     auto& impl = surfaces.ItemAt(surface_id);

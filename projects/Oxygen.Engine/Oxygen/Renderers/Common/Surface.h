@@ -5,16 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#include "oxygen/base/resource.h"
-#include "oxygen/renderer/types.h"
+
+#include "Oxygen/Base/Resource.h"
+#include "Oxygen/Renderers/Common/Types.h"
 
 namespace oxygen::renderer {
 
   class Surface : public Resource<resources::kSurface>
   {
   public:
-    explicit Surface(const SurfaceId& surface_id) : Resource(surface_id) {}
-    explicit Surface() {} // Create a Surface with an invalid id
+    explicit Surface(const resources::SurfaceId& surface_id) : Resource(surface_id) {}
+    explicit Surface() = default; // Create a Surface with an invalid id
+    ~Surface() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Surface);
     OXYGEN_MAKE_NON_MOVEABLE(Surface);
@@ -31,7 +33,7 @@ namespace oxygen::renderer {
 
     [[nodiscard]] virtual auto Width() const->uint32_t = 0;
     [[nodiscard]] virtual auto Height() const->uint32_t = 0;
-    [[nodiscard]] virtual constexpr auto IsClosed() const -> bool { return is_released_; };
+    [[nodiscard]] virtual constexpr auto IsClosed() const -> bool { return is_released_; }
 
   protected:
     virtual void DoRelease() = 0;

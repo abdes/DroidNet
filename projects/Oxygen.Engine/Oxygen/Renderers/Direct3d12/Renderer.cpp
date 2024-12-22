@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/renderer-d3d12/renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 #include <algorithm>
 #include <functional>
@@ -14,18 +14,20 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include "D3DPtr.h"
 #include "oxygen/base/compilers.h"
-#include "oxygen/renderer/types.h"
-#include "oxygen/renderer-d3d12/commander.h"
-#include "oxygen/renderer-d3d12/deferred_release.h"
-#include "oxygen/renderer-d3d12/detail/dx12_utils.h"
-#include "oxygen/renderer-d3d12/detail/resources.h"
-#include "surface.h"
-#include "types.h"
+#include "oxygen/base/macros.h"
+#include "oxygen/Renderers/Common/Types.h"
+#include "Oxygen/Renderers/Direct3d12/commander.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/detail/resources.h"
+#include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Surface.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using Microsoft::WRL::ComPtr;
 using oxygen::CheckResult;
-using oxygen::renderer::direct3d12::ToNarrow;
+using oxygen::renderer::d3d12::ToNarrow;
 
 namespace {
   auto GetMainDeviceInternal() -> ComPtr<ID3D12Device9>&
@@ -34,12 +36,12 @@ namespace {
     return main_device;
   }
 }  // namesape
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
   auto GetMainDevice() -> ID3D12Device9*
   {
     return GetMainDeviceInternal().Get();
   }
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12
 
 // Anonymous namespace for adapter discovery helper functions
 namespace {
@@ -200,19 +202,21 @@ namespace {
 } // namespace
 
 // Implementation details of the Renderer class
-namespace oxygen::renderer::direct3d12::detail {
-  class RendererImpl final : public std::enable_shared_from_this<RendererImpl>, public IDeferredReleaseCoordinator
+namespace oxygen::renderer::d3d12::detail {
+  class RendererImpl final
+    : public std::enable_shared_from_this<RendererImpl>
+    , public IDeferredReleaseController
   {
   public:
-    RendererImpl(PlatformPtr platform, const RendererProperties& props);
+    RendererImpl();
     ~RendererImpl() override = default;
     OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
     OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
 
-    void Init();
+    void Init(PlatformPtr platform, const RendererProperties& props);
     void Shutdown();
 
-    void Render(const SurfaceId& surface_id) const;
+    void Render(const resources::SurfaceId& surface_id) const;
 
     void RegisterDeferredReleases(std::function<void(size_t)> handler) const override
     {
@@ -225,7 +229,9 @@ namespace oxygen::renderer::direct3d12::detail {
     [[nodiscard]] auto SrvHeap() const->DescriptorHeap& { return srv_heap_; }
     [[nodiscard]] auto UavHeap() const->DescriptorHeap& { return uav_heap_; }
 
-    void CreateSwapChain(const SurfaceId& surface_id, DXGI_FORMAT format) const;
+    void CreateSwapChain(const resources::SurfaceId& surface_id, DXGI_FORMAT format) const;
+
+    [[nodiscard]] D3D12MA::Allocator* GetAllocator() const { return allocator_; }
 
   private:
     void ProcessDeferredRelease(size_t frame_index) const
@@ -234,13 +240,10 @@ namespace oxygen::renderer::direct3d12::detail {
       deferred_release.InvokeHandlers(frame_index);
     }
 
-    PlatformPtr platform_;
-    RendererProperties props_;
-    std::unique_ptr<Commander> commander_{ nullptr };
+    D3D12MA::Allocator* allocator_{ nullptr };
+    std::unique_ptr<Commander> commander_{};
 
-    std::weak_ptr<IDeferredReleaseCoordinator> GetWeakPtr() {
-      return shared_from_this();
-    }
+    DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
 
     mutable DescriptorHeap rtv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV };
     mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV };
@@ -293,28 +296,27 @@ namespace oxygen::renderer::direct3d12::detail {
 
     mutable DeferredRelease deferred_releases_[kFrameBufferCount]{ };
   };
-  RendererImpl::RendererImpl(PlatformPtr platform, const RendererProperties& props)
-    : IDeferredReleaseCoordinator(), platform_(std::move(platform)), props_(props)
+  RendererImpl::RendererImpl() : IDeferredReleaseController()
   {
   }
 
-  void RendererImpl::Init()
+  void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
   {
     if (GetMainDevice()) Shutdown();
 
     LOG_SCOPE_FUNCTION(INFO);
     try {
       // Setup the DXGI factory
-      InitializeFactory(props_.enable_debug);
+      InitializeFactory(props.enable_debug);
 
 
       // Optionally enable debugging layer and GPU-based validation
-      if (props_.enable_debug)
+      if (props.enable_debug)
       {
         ComPtr<ID3D12Debug1> debug_controller;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_controller)))) {
           debug_controller->EnableDebugLayer();
-          if (props_.enable_validation) {
+          if (props.enable_validation) {
             debug_controller->SetEnableGPUBasedValidation(TRUE);
           }
         }
@@ -348,6 +350,19 @@ namespace oxygen::renderer::direct3d12::detail {
         CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true));
       }
 #endif
+
+      {
+        D3D12MA::ALLOCATOR_DESC allocator_desc = {};
+        allocator_desc.pDevice = GetMainDevice();
+        allocator_desc.pAdapter = best_adapter.Get();
+
+        if (FAILED(D3D12MA::CreateAllocator(&allocator_desc, &allocator_)))
+        {
+          LOG_F(ERROR, "Failed to initialize D3D12MemoryAllocator");
+          throw std::runtime_error("Failed to initialize D3D12MemoryAllocator");
+        }
+      }
+
       // Initialize deferred release manager
       DeferredResourceReleaseTracker::Instance().Initialize(GetWeakPtr());
 
@@ -366,6 +381,7 @@ namespace oxygen::renderer::direct3d12::detail {
     }
     catch (const std::runtime_error& e) {
       LOG_F(ERROR, "Initialization failed: {}", e.what());
+      // TODO: cleanup
       throw;
     }
   }
@@ -393,6 +409,7 @@ namespace oxygen::renderer::direct3d12::detail {
     // have been made while we are rleasing things here
     ProcessDeferredRelease(CurrentFrameIndex());
 
+    SafeRelease(&allocator_);
     dxgi_factory.Reset();
 
 #ifdef _DEBUG
@@ -417,7 +434,7 @@ namespace oxygen::renderer::direct3d12::detail {
     GetMainDeviceInternal().Reset();
   }
 
-  void RendererImpl::Render(const SurfaceId& surface_id) const
+  void RendererImpl::Render(const resources::SurfaceId& surface_id) const
   {
     DCHECK_NOTNULL_F(commander_);
 
@@ -443,7 +460,7 @@ namespace oxygen::renderer::direct3d12::detail {
 
   }
 
-  void RendererImpl::CreateSwapChain(const SurfaceId& surface_id, const DXGI_FORMAT format) const
+  void RendererImpl::CreateSwapChain(const resources::SurfaceId& surface_id, const DXGI_FORMAT format) const
   {
     auto surface = GetSurface(surface_id);
     if (!surface.IsValid()) {
@@ -453,34 +470,32 @@ namespace oxygen::renderer::direct3d12::detail {
     surface.CreateSwapChain(dxgi_factory.Get(), commander_->CommandQueue(), format);
   }
 
-}  // namespace oxygen::renderer::direct3d12::detail
+}  // namespace oxygen::renderer::d3d12::detail
 
-using oxygen::renderer::direct3d12::Renderer;
+using oxygen::renderer::d3d12::Renderer;
 
-Renderer::Renderer() = default;
-Renderer::~Renderer() = default;
 
-void Renderer::Init(PlatformPtr platform, const RendererProperties& props)
+void Renderer::OnInitialize()
 {
-  pimpl_ = std::make_shared<detail::RendererImpl>(platform, props);
-  pimpl_->Init();
+  pimpl_ = std::make_shared<detail::RendererImpl>();
+  pimpl_->Init(GetPlatform(), GetPInitProperties());
   LOG_F(INFO, "Renderer `{}` initialized", Name());
 }
 
-void Renderer::DoShutdown()
+void Renderer::OnShutdown()
 {
   pimpl_->Shutdown();
   LOG_F(INFO, "Renderer `{}` shut down", Name());
 }
 
-void Renderer::Render(const SurfaceId& surface_id)
+void Renderer::Render(const resources::SurfaceId& surface_id)
 {
   pimpl_->Render(surface_id);
 }
 
 auto Renderer::CurrentFrameIndex() const -> size_t
 {
-  return direct3d12::CurrentFrameIndex();
+  return d3d12::CurrentFrameIndex();
 }
 
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&
@@ -503,7 +518,12 @@ auto Renderer::UavHeap() const -> detail::DescriptorHeap&
   return pimpl_->UavHeap();
 }
 
-void Renderer::CreateSwapChain(const SurfaceId& surface_id) const
+auto Renderer::GetAllocator() const -> D3D12MA::Allocator*
+{
+  return pimpl_->GetAllocator();
+}
+
+void Renderer::CreateSwapChain(const resources::SurfaceId& surface_id) const
 {
   pimpl_->CreateSwapChain(surface_id, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
 }
