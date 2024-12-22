@@ -19,3 +19,7 @@ The solution for this problem is:
 Download the latest Microsoft Visual C++ Redistributables and install them on the machine that gives the problem.
 On this Microsoft site you find the downloads.
 https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+
+## Shader Compilation Setup
+
+[text](https://github.com/Devaniti/GetDXC)

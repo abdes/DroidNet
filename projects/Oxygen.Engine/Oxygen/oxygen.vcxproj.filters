@@ -114,9 +114,6 @@
     <ClInclude Include="world\transform.h">
       <Filter>World</Filter>
     </ClInclude>
-    <ClInclude Include="base\win_errors.h">
-      <Filter>Base</Filter>
-    </ClInclude>
     <ClInclude Include="Renderers\Common\MemoryBlock.h">
       <Filter>Renderer</Filter>
     </ClInclude>
@@ -134,6 +131,15 @@
     </ClInclude>
     <ClInclude Include="Renderers\Common\IFence.h">
       <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Windows\Exceptions.h">
+      <Filter>Base\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Windows\StringUtils.h">
+      <Filter>Base\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Windows\ComError.h">
+      <Filter>Base\Windows</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -160,6 +166,9 @@
     </Filter>
     <Filter Include="Renderer">
       <UniqueIdentifier>{cf3a60d9-7cd4-47da-9949-e6e59d2640f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base\Windows">
+      <UniqueIdentifier>{9e6223df-6965-43fd-89a4-690ad4f81e92}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -205,8 +214,11 @@
     <ClCompile Include="base\loguru.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\win_errors.cpp">
-      <Filter>Base</Filter>
+    <ClCompile Include="base\Windows\Exceptions.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="base\Windows\ComError.cpp">
+      <Filter>Base\Windows</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

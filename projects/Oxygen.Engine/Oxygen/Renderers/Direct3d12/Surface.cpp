@@ -11,7 +11,7 @@
 #include "detail/dx12_utils.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/base/resource_table.h"
-#include "oxygen/base/win_errors.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "oxygen/platform/window.h"
 #include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
@@ -19,6 +19,7 @@ using oxygen::renderer::resources::SurfaceId;
 using oxygen::platform::WindowPtr;
 using oxygen::renderer::Surface;
 using oxygen::renderer::d3d12::WindowSurface;
+using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::renderer::d3d12::detail {
 
@@ -98,7 +99,7 @@ void WindowSurfaceImpl::SetSize(int width, int height)
 void WindowSurfaceImpl::Present() const
 {
   DCHECK_NOTNULL_F(swap_chain_);
-  CheckResult(swap_chain_->Present(0, 0));
+  ThrowOnFailed(swap_chain_->Present(0, 0));
   current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
@@ -138,7 +139,7 @@ void WindowSurfaceImpl::CreateSwapChain(
   IDXGISwapChain1* swap_chain{ nullptr };
   const auto hwnd = static_cast<HWND>(window->NativeWindow().window_handle);
   try {
-    CheckResult(
+    ThrowOnFailed(
       factory->CreateSwapChainForHwnd(
         command_queue,
         hwnd,
@@ -146,8 +147,8 @@ void WindowSurfaceImpl::CreateSwapChain(
         nullptr,
         nullptr,
         &swap_chain));
-    CheckResult(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
-    CheckResult(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
+    ThrowOnFailed(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
+    ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
   }
   catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create swap chain: {}", e.what());
@@ -170,7 +171,7 @@ void WindowSurfaceImpl::Finalize()
     DCHECK_F(render_targets_[i].resource == nullptr);
     ID3D12Resource* back_buffer{ nullptr };
     try {
-      CheckResult(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
+      ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
       render_targets_[i].resource = back_buffer;
       const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc{
         .Format = format_,
@@ -186,7 +187,7 @@ void WindowSurfaceImpl::Finalize()
   }
 
   DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{};
-  CheckResult(swap_chain_->GetDesc1(&swap_chain_desc));
+  ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
   const auto [width, height] = window_.lock()->GetFrameBufferSize();
   DCHECK_EQ_F(width, swap_chain_desc.Width);
   DCHECK_EQ_F(height, swap_chain_desc.Height);

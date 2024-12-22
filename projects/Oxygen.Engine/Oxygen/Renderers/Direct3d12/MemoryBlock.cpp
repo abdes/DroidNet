@@ -8,11 +8,12 @@
 
 #include "detail/dx12_utils.h"
 #include "oxygen/base/logging.h"
-#include "oxygen/base/win_errors.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/D3D12MemAlloc.h"
 #include "Renderer.h"
 
 using namespace oxygen::renderer::d3d12;
+using oxygen::windows::ThrowOnFailed;
 
 MemoryBlock::MemoryBlock()
   : IMemoryBlock()
@@ -46,7 +47,7 @@ void MemoryBlock::Init(const MemoryBlockDesc& desc)
 
   const auto& renderer = detail::GetRenderer();
   D3D12MA::Allocation* allocation_raw_ptr = nullptr; // Local variable to store the raw pointer
-  CheckResult(renderer.GetAllocator()->AllocateMemory(
+  ThrowOnFailed(renderer.GetAllocator()->AllocateMemory(
     &alloc_desc,
     &allocation_info,
     &allocation_raw_ptr));

@@ -11,11 +11,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="base\test\ComError_test.cpp" />
+    <ClCompile Include="base\test\Exceptions_test.cpp" />
     <ClCompile Include="base\test\macros_test.cpp" />
     <ClCompile Include="base\test\platform_test.cpp" />
     <ClCompile Include="base\test\resource_handle_test.cpp" />
     <ClCompile Include="base\test\resource_table_test.cpp" />
     <ClCompile Include="base\test\resource_test.cpp" />
+    <ClCompile Include="base\test\StringUtils_test.cpp" />
     <ClCompile Include="base\test\time_test.cpp" />
     <ClCompile Include="base\test\types_test.cpp" />
     <ClCompile Include="core\test\input_handler_test.cpp" />
@@ -76,6 +79,12 @@
     <Link>
       <SubSystem>Console</SubSystem>
     </Link>
+    <ClCompile>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

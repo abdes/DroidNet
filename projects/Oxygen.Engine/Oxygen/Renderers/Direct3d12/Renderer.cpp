@@ -14,19 +14,22 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
-#include "D3DPtr.h"
 #include "oxygen/base/compilers.h"
 #include "oxygen/base/macros.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/commander.h"
+#include "Oxygen/Renderers/Direct3d12/Content.h"
+#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/detail/resources.h"
 #include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Shaders.h"
 #include "Oxygen/Renderers/Direct3d12/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using Microsoft::WRL::ComPtr;
-using oxygen::CheckResult;
+using oxygen::windows::ThrowOnFailed;
 using oxygen::renderer::d3d12::ToNarrow;
 using oxygen::renderer::d3d12::DeviceType;
 using oxygen::renderer::d3d12::FactoryType;
@@ -140,12 +143,12 @@ namespace {
 
   void InitializeFactory(const bool enable_debug)
   {
-    CheckResult(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory)));
+    ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory)));
     UINT dxgi_factory_flags{ 0 };
     if (enable_debug) {
       dxgi_factory_flags = DXGI_CREATE_FACTORY_DEBUG;
     }
-    CheckResult(CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&dxgi_factory)));
+    ThrowOnFailed(CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&dxgi_factory)));
   }
 
   std::tuple<ComPtr<IDXGIAdapter1>, size_t> DiscoverAdapters(const std::function<bool(const AdapterDesc&)>& selector)
@@ -164,7 +167,7 @@ namespace {
            IID_PPV_ARGS(&adapter));
          adapter_index++) {
       DXGI_ADAPTER_DESC1 desc;
-      CheckResult(adapter->GetDesc1(&desc));
+      ThrowOnFailed(adapter->GetDesc1(&desc));
 
       if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
         // Don't select the Basic Render Driver adapter.
@@ -337,7 +340,7 @@ namespace oxygen::renderer::d3d12::detail {
       LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
 
       // Create the device with the maximum feature level of the selected adapter
-      CheckResult(
+      ThrowOnFailed(
         D3D12CreateDevice(
           best_adapter.Get(),
           best_adapter_desc.max_feature_level,
@@ -347,9 +350,9 @@ namespace oxygen::renderer::d3d12::detail {
 #ifdef _DEBUG
       ComPtr<ID3D12InfoQueue> info_queue;
       if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
-        CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true));
-        CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true));
-        CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true));
+        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true));
+        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true));
+        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true));
       }
 #endif
 
@@ -380,6 +383,13 @@ namespace oxygen::renderer::d3d12::detail {
       NameObject(srv_heap_.Heap(), L"SRV Descriptor Heap");
       uav_heap_.Initialize(512, false, GetMainDevice(), GetWeakPtr());
       NameObject(uav_heap_.Heap(), L"UAV Descriptor Heap");
+
+      // Load engine shaders
+      if (!shaders::Initialize())
+      {
+        LOG_F(ERROR, "Failed to load engine shaders");
+        throw std::runtime_error("Failed to load engine shaders");
+      }
     }
     catch (const std::runtime_error& e) {
       LOG_F(ERROR, "Initialization failed: {}", e.what());
@@ -392,7 +402,10 @@ namespace oxygen::renderer::d3d12::detail {
   {
     LOG_SCOPE_FUNCTION(INFO);
 
-    // Flush any pending commands and release any defeerred resources for all
+    // Cleanup engine shaders
+    shaders::Shutdown();
+
+    // Flush any pending commands and release any deferred resources for all
     // our frame indices
     commander_->Flush();
     for (uint32_t index = 0; index < kFrameBufferCount; ++index) {
@@ -417,16 +430,16 @@ namespace oxygen::renderer::d3d12::detail {
 #ifdef _DEBUG
     ComPtr<ID3D12InfoQueue> info_queue;
     if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
-      CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false));
-      CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false));
-      CheckResult(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false));
+      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false));
+      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false));
+      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false));
       info_queue.Reset();
 
       // Check for leftover live objects
       ComPtr<ID3D12DebugDevice2> debug_device;
       if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&debug_device)))) {
         GetMainDeviceInternal().Reset();
-        CheckResult(debug_device->ReportLiveDeviceObjects(
+        ThrowOnFailed(debug_device->ReportLiveDeviceObjects(
           D3D12_RLDO_SUMMARY | D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL));
         debug_device.Reset();
       }

@@ -9,9 +9,11 @@
 #include <d3d12.h>
 
 #include "Oxygen/Base/logging.h"
-#include "Oxygen/Base/win_errors.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
 #include "Oxygen/Renderers/Direct3d12/detail/resources.h"
+
+using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::renderer::d3d12 {
 
@@ -49,7 +51,7 @@ namespace oxygen::renderer::d3d12 {
   inline void NameObject(ID3D12Object* const object, const std::wstring& name)
   {
 #ifdef _DEBUG
-    CheckResult(object->SetName(name.c_str()));
+    ThrowOnFailed(object->SetName(name.c_str()));
     LOG_F(1, "+D3D12 named object created: {}", ToNarrow(name));
 #endif
   }

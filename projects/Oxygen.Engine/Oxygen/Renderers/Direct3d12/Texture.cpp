@@ -6,7 +6,10 @@
 
 #include "Oxygen/Renderers/Direct3d12/Texture.h"
 
+#include "Oxygen/Base/Windows/ComError.h"
+
 using namespace oxygen::renderer::d3d12;
+using oxygen::windows::ThrowOnFailed;
 
 void Texture::Initialize(const TextureInitInfo& info)
 {
@@ -33,7 +36,7 @@ void Texture::Initialize(const TextureInitInfo& info)
     if (info.heap)
     {
       ID3D12Resource* resource{ nullptr };
-      CheckResult(device->CreatePlacedResource(
+      ThrowOnFailed(device->CreatePlacedResource(
         info.heap,
         info.alloc_info.Offset,
         info.desc,
@@ -45,7 +48,7 @@ void Texture::Initialize(const TextureInitInfo& info)
     else
     {
       ID3D12Resource* resource{ nullptr };
-      CheckResult(device->CreateCommittedResource(
+      ThrowOnFailed(device->CreateCommittedResource(
         &kHeapProperties.default_heap_props,
         D3D12_HEAP_FLAG_NONE,
         info.desc,

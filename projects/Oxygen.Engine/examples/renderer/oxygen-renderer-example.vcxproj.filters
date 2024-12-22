@@ -10,8 +10,10 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="main_module.cpp" />
+    <ClCompile Include="ShaderCompiler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_module.h" />
+    <ClInclude Include="ShaderCompiler.h" />
   </ItemGroup>
 </Project>
