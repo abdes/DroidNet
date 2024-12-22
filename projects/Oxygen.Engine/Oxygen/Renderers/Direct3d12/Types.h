@@ -11,11 +11,11 @@
 
 namespace oxygen::renderer::d3d12 {
 
-  using DeviceType = ID3D12Device12;
-  using GraphicsCommandListType = ID3D12GraphicsCommandList10;
+  using DeviceType = ID3D12Device9;
+  using GraphicsCommandListType = ID3D12GraphicsCommandList7;
   using CommandQueueType = ID3D12CommandQueue;
   using DescriptorHeapType = ID3D12DescriptorHeap;
-  using FenceType = ID3D12Fence1;
+  using FenceType = ID3D12Fence;
   using FactoryType = IDXGIFactory7;
 
   /**

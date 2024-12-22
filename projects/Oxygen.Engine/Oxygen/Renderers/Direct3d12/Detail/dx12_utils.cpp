@@ -8,8 +8,11 @@
 
 #include <wrl/client.h>
 
+#include "Oxygen/Base/Windows/ComError.h"
+
 using namespace oxygen::renderer::d3d12;
 using Microsoft::WRL::ComPtr;
+using oxygen::windows::ThrowOnFailed;
 
 ID3D12RootSignature*
 oxygen::renderer::d3d12::create_root_signature(const D3d12RootSignatureDesc& desc)
@@ -20,13 +23,13 @@ oxygen::renderer::d3d12::create_root_signature(const D3d12RootSignatureDesc& des
 
   ComPtr<ID3DBlob> signature_blob;
   ComPtr<ID3DBlob> error_blob;
-  CheckResult(D3D12SerializeVersionedRootSignature(
+  ThrowOnFailed(D3D12SerializeVersionedRootSignature(
     &versioned_desc,
     &signature_blob,
     &error_blob));
 
   ID3D12RootSignature* root_signature;
-  CheckResult(GetMainDevice()->CreateRootSignature(
+  ThrowOnFailed(GetMainDevice()->CreateRootSignature(
     0,
     signature_blob->GetBufferPointer(),
     signature_blob->GetBufferSize(),
@@ -42,7 +45,7 @@ oxygen::renderer::d3d12::create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM
   CHECK_GT_F(0, desc.SizeInBytes);
 
   ID3D12PipelineState* pso{ nullptr };
-  CheckResult(GetMainDevice()->CreatePipelineState(&desc, IID_PPV_ARGS(&pso)));
+  ThrowOnFailed(GetMainDevice()->CreatePipelineState(&desc, IID_PPV_ARGS(&pso)));
   CHECK_NOTNULL_F(pso);
 
   return pso;
