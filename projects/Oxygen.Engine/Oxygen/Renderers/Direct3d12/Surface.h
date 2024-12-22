@@ -12,8 +12,10 @@
 #include "oxygen/platform/types.h"
 #include "Oxygen/Renderers/Common/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
+  constexpr static DXGI_FORMAT kDefaultBackBufferFormat{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB };
 
   namespace detail {
     class WindowSurfaceImpl;
@@ -38,8 +40,10 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_D3D12_API [[nodiscard]] D3D12_VIEWPORT Viewport() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_RECT Scissor() const;
 
-    OXYGEN_D3D12_API void CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQueue* command_queue, DXGI_FORMAT format);
-    OXYGEN_D3D12_API void Finalize();
+    OXYGEN_D3D12_API void CreateSwapChain(
+      FactoryType* factory,
+      CommandQueueType* command_queue,
+      DXGI_FORMAT format = kDefaultBackBufferFormat);
 
   protected:
     OXYGEN_D3D12_API void DoRelease() override;
@@ -47,6 +51,8 @@ namespace oxygen::renderer::d3d12 {
   private:
     OXYGEN_D3D12_API explicit WindowSurface(const resources::SurfaceId& surface_id, detail::WindowSurfaceImpl* impl);
     WindowSurface(); // Invalid object
+
+    OXYGEN_D3D12_API void Finalize();
 
     // We do not use a smart pointer here, because the implementation is cleared
     // only once the surface is removed from the resource table.

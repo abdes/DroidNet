@@ -54,7 +54,7 @@ void DeferredResourceReleaseTracker::ProcessDeferredReleases(const size_t frame_
 void DescriptorHeap::Initialize(
   const size_t capacity,
   bool is_shader_visible,
-  ID3D12Device* device,
+  DeviceType* device,
   DeferredReleaseControllerPtr renderer)
 {
   Release();

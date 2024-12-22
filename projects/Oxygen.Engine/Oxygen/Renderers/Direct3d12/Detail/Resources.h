@@ -80,7 +80,8 @@ namespace oxygen::renderer::d3d12::detail {
 
     void Initialize(
       size_t capacity,
-      bool is_shader_visible, ID3D12Device* device,
+      bool is_shader_visible,
+      DeviceType* device,
       DeferredReleaseControllerPtr renderer);
 
     void Release();
@@ -90,7 +91,7 @@ namespace oxygen::renderer::d3d12::detail {
 
     void ProcessDeferredRelease(size_t frame_index);
 
-    [[nodiscard]] auto Heap() const -> ID3D12DescriptorHeap* { return heap_; }
+    [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }
     [[nodiscard]] auto Size() const -> size_t { return size_; }
     [[nodiscard]] auto Capacity() const -> size_t { return capacity_; }
     [[nodiscard]] auto Type() const -> D3D12_DESCRIPTOR_HEAP_TYPE { return type_; }
@@ -105,7 +106,7 @@ namespace oxygen::renderer::d3d12::detail {
     std::mutex mutex_{};
     bool is_released_{ false };
 
-    ID3D12DescriptorHeap* heap_{ nullptr };
+    DescriptorHeapType* heap_{ nullptr };
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_start_{};
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_start_{};
     size_t capacity_{ 0 };

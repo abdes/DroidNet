@@ -26,6 +26,7 @@
   <ItemGroup>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />

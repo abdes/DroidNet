@@ -23,7 +23,7 @@ void Fence::Initialize(const uint64_t initial_value)
 
   current_value_ = initial_value;
 
-  ID3D12Fence* raw_fence = nullptr;
+  FenceType* raw_fence = nullptr;
   CheckResult(GetMainDevice()->CreateFence(current_value_, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&raw_fence)));
   fence_.reset(raw_fence);
 

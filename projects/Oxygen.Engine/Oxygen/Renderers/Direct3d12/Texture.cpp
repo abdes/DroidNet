@@ -46,7 +46,7 @@ void Texture::Initialize(const TextureInitInfo& info)
     {
       ID3D12Resource* resource{ nullptr };
       CheckResult(device->CreateCommittedResource(
-        &kHeapProperties.default_hep_props,
+        &kHeapProperties.default_heap_props,
         D3D12_HEAP_FLAG_NONE,
         info.desc,
         D3D12_RESOURCE_STATE_COMMON,
