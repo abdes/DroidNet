@@ -24,6 +24,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="main_module.cpp" />
+    <ClCompile Include="ShaderCompiler.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -81,9 +82,15 @@
   <ItemDefinitionGroup>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Imm32.lib;Version.lib;Cfgmgr32.lib;Setupapi.lib;Winmm.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Imm32.lib;Version.lib;Cfgmgr32.lib;Setupapi.lib;Winmm.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectsRoot)\Oxygen.Engine\packages\DXC\lib\$(Platform)\dxcompiler.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectsRoot)\Oxygen.Engine\packages\DXC\lib\$(Platform)\dxcompiler.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <ClCompile>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectsRoot)\Oxygen.Engine\packages\DXC\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectsRoot)\Oxygen.Engine\packages\DXC\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
@@ -92,8 +99,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_module.h" />
+    <ClInclude Include="ShaderCompiler.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Copy SourceFiles="$(ProjectsRoot)\Oxygen.Engine\packages\DXC\bin\$(Platform)\dxcompiler.dll" DestinationFolder="$(OutDir)" />
+  </Target>
 </Project>

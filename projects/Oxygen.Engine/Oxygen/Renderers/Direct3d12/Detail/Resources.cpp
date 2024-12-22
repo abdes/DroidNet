@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "oxygen/base/logging.h"
-#include "oxygen/base/win_errors.h"
+#include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
@@ -83,7 +83,7 @@ void DescriptorHeap::Initialize(
   };
 
   try {
-    CheckResult(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
+    ThrowOnFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
 
     free_handles_ = std::make_unique<size_t[]>(capacity);
     capacity_ = capacity;
