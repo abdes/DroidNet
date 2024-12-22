@@ -132,6 +132,9 @@
     <ClInclude Include="Renderers\Common\Types.h">
       <Filter>Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="Renderers\Common\IFence.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">

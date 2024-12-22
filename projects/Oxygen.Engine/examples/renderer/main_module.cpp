@@ -78,6 +78,22 @@ void MainModule::Render() {
   const auto renderer = renderer_.lock();
   DCHECK_NOTNULL_F(renderer, "renderer destroyed before the module is shutdown");
   if (renderer) {
+    //// Get the command list from the renderer
+    //auto command_list = renderer->GetCommandList();
+
+    //// Set the render target (backbuffer)
+    //auto backbuffer = renderer->GetBackBuffer(surface_id_);
+    //command_list->OMSetRenderTargets(1, &backbuffer, FALSE, nullptr);
+
+    //// Define the clear color (RGBA)
+    //constexpr float clear_color[4] = { 0.0f, 0.2f, 0.4f, 1.0f }; // Example color: dark blue
+
+    //// Clear the render target (backbuffer)
+    //command_list->ClearRenderTargetView(backbuffer, clear_color, 0, nullptr);
+
+    //// Execute the command list
+    //renderer->ExecuteCommandList(command_list);
+
     renderer->Render(surface_id_);
   }
 

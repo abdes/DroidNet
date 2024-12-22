@@ -8,6 +8,7 @@
 
 #include <stdexcept>
 
+#include "Fence.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
 #include "Oxygen/Renderers/Common/Types.h"
@@ -131,9 +132,7 @@ namespace oxygen::renderer::d3d12::detail {
     ID3D12GraphicsCommandList7* command_list_{ nullptr };
     CommandFrame frames_[kFrameBufferCount]{};
 
-    ID3D12Fence1* fence_{ nullptr };
-    uint64_t fence_value_{ 0 };
-    HANDLE fence_event_{ nullptr };
+    Fence fence_;
   };
 
   CommanderImpl::CommanderImpl(ID3D12Device9* device, const D3D12_COMMAND_LIST_TYPE type)
@@ -150,7 +149,7 @@ namespace oxygen::renderer::d3d12::detail {
       CheckResult(device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)));
       NameObject(command_queue_, GetNameForType(type, ObjectType::kCommandQueue));
 
-      for (size_t index = 0; index < oxygen::kFrameBufferCount; ++index) {
+      for (size_t index = 0; index < kFrameBufferCount; ++index) {
         auto& command_allocator = frames_[index].command_allocator;
         CheckResult(device->CreateCommandAllocator(type, IID_PPV_ARGS(&command_allocator)));
         NameObject(command_allocator, GetIndexNameForType(type, ObjectType::kCommandAllocator, index));
@@ -164,14 +163,7 @@ namespace oxygen::renderer::d3d12::detail {
         IID_PPV_ARGS(&command_list_)));
       NameObject(command_list_, GetNameForType(type, ObjectType::kCommandList));
 
-      CheckResult(device->CreateFence(
-        0,
-        D3D12_FENCE_FLAG_NONE,
-        IID_PPV_ARGS(&fence_)));
-      NameObject(fence_, L"D3d12 Fence");
-
-      fence_event_ = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-      DCHECK_NOTNULL_F(fence_event_);
+      fence_.Initialize(0);
     }
     catch (const std::runtime_error& e) {
       LOG_F(ERROR, "Command queue creation failed: {}", e.what());
@@ -188,12 +180,7 @@ namespace oxygen::renderer::d3d12::detail {
 
     ObjectRelease(command_queue_);
     ObjectRelease(command_list_);
-    ObjectRelease(fence_);
-    fence_value_ = 0;
-    if (fence_event_) {
-      CloseHandle(fence_event_);
-      fence_event_ = nullptr;
-    }
+    fence_.Release();
     for (auto& frame : frames_) {
       frame.Release();
     }
@@ -205,11 +192,21 @@ namespace oxygen::renderer::d3d12::detail {
   {
     static bool first_time{ true };
 
-    const auto& frame = frames_[current_frame_index];
-    frame.Wait(fence_event_, fence_);
+    const auto& [command_allocator, fence_value] = frames_[current_frame_index];
+    fence_.Wait(fence_value);
+    const auto completed_value = fence_.GetCompletedValue();
+    DCHECK_LE_F(fence_value, completed_value);
     if (!first_time) {
-      CheckResult(frame.command_allocator->Reset());
-      CheckResult(command_list_->Reset(frame.command_allocator, nullptr));
+      try {
+        LOG_F(1, "BEGIN [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, completed_value);
+        CheckResult(command_allocator->Reset());
+        CheckResult(command_list_->Reset(command_allocator, nullptr));
+      }
+      catch (const std::runtime_error& e) {
+        LOG_F(WARNING, "Commander reset error: {}", e.what());
+        LOG_F(WARNING, "Current frame index [{}] - Awaited Fence Value [{}] - Completed Fence Value [{}]",
+              current_frame_index, fence_value, completed_value);
+      }
     }
     first_time = false;
   }
@@ -220,17 +217,17 @@ namespace oxygen::renderer::d3d12::detail {
     ID3D12CommandList* command_lists[]{ command_list_ };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 
-    const CommandFrame& frame = frames_[current_frame_index];
-    const uint64_t fence_value{ fence_value_ };
-    ++fence_value_;
-    CheckResult(command_queue_->Signal(fence_, fence_value));
+    const uint64_t fence_value{ fence_.GetCompletedValue() + 1 };
+    CheckResult(command_queue_->Signal(fence_.GetFenceObject(), fence_value));
+    LOG_F(1, "END   [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, fence_.GetCompletedValue());
 
-    current_frame_index = (current_frame_index + 1) % oxygen::kFrameBufferCount;
+    frames_[current_frame_index].fence_value = fence_value;
+    current_frame_index = (current_frame_index + 1) % kFrameBufferCount;
   }
 
   void CommanderImpl::Flush()
   {
-    for (auto& frame : frames_) frame.Wait(fence_event_, fence_);
+    for (const auto& [_, fence_value] : frames_) fence_.Wait(fence_value);
     current_frame_index = 0;
   }
 

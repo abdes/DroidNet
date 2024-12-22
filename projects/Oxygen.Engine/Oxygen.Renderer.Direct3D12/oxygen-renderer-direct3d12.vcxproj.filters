@@ -40,6 +40,9 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Surface.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
@@ -79,6 +82,9 @@
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Types.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h">
       <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>
