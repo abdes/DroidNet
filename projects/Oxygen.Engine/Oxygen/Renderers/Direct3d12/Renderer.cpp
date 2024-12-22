@@ -28,16 +28,18 @@
 using Microsoft::WRL::ComPtr;
 using oxygen::CheckResult;
 using oxygen::renderer::d3d12::ToNarrow;
+using oxygen::renderer::d3d12::DeviceType;
+using oxygen::renderer::d3d12::FactoryType;
 
 namespace {
-  auto GetMainDeviceInternal() -> ComPtr<ID3D12Device12>&
+  auto GetMainDeviceInternal() -> ComPtr<DeviceType>&
   {
-    static ComPtr<ID3D12Device12> main_device;
+    static ComPtr<DeviceType> main_device;
     return main_device;
   }
 }  // namespace
 namespace oxygen::renderer::d3d12 {
-  auto GetMainDevice() -> ID3D12Device12*
+  auto GetMainDevice() -> DeviceType*
   {
     return GetMainDeviceInternal().Get();
   }
@@ -58,7 +60,7 @@ namespace {
   };
 
   std::vector<AdapterDesc> adapters;
-  ComPtr<IDXGIFactory7> dxgi_factory;
+  ComPtr<FactoryType> dxgi_factory;
 
   bool CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter)
   {
@@ -115,7 +117,7 @@ namespace {
       });
   }
 
-  auto GetMaxFeatureLevel(const ComPtr<ID3D12Device>& device) -> D3D_FEATURE_LEVEL
+  auto GetMaxFeatureLevel(const ComPtr<DeviceType>& device) -> D3D_FEATURE_LEVEL
   {
     static constexpr D3D_FEATURE_LEVEL feature_levels[] = {
       D3D_FEATURE_LEVEL_12_2,
@@ -172,7 +174,7 @@ namespace {
       AdapterDesc adapter_info = CreateAdapterDesc(desc, adapter);
 
       // Check if the adapter supports the minimum required feature level
-      ComPtr<ID3D12Device> device;
+      ComPtr<DeviceType> device;
       if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)))) {
         adapter_info.meets_feature_level = true;
         adapter_info.max_feature_level = GetMaxFeatureLevel(device);
@@ -450,7 +452,7 @@ namespace oxygen::renderer::d3d12::detail {
     auto const surface = GetSurface(surface_id);
     surface.Present();
 
-    ID3D12GraphicsCommandList7* command_list{ commander_->CommandList() };
+    GraphicsCommandListType* command_list{ commander_->CommandList() };
     // Record commands
     //...
 

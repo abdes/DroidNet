@@ -11,6 +11,7 @@
 #include <d3d12.h>
 
 #include "oxygen/base/macros.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -21,7 +22,7 @@ namespace oxygen::renderer::d3d12 {
   class Commander final
   {
   public:
-    explicit Commander(ID3D12Device9* device, D3D12_COMMAND_LIST_TYPE type);
+    explicit Commander(DeviceType* device, D3D12_COMMAND_LIST_TYPE type);
     ~Commander();
 
     OXYGEN_MAKE_NON_COPYABLE(Commander);
@@ -29,8 +30,8 @@ namespace oxygen::renderer::d3d12 {
 
     void Release() const noexcept;
 
-    [[nodiscard]] ID3D12CommandQueue* CommandQueue() const noexcept;
-    [[nodiscard]] ID3D12GraphicsCommandList7* CommandList() const noexcept;
+    [[nodiscard]] CommandQueueType* CommandQueue() const noexcept;
+    [[nodiscard]] GraphicsCommandListType* CommandList() const noexcept;
     [[nodiscard]] size_t CurrentFrameIndex() const noexcept;
 
     void BeginFrame() const;

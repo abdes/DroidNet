@@ -32,10 +32,10 @@ namespace oxygen::renderer::d3d12 {
 
     /// Needed to access the fence object from the command queue for GPU side
     /// signaling.
-    [[nodiscard]] ID3D12Fence* GetFenceObject() const { return fence_.get(); }
+    [[nodiscard]] FenceType* GetFenceObject() const { return fence_.get(); }
 
   private:
-    D3DPtr<ID3D12Fence> fence_{ nullptr };
+    D3DPtr<FenceType> fence_{ nullptr };
     HANDLE fence_event_{ nullptr };
     uint64_t current_value_{ 0 };
 

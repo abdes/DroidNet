@@ -25,6 +25,7 @@ namespace oxygen::renderer::d3d12::detail {
   class WindowSurfaceImpl
   {
   public:
+
     explicit WindowSurfaceImpl(WindowPtr window)
       : window_(std::move(window))
     {
@@ -32,9 +33,10 @@ namespace oxygen::renderer::d3d12::detail {
 
     void SetSize(int width, int height);
     void Present() const;
-    void CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQueue* command_queue, DXGI_FORMAT format);
-    void Finalize();
-    void DoRelease();
+    void CreateSwapChain(
+      FactoryType* factory,
+      CommandQueueType* command_queue,
+      DXGI_FORMAT format = kDefaultBackBufferFormat);
 
     [[nodiscard]] uint32_t Width() const;
     [[nodiscard]] uint32_t Height() const;
@@ -44,11 +46,16 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] D3D12_RECT Scissor() const;
 
   private:
+    friend class WindowSurface;
+    void DoRelease();
+    void Finalize();
+
     std::weak_ptr<platform::Window> window_;
     IDXGISwapChain4* swap_chain_{ nullptr };
     mutable UINT current_backbuffer_index_{ 0 };
     D3D12_VIEWPORT viewport_{};
     D3D12_RECT scissor_{};
+    DXGI_FORMAT format_{ kDefaultBackBufferFormat };  // The format of the swap chain
 
     struct RenderTargetData
     {
@@ -95,7 +102,10 @@ void WindowSurfaceImpl::Present() const
   current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
-void WindowSurfaceImpl::CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQueue* command_queue, const DXGI_FORMAT format)
+void WindowSurfaceImpl::CreateSwapChain(
+  FactoryType* factory,
+  CommandQueueType* command_queue,
+  const DXGI_FORMAT format)
 {
   DCHECK_NOTNULL_F(factory);
   DCHECK_NOTNULL_F(command_queue);
@@ -103,6 +113,10 @@ void WindowSurfaceImpl::CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQue
   // This method may be called multiple times, therefore we need to ensure that
   // any remaining resources from previous calls are released first.
   if (swap_chain_) DoRelease();
+
+  // Remember the format used during swap-chain creation, and use it for the
+  // render target creation in Finalize()
+  format_ = format;
 
   const auto window = window_.lock();
   CHECK_NOTNULL_F(window, "window is not valid");
@@ -159,7 +173,7 @@ void WindowSurfaceImpl::Finalize()
       CheckResult(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
       render_targets_[i].resource = back_buffer;
       const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc{
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        .Format = format_,
         .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
         .Texture2D = {0, 0}
       };
@@ -295,7 +309,7 @@ D3D12_RECT WindowSurface::Scissor() const
   RETURN_IMPL(Scissor(), {});
 }
 
-void WindowSurface::CreateSwapChain(IDXGIFactory7* factory, ID3D12CommandQueue* command_queue, const DXGI_FORMAT format)
+void WindowSurface::CreateSwapChain(FactoryType* factory, CommandQueueType* command_queue, const DXGI_FORMAT format)
 {
   CALL_IMPL(CreateSwapChain(factory, command_queue, format));
 }

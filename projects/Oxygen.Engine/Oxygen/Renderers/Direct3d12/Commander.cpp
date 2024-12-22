@@ -13,9 +13,11 @@
 #include "oxygen/base/win_errors.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
 using oxygen::CheckResult;
+using oxygen::renderer::d3d12::DeviceType;
 
 // Anonymous namespace for object naming helper functions
 namespace {
@@ -78,7 +80,7 @@ namespace {
     ID3D12CommandAllocator* command_allocator{ nullptr };
     uint64_t fence_value{ 0 };
 
-    void Wait(const HANDLE fence_event, ID3D12Fence1* fence) const
+    void Wait(const HANDLE fence_event, FenceType* fence) const
     {
       DCHECK_F(fence && fence_event);
 
@@ -109,7 +111,7 @@ namespace oxygen::renderer::d3d12::detail {
   class CommanderImpl final
   {
   public:
-    CommanderImpl(ID3D12Device9* device, D3D12_COMMAND_LIST_TYPE type);
+    CommanderImpl(DeviceType* device, D3D12_COMMAND_LIST_TYPE type);
     ~CommanderImpl() { Release(); }
 
     OXYGEN_MAKE_NON_COPYABLE(CommanderImpl);
@@ -117,8 +119,8 @@ namespace oxygen::renderer::d3d12::detail {
 
     void Release() noexcept;
 
-    [[nodiscard]] auto CommandQueue() const noexcept -> ID3D12CommandQueue* { return command_queue_; }
-    [[nodiscard]] auto CommandList() const noexcept -> ID3D12GraphicsCommandList7* { return command_list_; }
+    [[nodiscard]] auto CommandQueue() const noexcept -> CommandQueueType* { return command_queue_; }
+    [[nodiscard]] auto CommandList() const noexcept -> GraphicsCommandListType* { return command_list_; }
 
     void BeginFrame() const;
     void EndFrame();
@@ -128,14 +130,14 @@ namespace oxygen::renderer::d3d12::detail {
   private:
     bool is_released_{ false };
 
-    ID3D12CommandQueue* command_queue_{ nullptr };
-    ID3D12GraphicsCommandList7* command_list_{ nullptr };
+    CommandQueueType* command_queue_{ nullptr };
+    GraphicsCommandListType* command_list_{ nullptr };
     CommandFrame frames_[kFrameBufferCount]{};
 
     Fence fence_;
   };
 
-  CommanderImpl::CommanderImpl(ID3D12Device9* device, const D3D12_COMMAND_LIST_TYPE type)
+  CommanderImpl::CommanderImpl(DeviceType* device, const D3D12_COMMAND_LIST_TYPE type)
   {
     CHECK_NOTNULL_F(device);
 
@@ -235,7 +237,7 @@ namespace oxygen::renderer::d3d12::detail {
 
 namespace oxygen::renderer::d3d12 {
 
-  Commander::Commander(ID3D12Device9* device, D3D12_COMMAND_LIST_TYPE type)
+  Commander::Commander(DeviceType* device, D3D12_COMMAND_LIST_TYPE type)
     : pimpl_(std::make_unique<detail::CommanderImpl>(device, type))
   {
   }
@@ -247,12 +249,12 @@ namespace oxygen::renderer::d3d12 {
     pimpl_->Release();
   }
 
-  ID3D12CommandQueue* Commander::CommandQueue() const noexcept
+  CommandQueueType* Commander::CommandQueue() const noexcept
   {
     return pimpl_->CommandQueue();
   }
 
-  ID3D12GraphicsCommandList7* Commander::CommandList() const noexcept
+  GraphicsCommandListType* Commander::CommandList() const noexcept
   {
     return pimpl_->CommandList();
   }
