@@ -11,9 +11,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Oxygen\renderer-loader\renderer_loader.h" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Oxygen\oxygen.vcxproj">
       <Project>{1639A241-B84E-4B70-895C-1A74DBBCC3EF}</Project>
     </ProjectReference>
@@ -23,7 +20,10 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\renderer-loader\renderer_loader.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Loader\RendererLoader.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Renderers\Loader\RendererLoader.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/renderer-d3d12/Commander.h"
+#include "Oxygen/Renderers/Direct3d12/Commander.h"
 
 #include <stdexcept>
 
 #include "oxygen/base/logging.h"
 #include "oxygen/base/win_errors.h"
-#include "oxygen/renderer/types.h"
-#include "oxygen/renderer-d3d12/detail/dx12_utils.h"
+#include "Oxygen/Renderers/Common/Types.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 
-using namespace oxygen::renderer::direct3d12;
+using namespace oxygen::renderer::d3d12;
 using oxygen::CheckResult;
 
 // Anonymous namespace for object naming helper functions
@@ -27,7 +27,7 @@ namespace {
 
   auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type, const ObjectType object_type) -> std::wstring
   {
-    LPCWSTR object_string{ nullptr };
+    auto object_string{ L"" };
     switch (object_type) {
     case ObjectType::kCommandQueue:
       object_string = L"Command Queue";
@@ -40,7 +40,7 @@ namespace {
       break;
     }
 
-    LPCWSTR list_type_string{ nullptr };
+    auto list_type_string{ L"" };
     switch (list_type) {
     case D3D12_COMMAND_LIST_TYPE_DIRECT:
       list_type_string = L"Graphics ";
@@ -98,12 +98,12 @@ namespace {
 
 }  // namespace
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
   [[nodiscard]] auto CurrentFrameIndex() -> size_t { return current_frame_index; }
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12
 
 // Commander implementation details
-namespace oxygen::renderer::direct3d12::detail {
+namespace oxygen::renderer::d3d12::detail {
 
   class CommanderImpl final
   {
@@ -236,7 +236,7 @@ namespace oxygen::renderer::direct3d12::detail {
 
 }  // namespace
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
 
   Commander::Commander(ID3D12Device9* device, D3D12_COMMAND_LIST_TYPE type)
     : pimpl_(std::make_unique<detail::CommanderImpl>(device, type))
@@ -281,4 +281,4 @@ namespace oxygen::renderer::direct3d12 {
     pimpl_->Flush();
   }
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

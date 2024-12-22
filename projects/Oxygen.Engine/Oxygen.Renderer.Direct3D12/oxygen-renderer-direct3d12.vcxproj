@@ -11,30 +11,41 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\commander.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\deferred_release.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\dx12_utils.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\resources.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\surface.h" />
-    <ClInclude Include="..\Oxygen\renderer-d3d12\types.h" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Oxygen\oxygen.vcxproj">
       <Project>{1680AC1F-6F96-448E-BCAB-DFC899A9B4EE}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="cpp.hint" />
     <None Include="vcpkg-configuration.json" />
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\commander.cpp" />
-    <ClCompile Include="..\Oxygen\renderer-d3d12\detail\resources.cpp" />
-    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp" />
-    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp" />
-    <ClCompile Include="..\Oxygen\renderer-d3d12\surface.cpp" />
+    <Natvis Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Surface.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Commander.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IDeferredReleaseController.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Surface.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Texture.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Types.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

@@ -8,15 +8,14 @@
 
 #include <d3d12.h>
 
-#include "oxygen/base/logging.h"
-#include "oxygen/base/win_errors.h"
-#include "oxygen/renderer-d3d12/api_export.h"
-#include "oxygen/renderer-d3d12/detail/resources.h"
+#include "Oxygen/Base/logging.h"
+#include "Oxygen/Base/win_errors.h"
+#include "Oxygen/Renderers/Direct3d12/api_export.h"
+#include "Oxygen/Renderers/Direct3d12/detail/resources.h"
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
 
   OXYGEN_D3D12_API [[nodiscard]] ID3D12Device9* GetMainDevice();
-  OXYGEN_D3D12_API [[nodiscard]] RendererPtr GetRenderer();
   OXYGEN_D3D12_API [[nodiscard]] auto CurrentFrameIndex() -> size_t;
 
   inline auto ToNarrow(const std::wstring& wide_string) -> std::string
@@ -80,4 +79,4 @@ namespace oxygen::renderer::direct3d12 {
     }
   }
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

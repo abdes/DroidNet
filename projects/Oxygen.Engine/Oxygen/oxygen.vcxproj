@@ -45,10 +45,11 @@
     <ClInclude Include="platform\platform.h" />
     <ClInclude Include="platform\types.h" />
     <ClInclude Include="platform\window.h" />
-    <ClInclude Include="renderer\renderer.h" />
-    <ClInclude Include="renderer\renderer_module.h" />
-    <ClInclude Include="renderer\surface.h" />
-    <ClInclude Include="renderer\types.h" />
+    <ClInclude Include="Renderers\Common\MemoryBlock.h" />
+    <ClInclude Include="Renderers\Common\Renderer.h" />
+    <ClInclude Include="Renderers\Common\RendererModule.h" />
+    <ClInclude Include="Renderers\Common\Surface.h" />
+    <ClInclude Include="Renderers\Common\Types.h" />
     <ClInclude Include="world\entity.h" />
     <ClInclude Include="world\transform.h" />
     <ClInclude Include="world\types.h" />

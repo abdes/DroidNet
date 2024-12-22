@@ -8,13 +8,14 @@
 
 #include <random>
 
+#include "oxygen/base/logging.h"
 #include "oxygen/core/engine.h"
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/types.h"
 #include "oxygen/platform/platform.h"
-#include "oxygen/renderer/renderer.h"
-#include "Oxygen/renderer-d3d12/surface.h"
-#include "oxygen/renderer-loader/renderer_loader.h"
+#include "Oxygen/Renderers/Common/Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Surface.h"
+#include "Oxygen/Renderers/Loader/RendererLoader.h"
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
@@ -25,9 +26,9 @@ using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
 using oxygen::graphics::GetRenderer;
-using oxygen::renderer::direct3d12::CreateWindowSurface;
-using oxygen::renderer::direct3d12::DestroyWindowSurface;
-using oxygen::renderer::direct3d12::GetSurface;
+using oxygen::renderer::d3d12::CreateWindowSurface;
+using oxygen::renderer::d3d12::DestroyWindowSurface;
+using oxygen::renderer::d3d12::GetSurface;
 
 MainModule::MainModule(oxygen::PlatformPtr platform)
   : platform_(std::move(platform)) {

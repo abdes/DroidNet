@@ -5,56 +5,86 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="vcpkg.json" />
     <None Include="vcpkg-configuration.json" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\renderer.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\api_export.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\commander.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\dx12_utils.h">
-      <Filter>Renderer\detail</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\detail\resources.h">
-      <Filter>Renderer\detail</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\deferred_release.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\surface.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\renderer-d3d12\types.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer_module.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\renderer.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\commander.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\detail\resources.cpp">
-      <Filter>Renderer\detail</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\renderer-d3d12\surface.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
+    <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Renderer">
       <UniqueIdentifier>{0ac0d72d-5105-4eae-818f-7ff59ac387ee}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Renderer\detail">
+    <Filter Include="Renderer\Debug">
+      <UniqueIdentifier>{01d0aadb-13f7-4d7c-a308-9e68803d3c8f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Renderer\Detail">
       <UniqueIdentifier>{c1f1df9c-4cd5-4d78-aa64-086fb4c9cbaa}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp">
+      <Filter>Renderer\Detail</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Surface.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Commander.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IDeferredReleaseController.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Surface.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Texture.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Types.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.natvis">
+      <Filter>Renderer\Debug</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>

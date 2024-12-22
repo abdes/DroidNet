@@ -5,6 +5,7 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="vcpkg.json" />
     <None Include="vcpkg-configuration.json" />
+    <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

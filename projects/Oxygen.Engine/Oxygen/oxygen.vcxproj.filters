@@ -114,19 +114,22 @@
     <ClInclude Include="world\transform.h">
       <Filter>World</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\renderer.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="renderer\renderer_module.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="renderer\types.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
     <ClInclude Include="base\win_errors.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\surface.h">
+    <ClInclude Include="Renderers\Common\MemoryBlock.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\Renderer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\RendererModule.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\Surface.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\Types.h">
       <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>

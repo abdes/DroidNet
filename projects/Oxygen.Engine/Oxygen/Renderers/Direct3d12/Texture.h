@@ -6,14 +6,16 @@
 
 #pragma once
 
-#include "Oxygen/platform/types.h"
-#include "oxygen/renderer/renderer_module.h"
-#include "oxygen/renderer/types.h"
+#include "Oxygen/Renderers/Direct3d12/D3DResource.h"
 
-namespace oxygen::graphics {
+namespace oxygen::renderer::d3d12 {
 
-  void CreateRenderer(GraphicsBackendType backend, PlatformPtr platform, const RendererProperties& renderer_props);
-  void DestroyRenderer();
-  auto GetRenderer() -> RendererPtr;
+  class Texture : public D3DResource
+  {
+  public:
+    Texture();
+    ~Texture() override;
 
-}  // namespace oxygen::renderer
+  };
+
+}  // namespace oxygen::renderer::d3d12

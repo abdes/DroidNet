@@ -8,11 +8,18 @@
 
 #include <memory>
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
+
+  /**
+   * Forward declarations of renderer types and associated smart pointers.
+   * @{
+   */
 
   class WindowSurface;
   class Renderer;
+  class IDeferredReleaseController;
 
-  using RendererPtr = std::shared_ptr<Renderer>;
+  using DeferredReleaseControllerPtr = std::weak_ptr<IDeferredReleaseController>;
+  /**@}*/
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

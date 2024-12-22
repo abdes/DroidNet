@@ -10,20 +10,20 @@
 
 #include "oxygen/base/macros.h"
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
 
-  class IDeferredReleaseCoordinator
+  class IDeferredReleaseController
   {
   public:
     using DeferredReleaseHandler = std::function<void(size_t)>;
 
-    IDeferredReleaseCoordinator() = default;
-    virtual ~IDeferredReleaseCoordinator() = default;
+    IDeferredReleaseController() = default;
+    virtual ~IDeferredReleaseController() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(IDeferredReleaseCoordinator);
-    OXYGEN_MAKE_NON_MOVEABLE(IDeferredReleaseCoordinator);
+    OXYGEN_MAKE_NON_COPYABLE(IDeferredReleaseController);
+    OXYGEN_MAKE_NON_MOVEABLE(IDeferredReleaseController);
 
     virtual void RegisterDeferredReleases(DeferredReleaseHandler handler) const = 0;
   };
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

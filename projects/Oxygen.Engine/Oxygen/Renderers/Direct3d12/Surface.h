@@ -8,14 +8,12 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <memory>
-#include <span>
 
 #include "oxygen/platform/types.h"
-#include "oxygen/renderer/surface.h"
-#include "oxygen/renderer-d3d12/api_export.h"
+#include "Oxygen/Renderers/Common/Surface.h"
+#include "Oxygen/Renderers/Direct3d12/api_export.h"
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
 
   namespace detail {
     class WindowSurfaceImpl;
@@ -25,7 +23,7 @@ namespace oxygen::renderer::direct3d12 {
   {
     friend OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) -> WindowSurface;
     friend OXYGEN_D3D12_API size_t DestroyWindowSurface(WindowSurface&);
-    friend OXYGEN_D3D12_API auto GetSurface(const SurfaceId& surface_id) -> WindowSurface;
+    friend OXYGEN_D3D12_API auto GetSurface(const resources::SurfaceId& surface_id) -> WindowSurface;
 
   public:
     OXYGEN_D3D12_API ~WindowSurface() override;
@@ -47,7 +45,7 @@ namespace oxygen::renderer::direct3d12 {
     OXYGEN_D3D12_API void DoRelease() override;
 
   private:
-    OXYGEN_D3D12_API explicit WindowSurface(const SurfaceId& surface_id, detail::WindowSurfaceImpl* impl);
+    OXYGEN_D3D12_API explicit WindowSurface(const resources::SurfaceId& surface_id, detail::WindowSurfaceImpl* impl);
     WindowSurface(); // Invalid object
 
     // We do not use a smart pointer here, because the implementation is cleared
@@ -56,7 +54,7 @@ namespace oxygen::renderer::direct3d12 {
   };
 
   OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) -> WindowSurface;
-  OXYGEN_D3D12_API auto DestroyWindowSurface(SurfaceId& surface_id) -> size_t;
-  OXYGEN_D3D12_API auto GetSurface(const SurfaceId& surface_id) -> WindowSurface;
+  OXYGEN_D3D12_API auto DestroyWindowSurface(resources::SurfaceId& surface_id) -> size_t;
+  OXYGEN_D3D12_API auto GetSurface(const resources::SurfaceId& surface_id) -> WindowSurface;
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

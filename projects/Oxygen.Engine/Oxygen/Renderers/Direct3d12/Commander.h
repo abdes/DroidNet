@@ -12,7 +12,7 @@
 
 #include "oxygen/base/macros.h"
 
-namespace oxygen::renderer::direct3d12 {
+namespace oxygen::renderer::d3d12 {
 
   namespace detail {
     class CommanderImpl;
@@ -42,4 +42,4 @@ namespace oxygen::renderer::direct3d12 {
     std::unique_ptr<detail::CommanderImpl> pimpl_;
   };
 
-}  // namespace oxygen::renderer::direct3d12
+}  // namespace oxygen::renderer::d3d12

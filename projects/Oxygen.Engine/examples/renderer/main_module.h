@@ -12,7 +12,7 @@
 
 #include "oxygen/base/macros.h"
 #include "oxygen/platform/types.h"
-#include "oxygen/renderer/types.h"
+#include "Oxygen/Renderers/Common/Types.h"
 
 class MainModule : public oxygen::core::Module
 {
@@ -35,5 +35,5 @@ public:
 private:
   oxygen::PlatformPtr platform_;
   oxygen::RendererPtr renderer_;
-  oxygen::SurfaceId surface_id_;
+  oxygen::renderer::resources::SurfaceId surface_id_;
 };
