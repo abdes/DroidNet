@@ -55,12 +55,12 @@ namespace oxygen::windows {
     OXYGEN_API [[nodiscard]] auto message(int hr) const->std::string override;
   };
 
+  // Any form of a string, UTF-8 string or wide string
   template <typename T>
-  concept StringType = requires(T t) {
-    { std::string_view(t) } -> std::convertible_to<std::string_view>;
-    { std::u8string_view(t) } -> std::convertible_to<std::u8string_view>;
-    { std::wstring_view(t) } -> std::convertible_to<std::wstring_view>;
-  } || std::is_same_v<T, const char8_t*> || std::is_same_v<T, const char*> || std::is_same_v<T, const wchar_t*>;
+  concept StringType =
+    std::convertible_to<T, std::string_view> ||
+    std::convertible_to<T, std::u8string_view> ||
+    std::convertible_to<T, std::wstring_view>;
 
   // ComError class derived from std::system_error
   class ComError final : public std::system_error
@@ -100,19 +100,30 @@ namespace oxygen::windows {
     // Non-templated function to handle COM errors with a UTF-8 message
     OXYGEN_API void HandleComErrorImpl(HRESULT hr, const std::string& utf8_message);
 
+    // Define a concept for nullable types
+    template <typename T>
+    concept Nullable = requires(T t)
+    {
+      { t == nullptr } -> std::convertible_to<bool>;
+    };
+
     // Function to handle COM errors
     template <StringType T>
     void HandleComError(const HRESULT hr, T message = nullptr) {
       std::string utf8_message{};
-      if (message != nullptr) {
+      if constexpr (Nullable<T>) {
+        return HandleComErrorImpl(hr, utf8_message);
+      }
+      else
+      {
         try {
           string_utils::WideToUtf8(message, utf8_message);
         }
         catch (const std::exception& e) {
           utf8_message.append("__not_available__ (").append(e.what()).append(")");
         }
+        HandleComErrorImpl(hr, utf8_message);
       }
-      HandleComErrorImpl(hr, utf8_message);
     }
 
   }  // namespace detail
