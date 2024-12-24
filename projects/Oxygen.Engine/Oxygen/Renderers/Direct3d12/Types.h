@@ -26,8 +26,10 @@ namespace oxygen::renderer::d3d12 {
   class WindowSurface;
   class Renderer;
   class IDeferredReleaseController;
+  class Fence;
 
   using DeferredReleaseControllerPtr = std::weak_ptr<IDeferredReleaseController>;
+  using FencePtr = std::unique_ptr<Fence>;
   /**@}*/
 
 }  // namespace oxygen::renderer::d3d12

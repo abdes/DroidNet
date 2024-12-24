@@ -8,6 +8,8 @@
 
 #include <stdexcept>
 
+#include "D3DPtr.h"
+#include "Detail/FenceImpl.h"
 #include "Fence.h"
 #include "oxygen/base/logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
@@ -82,7 +84,7 @@ namespace {
 
     void Release() noexcept
     {
-      ObjectRelease(command_allocator);
+      DeferredObjectRelease(command_allocator);
       fence_value = 0;
     }
   };
@@ -124,7 +126,7 @@ namespace oxygen::renderer::d3d12::detail {
     GraphicsCommandListType* command_list_{ nullptr };
     CommandFrame frames_[kFrameBufferCount]{};
 
-    Fence fence_;
+    FencePtr fence_{};
   };
 
   CommanderImpl::CommanderImpl(DeviceType* device, const D3D12_COMMAND_LIST_TYPE type)
@@ -154,8 +156,11 @@ namespace oxygen::renderer::d3d12::detail {
         nullptr,
         IID_PPV_ARGS(&command_list_)));
       NameObject(command_list_, GetNameForType(type, ObjectType::kCommandList));
+      ThrowOnFailed(command_list_->Close(), "Close Command List");
 
-      fence_.Initialize(0);
+      FencePtr fence{ new Fence(std::make_unique<FenceImpl>(command_queue_)) };
+      fence_.swap(fence);
+      fence_->Initialize(0);
     }
     catch (const std::runtime_error& e) {
       LOG_F(ERROR, "Command queue creation failed: {}", e.what());
@@ -170,9 +175,9 @@ namespace oxygen::renderer::d3d12::detail {
 
     Flush();
 
-    ObjectRelease(command_queue_);
-    ObjectRelease(command_list_);
-    fence_.Release();
+    DeferredObjectRelease(command_queue_);
+    DeferredObjectRelease(command_list_);
+    fence_.reset();
     for (auto& frame : frames_) {
       frame.Release();
     }
@@ -182,25 +187,19 @@ namespace oxygen::renderer::d3d12::detail {
 
   void CommanderImpl::BeginFrame() const
   {
-    static bool first_time{ true };
-
     const auto& [command_allocator, fence_value] = frames_[current_frame_index];
-    fence_.Wait(fence_value);
-    const auto completed_value = fence_.GetCompletedValue();
+    const auto completed_value = fence_->GetCompletedValue();
     DCHECK_LE_F(fence_value, completed_value);
-    if (!first_time) {
-      try {
-        LOG_F(1, "BEGIN [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, completed_value);
-        ThrowOnFailed(command_allocator->Reset());
-        ThrowOnFailed(command_list_->Reset(command_allocator, nullptr));
-      }
-      catch (const std::runtime_error& e) {
-        LOG_F(WARNING, "Commander reset error: {}", e.what());
-        LOG_F(WARNING, "Current frame index [{}] - Awaited Fence Value [{}] - Completed Fence Value [{}]",
-              current_frame_index, fence_value, completed_value);
-      }
+    try {
+      //LOG_F(1, "BEGIN [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, completed_value);
+      ThrowOnFailed(command_allocator->Reset());
+      ThrowOnFailed(command_list_->Reset(command_allocator, nullptr));
     }
-    first_time = false;
+    catch (const std::runtime_error& e) {
+      LOG_F(WARNING, "Commander reset error: {}", e.what());
+      LOG_F(WARNING, "Current frame index [{}] - Awaited Fence Value [{}] - Completed Fence Value [{}]",
+            current_frame_index, fence_value, completed_value);
+    }
   }
 
   void CommanderImpl::EndFrame()
@@ -209,17 +208,20 @@ namespace oxygen::renderer::d3d12::detail {
     ID3D12CommandList* command_lists[]{ command_list_ };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 
-    const uint64_t fence_value{ fence_.GetCompletedValue() + 1 };
-    ThrowOnFailed(command_queue_->Signal(fence_.GetFenceObject(), fence_value));
-    LOG_F(1, "END   [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, fence_.GetCompletedValue());
-
+    const uint64_t fence_value = fence_->Signal();
     frames_[current_frame_index].fence_value = fence_value;
+    if (fence_->GetCompletedValue() != fence_value)
+    {
+      fence_->Wait(fence_value);
+    }
+    //LOG_F(1, "END   [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, fence_->GetCompletedValue());
+
     current_frame_index = (current_frame_index + 1) % kFrameBufferCount;
   }
 
   void CommanderImpl::Flush()
   {
-    for (const auto& [_, fence_value] : frames_) fence_.Wait(fence_value);
+    for (const auto& [_, fence_value] : frames_) fence_->Wait(fence_value);
     current_frame_index = 0;
   }
 

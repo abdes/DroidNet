@@ -28,6 +28,7 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />
@@ -43,8 +44,9 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IDeferredReleaseController.h" />
@@ -120,7 +122,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -130,7 +132,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>OXYGEN_D3D12_EXPORTS;_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
