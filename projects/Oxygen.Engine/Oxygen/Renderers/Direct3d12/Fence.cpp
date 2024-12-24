@@ -10,6 +10,7 @@
 
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h" // for GetMainDevice()
+#include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
 
 using namespace oxygen::renderer::d3d12;
 
@@ -21,31 +22,15 @@ Fence::~Fence()
 void Fence::Initialize(const uint64_t initial_value)
 {
   Release();
-
   current_value_ = initial_value;
-
-  FenceType* raw_fence = nullptr;
-  ThrowOnFailed(GetMainDevice()->CreateFence(current_value_, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&raw_fence)));
-  fence_.reset(raw_fence);
-
-  fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-  if (!fence_event_) {
-    Release();
-    throw std::runtime_error("Failed to create fence event");
-  }
-
+  pimpl_->OnInitialize(initial_value);
   should_release_ = true;
 }
 
 void Fence::Release() noexcept
 {
   if (!should_release_) return;
-
-  if (fence_event_) {
-    CloseHandle(fence_event_);
-    fence_event_ = nullptr;
-  }
-  fence_.reset(); // Will automatically call Release() on the fence object
+  pimpl_->OnRelease();
   should_release_ = false;
 }
 
@@ -55,25 +40,39 @@ void Fence::Signal(const uint64_t value)
     DLOG_F(WARNING, "New value {} must be greater than the current value {}", value, current_value_);
     throw std::invalid_argument("New value must be greater than the current value");
   }
-  ThrowOnFailed(fence_->Signal(value));
+  pimpl_->Signal(value);
   current_value_ = value;
+}
+
+auto Fence::Signal() -> uint64_t
+{
+  Signal(current_value_ + 1);
+  // Increment only if the signal was successful
+  return current_value_;
+}
+
+void Fence::Wait(const uint64_t value, const std::chrono::milliseconds timeout) const
+{
+  DCHECK_LE_F(timeout.count(), std::numeric_limits<DWORD>::max());
+  pimpl_->Wait(value, static_cast<DWORD>(timeout.count()));
 }
 
 void Fence::Wait(const uint64_t value) const
 {
-  if (fence_->GetCompletedValue() < value) {
-    ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_));
-    WaitForSingleObject(fence_event_, INFINITE);
-  }
+  Wait(value, std::chrono::milliseconds(std::numeric_limits<DWORD>::max()));
+}
+
+void Fence::QueueWaitCommand(const uint64_t value)
+{
+  pimpl_->QueueWaitCommand(value);
+}
+
+void Fence::QueueSignalCommand(const uint64_t value)
+{
+  pimpl_->QueueSignalCommand(value);
 }
 
 auto Fence::GetCompletedValue() const->uint64_t
 {
-  return fence_->GetCompletedValue();
-}
-
-void Fence::Reset(const uint64_t value)
-{
-  current_value_ = value;
-  ThrowOnFailed(fence_->Signal(current_value_));
+  return pimpl_->GetCompletedValue();
 }

@@ -6,18 +6,23 @@
 
 #pragma once
 
-#include <d3d12.h>
+#include <memory>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Renderers/Common/IFence.h"
-#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
+#include "Oxygen/Renderers/Common/ISynchronizationCounter.h"
 
 namespace oxygen::renderer::d3d12 {
 
-  class Fence final : public IFence
+  namespace detail {
+    class CommanderImpl;
+    class FenceImpl;
+  }  // namespace detail
+
+  class Fence final : public ISynchronizationCounter
   {
   public:
-    Fence() = default;
+    using FenceImplPtr = std::unique_ptr<detail::FenceImpl>;
+
     ~Fence() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Fence);
@@ -25,21 +30,24 @@ namespace oxygen::renderer::d3d12 {
 
     void Initialize(uint64_t initial_value = 0) override;
     void Release() noexcept override;
+
     void Signal(uint64_t value) override;
+    [[nodiscard]] uint64_t Signal() override;
+    void Wait(uint64_t value, std::chrono::milliseconds timeout) const override;
     void Wait(uint64_t value) const override;
-    void Reset(uint64_t value) override;
+    void QueueWaitCommand(uint64_t value) override;
+    void QueueSignalCommand(uint64_t value) override;
+
     [[nodiscard]] auto GetCompletedValue() const->uint64_t override;
 
-    /// Needed to access the fence object from the command queue for GPU side
-    /// signaling.
-    [[nodiscard]] FenceType* GetFenceObject() const { return fence_.get(); }
-
   private:
-    D3DPtr<FenceType> fence_{ nullptr };
-    HANDLE fence_event_{ nullptr };
-    uint64_t current_value_{ 0 };
+    friend class detail::CommanderImpl;
+    explicit Fence(FenceImplPtr pimpl) : pimpl_{ std::move(pimpl) } {}
 
+    uint64_t current_value_{ 0 };
     bool should_release_{ false };
+
+    FenceImplPtr pimpl_{};
   };
 
 }  // namespace oxygen::renderer::d3d12

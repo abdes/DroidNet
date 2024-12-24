@@ -47,7 +47,7 @@
     <ClInclude Include="platform\platform.h" />
     <ClInclude Include="platform\types.h" />
     <ClInclude Include="platform\window.h" />
-    <ClInclude Include="Renderers\Common\IFence.h" />
+    <ClInclude Include="Renderers\Common\ISynchronizationCounter.h" />
     <ClInclude Include="Renderers\Common\MemoryBlock.h" />
     <ClInclude Include="Renderers\Common\Renderer.h" />
     <ClInclude Include="Renderers\Common\RendererModule.h" />

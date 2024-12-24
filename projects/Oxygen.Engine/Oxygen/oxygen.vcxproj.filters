@@ -129,7 +129,7 @@
     <ClInclude Include="Renderers\Common\Types.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="Renderers\Common\IFence.h">
+    <ClInclude Include="Renderers\Common\ISynchronizationCounter.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="base\Windows\Exceptions.h">
