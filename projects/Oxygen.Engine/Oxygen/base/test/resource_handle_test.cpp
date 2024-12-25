@@ -4,27 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/resource_handle.h"
+#include "Oxygen/Base/ResourceHandle.h"
 
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 
 using oxygen::ResourceHandle;
 
 namespace base::resources {
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, InvalidHandle) {
     const ResourceHandle handle;
     ASSERT_FALSE(handle.IsValid());
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, ToString) {
     const ResourceHandle handle(1U, 0x04);
     const std::string expected_string = "ResourceHandle(Index: 1, ResourceType: 4, Generation: 0, IsFree: false)";
     EXPECT_EQ(handle.ToString(), expected_string);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, ToString_InvalidHandle) {
     const ResourceHandle handle;
     ASSERT_FALSE(handle.IsValid());
@@ -32,7 +29,6 @@ namespace base::resources {
     EXPECT_EQ(handle.ToString(), expected_string);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, ValidHandle) {
     const ResourceHandle handle(1U, 0x04);
     EXPECT_EQ(handle.Index(), 1U);
@@ -40,7 +36,6 @@ namespace base::resources {
     EXPECT_EQ(handle.Generation(), 0);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, Comparison) {
     // Arrange & Act
     const ResourceHandle handle1(1U, 0x04);
@@ -53,14 +48,12 @@ namespace base::resources {
     EXPECT_TRUE(handle1 != handle3);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, GetHandle) {
     const ResourceHandle handle(1U, 0x04);
     const ResourceHandle::HandleT theHandle = handle.Handle();
     EXPECT_EQ(theHandle, 0x0004'0000'0000'0001);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, NewGeneration) {
     ResourceHandle handle(1U, 0x03);
     ASSERT_EQ(handle.Generation(), 0);
@@ -80,7 +73,6 @@ namespace base::resources {
 #endif
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, SetResourceType) {
     ResourceHandle handle(1U);
     EXPECT_EQ(handle.ResourceType(), ResourceHandle::kTypeNotInitialized);
@@ -88,7 +80,6 @@ namespace base::resources {
     EXPECT_EQ(handle.ResourceType(), 0x12);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, SetIndex) {
     ResourceHandle handle;
     handle.SetIndex(0);
@@ -98,7 +89,6 @@ namespace base::resources {
     EXPECT_EQ(handle.Index(), kValidIndex);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, SetFree) {
     ResourceHandle handle(1U, 0x03);
     handle.NewGeneration();
@@ -117,21 +107,19 @@ namespace base::resources {
     EXPECT_EQ(handle.ResourceType(), 0x03);
     ASSERT_EQ(handle.Generation(), 1);
   }
-  // NOLINTNEXTLINE
+
   TEST(ResourceHandleTest, CopyConstructor) {
     const ResourceHandle handle1(1U, 0x04);
     const auto handle2(handle1);
     EXPECT_EQ(handle1, handle2);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, CopyAssignment) {
     const ResourceHandle handle1(1U, 0x04);
     const auto handle2 = handle1;
     EXPECT_EQ(handle1, handle2);
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, MoveConstructor) {
     ResourceHandle handle1(1U, 0x04);
     const auto handle2(std::move(handle1));
@@ -141,7 +129,7 @@ namespace base::resources {
     EXPECT_FALSE(handle1.IsValid());  // NOLINT(bugprone-use-after-move) for testing purposes
   }
 
-  // NOLINTNEXTLINE
+
   TEST(ResourceHandleTest, MoveAssignment) {
     ResourceHandle handle1(1U, 0x04);
     const auto handle2 = std::move(handle1);
@@ -152,7 +140,6 @@ namespace base::resources {
     EXPECT_FALSE(handle1.IsValid());  // NOLINT(bugprone-use-after-move) for testing purposes
   }
 
-  // NOLINTNEXTLINE
   TEST(ResourceHandleTest, Invalidate) {
     ResourceHandle handle(1U, 0x04);
     ASSERT_TRUE(handle.IsValid());

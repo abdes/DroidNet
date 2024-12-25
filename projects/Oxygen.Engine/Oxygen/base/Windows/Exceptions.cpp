@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/platform.h"
+#include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
 #include "Oxygen/Base/Windows/Exceptions.h"
@@ -15,7 +15,7 @@
 #include <fmt/format.h>
 #include <windows.h>
 
-#include "oxygen/base/loguru.hpp"
+#include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Windows/StringUtils.h"
 
 using oxygen::windows::WindowsException;

@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/time.h"
+#include "oxygen/base/Time.h"
 
 #include <gmock/gmock-actions.h>
 #include <gmock/gmock-function-mocker.h>
 #include <gmock/gmock-spec-builders.h>
 #include <gtest/gtest.h>
-#include <oxygen/base/types.h>
+#include <oxygen/base/Types.h>
 
 #include <chrono>
 

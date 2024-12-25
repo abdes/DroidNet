@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/platform.h"
+#include "Oxygen/Base/Platforms.h"
 
 #include <string>
 

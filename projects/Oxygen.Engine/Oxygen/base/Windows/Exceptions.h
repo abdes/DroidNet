@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/platform.h"
+#include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
 #include <exception>

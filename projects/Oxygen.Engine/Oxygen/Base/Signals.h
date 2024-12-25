@@ -6,4 +6,4 @@
 
 #pragma once
 
-#include "Detail/loguru.hpp"
+#include "Detail/signal.hpp"
