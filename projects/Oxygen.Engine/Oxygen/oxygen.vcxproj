@@ -12,17 +12,18 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="api_export.h" />
-    <ClInclude Include="base\compilers.h" />
-    <ClInclude Include="base\logging.h" />
-    <ClInclude Include="base\loguru.hpp" />
-    <ClInclude Include="base\macros.h" />
-    <ClInclude Include="base\platform.h" />
-    <ClInclude Include="base\resource.h" />
-    <ClInclude Include="base\resource_handle.h" />
-    <ClInclude Include="base\resource_table.h" />
-    <ClInclude Include="base\signal.hpp" />
-    <ClInclude Include="base\time.h" />
-    <ClInclude Include="base\types.h" />
+    <ClInclude Include="base\Compilers.h" />
+    <ClInclude Include="base\Detail\loguru.hpp" />
+    <ClInclude Include="base\Detail\signal.hpp" />
+    <ClInclude Include="base\Logging.h" />
+    <ClInclude Include="base\Macros.h" />
+    <ClInclude Include="base\Platforms.h" />
+    <ClInclude Include="base\Resource.h" />
+    <ClInclude Include="base\ResourceHandle.h" />
+    <ClInclude Include="base\ResourceTable.h" />
+    <ClInclude Include="base\Signals.h" />
+    <ClInclude Include="base\Time.h" />
+    <ClInclude Include="base\Types.h" />
     <ClInclude Include="base\Windows\ComError.h" />
     <ClInclude Include="base\Windows\Exceptions.h" />
     <ClInclude Include="base\Windows\StringUtils.h" />
@@ -45,7 +46,7 @@
     <ClInclude Include="platform\input.h" />
     <ClInclude Include="platform\input_event.h" />
     <ClInclude Include="platform\platform.h" />
-    <ClInclude Include="platform\types.h" />
+    <ClInclude Include="platform\Types.h" />
     <ClInclude Include="platform\window.h" />
     <ClInclude Include="Renderers\Common\ISynchronizationCounter.h" />
     <ClInclude Include="Renderers\Common\MemoryBlock.h" />
@@ -58,7 +59,7 @@
     <ClInclude Include="world\types.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="base\loguru.cpp" />
+    <ClCompile Include="base\Detail\loguru.cpp" />
     <ClCompile Include="base\Windows\ComError.cpp" />
     <ClCompile Include="base\Windows\Exceptions.cpp" />
     <ClCompile Include="core\engine.cpp" />
@@ -73,6 +74,7 @@
     <ClCompile Include="platform\input.cpp" />
     <ClCompile Include="platform\platform.cpp" />
     <ClCompile Include="platform\window.cpp" />
+    <ClCompile Include="Renderers\Common\Surface.cpp" />
     <ClCompile Include="world\entity.cpp" />
   </ItemGroup>
   <ItemGroup>

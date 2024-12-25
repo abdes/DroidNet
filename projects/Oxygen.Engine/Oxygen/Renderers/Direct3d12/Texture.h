@@ -8,9 +8,10 @@
 
 #include <d3d12.h>
 
-#include "D3DPtr.h"
+#include "Oxygen/Base/Logging.h"
+#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/Resources.h"
-#include "Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 namespace oxygen::renderer::d3d12 {
 

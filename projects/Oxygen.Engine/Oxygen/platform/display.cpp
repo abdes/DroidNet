@@ -8,7 +8,7 @@
 
 #include <cassert>
 
-#include "oxygen/base/compilers.h"
+#include "oxygen/base/Compilers.h"
 
 // Disable compiler and linter warnings originating from 'fmt' and for which we
 // cannot do anything.

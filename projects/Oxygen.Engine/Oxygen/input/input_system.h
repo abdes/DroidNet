@@ -14,7 +14,7 @@
 #include "oxygen/core/input_handler.h"
 #include "oxygen/core/system.h"
 #include "oxygen/input/types.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::input {
 

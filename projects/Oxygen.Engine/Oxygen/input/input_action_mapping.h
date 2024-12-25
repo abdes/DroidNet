@@ -12,7 +12,7 @@
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/action_value.h"
 #include "oxygen/input/types.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::input {
 

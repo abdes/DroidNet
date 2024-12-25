@@ -84,18 +84,12 @@ namespace {
 
     void Release() noexcept
     {
-      DeferredObjectRelease(command_allocator);
+      detail::DeferredObjectRelease(command_allocator);
       fence_value = 0;
     }
   };
 
-  size_t current_frame_index{ 0 };
-
 }  // namespace
-
-namespace oxygen::renderer::d3d12 {
-  [[nodiscard]] auto CurrentFrameIndex() -> size_t { return current_frame_index; }
-}  // namespace oxygen::renderer::d3d12
 
 // Commander implementation details
 namespace oxygen::renderer::d3d12::detail {
@@ -105,6 +99,7 @@ namespace oxygen::renderer::d3d12::detail {
   public:
     CommanderImpl(DeviceType* device, D3D12_COMMAND_LIST_TYPE type);
     ~CommanderImpl() { Release(); }
+    [[nodiscard]] auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
     OXYGEN_MAKE_NON_COPYABLE(CommanderImpl);
     OXYGEN_MAKE_NON_MOVEABLE(CommanderImpl);
@@ -117,10 +112,11 @@ namespace oxygen::renderer::d3d12::detail {
     void BeginFrame() const;
     void EndFrame();
 
-    void Flush();
+    void Flush() const;
 
   private:
     bool is_released_{ false };
+    size_t current_frame_index_{ 0 };
 
     CommandQueueType* command_queue_{ nullptr };
     GraphicsCommandListType* command_list_{ nullptr };
@@ -174,6 +170,7 @@ namespace oxygen::renderer::d3d12::detail {
     if (is_released_) return;
 
     Flush();
+    current_frame_index_ = 0;
 
     DeferredObjectRelease(command_queue_);
     DeferredObjectRelease(command_list_);
@@ -187,7 +184,7 @@ namespace oxygen::renderer::d3d12::detail {
 
   void CommanderImpl::BeginFrame() const
   {
-    const auto& [command_allocator, fence_value] = frames_[current_frame_index];
+    const auto& [command_allocator, fence_value] = frames_[current_frame_index_];
     const auto completed_value = fence_->GetCompletedValue();
     DCHECK_LE_F(fence_value, completed_value);
     try {
@@ -198,7 +195,7 @@ namespace oxygen::renderer::d3d12::detail {
     catch (const std::runtime_error& e) {
       LOG_F(WARNING, "Commander reset error: {}", e.what());
       LOG_F(WARNING, "Current frame index [{}] - Awaited Fence Value [{}] - Completed Fence Value [{}]",
-            current_frame_index, fence_value, completed_value);
+            current_frame_index_, fence_value, completed_value);
     }
   }
 
@@ -209,20 +206,20 @@ namespace oxygen::renderer::d3d12::detail {
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 
     const uint64_t fence_value = fence_->Signal();
-    frames_[current_frame_index].fence_value = fence_value;
+    frames_[current_frame_index_].fence_value = fence_value;
     if (fence_->GetCompletedValue() != fence_value)
     {
       fence_->Wait(fence_value);
     }
     //LOG_F(1, "END   [{}] - Wait [{}] - Completed [{}]", current_frame_index, fence_value, fence_->GetCompletedValue());
 
-    current_frame_index = (current_frame_index + 1) % kFrameBufferCount;
+    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
   }
 
-  void CommanderImpl::Flush()
+  void CommanderImpl::Flush() const
   {
-    for (const auto& [_, fence_value] : frames_) fence_->Wait(fence_value);
-    current_frame_index = 0;
+    //for (const auto& [_, fence_value] : frames_) fence_->Wait(fence_value);
+    fence_->Flush();
   }
 
 }  // namespace
@@ -254,7 +251,7 @@ namespace oxygen::renderer::d3d12 {
   // ReSharper disable once CppMemberFunctionMayBeStatic
   auto Commander::CurrentFrameIndex() const noexcept -> size_t
   {
-    return current_frame_index;
+    return pimpl_->CurrentFrameIndex();
   }
 
   void Commander::BeginFrame() const

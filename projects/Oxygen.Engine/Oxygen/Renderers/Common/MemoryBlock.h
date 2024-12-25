@@ -10,9 +10,7 @@
 #include "Oxygen/Base/Types.h"
 
 namespace oxygen::renderer {
-  /**
- * Description of GPU memory block
- */
+  //! Description of a GPU memory block.
   struct MemoryBlockDesc
   {
     uint64_t size;
@@ -25,9 +23,7 @@ namespace oxygen::renderer {
     }
   };
 
-  /**
-   * GPU memory block.
-   */
+  //! GPU memory block.
   class IMemoryBlock
   {
   public:

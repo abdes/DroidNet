@@ -11,9 +11,9 @@
 #include <vector>
 
 #include "oxygen/api_export.h"
-#include "oxygen/base/types.h"
+#include "oxygen/base/Types.h"
 #include "oxygen/input/types.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::input {
 

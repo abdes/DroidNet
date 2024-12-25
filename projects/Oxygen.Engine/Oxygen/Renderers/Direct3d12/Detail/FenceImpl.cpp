@@ -1,7 +1,9 @@
 #include "FenceImpl.h"
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/Windows/ComError.h"
 
+using oxygen::windows::ThrowOnFailed;
 using oxygen::renderer::d3d12::detail::FenceImpl;
 
 FenceImpl::FenceImpl(ID3D12CommandQueue* command_queue)
@@ -22,10 +24,10 @@ void FenceImpl::OnInitialize(const uint64_t initial_value)
   DCHECK_F(!fence_, "not already initialized");
 
   FenceType* raw_fence = nullptr;
-  ThrowOnFailed(GetMainDevice()->CreateFence(initial_value,
-                                             D3D12_FENCE_FLAG_NONE,
-                                             IID_PPV_ARGS(&raw_fence)),
-                "Could not create a Fence");
+  windows::ThrowOnFailed(GetMainDevice()->CreateFence(initial_value,
+                                                      D3D12_FENCE_FLAG_NONE,
+                                                      IID_PPV_ARGS(&raw_fence)),
+                         "Could not create a Fence");
   fence_.reset(raw_fence);
 
   fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -55,16 +57,16 @@ void FenceImpl::Signal(const uint64_t value) const
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
 
   DCHECK_GT_F(value, fence_->GetCompletedValue(), "New value must be greater than the current value");
-  ThrowOnFailed((command_queue_->Signal(fence_.get(), value)),
-                fmt::format("Signal({}) on fence failed", value));
+  windows::ThrowOnFailed((command_queue_->Signal(fence_.get(), value)),
+                         fmt::format("Signal({}) on fence failed", value));
 }
 
 void FenceImpl::Wait(const uint64_t value,
                      const DWORD milliseconds) const
 {
   if (fence_->GetCompletedValue() < value) {
-    ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_),
-                  fmt::format("Wait({}) on fence failed", value));
+    windows::ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_),
+                           fmt::format("Wait({}) on fence failed", value));
     WaitForSingleObject(fence_event_, milliseconds);
   }
 }

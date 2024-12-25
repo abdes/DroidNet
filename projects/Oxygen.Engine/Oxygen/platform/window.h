@@ -9,10 +9,10 @@
 #include <string>
 
 #include "oxygen/api_export.h"
-#include "oxygen/base/macros.h"
-#include "oxygen/base/signal.hpp"
+#include "oxygen/base/Macros.h"
+#include "Oxygen/Base/Signals.h"
 #include "oxygen/input/action.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::platform {
   class BaseWindow;

@@ -8,10 +8,10 @@
 
 #include "glm/glm.hpp"
 #include "glm/gtc/quaternion.hpp"
-#include "oxygen/api_export.h"
-#include "oxygen/base/resource.h"
-#include "oxygen/base/resource_handle.h"
-#include "oxygen/world/types.h"
+
+#include "Oxygen/api_export.h"
+#include "Oxygen/Base/Resource.h"
+#include "Oxygen/World/Types.h"
 
 namespace oxygen::world {
 

@@ -12,7 +12,7 @@
 #include <memory>
 #include <ranges>
 
-#include "oxygen/base/compilers.h"
+#include "oxygen/base/Compilers.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"

@@ -12,18 +12,20 @@
 #include <mutex>
 
 #include <dxgi1_6.h>
+#include <shared_mutex>
 #include <wrl/client.h>
 
-#include "oxygen/base/compilers.h"
-#include "oxygen/base/macros.h"
+#include "Oxygen/Base/Compilers.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
-#include "oxygen/Renderers/Common/Types.h"
-#include "Oxygen/Renderers/Direct3d12/commander.h"
-#include "Oxygen/Renderers/Direct3d12/Content.h"
+#include "Oxygen/Renderers/Common/Types.h"
+#include "Oxygen/Renderers/Direct3d12/Commander.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Renderers/Direct3d12/detail/resources.h"
-#include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/Resources.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
 #include "Oxygen/Renderers/Direct3d12/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
@@ -35,18 +37,41 @@ using oxygen::renderer::d3d12::DeviceType;
 using oxygen::renderer::d3d12::FactoryType;
 
 namespace {
+  auto GetFactoryInternal() -> ComPtr<FactoryType>&
+  {
+    static ComPtr<FactoryType> factory;
+    return factory;
+  }
   auto GetMainDeviceInternal() -> ComPtr<DeviceType>&
   {
     static ComPtr<DeviceType> main_device;
+#if defined(_DEBUG)
+    if (main_device) {
+      const ULONG ref_count = main_device.Get()->AddRef();
+      main_device.Get()->Release();
+      DLOG_F(2, "Main Device reference count: {}", ref_count);
+    }
+#endif
     return main_device;
   }
 }  // namespace
 namespace oxygen::renderer::d3d12 {
+  auto GetFactory() -> FactoryType*
+  {
+    return GetFactoryInternal().Get();
+  }
   auto GetMainDevice() -> DeviceType*
   {
     return GetMainDeviceInternal().Get();
   }
 }  // namespace oxygen::renderer::d3d12
+
+
+namespace {
+  using oxygen::renderer::resources::kSurface;
+  oxygen::ResourceTable<oxygen::renderer::d3d12::detail::WindowSurfaceImpl> surfaces(kSurface, 256);
+} // namespace
+
 
 // Anonymous namespace for adapter discovery helper functions
 namespace {
@@ -63,7 +88,6 @@ namespace {
   };
 
   std::vector<AdapterDesc> adapters;
-  ComPtr<FactoryType> dxgi_factory;
 
   bool CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter)
   {
@@ -143,12 +167,12 @@ namespace {
 
   void InitializeFactory(const bool enable_debug)
   {
-    ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgi_factory)));
+    ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&GetFactoryInternal())));
     UINT dxgi_factory_flags{ 0 };
     if (enable_debug) {
       dxgi_factory_flags = DXGI_CREATE_FACTORY_DEBUG;
     }
-    ThrowOnFailed(CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&dxgi_factory)));
+    ThrowOnFailed(CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&GetFactoryInternal())));
   }
 
   std::tuple<ComPtr<IDXGIAdapter1>, size_t> DiscoverAdapters(const std::function<bool(const AdapterDesc&)>& selector)
@@ -161,7 +185,7 @@ namespace {
 
     // Enumerate high-performance adapters only
     for (UINT adapter_index = 0;
-         DXGI_ERROR_NOT_FOUND != dxgi_factory->EnumAdapterByGpuPreference(
+         DXGI_ERROR_NOT_FOUND != GetFactoryInternal()->EnumAdapterByGpuPreference(
            adapter_index,
            DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
            IID_PPV_ARGS(&adapter));
@@ -208,6 +232,7 @@ namespace {
 
 // Implementation details of the Renderer class
 namespace oxygen::renderer::d3d12::detail {
+
   class RendererImpl final
     : public std::enable_shared_from_this<RendererImpl>
     , public IDeferredReleaseController
@@ -218,10 +243,14 @@ namespace oxygen::renderer::d3d12::detail {
     OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
     OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
 
+    auto CurrentFrameIndex() const -> size_t { return commander_->CurrentFrameIndex(); }
+
     void Init(PlatformPtr platform, const RendererProperties& props);
     void Shutdown();
 
     void Render(const resources::SurfaceId& surface_id) const;
+    auto CreateWindowSurfaceImpl(WindowPtr window) const
+      ->std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
 
     void RegisterDeferredReleases(std::function<void(size_t)> handler) const override
     {
@@ -234,12 +263,10 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] auto SrvHeap() const->DescriptorHeap& { return srv_heap_; }
     [[nodiscard]] auto UavHeap() const->DescriptorHeap& { return uav_heap_; }
 
-    void CreateSwapChain(const resources::SurfaceId& surface_id, DXGI_FORMAT format) const;
-
     [[nodiscard]] D3D12MA::Allocator* GetAllocator() const { return allocator_; }
 
   private:
-    void ProcessDeferredRelease(size_t frame_index) const
+    void ProcessDeferredRelease(const size_t frame_index) const
     {
       auto& deferred_release = deferred_releases_[frame_index];
       deferred_release.InvokeHandlers(frame_index);
@@ -369,7 +396,7 @@ namespace oxygen::renderer::d3d12::detail {
       }
 
       // Initialize deferred release manager
-      DeferredResourceReleaseTracker::Instance().Initialize(GetWeakPtr());
+      DeferredReleaseTracker::Instance().Initialize(GetWeakPtr());
 
       // Initialize the commander
       commander_.reset(new Commander(GetMainDevice(), D3D12_COMMAND_LIST_TYPE_DIRECT));
@@ -413,19 +440,29 @@ namespace oxygen::renderer::d3d12::detail {
     }
 
     srv_heap_.Release();
+    LOG_F(INFO, "SRV Descriptor heap released");
     uav_heap_.Release();
+    LOG_F(INFO, "UAV Descriptor heap released");
     dsv_heap_.Release();
+    LOG_F(INFO, "DSV Descriptor heap released");
     rtv_heap_.Release();
+    LOG_F(INFO, "RTV Descriptor heap released");
 
     commander_->Release();
     commander_.reset();
+    LOG_F(INFO, "Commander released");
 
     // Call deferred release for the last time in case some deferred releases
-    // have been made while we are rleasing things here
-    ProcessDeferredRelease(CurrentFrameIndex());
+    // have been made while we are releasing things here
+    LOG_F(INFO, "Processing deferred releases one last time...");
+    for (uint32_t index = 0; index < kFrameBufferCount; ++index) {
+      ProcessDeferredRelease(index);
+    }
 
     SafeRelease(&allocator_);
-    dxgi_factory.Reset();
+    LOG_F(INFO, "D3D12MA Memory Allocator released");
+    GetFactoryInternal().Reset();
+    LOG_F(INFO, "D3D12 DXGI Factory reset");
 
 #ifdef _DEBUG
     ComPtr<ID3D12InfoQueue> info_queue;
@@ -446,11 +483,13 @@ namespace oxygen::renderer::d3d12::detail {
     }
 #endif
 
-    GetMainDeviceInternal().Reset();
+    CHECK_EQ_F(GetMainDeviceInternal().Reset(), 0);
+    LOG_F(INFO, "D3D12 Main Device reset");
   }
 
   void RendererImpl::Render(const resources::SurfaceId& surface_id) const
   {
+    DCHECK_F(surface_id.IsValid());
     DCHECK_NOTNULL_F(commander_);
 
     // Wait for the GPU to finish executing the previous frame, reset the
@@ -462,7 +501,7 @@ namespace oxygen::renderer::d3d12::detail {
     ProcessDeferredRelease(CurrentFrameIndex());
 
     // Presenting
-    auto const surface = GetSurface(surface_id);
+    auto const& surface = surfaces.ItemAt(surface_id);
     surface.Present();
 
     GraphicsCommandListType* command_list{ commander_->CommandList() };
@@ -475,14 +514,24 @@ namespace oxygen::renderer::d3d12::detail {
 
   }
 
-  void RendererImpl::CreateSwapChain(const resources::SurfaceId& surface_id, const DXGI_FORMAT format) const
+  auto RendererImpl::CreateWindowSurfaceImpl(WindowPtr window) const -> std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
   {
-    auto surface = GetSurface(surface_id);
-    if (!surface.IsValid()) {
-      LOG_F(ERROR, "Invalid surface ID: {}", surface_id.ToString());
-      return;
+    DCHECK_NOTNULL_F(window.lock());
+    DCHECK_F(window.lock()->IsValid());
+
+    const auto surface_id = surfaces.Emplace(std::move(window), commander_->CommandQueue());
+    if (!surface_id.IsValid()) {
+      return {};
     }
-    surface.CreateSwapChain(dxgi_factory.Get(), commander_->CommandQueue(), format);
+    LOG_F(INFO, "Window Surface created: {}", surface_id.ToString());
+
+    // Use a custom deleter to call Erase when the shared_ptr<WindowSurfaceImpl> is destroyed
+    auto deleter = [surface_id](WindowSurfaceImpl* ptr)
+      {
+        surfaces.Erase(surface_id);
+      };
+    auto& surface_impl = surfaces.ItemAt(surface_id);
+    return { surface_id, { &surface_impl, deleter } };
   }
 
 }  // namespace oxygen::renderer::d3d12::detail
@@ -510,7 +559,7 @@ void Renderer::Render(const resources::SurfaceId& surface_id)
 
 auto Renderer::CurrentFrameIndex() const -> size_t
 {
-  return d3d12::CurrentFrameIndex();
+  return pimpl_->CurrentFrameIndex();
 }
 
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&
@@ -533,12 +582,19 @@ auto Renderer::UavHeap() const -> detail::DescriptorHeap&
   return pimpl_->UavHeap();
 }
 
+auto Renderer::CreateWindowSurface(WindowPtr window) const ->SurfacePtr
+{
+  DCHECK_NOTNULL_F(window.lock());
+  DCHECK_F(window.lock()->IsValid());
+
+  const auto [surface_id, surface_impl] { pimpl_->CreateWindowSurfaceImpl(window) };
+  if (!surface_impl) {
+    return {};
+  }
+  return SurfacePtr(new WindowSurface(surface_id, std::move(window), surface_impl));
+}
+
 auto Renderer::GetAllocator() const -> D3D12MA::Allocator*
 {
   return pimpl_->GetAllocator();
-}
-
-void Renderer::CreateSwapChain(const resources::SurfaceId& surface_id) const
-{
-  pimpl_->CreateSwapChain(surface_id, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
 }

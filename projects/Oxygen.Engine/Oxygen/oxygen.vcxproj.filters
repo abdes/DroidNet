@@ -8,28 +8,28 @@
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="base\compilers.h">
+    <ClInclude Include="base\Compilers.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\macros.h">
+    <ClInclude Include="base\Macros.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\platform.h">
+    <ClInclude Include="base\Platforms.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\resource.h">
+    <ClInclude Include="base\Resource.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\resource_handle.h">
+    <ClInclude Include="base\ResourceHandle.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\resource_table.h">
+    <ClInclude Include="base\ResourceTable.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\time.h">
+    <ClInclude Include="base\Time.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="base\types.h">
+    <ClInclude Include="base\Types.h">
       <Filter>Base</Filter>
     </ClInclude>
     <ClInclude Include="core\engine.h">
@@ -92,7 +92,7 @@
     <ClInclude Include="platform\platform.h">
       <Filter>Platform</Filter>
     </ClInclude>
-    <ClInclude Include="platform\types.h">
+    <ClInclude Include="platform\Types.h">
       <Filter>Platform</Filter>
     </ClInclude>
     <ClInclude Include="platform\window.h">
@@ -101,13 +101,7 @@
     <ClInclude Include="platform\detail\base_window.h">
       <Filter>Platform\detail</Filter>
     </ClInclude>
-    <ClInclude Include="base\signal.hpp">
-      <Filter>Base</Filter>
-    </ClInclude>
-    <ClInclude Include="base\loguru.hpp">
-      <Filter>Base</Filter>
-    </ClInclude>
-    <ClInclude Include="base\logging.h">
+    <ClInclude Include="base\Logging.h">
       <Filter>Base</Filter>
     </ClInclude>
     <ClInclude Include="api_export.h" />
@@ -141,6 +135,15 @@
     <ClInclude Include="base\Windows\ComError.h">
       <Filter>Base\Windows</Filter>
     </ClInclude>
+    <ClInclude Include="base\Detail\loguru.hpp">
+      <Filter>Base\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Detail\signal.hpp">
+      <Filter>Base\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Signals.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -169,6 +172,9 @@
     </Filter>
     <Filter Include="Base\Windows">
       <UniqueIdentifier>{9e6223df-6965-43fd-89a4-690ad4f81e92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base\Detail">
+      <UniqueIdentifier>{f9a55c4c-dc3f-489b-8c39-5a17b98b44e6}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -211,14 +217,17 @@
     <ClCompile Include="platform\detail\base_window.cpp">
       <Filter>Platform\detail</Filter>
     </ClCompile>
-    <ClCompile Include="base\loguru.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
     <ClCompile Include="base\Windows\Exceptions.cpp">
       <Filter>Base\Windows</Filter>
     </ClCompile>
     <ClCompile Include="base\Windows\ComError.cpp">
       <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\Surface.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="base\Detail\loguru.cpp">
+      <Filter>Base\Detail</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

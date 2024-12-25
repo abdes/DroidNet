@@ -11,7 +11,7 @@
 #include <vector>
 #include <wrl/client.h>
 
-#include "Oxygen/base/macros.h"
+#include "Oxygen/base/Macros.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
 

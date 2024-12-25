@@ -9,7 +9,8 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
-#include "oxygen/platform/types.h"
+#include "oxygen/base/ResourceTable.h"
+#include "oxygen/platform/Types.h"
 #include "Oxygen/Renderers/Common/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
@@ -21,46 +22,35 @@ namespace oxygen::renderer::d3d12 {
     class WindowSurfaceImpl;
   }  // namespace detail
 
-  class WindowSurface : public Surface
+  class WindowSurface : public renderer::WindowSurface
   {
-    friend OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) -> WindowSurface;
-    friend OXYGEN_D3D12_API size_t DestroyWindowSurface(WindowSurface&);
-    friend OXYGEN_D3D12_API auto GetSurface(const resources::SurfaceId& surface_id) -> WindowSurface;
+    friend class Renderer;
+
+    using Super = renderer::WindowSurface;
 
   public:
-    OXYGEN_D3D12_API ~WindowSurface() override;
+    OXYGEN_D3D12_API ~WindowSurface() override = default;
 
-    OXYGEN_D3D12_API void SetSize(int width, int height) override;
+    OXYGEN_DEFAULT_COPYABLE(WindowSurface);
+    OXYGEN_DEFAULT_MOVABLE(WindowSurface);
+
+    OXYGEN_D3D12_API void Resize(int width, int height) override;
     OXYGEN_D3D12_API void Present() const override;
 
-    OXYGEN_D3D12_API [[nodiscard]] uint32_t Width() const override;
-    OXYGEN_D3D12_API [[nodiscard]] uint32_t Height() const override;
     OXYGEN_D3D12_API [[nodiscard]] ID3D12Resource* BackBuffer() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE Rtv() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_VIEWPORT Viewport() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_RECT Scissor() const;
 
-    OXYGEN_D3D12_API void CreateSwapChain(
-      FactoryType* factory,
-      CommandQueueType* command_queue,
-      DXGI_FORMAT format = kDefaultBackBufferFormat);
 
   protected:
-    OXYGEN_D3D12_API void DoRelease() override;
+    OXYGEN_D3D12_API void OnInitialize() override;
+    OXYGEN_D3D12_API void OnRelease() override;
 
   private:
-    OXYGEN_D3D12_API explicit WindowSurface(const resources::SurfaceId& surface_id, detail::WindowSurfaceImpl* impl);
-    WindowSurface(); // Invalid object
+    WindowSurface(const resources::SurfaceId& surface_id, platform::WindowPtr window, detail::WindowSurfaceImplPtr impl);
 
-    OXYGEN_D3D12_API void Finalize();
-
-    // We do not use a smart pointer here, because the implementation is cleared
-    // only once the surface is removed from the resource table.
-    detail::WindowSurfaceImpl* impl_{ nullptr };
+    detail::WindowSurfaceImplPtr pimpl_{ };
   };
-
-  OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) -> WindowSurface;
-  OXYGEN_D3D12_API auto DestroyWindowSurface(resources::SurfaceId& surface_id) -> size_t;
-  OXYGEN_D3D12_API auto GetSurface(const resources::SurfaceId& surface_id) -> WindowSurface;
 
 }  // namespace oxygen::renderer::d3d12

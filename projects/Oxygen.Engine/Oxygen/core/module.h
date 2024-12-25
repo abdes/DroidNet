@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "oxygen/base/time.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/base/Time.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::core {
 

@@ -26,9 +26,6 @@ using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
 using oxygen::graphics::GetRenderer;
-using oxygen::renderer::d3d12::CreateWindowSurface;
-using oxygen::renderer::d3d12::DestroyWindowSurface;
-using oxygen::renderer::d3d12::GetSurface;
 
 MainModule::MainModule(oxygen::PlatformPtr platform)
   : platform_(std::move(platform)) {
@@ -55,9 +52,9 @@ void MainModule::Initialize() {
     auto renderer = renderer_.lock();
     DCHECK_NOTNULL_F(renderer, "renderer not initialized");
 
-    auto surface = CreateWindowSurface(my_window);
-    surface_id_ = surface.GetId();
-    renderer->CreateSwapChain(surface_id_);
+    surface_ = renderer->CreateWindowSurface(my_window);
+    DCHECK_F(surface_->IsValid());
+    surface_->Initialize();
 }
 
 void MainModule::ProcessInput(const oxygen::platform::InputEvent& event) {
@@ -78,6 +75,7 @@ void MainModule::Render() {
   const auto renderer = renderer_.lock();
   DCHECK_NOTNULL_F(renderer, "renderer destroyed before the module is shutdown");
   if (renderer) {
+    DCHECK_F(surface_->IsValid());
     //// Get the command list from the renderer
     //auto command_list = renderer->GetCommandList();
 
@@ -94,7 +92,7 @@ void MainModule::Render() {
     //// Execute the command list
     //renderer->ExecuteCommandList(command_list);
 
-    renderer->Render(surface_id_);
+    renderer->Render(surface_->GetId());
   }
 
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
@@ -102,13 +100,7 @@ void MainModule::Render() {
 
 void MainModule::Shutdown() noexcept
 {
-  if (auto surface = GetSurface(surface_id_); surface.IsValid())
-  {
-    surface.Release();
-    DestroyWindowSurface(surface_id_);
-  }
-  surface_id_.Invalidate();
-
+  surface_.reset();
   renderer_.reset();
   platform_.reset();
 }

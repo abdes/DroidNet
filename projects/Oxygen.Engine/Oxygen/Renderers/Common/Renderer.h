@@ -50,12 +50,12 @@ namespace oxygen {
   /**
    * Base class for all renderers.
    *
-   * This is the interface that allows to intercat with the graphics API to
+   * This is the interface that allows to interact with the graphics API to
    * create resources, record commands and execute them. The backend
    * implementation is dynamically loaded and initialized via the renderer
    * loader.
    *
-   * It is possible to havle multiple renderers active at the same time, but in
+   * It is possible to have multiple renderers active at the same time, but in
    * most cases, only one is needed, and that one can be obtained at any time
    * using the GetRenderer() function from the loader.
    */
@@ -133,11 +133,11 @@ namespace oxygen {
     virtual void Render(const renderer::resources::SurfaceId& surface_id) = 0;
 
     /**
-     * DeviceResourcesCreation Resources creation functions
+     * Device resources creation functions
      * @{
      */
 
-    virtual void CreateSwapChain(const renderer::resources::SurfaceId& surface_id) const = 0;
+    [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const->renderer::SurfacePtr = 0;
 
     /**@}*/
 

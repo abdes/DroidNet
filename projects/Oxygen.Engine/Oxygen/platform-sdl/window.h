@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <oxygen/base/macros.h>
-#include <oxygen/platform/types.h>
+#include <Oxygen/Base/Macros.h>
+#include <oxygen/platform/Types.h>
 #include <oxygen/platform/window.h>
 
 #include "oxygen/platform-sdl/api_export.h"

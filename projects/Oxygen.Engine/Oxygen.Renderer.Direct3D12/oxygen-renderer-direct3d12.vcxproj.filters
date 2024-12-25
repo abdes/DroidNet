@@ -61,6 +61,12 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp">
+      <Filter>Renderer\Detail</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.cpp">
+      <Filter>Renderer\Detail</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
@@ -79,9 +85,6 @@
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IDeferredReleaseController.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h">
@@ -112,6 +115,15 @@
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\IDeferredReleaseController.h">
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
   </ItemGroup>

@@ -17,9 +17,6 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::renderer::d3d12 {
 
-  OXYGEN_D3D12_API [[nodiscard]] DeviceType* GetMainDevice();
-  OXYGEN_D3D12_API [[nodiscard]] auto CurrentFrameIndex() -> size_t;
-
   inline auto ToNarrow(const std::wstring& wide_string) -> std::string
   {
     if (wide_string.empty()) return {};
@@ -61,22 +58,6 @@ namespace oxygen::renderer::d3d12 {
   {
     if (resource) {
       resource->Release();
-      resource = nullptr;
-    }
-  }
-
-  template<typename T>
-  void DeferredObjectRelease(T*& resource) noexcept
-  {
-    if (resource) {
-      auto& instance = detail::DeferredResourceReleaseTracker::Instance();
-      try {
-        instance.DeferRelease(resource);
-      }
-      catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to defer release of resource: {}", e.what());
-        resource->Release();
-      }
       resource = nullptr;
     }
   }

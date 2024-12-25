@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <oxygen/base/macros.h>
-#include <oxygen/base/types.h>
+#include <Oxygen/Base/Macros.h>
+#include <oxygen/base/Types.h>
 
 #include <cstdint>
 #include <string>

@@ -7,6 +7,7 @@
 #include "Oxygen/Renderers/Direct3d12/Texture.h"
 
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 
 using namespace oxygen::renderer::d3d12;
 using oxygen::windows::ThrowOnFailed;

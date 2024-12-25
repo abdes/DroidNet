@@ -27,9 +27,11 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp" />
@@ -45,11 +47,13 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\IDeferredReleaseController.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h" />
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IDeferredReleaseController.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Shaders.h" />

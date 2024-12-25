@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "oxygen/base/resource_handle.h"
+#include "Oxygen/Base/ResourceHandle.h"
 
 #define DECLARE_RESOURCE(scope, Name)                                          \
   using Name##Id = ResourceHandle;                                             \

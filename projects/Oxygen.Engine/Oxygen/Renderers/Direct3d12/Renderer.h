@@ -6,12 +6,16 @@
 
 #pragma once
 
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 #include "Oxygen/Renderers/Common/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
 #include <Oxygen/Renderers/Common/Types.h>
 
 #include "D3D12MemAlloc.h"
+
+namespace oxygen::renderer {
+  class WindowSurface;
+}
 
 namespace oxygen::renderer::d3d12 {
 
@@ -42,7 +46,10 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_D3D12_API [[nodiscard]] auto SrvHeap() const->detail::DescriptorHeap&;
     OXYGEN_D3D12_API [[nodiscard]] auto UavHeap() const->detail::DescriptorHeap&;
 
-    OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
+    OXYGEN_D3D12_API auto CreateWindowSurface(oxygen::platform::WindowPtr window) const->SurfacePtr override;
+
+
+    //OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
     //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;
     // TODO: Add backend independent support for format
 
@@ -52,6 +59,7 @@ namespace oxygen::renderer::d3d12 {
     void OnInitialize() override;
     void OnShutdown() override;
 
+
   private:
     std::shared_ptr<detail::RendererImpl> pimpl_;
   };
@@ -59,7 +67,7 @@ namespace oxygen::renderer::d3d12 {
   namespace detail {
     /**
      * Get a reference to the single instance of the Direct3D12 Renderer for
-     * internal use within the renderer implemntation module.
+     * internal use within the renderer implementation module.
      *
      * @note This function is not part of the public API and should not be used.
      * Instead, use the GetRenderer() function from the renderer loader API.
