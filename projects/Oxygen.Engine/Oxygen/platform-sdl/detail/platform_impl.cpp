@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <oxygen/base/compilers.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keycode.h>
-#include <oxygen/base/compilers.h>
 
 #include <algorithm>
 #include <cassert>
@@ -51,10 +51,10 @@ using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::sdl::Platform;
 
 namespace {
-auto MapKeyCode(SDL_Keycode code) {
-  using oxygen::platform::Key;
-  // clang-format off
-  switch (code) {
+  auto MapKeyCode(SDL_Keycode code) {
+    using oxygen::platform::Key;
+    // clang-format off
+    switch (code) {
     case SDLK_BACKSPACE: return Key::kBackSpace;
     case SDLK_DELETE: return Key::kDelete;
     case SDLK_TAB: return Key::kTab;
@@ -184,92 +184,92 @@ auto MapKeyCode(SDL_Keycode code) {
     case SDLK_SYSREQ: return Key::kSysReq;
     case SDLK_MENU: return Key::kMenu;
     default: return Key::kNone;
+    }
+    // clang-format on
   }
-  // clang-format on
-}
 
-auto TranslateKeyboardEvent(SDL_Event const &event)
+  auto TranslateKeyboardEvent(SDL_Event const& event)
     -> std::unique_ptr<InputEvent> {
-  const auto key_code = MapKeyCode(event.key.key);
-  if (key_code == Key::kNone) {
-    // This is not a key code we are interested to handle.
-    // Do not generate an event for it
-    uint32_t key = event.key.key;
-    uint32_t scan_code = event.key.scancode;
-    DLOG_F(2,
-           "Keyboard event with key code = {} (scan code = {}) is not "
-           "something we can handle. Ignoring event.",
-           key,
-           scan_code);
-    return {};
-  }
+    const auto key_code = MapKeyCode(event.key.key);
+    if (key_code == Key::kNone) {
+      // This is not a key code we are interested to handle.
+      // Do not generate an event for it
+      uint32_t key = event.key.key;
+      uint32_t scan_code = event.key.scancode;
+      DLOG_F(2,
+             "Keyboard event with key code = {} (scan code = {}) is not "
+             "something we can handle. Ignoring event.",
+             key,
+             scan_code);
+      return {};
+    }
 
-  const KeyEvent::KeyInfo key_info(key_code, event.key.repeat);
-  const ButtonState button_state =
+    const KeyEvent::KeyInfo key_info(key_code, event.key.repeat);
+    const ButtonState button_state =
       event.key.down ? ButtonState::kPressed : ButtonState::kReleased;
 
-  auto key_event = std::make_unique<KeyEvent>(
+    auto key_event = std::make_unique<KeyEvent>(
       &event,
       std::chrono::duration_cast<oxygen::TimePoint>(
-          std::chrono::nanoseconds(event.key.timestamp)),
+        std::chrono::nanoseconds(event.key.timestamp)),
       key_info,
       button_state);
-  key_event->SetWindowId(event.key.windowID);
+    key_event->SetWindowId(event.key.windowID);
 
-  return key_event;
-}
+    return key_event;
+  }
 
-auto MapMouseButton(auto button) {
-  using oxygen::platform::MouseButton;
-  // clang-format off
-  switch (button) {
+  auto MapMouseButton(auto button) {
+    using oxygen::platform::MouseButton;
+    // clang-format off
+    switch (button) {
     case SDL_BUTTON_LEFT: return MouseButton::kLeft;
     case SDL_BUTTON_RIGHT: return MouseButton::kRight;
     case SDL_BUTTON_MIDDLE: return MouseButton::kMiddle;
     case SDL_BUTTON_X1: return MouseButton::kExtButton1;
     case SDL_BUTTON_X2: return MouseButton::kExtButton2;
     default: return MouseButton::kNone;
+    }
+    // clang-format on
   }
-  // clang-format on
-}
 
-auto TranslateMouseButtonEvent(const SDL_Event &event)
+  auto TranslateMouseButtonEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent> {
-  const auto button = MapMouseButton(event.button.button);
-  if (button == MouseButton::kNone) {
-    // This is not a mouse button we are interested to handle.
-    // Do not generate an event for it
-    DLOG_F(
+    const auto button = MapMouseButton(event.button.button);
+    if (button == MouseButton::kNone) {
+      // This is not a mouse button we are interested to handle.
+      // Do not generate an event for it
+      DLOG_F(
         2,
         "Mouse button event with button = {} is not something we can handle. "
         "Ignoring event.",
         event.button.button);
-    return {};
-  }
+      return {};
+    }
 
-  const ButtonState button_state =
+    const ButtonState button_state =
       event.button.down ? ButtonState::kPressed : ButtonState::kReleased;
 
-  auto button_event = std::make_unique<MouseButtonEvent>(
+    auto button_event = std::make_unique<MouseButtonEvent>(
       &event,
       std::chrono::duration_cast<oxygen::TimePoint>(
-          std::chrono::nanoseconds(event.button.timestamp)),
+        std::chrono::nanoseconds(event.button.timestamp)),
       SubPixelPosition{
           .x = event.button.x,
           .y = event.button.y,
       },
       button,
       button_state);
-  button_event->SetWindowId(event.key.windowID);
-  return button_event;
-}
+    button_event->SetWindowId(event.key.windowID);
+    return button_event;
+  }
 
-auto TranslateMouseMotionEvent(const SDL_Event &event)
+  auto TranslateMouseMotionEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent> {
-  auto motion_event = std::make_unique<MouseMotionEvent>(
+    auto motion_event = std::make_unique<MouseMotionEvent>(
       &event,
       std::chrono::duration_cast<oxygen::TimePoint>(
-          std::chrono::nanoseconds(event.motion.timestamp)),
+        std::chrono::nanoseconds(event.motion.timestamp)),
       SubPixelPosition{
           .x = event.motion.x,
           .y = event.motion.y,
@@ -278,19 +278,19 @@ auto TranslateMouseMotionEvent(const SDL_Event &event)
           .dx = event.motion.xrel,
           .dy = event.motion.yrel,
       });
-  motion_event->SetWindowId(event.key.windowID);
-  return motion_event;
-}
+    motion_event->SetWindowId(event.key.windowID);
+    return motion_event;
+  }
 
-auto TranslateMouseWheelEvent(const SDL_Event &event)
+  auto TranslateMouseWheelEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent> {
-  const auto direction =
+    const auto direction =
       event.wheel.direction == SDL_MOUSEWHEEL_NORMAL ? 1.0F : -1.0F;
 
-  auto wheel_event = std::make_unique<MouseWheelEvent>(
+    auto wheel_event = std::make_unique<MouseWheelEvent>(
       &event,
       std::chrono::duration_cast<oxygen::TimePoint>(
-          std::chrono::nanoseconds(event.wheel.timestamp)),
+        std::chrono::nanoseconds(event.wheel.timestamp)),
       SubPixelPosition{
           .x = event.wheel.mouse_x,
           .y = event.wheel.mouse_y,
@@ -299,16 +299,16 @@ auto TranslateMouseWheelEvent(const SDL_Event &event)
           .dx = direction * event.wheel.x,
           .dy = direction * event.wheel.y,
       });
-  wheel_event->SetWindowId(event.key.windowID);
-  return wheel_event;
-}
+    wheel_event->SetWindowId(event.key.windowID);
+    return wheel_event;
+  }
 }  // namespace
 
 Platform::PlatformImpl::PlatformImpl(
-    Platform *platform, std::shared_ptr<detail::WrapperInterface> sdl_wrapper)
-    : platform_(platform)
-    , sdl_(sdl_wrapper ? std::move(sdl_wrapper)
-                       : std::make_shared<detail::Wrapper>()) {
+  Platform* platform, std::shared_ptr<detail::WrapperInterface> sdl_wrapper)
+  : platform_(platform)
+  , sdl_(sdl_wrapper ? std::move(sdl_wrapper)
+         : std::make_shared<detail::Wrapper>()) {
   sdl_->Init(SDL_INIT_VIDEO);
   sdl_->SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
   LOG_F(INFO, "Platform/SDL3 initialized");
@@ -327,56 +327,56 @@ Platform::PlatformImpl::~PlatformImpl() {
 }
 
 auto Platform::PlatformImpl::GetRequiredInstanceExtensions() const
-    -> std::vector<const char *> {
+-> std::vector<const char*> {
   return sdl_->GetRequiredVulkanExtensions();
 }
 
-auto Platform::PlatformImpl::MakeWindow(std::string const &title,
-                                        PixelExtent const &extent)
-    -> std::weak_ptr<platform::Window> {
+auto Platform::PlatformImpl::MakeWindow(std::string const& title,
+                                        PixelExtent const& extent)
+  -> std::weak_ptr<platform::Window> {
   auto new_window = std::make_shared<Window>(title, extent);
   windows_.push_back(new_window);
   return new_window;
 }
 
-auto Platform::PlatformImpl::MakeWindow(std::string const &title,
-                                        PixelExtent const &extent,
+auto Platform::PlatformImpl::MakeWindow(std::string const& title,
+                                        PixelExtent const& extent,
                                         platform::Window::InitialFlags flags)
-    -> std::weak_ptr<platform::Window> {
+  -> std::weak_ptr<platform::Window> {
   auto new_window = std::make_shared<Window>(title, extent, flags);
   windows_.push_back(new_window);
   return new_window;
 }
 
-auto Platform::PlatformImpl::MakeWindow(std::string const &title,
-                                        PixelPosition const &position,
-                                        PixelExtent const &extent)
-    -> std::weak_ptr<platform::Window> {
+auto Platform::PlatformImpl::MakeWindow(std::string const& title,
+                                        PixelPosition const& position,
+                                        PixelExtent const& extent)
+  -> std::weak_ptr<platform::Window> {
   auto new_window = std::make_shared<Window>(title, position, extent);
   windows_.push_back(new_window);
   return new_window;
 }
 
-auto Platform::PlatformImpl::MakeWindow(std::string const &title,
-                                        PixelPosition const &position,
-                                        PixelExtent const &extent,
+auto Platform::PlatformImpl::MakeWindow(std::string const& title,
+                                        PixelPosition const& position,
+                                        PixelExtent const& extent,
                                         platform::Window::InitialFlags flags)
-    -> std::weak_ptr<platform::Window> {
+  -> std::weak_ptr<platform::Window> {
   auto new_window = std::make_shared<Window>(title, position, extent, flags);
   windows_.push_back(new_window);
   return new_window;
 }
 
 auto Platform::PlatformImpl::Displays() const
-    -> std::vector<std::unique_ptr<platform::Display>> {
+-> std::vector<std::unique_ptr<platform::Display>> {
   std::vector<std::unique_ptr<platform::Display>> displays;
 
-  int display_count{0};
-  SDL_DisplayID *display_ids = sdl_->GetDisplays(&display_count);
+  int display_count{ 0 };
+  SDL_DisplayID* display_ids = sdl_->GetDisplays(&display_count);
 
   for (const std::span s_display_ids(display_ids,
                                      static_cast<std::size_t>(display_count));
-       auto const &display_id : s_display_ids) {
+       auto const& display_id : s_display_ids) {
     displays.emplace_back(std::make_unique<Display>(display_id));
   }
 
@@ -387,21 +387,22 @@ auto Platform::PlatformImpl::Displays() const
 }
 
 auto Platform::PlatformImpl::DisplayFromId(
-    const platform::Display::IdType &display_id) const
-    -> std::unique_ptr<platform::Display> {
+  const platform::Display::IdType& display_id) const
+  -> std::unique_ptr<platform::Display> {
   std::unique_ptr<platform::Display> display{};
-  int display_count{0};
+  int display_count{ 0 };
   try {
-    SDL_DisplayID *display_ids = sdl_->GetDisplays(&display_count);
+    SDL_DisplayID* display_ids = sdl_->GetDisplays(&display_count);
 
     for (const std::span s_display_ids(display_ids,
                                        static_cast<std::size_t>(display_count));
-         auto const &a_display_id : s_display_ids) {
+         auto const& a_display_id : s_display_ids) {
       if (a_display_id == display_id) {
         display = std::make_unique<Display>(display_id);
       }
     }
-  } catch (...) {  // NOLINT(*-empty-catch)
+  }
+  catch (...) {  // NOLINT(*-empty-catch)
     // If an error occurs or there are no connected displays, we simply
     // return a nullptr value
   }
@@ -409,7 +410,7 @@ auto Platform::PlatformImpl::DisplayFromId(
 }
 
 auto Platform::PlatformImpl::PollEvent()
-    -> std::unique_ptr<platform::InputEvent> {
+-> std::unique_ptr<platform::InputEvent> {
   if (sdl_->PollEvent(&event_)) {
     if (event_.type == SDL_EVENT_KEY_UP || event_.type == SDL_EVENT_KEY_DOWN) {
       LOG_SCOPE_F(1, "Keyboard event");
@@ -428,9 +429,9 @@ auto Platform::PlatformImpl::PollEvent()
       LOG_SCOPE_F(1, "Mouse button event");
       DLOG_F(2, "button = {}", event_.button.button);
       DLOG_F(
-          2,
-          "state  = {}",
-          ((event_.button.type == SDL_EVENT_MOUSE_BUTTON_UP) ? "UP" : "DOWN"));
+        2,
+        "state  = {}",
+        ((event_.button.type == SDL_EVENT_MOUSE_BUTTON_UP) ? "UP" : "DOWN"));
       return TranslateMouseButtonEvent(event_);
     }
     if (event_.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -449,12 +450,15 @@ auto Platform::PlatformImpl::PollEvent()
     if (event_.type >= SDL_EVENT_DISPLAY_FIRST
         && event_.type <= SDL_EVENT_DISPLAY_LAST) {
       DispatchDisplayEvent(event_);
-    } else if (event_.type >= SDL_EVENT_WINDOW_FIRST
-               && event_.type <= SDL_EVENT_WINDOW_LAST) {
+    }
+    else if (event_.type >= SDL_EVENT_WINDOW_FIRST
+             && event_.type <= SDL_EVENT_WINDOW_LAST) {
       DispatchWindowEvent(event_);
-    } else if (event_.type == SDL_EVENT_POLL_SENTINEL) {
+    }
+    else if (event_.type == SDL_EVENT_POLL_SENTINEL) {
       // Signals the end of an event poll cycle
-    } else {
+    }
+    else {
       if (event_.type != SDL_EVENT_MOUSE_MOTION) {
         DLOG_F(1,
                "Event [{}] has no dispatcher",
@@ -467,121 +471,129 @@ auto Platform::PlatformImpl::PollEvent()
 }
 
 auto Platform::PlatformImpl::WindowFromId(WindowIdType window_id) const
-    -> platform::Window & {
-  const auto found = std::ranges::find_if(windows_, [window_id](auto &window) {
+-> platform::Window& {
+  const auto found = std::ranges::find_if(windows_, [window_id](auto& window) {
     return window->Id() == window_id;
-  });
+                                          });
   // We should only call this method when we are sure the window id is valid
   assert(found != windows_.end() && "We should only call this method when we "
-                                    "are sure the window id is valid");
+         "are sure the window id is valid");
   return **found;
 }
 
 void Platform::PlatformImpl::DispatchDisplayEvent(
-    SDL_Event const &event) const {
+  SDL_Event const& event) const {
   switch (event.type) {
-    case SDL_EVENT_DISPLAY_ADDED:
-      platform_->OnDisplayConnected()(event.display.displayID);
-      break;
+  case SDL_EVENT_DISPLAY_ADDED:
+    platform_->OnDisplayConnected()(event.display.displayID);
+    break;
 
-    case SDL_EVENT_DISPLAY_REMOVED:
-      platform_->OnDisplayDisconnected()(event.display.displayID);
-      break;
+  case SDL_EVENT_DISPLAY_REMOVED:
+    platform_->OnDisplayDisconnected()(event.display.displayID);
+    break;
 
-    case SDL_EVENT_DISPLAY_ORIENTATION:
-      platform_->OnDisplayOrientationChanged()(event.display.displayID);
-      break;
+  case SDL_EVENT_DISPLAY_ORIENTATION:
+    platform_->OnDisplayOrientationChanged()(event.display.displayID);
+    break;
 
-    case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-      [[fallthrough]];
-    case SDL_EVENT_DISPLAY_MOVED:
-      // As of now, we do not handle these events and, we do not have slots for
-      // dispatching them.
-      break;
-    default:
-      LOG_F(WARNING,
-            "Display event [{}] not expected by handler",
-            detail::SdlEventName(event.type));
+  case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+    [[fallthrough]];
+  case SDL_EVENT_DISPLAY_MOVED:
+    // As of now, we do not handle these events and, we do not have slots for
+    // dispatching them.
+    break;
+  default:
+    LOG_F(WARNING,
+          "Display event [{}] not expected by handler",
+          detail::SdlEventName(event.type));
   }
 }
 
-void Platform::PlatformImpl::DispatchWindowEvent(SDL_Event const &event) {
+void Platform::PlatformImpl::DispatchWindowEvent(SDL_Event const& event) {
   switch (event.type) {
-    case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
-      auto window_id = event.window.windowID;
-      const auto the_window = std::ranges::find_if(
-          windows_,
-          [window_id](auto &window) { return window->Id() == window_id; });
-      assert(the_window != windows_.end());
-      LOG_F(INFO, "Window [id = {}] is closing", window_id);
-      platform_->OnWindowClosed()(**the_window);
-      LOG_F(INFO, "Window [id = {}] is closed", window_id);
+  case SDL_EVENT_WINDOW_CLOSE_REQUESTED: {
+    auto window_id = event.window.windowID;
+    const auto the_window = std::ranges::find_if(
+      windows_,
+      [window_id](auto& window)
+      {
+        return window->Id() == window_id;
+      });
+    assert(the_window != windows_.end());
 
-      windows_.erase(the_window);
+    (*the_window)->RequestClose(false);
+    if (!(*the_window)->ShouldClose()) return;
 
-      if (windows_.empty()) {
-        platform_->OnLastWindowClosed()();
-      }
-    } break;
+    platform_->OnWindowClosed()(**the_window);
+    windows_.erase(the_window);
+    LOG_F(INFO, "Window [id = {}] is closed", window_id);
 
-    case SDL_EVENT_WINDOW_DESTROYED:
-      assert(std::ranges::find_if(std::begin(windows_),
-                                  std::end(windows_),
-                                  [&event](auto const &window) {
-                                    return window->Id()
-                                        == event.window.windowID;
-                                  })
-             == std::end(windows_));
-      LOG_F(INFO,
-            "Window [id = {}] was destroyed and is now no longer tracked",
-            event.window.windowID);
-      break;
+    if (windows_.empty()) {
+      platform_->OnLastWindowClosed()();
+    }
+  } break;
 
-    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
-      LOG_F(INFO,
-            "Window [id = {}] buffer size changed to {} x {}",
-            event.window.windowID,
-            event.window.data1,
-            event.window.data2);
+  case SDL_EVENT_WINDOW_DESTROYED:
+    assert(std::ranges::find_if(
+      std::begin(windows_),
+      std::end(windows_),
+      [&event](auto const& window) {
+        return window->Id()
+          == event.window.windowID;
+      }) == std::end(windows_));
+    LOG_F(INFO,
+          "Window [id = {}] was destroyed and is now no longer tracked",
+          event.window.windowID);
+    break;
 
-      // We don't rely on this unreliable event from SDL3. Instead, we handle
-      // swapchain resizing and creation using vulkan view of the window
-      // surface and the SDL_EVENT_WINDOW_RESIZED / SDL_EVENT_WINDOW_MINIMIZED /
-      // SDL_EVENT_WINDOW_RESTORED.
-    } break;
+  case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+    LOG_F(INFO,
+          "Window [id = {}] buffer size changed to {} x {}",
+          event.window.windowID,
+          event.window.data1,
+          event.window.data2);
 
-    case SDL_EVENT_WINDOW_RESIZED: {
-      LOG_F(INFO,
-            "Window [id = {}] size changed to {} x {}",
-            event.window.windowID,
-            event.window.data1,
-            event.window.data2);
-      const auto &window = WindowFromId(event.window.windowID);
-      window.OnResized()(PixelExtent{.width = event.window.data1,
-                                     .height = event.window.data2});
-    } break;
+    // We don't rely on this unreliable event from SDL3. Instead, we handle
+    // swapchain resizing and creation using vulkan view of the window
+    // surface and the SDL_EVENT_WINDOW_RESIZED / SDL_EVENT_WINDOW_MINIMIZED /
+    // SDL_EVENT_WINDOW_RESTORED.
+  } break;
 
-    case SDL_EVENT_WINDOW_MINIMIZED: {
-      LOG_F(INFO, "Window [id = {}] minimized", event.window.windowID);
-      const auto &window = WindowFromId(event.window.windowID);
-      window.OnMinimized()();
-    } break;
+  case SDL_EVENT_WINDOW_RESIZED: {
+    LOG_F(INFO,
+          "Window [id = {}] size changed to {} x {}",
+          event.window.windowID,
+          event.window.data1,
+          event.window.data2);
+    const auto& window = WindowFromId(event.window.windowID);
+    window.OnResized()(PixelExtent
+                       {
+                         .width = event.window.data1,
+                         .height = event.window.data2
+                       });
+  } break;
 
-    case SDL_EVENT_WINDOW_MAXIMIZED: {
-      LOG_F(INFO, "Window [id = {}] maximized", event.window.windowID);
-      const auto &window = WindowFromId(event.window.windowID);
-      window.OnMaximized()();
-    } break;
+  case SDL_EVENT_WINDOW_MINIMIZED: {
+    LOG_F(INFO, "Window [id = {}] minimized", event.window.windowID);
+    const auto& window = WindowFromId(event.window.windowID);
+    window.OnMinimized()();
+  } break;
 
-    case SDL_EVENT_WINDOW_RESTORED: {
-      LOG_F(INFO, "Window [id = {}] restored", event.window.windowID);
-      const auto &window = WindowFromId(event.window.windowID);
-      window.OnRestored()();
-    } break;
+  case SDL_EVENT_WINDOW_MAXIMIZED: {
+    LOG_F(INFO, "Window [id = {}] maximized", event.window.windowID);
+    const auto& window = WindowFromId(event.window.windowID);
+    window.OnMaximized()();
+  } break;
 
-    default:
-      DLOG_F(3,
-             "Window event [{}] not expected by handler",
-             detail::SdlEventName(event.type));
+  case SDL_EVENT_WINDOW_RESTORED: {
+    LOG_F(INFO, "Window [id = {}] restored", event.window.windowID);
+    const auto& window = WindowFromId(event.window.windowID);
+    window.OnRestored()();
+  } break;
+
+  default:
+    DLOG_F(3,
+           "Window event [{}] not expected by handler",
+           detail::SdlEventName(event.type));
   }
 }

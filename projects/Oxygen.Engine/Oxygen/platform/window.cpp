@@ -118,6 +118,7 @@ void Window::RequestClose(const bool force) {
   LOG_F(INFO, "Window [id = {}] is requested to close", Id());
   pimpl_->RequestClose(force);
   if (ShouldClose()) {
+    pimpl_->NotifyClosing();
     ProcessCloseRequest(force);
     // Window will be closed and destroyed
   }
@@ -132,6 +133,10 @@ auto Window::ShouldClose() const -> bool {
 
 auto Window::OnCloseRequested() const -> sigslot::signal<bool>& {
   return pimpl_->OnCloseRequested();
+}
+
+auto Window::OnClosing() const -> sigslot::signal<>& {
+  return pimpl_->OnClosing();
 }
 
 auto Window::OnResized() const -> sigslot::signal<oxygen::PixelExtent>& {

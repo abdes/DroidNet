@@ -11,6 +11,7 @@
 #include "oxygen/api_export.h"
 #include "oxygen/base/macros.h"
 #include "oxygen/base/signal.hpp"
+#include "oxygen/input/action.h"
 #include "oxygen/platform/types.h"
 
 namespace oxygen::platform {
@@ -95,8 +96,8 @@ namespace oxygen::platform {
 
     OXYGEN_API [[nodiscard]] auto ShouldClose() const -> bool;
 
-    OXYGEN_API [[nodiscard]] auto OnCloseRequested() const
-      ->sigslot::signal<bool>&;
+    OXYGEN_API [[nodiscard]] auto OnCloseRequested() const->sigslot::signal<bool>&;
+    OXYGEN_API [[nodiscard]] auto OnClosing() const->sigslot::signal<>&;
 
     [[nodiscard]] virtual auto GetFrameBufferSize() const->PixelExtent = 0;
 

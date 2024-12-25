@@ -14,8 +14,6 @@
 #include "oxygen/platform/types.h"
 
 using testing::Eq;
-using testing::IsFalse;
-using testing::IsTrue;
 
 using oxygen::PixelExtent;
 using oxygen::PixelPosition;
@@ -23,7 +21,6 @@ using oxygen::platform::NativeWindowInfo;
 using oxygen::platform::Window;
 using oxygen::platform::WindowIdType;
 
-// NOLINTBEGIN
 class MockWindow final : public Window
 {
 public:
@@ -63,67 +60,62 @@ public:
   MOCK_METHOD(void, ProcessCloseRequest, (bool), (override));
   // clang-format on
 };
-// NOLINTEND
 
-// NOLINTNEXTLINE
 TEST(WindowTest, RequestCloseNoForce) {
   MockWindow window;
 
   EXPECT_CALL(window, ProcessCloseRequest(false)).Times(1);
 
   auto subscription =
-    window.OnCloseRequested().connect([&window](const bool force) {
-    EXPECT_THAT(force, IsFalse());
-    EXPECT_THAT(&window, Eq(&window));
-                                      });
+    window.OnCloseRequested().connect(
+      [](const bool force) {
+        EXPECT_FALSE(force);
+      });
   window.RequestClose();
-  EXPECT_THAT(window.ShouldClose(), IsTrue());
+  EXPECT_TRUE(window.ShouldClose());
   subscription.disconnect();
 }
 
-// NOLINTNEXTLINE
 TEST(WindowTest, RequestCloseNoForceRejected) {
   MockWindow window;
   auto subscription =
-    window.OnCloseRequested().connect([&window](const bool force) {
-    EXPECT_THAT(force, IsFalse());
-    EXPECT_THAT(&window, Eq(&window));
-    window.RequestNotToClose();
-                                      });
+    window.OnCloseRequested().connect(
+      [&window](const bool force) {
+        EXPECT_FALSE(force);
+        window.RequestNotToClose();
+      });
   window.RequestClose();
-  EXPECT_THAT(window.ShouldClose(), IsFalse());
+  EXPECT_FALSE(window.ShouldClose());
   subscription.disconnect();
 }
 
-// NOLINTNEXTLINE
 TEST(WindowTest, RequestCloseForce) {
   MockWindow window;
 
   EXPECT_CALL(window, ProcessCloseRequest(true)).Times(1);
 
   auto subscription =
-    window.OnCloseRequested().connect([&window](const bool force) {
-    EXPECT_THAT(force, IsTrue());
-    EXPECT_THAT(&window, Eq(&window));
-                                      });
+    window.OnCloseRequested().connect(
+      [](const bool force) {
+        EXPECT_TRUE(force);
+      });
   window.RequestClose(true);
-  EXPECT_THAT(window.ShouldClose(), IsTrue());
+  EXPECT_TRUE(window.ShouldClose());
   subscription.disconnect();
 }
 
-// NOLINTNEXTLINE
 TEST(WindowTest, RequestCloseForceRejected) {
   MockWindow window;
 
   EXPECT_CALL(window, ProcessCloseRequest(true)).Times(1);
 
   auto subscription =
-    window.OnCloseRequested().connect([&window](const bool force) {
-    EXPECT_THAT(force, IsTrue());
-    EXPECT_THAT(&window, Eq(&window));
-    window.RequestNotToClose();
-                                      });
+    window.OnCloseRequested().connect(
+      [&window](const bool force) {
+        EXPECT_TRUE(force);
+        window.RequestNotToClose();
+      });
   window.RequestClose(true);
-  EXPECT_THAT(window.ShouldClose(), IsTrue());
+  EXPECT_TRUE(window.ShouldClose());
   subscription.disconnect();
 }
