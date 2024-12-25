@@ -24,7 +24,9 @@
     <Natvis Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.natvis" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandList.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandQueue.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.cpp" />
@@ -42,7 +44,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h" />
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Commander.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandList.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandQueue.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />

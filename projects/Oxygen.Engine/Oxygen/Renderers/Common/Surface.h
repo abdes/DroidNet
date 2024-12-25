@@ -9,6 +9,7 @@
 #include "Oxygen/api_export.h"
 #include "Oxygen/Base/Resource.h"
 #include "Oxygen/Platform/Types.h"
+#include "Oxygen/Renderers/Common/Disposable.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
 namespace sigslot {
@@ -24,7 +25,7 @@ namespace oxygen::renderer {
     the display, and therefore, the surface does not have an associated swapchain. Examples of such
     usage include shadow maps, reflection maps, and post-processing effects.
    */
-  class Surface : public Resource<resources::kSurface>
+  class Surface : public Resource<resources::kSurface>, public Disposable
   {
   public:
     explicit Surface(const resources::SurfaceId& surface_id) : Resource(surface_id) {}
@@ -41,14 +42,7 @@ namespace oxygen::renderer {
     {
       Release();
       OnInitialize();
-      should_release_ = true;
-    }
-
-    void Release()
-    {
-      if (!should_release_) return;
-      OnRelease();
-      should_release_ = false;
+      ShouldRelease(true);
     }
 
     [[nodiscard]] virtual auto Width() const->uint32_t = 0;
@@ -56,10 +50,6 @@ namespace oxygen::renderer {
 
   protected:
     virtual void OnInitialize() = 0;
-    virtual void OnRelease() = 0;
-
-  private:
-    bool should_release_{ false };
   };
 
   //! Represents a surface that is associated with a window.
@@ -75,7 +65,7 @@ namespace oxygen::renderer {
   class WindowSurface : public Surface
   {
   public:
-    explicit WindowSurface(const resources::SurfaceId& surface_id, oxygen::platform::WindowPtr window)
+    explicit WindowSurface(const resources::SurfaceId& surface_id, platform::WindowPtr window)
       : Surface(surface_id)
       , window_(std::move(window))
     {

@@ -6,15 +6,11 @@
 
 #include "Oxygen/Renderers/Direct3d12/Surface.h"
 
-#include <shared_mutex>
 
 #include "detail/dx12_utils.h"
 #include "Detail/WindowSurfaceImpl.h"
-#include "oxygen/base/logging.h"
 #include "oxygen/base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
-#include "oxygen/platform/window.h"
-#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 using oxygen::renderer::resources::SurfaceId;
 using oxygen::platform::WindowPtr;

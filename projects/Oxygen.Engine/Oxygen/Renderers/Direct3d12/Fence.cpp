@@ -34,7 +34,7 @@ void Fence::Release() noexcept
   should_release_ = false;
 }
 
-void Fence::Signal(const uint64_t value)
+void Fence::Signal(const uint64_t value) const
 {
   if (value <= current_value_) {
     DLOG_F(WARNING, "New value {} must be greater than the current value {}", value, current_value_);
@@ -44,7 +44,7 @@ void Fence::Signal(const uint64_t value)
   current_value_ = value;
 }
 
-auto Fence::Signal() -> uint64_t
+auto Fence::Signal() const -> uint64_t
 {
   Signal(current_value_ + 1);
   // Increment only if the signal was successful
@@ -62,7 +62,7 @@ void Fence::Wait(const uint64_t value) const
   Wait(value, std::chrono::milliseconds(std::numeric_limits<DWORD>::max()));
 }
 
-void Fence::QueueWaitCommand(const uint64_t value)
+void Fence::QueueWaitCommand(const uint64_t value) const
 {
   pimpl_->QueueWaitCommand(value);
 }

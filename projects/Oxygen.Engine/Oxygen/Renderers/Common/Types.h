@@ -29,6 +29,29 @@ namespace oxygen {
   //! The number of frame buffers we manage
   constexpr uint32_t kFrameBufferCount{ 3 };
 
+  namespace renderer {
+
+    //! Types of command queues.
+    enum class CommandListType : int8_t
+    {
+      kGraphics = 0,      //<! Graphics command queue.
+      kCompute = 1,       //<! Compute command queue.
+      kCopy = 2,          //<! Copy command queue.
+
+      kNone = -1          //<! Invalid command queue.
+    };
+
+    inline auto to_string(CommandListType const& ct) {
+      switch (ct) {
+      case CommandListType::kGraphics: return "Graphics";
+      case CommandListType::kCompute: return "Compute";
+      case CommandListType::kCopy: return "Copy";
+      case CommandListType::kNone: return "Unknown";
+      }
+      return "Unknown";
+    }
+  }  // namespace renderer
+
   //! Forward declarations of renderer types and associated smart pointers.
   //! @{
 
@@ -38,12 +61,16 @@ namespace oxygen {
   namespace renderer {
     class Surface;
     class WindowSurface;
+    class ISynchronizationCounter;
     class IMemoryBlock;
     struct MemoryBlockDesc;
+    class CommandList;
+    class CommandQueue;
 
     using SurfacePtr = std::shared_ptr<Surface>;
     using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
     using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
+    using CommandListPtr = std::unique_ptr<CommandList>;
   }
 
   //! @}

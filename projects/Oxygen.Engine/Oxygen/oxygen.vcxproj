@@ -48,6 +48,11 @@
     <ClInclude Include="platform\platform.h" />
     <ClInclude Include="platform\Types.h" />
     <ClInclude Include="platform\window.h" />
+    <ClInclude Include="Renderers\Common\Buffer.h" />
+    <ClInclude Include="Renderers\Common\CommandList.h" />
+    <ClInclude Include="Renderers\Common\CommandQueue.h" />
+    <ClInclude Include="Renderers\Common\CommandRecorder.h" />
+    <ClInclude Include="Renderers\Common\Disposable.h" />
     <ClInclude Include="Renderers\Common\ISynchronizationCounter.h" />
     <ClInclude Include="Renderers\Common\MemoryBlock.h" />
     <ClInclude Include="Renderers\Common\Renderer.h" />
@@ -74,6 +79,8 @@
     <ClCompile Include="platform\input.cpp" />
     <ClCompile Include="platform\platform.cpp" />
     <ClCompile Include="platform\window.cpp" />
+    <ClCompile Include="Renderers\Common\CommandQueue.cpp" />
+    <ClCompile Include="Renderers\Common\Disposable.cpp" />
     <ClCompile Include="Renderers\Common\Surface.cpp" />
     <ClCompile Include="world\entity.cpp" />
   </ItemGroup>

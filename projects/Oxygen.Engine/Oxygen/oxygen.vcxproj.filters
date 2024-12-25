@@ -144,6 +144,21 @@
     <ClInclude Include="base\Signals.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="Renderers\Common\Buffer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\CommandList.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\CommandQueue.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\CommandRecorder.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\Disposable.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -228,6 +243,12 @@
     </ClCompile>
     <ClCompile Include="base\Detail\loguru.cpp">
       <Filter>Base\Detail</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\CommandQueue.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\Disposable.cpp">
+      <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

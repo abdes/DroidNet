@@ -285,7 +285,7 @@ auto Engine::Run() -> void {
 
             // Log FPS and UPS once every second
             if (module.log_timer.ElapsedTime() >= std::chrono::seconds(1)) {
-              LOG_F(1, "FPS: {} UPS: {}", module.fps.Value(), module.ups.Value());
+              LOG_F(INFO, "FPS: {} UPS: {}", module.fps.Value(), module.ups.Value());
               module.log_timer = {};
             }
           }

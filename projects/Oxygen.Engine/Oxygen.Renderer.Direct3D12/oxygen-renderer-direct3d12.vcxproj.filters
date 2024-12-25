@@ -25,9 +25,6 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Commander.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
@@ -67,6 +64,15 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandList.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandQueue.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
@@ -76,9 +82,6 @@
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Commander.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h">
@@ -125,6 +128,15 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\IDeferredReleaseController.h">
       <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandList.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandQueue.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.h">
+      <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

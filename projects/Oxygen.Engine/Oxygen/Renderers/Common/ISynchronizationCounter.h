@@ -67,11 +67,11 @@ namespace oxygen::renderer {
       submission is done out of order, and synchronization is required at
       multiple discrete points in the command queue timeline.
     */
-    virtual void Signal(uint64_t value) = 0;
+    virtual void Signal(uint64_t value) const = 0;
 
     //! Increment the counter current value on the CPU side by 1.
     //! \return The new counter value, to be used to wait for completion.
-    [[nodiscard]] virtual uint64_t Signal() = 0;
+    [[nodiscard]] virtual auto Signal() const->uint64_t = 0;
 
     //! Wait up to a certain number of milliseconds, for the counter to reach or
     //! exceed the specified value, on the CPU side.
@@ -96,7 +96,7 @@ namespace oxygen::renderer {
     //! Enqueue a command to hold the GPU for the counter to reach or exceed the
     //! specified value.
     //! \param [in] value The value that the GPU should be waiting for.
-    virtual void QueueWaitCommand(uint64_t value) = 0;
+    virtual void QueueWaitCommand(uint64_t value) const = 0;
 
     //! Get the last completed value of the counter.
     //! \return  The last value signaled by the GPU.
