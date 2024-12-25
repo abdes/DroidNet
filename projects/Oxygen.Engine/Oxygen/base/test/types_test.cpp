@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/types.h"
+#include "oxygen/base/Types.h"
 
 #include <cstdint>
 #include <string>

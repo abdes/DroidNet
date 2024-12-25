@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/platform.h"
+#include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
 #include "Oxygen/Base/Windows/ComError.h"

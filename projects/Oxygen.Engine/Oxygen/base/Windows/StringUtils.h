@@ -6,15 +6,14 @@
 
 #pragma once
 
-#include <iterator>
-#include <Oxygen/base/Platform.h>
+#include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
 #include <string>
 
 #include <Stringapiset.h>
 
-#include <Oxygen/base/Windows/Exceptions.h>
+#include "Oxygen/Base/Windows/Exceptions.h"
 
 namespace oxygen::string_utils {
 
