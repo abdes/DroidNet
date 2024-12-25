@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "oxygen/base/macros.h"
-#include "oxygen/base/time.h"
+#include "oxygen/base/Macros.h"
+#include "oxygen/base/Time.h"
 
 namespace oxygen::engine {
 

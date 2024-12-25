@@ -38,6 +38,8 @@ namespace oxygen::renderer::d3d12 {
     void QueueWaitCommand(uint64_t value) override;
     void QueueSignalCommand(uint64_t value) override;
 
+    void Flush() const { Wait(current_value_); }
+
     [[nodiscard]] auto GetCompletedValue() const->uint64_t override;
 
   private:

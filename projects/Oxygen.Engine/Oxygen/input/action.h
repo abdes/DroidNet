@@ -10,7 +10,7 @@
 #include <string>
 
 #include "oxygen/api_export.h"
-#include "oxygen/base/signal.hpp"
+#include "Oxygen/Base/Signals.h"
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/action_value.h"
 #include "oxygen/input/types.h"

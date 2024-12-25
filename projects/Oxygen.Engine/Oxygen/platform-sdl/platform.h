@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "oxygen/base/macros.h"
+#include "oxygen/base/Macros.h"
 #include "oxygen/platform/platform.h"
 #include "oxygen/platform-sdl/api_export.h"
 

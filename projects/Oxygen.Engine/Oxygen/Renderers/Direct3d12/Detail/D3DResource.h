@@ -8,7 +8,7 @@
 
 #include <d3d12.h>
 
-#include "oxygen/base/macros.h"
+#include "oxygen/base/Macros.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "oxygen/Renderers/Direct3d12/D3DPtr.h"
 

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <oxygen/base/compilers.h>
+#include <oxygen/base/Compilers.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
@@ -30,9 +30,9 @@ OXYGEN_DIAGNOSTIC_POP
 #include "../platform.h"
 #include "../window.h"
 #include "oxygen/base/logging.h"
-#include "oxygen/base/types.h"
+#include "oxygen/base/Types.h"
 #include "oxygen/platform/input_event.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 #include "oxygen/platform/window.h"
 #include "platform_impl.h"
 #include "wrapper.h"

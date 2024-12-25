@@ -1,22 +1,22 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="base\test\macros_test.cpp">
+    <ClCompile Include="Base\test\macros_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\platform_test.cpp">
+    <ClCompile Include="Base\test\platform_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\resource_handle_test.cpp">
+    <ClCompile Include="Base\test\resource_handle_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\resource_table_test.cpp">
+    <ClCompile Include="Base\test\resource_table_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\time_test.cpp">
+    <ClCompile Include="Base\test\time_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\types_test.cpp">
+    <ClCompile Include="Base\test\types_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)..\..\lib\native\src\gtest\gtest-all.cc" />
@@ -40,16 +40,16 @@
     <ClCompile Include="world\test\entity_component_test.cpp">
       <Filter>World</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\resource_test.cpp">
+    <ClCompile Include="Base\test\resource_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\StringUtils_test.cpp">
+    <ClCompile Include="Base\test\StringUtils_test.cpp">
       <Filter>Base\Windows</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\Exceptions_test.cpp">
+    <ClCompile Include="Base\test\Exceptions_test.cpp">
       <Filter>Base\Windows</Filter>
     </ClCompile>
-    <ClCompile Include="base\test\ComError_test.cpp">
+    <ClCompile Include="Base\test\ComError_test.cpp">
       <Filter>Base\Windows</Filter>
     </ClCompile>
   </ItemGroup>

@@ -8,9 +8,9 @@
 
 #include <functional>
 
-#include "oxygen/base/macros.h"
+#include "oxygen/base/Macros.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::renderer::d3d12::detail {
 
   class IDeferredReleaseController
   {

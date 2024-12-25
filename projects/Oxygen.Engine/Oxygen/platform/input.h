@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "oxygen/api_export.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 //------------------------------------------------------------------------------
 // InputSlotDetails

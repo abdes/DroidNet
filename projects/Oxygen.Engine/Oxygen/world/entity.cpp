@@ -7,7 +7,7 @@
 #include "entity.h"
 
 #include "oxygen/base/logging.h"
-#include "oxygen/base/resource_table.h"
+#include "oxygen/base/ResourceTable.h"
 #include "transform.h"
 #include <shared_mutex>
 

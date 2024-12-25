@@ -8,48 +8,17 @@
 
 #include <utility>
 
-#include "oxygen/base/logging.h"
+#include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/DeferredRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Renderers/Direct3d12/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/IDeferredReleaseController.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12::detail;
 using  oxygen::renderer::d3d12::Renderer;
 
-void DeferredResourceReleaseTracker::DeferRelease(IUnknown* resource)
-{
-  DCHECK_NOTNULL_F(resource);
-  if (resource == nullptr) return;
-
-  const auto renderer = renderer_.lock();
-  if (!renderer) throw std::runtime_error("DeferredRelease not initialized, renderer is not available");
-
-  {
-    std::lock_guard lock{ mutex_ };
-    deferred_releases_[CurrentFrameIndex()].push_back(resource);
-  }
-
-  renderer->RegisterDeferredReleases(
-    [this](const size_t frame_index)
-    {
-      ProcessDeferredReleases(frame_index);
-    });
-}
-
-void DeferredResourceReleaseTracker::ProcessDeferredReleases(const size_t frame_index)
-{
-  DCHECK_LE_F(frame_index, kFrameBufferCount);
-  DLOG_F(1, "DeferredResourceReleaseTracker::ProcessDeferredRelease for frame index `{}`", frame_index);
-
-  std::lock_guard lock{ mutex_ };
-  auto& deferred_releases = deferred_releases_[frame_index];
-  for (auto resource : deferred_releases)
-  {
-    ObjectRelease(resource);
-  }
-  deferred_releases.clear();
-}
 
 void DescriptorHeap::Initialize(
   const size_t capacity,
@@ -167,7 +136,7 @@ void DescriptorHeap::Free(DescriptorHandle& handle)
   // Remember the index for deferred release
   if (const auto renderer = renderer_.lock())
   {
-    const auto frame_index = CurrentFrameIndex();
+    const auto frame_index = GetRenderer().CurrentFrameIndex();
     deferred_release_indices_[frame_index].push_back(handle.index);
     renderer->RegisterDeferredReleases(
       [this](const size_t current_frame_index)

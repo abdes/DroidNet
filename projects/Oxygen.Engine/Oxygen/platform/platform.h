@@ -11,11 +11,11 @@
 #include <vector>
 
 #include "oxygen/api_export.h"
-#include "oxygen/base/macros.h"
-#include "oxygen/base/signal.hpp"
+#include "oxygen/base/Macros.h"
+#include "oxygen/base/Signals.h"
 #include "oxygen/platform/display.h"
 #include "oxygen/platform/input_event.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 #include "oxygen/platform/window.h"
 
 namespace oxygen {

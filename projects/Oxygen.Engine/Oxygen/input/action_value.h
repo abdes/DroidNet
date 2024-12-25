@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <variant>
 
-#include "oxygen/base/types.h"
+#include "oxygen/base/Types.h"
 
 namespace oxygen::input {
 

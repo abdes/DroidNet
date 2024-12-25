@@ -12,40 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include "oxygen/base/macros.h"
+#include "oxygen/base/Macros.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12::detail {
 
-  class DeferredResourceReleaseTracker
-  {
-  public:
-    static DeferredResourceReleaseTracker& Instance()
-    {
-      static DeferredResourceReleaseTracker instance;
-      return instance;
-    }
-
-    void DeferRelease(IUnknown* resource);
-    void ProcessDeferredReleases(size_t frame_index);
-
-    void Initialize(DeferredReleaseControllerPtr renderer)
-    {
-      renderer_ = std::move(renderer);
-    }
-
-  private:
-    DeferredResourceReleaseTracker() = default;
-    ~DeferredResourceReleaseTracker() = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(DeferredResourceReleaseTracker);
-    OXYGEN_MAKE_NON_MOVEABLE(DeferredResourceReleaseTracker);
-
-    std::vector<IUnknown*> deferred_releases_[kFrameBufferCount]{};
-    DeferredReleaseControllerPtr renderer_;
-    std::mutex mutex_;
-  };
 
   class DescriptorHeap;
 

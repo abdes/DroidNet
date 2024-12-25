@@ -8,13 +8,12 @@
 
 #include <memory>
 
-#include "oxygen/base/resource_handle.h"
+#include "Oxygen/Base/ResourceHandle.h"
 
 namespace oxygen {
 
-  /**
-   * Constants and types for render special resources.
-   *
+  //! Constants and types for render special resources.
+  /*!
    * These resources are not managed by the backend graphics API, but are
    * managed by the render and treated as resources with a handle.
    */
@@ -27,21 +26,25 @@ namespace oxygen {
   }  // namespace resources
 
 
-  /// The number of frame buffers we manage
+  //! The number of frame buffers we manage
   constexpr uint32_t kFrameBufferCount{ 3 };
 
-  /**
-   * Forward declarations of renderer types and associated smart pointers.
-   * @{
-   */
+  //! Forward declarations of renderer types and associated smart pointers.
+  //! @{
 
   class Renderer;
-  class IMemoryBlock;
-  struct MemoryBlockDesc;
-
   using RendererPtr = std::weak_ptr<Renderer>;
-  using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
 
-  /**@}*/
+  namespace renderer {
+    class Surface;
+    class WindowSurface;
+    class IMemoryBlock;
+    struct MemoryBlockDesc;
 
+    using SurfacePtr = std::shared_ptr<Surface>;
+    using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
+    using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
+  }
+
+  //! @}
 }

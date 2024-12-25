@@ -9,7 +9,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "oxygen/platform/types.h"
+#include "oxygen/platform/Types.h"
 
 using oxygen::platform::InputSlots;
 

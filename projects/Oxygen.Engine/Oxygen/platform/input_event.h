@@ -8,8 +8,8 @@
 
 #include <chrono>
 
-#include "oxygen/base/types.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/base/Types.h"
+#include "oxygen/platform/Types.h"
 
 namespace oxygen::platform {
 

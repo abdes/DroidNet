@@ -19,7 +19,7 @@
 
 #include "module.h"
 #include "oxygen/base/logging.h"
-#include "oxygen/base/time.h"
+#include "oxygen/base/Time.h"
 #include "oxygen/platform/platform.h"
 #include "version.h"
 

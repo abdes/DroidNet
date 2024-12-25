@@ -10,8 +10,8 @@
 
 #include <oxygen/core/module.h>
 
-#include "oxygen/base/macros.h"
-#include "oxygen/platform/types.h"
+#include "oxygen/base/Macros.h"
+#include "oxygen/platform/Types.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
 class MainModule : public oxygen::core::Module
@@ -33,7 +33,7 @@ public:
   void Shutdown() noexcept override;
 
 private:
-  oxygen::PlatformPtr platform_;
-  oxygen::RendererPtr renderer_;
-  oxygen::renderer::resources::SurfaceId surface_id_;
+  oxygen::PlatformPtr platform_{};
+  oxygen::RendererPtr renderer_{};
+  oxygen::renderer::SurfacePtr surface_{};
 };

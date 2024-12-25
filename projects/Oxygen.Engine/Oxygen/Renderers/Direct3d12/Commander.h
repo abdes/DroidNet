@@ -10,7 +10,7 @@
 
 #include <d3d12.h>
 
-#include "oxygen/base/macros.h"
+#include "oxygen/base/Macros.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
@@ -32,7 +32,7 @@ namespace oxygen::renderer::d3d12 {
 
     [[nodiscard]] CommandQueueType* CommandQueue() const noexcept;
     [[nodiscard]] GraphicsCommandListType* CommandList() const noexcept;
-    [[nodiscard]] size_t CurrentFrameIndex() const noexcept;
+    [[nodiscard]] auto CurrentFrameIndex() const noexcept -> size_t;
 
     void BeginFrame() const;
     void EndFrame() const;
