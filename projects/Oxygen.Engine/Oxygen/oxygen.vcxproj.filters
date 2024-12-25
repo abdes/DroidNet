@@ -159,6 +159,15 @@
     <ClInclude Include="Renderers\Common\Disposable.h">
       <Filter>Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="base\Windows\Exceptions.h">
+      <Filter>Base\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Windows\StringUtils.h">
+      <Filter>Base\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="base\Windows\ComError.h">
+      <Filter>Base\Windows</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
