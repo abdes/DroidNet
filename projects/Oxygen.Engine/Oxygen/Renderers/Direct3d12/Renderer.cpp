@@ -20,9 +20,12 @@
 #include "Oxygen/Base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Common/Types.h"
-#include "Oxygen/Renderers/Direct3d12/Commander.h"
+#include "Oxygen/Renderers/Direct3d12/CommandList.h"
+#include "Oxygen/Renderers/Direct3d12/CommandQueue.h"
+#include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/IDeferredReleaseController.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/Resources.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
@@ -232,6 +235,21 @@ namespace {
 
 // Implementation details of the Renderer class
 namespace oxygen::renderer::d3d12::detail {
+  // Anonymous namespace for command frame management
+  namespace {
+
+    struct CommandFrame
+    {
+      uint64_t fence_value{ 0 };
+
+      void Release() noexcept
+      {
+        fence_value = 0;
+      }
+    };
+
+  }  // namespace
+
 
   class RendererImpl final
     : public std::enable_shared_from_this<RendererImpl>
@@ -243,7 +261,7 @@ namespace oxygen::renderer::d3d12::detail {
     OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
     OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
 
-    auto CurrentFrameIndex() const -> size_t { return commander_->CurrentFrameIndex(); }
+    auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
     void Init(PlatformPtr platform, const RendererProperties& props);
     void Shutdown();
@@ -273,7 +291,11 @@ namespace oxygen::renderer::d3d12::detail {
     }
 
     D3D12MA::Allocator* allocator_{ nullptr };
-    std::unique_ptr<Commander> commander_{};
+
+    std::unique_ptr<CommandQueue> command_queue_{};
+    std::unique_ptr<CommandRecorder> command_recorder_{};
+    mutable size_t current_frame_index_{ 0 };
+    mutable CommandFrame frames_[kFrameBufferCount]{};
 
     DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
 
@@ -398,8 +420,11 @@ namespace oxygen::renderer::d3d12::detail {
       // Initialize deferred release manager
       DeferredReleaseTracker::Instance().Initialize(GetWeakPtr());
 
-      // Initialize the commander
-      commander_.reset(new Commander(GetMainDevice(), D3D12_COMMAND_LIST_TYPE_DIRECT));
+      // Initialize the command recorder
+      command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
+      command_queue_->Initialize();
+      command_recorder_.reset(new CommandRecorder(CommandListType::kGraphics));
+      command_recorder_->Initialize();
 
       // Initialize heaps
       rtv_heap_.Initialize(512, false, GetMainDevice(), GetWeakPtr());
@@ -434,7 +459,7 @@ namespace oxygen::renderer::d3d12::detail {
 
     // Flush any pending commands and release any deferred resources for all
     // our frame indices
-    commander_->Flush();
+    command_queue_->Flush();
     for (uint32_t index = 0; index < kFrameBufferCount; ++index) {
       ProcessDeferredRelease(index);
     }
@@ -448,9 +473,10 @@ namespace oxygen::renderer::d3d12::detail {
     rtv_heap_.Release();
     LOG_F(INFO, "RTV Descriptor heap released");
 
-    commander_->Release();
-    commander_.reset();
-    LOG_F(INFO, "Commander released");
+    command_queue_->Release();
+    command_queue_.reset();
+    command_recorder_->Release();
+    command_recorder_.reset();
 
     // Call deferred release for the last time in case some deferred releases
     // have been made while we are releasing things here
@@ -490,28 +516,32 @@ namespace oxygen::renderer::d3d12::detail {
   void RendererImpl::Render(const resources::SurfaceId& surface_id) const
   {
     DCHECK_F(surface_id.IsValid());
-    DCHECK_NOTNULL_F(commander_);
+    DCHECK_NOTNULL_F(command_recorder_);
 
     // Wait for the GPU to finish executing the previous frame, reset the
     // allocator once the GPU is done with it to free the memory we allocated to
     // store the commands.
-    commander_->BeginFrame();
-
-    // Process deferred releases
+    const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
+    command_queue_->Wait(fence_value);
     ProcessDeferredRelease(CurrentFrameIndex());
+
+    command_recorder_->Begin();
+
+    // Record commands
+    //...
+
+    auto command_list = command_recorder_->End();
+    command_queue_->Submit(command_list);
+    command_list->Release();
+    command_list.reset();
 
     // Presenting
     auto const& surface = surfaces.ItemAt(surface_id);
     surface.Present();
 
-    GraphicsCommandListType* command_list{ commander_->CommandList() };
-    // Record commands
-    //...
-
-    // Done with recording -> execute the commands, signal and increment the fence
-    // value for the next frame.
-    commander_->EndFrame();
-
+    // Signal and increment the fence value for the next frame.
+    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
+    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
   }
 
   auto RendererImpl::CreateWindowSurfaceImpl(WindowPtr window) const -> std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
@@ -519,7 +549,7 @@ namespace oxygen::renderer::d3d12::detail {
     DCHECK_NOTNULL_F(window.lock());
     DCHECK_F(window.lock()->IsValid());
 
-    const auto surface_id = surfaces.Emplace(std::move(window), commander_->CommandQueue());
+    const auto surface_id = surfaces.Emplace(std::move(window), command_queue_->GetCommandQueue());
     if (!surface_id.IsValid()) {
       return {};
     }

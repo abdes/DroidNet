@@ -13,6 +13,8 @@
 
 namespace oxygen::renderer::d3d12 {
 
+  class CommandQueue;
+
   namespace detail {
     class CommanderImpl;
     class FenceImpl;
@@ -31,11 +33,11 @@ namespace oxygen::renderer::d3d12 {
     void Initialize(uint64_t initial_value = 0) override;
     void Release() noexcept override;
 
-    void Signal(uint64_t value) override;
-    [[nodiscard]] uint64_t Signal() override;
+    void Signal(uint64_t value) const override;
+    [[nodiscard]] uint64_t Signal() const override;
     void Wait(uint64_t value, std::chrono::milliseconds timeout) const override;
     void Wait(uint64_t value) const override;
-    void QueueWaitCommand(uint64_t value) override;
+    void QueueWaitCommand(uint64_t value) const override;
     void QueueSignalCommand(uint64_t value) override;
 
     void Flush() const { Wait(current_value_); }
@@ -44,9 +46,10 @@ namespace oxygen::renderer::d3d12 {
 
   private:
     friend class detail::CommanderImpl;
+    friend class CommandQueue;
     explicit Fence(FenceImplPtr pimpl) : pimpl_{ std::move(pimpl) } {}
 
-    uint64_t current_value_{ 0 };
+    mutable uint64_t current_value_{ 0 };
     bool should_release_{ false };
 
     FenceImplPtr pimpl_{};

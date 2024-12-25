@@ -29,9 +29,12 @@ namespace oxygen::renderer::d3d12 {
   //! Forward declarations of renderer types and associated smart pointers.
   //! @{
 
-  class WindowSurface;
-  class Renderer;
+  class CommandList;
+  class CommandQueue;
+  class CommandRecorder;
   class Fence;
+  class Renderer;
+  class WindowSurface;
 
   using FencePtr = std::unique_ptr<Fence>;
   //! @}
