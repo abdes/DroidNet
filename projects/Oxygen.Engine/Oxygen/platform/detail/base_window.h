@@ -33,6 +33,7 @@ namespace oxygen::platform {
     [[nodiscard]] auto ShouldClose() const -> bool { return should_close_; }
 
     auto OnCloseRequested() -> auto& { return on_close_requested_; }
+    auto OnClosing() -> auto& { return on_closing_; }
 
     auto OnResized() -> auto& { return on_resized_; }
 
@@ -47,10 +48,15 @@ namespace oxygen::platform {
       forced_close_ = false;
     }
 
+    void NotifyClosing() {
+      OnClosing()();
+    }
+
   private:
     bool should_close_{ false };
     bool forced_close_{ false };
     sigslot::signal<bool> on_close_requested_;
+    sigslot::signal<> on_closing_;
     sigslot::signal<PixelExtent> on_resized_;
     sigslot::signal<> on_minimized_;
     sigslot::signal<> on_maximized_;
