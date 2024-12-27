@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <cassert>
 #include <d3d12.h>
 
 #include "Oxygen/Base/logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Renderers/Direct3d12/api_export.h"
 
 using oxygen::windows::ThrowOnFailed;
 
