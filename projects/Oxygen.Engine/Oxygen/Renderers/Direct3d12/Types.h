@@ -35,6 +35,7 @@ namespace oxygen::renderer::d3d12 {
   class Fence;
   class Renderer;
   class WindowSurface;
+  class IFrameLifecycleController;
 
   using FencePtr = std::unique_ptr<Fence>;
   //! @}
@@ -54,9 +55,26 @@ namespace oxygen::renderer::d3d12 {
   namespace detail {
     class IDeferredReleaseController;
     class WindowSurfaceImpl;
+    struct DescriptorHandle;
+    class DescriptorHeap;
+    class PerFrameResourceManager;
 
-    using DeferredReleaseControllerPtr = std::weak_ptr<IDeferredReleaseController>;
+    using FrameLifecycleControllerPtr = std::weak_ptr<IFrameLifecycleController>;
     using WindowSurfaceImplPtr = std::shared_ptr<WindowSurfaceImpl>;
-  }
+    using DescriptorHandlePtr = std::shared_ptr<DescriptorHandle>;
+
+    //! Get references to the Direct3D12 Renderer global objects for internal use within the
+    //! renderer implementation module.
+    /*!
+      \note These functions are not part of the public API and should not be used. For application
+      needs, use the GetRenderer() function from the renderer loader API and use the Renderer class.
+
+      \note These functions will __abort__ when called while the renderer instance is not yet
+      initialized or has been destroyed.
+    */
+    //! @{
+    [[nodiscard]] Renderer& GetRenderer();
+    //! @}
+  } // namespace oxygen::renderer::d3d12::detail
 
 }  // namespace oxygen::renderer::d3d12

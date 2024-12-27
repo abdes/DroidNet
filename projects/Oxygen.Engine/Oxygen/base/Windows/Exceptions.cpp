@@ -16,7 +16,7 @@
 #include <windows.h>
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Windows/StringUtils.h"
+#include "Oxygen/Base/StringUtils.h"
 
 using oxygen::windows::WindowsException;
 using oxygen::string_utils::WideToUtf8;

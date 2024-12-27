@@ -24,8 +24,10 @@ namespace oxygen::renderer::d3d12 {
     void Begin() override;
     auto End() -> CommandListPtr override;
 
+    void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) override;
+
   protected:
-    void OnInitialize() override {};
+    void OnInitialize() override {}
     void OnRelease() override;
 
   private:

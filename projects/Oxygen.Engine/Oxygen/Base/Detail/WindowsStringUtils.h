@@ -9,9 +9,7 @@
 #include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
-#include <string>
-
-#include <Stringapiset.h>
+#include <windows.h>
 
 #include "Oxygen/Base/Windows/Exceptions.h"
 

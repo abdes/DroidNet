@@ -9,6 +9,7 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12::detail {
   class FenceImpl final

@@ -6,43 +6,69 @@
 
 #pragma once
 
-#include <d3d12.h>
-
 #include <mutex>
 #include <utility>
 #include <vector>
 
-#include "oxygen/base/Macros.h"
+#include <d3d12.h>
+
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12::detail {
 
-
-  class DescriptorHeap;
-
   inline size_t kInvalidIndex{ std::numeric_limits<size_t>::max() };
 
   struct DescriptorHandle
   {
+    friend class DescriptorHeap;
+    friend struct DescriptorHandleDeleter;
+
+    DescriptorHandle() = default;
+    ~DescriptorHandle();
+
     D3D12_CPU_DESCRIPTOR_HANDLE cpu{};
     D3D12_GPU_DESCRIPTOR_HANDLE gpu{};
 
     [[nodiscard]] auto IsValid() const -> bool { return cpu.ptr != 0; }
     [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu.ptr != 0; }
 
+    struct Deleter
+    {
+      void operator()(DescriptorHandle* handle) const noexcept
+      {
+        if (handle)
+        {
+          handle->Free();
+          handle->allocator = nullptr;
+          delete handle;
+        }
+      }
+    };
+
   private:
-    friend class DescriptorHeap;
+    // Constructor to initialize allocator_
+    explicit DescriptorHandle(DescriptorHeap* allocator) noexcept
+      : allocator(allocator)
+    {
+    }
+    void Free();
+
     size_t index{ kInvalidIndex };
-#ifdef _DEBUG
-    DescriptorHeap* heap{ nullptr };
-#endif
+    DescriptorHeap* allocator{ nullptr };
   };
 
   class DescriptorHeap
+    : public Mixin< DescriptorHeap, Curry<MixinNamed, const char*>::mixin >
   {
   public:
-    explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type) : type_{ type }
+    //! Forwarding constructor
+    template <typename... Args>
+    constexpr explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type, Args &&...args)
+      : type_{ type }, Mixin(static_cast<decltype(args)>(args)...)
     {
     }
     ~DescriptorHeap() { Release(); }
@@ -50,17 +76,11 @@ namespace oxygen::renderer::d3d12::detail {
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
     OXYGEN_MAKE_NON_MOVEABLE(DescriptorHeap);
 
-    void Initialize(
-      size_t capacity,
-      bool is_shader_visible,
-      DeviceType* device);
-
+    void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
     void Release();
 
     [[nodiscard]] auto Allocate() -> DescriptorHandle;
     void Free(DescriptorHandle& handle);
-
-    void ProcessDeferredRelease(size_t frame_index);
 
     [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }
     [[nodiscard]] auto Size() const -> size_t { return size_; }
@@ -75,7 +95,7 @@ namespace oxygen::renderer::d3d12::detail {
 
   private:
     std::mutex mutex_{};
-    bool is_released_{ false };
+    bool should_release_{ false };
 
     DescriptorHeapType* heap_{ nullptr };
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_start_{};
@@ -85,10 +105,6 @@ namespace oxygen::renderer::d3d12::detail {
     size_t descriptor_size_{ 0 };
     D3D12_DESCRIPTOR_HEAP_TYPE type_{};
     std::unique_ptr<size_t[]> free_handles_{};
-
-    // Remember what indices for handles that are to be freed but still referred
-    // to in the corresponding frame slot.
-    std::vector<size_t> deferred_release_indices_[kFrameBufferCount]{};
-    DeferredReleaseControllerPtr renderer_;
   };
-}
+
+}  // namespace oxygen::renderer::d3d12::detail

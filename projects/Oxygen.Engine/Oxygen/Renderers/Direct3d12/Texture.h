@@ -10,7 +10,7 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/Resources.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 namespace oxygen::renderer::d3d12 {

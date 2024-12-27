@@ -9,6 +9,7 @@
 #include <wrl/client.h>
 
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
 using Microsoft::WRL::ComPtr;

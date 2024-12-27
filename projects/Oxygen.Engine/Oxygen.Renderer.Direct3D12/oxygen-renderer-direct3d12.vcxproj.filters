@@ -22,9 +22,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.cpp">
-      <Filter>Renderer\Detail</Filter>
-    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
@@ -61,9 +58,6 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.cpp">
-      <Filter>Renderer\Detail</Filter>
-    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandList.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
@@ -73,12 +67,12 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.cpp">
+      <Filter>Renderer\Detail</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
-      <Filter>Renderer\Detail</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\Resources.h">
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h">
@@ -123,12 +117,6 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h">
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DeferredRelease.h">
-      <Filter>Renderer\Detail</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\IDeferredReleaseController.h">
-      <Filter>Renderer\Detail</Filter>
-    </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandList.h">
       <Filter>Renderer</Filter>
     </ClInclude>
@@ -136,6 +124,15 @@
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h">
+      <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IFrameLifecycleController.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DeferredObjectRelease.h">
       <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>

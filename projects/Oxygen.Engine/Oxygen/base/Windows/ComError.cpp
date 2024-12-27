@@ -8,7 +8,7 @@
 #if defined(OXYGEN_WINDOWS)
 
 #include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Base/Windows/StringUtils.h"
+#include "Oxygen/Base/StringUtils.h"
 #include "Oxygen/Base/Logging.h"
 
 using oxygen::string_utils::WideToUtf8;

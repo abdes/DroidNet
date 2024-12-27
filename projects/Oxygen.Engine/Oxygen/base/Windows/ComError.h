@@ -17,7 +17,7 @@
 #include <comdef.h>
 
 #include "Oxygen/api_export.h"
-#include "Oxygen/Base/Windows/StringUtils.h"
+#include "Oxygen/Base/StringUtils.h"
 
 namespace oxygen {
   enum class ComErrorEnum;

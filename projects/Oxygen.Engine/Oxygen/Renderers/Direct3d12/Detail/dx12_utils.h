@@ -11,7 +11,6 @@
 #include "Oxygen/Base/logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
-#include "Oxygen/Renderers/Direct3d12/detail/resources.h"
 
 using oxygen::windows::ThrowOnFailed;
 

@@ -9,8 +9,9 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
-#include "oxygen/base/ResourceTable.h"
-#include "oxygen/platform/Types.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/ResourceTable.h"
+#include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
