@@ -7,8 +7,13 @@
 #pragma once
 
 #include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Platform/Types.h"
+#include "Oxygen/Renderers/Common/MixinDeferredRelease.h"
+#include "Oxygen/Renderers/Common/MixinManagedLifecycle.h"
+#include "Oxygen/Renderers/Common/MixinRendererEvents.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
 namespace oxygen {
@@ -60,19 +65,31 @@ namespace oxygen {
    * using the GetRenderer() function from the loader.
    */
   class Renderer
+    : public Mixin
+    < Renderer
+    , Curry<MixinNamed, const char*>::mixin  //<! Named object
+    , renderer::MixinManagedLifecycle        //<! Managed lifecycle
+    , renderer::MixinRendererEvents          //<! Exposes renderer events
+    , renderer::MixinDeferredRelease         //<! Handles deferred release of resources
+    >
   {
   public:
-    Renderer() = default;
-    /**
-     * Destructor. Calls Shutdown() if not already done.
-     */
-    virtual ~Renderer() { Shutdown(); }
+    //! Constructor to forward the arguments to the mixins in the chain.
+    template <typename... Args>
+    constexpr explicit Renderer(Args &&...args)
+      : Mixin(std::forward<Args>(args)...)
+    {
+    }
+
+    //! Default constructor, sets the object name.
+    Renderer() : Mixin("Renderer")
+    {
+    }
+
+    ~Renderer() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Renderer); //< Non-copyable.
     OXYGEN_MAKE_NON_MOVEABLE(Renderer); //< Non-moveable.
-
-    /// Get a user friendly name for the renderer, for logging purposes.
-    [[nodiscard]] virtual auto Name() const->std::string = 0;
 
     /**
      * Gets the index of the current frame being rendered.
@@ -85,52 +102,9 @@ namespace oxygen {
      *
      * @return The index of the current frame being rendered.
      */
-    [[nodiscard]] virtual auto CurrentFrameIndex() const->size_t = 0;
+    [[nodiscard]] virtual auto CurrentFrameIndex() const->uint32_t { return current_frame_index_; }
 
-    /**
-     * Initializes the renderer.
-     *
-     * Initialization of the renderer involving platform-specific detection of
-     * adapters, attached displays, and their capabilities, and the selection of
-     * the most suitable rendering device as the main device. That main device
-     * is unique for the lifetime of the renderer, and can be obtained at any
-     * time after initialization and before shutdown, using the GetMainDevice()
-     * method.
-     *
-     * @param platform The platform abstraction interface to use for the
-     * renderer initialization.
-     * @param props Configuration properties to customize the renderer and guide
-     * the initialization process.
-     *
-     * @throws std::runtime_error if the initialization fails.
-     */
-    void Initialize(PlatformPtr platform, const RendererProperties& props);
-
-    /**
-     * Shuts down the renderer.
-     *
-     * This method releases all resources and cleans up the renderer state.
-     * After this method is called, the renderer is in a shutdown state and
-     * cannot be used anymore. The renderer can be re-initialized by calling
-     * Initialize() again.
-     *
-     * @throws std::runtime_error if the shutdown fails. When that happens, the
-     * renderer may be in an inconsistent state, and should not be used until
-     * re-initialize.
-     */
-    void Shutdown();
-
-    /**
-     * Checks if the renderer is ready to be used.
-     *
-     * The renderer is ready to be used after it has been initialized and is not
-     * in a shutdown state.
-     *
-     * @return \c true if the renderer is ready to be used, \c false otherwise.
-     */
-    [[nodiscard]] constexpr auto IsReady() const->bool { return is_ready_; }
-
-    virtual void Render(const renderer::resources::SurfaceId& surface_id) = 0;
+    virtual void Render(const renderer::resources::SurfaceId& surface_id);
 
     /**
      * Device resources creation functions
@@ -141,55 +115,59 @@ namespace oxygen {
 
     /**@}*/
 
+
   protected:
-    virtual void OnShutdown() = 0;   //< Backend specific shutdown.
-    virtual void OnInitialize() = 0; //< Backend specific initialization.
+    template <typename Base, typename... CtorArgs>
+    friend class MixinManagedLifecycle; //< Allow access to the lifecycle methods.
+
+    virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
+    virtual void OnShutdown();
+
+    virtual void BeginFrame();
+    virtual void EndFrame();
+    virtual void RenderCurrentFrame(const renderer::resources::SurfaceId& surface_id) = 0;
 
     [[nodiscard]] auto GetPlatform() const->PlatformPtr { return platform_; }
     [[nodiscard]] auto GetPInitProperties() const-> const RendererProperties& { return props_; }
 
   private:
-    bool is_ready_{ false };
-
     RendererProperties props_;
     PlatformPtr platform_;
+
+    uint32_t current_frame_index_{ 0 };
   };
 
-  inline void Renderer::Initialize(PlatformPtr platform, const RendererProperties& props)
+  inline void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
   {
-    // If already initialized, return.
-    if (IsReady()) return;
-
     platform_ = std::move(platform);
     props_ = props;
-
-    try
-    {
-      OnInitialize();
-    }
-    catch (const std::exception& e)
-    {
-      throw std::runtime_error("renderer initialization error: " + std::string(e.what()));
-    }
-
-    is_ready_ = true;
+    EmitRendererInitialized();
   }
 
-  inline void Renderer::Shutdown()
+  inline void Renderer::OnShutdown()
   {
-    // If already shutdown, return.
-    if (!IsReady()) return;
+    EmitRendererShutdown();
+    platform_.reset();
+  }
 
-    try
-    {
-      OnShutdown();
-    }
-    catch (const std::exception& e)
-    {
-      throw std::runtime_error("renderer shutdown incomplete: " + std::string(e.what()));
-    }
+  inline void Renderer::BeginFrame()
+  {
+    DLOG_F(2, "BEGIN Frame");
+    EmitBeginFrameRender(current_frame_index_);
+  }
 
-    is_ready_ = false;
+  inline void Renderer::EndFrame()
+  {
+    EmitEndFrameRender(current_frame_index_);
+    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
+    DLOG_F(2, "END Frame");
+  }
+
+  inline void Renderer::Render(const renderer::resources::SurfaceId& surface_id)
+  {
+    BeginFrame();
+    RenderCurrentFrame(surface_id);
+    EndFrame();
   }
 
 } // namespace oxygen

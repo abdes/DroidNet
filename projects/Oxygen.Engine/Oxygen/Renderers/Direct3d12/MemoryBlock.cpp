@@ -10,6 +10,8 @@
 #include "oxygen/base/logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/D3D12MemAlloc.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 #include "Renderer.h"
 
 using namespace oxygen::renderer::d3d12;

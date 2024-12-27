@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/resource.h"
+#include "Oxygen/Base/Resource.h"
 
 #include "gtest/gtest.h"
 

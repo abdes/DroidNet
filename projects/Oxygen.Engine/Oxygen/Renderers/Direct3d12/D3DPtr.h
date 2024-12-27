@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include "Oxygen/Renderers/Direct3d12/Detail/DeferredRelease.h"
+#include "Oxygen/Renderers/Common/ObjectRelease.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -51,7 +51,7 @@ namespace oxygen::renderer::d3d12 {
     {
       if (pointer)
       {
-        detail::DeferredObjectRelease(pointer);
+        ObjectRelease(pointer);
       }
     }
   };

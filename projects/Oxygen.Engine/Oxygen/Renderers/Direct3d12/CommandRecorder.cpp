@@ -8,6 +8,8 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Types.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
 
@@ -43,6 +45,15 @@ oxygen::renderer::CommandListPtr CommandRecorder::End() {
 
   current_command_list_->OnEndRecording();
   return std::move(current_command_list_);
+}
+
+void CommandRecorder::Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
+                            float depth_value, uint8_t stencil_value)
+{
+  auto& renderer = detail::GetRenderer();
+  auto& rtv_heap = renderer.RtvHeap();
+  auto& dsv_heap = renderer.DsvHeap();
+
 }
 
 void CommandRecorder::OnRelease()

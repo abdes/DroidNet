@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Platform.h>
+#include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
-#include "Oxygen/Base/Windows/StringUtils.h"
+#include "Oxygen/Base/StringUtils.h"
 
 #include <array>
 #include <string_view>

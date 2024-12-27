@@ -9,7 +9,7 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/DeferredRelease.h"
+#include "Oxygen/Renderers/Direct3d12/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 

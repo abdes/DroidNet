@@ -4,15 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/Time.h"
+#include "Oxygen/Base/Time.h"
 
 #include <gmock/gmock-actions.h>
 #include <gmock/gmock-function-mocker.h>
 #include <gmock/gmock-spec-builders.h>
 #include <gtest/gtest.h>
-#include <oxygen/base/Types.h>
 
 #include <chrono>
+
+#include "Oxygen/Base/Types.h"
 
 using namespace std::chrono_literals;
 
@@ -25,25 +26,28 @@ using oxygen::Duration;
 using oxygen::ElapsedTimeType;
 using oxygen::TimePoint;
 
-class MockNow {
- public:
+class MockNow
+{
+public:
   // NOLINTBEGIN
   MOCK_METHOD(Duration, Now, (), (const));
   // NOLINTEND
 };
-struct MockTime {
-  inline static MockNow *mock{nullptr};
+struct MockTime
+{
+  inline static MockNow* mock{ nullptr };
   // This class is passed as template type during class B object creation in
   // unit test environment
   static auto Now() -> TimePoint { return mock->Now(); }
 };
 
-class TimeTest : public ::testing::Test {
- protected:
+class TimeTest : public ::testing::Test
+{
+protected:
   void SetUp() override { MockTime::mock = &mock_now; }
   void TearDown() override { MockTime::mock = nullptr; }
 
- public:
+public:
   MockNow mock_now;
 };
 
@@ -60,9 +64,9 @@ TEST_F(ElapsedTimeTest, StartTime) {
 // NOLINTNEXTLINE
 TEST_F(ElapsedTimeTest, ElapsedTime) {
   EXPECT_CALL(mock_now, Now)
-      .Times(2)
-      .WillOnce(Return(10us))
-      .WillOnce(Return(25us));
+    .Times(2)
+    .WillOnce(Return(10us))
+    .WillOnce(Return(25us));
 
   const ElapsedTimeType<MockTime> elapsed;
   EXPECT_TRUE(elapsed.StartTime() == 10us);
@@ -83,9 +87,9 @@ TEST_F(DeltaTimeTest, AtCreation) {
 // NOLINTNEXTLINE
 TEST_F(DeltaTimeTest, AfterUpdate) {
   EXPECT_CALL(mock_now, Now)
-      .Times(2)
-      .WillOnce(Return(10us))
-      .WillOnce(Return(30us));
+    .Times(2)
+    .WillOnce(Return(10us))
+    .WillOnce(Return(30us));
 
   DeltaTimeType<MockTime> delta;
   delta.Update();
@@ -107,11 +111,11 @@ TEST_F(ChangePerSecondTest, AtCreation) {
 // NOLINTNEXTLINE
 TEST_F(ChangePerSecondTest, AfterUpdate) {
   EXPECT_CALL(mock_now, Now)
-      .Times(4)
-      .WillOnce(Return(0us))
-      .WillOnce(Return(10us))
-      .WillOnce(Return(1s))
-      .WillOnce(Return(2s + 10us));
+    .Times(4)
+    .WillOnce(Return(0us))
+    .WillOnce(Return(10us))
+    .WillOnce(Return(1s))
+    .WillOnce(Return(2s + 10us));
 
   ChangePerSecondType<MockTime> cps;
   cps.Update();

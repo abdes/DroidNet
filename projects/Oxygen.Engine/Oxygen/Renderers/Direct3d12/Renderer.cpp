@@ -24,10 +24,9 @@
 #include "Oxygen/Renderers/Direct3d12/CommandQueue.h"
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/IDeferredReleaseController.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/Resources.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
 #include "Oxygen/Renderers/Direct3d12/Surface.h"
@@ -52,7 +51,7 @@ namespace {
     if (main_device) {
       const ULONG ref_count = main_device.Get()->AddRef();
       main_device.Get()->Release();
-      DLOG_F(2, "Main Device reference count: {}", ref_count);
+      // DLOG_F(2, "Main Device reference count: {}", ref_count);
     }
 #endif
     return main_device;
@@ -252,29 +251,24 @@ namespace oxygen::renderer::d3d12::detail {
 
 
   class RendererImpl final
-    : public std::enable_shared_from_this<RendererImpl>
-    , public IDeferredReleaseController
   {
   public:
-    RendererImpl();
-    ~RendererImpl() override = default;
-    OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
-    OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
+    RendererImpl() = default;
+    ~RendererImpl() = default;
+    //OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
+    //OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
 
     auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
     void Init(PlatformPtr platform, const RendererProperties& props);
-    void Shutdown();
+    void ShutdownRenderer();
+    void ShutdownDevice();
 
-    void Render(const resources::SurfaceId& surface_id) const;
+    void BeginFrame();
+    void EndFrame();
+    void RenderCurrentFrame(const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(WindowPtr window) const
       ->std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
-
-    void RegisterDeferredReleases(std::function<void(size_t)> handler) const override
-    {
-      auto& deferred_release = deferred_releases_[CurrentFrameIndex()];
-      deferred_release.AddHandler(std::move(handler));
-    }
 
     [[nodiscard]] auto RtvHeap() const->DescriptorHeap& { return rtv_heap_; }
     [[nodiscard]] auto DsvHeap() const->DescriptorHeap& { return dsv_heap_; }
@@ -297,12 +291,12 @@ namespace oxygen::renderer::d3d12::detail {
     mutable size_t current_frame_index_{ 0 };
     mutable CommandFrame frames_[kFrameBufferCount]{};
 
-    DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
+    //DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
 
-    mutable DescriptorHeap rtv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV };
-    mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV };
-    mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
-    mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
+    mutable DescriptorHeap rtv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, "RTV Descrfiptor Heap" };
+    mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descrfiptor Heap" };
+    mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descrfiptor Heap" };
+    mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descrfiptor Heap" };
 
     class DeferredRelease
     {
@@ -350,13 +344,10 @@ namespace oxygen::renderer::d3d12::detail {
 
     mutable DeferredRelease deferred_releases_[kFrameBufferCount]{ };
   };
-  RendererImpl::RendererImpl() : IDeferredReleaseController()
-  {
-  }
 
   void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
   {
-    if (GetMainDevice()) Shutdown();
+    DCHECK_F(GetMainDevice() == nullptr);
 
     LOG_SCOPE_FUNCTION(INFO);
     try {
@@ -418,7 +409,7 @@ namespace oxygen::renderer::d3d12::detail {
       }
 
       // Initialize deferred release manager
-      DeferredReleaseTracker::Instance().Initialize(GetWeakPtr());
+      //DeferredReleaseTracker::Instance().Initialize(GetWeakPtr());
 
       // Initialize the command recorder
       command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
@@ -427,14 +418,10 @@ namespace oxygen::renderer::d3d12::detail {
       command_recorder_->Initialize();
 
       // Initialize heaps
-      rtv_heap_.Initialize(512, false, GetMainDevice(), GetWeakPtr());
-      NameObject(rtv_heap_.Heap(), L"RTV Descriptor Heap");
-      dsv_heap_.Initialize(512, false, GetMainDevice(), GetWeakPtr());
-      NameObject(dsv_heap_.Heap(), L"DSV Descriptor Heap");
-      srv_heap_.Initialize(4096, true, GetMainDevice(), GetWeakPtr());
-      NameObject(srv_heap_.Heap(), L"SRV Descriptor Heap");
-      uav_heap_.Initialize(512, false, GetMainDevice(), GetWeakPtr());
-      NameObject(uav_heap_.Heap(), L"UAV Descriptor Heap");
+      rtv_heap_.Initialize(512, false, GetMainDevice());
+      dsv_heap_.Initialize(512, false, GetMainDevice());
+      srv_heap_.Initialize(4096, true, GetMainDevice());
+      uav_heap_.Initialize(512, false, GetMainDevice());
 
       // Load engine shaders
       if (!shaders::Initialize())
@@ -450,7 +437,7 @@ namespace oxygen::renderer::d3d12::detail {
     }
   }
 
-  void RendererImpl::Shutdown()
+  void RendererImpl::ShutdownRenderer()
   {
     LOG_SCOPE_FUNCTION(INFO);
 
@@ -460,33 +447,25 @@ namespace oxygen::renderer::d3d12::detail {
     // Flush any pending commands and release any deferred resources for all
     // our frame indices
     command_queue_->Flush();
-    for (uint32_t index = 0; index < kFrameBufferCount; ++index) {
-      ProcessDeferredRelease(index);
-    }
 
     srv_heap_.Release();
-    LOG_F(INFO, "SRV Descriptor heap released");
     uav_heap_.Release();
-    LOG_F(INFO, "UAV Descriptor heap released");
     dsv_heap_.Release();
-    LOG_F(INFO, "DSV Descriptor heap released");
     rtv_heap_.Release();
-    LOG_F(INFO, "RTV Descriptor heap released");
 
     command_queue_->Release();
     command_queue_.reset();
     command_recorder_->Release();
     command_recorder_.reset();
 
-    // Call deferred release for the last time in case some deferred releases
-    // have been made while we are releasing things here
-    LOG_F(INFO, "Processing deferred releases one last time...");
-    for (uint32_t index = 0; index < kFrameBufferCount; ++index) {
-      ProcessDeferredRelease(index);
-    }
-
     SafeRelease(&allocator_);
     LOG_F(INFO, "D3D12MA Memory Allocator released");
+  }
+
+  void RendererImpl::ShutdownDevice()
+  {
+    LOG_SCOPE_FUNCTION(INFO);
+
     GetFactoryInternal().Reset();
     LOG_F(INFO, "D3D12 DXGI Factory reset");
 
@@ -513,9 +492,8 @@ namespace oxygen::renderer::d3d12::detail {
     LOG_F(INFO, "D3D12 Main Device reset");
   }
 
-  void RendererImpl::Render(const resources::SurfaceId& surface_id) const
+  void RendererImpl::BeginFrame()
   {
-    DCHECK_F(surface_id.IsValid());
     DCHECK_NOTNULL_F(command_recorder_);
 
     // Wait for the GPU to finish executing the previous frame, reset the
@@ -523,10 +501,20 @@ namespace oxygen::renderer::d3d12::detail {
     // store the commands.
     const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
     command_queue_->Wait(fence_value);
-    ProcessDeferredRelease(CurrentFrameIndex());
+    //ProcessDeferredRelease(CurrentFrameIndex());
+
+  }
+  void RendererImpl::EndFrame()
+  {
+    // Signal and increment the fence value for the next frame.
+    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
+    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
+  }
+  void RendererImpl::RenderCurrentFrame(const resources::SurfaceId& surface_id) const
+  {
+    DCHECK_F(surface_id.IsValid());
 
     command_recorder_->Begin();
-
     // Record commands
     //...
 
@@ -539,9 +527,6 @@ namespace oxygen::renderer::d3d12::detail {
     auto const& surface = surfaces.ItemAt(surface_id);
     surface.Present();
 
-    // Signal and increment the fence value for the next frame.
-    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
-    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
   }
 
   auto RendererImpl::CreateWindowSurfaceImpl(WindowPtr window) const -> std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
@@ -568,28 +553,41 @@ namespace oxygen::renderer::d3d12::detail {
 
 using oxygen::renderer::d3d12::Renderer;
 
-
-void Renderer::OnInitialize()
+Renderer::Renderer() : oxygen::Renderer("D3D12 Renderer")
 {
+}
+
+void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
+{
+  if (GetMainDevice()) OnShutdown();
+
+  oxygen::Renderer::OnInitialize(platform, props);
   pimpl_ = std::make_shared<detail::RendererImpl>();
   pimpl_->Init(GetPlatform(), GetPInitProperties());
-  LOG_F(INFO, "Renderer `{}` initialized", Name());
 }
 
 void Renderer::OnShutdown()
 {
-  pimpl_->Shutdown();
-  LOG_F(INFO, "Renderer `{}` shut down", Name());
+  pimpl_->ShutdownRenderer();
+  oxygen::Renderer::OnShutdown();
+  pimpl_->ShutdownDevice();
 }
 
-void Renderer::Render(const resources::SurfaceId& surface_id)
+void Renderer::BeginFrame()
 {
-  pimpl_->Render(surface_id);
+  pimpl_->BeginFrame();
+  oxygen::Renderer::BeginFrame();
 }
 
-auto Renderer::CurrentFrameIndex() const -> size_t
+void Renderer::EndFrame()
 {
-  return pimpl_->CurrentFrameIndex();
+  pimpl_->EndFrame();
+  oxygen::Renderer::EndFrame();
+}
+
+void Renderer::RenderCurrentFrame(const resources::SurfaceId& surface_id)
+{
+  pimpl_->RenderCurrentFrame(surface_id);
 }
 
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&

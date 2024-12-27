@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "glm/vec4.hpp"
+
 #include "Oxygen/Renderers/Common/Disposable.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
@@ -34,6 +36,9 @@ namespace oxygen::renderer {
 
     virtual void Begin() = 0;
     virtual auto End() -> CommandListPtr = 0;
+
+    // Graphics commands
+    virtual void Clear(uint32_t flags, uint32_t numTargets, const uint32_t* slots, const glm::vec4* colors, float depthValue, uint8_t stencilValue) = 0;
 
   protected:
     virtual void OnInitialize() = 0;

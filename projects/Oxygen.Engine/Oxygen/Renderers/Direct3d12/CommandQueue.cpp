@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Renderers/Direct3d12/CommandList.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/DeferredRelease.h"
+#include "Oxygen/Renderers/Direct3d12/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Fence.h"

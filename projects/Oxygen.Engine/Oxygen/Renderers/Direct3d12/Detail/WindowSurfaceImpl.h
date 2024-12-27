@@ -12,8 +12,8 @@
 #include "oxygen/base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "oxygen/platform/window.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Renderer.h"
-#include "resources.h"
 
 using oxygen::renderer::resources::SurfaceId;
 using oxygen::platform::WindowPtr;

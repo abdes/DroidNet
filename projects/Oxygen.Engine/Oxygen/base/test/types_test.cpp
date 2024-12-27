@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/base/Types.h"
+#include "Oxygen/Base/Types.h"
 
 #include <cstdint>
 #include <string>
@@ -13,7 +13,7 @@
 #include "gtest/gtest.h"
 
 template <typename T>
-concept has_to_string = requires(const T &type) {
+concept has_to_string = requires(const T & type) {
   { to_string(type) } -> std::convertible_to<std::string>;
 };
 

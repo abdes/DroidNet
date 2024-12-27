@@ -129,9 +129,6 @@
     <ClInclude Include="base\Windows\Exceptions.h">
       <Filter>Base\Windows</Filter>
     </ClInclude>
-    <ClInclude Include="base\Windows\StringUtils.h">
-      <Filter>Base\Windows</Filter>
-    </ClInclude>
     <ClInclude Include="base\Windows\ComError.h">
       <Filter>Base\Windows</Filter>
     </ClInclude>
@@ -167,6 +164,30 @@
     </ClInclude>
     <ClInclude Include="base\Windows\ComError.h">
       <Filter>Base\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\MixinManagedLifecycle.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\MixinRendererEvents.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\MixinDeferredRelease.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\ObjectRelease.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Mixin.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\MixinNamed.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\StringUtils.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Detail\WindowsStringUtils.h">
+      <Filter>Base\Detail</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
