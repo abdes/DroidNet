@@ -1,3 +1,4 @@
+//===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
@@ -23,9 +24,11 @@ namespace oxygen::renderer::d3d12::detail {
     {
     }
 
-    void SetSize(int width, int height);
     void Present() const;
-    void CreateSwapChain(DXGI_FORMAT format = kDefaultBackBufferFormat);
+
+    void ShouldResize(const bool flag) { should_resize_ = flag; }
+    auto ShouldResize() const -> bool { return should_resize_; }
+    void Resize();
 
     [[nodiscard]] uint32_t Width() const;
     [[nodiscard]] uint32_t Height() const;
@@ -35,12 +38,15 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] D3D12_RECT Scissor() const;
 
   private:
-    friend class WindowSurface;
-    void DoRelease();
+    friend class oxygen::renderer::d3d12::WindowSurface;
+    void CreateSwapChain(DXGI_FORMAT format = kDefaultBackBufferFormat);
+    void ReleaseSwapChain();
     void Finalize();
 
     std::weak_ptr<platform::Window> window_;
     IDXGISwapChain4* swap_chain_{ nullptr };
+    bool should_resize_{ false };
+
     mutable UINT current_backbuffer_index_{ 0 };
     D3D12_VIEWPORT viewport_{};
     D3D12_RECT scissor_{};

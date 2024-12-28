@@ -7,48 +7,25 @@
 #pragma once
 
 #include <cassert>
+#include <string>
+
 #include <d3d12.h>
 
 #include "Oxygen/Base/logging.h"
+#include "Oxygen/Base/StringUtils.h"
 #include "Oxygen/Base/Windows/ComError.h"
 
 using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::renderer::d3d12 {
 
-  inline auto ToNarrow(const std::wstring& wide_string) -> std::string
-  {
-    if (wide_string.empty()) return {};
-
-    const int size_needed = WideCharToMultiByte(
-      CP_UTF8,
-      0,
-      wide_string.data(),
-      static_cast<int>(wide_string.size()),
-      nullptr,
-      0,
-      nullptr,
-      nullptr);
-    std::string utf8_string(size_needed, 0);
-
-    WideCharToMultiByte(
-      CP_UTF8,
-      0,
-      wide_string.data(),
-      static_cast<int>(wide_string.size()),
-      utf8_string.data(),
-      size_needed,
-      nullptr,
-      nullptr);
-
-    return utf8_string;
-  }
-
   inline void NameObject(ID3D12Object* const object, const std::wstring& name)
   {
 #ifdef _DEBUG
     ThrowOnFailed(object->SetName(name.c_str()));
-    LOG_F(1, "+D3D12 named object created: {}", ToNarrow(name));
+    std::string narrow_name{};
+    string_utils::WideToUtf8(name, narrow_name);
+    LOG_F(1, "+D3D12 named object created: {}", narrow_name);
 #endif
   }
 

@@ -47,7 +47,7 @@ WindowSurface::WindowSurface(const SurfaceId& surface_id, WindowPtr window, std:
 
 void WindowSurface::Resize(const int width, const int height)
 {
-  CALL_IMPL(SetSize(width, height));
+  CALL_IMPL(Resize());
 }
 
 void WindowSurface::Present() const
@@ -84,7 +84,7 @@ void WindowSurface::InitializeSurface()
 void WindowSurface::ReleaseSurface() noexcept
 {
   Super::ReleaseSurface();
-  pimpl_->DoRelease();
+  pimpl_->ReleaseSwapChain();
 }
 
 #undef CALL_IMPL
