@@ -8,11 +8,12 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
+#include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/MixinDeferredRelease.h"
-#include "Oxygen/Renderers/Common/MixinManagedLifecycle.h"
 #include "Oxygen/Renderers/Common/MixinRendererEvents.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
@@ -68,7 +69,8 @@ namespace oxygen {
     : public Mixin
     < Renderer
     , Curry<MixinNamed, const char*>::mixin  //<! Named object
-    , renderer::MixinManagedLifecycle        //<! Managed lifecycle
+    , MixinShutdown                //<! Managed lifecycle
+    , MixinInitialize                //<! Managed lifecycle
     , renderer::MixinRendererEvents          //<! Exposes renderer events
     , renderer::MixinDeferredRelease         //<! Handles deferred release of resources
     >
@@ -117,11 +119,14 @@ namespace oxygen {
 
 
   protected:
-    template <typename Base, typename... CtorArgs>
-    friend class MixinManagedLifecycle; //< Allow access to the lifecycle methods.
 
     virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
+    template <typename Base, typename... CtorArgs>
+    friend class MixinInitialize; //< Allow access to OnInitialize.
+
     virtual void OnShutdown();
+    template <typename Base>
+    friend class MixinShutdown; //< Allow access to OnShutdown.
 
     virtual void BeginFrame();
     virtual void EndFrame();

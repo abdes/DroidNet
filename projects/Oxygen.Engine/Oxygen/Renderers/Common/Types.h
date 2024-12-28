@@ -61,7 +61,7 @@ namespace oxygen {
   namespace renderer {
     class Surface;
     class WindowSurface;
-    class ISynchronizationCounter;
+    class SynchronizationCounter;
     class IMemoryBlock;
     struct MemoryBlockDesc;
     class CommandList;

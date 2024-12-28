@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <memory>
+
 namespace oxygen::renderer {
 
   //! Requires a type `T` to have `Release()` method. Typically the case for
@@ -23,6 +25,27 @@ namespace oxygen::renderer {
   {
     if (resource) {
       resource->Release();
+      resource = nullptr;
+    }
+  }
+
+  //! Immediately releases a resource that has a `Release()` method, resets the
+  //! reference to it, and sets the provided pointer to `nullptr`.
+  template <typename T>
+  void ObjectRelease(std::shared_ptr<T>& resource) noexcept requires HasReleaseMethod<T>
+  {
+    if (resource) {
+      resource->Release();
+      resource = nullptr;
+    }
+  }
+
+  //! Immediately releases a resource with no `Release()` method, resets the
+  //! reference to it and sets the provided pointer to `nullptr`.
+  template <typename T>
+  void ObjectRelease(std::shared_ptr<T>& resource) noexcept
+  {
+    if (resource) {
       resource = nullptr;
     }
   }

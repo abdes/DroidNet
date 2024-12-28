@@ -29,14 +29,18 @@ namespace oxygen::renderer::d3d12 {
       kExecuting = 3,       //<! Command list is being executed.
     };
 
-    CommandList() = default;
+    //! Minimal constructor, sets the object name.
+    explicit CommandList() : Base("Command List")
+    {
+    }
+
     ~CommandList() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_DEFAULT_MOVABLE(CommandList);
 
-    void OnInitialize(CommandListType type) override;
-    void OnRelease() override;
+    void InitializeCommandList(CommandListType type) override;
+    void ReleaseCommandList() noexcept override;
 
     ID3D12GraphicsCommandList* GetCommandList() const { return command_list_; }
     State GetState() const { return state_; }

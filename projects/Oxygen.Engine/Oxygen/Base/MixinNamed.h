@@ -12,9 +12,11 @@ namespace oxygen {
 
   //! Mixin class that provides a name to the object which can be used for
   //! logging and debugging.
+  // ReSharper disable once CppClassCanBeFinal (mixin should never be made final)
   template <typename Base, string_utils::AnyStringType Name>
-  struct MixinNamed : Base
+  class MixinNamed : public Base
   {
+  public:
     //! Forwarding constructor, which expects the name of the object as the
     //! first argument
     /*!
@@ -25,15 +27,20 @@ namespace oxygen {
     constexpr explicit MixinNamed(Name class_name, Args &&...args)
       : Base(static_cast<decltype(args)>(args)...)
     {
-      string_utils::WideToUtf8(class_name, object_name);
+      string_utils::WideToUtf8(class_name, object_name_);
     }
+
+    virtual ~MixinNamed() noexcept = default;
+
+    OXYGEN_DEFAULT_COPYABLE(MixinNamed);
+    OXYGEN_DEFAULT_MOVABLE(MixinNamed);
 
     //! Returns the name of the object as a UTF-8 string. Use
     //! `string_utils::Utf8ToWide` to convert it to a wide string if needed.
-    [[nodiscard]] auto ObjectName() const -> const std::string& { return object_name; }
+    [[nodiscard]] auto ObjectName() const -> const std::string& { return object_name_; }
 
   private:
-    std::string object_name;
+    std::string object_name_;
   };
 
 }  // namespace oxygen

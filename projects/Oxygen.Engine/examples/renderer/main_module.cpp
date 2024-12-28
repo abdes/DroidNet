@@ -14,7 +14,7 @@
 #include "oxygen/input/types.h"
 #include "oxygen/platform/platform.h"
 #include "Oxygen/Renderers/Common/Renderer.h"
-#include "Oxygen/Renderers/Direct3d12/Surface.h"
+#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 #include "Oxygen/Renderers/Loader/RendererLoader.h"
 
 using oxygen::input::Action;

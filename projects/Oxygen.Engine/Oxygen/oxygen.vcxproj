@@ -19,7 +19,10 @@
     <ClInclude Include="base\Logging.h" />
     <ClInclude Include="base\Macros.h" />
     <ClInclude Include="Base\Mixin.h" />
+    <ClInclude Include="Base\MixinDisposable.h" />
+    <ClInclude Include="Base\MixinInitialize.h" />
     <ClInclude Include="Base\MixinNamed.h" />
+    <ClInclude Include="Base\MixinShutdown.h" />
     <ClInclude Include="base\Platforms.h" />
     <ClInclude Include="base\Resource.h" />
     <ClInclude Include="base\ResourceHandle.h" />
@@ -55,10 +58,9 @@
     <ClInclude Include="Renderers\Common\CommandList.h" />
     <ClInclude Include="Renderers\Common\CommandQueue.h" />
     <ClInclude Include="Renderers\Common\CommandRecorder.h" />
+    <ClInclude Include="Renderers\Common\DeferredObjectRelease.h" />
     <ClInclude Include="Renderers\Common\MixinDeferredRelease.h" />
-    <ClInclude Include="Renderers\Common\Disposable.h" />
-    <ClInclude Include="Renderers\Common\ISynchronizationCounter.h" />
-    <ClInclude Include="Renderers\Common\MixinManagedLifecycle.h" />
+    <ClInclude Include="Renderers\Common\SynchronizationCounter.h" />
     <ClInclude Include="Renderers\Common\MemoryBlock.h" />
     <ClInclude Include="Renderers\Common\ObjectRelease.h" />
     <ClInclude Include="Renderers\Common\Renderer.h" />
@@ -86,8 +88,6 @@
     <ClCompile Include="platform\input.cpp" />
     <ClCompile Include="platform\platform.cpp" />
     <ClCompile Include="platform\window.cpp" />
-    <ClCompile Include="Renderers\Common\CommandQueue.cpp" />
-    <ClCompile Include="Renderers\Common\Disposable.cpp" />
     <ClCompile Include="Renderers\Common\Surface.cpp" />
     <ClCompile Include="world\entity.cpp" />
   </ItemGroup>

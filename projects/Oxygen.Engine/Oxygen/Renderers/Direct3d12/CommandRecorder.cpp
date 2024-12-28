@@ -13,12 +13,6 @@
 
 using namespace oxygen::renderer::d3d12;
 
-CommandRecorder::CommandRecorder(const CommandListType type)
-  : Base(type)
-{
-  LOG_F(1, "{} Command Recorder created", nostd::to_string(type));
-}
-
 void CommandRecorder::Begin() {
   DCHECK_F(current_command_list_ == nullptr);
 
@@ -56,8 +50,7 @@ void CommandRecorder::Clear(uint32_t flags, uint32_t num_targets, const uint32_t
 
 }
 
-void CommandRecorder::OnRelease()
+void CommandRecorder::ReleaseCommandRecorder() noexcept
 {
   current_command_list_.reset();
-  LOG_F(INFO, "Command Recorder released");
 }

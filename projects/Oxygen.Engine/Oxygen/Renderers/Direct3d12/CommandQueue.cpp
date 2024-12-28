@@ -7,10 +7,9 @@
 #include "Oxygen/Renderers/Direct3d12/CommandQueue.h"
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Renderers/Common/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/CommandList.h"
-#include "Oxygen/Renderers/Direct3d12/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Fence.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
@@ -43,9 +42,8 @@ namespace {
 }  // namespace
 
 using namespace oxygen::renderer::d3d12;
-using detail::DeferredObjectRelease;
 
-void CommandQueue::OnInitialize()
+void CommandQueue::InitializeCommandQueue()
 {
   const auto device = GetMainDevice();
   DCHECK_NOTNULL_F(device);
@@ -77,8 +75,6 @@ void CommandQueue::OnInitialize()
     device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),
     fmt::format("could not create {} Command Queue", nostd::to_string(GetQueueType())));
   NameObject(command_queue_, GetNameForType(d3d12_type));
-
-  ShouldRelease(true);
 }
 
 void CommandQueue::Submit(const CommandListPtr& command_list) {
@@ -89,20 +85,12 @@ void CommandQueue::Submit(const CommandListPtr& command_list) {
   d3d12_command_list->OnExecuted();
 }
 
-void CommandQueue::Flush() {
-  const auto fence = dynamic_cast<Fence*>(fence_.get());
-  CHECK_NOTNULL_F(fence);
-  fence->Flush();
+void CommandQueue::ReleaseCommandQueue() noexcept
+{
+  DeferredObjectRelease(command_queue_, detail::GetRenderer().GetPerFrameResourceManager());
 }
 
-void CommandQueue::OnRelease()
+auto CommandQueue::CreateSynchronizationCounter() -> std::unique_ptr<SynchronizationCounter>
 {
-  LOG_F(INFO, "Command Queue released (deferred)");
-  DeferredObjectRelease(command_queue_);
-}
-
-auto CommandQueue::CreateSynchronizationCounter() -> std::unique_ptr<ISynchronizationCounter>
-{
-  auto fence_impl = std::make_unique<detail::FenceImpl>(command_queue_);
-  return std::unique_ptr<Fence>(new Fence(std::move(fence_impl)));
+  return std::make_unique<Fence>(command_queue_);
 }

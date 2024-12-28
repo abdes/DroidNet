@@ -6,6 +6,11 @@
 
 #pragma once
 
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinDisposable.h"
+#include "Oxygen/Base/MixinInitialize.h"
+#include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/Types.h"
 
 namespace oxygen::renderer {
@@ -32,33 +37,25 @@ namespace oxygen::renderer {
     interface leaves the flexibility of how to structure the work submission and
     execution to the user.
   */
-  class ISynchronizationCounter
+  class SynchronizationCounter
+    : public Mixin<SynchronizationCounter
+    , Curry<MixinNamed, const char*>::mixin
+    , MixinDisposable
+    , MixinInitialize // last to consume remaining args
+    >
   {
   public:
-    //! Creates a new instance of the fence, but does not initialize it.
-    ISynchronizationCounter() = default;
+    //! Constructor to forward the arguments to the mixins in the chain.
+    template <typename... Args>
+    constexpr explicit SynchronizationCounter(Args &&...args)
+      : Mixin(std::forward<Args>(args)...)
+    {
+    }
 
-    //! Destructor, may automatically call `Release()` if not done yet.
-    virtual ~ISynchronizationCounter() = default;
+    ~SynchronizationCounter() override = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(ISynchronizationCounter);
-    OXYGEN_MAKE_NON_MOVEABLE(ISynchronizationCounter);
-
-    //! Initialize the synchronization counter with an initial value.
-    virtual void Initialize(uint64_t initial_value = 0) = 0;
-
-    //! Safely release any resources used by the counter.
-    /*!
-      Implementations must ensure that any resources being released are no
-      longer used by the GPU.
-
-      \note Following the general practice of deterministic resource management,
-      the Release() method should be explicitly called before the destructor is
-      invoked. However, it is recommended to have an implementation of Release()
-      that guards against double calls, and to call it from the destructor if it
-      has not been done yet.
-    */
-    virtual void Release() noexcept = 0;
+    OXYGEN_MAKE_NON_COPYABLE(SynchronizationCounter);
+    OXYGEN_MAKE_NON_MOVEABLE(SynchronizationCounter);
 
     //! Set the counter to the specified value on the CPU side.
     /*!
@@ -101,6 +98,43 @@ namespace oxygen::renderer {
     //! Get the last completed value of the counter.
     //! \return  The last value signaled by the GPU.
     [[nodiscard]] virtual auto GetCompletedValue() const->uint64_t = 0;
+
+    //! Get the current value of the counter.
+    //! \return  The last value signaled by the CPU.
+    [[nodiscard]] virtual auto GetCurrentValue() const->uint64_t = 0;
+
+  protected:
+    virtual void InitializeSynchronizationObject(uint64_t initial_value) = 0;
+    virtual void ReleaseSynchronizationObject() noexcept = 0;
+
+  private:
+    void OnInitialize(const uint64_t initial_value)
+    {
+      if (this->self().ShouldRelease())
+      {
+        const auto msg = fmt::format("{} OnInitialize() called twice without calling Release()", this->self().ObjectName());
+        LOG_F(ERROR, "{}", msg);
+        throw std::runtime_error(msg);
+      }
+      try {
+        InitializeSynchronizationObject(initial_value);
+        this->self().ShouldRelease(true);
+      }
+      catch (const std::exception& e) {
+        LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
+        throw;
+      }
+    }
+    template <typename Base, typename... CtorArgs>
+    friend class MixinInitialize; //< Allow access to OnInitialize.
+
+    void OnRelease() noexcept
+    {
+      ReleaseSynchronizationObject();
+      this->self().IsInitialized(false);
+    }
+    template <typename Base>
+    friend class MixinDisposable; //< Allow access to OnRelease.
   };
 
 }  // namespace oxygen::renderer

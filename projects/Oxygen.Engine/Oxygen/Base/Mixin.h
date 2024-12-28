@@ -206,7 +206,7 @@ namespace oxygen {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wsuggest-destructor-override"
 #endif
-    ~Mixin() = default;
+    virtual ~Mixin() = default;
 #if defined(__clang__)
 #pragma clang diagnostic push
 #endif
@@ -225,10 +225,10 @@ namespace oxygen {
     template <typename Base> using mixin = Mixin<Base, Args...>;
   };
 
-} // namespace oxygen::mixin
+} // namespace oxygen
 
 /// Utility mixins
-namespace oxygen::mixins {
+namespace oxygen::mixin {
 
   /// Implementation detail used in the `Provides` mixin.
   struct Deferred
@@ -261,4 +261,4 @@ namespace oxygen::mixins {
     }
   };
 
-} // namespace oxygen::mixins
+} // namespace oxygen::mixin

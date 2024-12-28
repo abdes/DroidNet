@@ -37,6 +37,25 @@ namespace oxygen::renderer {
     */
     template <typename T>
     void RegisterDeferredRelease(std::shared_ptr<T> resource)
+      requires HasReleaseMethod<T>
+    {
+      auto& frame_resources = deferred_releases_[current_frame_index_];
+      frame_resources.emplace_back(
+        [resource = std::move(resource)]() mutable {
+          resource->Release();
+          resource.reset();
+        });
+    }
+
+    //! Registers a resource managed through a `std::shared_ptr` for deferred
+    //! release.
+    /*!
+     \note This method can be used for resources that are released via their
+     destructor, or can be used with a custom deleter. The custom deleter can
+     help release the resource to an allocator, a shared pool, etc.
+    */
+    template <typename T>
+    void RegisterDeferredRelease(std::shared_ptr<T> resource)
     {
       auto& frame_resources = deferred_releases_[current_frame_index_];
       frame_resources.emplace_back(
@@ -112,7 +131,7 @@ namespace oxygen::renderer {
   /*!
    \tparam Base The base class to mix-in the deferred resource release
 
-   \note This mixin requires the `MixinManagedLifecycle` mixin to be also mixed-in.
+   \note This mixin requires the `MixinRendererEvents` mixin to be also mixed-in.
    When the `GetPerFrameResourceManager()` is called for the first time, it
    hooks itself with the frame and renderer events.
 

@@ -9,14 +9,12 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
-#include <mutex>
 
 #include <dxgi1_6.h>
 #include <shared_mutex>
 #include <wrl/client.h>
 
 #include "Oxygen/Base/Compilers.h"
-#include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Common/Types.h"
@@ -26,11 +24,10 @@
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/FenceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
-#include "Oxygen/Renderers/Direct3d12/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
+#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 
 using Microsoft::WRL::ComPtr;
 using oxygen::windows::ThrowOnFailed;
@@ -267,8 +264,8 @@ namespace oxygen::renderer::d3d12::detail {
     void BeginFrame();
     void EndFrame();
     void RenderCurrentFrame(const resources::SurfaceId& surface_id) const;
-    auto CreateWindowSurfaceImpl(WindowPtr window) const
-      ->std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
+    auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
+      ->std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
 
     [[nodiscard]] auto RtvHeap() const->DescriptorHeap& { return rtv_heap_; }
     [[nodiscard]] auto DsvHeap() const->DescriptorHeap& { return dsv_heap_; }
@@ -278,12 +275,6 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] D3D12MA::Allocator* GetAllocator() const { return allocator_; }
 
   private:
-    void ProcessDeferredRelease(const size_t frame_index) const
-    {
-      auto& deferred_release = deferred_releases_[frame_index];
-      deferred_release.InvokeHandlers(frame_index);
-    }
-
     D3D12MA::Allocator* allocator_{ nullptr };
 
     std::unique_ptr<CommandQueue> command_queue_{};
@@ -297,52 +288,6 @@ namespace oxygen::renderer::d3d12::detail {
     mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descrfiptor Heap" };
     mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descrfiptor Heap" };
     mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descrfiptor Heap" };
-
-    class DeferredRelease
-    {
-    public:
-      DeferredRelease() = default;
-      ~DeferredRelease() = default;
-
-      OXYGEN_MAKE_NON_COPYABLE(DeferredRelease);
-      OXYGEN_MAKE_NON_MOVEABLE(DeferredRelease);
-
-      void InvokeHandlers(const size_t frame_index)
-      {
-        std::lock_guard lock{ mutex_ };
-
-        if (handlers_.empty()) return;
-
-        for (const auto& handler : handlers_)
-        {
-          handler(frame_index);
-        }
-        handlers_.clear();
-      }
-
-      void AddHandler(std::function<void(size_t)> handler)
-      {
-        std::lock_guard lock{ mutex_ };
-
-        // Check if the handler already exists
-        const auto it = std::ranges::find_if(
-          handlers_,
-          [&handler](const std::function<void(size_t)>& existing_handler) {
-            return handler.target_type() == existing_handler.target_type();
-          });
-
-        if (it == handlers_.end())
-        {
-          handlers_.push_back(std::move(handler));
-        }
-      }
-
-    private:
-      mutable std::mutex mutex_{};
-      std::vector<std::function<void(size_t)>> handlers_{};
-    };
-
-    mutable DeferredRelease deferred_releases_[kFrameBufferCount]{ };
   };
 
   void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
@@ -529,7 +474,7 @@ namespace oxygen::renderer::d3d12::detail {
 
   }
 
-  auto RendererImpl::CreateWindowSurfaceImpl(WindowPtr window) const -> std::pair<SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
+  auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
   {
     DCHECK_NOTNULL_F(window.lock());
     DCHECK_F(window.lock()->IsValid());
@@ -610,7 +555,7 @@ auto Renderer::UavHeap() const -> detail::DescriptorHeap&
   return pimpl_->UavHeap();
 }
 
-auto Renderer::CreateWindowSurface(WindowPtr window) const ->SurfacePtr
+auto Renderer::CreateWindowSurface(platform::WindowPtr window) const ->SurfacePtr
 {
   DCHECK_NOTNULL_F(window.lock());
   DCHECK_F(window.lock()->IsValid());

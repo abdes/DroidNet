@@ -34,7 +34,7 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Surface.cpp">
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\WindowSurface.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp">
@@ -51,9 +51,6 @@
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp">
       <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.cpp">
-      <Filter>Renderer\Detail</Filter>
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp">
       <Filter>Renderer\Detail</Filter>
@@ -90,7 +87,7 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Surface.h">
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\WindowSurface.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Texture.h">
@@ -107,9 +104,6 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h">
       <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\FenceImpl.h">
-      <Filter>Renderer\Detail</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h">
       <Filter>Renderer\Detail</Filter>
@@ -128,12 +122,6 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h">
       <Filter>Renderer\Detail</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\IFrameLifecycleController.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DeferredObjectRelease.h">
-      <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

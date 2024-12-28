@@ -3,26 +3,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Renderers/Direct3d12/Surface.h"
+#pragma once
 
-#include <shared_mutex>
+#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 
-#include "dx12_utils.h"
-#include "oxygen/base/logging.h"
-#include "oxygen/base/ResourceTable.h"
-#include "Oxygen/Base/Windows/ComError.h"
-#include "oxygen/platform/window.h"
+#include "Oxygen/Platform/Window.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
-using oxygen::renderer::resources::SurfaceId;
-using oxygen::platform::WindowPtr;
-using oxygen::renderer::Surface;
-using oxygen::renderer::d3d12::WindowSurface;
-using oxygen::windows::ThrowOnFailed;
-
-
-#pragma once
 
 namespace oxygen::renderer::d3d12::detail {
 
@@ -30,7 +18,7 @@ namespace oxygen::renderer::d3d12::detail {
   {
   public:
 
-    explicit WindowSurfaceImpl(WindowPtr window, CommandQueueType* command_queue)
+    explicit WindowSurfaceImpl(platform::WindowPtr window, CommandQueueType* command_queue)
       : window_(std::move(window)), command_queue_(command_queue)
     {
     }
