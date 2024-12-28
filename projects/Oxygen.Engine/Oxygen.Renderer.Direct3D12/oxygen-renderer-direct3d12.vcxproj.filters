@@ -67,6 +67,9 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
@@ -122,6 +125,9 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h">
       <Filter>Renderer\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.h">
+      <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

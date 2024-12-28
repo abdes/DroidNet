@@ -14,6 +14,7 @@
 #include <shared_mutex>
 #include <wrl/client.h>
 
+#include "DebugLayer.h"
 #include "Oxygen/Base/Compilers.h"
 #include "Oxygen/Base/ResourceTable.h"
 #include "Oxygen/Base/Windows/ComError.h"
@@ -288,6 +289,8 @@ namespace oxygen::renderer::d3d12::detail {
     mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descrfiptor Heap" };
     mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descrfiptor Heap" };
     mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descrfiptor Heap" };
+
+    DebugLayer debug_layer_{};
   };
 
   void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
@@ -299,23 +302,6 @@ namespace oxygen::renderer::d3d12::detail {
       // Setup the DXGI factory
       InitializeFactory(props.enable_debug);
 
-
-      // Optionally enable debugging layer and GPU-based validation
-      if (props.enable_debug)
-      {
-        ComPtr<ID3D12Debug1> debug_controller;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_controller)))) {
-          debug_controller->EnableDebugLayer();
-          if (props.enable_validation) {
-            debug_controller->SetEnableGPUBasedValidation(TRUE);
-          }
-        }
-        else
-        {
-          LOG_F(WARNING, "Failed to enable the debug layer");
-        }
-      }
-
       // Discover adapters and select the most suitable one
       const auto [best_adapter, best_adapter_index] = DiscoverAdapters(
         [](const AdapterDesc& adapter) {
@@ -324,6 +310,9 @@ namespace oxygen::renderer::d3d12::detail {
       const auto& best_adapter_desc = adapters[best_adapter_index];
       LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
 
+      // Initialize the Debug Layer and GPU-based validation
+      debug_layer_.Initialize(props.enable_debug, props.enable_validation);
+
       // Create the device with the maximum feature level of the selected adapter
       ThrowOnFailed(
         D3D12CreateDevice(
@@ -331,15 +320,6 @@ namespace oxygen::renderer::d3d12::detail {
           best_adapter_desc.max_feature_level,
           IID_PPV_ARGS(&GetMainDeviceInternal())));
       NameObject(GetMainDevice(), L"MAIN DEVICE");
-
-#ifdef _DEBUG
-      ComPtr<ID3D12InfoQueue> info_queue;
-      if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
-        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true));
-        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true));
-        ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true));
-      }
-#endif
 
       {
         D3D12MA::ALLOCATOR_DESC allocator_desc = {};
@@ -352,9 +332,6 @@ namespace oxygen::renderer::d3d12::detail {
           throw std::runtime_error("Failed to initialize D3D12MemoryAllocator");
         }
       }
-
-      // Initialize deferred release manager
-      //DeferredReleaseTracker::Instance().Initialize(GetWeakPtr());
 
       // Initialize the command recorder
       command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
@@ -414,27 +391,10 @@ namespace oxygen::renderer::d3d12::detail {
     GetFactoryInternal().Reset();
     LOG_F(INFO, "D3D12 DXGI Factory reset");
 
-#ifdef _DEBUG
-    ComPtr<ID3D12InfoQueue> info_queue;
-    if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
-      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, false));
-      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, false));
-      ThrowOnFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, false));
-      info_queue.Reset();
-
-      // Check for leftover live objects
-      ComPtr<ID3D12DebugDevice2> debug_device;
-      if (SUCCEEDED(GetMainDevice()->QueryInterface(IID_PPV_ARGS(&debug_device)))) {
-        GetMainDeviceInternal().Reset();
-        ThrowOnFailed(debug_device->ReportLiveDeviceObjects(
-          D3D12_RLDO_SUMMARY | D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL));
-        debug_device.Reset();
-      }
-    }
-#endif
-
     CHECK_EQ_F(GetMainDeviceInternal().Reset(), 0);
     LOG_F(INFO, "D3D12 Main Device reset");
+
+    debug_layer_.Shutdown();
   }
 
   void RendererImpl::BeginFrame()
