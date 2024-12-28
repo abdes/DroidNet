@@ -9,6 +9,8 @@
 #include <d3d12.h>
 
 #include "Oxygen/Renderers/Common/CommandQueue.h"
+#include "Renderer.h"
+#include "Types.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -27,14 +29,18 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_MAKE_NON_MOVEABLE(CommandQueue);
 
     void Submit(const CommandListPtr& command_list) override;
-    void Flush() override;
 
     [[nodiscard]] ID3D12CommandQueue* GetCommandQueue() const { return command_queue_; }
 
   protected:
-    void OnInitialize() override;
-    void OnRelease() override;
-    auto CreateSynchronizationCounter() -> std::unique_ptr<ISynchronizationCounter> override;
+    void InitializeCommandQueue() override;
+    void ReleaseCommandQueue() noexcept override;
+
+    [[nodiscard]] auto CreateSynchronizationCounter() -> std::unique_ptr<SynchronizationCounter> override;
+    [[nodiscard]] auto GetPerFrameResourceManager() const->PerFrameResourceManager & override
+    {
+      return detail::GetRenderer().GetPerFrameResourceManager();
+    }
 
   private:
     ID3D12CommandQueue* command_queue_{};

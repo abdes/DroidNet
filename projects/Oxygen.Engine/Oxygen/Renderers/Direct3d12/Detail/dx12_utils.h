@@ -52,15 +52,6 @@ namespace oxygen::renderer::d3d12 {
 #endif
   }
 
-  template<typename T>
-  void ObjectRelease(T*& resource) noexcept
-  {
-    if (resource) {
-      resource->Release();
-      resource = nullptr;
-    }
-  }
-
   //////////////////////////////////////////////////////////////////////////////
 
 

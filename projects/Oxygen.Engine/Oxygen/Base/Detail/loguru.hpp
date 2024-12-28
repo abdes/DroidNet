@@ -1337,13 +1337,17 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 
 #  if LOGURU_DEBUG_LOGGING
    // Debug logging enabled:
-#    define DLOG_F(verbosity_name, ...) LOG_F(verbosity_name, __VA_ARGS__)
-#    define DVLOG_F(verbosity, ...) VLOG_F(verbosity, __VA_ARGS__)
-#    define DLOG_IF_F(verbosity_name, ...) LOG_IF_F(verbosity_name, __VA_ARGS__)
-#    define DVLOG_IF_F(verbosity, ...) VLOG_IF_F(verbosity, __VA_ARGS__)
-#    define DRAW_LOG_F(verbosity_name, ...)                                    \
-      RAW_LOG_F(verbosity_name, __VA_ARGS__)
-#    define DRAW_VLOG_F(verbosity, ...) RAW_VLOG_F(verbosity, __VA_ARGS__)
+
+   // https://github.com/emilk/loguru/issues/97
+   // Explicitly force expansion of the forwarded __VA_ARGS__
+#    define EXPAND(x) x
+
+#    define DLOG_F(verbosity_name, ...) EXPAND(LOG_F(verbosity_name, __VA_ARGS__))
+#    define DVLOG_F(verbosity, ...) EXPAND(VLOG_F(verbosity, __VA_ARGS__))
+#    define DLOG_IF_F(verbosity_name, ...) EXPAND(LOG_IF_F(verbosity_name, __VA_ARGS__))
+#    define DVLOG_IF_F(verbosity, ...) EXPAND(VLOG_IF_F(verbosity, __VA_ARGS__))
+#    define DRAW_LOG_F(verbosity_name, ...) EXPAND(RAW_LOG_F(verbosity_name, __VA_ARGS__))
+#    define DRAW_VLOG_F(verbosity, ...) EXPAND(RAW_VLOG_F(verbosity, __VA_ARGS__))
 #  else
    // Debug logging disabled:
 #    define DLOG_F(verbosity_name, ...)

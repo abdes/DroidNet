@@ -27,7 +27,7 @@ auto WindowSurface::Height() const -> uint32_t
   throw std::runtime_error("Window is no longer valid");
 }
 
-void WindowSurface::OnInitialize()
+void WindowSurface::InitializeSurface()
 {
   const auto window = window_.lock();
   if (!window) throw std::runtime_error("Window is no longer valid");
@@ -67,11 +67,11 @@ void WindowSurface::OnInitialize()
       DCHECK_NOTNULL_F(on_restored_);
       on_restored_->disconnect();
 
-      Release();
+      this->self().Release();
     }));
 }
 
-void WindowSurface::OnRelease()
+void WindowSurface::ReleaseSurface() noexcept
 {
   DCHECK_F(IsValid());
 

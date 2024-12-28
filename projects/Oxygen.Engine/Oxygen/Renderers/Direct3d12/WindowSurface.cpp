@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Renderers/Direct3d12/Surface.h"
+#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 
 
 #include "detail/dx12_utils.h"
@@ -75,15 +75,15 @@ D3D12_RECT WindowSurface::Scissor() const
   RETURN_IMPL(Scissor(), {});
 }
 
-void WindowSurface::OnInitialize()
+void WindowSurface::InitializeSurface()
 {
-  Super::OnInitialize();
+  Super::InitializeSurface();
   CALL_IMPL(CreateSwapChain());
 }
 
-void WindowSurface::OnRelease()
+void WindowSurface::ReleaseSurface() noexcept
 {
-  Super::OnRelease();
+  Super::ReleaseSurface();
   pimpl_->DoRelease();
 }
 

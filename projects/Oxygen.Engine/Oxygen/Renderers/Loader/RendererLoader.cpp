@@ -15,8 +15,8 @@ using namespace oxygen::graphics;
 
 namespace {
 
-  // This is the single instance of the loaded rendderer, which is wrapped in a
-  // shared pointer that will call the backend's destroy function when no longer
+  // This is the single instance of the loaded renderer, which is wrapped in a
+  // shared pointer that will call the backend destroy function when no longer
   // referenced. any additional reference to the renderer will be through a weak
   // pointer returned by GetRenderer(), thus ensuring that we actually have a
   // single strong reference.

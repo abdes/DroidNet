@@ -6,10 +6,14 @@
 
 #pragma once
 
-#include "Oxygen/api_export.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinDisposable.h"
+#include "Oxygen/Base/MixinInitialize.h"
+#include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/Resource.h"
+#include "Oxygen/Base/Types.h"
 #include "Oxygen/Platform/Types.h"
-#include "Oxygen/Renderers/Common/Disposable.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
 namespace sigslot {
@@ -25,12 +29,33 @@ namespace oxygen::renderer {
     the display, and therefore, the surface does not have an associated swapchain. Examples of such
     usage include shadow maps, reflection maps, and post-processing effects.
    */
-  class Surface : public Resource<resources::kSurface>, public Disposable
+  class Surface
+    : public Resource<resources::kSurface>
+    , public Mixin<Surface
+    , Curry<MixinNamed, const char*>::mixin
+    , MixinDisposable
+    , MixinInitialize // last to consume remaining args
+    >
   {
   public:
-    explicit Surface(const resources::SurfaceId& surface_id) : Resource(surface_id) {}
-    explicit Surface() = default; // Create a Surface with an invalid id
-    ~Surface() override { Release(); }
+    //! Constructor to forward the arguments to the mixins in the chain.
+    template <typename... Args>
+    constexpr explicit Surface(const resources::SurfaceId& surface_id,
+                               Args &&...args) requires (sizeof...(args) > 0)
+      : Resource(surface_id), Mixin(std::forward<Args>(args)...)
+    {
+    }
+    constexpr explicit Surface(const resources::SurfaceId& surface_id)
+      : Resource(surface_id), Mixin("Surface")
+    {
+    }
+
+    Surface() // Create a Surface with an invalid id
+      : Resource(), Mixin("Surface")
+    {
+    }
+
+    ~Surface() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Surface);
     OXYGEN_MAKE_NON_MOVEABLE(Surface);
@@ -38,18 +63,43 @@ namespace oxygen::renderer {
     virtual void Resize(int width, int height) = 0;
     virtual void Present() const = 0;
 
-    void Initialize()
-    {
-      Release();
-      OnInitialize();
-      ShouldRelease(true);
-    }
-
     [[nodiscard]] virtual auto Width() const->uint32_t = 0;
     [[nodiscard]] virtual auto Height() const->uint32_t = 0;
 
+
   protected:
-    virtual void OnInitialize() = 0;
+    virtual void InitializeSurface() = 0;
+    virtual void ReleaseSurface() noexcept = 0;
+
+  private:
+    void OnInitialize()
+    {
+      if (this->self().ShouldRelease())
+      {
+        const auto msg = fmt::format("{} OnInitialize() called twice without calling Release()", this->self().ObjectName());
+        LOG_F(ERROR, "{}", msg);
+        throw std::runtime_error(msg);
+      }
+      try {
+        InitializeSurface();
+        DLOG_F(INFO, "{} initialized", this->self().ObjectName());
+        this->self().ShouldRelease(true);
+      }
+      catch (const std::exception& e) {
+        LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
+        throw;
+      }
+    }
+    template <typename Base, typename... CtorArgs>
+    friend class MixinInitialize; //< Allow access to OnInitialize.
+
+    void OnRelease() noexcept
+    {
+      ReleaseSurface();
+      this->self().IsInitialized(false);
+    }
+    template <typename Base>
+    friend class MixinDisposable; //< Allow access to OnRelease.
   };
 
   //! Represents a surface that is associated with a window.
@@ -65,12 +115,27 @@ namespace oxygen::renderer {
   class WindowSurface : public Surface
   {
   public:
-    explicit WindowSurface(const resources::SurfaceId& surface_id, platform::WindowPtr window)
-      : Surface(surface_id)
+    //! Constructor to forward the arguments to the mixins in the chain.
+    template <typename... Args>
+    explicit WindowSurface(const resources::SurfaceId& surface_id,
+                           platform::WindowPtr window,
+                           Args &&...args) requires (sizeof...(args) > 0)
+      : Mixin(std::forward<Args>(args)...)
+      , Surface(surface_id)
       , window_(std::move(window))
     {
     }
-    OXYGEN_API WindowSurface() = default; // Create a WindowSurface with an invalid id
+    explicit WindowSurface(const resources::SurfaceId& surface_id,
+                           platform::WindowPtr window)
+      : Surface(surface_id), window_(std::move(window))
+    {
+    }
+
+    WindowSurface() // Create a WindowSurface with an invalid id
+      : Surface()
+    {
+    }
+
     OXYGEN_API ~WindowSurface() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
@@ -90,7 +155,7 @@ namespace oxygen::renderer {
       window events to handlers that will request swapchain resizes, and must be always called by
       derived classes.
      */
-    OXYGEN_API void OnInitialize() override;
+    OXYGEN_API void InitializeSurface() override;
 
     //! Release the window surface.
     /*!
@@ -98,7 +163,7 @@ namespace oxygen::renderer {
       swapchain and disconnecting from window events. The base class implementation releases the
       swapchain and must be always called by derived classes.
      */
-    OXYGEN_API void OnRelease() override;
+    OXYGEN_API void ReleaseSurface() noexcept override;
 
   private:
     platform::WindowPtr window_;

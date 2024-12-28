@@ -45,8 +45,8 @@ namespace oxygen::renderer::d3d12 {
 
 
   protected:
-    OXYGEN_D3D12_API void OnInitialize() override;
-    OXYGEN_D3D12_API void OnRelease() override;
+    OXYGEN_D3D12_API void InitializeSurface() override;
+    OXYGEN_D3D12_API void ReleaseSurface() noexcept override;
 
   private:
     WindowSurface(const resources::SurfaceId& surface_id, platform::WindowPtr window, detail::WindowSurfaceImplPtr impl);

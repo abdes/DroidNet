@@ -15,7 +15,11 @@ namespace oxygen::renderer::d3d12 {
   {
     using Base = renderer::CommandRecorder;
   public:
-    explicit CommandRecorder(const CommandListType type);
+    explicit CommandRecorder(const CommandListType type)
+      : Base(type)
+    {
+
+    }
     ~CommandRecorder() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
@@ -27,8 +31,8 @@ namespace oxygen::renderer::d3d12 {
     void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) override;
 
   protected:
-    void OnInitialize() override {}
-    void OnRelease() override;
+    void InitializeCommandRecorder() override {}
+    void ReleaseCommandRecorder() noexcept override;
 
   private:
     std::unique_ptr<CommandList> current_command_list_;

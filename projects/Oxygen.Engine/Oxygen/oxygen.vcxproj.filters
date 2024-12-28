@@ -123,7 +123,7 @@
     <ClInclude Include="Renderers\Common\Types.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="Renderers\Common\ISynchronizationCounter.h">
+    <ClInclude Include="Renderers\Common\SynchronizationCounter.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="base\Windows\Exceptions.h">
@@ -153,20 +153,11 @@
     <ClInclude Include="Renderers\Common\CommandRecorder.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="Renderers\Common\Disposable.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
     <ClInclude Include="base\Windows\Exceptions.h">
-      <Filter>Base\Windows</Filter>
-    </ClInclude>
-    <ClInclude Include="base\Windows\StringUtils.h">
       <Filter>Base\Windows</Filter>
     </ClInclude>
     <ClInclude Include="base\Windows\ComError.h">
       <Filter>Base\Windows</Filter>
-    </ClInclude>
-    <ClInclude Include="Renderers\Common\MixinManagedLifecycle.h">
-      <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="Renderers\Common\MixinRendererEvents.h">
       <Filter>Renderer</Filter>
@@ -188,6 +179,18 @@
     </ClInclude>
     <ClInclude Include="Base\Detail\WindowsStringUtils.h">
       <Filter>Base\Detail</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\MixinDisposable.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\MixinInitialize.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\DeferredObjectRelease.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\MixinShutdown.h">
+      <Filter>Base</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -273,12 +276,6 @@
     </ClCompile>
     <ClCompile Include="base\Detail\loguru.cpp">
       <Filter>Base\Detail</Filter>
-    </ClCompile>
-    <ClCompile Include="Renderers\Common\CommandQueue.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="Renderers\Common\Disposable.cpp">
-      <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

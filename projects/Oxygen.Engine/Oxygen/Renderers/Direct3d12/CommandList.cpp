@@ -9,9 +9,10 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Renderers/Direct3d12/DeferredObjectRelease.h"
+#include "Oxygen/Renderers/Common/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
+#include "Renderer.h"
 
 namespace {
 
@@ -42,9 +43,8 @@ namespace {
 }  // namespace
 
 using namespace oxygen::renderer::d3d12;
-using detail::DeferredObjectRelease;
 
-void CommandList::OnInitialize(CommandListType type) {
+void CommandList::InitializeCommandList(CommandListType type) {
   // TODO: consider if we want to reuse command list objects
 
   D3D12_COMMAND_LIST_TYPE d3d12_type;
@@ -82,18 +82,16 @@ void CommandList::OnInitialize(CommandListType type) {
   }
   catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create CommandList: {}", e.what());
-    OnRelease();
+    ReleaseCommandList();
     throw;
   }
 
   state_ = State::kFree;
-  ShouldRelease(true);
 }
 
-void CommandList::OnRelease() {
-  DLOG_F(1, "Releasing Command List and its Command Allocator");
-  DeferredObjectRelease(command_allocator_);
-  DeferredObjectRelease(command_list_);
+void CommandList::ReleaseCommandList() noexcept {
+  if (command_allocator_) DeferredObjectRelease(command_allocator_, detail::GetRenderer().GetPerFrameResourceManager());
+  if (command_list_) DeferredObjectRelease(command_list_, detail::GetRenderer().GetPerFrameResourceManager());
 }
 
 void CommandList::OnBeginRecording() {

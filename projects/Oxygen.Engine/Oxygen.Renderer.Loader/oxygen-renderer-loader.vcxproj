@@ -20,7 +20,10 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\Oxygen\Renderers\Loader\RendererLoader.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Loader\RendererLoader.cpp">
+      <PreprocessToFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</PreprocessToFile>
+      <PreprocessToFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</PreprocessToFile>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Loader\RendererLoader.h" />
