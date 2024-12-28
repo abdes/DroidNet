@@ -34,11 +34,6 @@ namespace oxygen::renderer::d3d12::detail {
     CHECK_NOTNULL_F(GetRendererInternal());
     return *GetRendererInternal();
   }
-
-  auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&
-  {
-    return GetRendererInternal()->GetPerFrameResourceManager();
-  }
 }  // namespace oxygen::renderer::d3d12
 
 extern "C" __declspec(dllexport) void* GetRendererModuleApi()

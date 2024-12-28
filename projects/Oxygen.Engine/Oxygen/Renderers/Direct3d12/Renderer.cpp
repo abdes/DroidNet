@@ -32,7 +32,6 @@
 
 using Microsoft::WRL::ComPtr;
 using oxygen::windows::ThrowOnFailed;
-using oxygen::renderer::d3d12::ToNarrow;
 using oxygen::renderer::d3d12::DeviceType;
 using oxygen::renderer::d3d12::FactoryType;
 
@@ -97,8 +96,10 @@ namespace {
 
   AdapterDesc CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter)
   {
+    std::string description{};
+    oxygen::string_utils::WideToUtf8(desc.Description, description);
     AdapterDesc adapter_info{
-      .name = ToNarrow(desc.Description),
+      .name = description,
       .vendor_id = desc.VendorId,
       .device_id = desc.DeviceId,
       .dedicated_memory = desc.DedicatedVideoMemory,
@@ -262,8 +263,8 @@ namespace oxygen::renderer::d3d12::detail {
     void ShutdownRenderer();
     void ShutdownDevice();
 
-    void BeginFrame();
-    void EndFrame();
+    void BeginFrame() const;
+    void EndFrame() const;
     void RenderCurrentFrame(const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
       ->std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
@@ -285,12 +286,14 @@ namespace oxygen::renderer::d3d12::detail {
 
     //DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
 
-    mutable DescriptorHeap rtv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, "RTV Descrfiptor Heap" };
-    mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descrfiptor Heap" };
-    mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descrfiptor Heap" };
-    mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descrfiptor Heap" };
+    mutable DescriptorHeap rtv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV, "RTV Descriptor Heap" };
+    mutable DescriptorHeap dsv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descriptor Heap" };
+    mutable DescriptorHeap srv_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descriptor Heap" };
+    mutable DescriptorHeap uav_heap_{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descriptor Heap" };
 
+#if defined(_DEBUG)
     DebugLayer debug_layer_{};
+#endif
   };
 
   void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
@@ -310,8 +313,10 @@ namespace oxygen::renderer::d3d12::detail {
       const auto& best_adapter_desc = adapters[best_adapter_index];
       LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
 
+#if defined(_DEBUG)
       // Initialize the Debug Layer and GPU-based validation
       debug_layer_.Initialize(props.enable_debug, props.enable_validation);
+#endif
 
       // Create the device with the maximum feature level of the selected adapter
       ThrowOnFailed(
@@ -381,6 +386,8 @@ namespace oxygen::renderer::d3d12::detail {
     command_recorder_.reset();
 
     SafeRelease(&allocator_);
+    // TODO: SafeRelease for objects that need to be released after a full flush
+    // otherwise, we should use ObjectRelease() or DeferredObjectRelease()
     LOG_F(INFO, "D3D12MA Memory Allocator released");
   }
 
@@ -394,10 +401,12 @@ namespace oxygen::renderer::d3d12::detail {
     CHECK_EQ_F(GetMainDeviceInternal().Reset(), 0);
     LOG_F(INFO, "D3D12 Main Device reset");
 
+#if defined(_DEBUG)
     debug_layer_.Shutdown();
+#endif
   }
 
-  void RendererImpl::BeginFrame()
+  void RendererImpl::BeginFrame() const
   {
     DCHECK_NOTNULL_F(command_recorder_);
 
@@ -406,18 +415,25 @@ namespace oxygen::renderer::d3d12::detail {
     // store the commands.
     const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
     command_queue_->Wait(fence_value);
-    //ProcessDeferredRelease(CurrentFrameIndex());
 
   }
-  void RendererImpl::EndFrame()
+  void RendererImpl::EndFrame() const
   {
     // Signal and increment the fence value for the next frame.
     frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
     current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
   }
+
   void RendererImpl::RenderCurrentFrame(const resources::SurfaceId& surface_id) const
   {
     DCHECK_F(surface_id.IsValid());
+    auto& surface = surfaces.ItemAt(surface_id);
+
+    if (surface.ShouldResize())
+    {
+      command_queue_->Flush();
+      surface.Resize();
+    }
 
     command_recorder_->Begin();
     // Record commands
@@ -429,9 +445,7 @@ namespace oxygen::renderer::d3d12::detail {
     command_list.reset();
 
     // Presenting
-    auto const& surface = surfaces.ItemAt(surface_id);
     surface.Present();
-
   }
 
   auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>

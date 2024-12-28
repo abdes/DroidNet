@@ -25,8 +25,6 @@ namespace oxygen::renderer::d3d12 {
 
   class WindowSurface : public renderer::WindowSurface
   {
-    friend class Renderer;
-
     using Super = renderer::WindowSurface;
 
   public:
@@ -50,6 +48,7 @@ namespace oxygen::renderer::d3d12 {
 
   private:
     WindowSurface(const resources::SurfaceId& surface_id, platform::WindowPtr window, detail::WindowSurfaceImplPtr impl);
+    friend class Renderer; // Renderer needs to create WindowSurface instances
 
     detail::WindowSurfaceImplPtr pimpl_{ };
   };

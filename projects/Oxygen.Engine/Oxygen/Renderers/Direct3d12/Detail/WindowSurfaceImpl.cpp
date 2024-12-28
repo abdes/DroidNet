@@ -1,9 +1,16 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
 
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 
-#include "dx12_utils.h"
+#include "Oxygen/Base/Windows/ComError.h"
 
 using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
+using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
@@ -22,15 +29,31 @@ namespace {
   }
 }  // namespace
 
-void WindowSurfaceImpl::SetSize(int width, int height)
+void WindowSurfaceImpl::Resize()
 {
-  // TODO: Implement
+  DCHECK_NOTNULL_F(swap_chain_);
+  const auto [width, height] = window_.lock()->GetFrameBufferSize();
+  try {
+    for (auto& [resource, rtv] : render_targets_) {
+      ObjectRelease(resource);
+    }
+    ThrowOnFailed(swap_chain_->ResizeBuffers(
+      kFrameBufferCount,
+      width, height,
+      ToNonSrgb(format_),
+      DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+  }
+  catch (const std::exception& e) {
+    LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
+  }
+  ShouldResize(false);
+  Finalize();
 }
 
 void WindowSurfaceImpl::Present() const
 {
   DCHECK_NOTNULL_F(swap_chain_);
-  ThrowOnFailed(swap_chain_->Present(0, 0));
+  ThrowOnFailed(swap_chain_->Present(1, 0));
   current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
@@ -38,7 +61,7 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
 {
   // This method may be called multiple times, therefore we need to ensure that
   // any remaining resources from previous calls are released first.
-  if (swap_chain_) DoRelease();
+  if (swap_chain_) ReleaseSwapChain();
 
   // Remember the format used during swap-chain creation, and use it for the
   // render target creation in Finalize()
@@ -48,31 +71,31 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
   CHECK_NOTNULL_F(window, "window is not valid");
 
   const DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{
-        .Width = Width(),
-        .Height = Height(),
-        .Format = ToNonSrgb(format),
-        .Stereo = FALSE,
-        .SampleDesc = {1, 0},
-        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        .BufferCount = kFrameBufferCount,
-        .Scaling = DXGI_SCALING_STRETCH,
-        .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
-        .Flags = 0
+    .Width = Width(),
+    .Height = Height(),
+    .Format = ToNonSrgb(format),
+    .Stereo = FALSE,
+    .SampleDesc = {1, 0}, // Always like this for D3D12
+    .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER, // For now we will use the back buffer as a render target
+    .BufferCount = kFrameBufferCount,
+    .Scaling = DXGI_SCALING_STRETCH,
+    .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+    .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+    .Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
   };
 
   IDXGISwapChain1* swap_chain{ nullptr };
-  const auto hwnd = static_cast<HWND>(window->NativeWindow().window_handle);
+  const auto window_handle = static_cast<HWND>(window->NativeWindow().window_handle);
   try {
     ThrowOnFailed(
       GetFactory()->CreateSwapChainForHwnd(
         command_queue_,
-        hwnd,
+        window_handle,
         &swap_chain_desc,
         nullptr,
         nullptr,
         &swap_chain));
-    ThrowOnFailed(GetFactory()->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
+    ThrowOnFailed(GetFactory()->MakeWindowAssociation(window_handle, DXGI_MWA_NO_ALT_ENTER));
     ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
   }
   catch (const std::exception& e) {
@@ -87,6 +110,7 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
   for (auto& [resource, rtv] : render_targets_) {
     rtv = GetRenderer().RtvHeap().Allocate();
   }
+
   Finalize();
 }
 
@@ -132,7 +156,7 @@ void WindowSurfaceImpl::Finalize()
   scissor_.bottom = static_cast<LONG>(height);
 }
 
-void WindowSurfaceImpl::DoRelease()
+void WindowSurfaceImpl::ReleaseSwapChain()
 {
   for (auto& [resource, rtv] : render_targets_) {
     ObjectRelease(resource);
