@@ -51,7 +51,7 @@ namespace oxygen::renderer::d3d12 {
     D3D12MA::Allocator* GetAllocator() const;
 
   protected:
-    virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
+    void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
     void OnShutdown() override;
 
     void BeginFrame() override;

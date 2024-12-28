@@ -29,6 +29,10 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp" />
@@ -48,6 +52,7 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
@@ -130,7 +135,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -140,7 +145,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
