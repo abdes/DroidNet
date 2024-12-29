@@ -7,6 +7,8 @@
 #include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
+#include <windows.h>
+
 #include "Oxygen/Base/Windows/ComError.h"
 
 #include <gmock/gmock.h>
