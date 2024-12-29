@@ -12,9 +12,12 @@
 
 // #include <vulkan/vulkan_core.h>
 
+#include <list>
+
 #include "oxygen/api_export.h"
 #include "oxygen/base/Time.h"
 #include "oxygen/platform/Types.h"
+#include "Oxygen/Renderers/Common/Types.h"
 
 namespace oxygen {
 
@@ -70,6 +73,8 @@ namespace oxygen {
   class Engine
   {
   public:
+    using ModulePtr = std::shared_ptr<core::Module>;
+
     struct Properties
     {
       struct
@@ -81,7 +86,7 @@ namespace oxygen {
       Duration max_fixed_update_duration{ kDefaultFixedUpdateDuration };
     };
 
-    OXYGEN_API Engine(PlatformPtr platform, Properties props);
+    OXYGEN_API Engine(PlatformPtr platform, RendererPtr renderer, Properties props);
     OXYGEN_API ~Engine();
 
     // Non-copyable
@@ -94,7 +99,16 @@ namespace oxygen {
 
     OXYGEN_API [[nodiscard]] auto GetPlatform() const->Platform&;
 
-    OXYGEN_API void AddModule(std::weak_ptr<core::Module> module);
+    //! Attaches the given Module to the engine, to be updated, rendered, etc.
+    //! \param module module to be attached.
+    //! \param layer layer to determine the order of invocation. Default is the main layer (`0`).
+    //! \throws std::invalid_argument if the module is attached or the weak_ptr is expired.
+    OXYGEN_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
+
+    //! Detached the given Module from the engine.
+    //! @param module the module to be detached.
+    //! \throws std::invalid_argument if the module is not attached or the weak_ptr is expired.
+    OXYGEN_API void DetachModule(const ModulePtr& module);
 
     OXYGEN_API auto Run() -> void;
 
@@ -122,13 +136,15 @@ namespace oxygen {
 #endif
 
     PlatformPtr platform_;
+    RendererPtr renderer_;
     Properties props_;
 
     DeltaTimeCounter engine_clock_{};
 
     struct ModuleContext
     {
-      std::weak_ptr<core::Module> module;
+      ModulePtr module;
+      uint32_t layer;
       Duration fixed_interval{ kDefaultFixedIntervalDuration };
       Duration fixed_accumulator{};
       ElapsedTimeCounter time_since_start{};
@@ -137,7 +153,11 @@ namespace oxygen {
       ChangePerSecondCounter ups{};
       ElapsedTimeCounter log_timer{}; // Add this timer
     };
-    std::vector<ModuleContext> modules_;
+    std::list<ModuleContext> modules_;
+
+    void SortModulesByLayer();
+    void InitializeModules();
+    void ShutdownModules();
   };
 
 }  // namespace oxygen

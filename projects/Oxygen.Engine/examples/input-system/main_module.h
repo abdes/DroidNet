@@ -12,38 +12,40 @@
 #include <oxygen/core/module.h>
 #include <oxygen/input/fwd.h>
 
-class MainModule : public oxygen::core::Module {
+class MainModule : public oxygen::core::Module
+{
 public:
-  explicit MainModule(oxygen::Engine &engine);
+  explicit MainModule(oxygen::Engine& engine);
   ~MainModule() override;
 
   // Non-copyable
-  MainModule(const MainModule &) = delete;
-  auto operator=(const MainModule &) -> MainModule & = delete;
+  MainModule(const MainModule&) = delete;
+  auto operator=(const MainModule&)->MainModule & = delete;
 
   // Non-Movable
-  MainModule(MainModule &&other) noexcept = delete;
-  auto operator=(MainModule &&other) noexcept -> MainModule & = delete;
+  MainModule(MainModule&& other) noexcept = delete;
+  auto operator=(MainModule&& other) noexcept -> MainModule & = delete;
 
-  void Initialize() override;
+  void Initialize(const oxygen::Renderer& renderer) override;
 
-  void ProcessInput(const oxygen::platform::InputEvent &event) override;
+  void ProcessInput(const oxygen::platform::InputEvent& event) override;
   void Update(oxygen::Duration delta_time) override;
   void FixedUpdate() override;
-  void Render() override;
+  void Render(const oxygen::Renderer& renderer) override;
 
   void Shutdown() noexcept override;
 
 private:
-  struct State {
-    float distance{10.0F};
-    float direction{1.0F};
+  struct State
+  {
+    float distance{ 10.0F };
+    float direction{ 1.0F };
   };
   State state_;
 
-  oxygen::Engine &engine_;
+  oxygen::Engine& engine_;
   std::shared_ptr<oxygen::input::InputSystem> player_input_;
 
 public:
-  [[maybe_unused]] static const char *const LOGGER_NAME;
+  [[maybe_unused]] static const char* const LOGGER_NAME;
 };

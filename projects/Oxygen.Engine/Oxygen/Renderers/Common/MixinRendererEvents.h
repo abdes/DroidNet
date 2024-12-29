@@ -57,8 +57,8 @@ namespace oxygen::renderer {
 
     void EmitRendererInitialized() { renderer_initialized_(); }
     void EmitRendererShutdown() { renderer_shutdown_(); }
-    void EmitBeginFrameRender(uint32_t frame_index) { begin_frame_render_(frame_index); }
-    void EmitEndFrameRender(uint32_t frame_index) { end_frame_render_(frame_index); }
+    void EmitBeginFrameRender(uint32_t frame_index) const { begin_frame_render_(frame_index); }
+    void EmitEndFrameRender(uint32_t frame_index) const { end_frame_render_(frame_index); }
 
     //! @}
 

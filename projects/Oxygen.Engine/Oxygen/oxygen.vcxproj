@@ -60,6 +60,10 @@
     <ClInclude Include="Renderers\Common\CommandRecorder.h" />
     <ClInclude Include="Renderers\Common\DeferredObjectRelease.h" />
     <ClInclude Include="Renderers\Common\MixinDeferredRelease.h" />
+    <ClInclude Include="Renderers\Common\RenderTarget.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
     <ClInclude Include="Renderers\Common\SynchronizationCounter.h" />
     <ClInclude Include="Renderers\Common\MemoryBlock.h" />
     <ClInclude Include="Renderers\Common\ObjectRelease.h" />
@@ -88,6 +92,10 @@
     <ClCompile Include="platform\input.cpp" />
     <ClCompile Include="platform\platform.cpp" />
     <ClCompile Include="platform\window.cpp" />
+    <ClCompile Include="Renderers\Common\Renderer.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="Renderers\Common\Surface.cpp" />
     <ClCompile Include="world\entity.cpp" />
   </ItemGroup>

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include "Oxygen/Base/ResourceHandle.h"
@@ -65,11 +66,17 @@ namespace oxygen {
     struct MemoryBlockDesc;
     class CommandList;
     class CommandQueue;
+    class CommandRecorder;
+    class RenderTarget;
 
     using SurfacePtr = std::shared_ptr<Surface>;
     using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
     using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
     using CommandListPtr = std::unique_ptr<CommandList>;
+    using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
+    using RenderTargetNoDeletePtr = const RenderTarget*;
+
+    using RenderGameFunction = std::function<CommandListPtr(const RenderTarget& render_target)>;
   }
   //! @}
 

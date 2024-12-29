@@ -8,6 +8,7 @@
 
 #include "oxygen/base/Time.h"
 #include "oxygen/platform/Types.h"
+#include "Oxygen/Renderers/Common/Types.h"
 
 namespace oxygen::core {
 
@@ -25,12 +26,12 @@ namespace oxygen::core {
     Module(Module&& other) noexcept = delete;
     auto operator=(Module&& other) noexcept -> Module & = delete;
 
-    virtual auto Initialize() -> void = 0;
+    virtual auto Initialize(const oxygen::Renderer& renderer) -> void = 0;
 
     virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
     virtual auto Update(Duration delta_time) -> void = 0;
     virtual auto FixedUpdate() -> void = 0;
-    virtual auto Render() -> void = 0;
+    virtual auto Render(const oxygen::Renderer&) -> void = 0;
 
     virtual auto Shutdown() noexcept -> void = 0;
   };

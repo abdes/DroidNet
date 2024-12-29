@@ -36,9 +36,6 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_D3D12_API void Resize(int width, int height) override;
     OXYGEN_D3D12_API void Present() const override;
 
-    OXYGEN_D3D12_API [[nodiscard]] D3D12_VIEWPORT Viewport() const;
-    OXYGEN_D3D12_API [[nodiscard]] D3D12_RECT Scissor() const;
-
     [[nodiscard]] auto GetResource() const->ID3D12Resource* override;
 
   protected:

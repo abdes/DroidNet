@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Renderers/Common/CommandList.h"
 #include "Oxygen/Renderers/Common/Renderer.h"
 
 using namespace oxygen::graphics;

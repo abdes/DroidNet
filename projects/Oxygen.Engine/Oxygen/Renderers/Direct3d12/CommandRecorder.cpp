@@ -75,7 +75,34 @@ oxygen::renderer::CommandListPtr CommandRecorder::End() {
   }
 }
 
-void CommandRecorder::Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
+void CommandRecorder::SetViewport(
+  const float left, const float width, const float top, const float height,
+  const float min_depth, const float max_depth)
+{
+  DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+
+  D3D12_VIEWPORT viewport;
+  viewport.TopLeftX = left;
+  viewport.TopLeftY = top;
+  viewport.Width = width;
+  viewport.Height = height;
+  viewport.MinDepth = min_depth;
+  viewport.MaxDepth = max_depth;
+  current_command_list_->GetCommandList()->RSSetViewports(1, &viewport);
+}
+
+void CommandRecorder::SetScissors(
+  const int32_t left, const int32_t top, const int32_t right, const int32_t bottom)
+{
+  D3D12_RECT rect;
+  rect.left = left;
+  rect.top = top;
+  rect.right = right;
+  rect.bottom = bottom;
+  current_command_list_->GetCommandList()->RSSetScissorRects(1, &rect);
+}
+
+void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
                             float depth_value, uint8_t stencil_value)
 {
   DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
@@ -129,7 +156,8 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
 {
   DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
-  current_render_target_ = render_target;
+  current_render_target_ = dynamic_cast<const RenderTarget*>(render_target);
+  CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
 
   // Indicate that the back buffer will be used as a render target.
   const D3D12_RESOURCE_BARRIER barrier{

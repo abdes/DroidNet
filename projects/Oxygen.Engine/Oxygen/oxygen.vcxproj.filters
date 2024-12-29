@@ -192,6 +192,9 @@
     <ClInclude Include="Base\MixinShutdown.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="Renderers\Common\RenderTarget.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -276,6 +279,9 @@
     </ClCompile>
     <ClCompile Include="base\Detail\loguru.cpp">
       <Filter>Base\Detail</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\Renderer.cpp">
+      <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
