@@ -44,7 +44,7 @@ namespace {
     static ComPtr<DeviceType> main_device;
 #if defined(_DEBUG)
     if (main_device) {
-      const ULONG ref_count = main_device.Get()->AddRef();
+      main_device.Get()->AddRef();
       main_device.Get()->Release();
       // DLOG_F(2, "Main Device reference count: {}", ref_count);
     }
@@ -237,11 +237,6 @@ namespace oxygen::renderer::d3d12::detail {
     struct CommandFrame
     {
       uint64_t fence_value{ 0 };
-
-      void Release() noexcept
-      {
-        fence_value = 0;
-      }
     };
 
   }  // namespace
@@ -252,8 +247,9 @@ namespace oxygen::renderer::d3d12::detail {
   public:
     RendererImpl() = default;
     ~RendererImpl() = default;
-    //OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
-    //OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
+
+    OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
+    OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
 
     auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
@@ -261,9 +257,9 @@ namespace oxygen::renderer::d3d12::detail {
     void ShutdownRenderer();
     void ShutdownDevice();
 
-    void BeginFrame() const;
-    void EndFrame() const;
-    void RenderCurrentFrame(const resources::SurfaceId& surface_id) const;
+    auto BeginFrame(const resources::SurfaceId& surface_id) const
+      -> const renderer::RenderTarget&;
+    void EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
       ->std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
 
@@ -273,12 +269,13 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] auto UavHeap() const->DescriptorHeap& { return uav_heap_; }
 
     [[nodiscard]] D3D12MA::Allocator* GetAllocator() const { return allocator_; }
+    CommandRecorderPtr GetCommandRecorder() { return command_recorder_; }
 
   private:
     D3D12MA::Allocator* allocator_{ nullptr };
 
     std::unique_ptr<CommandQueue> command_queue_{};
-    std::unique_ptr<CommandRecorder> command_recorder_{};
+    std::shared_ptr<CommandRecorder> command_recorder_{};
     mutable size_t current_frame_index_{ 0 };
     mutable CommandFrame frames_[kFrameBufferCount]{};
 
@@ -294,7 +291,7 @@ namespace oxygen::renderer::d3d12::detail {
 #endif
   };
 
-  void RendererImpl::Init(PlatformPtr platform, const RendererProperties& props)
+  void RendererImpl::Init([[maybe_unused]] PlatformPtr platform, const RendererProperties& props)
   {
     DCHECK_F(GetMainDevice() == nullptr);
 
@@ -404,7 +401,8 @@ namespace oxygen::renderer::d3d12::detail {
 #endif
   }
 
-  void RendererImpl::BeginFrame() const
+  auto RendererImpl::BeginFrame(const resources::SurfaceId& surface_id) const
+    -> const renderer::RenderTarget&
   {
     DCHECK_NOTNULL_F(command_recorder_);
 
@@ -414,42 +412,38 @@ namespace oxygen::renderer::d3d12::detail {
     const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
     command_queue_->Wait(fence_value);
 
-  }
-  void RendererImpl::EndFrame() const
-  {
-    // Signal and increment the fence value for the next frame.
-    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
-    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
-  }
-
-  void RendererImpl::RenderCurrentFrame(const resources::SurfaceId& surface_id) const
-  {
     DCHECK_F(surface_id.IsValid());
-    auto& surface = surfaces.ItemAt(surface_id);
 
+    auto& surface = surfaces.ItemAt(surface_id);
     if (surface.ShouldResize())
     {
       command_queue_->Flush();
       surface.Resize();
     }
+    return surface;
+  }
 
-    command_recorder_->Begin();
-    command_recorder_->SetRenderTarget(&surface);
-    // Record commands
+  void RendererImpl::EndFrame(
+    CommandListPtr command_list,
+    const resources::SurfaceId& surface_id) const
+  {
+    try {
+      const auto& surface = surfaces.ItemAt(surface_id);
 
-    constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
-    command_recorder_->Clear(kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
+      command_queue_->Submit(command_list);
+      command_list->Release();
+      command_list.reset();
 
-    //...
-    auto command_list = command_recorder_->End();
+      // Presenting
+      surface.Present();
+    }
+    catch (const std::exception& e) {
+      LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface_id.ToString(), e.what());
+    }
 
-    command_queue_->Submit(command_list);
-    command_list->Release();
-    command_list.reset();
-
-    // Presenting
-    surface.Present();
-
+    // Signal and increment the fence value for the next frame.
+    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
+    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
   }
 
   auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
@@ -496,21 +490,20 @@ void Renderer::OnShutdown()
   pimpl_->ShutdownDevice();
 }
 
-void Renderer::BeginFrame()
+auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
+-> const renderer::RenderTarget&
 {
-  pimpl_->BeginFrame();
-  oxygen::Renderer::BeginFrame();
+  return pimpl_->BeginFrame(surface_id);
 }
 
-void Renderer::EndFrame()
+void Renderer::EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id)
 {
-  pimpl_->EndFrame();
-  oxygen::Renderer::EndFrame();
+  pimpl_->EndFrame(std::move(command_list), surface_id);
 }
 
-void Renderer::RenderCurrentFrame(const resources::SurfaceId& surface_id)
+auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr
 {
-  pimpl_->RenderCurrentFrame(surface_id);
+  return pimpl_->GetCommandRecorder();
 }
 
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&

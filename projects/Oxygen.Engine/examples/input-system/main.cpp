@@ -46,10 +46,12 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
         .max_fixed_update_duration = 10ms,
     };
 
-    engine = std::make_shared<Engine>(platform, props);
+    // Engine with no renderer
+    std::shared_ptr<oxygen::Renderer> renderer{};
+    engine = std::make_shared<Engine>(platform, renderer, props);
 
     auto my_module = std::make_shared<MainModule>(*engine);
-    engine->AddModule(my_module);
+    engine->AttachModule(my_module);
 
     engine->Run();
 

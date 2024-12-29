@@ -18,7 +18,7 @@
 
 namespace oxygen::renderer {
 
-  enum ClearFlags
+  enum ClearFlags : uint8_t
   {
     kClearFlagsColor = (1 << 0),
     kClearFlagsDepth = (1 << 1),
@@ -57,7 +57,11 @@ namespace oxygen::renderer {
     virtual auto End() -> CommandListPtr = 0;
 
     // Graphics commands
-    virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depthValue, uint8_t stencilValue) = 0;
+    virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) = 0;
+
+    virtual void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) = 0;
+    virtual void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) = 0;
+    virtual void SetRenderTarget(RenderTargetNoDeletePtr render_target) = 0;
 
   protected:
     virtual void InitializeCommandRecorder() = 0;

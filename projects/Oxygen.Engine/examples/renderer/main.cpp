@@ -281,10 +281,10 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
     };
     CreateRenderer(GraphicsBackendType::kDirect3D12, platform, renderer_props);
 
-    engine = std::make_shared<Engine>(platform, props);
+    engine = std::make_shared<Engine>(platform, oxygen::graphics::GetRenderer(), props);
 
     const auto my_module = std::make_shared<MainModule>(platform);
-    engine->AddModule(my_module);
+    engine->AttachModule(my_module);
 
     engine->Run();
 

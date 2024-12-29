@@ -29,7 +29,7 @@ namespace {
 } // namespace
 
 namespace oxygen::renderer::d3d12::detail {
-  auto GetRenderer() -> Renderer&
+  auto GetRenderer() -> Renderer&  // NOLINT(misc-use-internal-linkage)
   {
     CHECK_NOTNULL_F(GetRendererInternal());
     return *GetRendererInternal();

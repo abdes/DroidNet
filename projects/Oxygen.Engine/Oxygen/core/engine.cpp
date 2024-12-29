@@ -175,9 +175,9 @@ namespace {
 }  // namespace
 #endif
 
-Engine::Engine(PlatformPtr platform, Properties props)
-  : platform_(std::move(platform))
-  ,
+Engine::Engine(PlatformPtr platform, RendererPtr renderer, Properties props)
+  : platform_(std::move(platform)), renderer_(std::move(renderer)), props_(std::move(props))
+{
 #if 0
   instance_(std::make_unique<Instance>(Instance::Properties{
       .application =
@@ -193,9 +193,9 @@ Engine::Engine(PlatformPtr platform, Properties props)
       .extensions = props.extensions,
                                        })),
 #endif
-                                       props_(std::move(props)) {
-  // DiscoverDevices();
-  LOG_F(INFO, "Engine initialization complete");
+
+                                       // DiscoverDevices();
+    LOG_F(INFO, "Engine initialization complete");
 }
 
 oxygen::Engine::~Engine() {
@@ -215,8 +215,54 @@ auto Engine::GetInstance() const -> VkInstance const&
 }
 #endif
 
-void Engine::AddModule(std::weak_ptr<core::Module> module) {
-  modules_.push_back(ModuleContext{ .module = std::move(module) });
+void Engine::AttachModule(const ModulePtr& module, const uint32_t layer)
+{
+  if (std::ranges::find_if(
+    modules_,
+    [&module](const auto& module_ctx) {
+      return module_ctx.module == module;
+    }) != modules_.end())
+  {
+    throw std::invalid_argument("The module is already attached.");
+  }
+
+  modules_.push_back(ModuleContext{ .module = module, .layer = layer });
+  SortModulesByLayer();
+}
+
+void Engine::DetachModule(const ModulePtr& module)
+{
+  if (const auto it = std::ranges::find_if(
+    modules_,
+    [&module](const auto& module_ctx) {
+      return module_ctx.module == module;
+    });
+    it != modules_.end())
+  {
+    modules_.erase(it);
+  }
+}
+
+void Engine::SortModulesByLayer()
+{
+  modules_.sort(
+    [](const ModuleContext& a, const ModuleContext& b) {
+      return a.layer < b.layer;
+    });
+}
+
+void Engine::InitializeModules()
+{
+  const auto renderer = renderer_.lock();
+  if (!renderer) {
+    return;
+  }
+  std::ranges::for_each(modules_, [&](auto& module) { module.module->Initialize(*renderer); });
+}
+
+void Engine::ShutdownModules()
+{
+  std::ranges::for_each(modules_, [](auto& module) { module.module->Shutdown(); });
 }
 
 auto Engine::Run() -> void {
@@ -226,13 +272,7 @@ auto Engine::Run() -> void {
   auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
     [&continue_running]() { continue_running = false; });
 
-  std::ranges::for_each(
-    modules_,
-    [](auto& module) {
-      if (auto the_module = module.module.lock()) {
-        the_module->Initialize();
-      }
-    });
+  InitializeModules();
 
   // Start the master clock
   engine_clock_.Reset();
@@ -245,63 +285,71 @@ auto Engine::Run() -> void {
       module.frame_time.Reset();
     });
 
-  while (continue_running) {
+  while (continue_running)
+  {
+    // Poll for platform events
     auto event = GetPlatform().PollEvent();
+
+    // Run the modules
     std::ranges::for_each(
-      modules_, [this, &continue_running, &event](auto& module) {
-        if (auto the_module = module.module.lock()) {
-          // Inputs
-          if (event) {
-            the_module->ProcessInput(*event);
+      modules_,
+      [this, &continue_running, &event](auto& module)
+      {
+        auto& the_module = module.module;
+        DCHECK_NOTNULL_F(the_module);
+
+        // Inputs
+        if (event) {
+          the_module->ProcessInput(*event);
+        }
+
+        // Always check if any of the modules have done something that causes
+        // the renderer to be destroyed.
+        const auto renderer = renderer_.lock();
+        if (!renderer) {
+          continue_running = false;
+        }
+
+        if (continue_running) {
+          module.frame_time.Update();
+          auto delta = module.frame_time.Delta();
+
+          // Fixed updates
+          if (delta > props_.max_fixed_update_duration) {
+            delta = props_.max_fixed_update_duration;
           }
+          module.fixed_accumulator += module.frame_time.Delta();
+          while (module.fixed_accumulator >= module.fixed_interval) {
+            the_module->FixedUpdate(
+              // module.time_since_start.ElapsedTime(),
+              // module.fixed_interval
+            );
+            module.fixed_accumulator -= module.fixed_interval;
+            module.ups.Update();
+          }
+          // TODO: Interpolate the remaining time in the
+          // accumulator const float alpha =
+          //    static_cast<float>(module.fixed_accumulator.count()) /
+          //    static_cast<float>(module.fixed_interval.count());
+          // the_module->FixedUpdate(/*alpha*/);
 
-          if (continue_running) {
-            module.frame_time.Update();
-            auto delta = module.frame_time.Delta();
+          // Per frame updates / render
+          the_module->Update(module.frame_time.Delta());
+          the_module->Render(*renderer);
+          module.fps.Update();
 
-            // Fixed updates
-            if (delta > props_.max_fixed_update_duration) {
-              delta = props_.max_fixed_update_duration;
-            }
-            module.fixed_accumulator += module.frame_time.Delta();
-            while (module.fixed_accumulator >= module.fixed_interval) {
-              the_module->FixedUpdate(
-                //  module.time_since_start.ElapsedTime(),
-                // module.fixed_interval
-              );
-              module.fixed_accumulator -= module.fixed_interval;
-              module.ups.Update();
-            }
-            // TODO(abdessattar): Interpolate the remaining time in the
-            // accumulator const float alpha =
-            //    static_cast<float>(module.fixed_accumulator.count()) /
-            //    static_cast<float>(module.fixed_interval.count());
-            // the_module->FixedUpdate(/*alpha*/);
-
-            // Per frame updates / render
-            the_module->Update(module.frame_time.Delta());
-            the_module->Render();
-            module.fps.Update();
-
-            // Log FPS and UPS once every second
-            if (module.log_timer.ElapsedTime() >= std::chrono::seconds(1)) {
-              LOG_F(INFO, "FPS: {} UPS: {}", module.fps.Value(), module.ups.Value());
-              module.log_timer = {};
-            }
+          // Log FPS and UPS once every second
+          if (module.log_timer.ElapsedTime() >= std::chrono::seconds(1)) {
+            LOG_F(INFO, "FPS: {} UPS: {}", module.fps.Value(), module.ups.Value());
+            module.log_timer = {};
           }
         }
       });
   }
   LOG_F(INFO, "Engine stopped.");
 
-  std::ranges::for_each(
-    modules_,
-    [](auto& module)
-    {
-      if (auto the_module = module.module.lock()) {
-        the_module->Shutdown();
-      }
-    });
+  // Shutdown modules
+  std::ranges::for_each(modules_, [](auto& module) { module.module->Shutdown(); });
 
   // Stop listening for the last window closed event
   last_window_closed_con.disconnect();

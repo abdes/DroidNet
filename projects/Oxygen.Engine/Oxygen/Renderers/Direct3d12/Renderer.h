@@ -36,6 +36,8 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_MAKE_NON_COPYABLE(Renderer);
     OXYGEN_MAKE_NON_MOVEABLE(Renderer);
 
+    auto GetCommandRecorder() const->CommandRecorderPtr override;
+
     OXYGEN_D3D12_API [[nodiscard]] auto RtvHeap() const->detail::DescriptorHeap&;
     OXYGEN_D3D12_API [[nodiscard]] auto DsvHeap() const->detail::DescriptorHeap&;
     OXYGEN_D3D12_API [[nodiscard]] auto SrvHeap() const->detail::DescriptorHeap&;
@@ -54,10 +56,8 @@ namespace oxygen::renderer::d3d12 {
     void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
     void OnShutdown() override;
 
-    void BeginFrame() override;
-    void EndFrame() override;
-    void RenderCurrentFrame(const resources::SurfaceId& surface_id) override;
-
+    auto BeginFrame(const resources::SurfaceId& surface_id) -> const renderer::RenderTarget & override;
+    void EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id) override;
 
   private:
     std::shared_ptr<detail::RendererImpl> pimpl_{};

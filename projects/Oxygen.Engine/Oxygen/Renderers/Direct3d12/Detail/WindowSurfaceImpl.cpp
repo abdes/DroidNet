@@ -145,12 +145,12 @@ void WindowSurfaceImpl::Finalize()
   DCHECK_EQ_F(height, swap_chain_desc.Height);
 
   // Set viewport
-  viewport_.TopLeftX = 0.0f;
-  viewport_.TopLeftY = 0.0f;
-  viewport_.Width = static_cast<float>(width);
-  viewport_.Height = static_cast<float>(height);
-  viewport_.MinDepth = 0.0f;
-  viewport_.MaxDepth = 1.0f;
+  viewport_.top_left_x = 0.0f;
+  viewport_.top_left_y = 0.0f;
+  viewport_.width = static_cast<float>(width);
+  viewport_.height = static_cast<float>(height);
+  viewport_.max_depth = 0.0f;
+  viewport_.max_depth = 1.0f;
 
   // Set scissor rectangle
   scissor_.left = 0;
@@ -170,12 +170,12 @@ void WindowSurfaceImpl::ReleaseSwapChain()
 
 auto WindowSurfaceImpl::Width() const -> uint32_t
 {
-  return static_cast<uint32_t>(viewport_.Width);
+  return static_cast<uint32_t>(viewport_.width);
 }
 
 auto WindowSurfaceImpl::Height() const -> uint32_t
 {
-  return static_cast<uint32_t>(viewport_.Height);
+  return static_cast<uint32_t>(viewport_.height);
 }
 
 auto WindowSurfaceImpl::CurrentBackBuffer() const -> ID3D12Resource*
@@ -188,12 +188,12 @@ auto WindowSurfaceImpl::Rtv() const -> const DescriptorHandle&
   return render_targets_[current_backbuffer_index_].rtv;
 }
 
-auto WindowSurfaceImpl::Viewport() const -> D3D12_VIEWPORT
+auto WindowSurfaceImpl::GetViewPort() const -> ViewPort
 {
   return viewport_;
 }
 
-auto WindowSurfaceImpl::Scissor() const -> D3D12_RECT
+auto WindowSurfaceImpl::GetScissors() const -> Scissors
 {
   return scissor_;
 }

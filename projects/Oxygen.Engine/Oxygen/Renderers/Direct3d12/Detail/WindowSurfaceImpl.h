@@ -35,8 +35,8 @@ namespace oxygen::renderer::d3d12::detail {
     [[nodiscard]] auto Height() const->uint32_t;
     [[nodiscard]] auto CurrentBackBuffer() const->ID3D12Resource*;
     [[nodiscard]] auto Rtv() const -> const DescriptorHandle & override;
-    [[nodiscard]] auto Viewport() const->D3D12_VIEWPORT;
-    [[nodiscard]] auto Scissor() const->D3D12_RECT;
+    [[nodiscard]] auto GetViewPort() const->ViewPort override;
+    [[nodiscard]] auto GetScissors() const->Scissors override;
 
     auto GetResource() const -> ID3D12Resource* override { return CurrentBackBuffer(); }
 
@@ -51,8 +51,8 @@ namespace oxygen::renderer::d3d12::detail {
     bool should_resize_{ false };
 
     mutable UINT current_backbuffer_index_{ 0 };
-    D3D12_VIEWPORT viewport_{};
-    D3D12_RECT scissor_{};
+    ViewPort viewport_{};
+    Scissors scissor_{};
     DXGI_FORMAT format_{ kDefaultBackBufferFormat };  // The format of the swap chain
     CommandQueueType* command_queue_;
 

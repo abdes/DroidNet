@@ -6,12 +6,12 @@
 
 #pragma once
 
+#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Base/Types.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/MixinDeferredRelease.h"
 #include "Oxygen/Renderers/Common/MixinRendererEvents.h"
@@ -88,7 +88,7 @@ namespace oxygen {
     {
     }
 
-    ~Renderer() override = default;
+    OXYGEN_API ~Renderer() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Renderer); //< Non-copyable.
     OXYGEN_MAKE_NON_MOVEABLE(Renderer); //< Non-moveable.
@@ -106,7 +106,11 @@ namespace oxygen {
      */
     [[nodiscard]] virtual auto CurrentFrameIndex() const->uint32_t { return current_frame_index_; }
 
-    virtual void Render(const renderer::resources::SurfaceId& surface_id);
+    OXYGEN_API virtual void Render(
+      const renderer::resources::SurfaceId& surface_id,
+      const renderer::RenderGameFunction& render_game) const;
+
+    virtual auto GetCommandRecorder() const->renderer::CommandRecorderPtr = 0;
 
     /**
      * Device resources creation functions
@@ -120,17 +124,24 @@ namespace oxygen {
 
   protected:
 
-    virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
+    OXYGEN_API virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
     template <typename Base, typename... CtorArgs>
     friend class MixinInitialize; //< Allow access to OnInitialize.
 
-    virtual void OnShutdown();
+    OXYGEN_API virtual void OnShutdown();
     template <typename Base>
     friend class MixinShutdown; //< Allow access to OnShutdown.
 
-    virtual void BeginFrame();
-    virtual void EndFrame();
-    virtual void RenderCurrentFrame(const renderer::resources::SurfaceId& surface_id) = 0;
+    virtual auto BeginFrame(const renderer::resources::SurfaceId& surface_id)
+      -> const renderer::RenderTarget & = 0;
+
+    void BeginFrame() const;
+
+    virtual void EndFrame(
+      renderer::CommandListPtr command_list,
+      const renderer::resources::SurfaceId& surface_id) = 0;
+
+    void EndFrame() const;
 
     [[nodiscard]] auto GetPlatform() const->PlatformPtr { return platform_; }
     [[nodiscard]] auto GetPInitProperties() const-> const RendererProperties& { return props_; }
@@ -139,40 +150,7 @@ namespace oxygen {
     RendererProperties props_;
     PlatformPtr platform_;
 
-    uint32_t current_frame_index_{ 0 };
+    mutable uint32_t current_frame_index_{ 0 };
   };
-
-  inline void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
-  {
-    platform_ = std::move(platform);
-    props_ = props;
-    EmitRendererInitialized();
-  }
-
-  inline void Renderer::OnShutdown()
-  {
-    EmitRendererShutdown();
-    platform_.reset();
-  }
-
-  inline void Renderer::BeginFrame()
-  {
-    DLOG_F(2, "BEGIN Frame");
-    EmitBeginFrameRender(current_frame_index_);
-  }
-
-  inline void Renderer::EndFrame()
-  {
-    EmitEndFrameRender(current_frame_index_);
-    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
-    DLOG_F(2, "END Frame");
-  }
-
-  inline void Renderer::Render(const renderer::resources::SurfaceId& surface_id)
-  {
-    BeginFrame();
-    RenderCurrentFrame(surface_id);
-    EndFrame();
-  }
 
 } // namespace oxygen
