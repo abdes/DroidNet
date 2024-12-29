@@ -6,8 +6,9 @@
 
 #pragma once
 
+#include <wrl/client.h>
+
 #include "Oxygen/Renderers/Common/MemoryBlock.h"
-#include "oxygen/Renderers/Direct3d12/D3DPtr.h"
 
 namespace D3D12MA {
   class Allocation;
@@ -28,12 +29,12 @@ namespace oxygen::renderer::d3d12 {
 
     [[nodiscard]] uint64_t GetSize() const { return size_; }
     [[nodiscard]] uint32_t GetAlignment() const { return alignment_; }
-    [[nodiscard]] D3D12MA::Allocation* GetAllocation() const { return allocation_.get(); }
+    [[nodiscard]] D3D12MA::Allocation* GetAllocation() const { return allocation_.Get(); }
 
   private:
     uint64_t size_;
     uint32_t alignment_;
-    D3DPtr<D3D12MA::Allocation> allocation_;
+    Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation_;
   };
 
 }  // namespace oxygen::renderer::d3d12

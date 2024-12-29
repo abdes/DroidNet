@@ -53,7 +53,7 @@ void MemoryBlock::Init(const MemoryBlockDesc& desc)
     &alloc_desc,
     &allocation_info,
     &allocation_raw_ptr));
-  allocation_.reset(allocation_raw_ptr); // Assign the raw pointer to the unique_ptr
+  allocation_ = { allocation_raw_ptr }; // Assign the raw pointer to the unique_ptr
 
   size_ = desc.size;
   alignment_ = desc.alignment;

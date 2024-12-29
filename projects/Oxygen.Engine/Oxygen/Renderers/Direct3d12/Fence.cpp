@@ -11,17 +11,20 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h" // for GetMainDevice()
 
+#include "Renderer.h"
+
 using namespace oxygen::renderer::d3d12;
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 {
+  DCHECK_EQ_F(fence_, nullptr);
   current_value_ = initial_value;
   ID3DFenceV* raw_fence = nullptr;
   ThrowOnFailed(GetMainDevice()->CreateFence(initial_value,
                                              D3D12_FENCE_FLAG_NONE,
                                              IID_PPV_ARGS(&raw_fence)),
                 "Could not create a Fence");
-  fence_.reset(raw_fence);
+  fence_ = raw_fence;
 
   fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
   if (!fence_event_) {
@@ -40,7 +43,7 @@ void Fence::ReleaseSynchronizationObject() noexcept
     }
     fence_event_ = nullptr;
   }
-  fence_.reset();
+  ObjectRelease(fence_);
   command_queue_ = nullptr;
 }
 
@@ -54,7 +57,7 @@ void Fence::Signal(const uint64_t value) const
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
 
   DCHECK_GT_F(value, fence_->GetCompletedValue(), "New value must be greater than the current value");
-  ThrowOnFailed((command_queue_->Signal(fence_.get(), value)),
+  ThrowOnFailed((command_queue_->Signal(fence_, value)),
                 fmt::format("Signal({}) on fence failed", value));
   current_value_ = value;
 }
@@ -86,7 +89,7 @@ void Fence::QueueWaitCommand(const uint64_t value) const
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
 
-  ThrowOnFailed(command_queue_->Wait(fence_.get(), value),
+  ThrowOnFailed(command_queue_->Wait(fence_, value),
                 fmt::format("QueueWaitCommand({}) on fence failed", value));
 }
 
@@ -94,7 +97,7 @@ void Fence::QueueSignalCommand(const uint64_t value)
 {
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  ThrowOnFailed(command_queue_->Signal(fence_.get(), value),
+  ThrowOnFailed(command_queue_->Signal(fence_, value),
                 fmt::format("QueueSignalCommand({}) on fence failed", value));
 }
 

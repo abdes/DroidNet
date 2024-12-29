@@ -81,9 +81,6 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h">
       <Filter>Renderer</Filter>
     </ClInclude>

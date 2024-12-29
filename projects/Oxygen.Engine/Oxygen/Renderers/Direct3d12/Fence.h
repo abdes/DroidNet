@@ -12,7 +12,6 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Renderers/Common/SynchronizationCounter.h"
-#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
@@ -47,7 +46,7 @@ namespace oxygen::renderer::d3d12 {
   private:
     mutable uint64_t current_value_{ 0 };
 
-    D3DDeferredPtr<ID3DFenceV> fence_{ nullptr };
+    ID3DFenceV* fence_{ nullptr };
     ID3D12CommandQueue* command_queue_;
     HANDLE fence_event_{ nullptr };
   };
