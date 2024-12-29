@@ -51,7 +51,6 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h" />
