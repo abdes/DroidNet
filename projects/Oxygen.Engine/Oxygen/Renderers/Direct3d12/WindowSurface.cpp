@@ -55,16 +55,6 @@ void WindowSurface::Present() const
   CALL_IMPL(Present());
 }
 
-ID3D12Resource* WindowSurface::BackBuffer() const
-{
-  RETURN_IMPL(BackBuffer(), nullptr);
-}
-
-D3D12_CPU_DESCRIPTOR_HANDLE WindowSurface::Rtv() const
-{
-  RETURN_IMPL(Rtv(), {});
-}
-
 D3D12_VIEWPORT WindowSurface::Viewport() const
 {
   RETURN_IMPL(Viewport(), {});
@@ -73,6 +63,11 @@ D3D12_VIEWPORT WindowSurface::Viewport() const
 D3D12_RECT WindowSurface::Scissor() const
 {
   RETURN_IMPL(Scissor(), {});
+}
+
+auto WindowSurface::GetResource() const -> ID3D12Resource*
+{
+  RETURN_IMPL(GetResource(), {});
 }
 
 void WindowSurface::InitializeSurface()

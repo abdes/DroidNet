@@ -36,8 +36,10 @@ namespace oxygen::renderer::d3d12 {
   class Renderer;
   class WindowSurface;
   class IFrameLifecycleController;
+  class RenderTarget;
 
   using FencePtr = std::unique_ptr<Fence>;
+  using RenderTargetNoDeletePtr = RenderTarget*;
   //! @}
 
   //! Getters for the global Direct3d12 objects used by the renderer.

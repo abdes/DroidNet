@@ -9,9 +9,12 @@
 #include <d3d12.h>
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinDisposable.h"
+#include "Oxygen/Base/MixinInitialize.h"
+#include "Oxygen/Renderers/Direct3d12/D3DResource.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -27,25 +30,64 @@ namespace oxygen::renderer::d3d12 {
   };
 
   class Texture
+    : public D3DResource
+    , public Mixin
+    < Texture
+    , Curry<MixinNamed, const char*>::mixin
+    , MixinDisposable
+    , MixinInitialize
+    >
   {
   public:
     constexpr static uint32_t max_mips{ 14 }; // 2^14 = 16384
 
-    Texture() = default;
-    ~Texture() { Release(); }
+    explicit Texture(const char* object_name = "Texture")
+      : D3DResource(), Mixin(object_name)
+    {
+    }
+
+    ~Texture() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Texture);
     OXYGEN_MAKE_NON_MOVEABLE(Texture);
 
-    [[nodiscard]] auto GetResource() const -> ID3D12Resource* { return resource_.get(); }
     [[nodiscard]] auto GetSrv() const -> detail::DescriptorHandle { return srv_; }
+    [[nodiscard]] auto GetResource() const -> ID3D12Resource* override { return resource_; }
 
-    void Initialize(const TextureInitInfo& info);
-
-    void Release();
+  protected:
+    virtual void InitializeTexture(const TextureInitInfo& init_info);
+    virtual void ReleaseTexture() noexcept;
 
   private:
-    D3DDeferredPtr<ID3D12Resource> resource_;
+    void OnInitialize(const TextureInitInfo& init_info)
+    {
+      if (this->self().ShouldRelease())
+      {
+        const auto msg = fmt::format("{} OnInitialize() called twice without calling Release()", this->self().ObjectName());
+        LOG_F(ERROR, "{}", msg);
+        throw std::runtime_error(msg);
+      }
+      try {
+        InitializeTexture(init_info);
+        this->self().ShouldRelease(true);
+      }
+      catch (const std::exception& e) {
+        LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
+        throw;
+      }
+    }
+    template <typename Base, typename... CtorArgs>
+    friend class MixinInitialize; //< Allow access to OnInitialize.
+
+    void OnRelease() noexcept
+    {
+      ReleaseTexture();
+      this->self().IsInitialized(false);
+    }
+    template <typename Base>
+    friend class MixinDisposable; //< Allow access to OnRelease.
+
+    ID3D12Resource* resource_{ nullptr };
     detail::DescriptorHandle srv_;
   };
 

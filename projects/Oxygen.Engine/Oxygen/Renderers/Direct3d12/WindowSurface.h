@@ -10,10 +10,10 @@
 #include <dxgi1_6.h>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/ResourceTable.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/Surface.h"
 #include "Oxygen/Renderers/Direct3d12/api_export.h"
+#include "Oxygen/Renderers/Direct3d12/D3DResource.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
@@ -23,7 +23,7 @@ namespace oxygen::renderer::d3d12 {
     class WindowSurfaceImpl;
   }  // namespace detail
 
-  class WindowSurface : public renderer::WindowSurface
+  class WindowSurface : public renderer::WindowSurface, public D3DResource
   {
     using Super = renderer::WindowSurface;
 
@@ -36,11 +36,10 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_D3D12_API void Resize(int width, int height) override;
     OXYGEN_D3D12_API void Present() const override;
 
-    OXYGEN_D3D12_API [[nodiscard]] ID3D12Resource* BackBuffer() const;
-    OXYGEN_D3D12_API [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE Rtv() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_VIEWPORT Viewport() const;
     OXYGEN_D3D12_API [[nodiscard]] D3D12_RECT Scissor() const;
 
+    [[nodiscard]] auto GetResource() const->ID3D12Resource* override;
 
   protected:
     OXYGEN_D3D12_API void InitializeSurface() override;

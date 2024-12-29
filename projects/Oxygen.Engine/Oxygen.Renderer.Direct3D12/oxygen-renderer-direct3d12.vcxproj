@@ -40,6 +40,14 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ResourceState.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ResourceStateCache.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Shaders.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\WindowSurface.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Texture.cpp" />
@@ -52,14 +60,26 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DPtr.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.h" />
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\D3DResource.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\DescriptorHeap.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\RenderTarget.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ResourceState.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ResourceStateCache.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Shaders.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\WindowSurface.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Texture.h" />
