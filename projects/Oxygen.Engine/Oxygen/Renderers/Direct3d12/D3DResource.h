@@ -8,7 +8,6 @@
 
 #include "oxygen/base/Macros.h"
 #include "Oxygen/Renderers/Common/Types.h"
-#include "oxygen/Renderers/Direct3d12/ResourceState.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -21,13 +20,11 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_DEFAULT_MOVABLE(D3DResource);
 
     [[nodiscard]] virtual auto GetResource() const->ID3D12Resource* = 0;
-    [[nodiscard]] virtual auto GetState() const -> ResourceState { return state_; }
     [[nodiscard]] virtual auto GetMode() const -> ResourceAccessMode { return mode_; }
 
   protected:
     D3DResource() = default;
 
-    ResourceState state_{};
     ResourceAccessMode mode_{ ResourceAccessMode::kImmutable };
   };
 

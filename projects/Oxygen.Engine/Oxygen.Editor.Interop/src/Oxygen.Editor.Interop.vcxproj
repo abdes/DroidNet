@@ -29,7 +29,6 @@
     <ClInclude Include="OxygenWorld.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="vcpkg-configuration.json" />
     <None Include="vcpkg.json" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

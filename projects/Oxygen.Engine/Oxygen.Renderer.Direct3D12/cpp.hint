@@ -20,3 +20,4 @@
 #define OXYGEN_MAKE_NON_COPYABLE(Type) Type(const Type &) = delete; auto operator=(const Type &)->Type & = delete;
 #define OXYGEN_MAKE_NON_MOVEABLE(Type) Type(Type &&) = delete; auto operator=(Type &&)->Type & = delete;
 #define kFrameBufferCount 3
+#define OXYGEN_DEFAULT_MOVABLE(Type) Type(Type &&) = default; auto operator=(Type &&)->Type & = default

@@ -4,8 +4,8 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="vcpkg.json" />
-    <None Include="vcpkg-configuration.json" />
     <None Include="cpp.hint" />
+    <None Include="vcpkg-configuration.json" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Renderer">
@@ -70,12 +70,6 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.cpp">
       <Filter>Renderer</Filter>
     </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ResourceState.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ResourceStateCache.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h">
@@ -130,12 +124,6 @@
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ResourceState.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ResourceStateCache.h">
       <Filter>Renderer</Filter>
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\D3DResource.h">
