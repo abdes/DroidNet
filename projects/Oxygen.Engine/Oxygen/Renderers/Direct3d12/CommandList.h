@@ -39,11 +39,13 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_DEFAULT_MOVABLE(CommandList);
 
-    void InitializeCommandList(CommandListType type) override;
-    void ReleaseCommandList() noexcept override;
 
     ID3D12GraphicsCommandList* GetCommandList() const { return command_list_; }
     State GetState() const { return state_; }
+
+  protected:
+    void InitializeCommandList(CommandListType type) override;
+    void ReleaseCommandList() noexcept override;
 
   private:
     friend class CommandRecorder;

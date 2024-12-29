@@ -10,18 +10,19 @@
 
 #include "Oxygen/Platform/Window.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Renderers/Direct3d12/Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/RenderTarget.h"
 
 
 namespace oxygen::renderer::d3d12::detail {
 
-  class WindowSurfaceImpl
+  class WindowSurfaceImpl : public D3DResource, public RenderTarget
   {
   public:
 
     explicit WindowSurfaceImpl(platform::WindowPtr window, CommandQueueType* command_queue)
       : window_(std::move(window)), command_queue_(command_queue)
     {
+      mode_ = ResourceAccessMode::kGpuOnly;
     }
 
     void Present() const;
@@ -30,12 +31,14 @@ namespace oxygen::renderer::d3d12::detail {
     auto ShouldResize() const -> bool { return should_resize_; }
     void Resize();
 
-    [[nodiscard]] uint32_t Width() const;
-    [[nodiscard]] uint32_t Height() const;
-    [[nodiscard]] ID3D12Resource* BackBuffer() const;
-    [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE Rtv() const;
-    [[nodiscard]] D3D12_VIEWPORT Viewport() const;
-    [[nodiscard]] D3D12_RECT Scissor() const;
+    [[nodiscard]] auto Width() const->uint32_t;
+    [[nodiscard]] auto Height() const->uint32_t;
+    [[nodiscard]] auto CurrentBackBuffer() const->ID3D12Resource*;
+    [[nodiscard]] auto Rtv() const -> const DescriptorHandle & override;
+    [[nodiscard]] auto Viewport() const->D3D12_VIEWPORT;
+    [[nodiscard]] auto Scissor() const->D3D12_RECT;
+
+    auto GetResource() const -> ID3D12Resource* override { return CurrentBackBuffer(); }
 
   private:
     friend class oxygen::renderer::d3d12::WindowSurface;

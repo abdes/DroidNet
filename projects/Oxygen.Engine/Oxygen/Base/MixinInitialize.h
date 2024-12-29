@@ -51,7 +51,7 @@ namespace oxygen {
   public:
     //! Forwarding constructor, for construction with arguments. \param
     /*!
-     ctor_args The arguments passed to the constructor. The ones for which a
+     \param ctor_args The arguments passed to the constructor. The ones for which a
      type is specified in the template are stripped and stored for use by the
      `Initialize()` methods. The rest are forwarded to other mixins in the
      chain.

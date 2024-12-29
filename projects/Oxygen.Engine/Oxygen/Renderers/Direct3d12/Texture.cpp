@@ -7,44 +7,49 @@
 #include "Oxygen/Renderers/Direct3d12/Texture.h"
 
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Common/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
 using oxygen::windows::ThrowOnFailed;
 
-void Texture::Initialize(const TextureInitInfo& info)
+void Texture::InitializeTexture(const TextureInitInfo& init_info)
 {
+  DCHECK_EQ_F(resource_, nullptr);
+
   const auto device = GetMainDevice();
   DCHECK_NOTNULL_F(device);
 
   const D3D12_CLEAR_VALUE* const clear_value
   {
-    (info.desc &&
-      (info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET ||
-        info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
-      ? info.clear_value
+    (init_info.desc &&
+      (init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET ||
+        init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+      ? init_info.clear_value
       : nullptr
   };
 
-  if (info.resource)
+  if (init_info.resource)
   {
-    DCHECK_EQ_F(nullptr, info.heap);
-    resource_.reset(info.resource);
+    DCHECK_EQ_F(nullptr, init_info.heap);
+    resource_ = init_info.resource;
   }
   else {
-    CHECK_NOTNULL_F(info.desc);
+    CHECK_NOTNULL_F(init_info.desc);
 
-    if (info.heap)
+    if (init_info.heap)
     {
       ID3D12Resource* resource{ nullptr };
       ThrowOnFailed(device->CreatePlacedResource(
-        info.heap,
-        info.alloc_info.Offset,
-        info.desc,
-        info.initial_state,
+        init_info.heap,
+        init_info.alloc_info.Offset,
+        init_info.desc,
+        init_info.initial_state,
         clear_value,
         IID_PPV_ARGS(&resource)));
-      resource_.reset(resource);
+      resource_ = resource;
     }
     else
     {
@@ -52,23 +57,22 @@ void Texture::Initialize(const TextureInitInfo& info)
       ThrowOnFailed(device->CreateCommittedResource(
         &kHeapProperties.default_heap_props,
         D3D12_HEAP_FLAG_NONE,
-        info.desc,
+        init_info.desc,
         D3D12_RESOURCE_STATE_COMMON,
         clear_value,
         IID_PPV_ARGS(&resource)));
-      resource_.reset(resource);
+      resource_ = resource;
     }
   }
 
   srv_ = detail::GetRenderer().SrvHeap().Allocate();
-  device->CreateShaderResourceView(resource_.get(), info.srv_dec, srv_.cpu);
-
+  device->CreateShaderResourceView(resource_, init_info.srv_dec, srv_.cpu);
 }
 
-void Texture::Release()
+void Texture::ReleaseTexture() noexcept
 {
   detail::GetRenderer().SrvHeap().Free(srv_);
-  resource_.reset();
+  DeferredObjectRelease(resource_, detail::GetRenderer().GetPerFrameResourceManager());
 }
 
 void RenderTexture::Initialize(const TextureInitInfo& info)

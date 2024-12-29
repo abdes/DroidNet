@@ -18,6 +18,13 @@
 
 namespace oxygen::renderer {
 
+  enum ClearFlags
+  {
+    kClearFlagsColor = (1 << 0),
+    kClearFlagsDepth = (1 << 1),
+    kClearFlagsStencil = (1 << 2),
+  };
+
   class CommandRecorder
     : public Mixin<CommandRecorder
     , Curry<MixinNamed, const char*>::mixin

@@ -8,9 +8,12 @@
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Common/ObjectRelease.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 
-using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
 using oxygen::windows::ThrowOnFailed;
+using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
+using oxygen::renderer::d3d12::detail::DescriptorHandle;
 
 namespace {
 
@@ -105,8 +108,6 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
   }
   ObjectRelease(swap_chain);
 
-  current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
-
   for (auto& [resource, rtv] : render_targets_) {
     rtv = GetRenderer().RtvHeap().Allocate();
   }
@@ -116,6 +117,8 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
 
 void WindowSurfaceImpl::Finalize()
 {
+  current_backbuffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+
   for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
     DCHECK_F(render_targets_[i].resource == nullptr);
     ID3D12Resource* back_buffer{ nullptr };
@@ -165,32 +168,32 @@ void WindowSurfaceImpl::ReleaseSwapChain()
   ObjectRelease(swap_chain_);
 }
 
-uint32_t WindowSurfaceImpl::Width() const
+auto WindowSurfaceImpl::Width() const -> uint32_t
 {
   return static_cast<uint32_t>(viewport_.Width);
 }
 
-uint32_t WindowSurfaceImpl::Height() const
+auto WindowSurfaceImpl::Height() const -> uint32_t
 {
   return static_cast<uint32_t>(viewport_.Height);
 }
 
-ID3D12Resource* WindowSurfaceImpl::BackBuffer() const
+auto WindowSurfaceImpl::CurrentBackBuffer() const -> ID3D12Resource*
 {
   return render_targets_[current_backbuffer_index_].resource;
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE WindowSurfaceImpl::Rtv() const
+auto WindowSurfaceImpl::Rtv() const -> const DescriptorHandle&
 {
-  return render_targets_[current_backbuffer_index_].rtv.cpu;
+  return render_targets_[current_backbuffer_index_].rtv;
 }
 
-D3D12_VIEWPORT WindowSurfaceImpl::Viewport() const
+auto WindowSurfaceImpl::Viewport() const -> D3D12_VIEWPORT
 {
   return viewport_;
 }
 
-D3D12_RECT WindowSurfaceImpl::Scissor() const
+auto WindowSurfaceImpl::Scissor() const -> D3D12_RECT
 {
   return scissor_;
 }

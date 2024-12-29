@@ -436,16 +436,22 @@ namespace oxygen::renderer::d3d12::detail {
     }
 
     command_recorder_->Begin();
+    command_recorder_->SetRenderTarget(&surface);
     // Record commands
-    //...
 
+    constexpr glm::vec4 clear_color = { 0.0f, 0.0f, 1.0f, 1.0f }; // Blue color
+    command_recorder_->Clear(kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
+
+    //...
     auto command_list = command_recorder_->End();
+
     command_queue_->Submit(command_list);
     command_list->Release();
     command_list.reset();
 
     // Presenting
     surface.Present();
+
   }
 
   auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
