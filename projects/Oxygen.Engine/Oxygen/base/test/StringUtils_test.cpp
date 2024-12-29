@@ -7,6 +7,8 @@
 #include "Oxygen/Base/Platforms.h"
 #if defined(OXYGEN_WINDOWS)
 
+#include <windows.h>
+
 #include "Oxygen/Base/StringUtils.h"
 
 #include <array>

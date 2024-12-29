@@ -32,7 +32,5 @@
     <ClCompile Include="..\oxygen\base\test\types_test.cpp">
       <Filter>Base</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\lib\native\src\gtest\gtest-all.cc" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\lib\native\src\gmock\gmock-all.cc" />
   </ItemGroup>
 </Project>
