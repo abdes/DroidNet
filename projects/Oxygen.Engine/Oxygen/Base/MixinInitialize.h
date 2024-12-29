@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <exception>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -86,7 +87,7 @@ namespace oxygen {
     void Initialize(InitArgs... init_args)
     {
       debug_object_name_ = this->self().ObjectName();
-      LOG_F(INFO, "Initializing {}", this->self().ObjectName());
+      LOG_F(3, "Initializing {}", this->self().ObjectName());
       try
       {
         if constexpr (sizeof...(CtorArgs) > 0)

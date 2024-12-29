@@ -6,12 +6,18 @@
 
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 
-#include "D3DResource.h"
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <type_traits>
+
+#include <d3d12.h>
+
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Renderers/Common/Types.h"
+#include "Oxygen/Renderers/Direct3d12/CommandList.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
-#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
@@ -43,7 +49,7 @@ oxygen::renderer::CommandListPtr CommandRecorder::End() {
   if (!current_command_list_) {
     throw std::runtime_error("No CommandList is being recorded");
   }
-  // Indicate that the back buffer will be used as a render target.
+
   D3D12_RESOURCE_BARRIER barrier{
     .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
@@ -55,12 +61,6 @@ oxygen::renderer::CommandListPtr CommandRecorder::End() {
     }
   };
   current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
-
-  //resource_state_cache_.FlushPendingBarriers(current_command_list_->GetCommandList());
-  //// TODO: pass resource states to the command list object
-  //ResourceStateCache::ResourceStateMap initial_states;
-  //ResourceStateCache::ResourceStateMap final_states;
-  //resource_state_cache_.OnFinishCommandBuffer(initial_states, final_states);
 
   try {
     current_command_list_->OnEndRecording();
@@ -88,27 +88,9 @@ void CommandRecorder::Clear(uint32_t flags, uint32_t num_targets, const uint32_t
 
     for (uint32_t i = 0; i < num_targets; ++i)
     {
-      uint32_t slot = i;
-
-      if (slots)
-      {
-        //if (slots[i] >= current_render_target_->GetNumTargets())
-        //{
-        //  NFE_LOG_ERROR("Invalid render target texture slot = %u", slots[i]);
-        //  return;
-        //}
-
-        slot = slots[i];
-      }
-
-      //const InternalTexturePtr& tex = mCurrRenderTarget->GetTexture(i);
-      //uint32_t subResource = mCurrRenderTarget->GetSubresourceID(i);
-
-      //BarrierFlusher(resource_state_cache_, current_command_list_->GetCommandList())
-      //  .EnsureResourceState(*current_render_target_, D3D12_RESOURCE_STATE_RENDER_TARGET/*, subResource*/);
+      // TODO: handle sub-resources
 
       const auto descriptor_handle = current_render_target_->Rtv().cpu;
-      //descriptor_handle.ptr += slot * rtv_heap.DescriptorSize();
 
       D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
       rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // Set the appropriate format
@@ -148,7 +130,7 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
   DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
   current_render_target_ = render_target;
-  //resource_state_cache_.EnsureResourceState(*current_render_target_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
   // Indicate that the back buffer will be used as a render target.
   const D3D12_RESOURCE_BARRIER barrier{
     .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -170,7 +152,6 @@ void CommandRecorder::ReleaseCommandRecorder() noexcept
 {
   current_command_list_.reset();
 }
-
 
 void CommandRecorder::ResetState()
 {

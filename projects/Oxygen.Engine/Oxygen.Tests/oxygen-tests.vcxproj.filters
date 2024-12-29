@@ -1,36 +1,77 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <ClCompile Include="..\Oxygen\Base\test\ComError_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\Exceptions_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\StringUtils_test.cpp">
+      <Filter>Base\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\macros_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\platform_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\resource_handle_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\resource_table_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\resource_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\time_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\types_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\core\test\input_handler_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\core\test\system_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\core\test\version_test.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform\test\input_test.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform\test\window_test.cpp">
+      <Filter>Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\world\test\entity_component_test.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
-    <None Include="packages.config" />
+    <None Include="vcpkg.json" />
+    <None Include="vcpkg-configuration.json" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
-      <UniqueIdentifier>{9ba025dd-fae8-45bc-929d-550bf1d7b0ca}</UniqueIdentifier>
+      <UniqueIdentifier>{1b6b7b63-671e-47d9-adcb-2580c20cff3e}</UniqueIdentifier>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\oxygen\base\test\macros_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\main.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\platform_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\resource_handle_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\resource_table_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\time_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\oxygen\base\test\types_test.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
+    <Filter Include="Core">
+      <UniqueIdentifier>{bf9f0dba-53f8-4f37-b725-f784b7025026}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{8ae04400-af2a-40b4-9add-43ed33c55f8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="World">
+      <UniqueIdentifier>{af1bc3aa-ea32-4221-8039-d9e6c079112e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base\Windows">
+      <UniqueIdentifier>{5cdaabf6-8b32-41d3-8f3f-8ebfb60c1788}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

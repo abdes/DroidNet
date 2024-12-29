@@ -8,7 +8,6 @@
 
 #include "Oxygen/Renderers/Common/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/CommandList.h"
-#include "Oxygen/Renderers/Direct3d12/ResourceStateCache.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
@@ -41,8 +40,6 @@ namespace oxygen::renderer::d3d12 {
     void ResetState();
 
     std::unique_ptr<CommandList> current_command_list_;
-
-    ResourceStateCache resource_state_cache_{};
 
     RenderTargetNoDeletePtr current_render_target_{ nullptr };
   };

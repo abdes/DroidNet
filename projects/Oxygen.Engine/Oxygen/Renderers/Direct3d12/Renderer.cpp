@@ -11,15 +11,13 @@
 #include <memory>
 
 #include <dxgi1_6.h>
-#include <shared_mutex>
 #include <wrl/client.h>
 
 #include "DebugLayer.h"
 #include "Oxygen/Base/Compilers.h"
 #include "Oxygen/Base/ResourceTable.h"
-#include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Renderers/Common/CommandRecorder.h"
 #include "Oxygen/Renderers/Common/Types.h"
-#include "Oxygen/Renderers/Direct3d12/CommandList.h"
 #include "Oxygen/Renderers/Direct3d12/CommandQueue.h"
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
@@ -439,7 +437,7 @@ namespace oxygen::renderer::d3d12::detail {
     command_recorder_->SetRenderTarget(&surface);
     // Record commands
 
-    constexpr glm::vec4 clear_color = { 0.0f, 0.0f, 1.0f, 1.0f }; // Blue color
+    constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
     command_recorder_->Clear(kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
 
     //...

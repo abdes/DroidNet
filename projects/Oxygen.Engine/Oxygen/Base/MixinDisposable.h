@@ -43,7 +43,7 @@ namespace oxygen {
       if (!should_release_) return;
       this->self().OnRelease();
       should_release_ = false;
-      DLOG_F(INFO, "{} released", this->self().ObjectName());
+      DLOG_F(3, "{} released", this->self().ObjectName());
     }
 
     [[nodiscard]] auto ShouldRelease() const -> bool { return should_release_; }
