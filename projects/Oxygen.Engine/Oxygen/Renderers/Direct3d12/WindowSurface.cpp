@@ -24,9 +24,9 @@ WindowSurface::WindowSurface(
 {
 }
 
-void WindowSurface::Resize(const int width, const int height)
+void WindowSurface::Resize(const int /*width*/, const int /*height*/)
 {
-  pimpl_->Resize();
+  pimpl_->ShouldResize(true);
 }
 
 void WindowSurface::Present() const

@@ -76,7 +76,8 @@ namespace oxygen {
     using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
     using RenderTargetNoDeletePtr = const RenderTarget*;
 
-    using RenderGameFunction = std::function<CommandListPtr(const RenderTarget& render_target)>;
+    using CommandLists = std::vector<CommandListPtr>;
+    using RenderGameFunction = std::function<CommandLists(const RenderTarget& render_target)>;
   }
   //! @}
 

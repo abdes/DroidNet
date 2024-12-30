@@ -19,6 +19,7 @@
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
+#include "Renderer.h"
 
 using namespace oxygen::renderer::d3d12;
 

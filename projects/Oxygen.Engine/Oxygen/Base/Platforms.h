@@ -29,7 +29,7 @@
 // UNIX-style OS
 // All UNIX-style OSes define some form of the unix symbol, except for Apple.
 // GCC with CygWin also defines unix symbols even when building WIN32 apps and
-// this is why UNIX detection is within the #elif of _WIN32
+// this is why UNIX detection is within the `#elif` of `_WIN32`
 #elif (defined(__unix__) || defined(__unix)                                    \
        || (defined(__APPLE__) && defined(__MACH__)))
 #  define OXYGEN_UNIX  // UNIX-style OS.

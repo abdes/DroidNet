@@ -12,30 +12,45 @@
 #include "oxygen/platform/Types.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
+
 class MainModule : public oxygen::core::Module
 {
 public:
-  explicit MainModule(oxygen::PlatformPtr platform);
-  ~MainModule() override;
+  template <typename... Args>
+  explicit MainModule(
+    oxygen::PlatformPtr platform,
+    oxygen::EngineWeakPtr engine,
+    oxygen::platform::WindowPtr window,
+    Args &&... ctor_args)
+    : Module("MainModule", engine, std::forward<Args>(ctor_args)...)
+    , platform_(std::move(platform))
+    , my_window_(std::move(window))
+  {
+  }
+
+  ~MainModule() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVEABLE(MainModule);
 
-  void Initialize(const oxygen::Renderer& renderer) override;
+  void OnInitialize(const oxygen::Renderer* renderer) override;
 
   void ProcessInput(const oxygen::platform::InputEvent& event) override;
   void Update(oxygen::Duration delta_time) override;
   void FixedUpdate() override;
-  void Render(const oxygen::Renderer& renderer) override;
+  void Render(const oxygen::Renderer* renderer) override;
 
-  void Shutdown() noexcept override;
+  void OnShutdown() noexcept override;
 
 private:
   [[nodiscard]] auto RenderGame(
-    const oxygen::Renderer& renderer,
+    const oxygen::Renderer* renderer,
     const oxygen::renderer::RenderTarget& render_target) const
-    ->oxygen::renderer::CommandListPtr;
+    ->oxygen::renderer::CommandLists;
 
   oxygen::PlatformPtr platform_{};
+
   oxygen::renderer::SurfacePtr surface_{};
+  // TODO: hack for ImGui - redesign surfaces
+  oxygen::platform::WindowPtr my_window_{};
 };

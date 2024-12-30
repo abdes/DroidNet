@@ -32,22 +32,22 @@
     <ClInclude Include="base\Types.h">
       <Filter>Base</Filter>
     </ClInclude>
-    <ClInclude Include="core\engine.h">
+    <ClInclude Include="core\Engine.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="core\fwd.h">
+    <ClInclude Include="core\Types.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="core\input_handler.h">
+    <ClInclude Include="core\InputHandler.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="core\module.h">
+    <ClInclude Include="core\Module.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="core\system.h">
+    <ClInclude Include="core\System.h">
       <Filter>Core</Filter>
     </ClInclude>
-    <ClInclude Include="core\version.h">
+    <ClInclude Include="core\Version.h">
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="input\action.h">
@@ -195,6 +195,15 @@
     <ClInclude Include="Renderers\Common\RenderTarget.h">
       <Filter>Renderer</Filter>
     </ClInclude>
+    <ClInclude Include="Imgui\ImguiModule.h">
+      <Filter>Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiRenderInterface.h">
+      <Filter>Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiPlatformBackend.h">
+      <Filter>Imgui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -227,12 +236,15 @@
     <Filter Include="Base\Detail">
       <UniqueIdentifier>{f9a55c4c-dc3f-489b-8c39-5a17b98b44e6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Imgui">
+      <UniqueIdentifier>{b39a8bca-f84c-47c0-b6e6-59f9eb380cf5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core\engine.cpp">
+    <ClCompile Include="core\Engine.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="core\version.cpp">
+    <ClCompile Include="core\Version.cpp">
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="input\action.cpp">
@@ -282,6 +294,12 @@
     </ClCompile>
     <ClCompile Include="Renderers\Common\Renderer.cpp">
       <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\ImguiModule.cpp">
+      <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\ImGuiRenderInterface.cpp">
+      <Filter>Imgui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

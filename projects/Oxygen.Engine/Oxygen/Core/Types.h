@@ -6,9 +6,12 @@
 
 #pragma once
 
+#include <memory>
+
 namespace oxygen {
 
   class Engine;
+  using EngineWeakPtr = std::weak_ptr<Engine>;
 
   namespace core {
 

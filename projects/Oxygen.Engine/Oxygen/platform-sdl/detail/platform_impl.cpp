@@ -4,38 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <oxygen/base/Compilers.h>
+#include "Oxygen/Platform-SDL/Detail/Platform_impl.h"
+
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keycode.h>
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cstddef>
 #include <memory>
 #include <span>
-// Disable compiler and linter warnings originating from 'fmt' and for which we
-// cannot do anything.
-OXYGEN_DIAGNOSTIC_PUSH
-#if defined(__clang__) || defined(ASAP_GNUC_VERSION)
-#  pragma GCC diagnostic ignored "-Wswitch-enum"
-#  pragma GCC diagnostic ignored "-Wswitch-default"
-#endif
-#include "fmt/core.h"
-OXYGEN_DIAGNOSTIC_POP
 
-#include "../display.h"
-#include "../platform.h"
-#include "../window.h"
-#include "oxygen/base/logging.h"
-#include "oxygen/base/Types.h"
-#include "oxygen/platform/input_event.h"
-#include "oxygen/platform/Types.h"
-#include "oxygen/platform/window.h"
-#include "platform_impl.h"
-#include "wrapper.h"
+#include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/Types.h"
+#include "Oxygen/Platform/input_event.h"
+#include "Oxygen/Platform/Types.h"
+#include "Oxygen/Platform/Window.h"
+#include "Oxygen/Platform-SDL/Detail/Wrapper.h"
+#include "Oxygen/Platform-SDL/display.h"
+#include "Oxygen/Platform-SDL/platform.h"
+#include "Oxygen/Platform-SDL/window.h"
 
 using oxygen::Duration;
 using oxygen::SubPixelMotion;
@@ -51,7 +40,7 @@ using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::sdl::Platform;
 
 namespace {
-  auto MapKeyCode(SDL_Keycode code) {
+  auto MapKeyCode(const SDL_Keycode code) {
     using oxygen::platform::Key;
     // clang-format off
     switch (code) {
@@ -409,62 +398,75 @@ auto Platform::PlatformImpl::DisplayFromId(
   return display;
 }
 
-auto Platform::PlatformImpl::PollEvent()
--> std::unique_ptr<platform::InputEvent> {
-  if (sdl_->PollEvent(&event_)) {
-    if (event_.type == SDL_EVENT_KEY_UP || event_.type == SDL_EVENT_KEY_DOWN) {
-      LOG_SCOPE_F(1, "Keyboard event");
-      DLOG_F(2,
-             "type      = {}",
-             ((event_.key.type == SDL_EVENT_KEY_UP) ? "KEY_UP" : "KEY_DOWN"));
-      DLOG_F(2, "window id = {}", event_.key.windowID);
-      DLOG_F(2, "repeat    = {}", event_.key.repeat);
-      DLOG_F(2, "scancode  = {}", static_cast<uint32_t>(event_.key.scancode));
-      DLOG_F(2, "keycode   = {}", event_.key.key);
-      DLOG_F(2, "key name  = {}", sdl_->GetKeyName(event_.key.key));
-      return TranslateKeyboardEvent(event_);
-    }
-    if (event_.type == SDL_EVENT_MOUSE_BUTTON_UP
-        || event_.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-      LOG_SCOPE_F(1, "Mouse button event");
-      DLOG_F(2, "button = {}", event_.button.button);
-      DLOG_F(
-        2,
-        "state  = {}",
-        ((event_.button.type == SDL_EVENT_MOUSE_BUTTON_UP) ? "UP" : "DOWN"));
-      return TranslateMouseButtonEvent(event_);
-    }
-    if (event_.type == SDL_EVENT_MOUSE_WHEEL) {
-      LOG_SCOPE_F(1, "Mouse wheel event");
-      DLOG_F(2, "dx = {}", event_.wheel.x);
-      DLOG_F(2, "dy = {}", event_.wheel.y);
-      return TranslateMouseWheelEvent(event_);
-    }
-    if (event_.type == SDL_EVENT_MOUSE_MOTION) {
-      LOG_SCOPE_F(1, "Mouse motion event");
-      DLOG_F(2, "dx = {}", event_.motion.xrel);
-      DLOG_F(2, "dy = {}", event_.motion.yrel);
-      return TranslateMouseMotionEvent(event_);
+auto Platform::PlatformImpl::PollEvent() -> std::unique_ptr<InputEvent>
+{
+  SDL_Event event{};
+  if (sdl_->PollEvent(&event)) {
+    // If we have a registered platform event handler, call it first.
+    bool capture_mouse{ false };
+    bool capture_keyboard{ false };
+    on_platform_event_(event, capture_mouse, capture_keyboard);
+
+    if (!capture_keyboard)
+    {
+      if (event.type == SDL_EVENT_KEY_UP || event.type == SDL_EVENT_KEY_DOWN) {
+        LOG_SCOPE_F(1, "Keyboard event");
+        DLOG_F(2,
+               "type      = {}",
+               ((event.key.type == SDL_EVENT_KEY_UP) ? "KEY_UP" : "KEY_DOWN"));
+        DLOG_F(2, "window id = {}", event.key.windowID);
+        DLOG_F(2, "repeat    = {}", event.key.repeat);
+        DLOG_F(2, "scancode  = {}", static_cast<uint32_t>(event.key.scancode));
+        DLOG_F(2, "keycode   = {}", event.key.key);
+        DLOG_F(2, "key name  = {}", sdl_->GetKeyName(event.key.key));
+        return TranslateKeyboardEvent(event);
+      }
     }
 
-    if (event_.type >= SDL_EVENT_DISPLAY_FIRST
-        && event_.type <= SDL_EVENT_DISPLAY_LAST) {
-      DispatchDisplayEvent(event_);
+    if (!capture_mouse)
+    {
+      if (event.type == SDL_EVENT_MOUSE_BUTTON_UP
+          || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        LOG_SCOPE_F(1, "Mouse button event");
+        DLOG_F(2, "button = {}", event.button.button);
+        DLOG_F(
+          2,
+          "state  = {}",
+          ((event.button.type == SDL_EVENT_MOUSE_BUTTON_UP) ? "UP" : "DOWN"));
+        return TranslateMouseButtonEvent(event);
+      }
+      if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        LOG_SCOPE_F(1, "Mouse wheel event");
+        DLOG_F(2, "dx = {}", event.wheel.x);
+        DLOG_F(2, "dy = {}", event.wheel.y);
+        return TranslateMouseWheelEvent(event);
+      }
+      if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        LOG_SCOPE_F(1, "Mouse motion event");
+        DLOG_F(2, "dx = {}", event.motion.xrel);
+        DLOG_F(2, "dy = {}", event.motion.yrel);
+        return TranslateMouseMotionEvent(event);
+      }
     }
-    else if (event_.type >= SDL_EVENT_WINDOW_FIRST
-             && event_.type <= SDL_EVENT_WINDOW_LAST) {
-      DispatchWindowEvent(event_);
+
+    if (event.type >= SDL_EVENT_DISPLAY_FIRST
+        && event.type <= SDL_EVENT_DISPLAY_LAST) {
+      DispatchDisplayEvent(event);
     }
-    else if (event_.type == SDL_EVENT_POLL_SENTINEL) {
+    else if (event.type >= SDL_EVENT_WINDOW_FIRST
+             && event.type <= SDL_EVENT_WINDOW_LAST) {
+      DispatchWindowEvent(event);
+    }
+    else if (event.type == SDL_EVENT_POLL_SENTINEL) {
       // Signals the end of an event poll cycle
     }
     else {
-      if (event_.type != SDL_EVENT_MOUSE_MOTION) {
+      if (event.type != SDL_EVENT_MOUSE_MOTION) {
         DLOG_F(1,
                "Event [{}] has no dispatcher",
-               detail::SdlEventName(event_.type));
+               detail::SdlEventName(event.type));
       }
-      OnUnhandledEvent()(event_);
+      OnUnhandledEvent()(event);
     }
   }
   return {};

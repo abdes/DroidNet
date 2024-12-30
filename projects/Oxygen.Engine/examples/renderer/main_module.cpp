@@ -9,8 +9,11 @@
 #include <random>
 
 #include <glm/glm.hpp>
+#include <Oxygen.Renderer.Direct3D12/vcpkg_installed/x64-windows-static-md/x64-windows-static-md/include/imgui.h>
 
 #include "oxygen/base/logging.h"
+#include "Oxygen/Core/Engine.h"
+#include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/types.h"
 #include "oxygen/platform/platform.h"
@@ -32,31 +35,17 @@ using oxygen::platform::InputSlots;
 using oxygen::graphics::GetRenderer;
 using oxygen::renderer::RenderTarget;
 using oxygen::renderer::CommandListPtr;
+using oxygen::renderer::CommandLists;
+using oxygen::Engine;
 
-MainModule::MainModule(oxygen::PlatformPtr platform)
-  : platform_(std::move(platform)) {
-}
+void MainModule::OnInitialize(const oxygen::Renderer* renderer)
+{
+  DCHECK_NOTNULL_F(renderer);
+  DCHECK_F(!my_window_.expired());
 
-MainModule::~MainModule() = default;
-
-void MainModule::Initialize(const oxygen::Renderer& renderer) {
-  // Create a window.
-  const auto my_window = platform_->MakeWindow(
-    "Oxygen Renderer Example",
-    { .width = 1200, .height = 800 },
-    {
-        .hidden = false,
-        .always_on_top = false,
-        .full_screen = false,
-        .maximized = false,
-        .minimized = false,
-        .resizable = true,
-        .borderless = false,
-    });
-
-    surface_ = renderer.CreateWindowSurface(my_window);
-    DCHECK_F(surface_->IsValid());
-    surface_->Initialize();
+  surface_ = renderer->CreateWindowSurface(my_window_);
+  DCHECK_F(surface_->IsValid());
+  surface_->Initialize();
 }
 
 void MainModule::ProcessInput(const oxygen::platform::InputEvent& event) {
@@ -68,7 +57,10 @@ void MainModule::Update(const oxygen::Duration delta_time) {
 void MainModule::FixedUpdate() {
 }
 
-void MainModule::Render(const oxygen::Renderer& renderer) {
+void MainModule::Render(const oxygen::Renderer* renderer)
+{
+  DCHECK_NOTNULL_F(renderer);
+
   // Create a random number core.
   static std::random_device rd;
   static std::mt19937 gen(rd());
@@ -91,25 +83,27 @@ void MainModule::Render(const oxygen::Renderer& renderer) {
   //// Execute the command list
   //renderer->ExecuteCommandList(command_list);
 
-  renderer.Render(surface_->GetId(),
-                  [this, &renderer](const RenderTarget& render_target)
-                  {
-                    return RenderGame(renderer, render_target);
-                  });
+  renderer->Render(surface_->GetId(),
+                   [this, &renderer](const RenderTarget& render_target)
+                   {
+                     return RenderGame(renderer, render_target);
+                   });
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
 }
 
-void MainModule::Shutdown() noexcept
+void MainModule::OnShutdown() noexcept
 {
   surface_.reset();
   platform_.reset();
 }
 
 auto MainModule::RenderGame(
-  const oxygen::Renderer& renderer,
-  const RenderTarget& render_target) const -> CommandListPtr
+  const oxygen::Renderer* renderer,
+  const RenderTarget& render_target) const -> CommandLists
 {
-  const auto command_recorder = renderer.GetCommandRecorder();
+  DCHECK_NOTNULL_F(renderer);
+
+  const auto command_recorder = renderer->GetCommandRecorder();
   command_recorder->Begin();
   command_recorder->SetRenderTarget(&render_target);
   // Record commands
@@ -124,5 +118,21 @@ auto MainModule::RenderGame(
   command_recorder->SetScissors(left, top, right, bottom);
 
   //...
-  return command_recorder->End();
+  CommandLists command_lists{};
+  auto my_command_list = command_recorder->End();
+  command_lists.emplace_back(std::move(my_command_list));
+  // Initialize the ImGui layer
+  if (!GetEngine().HasImGui())
+  {
+    return command_lists;
+  }
+
+  auto imgui = GetEngine().GetImGuiRenderInterface();
+  ImGui::SetCurrentContext(imgui.GetContext());
+  imgui.NewFrame(renderer);
+  ImGui::ShowDemoWindow();
+  auto imgui_command_list = imgui.Render(renderer);
+  command_lists.emplace_back(std::move(imgui_command_list));
+
+  return command_lists;
 }

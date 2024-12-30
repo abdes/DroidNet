@@ -11,8 +11,8 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Renderers/Common/DeferredObjectRelease.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
-#include "Renderer.h"
 
 namespace {
 
@@ -44,7 +44,8 @@ namespace {
 
 using namespace oxygen::renderer::d3d12;
 
-void CommandList::InitializeCommandList(CommandListType type) {
+void CommandList::InitializeCommandList(CommandListType type)
+{
   // TODO: consider if we want to reuse command list objects
 
   D3D12_COMMAND_LIST_TYPE d3d12_type;
@@ -89,36 +90,43 @@ void CommandList::InitializeCommandList(CommandListType type) {
   state_ = State::kFree;
 }
 
-void CommandList::ReleaseCommandList() noexcept {
-  if (command_allocator_) DeferredObjectRelease(command_allocator_, detail::GetRenderer().GetPerFrameResourceManager());
-  if (command_list_) DeferredObjectRelease(command_list_, detail::GetRenderer().GetPerFrameResourceManager());
+void CommandList::ReleaseCommandList() noexcept
+{
+  auto& renderer = detail::GetRenderer();
+  // TODO: refactor into a macro
+  if (command_allocator_) DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());
+  if (command_list_) DeferredObjectRelease(command_list_, renderer.GetPerFrameResourceManager());
 }
 
-void CommandList::OnBeginRecording() {
+void CommandList::OnBeginRecording()
+{
   if (state_ != State::kFree) {
     throw std::runtime_error("CommandList is not in a Free state");
   }
-  command_allocator_->Reset();
-  command_list_->Reset(command_allocator_, nullptr);
+  ThrowOnFailed(command_allocator_->Reset(), "could not reset the command allocator");
+  ThrowOnFailed(command_list_->Reset(command_allocator_, nullptr), "could not reset the command list");
   state_ = State::kRecording;
 }
 
-void CommandList::OnEndRecording() {
+void CommandList::OnEndRecording()
+{
   if (state_ != State::kRecording) {
     throw std::runtime_error("CommandList is not in a Recording state");
   }
-  command_list_->Close();
+  ThrowOnFailed(command_list_->Close(), "could not close the command list");
   state_ = State::kRecorded;
 }
 
-void CommandList::OnSubmitted() {
+void CommandList::OnSubmitted()
+{
   if (state_ != State::kRecorded) {
     throw std::runtime_error("CommandList is not in a Recorded state");
   }
   state_ = State::kExecuting;
 }
 
-void CommandList::OnExecuted() {
+void CommandList::OnExecuted()
+{
   if (state_ != State::kExecuting) {
     throw std::runtime_error("CommandList is not in an Executing state");
   }

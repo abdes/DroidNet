@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "ObjectRelease.h"
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
@@ -32,7 +31,7 @@ namespace oxygen::renderer {
     {
     }
 
-    ~CommandList() override = default;
+    OXYGEN_API ~CommandList() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_MAKE_NON_MOVEABLE(CommandList);

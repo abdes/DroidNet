@@ -10,7 +10,6 @@
 //! Windows-specific functions are fenced with `OXYGEN_WINDOWS` and are only
 //! available on the Windows platform.
 
-#include <concepts>
 #include <string>
 
 namespace oxygen::string_utils {

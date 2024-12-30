@@ -17,7 +17,6 @@
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12 {
-  constexpr static DXGI_FORMAT kDefaultBackBufferFormat{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB };
 
   namespace detail {
     class WindowSurfaceImpl;

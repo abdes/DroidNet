@@ -25,7 +25,7 @@ namespace oxygen::renderer::d3d12 {
     ThrowOnFailed(object->SetName(name.c_str()));
     std::string narrow_name{};
     string_utils::WideToUtf8(name, narrow_name);
-    LOG_F(1, "+D3D12 named object created: {}", narrow_name);
+    LOG_F(3, "+D3D12 named object created: {}", narrow_name);
 #endif
   }
 

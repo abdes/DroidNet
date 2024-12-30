@@ -18,7 +18,12 @@
 #include "oxygen/platform/Types.h"
 #include "oxygen/platform/window.h"
 
+
 namespace oxygen {
+
+  namespace imgui {
+    class ImGuiPlatformBackend;
+  }  // namespace imgui
 
   class Platform
   {
@@ -96,6 +101,9 @@ namespace oxygen {
 
     auto GetInputCategoryDisplayName(std::string_view category_name)
       -> std::string_view;
+
+    [[nodiscard]] virtual auto CreateImGuiBackend(platform::WindowIdType window_id) const
+      ->std::unique_ptr<imgui::ImGuiPlatformBackend> = 0;
 
   private:
     sigslot::signal<> on_last_window_closed_;

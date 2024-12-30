@@ -6,6 +6,7 @@
     <None Include="vcpkg.json" />
     <None Include="vcpkg-configuration.json" />
     <None Include="cpp.hint" />
+    <None Include="imgui.ini" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

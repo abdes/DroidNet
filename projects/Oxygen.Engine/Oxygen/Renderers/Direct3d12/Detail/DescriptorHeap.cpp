@@ -14,7 +14,7 @@
 using namespace oxygen::windows;
 using namespace oxygen::renderer::d3d12::detail;
 
-inline oxygen::renderer::d3d12::detail::DescriptorHandle::~DescriptorHandle()
+inline DescriptorHandle::~DescriptorHandle()
 {
   DLOG_F(3, "DescriptorHandle::~DescriptorHandle()");
 }

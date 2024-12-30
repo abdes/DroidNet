@@ -13,17 +13,18 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
-#include "DebugLayer.h"
 #include "Oxygen/Base/Compilers.h"
 #include "Oxygen/Base/ResourceTable.h"
+#include "Oxygen/ImGui/ImGuiPlatformBackend.h"
 #include "Oxygen/Renderers/Common/CommandRecorder.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/CommandQueue.h"
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
-#include "Oxygen/Renderers/Direct3d12/D3DPtr.h"
+#include "Oxygen/Renderers/Direct3d12/DebugLayer.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
+#include "Oxygen/Renderers/Direct3d12/ImGui/ImGuiModule.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 #include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
@@ -253,13 +254,13 @@ namespace oxygen::renderer::d3d12::detail {
 
     auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
-    void Init(PlatformPtr platform, const RendererProperties& props);
+    void Init(const RendererProperties& props);
     void ShutdownRenderer();
     void ShutdownDevice();
 
     auto BeginFrame(const resources::SurfaceId& surface_id) const
       -> const renderer::RenderTarget&;
-    void EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id) const;
+    void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
       ->std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
 
@@ -291,7 +292,7 @@ namespace oxygen::renderer::d3d12::detail {
 #endif
   };
 
-  void RendererImpl::Init([[maybe_unused]] PlatformPtr platform, const RendererProperties& props)
+  void RendererImpl::Init(const RendererProperties& props)
   {
     DCHECK_F(GetMainDevice() == nullptr);
 
@@ -380,7 +381,7 @@ namespace oxygen::renderer::d3d12::detail {
     command_recorder_->Release();
     command_recorder_.reset();
 
-    SafeRelease(&allocator_);
+    ObjectRelease(allocator_);
     // TODO: SafeRelease for objects that need to be released after a full flush
     // otherwise, we should use ObjectRelease() or DeferredObjectRelease()
     LOG_F(INFO, "D3D12MA Memory Allocator released");
@@ -423,16 +424,18 @@ namespace oxygen::renderer::d3d12::detail {
     return surface;
   }
 
-  void RendererImpl::EndFrame(
-    CommandListPtr command_list,
-    const resources::SurfaceId& surface_id) const
+  void RendererImpl::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
   {
     try {
       const auto& surface = surfaces.ItemAt(surface_id);
 
-      command_queue_->Submit(command_list);
-      command_list->Release();
-      command_list.reset();
+      command_queue_->Submit(command_lists);
+      for (auto& command_list : command_lists)
+      {
+        command_list->Release();
+        command_list.reset();
+      }
+      command_lists.clear();
 
       // Presenting
       surface.Present();
@@ -478,9 +481,9 @@ void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& prop
 {
   if (GetMainDevice()) OnShutdown();
 
-  oxygen::Renderer::OnInitialize(platform, props);
+  oxygen::Renderer::OnInitialize(std::move(platform), props);
   pimpl_ = std::make_shared<detail::RendererImpl>();
-  pimpl_->Init(GetPlatform(), GetPInitProperties());
+  pimpl_->Init(GetPInitProperties());
 }
 
 void Renderer::OnShutdown()
@@ -493,12 +496,18 @@ void Renderer::OnShutdown()
 auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
 -> const renderer::RenderTarget&
 {
-  return pimpl_->BeginFrame(surface_id);
+  current_render_target_ = &pimpl_->BeginFrame(surface_id);
+  return *current_render_target_;
 }
 
-void Renderer::EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id)
+void Renderer::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
 {
-  pimpl_->EndFrame(std::move(command_list), surface_id);
+  pimpl_->EndFrame(command_lists, surface_id);
+}
+
+auto Renderer::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const-> std::unique_ptr<imgui::ImguiModule>
+{
+  return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }
 
 auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr

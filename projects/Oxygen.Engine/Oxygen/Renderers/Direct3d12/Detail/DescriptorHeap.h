@@ -22,6 +22,7 @@ namespace oxygen::renderer::d3d12::detail {
 
   inline size_t kInvalidIndex{ std::numeric_limits<size_t>::max() };
 
+  // TODO: redesign for RAII resource management
   struct DescriptorHandle
   {
     friend class DescriptorHeap;
@@ -29,6 +30,9 @@ namespace oxygen::renderer::d3d12::detail {
 
     DescriptorHandle() = default;
     ~DescriptorHandle();
+
+    OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle);
+    OXYGEN_DEFAULT_MOVABLE(DescriptorHandle);
 
     D3D12_CPU_DESCRIPTOR_HANDLE cpu{};
     D3D12_GPU_DESCRIPTOR_HANDLE gpu{};
@@ -68,10 +72,10 @@ namespace oxygen::renderer::d3d12::detail {
     //! Forwarding constructor
     template <typename... Args>
     constexpr explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type, Args &&...args)
-      : type_{ type }, Mixin(static_cast<decltype(args)>(args)...)
+      : Mixin(std::forward<Args>(args)...), type_{ type }
     {
     }
-    ~DescriptorHeap() { Release(); }
+    ~DescriptorHeap() override { Release(); }
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
     OXYGEN_MAKE_NON_MOVEABLE(DescriptorHeap);

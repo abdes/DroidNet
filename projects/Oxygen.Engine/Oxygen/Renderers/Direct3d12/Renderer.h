@@ -13,6 +13,10 @@
 
 #include "D3D12MemAlloc.h"
 
+namespace oxygen {
+  class Engine;
+}
+
 namespace oxygen::renderer {
   class WindowSurface;
 }
@@ -43,7 +47,8 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_D3D12_API [[nodiscard]] auto SrvHeap() const->detail::DescriptorHeap&;
     OXYGEN_D3D12_API [[nodiscard]] auto UavHeap() const->detail::DescriptorHeap&;
 
-    OXYGEN_D3D12_API auto CreateWindowSurface(oxygen::platform::WindowPtr window) const->SurfacePtr override;
+    OXYGEN_D3D12_API [[nodiscard]] auto CreateWindowSurface(platform::WindowPtr window) const->SurfacePtr override;
+    OXYGEN_D3D12_API [[nodiscard]] auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const->std::unique_ptr<imgui::ImguiModule> override;
 
 
     //OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
@@ -52,15 +57,21 @@ namespace oxygen::renderer::d3d12 {
 
     D3D12MA::Allocator* GetAllocator() const;
 
+    // TODO: Temporary until we separate the rendering surfaces from the app module
+    auto GetCurrentRenderTarget() const -> const RenderTarget& { return *current_render_target_; }
+
   protected:
     void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
     void OnShutdown() override;
 
     auto BeginFrame(const resources::SurfaceId& surface_id) -> const renderer::RenderTarget & override;
-    void EndFrame(CommandListPtr command_list, const resources::SurfaceId& surface_id) override;
+    void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const override;
 
   private:
     std::shared_ptr<detail::RendererImpl> pimpl_{};
+
+    // TODO: Temporary until we separate the rendering surfaces from the app module
+    const RenderTarget* current_render_target_{ nullptr };
   };
 
 }  // namespace oxygen::renderer::d3d12

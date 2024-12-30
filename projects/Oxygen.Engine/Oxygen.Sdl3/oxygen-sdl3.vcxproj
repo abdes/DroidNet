@@ -15,13 +15,24 @@
     <ClCompile Include="..\Oxygen\platform-sdl\detail\wrapper.cpp" />
     <ClCompile Include="..\Oxygen\platform-sdl\display.cpp" />
     <ClCompile Include="..\Oxygen\platform-sdl\event_utils.cpp" />
+    <ClCompile Include="..\Oxygen\platform-sdl\ImGui\ImGuiSdl3Backend.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\ImGui\imgui_impl_sdl3.cpp" />
     <ClCompile Include="..\Oxygen\platform-sdl\platform.cpp" />
     <ClCompile Include="..\Oxygen\platform-sdl\window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Oxygen\platform-sdl\api_export.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\detail\platform_impl.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\detail\wrapper.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\display.h" />
+    <ClInclude Include="..\Oxygen\platform-sdl\ImGui\ImGuiSdl3Backend.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\ImGui\imgui_impl_sdl3.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\platform.h" />
     <ClInclude Include="..\Oxygen\platform-sdl\window.h" />
   </ItemGroup>

@@ -10,13 +10,15 @@
 #include <memory>
 #include <vector>
 
-#include "oxygen/api_export.h"
-#include "oxygen/core/input_handler.h"
-#include "oxygen/core/system.h"
-#include "oxygen/input/types.h"
+#include "Oxygen/api_export.h"
+#include "Oxygen/Core/InputHandler.h"
+#include "Oxygen/Core/System.h"
 #include "oxygen/platform/Types.h"
 
 namespace oxygen::input {
+
+  class Action;
+  class InputMappingContext;
 
   class InputSystem : public engine::System, engine::InputHandler
   {

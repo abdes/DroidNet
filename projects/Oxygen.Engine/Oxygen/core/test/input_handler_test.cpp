@@ -4,12 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/core/input_handler.h"
+#include "Oxygen/Core/InputHandler.h"
 
 #include "gtest/gtest.h"
 
-class MyInputHandler final : public oxygen::engine::InputHandler {
- public:
+class MyInputHandler final : public oxygen::engine::InputHandler
+{
+public:
   void ProcessInput(const oxygen::platform::InputEvent& /*event*/) override {}
 };
 
