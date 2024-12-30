@@ -6,18 +6,25 @@
 
 #pragma once
 
+#include <list>
 #include <memory>
 #include <string>
-#include <vector>
 
 // #include <vulkan/vulkan_core.h>
 
-#include <list>
 
-#include "oxygen/api_export.h"
-#include "oxygen/base/Time.h"
-#include "oxygen/platform/Types.h"
+#include "Oxygen/api_export.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinInitialize.h"
+#include "Oxygen/Base/MixinNamed.h"
+#include "Oxygen/Base/MixinShutdown.h"
+#include "Oxygen/Base/Time.h"
+#include "Oxygen/ImGui/ImguiModule.h"
+#include "Oxygen/ImGui/ImGuiRenderInterface.h"
+#include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/Types.h"
+
 
 namespace oxygen {
 
@@ -28,49 +35,15 @@ namespace oxygen {
     class Module;
   }  // namespace core
 
-#if 0
-  namespace engine {
-
-    struct DeviceRequirements
-    {
-      // Signature of the callback function that can be used to check if a
-      // particular device queue family supports presentation.
-      using GetPresentationSupportCallback =
-        std::function<bool(VkPhysicalDevice, uint32_t queue_family_index)>;
-
-      std::vector<const char*> required_extensions;
-
-      // Devices that support these extensions will be preferred.
-      std::vector<const char*> optional_extensions;
-
-      VkPhysicalDeviceFeatures required_features;
-      VkPhysicalDeviceFeatures optional_features;
-
-      // TODO(abdessattar) add requirements on queue families
-
-      // Optional callback, when provided, it will be used to check if a
-      // particular device queue family supports presentation to the surface for
-      // which a device is being selected.
-      GetPresentationSupportCallback get_presentation_support_cb;
-    };
-
-    struct SuitableDevice
-    {
-      std::weak_ptr<PhysicalDevice> device;
-
-      // These are the device features and extensions that are both supported by
-      // the device and requested during device selection either as required or as
-      // optional. They can be used when creating a logical device on top of this
-      // physical device.
-
-      VkPhysicalDeviceFeatures features;
-      std::vector<const char*> extensions{};
-    };
-
-  }  // namespace core
-#endif
 
   class Engine
+    : public Mixin
+    < Engine
+    , Curry<MixinNamed, const char*>::mixin
+    , MixinInitialize
+    , MixinShutdown
+    >
+    , public std::enable_shared_from_this<Engine>
   {
   public:
     using ModulePtr = std::shared_ptr<core::Module>;
@@ -84,60 +57,59 @@ namespace oxygen {
       } application;
       std::vector<const char*> extensions;  // Vulkan instance extensions
       Duration max_fixed_update_duration{ kDefaultFixedUpdateDuration };
+      bool enable_imgui_layer{ true };
+      platform::WindowIdType main_window_id{};
     };
 
-    OXYGEN_API Engine(PlatformPtr platform, RendererPtr renderer, Properties props);
-    OXYGEN_API ~Engine();
+    //! Constructor to forward the arguments to the mixins in the chain.
+    template <typename... Args>
+    explicit Engine(PlatformPtr platform, RendererPtr renderer, Properties props, Args&&... args)
+      : Mixin(Name().c_str(), std::forward<Args>(args)...)
+      , platform_(std::move(platform))
+      , renderer_(std::move(renderer))
+      , props_(std::move(props))
+    {
+    }
 
-    // Non-copyable
-    Engine(const Engine&) = delete;
-    auto operator=(const Engine&)->Engine & = delete;
+    OXYGEN_API ~Engine() override = default;
 
-    // Non-Movable
-    Engine(Engine&& other) noexcept = delete;
-    auto operator=(Engine&& other) noexcept -> Engine & = delete;
+    OXYGEN_MAKE_NON_COPYABLE(Engine);
+    OXYGEN_MAKE_NON_MOVEABLE(Engine);
 
     OXYGEN_API [[nodiscard]] auto GetPlatform() const->Platform&;
 
     //! Attaches the given Module to the engine, to be updated, rendered, etc.
     //! \param module module to be attached.
-    //! \param layer layer to determine the order of invocation. Default is the main layer (`0`).
+    //! \param priority layer to determine the order of invocation. Default is the main layer (`0`).
     //! \throws std::invalid_argument if the module is attached or the weak_ptr is expired.
-    OXYGEN_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
-
-    //! Detached the given Module from the engine.
-    //! @param module the module to be detached.
-    //! \throws std::invalid_argument if the module is not attached or the weak_ptr is expired.
-    OXYGEN_API void DetachModule(const ModulePtr& module);
+    OXYGEN_API void AttachModule(const ModulePtr& module, uint32_t priority = 0);
 
     OXYGEN_API auto Run() -> void;
 
-#if 0
-    [[nodiscard]] auto GetInstance() const->VkInstance const&;
+    OXYGEN_API [[nodiscard]] static auto Name() -> const std::string&;
+    OXYGEN_API [[nodiscard]] static auto Version() -> uint32_t;
 
-    [[nodiscard]] OXYGEN_API auto SelectDevices(
-      engine::DeviceRequirements const& requirements) const
-      ->std::vector<engine::SuitableDevice>;
-
-    [[nodiscard]] OXYGEN_API auto SelectDevice(
-      engine::DeviceRequirements const& requirements) const
-      ->engine::SuitableDevice;
-#endif
-
-    [[nodiscard]] static auto Name() -> const std::string&;
-    [[nodiscard]] static auto Version() -> uint32_t;
+    [[nodiscard]] auto HasImGui() const -> bool { return imgui_module_ != nullptr; }
+    OXYGEN_API [[nodiscard]] auto GetImGuiRenderInterface() const->imgui::ImGuiRenderInterface;
 
   private:
-#if 0
-    std::unique_ptr<vulkan::Instance> instance_;
+    OXYGEN_API virtual void OnInitialize();
+    template <typename Base, typename... CtorArgs>
+    friend class MixinInitialize; //< Allow access to OnInitialize.
 
-    std::vector<std::shared_ptr<engine::PhysicalDevice>> devices_;
-    auto DiscoverDevices() -> void;
-#endif
+    OXYGEN_API virtual void OnShutdown();
+    template <typename Base>
+    friend class MixinShutdown; //< Allow access to OnShutdown.
+
+    //! Detach the given Module from the engine.
+    //! @param module the module to be detached.
+    //! \throws std::invalid_argument if the module is not attached or the weak_ptr is expired.
+    void DetachModule(const ModulePtr& module);
 
     PlatformPtr platform_;
     RendererPtr renderer_;
     Properties props_;
+    std::unique_ptr<imgui::ImguiModule> imgui_module_{};
 
     DeltaTimeCounter engine_clock_{};
 
@@ -155,7 +127,7 @@ namespace oxygen {
     };
     std::list<ModuleContext> modules_;
 
-    void SortModulesByLayer();
+    void SortModulesByPriority();
     void InitializeModules();
     void ShutdownModules();
   };

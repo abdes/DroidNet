@@ -4,219 +4,73 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/core/engine.h"
+#include "Oxygen/Core/Engine.h"
 
 #include <algorithm>
-#include <ranges>
 
-#if 0
-#  include <vulkan/vulkan_core.h>
-
-#  include "oxygen/engine/physical_device.h"
-#  include "oxygen/vulkan/details/vk_utils.h"
-#  include "oxygen/vulkan/instance.h"
-#endif
-
-#include "module.h"
-#include "oxygen/base/logging.h"
-#include "oxygen/base/Time.h"
-#include "oxygen/platform/platform.h"
-#include "version.h"
+#include "Oxygen/Base/logging.h"
+#include "Oxygen/Base/Time.h"
+#include "Oxygen/core/Version.h"
+#include "Oxygen/ImGui/ImguiModule.h"
+#include "Oxygen/Platform/Platform.h"
+#include "Oxygen/Renderers/Common/Renderer.h"
 
 using oxygen::Engine;
-// using oxygen::core::DeviceRequirements;
-// using oxygen::core::PhysicalDevice;
-// using oxygen::core::PhysicalDeviceType;
-// using oxygen::core::SuitableDevice;
-// using oxygen::vulkan::Instance;
-// using oxygen::vulkan::details::CheckVk;
-// using oxygen::vulkan::details::GetDeviceFeatureDescription;
-
-#if 0
-namespace {
-
-  auto GetDeviceFeaturesAsVector(const VkPhysicalDeviceFeatures& features)
-    -> std::vector<VkBool32>
-  {
-    std::vector<VkBool32> comparable_features(
-      sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32));
-    std::memcpy(
-      comparable_features.data(),
-      &features,
-      sizeof(VkPhysicalDeviceFeatures));
-    return comparable_features;
-  }
-
-  auto IsExtensionSupported(
-    const std::vector<VkExtensionProperties>& extensions,
-    const std::string& extension_name) -> bool
-  {
-    return std::ranges::find_if(
-      extensions,
-      [&](const VkExtensionProperties& extension) {
-        return extension.extensionName == extension_name;
-      }) != extensions.end();
-  }
-
-  auto ScorePhysicalDevice(
-    PhysicalDevice const& device,
-    DeviceRequirements const& requirements,
-    VkPhysicalDeviceFeatures& features_to_enable,
-    std::vector<const char*>& extensions_to_enable) -> uint32_t
-  {
-    uint32_t score = 0;
-
-    // Check extensions
-    // Checks if the requested extensions are supported.
-    uint32_t count{ 0 };
-    CheckVk(
-      vkEnumerateDeviceExtensionProperties(
-        device.VkHandle(),
-        nullptr,
-        &count,
-        nullptr),
-      "vkEnumerateDeviceExtensionProperties failed");
-    std::vector<VkExtensionProperties> device_extensions(count);
-    CheckVk(
-      vkEnumerateDeviceExtensionProperties(
-        device.VkHandle(),
-        nullptr,
-        &count,
-        device_extensions.data()),
-      "vkEnumerateDeviceExtensionProperties failed");
-
-    for (auto const& extension : requirements.required_extensions) {
-      if (!IsExtensionSupported(device_extensions, extension)) {
-        LOG(WARNING) << "Device [" << device.Name()
-          << "] does not support required extension '" << extension
-          << "'";
-        return 0;
-      }
-      extensions_to_enable.emplace_back(extension);
-    }
-
-    for (auto const& extension : requirements.optional_extensions) {
-      if (!IsExtensionSupported(device_extensions, extension)) {
-        LOG(WARNING) << "Device [" << device.Name()
-          << "] does not support optional extension '" << extension
-          << "'";
-      }
-      else {
-        extensions_to_enable.emplace_back(extension);
-        score += 10;
-      }
-    }
-
-    // Check features
-
-    VkPhysicalDeviceFeatures available_features{};
-    vkGetPhysicalDeviceFeatures(device.VkHandle(), &available_features);
-
-    auto const v_required_features =
-      GetDeviceFeaturesAsVector(requirements.required_features);
-    auto const v_optional_features =
-      GetDeviceFeaturesAsVector(requirements.optional_features);
-    auto const v_available_features =
-      GetDeviceFeaturesAsVector(available_features);
-
-    constexpr auto kFeatureCount =
-      sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
-    std::vector v_features_to_enable(kFeatureCount, VK_FALSE);
-
-    for (std::size_t i = 0; i < kFeatureCount; i++) {
-      if (v_required_features[i] == VK_TRUE) {
-        if (v_available_features[i] == VK_TRUE) {
-          v_features_to_enable[i] = VK_TRUE;
-        }
-        else {
-          LOG(WARNING) << "The physical device [" << device.Name()
-            << "] does not support required feature '"
-            << GetDeviceFeatureDescription(i) << "'";
-          return 0;
-        }
-      }
-      if (v_optional_features[i] == VK_TRUE) {
-        if (v_available_features[i] == VK_TRUE) {
-          v_features_to_enable[i] = VK_TRUE;
-          score += 10;
-        }
-        else {
-          DLOG(WARNING) << "The physical device [" << device.Name()
-            << "] does not support optional feature '"
-            << GetDeviceFeatureDescription(i) << "'";
-        }
-      }
-    }
-    std::memcpy(
-      &features_to_enable,
-      v_features_to_enable.data(),
-      v_features_to_enable.size());
-
-    // Add a score boost for GPUs
-    if (device.DeviceType() == PhysicalDeviceType::kDiscrete) {
-      score += 1000;
-    }
-    else if (
-      device.DeviceType() == PhysicalDeviceType::kIntegrated ||
-      device.DeviceType() == PhysicalDeviceType::kVirtualGpu) {
-      score += 100;
-    }
-
-    // Gives a higher score to devices with a higher maximum texture size.
-    score += device.Limits().maxImageDimension2D;
-
-    // Give a higher score for devices with more memory available
-    VkPhysicalDeviceMemoryProperties memory_properties{};
-    vkGetPhysicalDeviceMemoryProperties(device.VkHandle(), &memory_properties);
-
-    return score;
-  }
-
-}  // namespace
-#endif
-
-Engine::Engine(PlatformPtr platform, RendererPtr renderer, Properties props)
-  : platform_(std::move(platform)), renderer_(std::move(renderer)), props_(std::move(props))
-{
-#if 0
-  instance_(std::make_unique<Instance>(Instance::Properties{
-      .application =
-          {
-              props.application.name,
-              props.application.version,
-          },
-      .engine =
-          {
-              Name(),
-              Version(),
-          },
-      .extensions = props.extensions,
-                                       })),
-#endif
-
-                                       // DiscoverDevices();
-    LOG_F(INFO, "Engine initialization complete");
-}
-
-oxygen::Engine::~Engine() {
-  // devices_.clear();
-  // instance_.reset();
-  LOG_F(INFO, "Engine destroyed");
-}
 
 auto Engine::GetPlatform() const -> Platform& {
   return *platform_;
 }
 
-#if 0
-auto Engine::GetInstance() const -> VkInstance const&
-{
-  return instance_->VkHandle();
+auto Engine::Name() -> const std::string& {
+  static const std::string kName{ "Oxygen" };
+  return kName;
 }
-#endif
 
-void Engine::AttachModule(const ModulePtr& module, const uint32_t layer)
+auto Engine::Version() -> uint32_t {
+  constexpr uint32_t kBitsPatch{ 12 };
+  constexpr uint32_t kBitsMinor{ 10 };
+  return (static_cast<uint32_t>(version::Major()) << (kBitsPatch + kBitsMinor))
+    | ((static_cast<uint32_t>(version::Minor())) << kBitsPatch)
+    | (static_cast<uint32_t>(version::Patch()));
+}
+
+auto Engine::GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface
 {
+  if (!imgui_module_) {
+    throw std::runtime_error("ImGui module is not enabled.");
+  }
+
+  return imgui_module_->GetRenderInterface();
+}
+
+void Engine::OnInitialize()
+{
+  CHECK_F(!renderer_.expired());
+  const auto renderer = renderer_.lock();
+
+  InitializeModules();
+
+  // Initialize ImGui if required
+  if (props_.enable_imgui_layer) {
+    imgui_module_ = renderer->CreateImGuiModule(shared_from_this(), props_.main_window_id);
+    imgui_module_->Initialize(renderer.get());
+  }
+}
+
+void Engine::OnShutdown()
+{
+  if (imgui_module_) {
+    imgui_module_->Shutdown();
+    imgui_module_.reset();
+  }
+
+  ShutdownModules();
+}
+
+void Engine::AttachModule(const ModulePtr& module, const uint32_t priority)
+{
+  DCHECK_F(!IsInitialized());
+
   if (std::ranges::find_if(
     modules_,
     [&module](const auto& module_ctx) {
@@ -226,8 +80,8 @@ void Engine::AttachModule(const ModulePtr& module, const uint32_t layer)
     throw std::invalid_argument("The module is already attached.");
   }
 
-  modules_.push_back(ModuleContext{ .module = module, .layer = layer });
-  SortModulesByLayer();
+  modules_.push_back(ModuleContext{ .module = module, .layer = priority });
+  SortModulesByPriority();
 }
 
 void Engine::DetachModule(const ModulePtr& module)
@@ -243,7 +97,7 @@ void Engine::DetachModule(const ModulePtr& module)
   }
 }
 
-void Engine::SortModulesByLayer()
+void Engine::SortModulesByPriority()
 {
   modules_.sort(
     [](const ModuleContext& a, const ModuleContext& b) {
@@ -253,11 +107,9 @@ void Engine::SortModulesByLayer()
 
 void Engine::InitializeModules()
 {
+  CHECK_F(!renderer_.expired());
   const auto renderer = renderer_.lock();
-  if (!renderer) {
-    return;
-  }
-  std::ranges::for_each(modules_, [&](auto& module) { module.module->Initialize(*renderer); });
+  std::ranges::for_each(modules_, [&](auto& module) { module.module->Initialize(renderer.get()); });
 }
 
 void Engine::ShutdownModules()
@@ -265,14 +117,15 @@ void Engine::ShutdownModules()
   std::ranges::for_each(modules_, [](auto& module) { module.module->Shutdown(); });
 }
 
-auto Engine::Run() -> void {
+auto Engine::Run() -> void
+{
+  DCHECK_F(IsInitialized(), "engine must be initialized before Run() is called");
+
   bool continue_running{ true };
 
   // Listen for the last window closed event
   auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
     [&continue_running]() { continue_running = false; });
-
-  InitializeModules();
 
   // Start the master clock
   engine_clock_.Reset();
@@ -290,6 +143,10 @@ auto Engine::Run() -> void {
     // Poll for platform events
     auto event = GetPlatform().PollEvent();
 
+    // Process Input Events with ImGui
+    if (event) {
+      imgui_module_->ProcessInput(*event);
+    }
     // Run the modules
     std::ranges::for_each(
       modules_,
@@ -335,7 +192,7 @@ auto Engine::Run() -> void {
 
           // Per frame updates / render
           the_module->Update(module.frame_time.Delta());
-          the_module->Render(*renderer);
+          the_module->Render(renderer.get());
           module.fps.Update();
 
           // Log FPS and UPS once every second
@@ -348,114 +205,7 @@ auto Engine::Run() -> void {
   }
   LOG_F(INFO, "Engine stopped.");
 
-  // Shutdown modules
-  std::ranges::for_each(modules_, [](auto& module) { module.module->Shutdown(); });
-
+  // TODO: we may want to have this become the responsibility of the application main
   // Stop listening for the last window closed event
   last_window_closed_con.disconnect();
 }
-
-auto oxygen::Engine::Name() -> const std::string& {
-  static const std::string kName{ "Oxygen" };
-  return kName;
-}
-
-auto oxygen::Engine::Version() -> uint32_t {
-  constexpr uint32_t kBitsPatch{ 12 };
-  constexpr uint32_t kBitsMinor{ 10 };
-  return (static_cast<uint32_t>(version::Major()) << (kBitsPatch + kBitsMinor))
-    | ((static_cast<uint32_t>(version::Minor())) << kBitsPatch)
-    | (static_cast<uint32_t>(version::Patch()));
-}
-
-#if 0
-auto Engine::DiscoverDevices() -> void
-{
-  uint32_t count = 0;
-  CheckVk(
-    vkEnumeratePhysicalDevices(instance_->VkHandle(), &count, nullptr),
-    "vkEnumeratePhysicalDevices failed");
-  std::vector<VkPhysicalDevice> vk_devices(count);
-  CheckVk(
-    vkEnumeratePhysicalDevices(
-      instance_->VkHandle(),
-      &count,
-      vk_devices.data()),
-    "vkEnumeratePhysicalDevices failed");
-
-  devices_.reserve(vk_devices.size());
-  std::ranges::transform(
-    vk_devices,
-    std::inserter(devices_, devices_.end()),
-    [](VkPhysicalDevice const& vk_device) {
-      return std::make_shared<PhysicalDevice>(vk_device);
-    });
-
-  // TODO(abdessattar): populate queue families when discovering devices not
-  // when selecting
-}
-
-auto Engine::SelectDevices(DeviceRequirements const& requirements) const
--> std::vector<SuitableDevice>
-{
-  std::vector<SuitableDevice> suitable_devices;
-
-  std::ranges::transform(
-    devices_,
-    std::inserter(suitable_devices, suitable_devices.end()),
-    [&requirements](auto const& device) {
-      if (SuitableDevice device_option{
-              .device = device,
-              .features = {},
-              .extensions = {},
-          };
-          device->PopulateQueueFamilyIndices(
-            requirements.get_presentation_support_cb) &&
-          ScorePhysicalDevice(
-            *device,
-            requirements,
-            device_option.features,
-            device_option.extensions) > 0) {
-        return device_option;
-      }
-      return SuitableDevice{};
-    });
-
-  return suitable_devices;
-}
-
-auto Engine::SelectDevice(DeviceRequirements const& requirements) const
--> SuitableDevice
-{
-  // Maps to hold devices and sort by rank.
-  std::multimap<uint32_t, SuitableDevice> ranked_devices;
-
-  std::ranges::transform(
-    devices_,
-    std::inserter(ranked_devices, ranked_devices.end()),
-    [&requirements](auto const& device) {
-      SuitableDevice device_option{
-          .device = device,
-          .features = {},
-          .extensions = {},
-      };
-      auto score = device->PopulateQueueFamilyIndices(
-        requirements.get_presentation_support_cb)
-        ? ScorePhysicalDevice(
-          *device,
-          requirements,
-          device_option.features,
-          device_option.extensions)
-        : 0;
-      return std::make_pair(score, std::move(device_option));
-    });
-
-  // Checks to make sure the best candidate scored higher than 0.
-  // rbegin() points to the last element in the ranked devices (ordered from
-  // lowest ranked to highest ranked); the key is the score.
-  if (ranked_devices.rbegin()->first > 0) {
-    return std::move(ranked_devices.rbegin()->second);
-  }
-  return SuitableDevice{};
-}
-#endif

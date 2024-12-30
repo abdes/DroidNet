@@ -8,32 +8,33 @@
 
 #include <memory>
 
-#include <oxygen/core/engine.h>
 #include <oxygen/core/module.h>
 #include <oxygen/input/fwd.h>
 
 class MainModule : public oxygen::core::Module
 {
 public:
-  explicit MainModule(oxygen::Engine& engine);
-  ~MainModule() override;
+  using Base = Module;
 
-  // Non-copyable
-  MainModule(const MainModule&) = delete;
-  auto operator=(const MainModule&)->MainModule & = delete;
+  template <typename... Args>
+  explicit MainModule(oxygen::EngineWeakPtr engine, Args &&... ctor_args)
+    : Base("MainModule", engine, std::forward<Args>(ctor_args)...)
+  {
+  }
 
-  // Non-Movable
-  MainModule(MainModule&& other) noexcept = delete;
-  auto operator=(MainModule&& other) noexcept -> MainModule & = delete;
+  ~MainModule() override = default;
 
-  void Initialize(const oxygen::Renderer& renderer) override;
+  OXYGEN_MAKE_NON_COPYABLE(MainModule);
+  OXYGEN_MAKE_NON_MOVEABLE(MainModule);
+
+  void OnInitialize(const oxygen::Renderer* renderer) override;
 
   void ProcessInput(const oxygen::platform::InputEvent& event) override;
   void Update(oxygen::Duration delta_time) override;
   void FixedUpdate() override;
-  void Render(const oxygen::Renderer& renderer) override;
+  void Render(const oxygen::Renderer* renderer) override;
 
-  void Shutdown() noexcept override;
+  void OnShutdown() noexcept override;
 
 private:
   struct State
@@ -43,7 +44,6 @@ private:
   };
   State state_;
 
-  oxygen::Engine& engine_;
   std::shared_ptr<oxygen::input::InputSystem> player_input_;
 
 public:

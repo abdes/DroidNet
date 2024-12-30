@@ -13,14 +13,18 @@
 #include "oxygen/platform/platform.h"
 #include "oxygen/platform-sdl/api_export.h"
 
+// Forward declare SDL_Event
+union SDL_Event;
+
 namespace oxygen::platform::sdl {
 
   namespace detail {
     class WrapperInterface;
   }  // namespace detail
 
-  class Platform final : public oxygen::Platform,
-    std::enable_shared_from_this<Platform>
+  class Platform final
+    : public oxygen::Platform
+    , public std::enable_shared_from_this<Platform>
   {
   public:
     OXYGEN_SDL3_API explicit Platform(
@@ -60,7 +64,11 @@ namespace oxygen::platform::sdl {
     OXYGEN_SDL3_API auto PollEvent()
       -> std::unique_ptr<platform::InputEvent> override;
 
-    OXYGEN_SDL3_API [[nodiscard]] auto OnUnhandledEvent() -> auto&;
+    OXYGEN_SDL3_API [[nodiscard]] auto OnUnhandledEvent() const->sigslot::signal<const SDL_Event&>&;
+    OXYGEN_SDL3_API [[nodiscard]] auto OnPlatformEvent() const->sigslot::signal<const SDL_Event&, bool&, bool&>&;
+
+    [[nodiscard]] auto CreateImGuiBackend(WindowIdType window_id) const
+      ->std::unique_ptr<imgui::ImGuiPlatformBackend> override;
 
   private:
     class PlatformImpl;  // Forward declaration of the implementation class

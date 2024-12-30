@@ -13,6 +13,9 @@
     <Filter Include="Platform\detail">
       <UniqueIdentifier>{030b8b77-10ea-4e72-bbf3-7d2d7f63eb3e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ImGui">
+      <UniqueIdentifier>{71c4d9a6-5f5c-496a-99c4-2f5145905cbd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Oxygen\platform-sdl\display.cpp">
@@ -33,6 +36,12 @@
     <ClCompile Include="..\Oxygen\platform-sdl\detail\platform_impl.cpp">
       <Filter>Platform\detail</Filter>
     </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\ImGui\ImGuiSdl3Backend.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\platform-sdl\ImGui\imgui_impl_sdl3.cpp">
+      <Filter>ImGui</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\platform-sdl\display.h">
@@ -50,5 +59,12 @@
     <ClInclude Include="..\Oxygen\platform-sdl\detail\platform_impl.h">
       <Filter>Platform\detail</Filter>
     </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\ImGui\ImGuiSdl3Backend.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\ImGui\imgui_impl_sdl3.h">
+      <Filter>ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\platform-sdl\api_export.h" />
   </ItemGroup>
 </Project>

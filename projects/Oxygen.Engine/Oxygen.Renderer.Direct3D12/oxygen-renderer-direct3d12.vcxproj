@@ -37,6 +37,7 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Fence.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Renderer.cpp" />
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\RendererModule.cpp" />
@@ -57,6 +58,7 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\MemoryBlock.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Renderer.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\RenderTarget.h">

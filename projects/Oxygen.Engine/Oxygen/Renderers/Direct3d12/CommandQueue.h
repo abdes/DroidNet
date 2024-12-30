@@ -29,6 +29,7 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_MAKE_NON_MOVEABLE(CommandQueue);
 
     void Submit(const CommandListPtr& command_list) override;
+    void Submit(const CommandLists& command_list);
 
     [[nodiscard]] ID3D12CommandQueue* GetCommandQueue() const { return command_queue_; }
 

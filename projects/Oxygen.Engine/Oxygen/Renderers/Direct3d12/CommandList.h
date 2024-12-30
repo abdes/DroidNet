@@ -40,8 +40,8 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_DEFAULT_MOVABLE(CommandList);
 
 
-    ID3D12GraphicsCommandList* GetCommandList() const { return command_list_; }
-    State GetState() const { return state_; }
+    [[nodiscard]] auto GetCommandList() const { return command_list_; }
+    [[nodiscard]] auto GetState() const { return state_; }
 
   protected:
     void InitializeCommandList(CommandListType type) override;
@@ -50,6 +50,7 @@ namespace oxygen::renderer::d3d12 {
   private:
     friend class CommandRecorder;
     friend class CommandQueue;
+    friend class ImGuiModule;
     void OnBeginRecording();
     void OnEndRecording();
     void OnSubmitted();

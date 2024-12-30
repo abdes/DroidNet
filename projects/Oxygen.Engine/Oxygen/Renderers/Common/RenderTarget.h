@@ -7,7 +7,6 @@
 #pragma once
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Types.h"
 
 namespace oxygen::renderer {
 

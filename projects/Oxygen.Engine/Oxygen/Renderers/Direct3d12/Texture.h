@@ -51,7 +51,7 @@ namespace oxygen::renderer::d3d12 {
     OXYGEN_MAKE_NON_COPYABLE(Texture);
     OXYGEN_MAKE_NON_MOVEABLE(Texture);
 
-    [[nodiscard]] auto GetSrv() const -> detail::DescriptorHandle { return srv_; }
+    [[nodiscard]] auto GetSrv() const -> const detail::DescriptorHandle& { return srv_; }
     [[nodiscard]] auto GetResource() const -> ID3D12Resource* override { return resource_; }
 
   protected:
@@ -104,8 +104,8 @@ namespace oxygen::renderer::d3d12 {
     void Release();
 
     [[nodiscard]] auto GetResource() const -> ID3D12Resource* { return texture_.GetResource(); }
-    [[nodiscard]] auto GetSrv() const -> detail::DescriptorHandle { return texture_.GetSrv(); }
-    [[nodiscard]] auto GetRtv(const uint32_t mip_index) const -> detail::DescriptorHandle
+    [[nodiscard]] auto GetSrv() const -> const detail::DescriptorHandle& { return texture_.GetSrv(); }
+    [[nodiscard]] auto GetRtv(const uint32_t mip_index) const -> const detail::DescriptorHandle&
     {
       DCHECK_LT_F(mip_index, mip_count_);
       return rtv_[mip_index];
@@ -131,8 +131,8 @@ namespace oxygen::renderer::d3d12 {
     void Release();
 
     [[nodiscard]] auto GetResource() const -> ID3D12Resource* { return texture_.GetResource(); }
-    [[nodiscard]] auto GetDsv() const -> detail::DescriptorHandle { return dsv_; }
-    [[nodiscard]] auto GetSrv() const -> detail::DescriptorHandle { return texture_.GetSrv(); }
+    [[nodiscard]] auto GetDsv() const -> const detail::DescriptorHandle& { return dsv_; }
+    [[nodiscard]] auto GetSrv() const -> const detail::DescriptorHandle& { return texture_.GetSrv(); }
 
   private:
     Texture texture_{};

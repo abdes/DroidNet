@@ -20,6 +20,9 @@
     <Filter Include="Renderer\Shaders">
       <UniqueIdentifier>{859303b5-1511-4fc8-95d2-11f99040d03f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Renderer\ImGui">
+      <UniqueIdentifier>{79a370c1-23a0-4283-b48e-374da0c18a95}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\D3D12MemAlloc.cpp">
@@ -69,6 +72,9 @@
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\DebugLayer.cpp">
       <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.cpp">
+      <Filter>Renderer\ImGui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -128,6 +134,9 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\RenderTarget.h">
       <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.h">
+      <Filter>Renderer\ImGui</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

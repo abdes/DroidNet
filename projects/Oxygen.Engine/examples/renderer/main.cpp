@@ -10,13 +10,13 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <ranges>
 
 #include "oxygen/base/Compilers.h"
 #include "oxygen/base/logging.h"
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"
 #include "oxygen/platform-sdl/platform.h"
+#include "Oxygen/Renderers/Common/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/Shaders.h"
 #include "oxygen/Renderers/Loader/RendererLoader.h"
 #include "ShaderCompiler.h"
@@ -31,6 +31,7 @@ using oxygen::graphics::GraphicsBackendType;
 
 namespace {
 
+  // TODO: refactor to make shader compilation and loading reusable
   struct ShaderProfile
   {
     const char* file_name;
@@ -262,17 +263,6 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
 
     platform = std::make_shared<oxygen::platform::sdl::Platform>();
 
-    Engine::Properties props{
-        .application =
-            {
-                .name = "Triangle",
-                .version = 0x0001'0000,
-            },
-        .extensions = {},
-        .max_fixed_update_duration = 10ms,
-    };
-
-
     constexpr oxygen::RendererProperties renderer_props{
 #ifdef _DEBUG
         .enable_debug = true,
@@ -280,13 +270,43 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
         .enable_validation = false,
     };
     CreateRenderer(GraphicsBackendType::kDirect3D12, platform, renderer_props);
+    auto renderer = oxygen::graphics::GetRenderer().lock();
+    DCHECK_NOTNULL_F(renderer);
 
-    engine = std::make_shared<Engine>(platform, oxygen::graphics::GetRenderer(), props);
+    // Create a window.
+    constexpr oxygen::PixelExtent window_size{ 1900, 1200 };
+    constexpr oxygen::platform::Window::InitialFlags window_flags
+    {
+      .hidden = false,
+      .always_on_top = false,
+      .full_screen = false,
+      .maximized = false,
+      .minimized = false,
+      .resizable = true,
+      .borderless = false,
+    };
+    const auto my_window{
+      platform->MakeWindow("Oxygen Renderer Example", window_size, window_flags)
+    };
 
-    const auto my_module = std::make_shared<MainModule>(platform);
+    Engine::Properties props{
+      .application = {
+        .name = "Triangle",
+        .version = 0x0001'0000,
+      },
+      .extensions = {},
+      .max_fixed_update_duration = 10ms,
+      .enable_imgui_layer = true,
+      .main_window_id = my_window.lock()->Id(),
+    };
+
+    engine = std::make_shared<Engine>(platform, renderer, props);
+    const auto my_module = std::make_shared<MainModule>(platform, engine, my_window);
     engine->AttachModule(my_module);
 
+    engine->Initialize();
     engine->Run();
+    engine->Shutdown();
 
     LOG_F(INFO, "Exiting application");
     DestroyRenderer();

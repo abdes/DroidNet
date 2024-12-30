@@ -33,12 +33,18 @@
     <ClInclude Include="base\Types.h" />
     <ClInclude Include="base\Windows\ComError.h" />
     <ClInclude Include="base\Windows\Exceptions.h" />
-    <ClInclude Include="core\engine.h" />
-    <ClInclude Include="core\fwd.h" />
-    <ClInclude Include="core\input_handler.h" />
-    <ClInclude Include="core\module.h" />
-    <ClInclude Include="core\system.h" />
-    <ClInclude Include="core\version.h" />
+    <ClInclude Include="core\Engine.h" />
+    <ClInclude Include="core\Types.h" />
+    <ClInclude Include="core\InputHandler.h" />
+    <ClInclude Include="core\Module.h" />
+    <ClInclude Include="core\System.h" />
+    <ClInclude Include="core\Version.h" />
+    <ClInclude Include="Imgui\ImguiModule.h" />
+    <ClInclude Include="ImGui\ImGuiPlatformBackend.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
+    <ClInclude Include="ImGui\ImGuiRenderInterface.h" />
     <ClInclude Include="input\action.h" />
     <ClInclude Include="input\action_triggers.h" />
     <ClInclude Include="input\action_value.h" />
@@ -80,8 +86,13 @@
     <ClCompile Include="base\Detail\loguru.cpp" />
     <ClCompile Include="base\Windows\ComError.cpp" />
     <ClCompile Include="base\Windows\Exceptions.cpp" />
-    <ClCompile Include="core\engine.cpp" />
-    <ClCompile Include="core\version.cpp" />
+    <ClCompile Include="core\Engine.cpp" />
+    <ClCompile Include="core\Version.cpp" />
+    <ClCompile Include="Imgui\ImguiModule.cpp" />
+    <ClCompile Include="ImGui\ImGuiRenderInterface.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="input\action.cpp" />
     <ClCompile Include="input\action_triggers.cpp" />
     <ClCompile Include="input\input_action_mapping.cpp" />
@@ -151,6 +162,8 @@
   <ItemDefinitionGroup>
     <Link>
       <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
       <PreprocessorDefinitions>OXYGEN_EXPORTS;_$(PROCESSOR_ARCHITECTURE)_;%(PreprocessorDefinitions)</PreprocessorDefinitions>

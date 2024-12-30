@@ -6,34 +6,66 @@
 
 #pragma once
 
-#include "oxygen/base/Time.h"
-#include "oxygen/platform/Types.h"
-#include "Oxygen/Renderers/Common/Types.h"
+#include <string>
 
-namespace oxygen::core {
+#include "Oxygen/Base/Mixin.h"
+#include "Oxygen/Base/MixinInitialize.h"
+#include "Oxygen/Base/MixinNamed.h"
+#include "Oxygen/Base/MixinShutdown.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Types.h>
+#include <Oxygen/Core/Types.h>
+#include <Oxygen/Platform/input_event.h>
+#include <Oxygen/Renderers/Common/Types.h>
 
-  class Module
-  {
-  public:
-    Module() = default;
-    virtual ~Module() = default;
 
-    // Non-copyable
-    Module(const Module&) = delete;
-    auto operator=(const Module&)->Module & = delete;
+namespace oxygen {
 
-    // Non-Movable
-    Module(Module&& other) noexcept = delete;
-    auto operator=(Module&& other) noexcept -> Module & = delete;
+  namespace core {
 
-    virtual auto Initialize(const oxygen::Renderer& renderer) -> void = 0;
+    class Module
+      : public Mixin
+      <Module
+      , Curry<MixinNamed, const char*>::mixin
+      , MixinInitialize
+      , MixinShutdown
+      >
+    {
+    public:
+      //! Constructor to forward the arguments to the mixins in the chain.
+      template <typename... Args>
+      constexpr explicit Module(const char* name, EngineWeakPtr engine, Args &&...args)
+        : Mixin(name, std::forward<Args>(args)...), engine_(std::move(engine))
+      {
+      }
 
-    virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
-    virtual auto Update(Duration delta_time) -> void = 0;
-    virtual auto FixedUpdate() -> void = 0;
-    virtual auto Render(const oxygen::Renderer&) -> void = 0;
+      ~Module() override = default;
 
-    virtual auto Shutdown() noexcept -> void = 0;
-  };
+      OXYGEN_MAKE_NON_COPYABLE(Module);
+      OXYGEN_MAKE_NON_MOVEABLE(Module);
+
+      [[nodiscard]] auto Name() const -> const std::string& { return ObjectName(); }
+
+      virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
+      virtual auto Update(Duration delta_time) -> void = 0;
+      virtual auto FixedUpdate() -> void = 0;
+      virtual auto Render(const Renderer*) -> void = 0;
+
+    protected:
+      virtual void OnInitialize(const Renderer* renderer) = 0;
+      template <typename Base, typename... CtorArgs>
+      friend class MixinInitialize; //< Allow access to OnInitialize.
+
+      virtual void OnShutdown() = 0;
+      template <typename Base>
+      friend class MixinShutdown; //< Allow access to OnShutdown.
+
+      [[nodiscard]] auto GetEngine() const -> const Engine& { return *(engine_.lock()); }
+
+    private:
+      EngineWeakPtr engine_;
+    };
+
+  }  // namespace core
 
 }  // namespace oxygen::core

@@ -9,9 +9,11 @@
 #include <memory>
 #include <vector>
 
-#include "SDL3/SDL_events.h"
 #include "Oxygen/Base/Signals.h"
 #include "oxygen/platform-sdl/platform.h"
+
+// ReSharper disable once CppInconsistentNaming (external library)
+union SDL_Event;
 
 namespace oxygen::platform::sdl {
 
@@ -37,7 +39,8 @@ namespace oxygen::platform::sdl {
       -> std::weak_ptr<platform::Window>;
     auto MakeWindow(std::string const& title,
                     PixelPosition const& position,
-                    PixelExtent const& extent) -> std::weak_ptr<platform::Window>;
+                    PixelExtent const& extent)
+      -> std::weak_ptr<platform::Window>;
     auto MakeWindow(std::string const& title,
                     PixelPosition const& position,
                     PixelExtent const& extent,
@@ -51,23 +54,40 @@ namespace oxygen::platform::sdl {
 
     auto PollEvent() -> std::unique_ptr<platform::InputEvent>;
 
-    [[nodiscard]] auto OnUnhandledEvent() -> auto& {
+    [[nodiscard]] auto OnUnhandledEvent() const -> sigslot::signal<const SDL_Event&>&
+    {
       return on_unhandled_event_;
     }
 
+    //! Get the signal for direct handling of platform events.
+    //! \return A signal that can be used to register a callback for handling
+    //! platform events before the platform processes them.
+    /*!
+     The callback takes the following parameters:
+        - The SDL event that was received.
+        - A boolean that can be set to true to indicate that the handler wants
+          to capture any mouse event, and the platform should not process such
+          events.
+        - A boolean that can be set to true to indicate that the handler wants
+          to capture any keyboard event, and the platform should not process
+          such events.
+    */
+    [[nodiscard]] auto OnPlatformEvent() const -> sigslot::signal<const SDL_Event&, bool&, bool&>&
+    {
+      return on_platform_event_;
+    }
+
   private:
-    [[nodiscard]] auto WindowFromId(WindowIdType window_id) const
-      ->platform::Window&;
+    [[nodiscard]] auto WindowFromId(WindowIdType window_id) const->platform::Window&;
     void DispatchDisplayEvent(SDL_Event const& event) const;
     void DispatchWindowEvent(SDL_Event const& event);
-
-    SDL_Event event_{};
 
     Platform* platform_;
     std::shared_ptr<detail::WrapperInterface> sdl_;
     std::vector<std::shared_ptr<Window>> windows_;
 
-    sigslot::signal<const SDL_Event&> on_unhandled_event_;
+    mutable sigslot::signal<const SDL_Event&> on_unhandled_event_;
+    mutable sigslot::signal<const SDL_Event&, bool&, bool&> on_platform_event_;
   };
 
 }  // namespace oxygen::platform::sdl

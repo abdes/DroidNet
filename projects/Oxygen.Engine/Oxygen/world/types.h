@@ -23,7 +23,7 @@ namespace oxygen::world {
   // ---------------------------------------------------------------------------
   // For each resource type, declare a ResourceTypeT constant and a resource,
   // using the `DECLARE_RESOURCE` macro. This will declare a specific name for
-  // resource handle and add forward type decclarations for the resource and its
+  // resource handle and add forward type declarations for the resource and its
   // descriptor.
   // ---------------------------------------------------------------------------
 

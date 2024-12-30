@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string>
 
-#include "oxygen/api_export.h"
+#include "Oxygen/api_export.h"
 
 namespace oxygen::version {
 

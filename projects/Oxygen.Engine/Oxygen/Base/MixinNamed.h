@@ -25,7 +25,7 @@ namespace oxygen {
     */
     template <typename... Args>
     constexpr explicit MixinNamed(Name class_name, Args &&...args)
-      : Base(static_cast<decltype(args)>(args)...)
+      : Base(std::forward<Args>(args)...)
     {
       string_utils::WideToUtf8(class_name, object_name_);
     }

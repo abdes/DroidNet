@@ -40,19 +40,19 @@ using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
 using oxygen::Renderer;
+using oxygen::Engine;
 
 const char* const MainModule::LOGGER_NAME = "MainModule";
 
-MainModule::MainModule(oxygen::Engine& engine)
-  : engine_(engine),
-  player_input_(std::make_shared<InputSystem>(engine_.GetPlatform())) {
-}
+void MainModule::OnInitialize(const oxygen::Renderer* renderer)
+{
+  DCHECK_NOTNULL_F(renderer);
 
-MainModule::~MainModule() = default;
+  // Initialize the input system.
+  player_input_ = std::make_shared<InputSystem>(GetEngine().GetPlatform());
 
-void MainModule::Initialize(const oxygen::Renderer& renderer) {
   // Create a window.
-  const auto my_window = engine_.GetPlatform().MakeWindow(
+  const auto my_window = GetEngine().GetPlatform().MakeWindow(
     "Input System Playground", { .width = 640, .height = 640 },
       {
           .full_screen = false,
@@ -171,7 +171,9 @@ void MainModule::FixedUpdate() {
   state_.distance = new_distance;
 }
 
-void MainModule::Render(const Renderer& renderer) {
+void MainModule::Render(const Renderer* renderer) {
+  DCHECK_NOTNULL_F(renderer);
+
   // Create a random number core.
   static std::random_device rd;
   static std::mt19937 gen(rd());
@@ -180,4 +182,4 @@ void MainModule::Render(const Renderer& renderer) {
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
 }
 
-void MainModule::Shutdown() noexcept {}
+void MainModule::OnShutdown() noexcept {}

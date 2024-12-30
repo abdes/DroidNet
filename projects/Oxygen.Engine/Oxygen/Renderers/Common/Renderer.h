@@ -12,12 +12,17 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
+#include "Oxygen/Core/Types.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/MixinDeferredRelease.h"
 #include "Oxygen/Renderers/Common/MixinRendererEvents.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
 namespace oxygen {
+
+  namespace imgui {
+    class ImguiModule;
+  }  // namespace imgui
 
   /**
    * Rendering device information.
@@ -117,13 +122,12 @@ namespace oxygen {
      * @{
      */
 
+    [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const->std::unique_ptr<imgui::ImguiModule> = 0;
     [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const->renderer::SurfacePtr = 0;
 
     /**@}*/
 
-
   protected:
-
     OXYGEN_API virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
     template <typename Base, typename... CtorArgs>
     friend class MixinInitialize; //< Allow access to OnInitialize.
@@ -138,8 +142,8 @@ namespace oxygen {
     void BeginFrame() const;
 
     virtual void EndFrame(
-      renderer::CommandListPtr command_list,
-      const renderer::resources::SurfaceId& surface_id) = 0;
+      renderer::CommandLists& command_lists,
+      const renderer::resources::SurfaceId& surface_id) const = 0;
 
     void EndFrame() const;
 

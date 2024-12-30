@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "oxygen/base/Macros.h"
-#include "oxygen/platform/Types.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace oxygen::engine {
 

@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Renderers/Common/CommandList.h"
 #include "Oxygen/Renderers/Common/Renderer.h"
+
+#include "Oxygen/Renderers/Common/CommandList.h" // Needed to forward the command list ptr
 
 using namespace oxygen;
 using namespace oxygen::renderer;
@@ -29,15 +30,6 @@ void Renderer::BeginFrame() const
   EmitBeginFrameRender(current_frame_index_);
 }
 
-void Renderer::EndFrame(
-  CommandListPtr command_list,
-  const resources::SurfaceId& surface_id)
-{
-  EmitEndFrameRender(current_frame_index_);
-  current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
-  DLOG_F(2, "END Frame");
-}
-
 void Renderer::EndFrame() const
 {
   EmitEndFrameRender(current_frame_index_);
@@ -58,8 +50,8 @@ void Renderer::Render(
   const auto& render_target = self->BeginFrame(surface_id);
   BeginFrame();
 
-  auto command_list = render_game(render_target);
+  auto command_lists = render_game(render_target);
+  self->EndFrame(command_lists, surface_id);
 
-  self->EndFrame(std::move(command_list), surface_id);
   EndFrame();
 }

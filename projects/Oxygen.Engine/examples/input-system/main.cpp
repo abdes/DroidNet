@@ -31,29 +31,31 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int {
   // We want to control the destruction order of the important objects in the
   // system. For example, destroy the core before we destroy the platform.
   std::shared_ptr<oxygen::Platform> platform;
-  std::shared_ptr<oxygen::Engine> engine;
+  std::shared_ptr<Engine> engine;
 
   try {
     platform = std::make_shared<oxygen::platform::sdl::Platform>();
 
     Engine::Properties props{
-        .application =
-            {
-                .name = "Triangle",
-                .version = 0x0001'0000,
-            },
-        .extensions = {},
-        .max_fixed_update_duration = 10ms,
+      .application = {
+        .name = "Triangle",
+        .version = 0x0001'0000,
+      },
+      .extensions = {},
+      .max_fixed_update_duration = 10ms,
+      .enable_imgui_layer = false,
     };
 
     // Engine with no renderer
     std::shared_ptr<oxygen::Renderer> renderer{};
-    engine = std::make_shared<Engine>(platform, renderer, props);
 
-    auto my_module = std::make_shared<MainModule>(*engine);
+    engine = std::make_shared<Engine>(platform, renderer, props);
+    const auto my_module = std::make_shared<MainModule>(engine);
     engine->AttachModule(my_module);
 
+    engine->Initialize();
     engine->Run();
+    engine->Shutdown();
 
     LOG_F(INFO, "Exiting application");
   }

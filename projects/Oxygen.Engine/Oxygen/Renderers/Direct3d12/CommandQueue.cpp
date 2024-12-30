@@ -77,12 +77,28 @@ void CommandQueue::InitializeCommandQueue()
   NameObject(command_queue_, GetNameForType(d3d12_type));
 }
 
-void CommandQueue::Submit(const CommandListPtr& command_list) {
+void CommandQueue::Submit(const CommandListPtr& command_list)
+{
   const auto d3d12_command_list = dynamic_cast<CommandList*>(command_list.get());
   d3d12_command_list->OnSubmitted();
   ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
   command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
   d3d12_command_list->OnExecuted();
+}
+
+void CommandQueue::Submit(const CommandLists& command_list)
+{
+  std::vector<ID3D12CommandList*> command_lists;
+  command_lists.reserve(command_list.size());
+  for (const auto& cl : command_list) {
+    const auto d3d12_command_list = dynamic_cast<CommandList*>(cl.get());
+    d3d12_command_list->OnSubmitted();
+    command_lists.push_back(d3d12_command_list->GetCommandList());
+  }
+  command_queue_->ExecuteCommandLists(static_cast<UINT>(command_lists.size()), command_lists.data());
+  for (const auto& cl : command_list) {
+    dynamic_cast<CommandList*>(cl.get())->OnExecuted();
+  }
 }
 
 void CommandQueue::ReleaseCommandQueue() noexcept
