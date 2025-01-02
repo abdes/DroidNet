@@ -50,6 +50,21 @@
       <Filter>World</Filter>
     </ClCompile>
     <ClCompile Include="..\Oxygen\Base\test\main.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Common\Tests\ShaderByteCodeTests.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\FileStream_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\MemoryStream_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\Reader_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Base\test\Writer_test.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
@@ -73,5 +88,16 @@
     <Filter Include="Base\Windows">
       <UniqueIdentifier>{5cdaabf6-8b32-41d3-8f3f-8ebfb60c1788}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Renderer">
+      <UniqueIdentifier>{294125c1-daa4-4019-b58a-4687f1f509de}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base\Mocks">
+      <UniqueIdentifier>{d6cbcf15-1f4c-4725-b450-2dbe0795ad7c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Base\test\Mocks\MockStream.h">
+      <Filter>Base\Mocks</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

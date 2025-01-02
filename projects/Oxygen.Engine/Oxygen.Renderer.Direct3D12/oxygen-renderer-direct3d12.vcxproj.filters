@@ -49,12 +49,6 @@
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\dx12_utils.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Shaders.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Content.cpp">
-      <Filter>Renderer</Filter>
-    </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.cpp">
       <Filter>Renderer\Detail</Filter>
     </ClCompile>
@@ -75,6 +69,9 @@
     </ClCompile>
     <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.cpp">
       <Filter>Renderer\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Oxygen\Renderers\Direct3d12\ShaderCompiler.cpp">
+      <Filter>Renderer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -105,12 +102,6 @@
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Fence.h">
       <Filter>Renderer</Filter>
     </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Shaders.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Content.h">
-      <Filter>Renderer</Filter>
-    </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Detail\WindowSurfaceImpl.h">
       <Filter>Renderer\Detail</Filter>
     </ClInclude>
@@ -137,6 +128,9 @@
     </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ImGui\ImGuiModule.h">
       <Filter>Renderer\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\ShaderCompiler.h">
+      <Filter>Renderer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

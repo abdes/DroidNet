@@ -6,23 +6,22 @@
 
 #pragma once
 
-#include <oxygen/core/module.h>
+#include <Oxygen/Core/Module.h>
 
-#include "oxygen/base/Macros.h"
-#include "oxygen/platform/Types.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Platform/Types.h"
 #include "Oxygen/Renderers/Common/Types.h"
 
-
-class MainModule : public oxygen::core::Module
+class MainModule final : public oxygen::core::Module
 {
-public:
+ public:
   template <typename... Args>
   explicit MainModule(
     oxygen::PlatformPtr platform,
     oxygen::EngineWeakPtr engine,
     oxygen::platform::WindowPtr window,
-    Args &&... ctor_args)
-    : Module("MainModule", engine, std::forward<Args>(ctor_args)...)
+    Args&&... ctor_args)
+    : Module("MainModule", std::move(engine), std::forward<Args>(ctor_args)...)
     , platform_(std::move(platform))
     , my_window_(std::move(window))
   {
@@ -42,15 +41,15 @@ public:
 
   void OnShutdown() noexcept override;
 
-private:
+ private:
   [[nodiscard]] auto RenderGame(
     const oxygen::Renderer* renderer,
     const oxygen::renderer::RenderTarget& render_target) const
-    ->oxygen::renderer::CommandLists;
+    -> oxygen::renderer::CommandLists;
 
-  oxygen::PlatformPtr platform_{};
+  oxygen::PlatformPtr platform_ {};
 
-  oxygen::renderer::SurfacePtr surface_{};
+  oxygen::renderer::SurfacePtr surface_ {};
   // TODO: hack for ImGui - redesign surfaces
-  oxygen::platform::WindowPtr my_window_{};
+  oxygen::platform::WindowPtr my_window_ {};
 };
