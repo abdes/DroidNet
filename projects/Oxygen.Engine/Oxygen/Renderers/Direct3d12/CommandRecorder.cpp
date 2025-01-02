@@ -23,10 +23,11 @@
 
 using namespace oxygen::renderer::d3d12;
 
-void CommandRecorder::Begin() {
+void CommandRecorder::Begin()
+{
   DCHECK_F(current_command_list_ == nullptr);
 
-  //resource_state_cache_.OnBeginCommandBuffer();
+  // resource_state_cache_.OnBeginCommandBuffer();
 
   // TODO: consider recycling command lists
   auto command_list = std::make_unique<CommandList>();
@@ -35,8 +36,7 @@ void CommandRecorder::Begin() {
     command_list->Initialize(GetQueueType());
     CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
     command_list->OnBeginRecording();
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to begin recording to a command list: {}", e.what());
     throw;
   }
@@ -46,20 +46,20 @@ void CommandRecorder::Begin() {
   ResetState();
 }
 
-oxygen::renderer::CommandListPtr CommandRecorder::End() {
+oxygen::renderer::CommandListPtr CommandRecorder::End()
+{
   if (!current_command_list_) {
     throw std::runtime_error("No CommandList is being recorded");
   }
 
-  D3D12_RESOURCE_BARRIER barrier{
+  D3D12_RESOURCE_BARRIER barrier {
     .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
     .Transition = {
       .pResource = current_render_target_->GetResource(),
       .Subresource = 0,
       .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
-      .StateAfter = D3D12_RESOURCE_STATE_PRESENT
-    }
+      .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
   };
   current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
 
@@ -69,8 +69,7 @@ oxygen::renderer::CommandListPtr CommandRecorder::End() {
     // TODO: consider recycling command lists
 
     return std::move(current_command_list_);
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
     return {};
   }
@@ -104,18 +103,16 @@ void CommandRecorder::SetScissors(
 }
 
 void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
-                            float depth_value, uint8_t stencil_value)
+  float depth_value, uint8_t stencil_value)
 {
   DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
   CHECK_NOTNULL_F(current_render_target_);
 
-  if (flags & kClearFlagsColor)
-  {
+  if (flags & kClearFlagsColor) {
     // TODO: temporarily accept only 1 target
     DCHECK_EQ_F(num_targets, 1u, "Only 1 render target is supported");
 
-    for (uint32_t i = 0; i < num_targets; ++i)
-    {
+    for (uint32_t i = 0; i < num_targets; ++i) {
       // TODO: handle sub-resources
 
       const auto descriptor_handle = current_render_target_->Rtv().cpu;
@@ -132,9 +129,9 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
     }
   }
 
-  //if (flags & (kClearFlagsDepth | kClearFlagsStencil))
+  // if (flags & (kClearFlagsDepth | kClearFlagsStencil))
   //{
-  //  HeapAllocator& dsvAllocator = gDevice->GetDsvHeapAllocator();
+  //   HeapAllocator& dsvAllocator = gDevice->GetDsvHeapAllocator();
 
   //  if (mCurrRenderTarget->GetDSV() == -1)
   //    return;
@@ -150,7 +147,32 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
 
   //  mCommandList->ClearDepthStencilView(handle, clearFlags, depthValue, stencilValue, 0, NULL);
   //}
+}
+void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buffers, const uint32_t* strides,
+  const uint32_t* offsets)
+{
+  DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
 
+  auto* command_list = current_command_list_->GetCommandList();
+
+  // command_list->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+}
+
+void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset)
+{
+  DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+  CHECK_NOTNULL_F(current_render_target_);
+
+  auto* command_list = current_command_list_->GetCommandList();
+
+  // Prepare for Draw
+  command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+  command_list->DrawInstanced(3, 1, 0, 0);
+}
+
+void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset)
+{
 }
 
 void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_target)
@@ -161,15 +183,14 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
   CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
 
   // Indicate that the back buffer will be used as a render target.
-  const D3D12_RESOURCE_BARRIER barrier{
+  const D3D12_RESOURCE_BARRIER barrier {
     .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
     .Transition = {
       .pResource = current_render_target_->GetResource(),
       .Subresource = 0,
       .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
-      .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET
-    }
+      .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
   };
   current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
 
@@ -184,25 +205,25 @@ void CommandRecorder::ReleaseCommandRecorder() noexcept
 
 void CommandRecorder::ResetState()
 {
-  //mGraphicsBindingState.Reset();
-  //mComputeBindingState.Reset();
+  // mGraphicsBindingState.Reset();
+  // mComputeBindingState.Reset();
 
-  //mCurrRenderTarget = nullptr;
-  //mGraphicsPipelineState = nullptr;
-  //mComputePipelineState = nullptr;
+  // mCurrRenderTarget = nullptr;
+  // mGraphicsPipelineState = nullptr;
+  // mComputePipelineState = nullptr;
 
-  //mGraphicsPipelineStateChanged = false;
-  //mComputePipelineStateChanged = false;
+  // mGraphicsPipelineStateChanged = false;
+  // mComputePipelineStateChanged = false;
 
-  //mCurrPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
-  //mNumBoundVertexBuffers = 0u;
-  //mBoundIndexBuffer = nullptr;
+  // mCurrPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+  // mNumBoundVertexBuffers = 0u;
+  // mBoundIndexBuffer = nullptr;
 
-  //mVertexBufferChanged = false;
-  //mIndexBufferChanged = false;
+  // mVertexBufferChanged = false;
+  // mIndexBufferChanged = false;
 
-  //for (uint32 i = 0; i < NFE_RENDERER_MAX_VERTEX_BUFFERS; ++i)
+  // for (uint32 i = 0; i < NFE_RENDERER_MAX_VERTEX_BUFFERS; ++i)
   //{
-  //  mBoundVertexBuffers[i] = nullptr;
-  //}
+  //   mBoundVertexBuffers[i] = nullptr;
+  // }
 }

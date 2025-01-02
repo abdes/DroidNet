@@ -11,17 +11,17 @@
 #include <glm/glm.hpp>
 #include <imgui.h>
 
-#include "oxygen/base/logging.h"
 #include "Oxygen/Core/Engine.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
+#include "Oxygen/Renderers/Common/CommandList.h"
+#include "Oxygen/Renderers/Common/CommandRecorder.h"
+#include "Oxygen/Renderers/Common/RenderTarget.h"
+#include "Oxygen/Renderers/Common/Renderer.h"
+#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
+#include "oxygen/base/logging.h"
 #include "oxygen/input/action_triggers.h"
 #include "oxygen/input/types.h"
 #include "oxygen/platform/platform.h"
-#include "Oxygen/Renderers/Common/CommandList.h"
-#include "Oxygen/Renderers/Common/CommandRecorder.h"
-#include "Oxygen/Renderers/Common/Renderer.h"
-#include "Oxygen/Renderers/Common/RenderTarget.h"
-#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 
 using oxygen::Engine;
 using oxygen::input::Action;
@@ -116,6 +116,8 @@ auto MainModule::RenderGame(
 
   const auto& [left, top, right, bottom] = render_target.GetScissors();
   command_recorder->SetScissors(left, top, right, bottom);
+
+  // command_recorder->Draw();
 
   //...
   CommandLists command_lists {};

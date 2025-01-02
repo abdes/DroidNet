@@ -72,7 +72,9 @@ namespace renderer {
   class CommandRecorder;
   class RenderTarget;
   class ShaderCompiler;
+  class Buffer;
 
+  using BufferPtr = std::shared_ptr<Buffer>;
   using SurfacePtr = std::shared_ptr<Surface>;
   using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
   using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;

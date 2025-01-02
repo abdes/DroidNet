@@ -46,6 +46,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\api_export.h" />
+    <ClInclude Include="..\Oxygen\Renderers\Direct3d12\Buffer.h">
+      <SubType>
+      </SubType>
+    </ClInclude>
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandList.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandQueue.h" />
     <ClInclude Include="..\Oxygen\Renderers\Direct3d12\CommandRecorder.h" />
