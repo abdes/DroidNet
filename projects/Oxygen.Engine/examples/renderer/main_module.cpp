@@ -9,7 +9,7 @@
 #include <random>
 
 #include <glm/glm.hpp>
-#include <Oxygen.Renderer.Direct3D12/vcpkg_installed/x64-windows-static-md/x64-windows-static-md/include/imgui.h>
+#include <imgui.h>
 
 #include "oxygen/base/logging.h"
 #include "Oxygen/Core/Engine.h"
@@ -22,8 +22,8 @@
 #include "Oxygen/Renderers/Common/Renderer.h"
 #include "Oxygen/Renderers/Common/RenderTarget.h"
 #include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
-#include "Oxygen/Renderers/Loader/RendererLoader.h"
 
+using oxygen::Engine;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
@@ -32,11 +32,9 @@ using oxygen::input::InputActionMapping;
 using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
-using oxygen::graphics::GetRenderer;
-using oxygen::renderer::RenderTarget;
 using oxygen::renderer::CommandListPtr;
 using oxygen::renderer::CommandLists;
-using oxygen::Engine;
+using oxygen::renderer::RenderTarget;
 
 void MainModule::OnInitialize(const oxygen::Renderer* renderer)
 {
@@ -48,13 +46,16 @@ void MainModule::OnInitialize(const oxygen::Renderer* renderer)
   surface_->Initialize();
 }
 
-void MainModule::ProcessInput(const oxygen::platform::InputEvent& event) {
+void MainModule::ProcessInput(const oxygen::platform::InputEvent& event)
+{
 }
 
-void MainModule::Update(const oxygen::Duration delta_time) {
+void MainModule::Update(const oxygen::Duration delta_time)
+{
 }
 
-void MainModule::FixedUpdate() {
+void MainModule::FixedUpdate()
+{
 }
 
 void MainModule::Render(const oxygen::Renderer* renderer)
@@ -68,26 +69,25 @@ void MainModule::Render(const oxygen::Renderer* renderer)
 
   DCHECK_F(surface_->IsValid());
   //// Get the command list from the renderer
-  //auto command_list = renderer->GetCommandList();
+  // auto command_list = renderer->GetCommandList();
 
   //// Set the render target (backbuffer)
-  //auto backbuffer = renderer->GetBackBuffer(surface_id_);
-  //command_list->OMSetRenderTargets(1, &backbuffer, FALSE, nullptr);
+  // auto backbuffer = renderer->GetBackBuffer(surface_id_);
+  // command_list->OMSetRenderTargets(1, &backbuffer, FALSE, nullptr);
 
   //// Define the clear color (RGBA)
-  //constexpr float clear_color[4] = { 0.0f, 0.2f, 0.4f, 1.0f }; // Example color: dark blue
+  // constexpr float clear_color[4] = { 0.0f, 0.2f, 0.4f, 1.0f }; // Example color: dark blue
 
   //// Clear the render target (backbuffer)
-  //command_list->ClearRenderTargetView(backbuffer, clear_color, 0, nullptr);
+  // command_list->ClearRenderTargetView(backbuffer, clear_color, 0, nullptr);
 
   //// Execute the command list
-  //renderer->ExecuteCommandList(command_list);
+  // renderer->ExecuteCommandList(command_list);
 
   renderer->Render(surface_->GetId(),
-                   [this, &renderer](const RenderTarget& render_target)
-                   {
-                     return RenderGame(renderer, render_target);
-                   });
+    [this, &renderer](const RenderTarget& render_target) {
+      return RenderGame(renderer, render_target);
+    });
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
 }
 
@@ -118,12 +118,11 @@ auto MainModule::RenderGame(
   command_recorder->SetScissors(left, top, right, bottom);
 
   //...
-  CommandLists command_lists{};
+  CommandLists command_lists {};
   auto my_command_list = command_recorder->End();
   command_lists.emplace_back(std::move(my_command_list));
   // Initialize the ImGui layer
-  if (!GetEngine().HasImGui())
-  {
+  if (!GetEngine().HasImGui()) {
     return command_lists;
   }
 

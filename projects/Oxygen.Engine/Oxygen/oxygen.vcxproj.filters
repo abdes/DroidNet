@@ -204,6 +204,36 @@
     <ClInclude Include="ImGui\ImGuiPlatformBackend.h">
       <Filter>Imgui</Filter>
     </ClInclude>
+    <ClInclude Include="Renderers\Common\ShaderCompiler.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\ShaderByteCode.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\ShaderManager.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderers\Common\Shaders.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\FileStream.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\MemoryStream.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Result.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Stream.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Reader.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Base\Writer.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Base">
@@ -300,6 +330,18 @@
     </ClCompile>
     <ClCompile Include="ImGui\ImGuiRenderInterface.cpp">
       <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\ShaderCompiler.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\ShaderManager.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderers\Common\Shaders.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Base\MemoryStream.cpp">
+      <Filter>Base</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -13,20 +13,31 @@
   <ItemGroup>
     <ClCompile Include="..\Oxygen\Base\test\ComError_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\Exceptions_test.cpp" />
+    <ClCompile Include="..\Oxygen\Base\test\FileStream_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\macros_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\main.cpp" />
+    <ClCompile Include="..\Oxygen\Base\test\MemoryStream_test.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="..\Oxygen\Base\test\platform_test.cpp" />
+    <ClCompile Include="..\Oxygen\Base\test\Reader_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\resource_handle_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\resource_table_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\resource_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\StringUtils_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\time_test.cpp" />
     <ClCompile Include="..\Oxygen\Base\test\types_test.cpp" />
+    <ClCompile Include="..\Oxygen\Base\test\Writer_test.cpp" />
     <ClCompile Include="..\Oxygen\core\test\input_handler_test.cpp" />
     <ClCompile Include="..\Oxygen\core\test\system_test.cpp" />
     <ClCompile Include="..\Oxygen\core\test\version_test.cpp" />
     <ClCompile Include="..\Oxygen\platform\test\input_test.cpp" />
     <ClCompile Include="..\Oxygen\platform\test\window_test.cpp" />
+    <ClCompile Include="..\Oxygen\Renderers\Common\Tests\ShaderByteCodeTests.cpp">
+      <SubType>
+      </SubType>
+    </ClCompile>
     <ClCompile Include="..\Oxygen\world\test\entity_component_test.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -37,6 +48,9 @@
     <ProjectReference Include="..\Oxygen\oxygen.vcxproj">
       <Project>{1e967650-3973-4151-b313-ab8f3fbac717}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Oxygen\Base\test\Mocks\MockStream.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{1ea0938d-0c09-4de1-85f4-8c4b1526f8fd}</ProjectGuid>

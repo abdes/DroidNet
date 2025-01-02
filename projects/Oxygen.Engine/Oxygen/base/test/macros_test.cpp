@@ -12,11 +12,12 @@
 #include "gtest/gtest.h"
 
 // NOLINTNEXTLINE
-TEST(CommonMacros, NonCopyable) {
+TEST(CommonMacros, NonCopyable)
+{
   // NOLINTNEXTLINE
   class NonCopyable
   {
-  public:
+   public:
     OXYGEN_MAKE_NON_COPYABLE(NonCopyable);
   };
 
@@ -25,11 +26,12 @@ TEST(CommonMacros, NonCopyable) {
 }
 
 // NOLINTNEXTLINE
-TEST(CommonMacros, NonMoveable) {
+TEST(CommonMacros, NonMoveable)
+{
   // NOLINTNEXTLINE
   class NonMoveable
   {
-  public:
+   public:
     OXYGEN_MAKE_NON_MOVEABLE(NonMoveable);
   };
 
@@ -38,11 +40,12 @@ TEST(CommonMacros, NonMoveable) {
 }
 
 // NOLINTNEXTLINE
-TEST(CommonMacros, DefaultCopyable) {
+TEST(CommonMacros, DefaultCopyable)
+{
   // NOLINTNEXTLINE
   class DefaultCopyable
   {
-  public:
+   public:
     OXYGEN_DEFAULT_COPYABLE(DefaultCopyable);
   };
 
@@ -51,15 +54,19 @@ TEST(CommonMacros, DefaultCopyable) {
 }
 
 // NOLINTNEXTLINE
-TEST(CommonMacros, DefaultMoveable) {
+TEST(CommonMacros, DefaultMoveable)
+{
   // NOLINTNEXTLINE
   class DefaultMoveable
   {
-  public:
-    DefaultMoveable() : member_("Hello World!") {}
+   public:
+    DefaultMoveable()
+      : member_("Hello World!")
+    {
+    }
     OXYGEN_DEFAULT_MOVABLE(DefaultMoveable);
 
-  private:
+   private:
     std::string member_;
   };
 

@@ -14,7 +14,8 @@ namespace {
 
 const auto kUnsupportedPlatform = "__UNSUPPORTED__";
 
-auto PlatformInfo() -> std::string {
+auto PlatformInfo() -> std::string
+{
 #if defined(OXYGEN_LINUX)
   return "Linux";
 #elif defined(OXYGEN_WINDOWS)
@@ -27,10 +28,11 @@ auto PlatformInfo() -> std::string {
 }
 
 // NOLINTNEXTLINE
-TEST(Platform, PlatformDefinitionExists) {
+TEST(Platform, PlatformDefinitionExists)
+{
   const auto platform = PlatformInfo();
 
   EXPECT_STRNE(kUnsupportedPlatform, platform.c_str());
 }
 
-}  // namespace
+} // namespace
