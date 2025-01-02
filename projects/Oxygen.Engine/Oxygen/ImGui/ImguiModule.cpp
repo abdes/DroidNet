@@ -43,7 +43,7 @@ void ImguiModule::OnShutdown()
   ImGui::DestroyContext();
 }
 
-auto ImguiModule::NewFrame(const Renderer* renderer) -> void
+auto ImguiModule::NewFrame(const Renderer* /*renderer*/) -> void
 {
   ImGuiBackendNewFrame();
   imgui_platform_->NewFrame();
@@ -61,7 +61,7 @@ void ImguiModule::ProcessInput(const platform::InputEvent& /*event*/)
   // Input is processed directly by the platform backend.
 }
 
-void ImguiModule::Update(Duration delta_time)
+void ImguiModule::Update(Duration /*delta_time*/)
 {
 }
 
@@ -71,5 +71,5 @@ void ImguiModule::FixedUpdate()
 
 auto ImguiModule::GetRenderInterface() -> ImGuiRenderInterface
 {
-  return ImGuiRenderInterface{ this };
+  return ImGuiRenderInterface { this };
 }

@@ -11,7 +11,7 @@
 #include <string>
 #include <type_traits>
 
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 
 namespace {
 
@@ -45,9 +45,9 @@ TEST(CommonTypes, HaveToString)
 TEST(CommonTypes, ConvertSecondsToDuration)
 {
   constexpr float kWholeValue = 2.0F;
-  constexpr uint64_t kWholeValueDuration = 2'000'000;
+  constexpr int64_t kWholeValueDuration = 2'000'000;
   constexpr float kFractionValue = .5F;
-  constexpr uint64_t kFractionValueDuration = 500'000;
+  constexpr int64_t kFractionValueDuration = 500'000;
 
   EXPECT_EQ(oxygen::SecondsToDuration(kWholeValue).count(), kWholeValueDuration);
   EXPECT_EQ(oxygen::SecondsToDuration(kFractionValue).count(), kFractionValueDuration);

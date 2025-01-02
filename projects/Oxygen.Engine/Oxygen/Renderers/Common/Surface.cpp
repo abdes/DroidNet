@@ -30,31 +30,28 @@ auto WindowSurface::Height() const -> uint32_t
 void WindowSurface::InitializeSurface()
 {
   const auto window = window_.lock();
-  if (!window) throw std::runtime_error("Window is no longer valid");
+  if (!window)
+    throw std::runtime_error("Window is no longer valid");
 
   LOG_F(INFO, "Initializing Window Surface `{}` [{}]", window->Title(), GetId().ToString());
 
   on_resize_ = std::make_unique<sigslot::connection>(window->OnResized().connect(
-    [this](const auto& size)
-    {
+    [this](const auto& size) {
       LOG_F(1, "Window Surface OnResized() [{}] ", GetId().ToString());
       Resize(size.width, size.height);
     }));
   on_minimized_ = std::make_unique<sigslot::connection>(window->OnMinimized().connect(
-    [this]
-    {
+    [this] {
       LOG_F(1, "Window Surface OnMinimized() [{}]", GetId().ToString());
       // TODO: Window minimized
     }));
   on_restored_ = std::make_unique<sigslot::connection>(window->OnRestored().connect(
-    [this]
-    {
+    [this] {
       LOG_F(1, "Window Surface OnRestored() [{}]", GetId().ToString());
       // TODO: Window restored
     }));
   on_close_ = std::make_unique<sigslot::connection>(window->OnClosing().connect(
-    [this]
-    {
+    [this] {
       LOG_F(INFO, "Window Surface OnClosing() [{}]", GetId().ToString());
 
       // Disconnect signals

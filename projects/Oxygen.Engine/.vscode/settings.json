@@ -97,5 +97,9 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "numbers": "cpp"
-    }
+    },
+    "Lua.diagnostics.globals": [
+        "link_lib_suffix",
+        "workspace_root"
+    ]
 }

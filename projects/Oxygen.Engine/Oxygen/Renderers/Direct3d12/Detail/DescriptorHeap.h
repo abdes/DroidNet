@@ -17,98 +17,97 @@
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Renderers/Common/Types.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
+#include "Oxygen/Renderers/Direct3d12/api_export.h"
 
 namespace oxygen::renderer::d3d12::detail {
 
-  inline size_t kInvalidIndex{ std::numeric_limits<size_t>::max() };
+inline size_t kInvalidIndex { std::numeric_limits<size_t>::max() };
 
-  // TODO: redesign for RAII resource management
-  struct DescriptorHandle
-  {
-    friend class DescriptorHeap;
-    friend struct DescriptorHandleDeleter;
+// TODO: redesign for RAII resource management
+struct DescriptorHandle {
+  friend class DescriptorHeap;
+  friend struct DescriptorHandleDeleter;
 
-    DescriptorHandle() = default;
-    ~DescriptorHandle();
+  DescriptorHandle() = default;
+  ~DescriptorHandle();
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle);
-    OXYGEN_DEFAULT_MOVABLE(DescriptorHandle);
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle);
+  OXYGEN_DEFAULT_MOVABLE(DescriptorHandle);
 
-    D3D12_CPU_DESCRIPTOR_HANDLE cpu{};
-    D3D12_GPU_DESCRIPTOR_HANDLE gpu{};
+  D3D12_CPU_DESCRIPTOR_HANDLE cpu {};
+  D3D12_GPU_DESCRIPTOR_HANDLE gpu {};
 
-    [[nodiscard]] auto IsValid() const -> bool { return cpu.ptr != 0; }
-    [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu.ptr != 0; }
+  [[nodiscard]] auto IsValid() const -> bool { return cpu.ptr != 0; }
+  [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu.ptr != 0; }
 
-    struct Deleter
+  struct Deleter {
+    void operator()(DescriptorHandle* handle) const noexcept
     {
-      void operator()(DescriptorHandle* handle) const noexcept
-      {
-        if (handle)
-        {
-          handle->Free();
-          handle->allocator = nullptr;
-          delete handle;
-        }
+      if (handle) {
+        handle->Free();
+        handle->allocator = nullptr;
+        delete handle;
       }
-    };
-
-  private:
-    // Constructor to initialize allocator_
-    explicit DescriptorHandle(DescriptorHeap* allocator) noexcept
-      : allocator(allocator)
-    {
     }
-    void Free();
-
-    size_t index{ kInvalidIndex };
-    DescriptorHeap* allocator{ nullptr };
   };
 
-  class DescriptorHeap
-    : public Mixin< DescriptorHeap, Curry<MixinNamed, const char*>::mixin >
+ private:
+  // Constructor to initialize allocator_
+  explicit DescriptorHandle(DescriptorHeap* allocator) noexcept
+    : allocator(allocator)
   {
-  public:
-    //! Forwarding constructor
-    template <typename... Args>
-    constexpr explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type, Args &&...args)
-      : Mixin(std::forward<Args>(args)...), type_{ type }
-    {
-    }
-    ~DescriptorHeap() override { Release(); }
+  }
+  void Free();
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
-    OXYGEN_MAKE_NON_MOVEABLE(DescriptorHeap);
+  size_t index { kInvalidIndex };
+  DescriptorHeap* allocator { nullptr };
+};
 
-    void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
-    void Release();
+class DescriptorHeap
+  : public Mixin<DescriptorHeap, Curry<MixinNamed, const char*>::mixin>
+{
+ public:
+  //! Forwarding constructor
+  template <typename... Args>
+  constexpr explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type, Args&&... args)
+    : Mixin(std::forward<Args>(args)...)
+    , type_ { type }
+  {
+  }
+  ~DescriptorHeap() override { Release(); }
 
-    [[nodiscard]] auto Allocate() -> DescriptorHandle;
-    void Free(DescriptorHandle& handle);
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
+  OXYGEN_MAKE_NON_MOVEABLE(DescriptorHeap);
 
-    [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }
-    [[nodiscard]] auto Size() const -> size_t { return size_; }
-    [[nodiscard]] auto Capacity() const -> size_t { return capacity_; }
-    [[nodiscard]] auto Type() const -> D3D12_DESCRIPTOR_HEAP_TYPE { return type_; }
-    [[nodiscard]] auto CpuStart() const -> D3D12_CPU_DESCRIPTOR_HANDLE { return cpu_start_; }
-    [[nodiscard]] auto GpuStart() const -> D3D12_GPU_DESCRIPTOR_HANDLE { return gpu_start_; }
-    [[nodiscard]] auto DescriptorSize() const -> size_t { return descriptor_size_; }
-    [[nodiscard]] auto IsValid() const -> bool { return heap_ != nullptr; }
+  void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
+  void Release();
 
-    [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu_start_.ptr != 0; }
+  OXYGEN_D3D12_API [[nodiscard]] auto Allocate() -> DescriptorHandle;
+  OXYGEN_D3D12_API void Free(DescriptorHandle& handle);
 
-  private:
-    std::mutex mutex_{};
-    bool should_release_{ false };
+  [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }
+  [[nodiscard]] auto Size() const -> size_t { return size_; }
+  [[nodiscard]] auto Capacity() const -> size_t { return capacity_; }
+  [[nodiscard]] auto Type() const -> D3D12_DESCRIPTOR_HEAP_TYPE { return type_; }
+  [[nodiscard]] auto CpuStart() const -> D3D12_CPU_DESCRIPTOR_HANDLE { return cpu_start_; }
+  [[nodiscard]] auto GpuStart() const -> D3D12_GPU_DESCRIPTOR_HANDLE { return gpu_start_; }
+  [[nodiscard]] auto DescriptorSize() const -> size_t { return descriptor_size_; }
+  [[nodiscard]] auto IsValid() const -> bool { return heap_ != nullptr; }
 
-    DescriptorHeapType* heap_{ nullptr };
-    D3D12_CPU_DESCRIPTOR_HANDLE cpu_start_{};
-    D3D12_GPU_DESCRIPTOR_HANDLE gpu_start_{};
-    size_t capacity_{ 0 };
-    size_t size_{ 0 };
-    size_t descriptor_size_{ 0 };
-    D3D12_DESCRIPTOR_HEAP_TYPE type_{};
-    std::unique_ptr<size_t[]> free_handles_{};
-  };
+  [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu_start_.ptr != 0; }
 
-}  // namespace oxygen::renderer::d3d12::detail
+ private:
+  std::mutex mutex_ {};
+  bool should_release_ { false };
+
+  DescriptorHeapType* heap_ { nullptr };
+  D3D12_CPU_DESCRIPTOR_HANDLE cpu_start_ {};
+  D3D12_GPU_DESCRIPTOR_HANDLE gpu_start_ {};
+  size_t capacity_ { 0 };
+  size_t size_ { 0 };
+  size_t descriptor_size_ { 0 };
+  D3D12_DESCRIPTOR_HEAP_TYPE type_ {};
+  std::unique_ptr<size_t[]> free_handles_ {};
+};
+
+} // namespace oxygen::renderer::d3d12::detail

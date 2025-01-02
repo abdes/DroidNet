@@ -22,7 +22,7 @@ class MockStream
     force_fail_ = value;
   }
 
-  void open(const std::filesystem::path& path, std::ios::openmode mode) noexcept
+  void open(const std::filesystem::path& /*path*/, std::ios::openmode /*mode*/) noexcept
   {
     is_open_ = true;
     if (force_fail_) {
