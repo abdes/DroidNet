@@ -6,13 +6,12 @@
 
 #include "Oxygen/Renderers/Direct3d12/ImGui/ImGuiModule.h"
 
-
 #include <imgui_impl_dx12.h>
 
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/RenderTarget.h"
+#include "Oxygen/Renderers/Direct3d12/Renderer.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
@@ -24,7 +23,7 @@ void ImGuiModule::ImGuiBackendInit(const oxygen::Renderer* renderer)
   font_srv_handle_ = d3d12_render->SrvHeap().Allocate();
   ImGui::SetCurrentContext(GetImGuiContext());
   ImGui_ImplDX12_Init(GetMainDevice(), kFrameBufferCount, DXGI_FORMAT_R8G8B8A8_UNORM,
-                      d3d12_render->SrvHeap().Heap(), font_srv_handle_.cpu, font_srv_handle_.gpu);
+    d3d12_render->SrvHeap().Heap(), font_srv_handle_.cpu, font_srv_handle_.gpu);
 }
 
 void ImGuiModule::ImGuiBackendShutdown()
@@ -40,8 +39,8 @@ void ImGuiModule::ImGuiBackendNewFrame()
   ImGui_ImplDX12_NewFrame();
 }
 
-auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* renderer, ImDrawData* draw_data)
--> CommandListPtr
+auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* /*renderer*/, ImDrawData* draw_data)
+  -> CommandListPtr
 {
   auto& current_render_target = detail::GetRenderer().GetCurrentRenderTarget();
 
@@ -53,22 +52,20 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* renderer, Im
     command_list->Initialize(CommandListType::kGraphics);
     CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
     command_list->OnBeginRecording();
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to begin recording to a command list: {}", e.what());
     throw;
   }
 
   // Render Target
-  D3D12_RESOURCE_BARRIER barrier{
-   .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-   .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-   .Transition = {
-     .pResource = current_render_target.GetResource(),
-     .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
-     .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
-     .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET
-   }
+  D3D12_RESOURCE_BARRIER barrier {
+    .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+    .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+    .Transition = {
+      .pResource = current_render_target.GetResource(),
+      .Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+      .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
+      .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
   };
   command_list->GetCommandList()->ResourceBarrier(1, &barrier);
 
@@ -91,8 +88,7 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* renderer, Im
   try {
     command_list->OnEndRecording();
     return std::move(command_list);
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
     return {};
   }

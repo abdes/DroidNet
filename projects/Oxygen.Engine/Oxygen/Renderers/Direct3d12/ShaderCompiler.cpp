@@ -131,6 +131,7 @@ auto ShaderCompiler::CompileFromSource(
     LOG_F(ERROR, "DXC Compile call failed: {:x}", hr);
     return {};
   }
+  DCHECK_NOTNULL_F(result);
 
   hr = result->GetStatus(&hr);
   if (FAILED(hr)) {
@@ -146,6 +147,25 @@ auto ShaderCompiler::CompileFromSource(
 
   ComPtr<IDxcBlob> output;
   ThrowOnFailed(result->GetResult(&output));
+
+  if (!output) {
+    LOG_F(ERROR, "GetResult returned null blob");
+    return {};
+  }
+
+  size_t size = output->GetBufferSize();
+  if (size == 0) {
+    LOG_F(ERROR, "Shader compilation succeeded but produced empty bytecode");
+
+    // Check if we have any warnings
+    ComPtr<IDxcBlobEncoding> warning_blob;
+    if (SUCCEEDED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), nullptr)) && warning_blob) {
+      LogCompilationErrors(warning_blob.Get());
+    }
+    return {};
+  }
+
+  LOG_F(1, "Shader bytecode size = {}", output->GetBufferSize());
 
   return std::make_unique<ShaderByteCode<ComPtr<IDxcBlob>>>(std::move(output));
 }

@@ -17,18 +17,21 @@
 
 using oxygen::Engine;
 
-auto Engine::GetPlatform() const -> Platform& {
+auto Engine::GetPlatform() const -> Platform&
+{
   return *platform_;
 }
 
-auto Engine::Name() -> const std::string& {
-  static const std::string kName{ "Oxygen" };
+auto Engine::Name() -> const std::string&
+{
+  static const std::string kName { "Oxygen" };
   return kName;
 }
 
-auto Engine::Version() -> uint32_t {
-  constexpr uint32_t kBitsPatch{ 12 };
-  constexpr uint32_t kBitsMinor{ 10 };
+auto Engine::Version() -> uint32_t
+{
+  constexpr uint32_t kBitsPatch { 12 };
+  constexpr uint32_t kBitsMinor { 10 };
   return (static_cast<uint32_t>(version::Major()) << (kBitsPatch + kBitsMinor))
     | ((static_cast<uint32_t>(version::Minor())) << kBitsPatch)
     | (static_cast<uint32_t>(version::Patch()));
@@ -45,13 +48,15 @@ auto Engine::GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface
 
 void Engine::OnInitialize()
 {
-  CHECK_F(!renderer_.expired());
   const auto renderer = renderer_.lock();
+  if (!renderer) {
+    LOG_F(INFO, "No renderer attached to the engine.");
+  }
 
   InitializeModules();
 
   // Initialize ImGui if required
-  if (props_.enable_imgui_layer) {
+  if (renderer && props_.enable_imgui_layer) {
     imgui_module_ = renderer->CreateImGuiModule(shared_from_this(), props_.main_window_id);
     imgui_module_->Initialize(renderer.get());
   }
@@ -72,27 +77,26 @@ void Engine::AttachModule(const ModulePtr& module, const uint32_t priority)
   DCHECK_F(!IsInitialized());
 
   if (std::ranges::find_if(
-    modules_,
-    [&module](const auto& module_ctx) {
-      return module_ctx.module == module;
-    }) != modules_.end())
-  {
+        modules_,
+        [&module](const auto& module_ctx) {
+          return module_ctx.module == module;
+        })
+    != modules_.end()) {
     throw std::invalid_argument("The module is already attached.");
   }
 
-  modules_.push_back(ModuleContext{ .module = module, .layer = priority });
+  modules_.push_back(ModuleContext { .module = module, .layer = priority });
   SortModulesByPriority();
 }
 
 void Engine::DetachModule(const ModulePtr& module)
 {
   if (const auto it = std::ranges::find_if(
-    modules_,
-    [&module](const auto& module_ctx) {
-      return module_ctx.module == module;
-    });
-    it != modules_.end())
-  {
+        modules_,
+        [&module](const auto& module_ctx) {
+          return module_ctx.module == module;
+        });
+    it != modules_.end()) {
     modules_.erase(it);
   }
 }
@@ -107,7 +111,6 @@ void Engine::SortModulesByPriority()
 
 void Engine::InitializeModules()
 {
-  CHECK_F(!renderer_.expired());
   const auto renderer = renderer_.lock();
   std::ranges::for_each(modules_, [&](auto& module) { module.module->Initialize(renderer.get()); });
 }
@@ -121,7 +124,7 @@ auto Engine::Run() -> void
 {
   DCHECK_F(IsInitialized(), "engine must be initialized before Run() is called");
 
-  bool continue_running{ true };
+  bool continue_running { true };
 
   // Listen for the last window closed event
   auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
@@ -133,25 +136,22 @@ auto Engine::Run() -> void
   // https://gafferongames.com/post/fix_your_timestep/
   std::ranges::for_each(
     modules_,
-    [](auto& module)
-    {
+    [](auto& module) {
       module.frame_time.Reset();
     });
 
-  while (continue_running)
-  {
+  while (continue_running) {
     // Poll for platform events
     auto event = GetPlatform().PollEvent();
 
     // Process Input Events with ImGui
-    if (event) {
+    if (event && imgui_module_) {
       imgui_module_->ProcessInput(*event);
     }
     // Run the modules
     std::ranges::for_each(
       modules_,
-      [this, &continue_running, &event](auto& module)
-      {
+      [this, &continue_running, &event](auto& module) {
         auto& the_module = module.module;
         DCHECK_NOTNULL_F(the_module);
 
@@ -160,12 +160,9 @@ auto Engine::Run() -> void
           the_module->ProcessInput(*event);
         }
 
-        // Always check if any of the modules have done something that causes
-        // the renderer to be destroyed.
+        // Note that we may be running renderer-less, which means the renderer
+        // is null, which is fine.
         const auto renderer = renderer_.lock();
-        if (!renderer) {
-          continue_running = false;
-        }
 
         if (continue_running) {
           module.frame_time.Update();

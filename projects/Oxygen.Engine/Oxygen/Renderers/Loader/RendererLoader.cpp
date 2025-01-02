@@ -78,7 +78,7 @@ auto GetEngineModuleDllName(const GraphicsBackendType backend) -> std::string
     throw std::runtime_error(
       "backend not yet implemented: " + nostd::to_string(backend));
   }
-  return "DroidNet.Oxygen.Renderer." + engine_name + ".dll";
+  return "Oxygen.Graphics." + engine_name + ".dll";
 }
 
 auto LoadEngineModule(const GraphicsBackendType backend)

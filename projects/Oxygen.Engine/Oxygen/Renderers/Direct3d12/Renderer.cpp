@@ -23,8 +23,8 @@
 #include "Oxygen/Renderers/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Renderers/Direct3d12/DebugLayer.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Renderers/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Renderers/Direct3d12/ImGui/ImGuiModule.h"
 #include "Oxygen/Renderers/Direct3d12/ShaderCompiler.h"
 #include "Oxygen/Renderers/Direct3d12/Types.h"
@@ -75,8 +75,8 @@ namespace {
 // corresponding to one of the shaders we want to automatically compile,
 // package and load.
 const oxygen::renderer::ShaderProfile kEngineShaders[] = {
-  { .type = oxygen::ShaderType::kVertex, .path = "FullScreenTriangle.hlsl" },
-  { .type = oxygen::ShaderType::kPixel, .path = "FillColor.hlsl" },
+  { .type = oxygen::ShaderType::kPixel, .path = "FullScreenTriangle.hlsl", .entry_point = "PS" },
+  { .type = oxygen::ShaderType::kVertex, .path = "FullScreenTriangle.hlsl", .entry_point = "VS" },
 };
 } // namespace
 
@@ -358,8 +358,8 @@ void RendererImpl::Init(const RendererProperties& props)
   // TODO: Make this better by not hard-coding the path
   ShaderManagerConfig shader_manager_config {
     .renderer_name = "D3D12 Renderer",
-    .archive_dir = R"(F:\projects\DroidNet\bin\Oxygen)",
-    .source_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\Oxygen\Renderers\Direct3d12\Shaders)",
+    .archive_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\bin\Oxygen)",
+    .source_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\Oxygen\Renderers\Direct3D12\Shaders)",
     .shaders = std::span(kEngineShaders, std::size(kEngineShaders)),
     .compiler = shader_compiler_,
   };

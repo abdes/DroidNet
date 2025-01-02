@@ -8,8 +8,8 @@
 
 #include "glm/glm.hpp"
 
-#include "oxygen/base/resource_handle.h"
-#include "oxygen/editor-api//api_export.h"
+#include "oxygen/base/ResourceHandle.h"
+#include "oxygen/editor-api/api_export.h"
 
 #include <glm/vec3.hpp>
 
@@ -20,11 +20,11 @@ struct OxygenTransformCreateInfo {
 };
 
 struct OxygenGameEntityCreateInfo {
-  OxygenTransformCreateInfo *transform;
+  OxygenTransformCreateInfo* transform;
 };
 
 OXYGEN_ENGINE_API auto CreateGameEntity(
-    const OxygenGameEntityCreateInfo *pDescriptor)
-    -> oxygen::ResourceHandle::HandleT;
+  const OxygenGameEntityCreateInfo* pDescriptor)
+  -> oxygen::ResourceHandle::HandleT;
 
 OXYGEN_ENGINE_API void RemoveGameEntity(oxygen::ResourceHandle::HandleT);

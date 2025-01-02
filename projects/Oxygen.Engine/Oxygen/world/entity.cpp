@@ -6,31 +6,31 @@
 
 #include "entity.h"
 
-#include "oxygen/base/logging.h"
 #include "oxygen/base/ResourceTable.h"
+#include "oxygen/base/logging.h"
 #include "transform.h"
 #include <shared_mutex>
 
 namespace {
 
-  using oxygen::ResourceTable;
-  using oxygen::world::GameEntity;
-  using oxygen::world::Transform;
+using oxygen::ResourceTable;
+using oxygen::world::GameEntity;
+using oxygen::world::Transform;
 
-#define MAKE_RESOURCE_TABLE(name, type, itemType)                              \
+#define MAKE_RESOURCE_TABLE(name, type, itemType) \
   ResourceTable<type> name(oxygen::world::resources::k##itemType, 256)
 
-  // TODO: table size needs to be moved to a constant
+// TODO: table size needs to be moved to a constant
 
-  MAKE_RESOURCE_TABLE(entities, GameEntity, GameEntity);
-  MAKE_RESOURCE_TABLE(transforms, Transform, Transform);
-  MAKE_RESOURCE_TABLE(positions, glm::vec3, Transform);
-  MAKE_RESOURCE_TABLE(rotations, glm::quat, Transform);
-  MAKE_RESOURCE_TABLE(scales, glm::vec3, Transform);
+MAKE_RESOURCE_TABLE(entities, GameEntity, GameEntity);
+MAKE_RESOURCE_TABLE(transforms, Transform, Transform);
+MAKE_RESOURCE_TABLE(positions, glm::vec3, Transform);
+MAKE_RESOURCE_TABLE(rotations, glm::quat, Transform);
+MAKE_RESOURCE_TABLE(scales, glm::vec3, Transform);
 
-  std::shared_mutex entity_mutex;
+std::shared_mutex entity_mutex;
 
-}  // namespace
+} // namespace
 
 /**
  * @brief Creates a new transform component for the specified entity.
@@ -94,34 +94,40 @@ auto GameEntity::RemoveTransform(Transform& transform) -> size_t
   return removed;
 }
 
-auto Transform::GetPosition() const noexcept -> glm::vec3 {
+auto Transform::GetPosition() const noexcept -> glm::vec3
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   return positions.ItemAt(GetId());
 }
 
-auto Transform::GetRotation() const noexcept -> glm::quat {
+auto Transform::GetRotation() const noexcept -> glm::quat
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   return rotations.ItemAt(GetId());
 }
 
-auto Transform::GetScale() const noexcept -> glm::vec3 {
+auto Transform::GetScale() const noexcept -> glm::vec3
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   return scales.ItemAt(GetId());
 }
-void Transform::SetPosition(const glm::vec3 position) const noexcept {
+void Transform::SetPosition(const glm::vec3 position) const noexcept
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   positions.ItemAt(GetId()) = position;
 }
-void Transform::SetRotation(const glm::quat rotation) const noexcept {
+void Transform::SetRotation(const glm::quat rotation) const noexcept
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   rotations.ItemAt(GetId()) = rotation;
 }
-void Transform::SetScale(const glm::vec3 scale) const noexcept {
+void Transform::SetScale(const glm::vec3 scale) const noexcept
+{
   CHECK_F(IsValid());
   std::unique_lock lock(entity_mutex);
   scales.ItemAt(GetId()) = scale;
@@ -172,7 +178,8 @@ auto oxygen::world::entity::RemoveGameEntity(GameEntity& entity) -> size_t
   return entity_removed;
 }
 
-auto GameEntity::GetTransform() const noexcept -> Transform {
+auto GameEntity::GetTransform() const noexcept -> Transform
+{
   if (!IsValid()) {
     return {};
   }

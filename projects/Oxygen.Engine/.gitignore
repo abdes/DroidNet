@@ -8,6 +8,7 @@ cmake-build*/
 out/
 vcpkg_installed/
 /bazel-*
+vs2022
 
 .clwb
 .vs

@@ -13,11 +13,12 @@
 #include "oxygen/world/transform.h"
 
 using oxygen::ResourceHandle;
-using oxygen::world::EntityDescriptor;
+using oxygen::world::GameEntityDescriptor;
 using oxygen::world::TransformDescriptor;
 
 auto CreateGameEntity(
-    const OxygenGameEntityCreateInfo *pDescriptor) -> ResourceHandle::HandleT {
+  const OxygenGameEntityCreateInfo* pDescriptor) -> ResourceHandle::HandleT
+{
   assert(pDescriptor != nullptr);
   if (pDescriptor == nullptr) {
     return {};
@@ -37,14 +38,15 @@ auto CreateGameEntity(
   transformDescriptor.rotation = glm::quat(pDescriptor->transform->rotation);
   transformDescriptor.scale = pDescriptor->transform->scale;
 
-  EntityDescriptor entityDescriptor;
+  GameEntityDescriptor entityDescriptor;
   entityDescriptor.transform = &transformDescriptor;
 
   const auto entity = oxygen::world::entity::CreateGameEntity(entityDescriptor);
-  return entity.GetEntityId().Handle();
+  return entity.GetId().Handle();
 }
 
-void RemoveGameEntity(const ResourceHandle::HandleT entity_id) {
-  const auto entity = oxygen::world::Entity(ResourceHandle(entity_id));
+void RemoveGameEntity(const ResourceHandle::HandleT entity_id)
+{
+  const auto entity = oxygen::world::GameEntity(ResourceHandle(entity_id));
   oxygen::world::entity::RemoveGameEntity(entity);
 }

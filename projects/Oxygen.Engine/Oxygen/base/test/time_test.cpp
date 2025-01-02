@@ -6,12 +6,10 @@
 
 #include "Oxygen/Base/Time.h"
 
-#include <gmock/gmock-actions.h>
-#include <gmock/gmock-function-mocker.h>
-#include <gmock/gmock-spec-builders.h>
-#include <gtest/gtest.h>
-
 #include <chrono>
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include "Oxygen/Base/Types.h"
 
@@ -28,14 +26,13 @@ using oxygen::TimePoint;
 
 class MockNow
 {
-public:
+ public:
   // NOLINTBEGIN
   MOCK_METHOD(Duration, Now, (), (const));
   // NOLINTEND
 };
-struct MockTime
-{
-  inline static MockNow* mock{ nullptr };
+struct MockTime {
+  inline static MockNow* mock { nullptr };
   // This class is passed as template type during class B object creation in
   // unit test environment
   static auto Now() -> TimePoint { return mock->Now(); }
@@ -43,18 +40,19 @@ struct MockTime
 
 class TimeTest : public ::testing::Test
 {
-protected:
+ protected:
   void SetUp() override { MockTime::mock = &mock_now; }
   void TearDown() override { MockTime::mock = nullptr; }
 
-public:
+ public:
   MockNow mock_now;
 };
 
 using ElapsedTimeTest = TimeTest;
 
 // NOLINTNEXTLINE
-TEST_F(ElapsedTimeTest, StartTime) {
+TEST_F(ElapsedTimeTest, StartTime)
+{
   EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
   const ElapsedTimeType<MockTime> elapsed;
@@ -62,7 +60,8 @@ TEST_F(ElapsedTimeTest, StartTime) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ElapsedTimeTest, ElapsedTime) {
+TEST_F(ElapsedTimeTest, ElapsedTime)
+{
   EXPECT_CALL(mock_now, Now)
     .Times(2)
     .WillOnce(Return(10us))
@@ -76,7 +75,8 @@ TEST_F(ElapsedTimeTest, ElapsedTime) {
 using DeltaTimeTest = TimeTest;
 
 // NOLINTNEXTLINE
-TEST_F(DeltaTimeTest, AtCreation) {
+TEST_F(DeltaTimeTest, AtCreation)
+{
   EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
   const DeltaTimeType<MockTime> delta;
@@ -85,7 +85,8 @@ TEST_F(DeltaTimeTest, AtCreation) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(DeltaTimeTest, AfterUpdate) {
+TEST_F(DeltaTimeTest, AfterUpdate)
+{
   EXPECT_CALL(mock_now, Now)
     .Times(2)
     .WillOnce(Return(10us))
@@ -100,16 +101,18 @@ TEST_F(DeltaTimeTest, AfterUpdate) {
 using ChangePerSecondTest = TimeTest;
 
 // NOLINTNEXTLINE
-TEST_F(ChangePerSecondTest, AtCreation) {
+TEST_F(ChangePerSecondTest, AtCreation)
+{
   EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
   const ChangePerSecondType<MockTime> cps;
-  EXPECT_EQ(cps.Value(), 0);
+  EXPECT_EQ(cps.Value(), 0U);
   EXPECT_TRUE(cps.ValueTime() == 10us);
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChangePerSecondTest, AfterUpdate) {
+TEST_F(ChangePerSecondTest, AfterUpdate)
+{
   EXPECT_CALL(mock_now, Now)
     .Times(4)
     .WillOnce(Return(0us))
@@ -119,12 +122,12 @@ TEST_F(ChangePerSecondTest, AfterUpdate) {
 
   ChangePerSecondType<MockTime> cps;
   cps.Update();
-  EXPECT_EQ(cps.Value(), 0);
+  EXPECT_EQ(cps.Value(), 0U);
   EXPECT_EQ(cps.ValueTime(), 10us);
   cps.Update();
-  EXPECT_EQ(cps.Value(), 2);
+  EXPECT_EQ(cps.Value(), 2U);
   EXPECT_EQ(cps.ValueTime(), 1s);
   cps.Update();
-  EXPECT_EQ(cps.Value(), 1);
+  EXPECT_EQ(cps.Value(), 1U);
   EXPECT_EQ(cps.ValueTime(), 2s + 10us);
 }
