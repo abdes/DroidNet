@@ -6,23 +6,32 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "Oxygen/Base/Macros.h"
 
 namespace oxygen::renderer {
 
-  class Buffer
-  {
-  public:
-    Buffer() = default;
-    virtual ~Buffer() = default;
+/**
+ * Buffer's view for binding
+ */
+struct BufferView {
+  uint32_t firstElement = 0;
+  uint32_t numElements = UINT32_MAX;
+};
 
-    OXYGEN_MAKE_NON_COPYABLE(Buffer);
-    OXYGEN_MAKE_NON_MOVEABLE(Buffer);
+class Buffer
+{
+ public:
+  Buffer() = default;
+  virtual ~Buffer() = default;
 
-    virtual void Bind() = 0;
-    virtual void* Map() = 0;
-    virtual void Unmap() = 0;
+  OXYGEN_MAKE_NON_COPYABLE(Buffer);
+  OXYGEN_MAKE_NON_MOVEABLE(Buffer);
 
-  };
+  virtual void Bind() = 0;
+  virtual void* Map() = 0;
+  virtual void Unmap() = 0;
+};
 
-}
+} // namespace oxygen::renderer

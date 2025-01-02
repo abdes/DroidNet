@@ -11,21 +11,41 @@
 
 namespace oxygen::renderer::d3d12 {
 
-  class D3DResource
-  {
-  public:
-    virtual ~D3DResource() noexcept = default;
+enum class ResourceType : uint8_t {
+  kTexture,
+  kBuffer,
 
-    OXYGEN_MAKE_NON_COPYABLE(D3DResource);
-    OXYGEN_DEFAULT_MOVABLE(D3DResource);
+  kMax,
+};
 
-    [[nodiscard]] virtual auto GetResource() const->ID3D12Resource* = 0;
-    [[nodiscard]] virtual auto GetMode() const -> ResourceAccessMode { return mode_; }
+/**
+ * Common description of renderer's resource (buffer or texture)
+ */
+struct CommonResourceDesc {
+  //// memory block to allocate the buffer from
+  //// if not provided, renderer will automatically manage memory for the resource
+  // MemoryBlockPtr memoryBlock;
+  // uint64_t memoryBlockOffset = 0u;
 
-  protected:
-    D3DResource() = default;
+  // optional debug name
+  const char* debug_name = nullptr;
+};
 
-    ResourceAccessMode mode_{ ResourceAccessMode::kImmutable };
-  };
+class D3DResource
+{
+ public:
+  virtual ~D3DResource() noexcept = default;
 
-}  // namespace oxygen::renderer::d3d12
+  OXYGEN_MAKE_NON_COPYABLE(D3DResource);
+  OXYGEN_DEFAULT_MOVABLE(D3DResource);
+
+  [[nodiscard]] virtual auto GetResource() const -> ID3D12Resource* = 0;
+  [[nodiscard]] virtual auto GetMode() const -> ResourceAccessMode { return mode_; }
+
+ protected:
+  D3DResource() = default;
+
+  ResourceAccessMode mode_ { ResourceAccessMode::kImmutable };
+};
+
+} // namespace oxygen::renderer::d3d12
