@@ -32,7 +32,7 @@ class Graphics final : public oxygen::Graphics
 
   OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> renderer::d3d12::FactoryType*;
   OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> renderer::d3d12::DeviceType*;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator* { return allocator_; }
 
  protected:
   void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) override;
@@ -56,12 +56,12 @@ namespace detail {
     initialized or has been destroyed.
   */
   //! @{
-  [[nodiscard]] auto Graphics() -> Graphics&;
-  [[nodiscard]] auto GetFactory() -> renderer::d3d12::FactoryType*;
-  [[nodiscard]] auto GetMainDevice() -> renderer::d3d12::DeviceType*;
-  [[nodiscard]] auto GetRenderer() -> renderer::d3d12::Renderer&;
-  [[nodiscard]] auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&;
-  [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
+  OXYGEN_D3D12_API [[nodiscard]] auto Graphics() -> Graphics&;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() -> renderer::d3d12::FactoryType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() -> renderer::d3d12::DeviceType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetRenderer() -> renderer::d3d12::Renderer&;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
   //! Get the backend memory allocator
   // TODO: Add the allocator
   //! @}

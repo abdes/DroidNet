@@ -42,6 +42,7 @@ class Renderer final
 
   auto GetCommandRecorder() const -> CommandRecorderPtr override;
   auto GetShaderCompiler() const -> ShaderCompilerPtr override;
+  auto GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode> override;
 
   OXYGEN_D3D12_API [[nodiscard]] auto RtvHeap() const -> detail::DescriptorHeap&;
   OXYGEN_D3D12_API [[nodiscard]] auto DsvHeap() const -> detail::DescriptorHeap&;
@@ -55,10 +56,10 @@ class Renderer final
   //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;
   //  TODO: Add backend independent support for format
 
-  D3D12MA::Allocator* GetAllocator() const;
-
   // TODO: Temporary until we separate the rendering surfaces from the app module
   auto GetCurrentRenderTarget() const -> const RenderTarget& { return *current_render_target_; }
+
+  [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
 
  protected:
   void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;

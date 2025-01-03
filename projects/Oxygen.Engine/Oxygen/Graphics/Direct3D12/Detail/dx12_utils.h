@@ -170,7 +170,7 @@ constexpr struct
 
 constexpr struct
 {
-  D3D12_DEPTH_STENCIL_DESC1 disabled {
+  D3D12_DEPTH_STENCIL_DESC disabled {
     0, // DepthEnable
     D3D12_DEPTH_WRITE_MASK_ZERO, // DepthWriteMask
     D3D12_COMPARISON_FUNC_LESS_EQUAL, // DepthFunc
@@ -179,7 +179,6 @@ constexpr struct
     0, // StencilWriteMask
     {}, // FrontFace
     {}, // BackFace
-    0 // DepthBoundsTestEnable
   };
 
   D3D12_DEPTH_STENCIL_DESC1 enabled {
@@ -501,7 +500,7 @@ struct D3d12PipelineStateSubObjectStream {
   D3D12PipelineStateSubObject_node_mask node_mask {};
   D3D12PipelineStateSubObject_cached_pso cached_pso {};
   D3D12PipelineStateSubObject_flags flags {};
-  D3D12PipelineStateSubObject_depth_stencil1 depth_stencil1 { kDepthState.disabled };
+  D3D12PipelineStateSubObject_depth_stencil depth_stencil1 { kDepthState.disabled };
   D3D12PipelineStateSubObject_view_instancing view_instancing {};
   D3D12PipelineStateSubObject_as as {};
   D3D12PipelineStateSubObject_ms ms {};

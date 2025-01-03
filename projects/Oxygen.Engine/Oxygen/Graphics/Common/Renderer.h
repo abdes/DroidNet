@@ -18,6 +18,13 @@
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/api_export.h"
 
+#include <d3d12.h>
+#include <wrl/client.h>
+
+namespace oxygen::renderer {
+class IShaderByteCode;
+}
+
 namespace oxygen {
 
 namespace imgui {
@@ -91,6 +98,7 @@ class Renderer
 
   virtual auto GetCommandRecorder() const -> renderer::CommandRecorderPtr = 0;
   virtual auto GetShaderCompiler() const -> renderer::ShaderCompilerPtr = 0;
+  virtual auto GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<renderer::IShaderByteCode> = 0;
 
   /**
    * Device resources creation functions
@@ -99,6 +107,7 @@ class Renderer
 
   [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> = 0;
   [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const -> renderer::SurfacePtr = 0;
+  [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> renderer::BufferPtr = 0;
 
   /**@}*/
 

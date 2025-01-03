@@ -7,6 +7,7 @@
 #pragma once
 
 #include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/api_export.h"
 
 namespace oxygen::renderer {
 struct CompiledShaderInfo;
@@ -21,7 +22,7 @@ struct ShaderProfile {
   std::string entry_point { "main" }; //< Entry point function name.
 };
 
-[[nodiscard]] auto MakeShaderIdentifier(ShaderType shader_type, const std::string& relative_path) -> std::string;
-[[nodiscard]] auto MakeShaderIdentifier(const ShaderProfile& shader) -> std::string;
+OXYGEN_API [[nodiscard]] auto MakeShaderIdentifier(ShaderType shader_type, const std::string& relative_path) -> std::string;
+OXYGEN_API [[nodiscard]] auto MakeShaderIdentifier(const ShaderProfile& shader) -> std::string;
 
 } // namespace oxygen::renderer
