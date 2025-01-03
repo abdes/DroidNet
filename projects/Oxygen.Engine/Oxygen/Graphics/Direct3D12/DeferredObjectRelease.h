@@ -13,6 +13,7 @@ namespace oxygen::renderer::d3d12::detail {
 
 template <typename T>
 void DeferredObjectRelease(T*& resource) noexcept
+  requires HasReleaseMethod<T>
 {
   if (resource) {
     graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);

@@ -12,9 +12,9 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Base/Windows/Exceptions.h"
 #include "Oxygen/Graphics/Common/GraphicsModule.h"
-#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
 //===----------------------------------------------------------------------===//
@@ -80,7 +80,7 @@ auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&
 
 auto GetAllocator() -> D3D12MA::Allocator&
 {
-  auto* allocator = GetRenderer().GetAllocator();
+  auto* allocator = Graphics().GetAllocator();
   DCHECK_NOTNULL_F(allocator);
   return *allocator;
 }
@@ -289,12 +289,6 @@ auto Graphics::GetMainDevice() const -> DeviceType*
   return main_device_.Get();
 }
 
-auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
-{
-  CHECK_NOTNULL_F(allocator_, "graphics backend not properly initialized");
-  return allocator_;
-}
-
 void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props)
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -321,11 +315,22 @@ void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBac
       best_adapter_desc.max_feature_level,
       IID_PPV_ARGS(&main_device_)));
   NameObject(main_device_.Get(), L"MAIN DEVICE");
+
+  D3D12MA::ALLOCATOR_DESC allocator_desc = {};
+  allocator_desc.Flags = D3D12MA::ALLOCATOR_FLAG_NONE;
+  allocator_desc.pDevice = main_device_.Get();
+  allocator_desc.pAdapter = best_adapter.Get();
+  ThrowOnFailed(D3D12MA::CreateAllocator(&allocator_desc, &allocator_));
+  LOG_F(INFO, "D3D12MA Memory Allocator initialized");
 }
 
 void Graphics::ShutdownGraphicsBackend()
 {
   LOG_SCOPE_FUNCTION(INFO);
+
+  renderer::ObjectRelease(allocator_);
+  allocator_ = nullptr;
+  LOG_F(INFO, "D3D12MA Memory Allocator released");
 
   factory_.Reset();
   LOG_F(INFO, "D3D12 DXGI Factory reset");

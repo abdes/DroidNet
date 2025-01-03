@@ -6,6 +6,9 @@
 
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
 
+#include "Buffer.h"
+#include "Detail/dx12_utils.h"
+
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -87,12 +90,11 @@ class RendererImpl final
   [[nodiscard]] auto SrvHeap() const -> DescriptorHeap& { return srv_heap_; }
   [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
-  [[nodiscard]] D3D12MA::Allocator* GetAllocator() const { return allocator_; }
   CommandRecorderPtr GetCommandRecorder() { return command_recorder_; }
   ShaderCompilerPtr GetShaderCompiler() const { return std::dynamic_pointer_cast<renderer::ShaderCompiler>(shader_compiler_); }
+  std::shared_ptr<IShaderByteCode> GetEngineShader(std::string_view unique_id);
 
  private:
-  D3D12MA::Allocator* allocator_ { nullptr };
   std::shared_ptr<ShaderCompiler> shader_compiler_ {};
   std::unique_ptr<ShaderManager> engine_shaders_ {};
 
@@ -166,7 +168,6 @@ void RendererImpl::ShutdownRenderer()
   command_recorder_->Release();
   command_recorder_.reset();
 
-  ObjectRelease(allocator_);
   // TODO: SafeRelease for objects that need to be released after a full flush
   // otherwise, we should use ObjectRelease() or DeferredObjectRelease()
   LOG_F(INFO, "D3D12MA Memory Allocator released");
@@ -235,6 +236,11 @@ auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> 
   return { surface_id, { &surface_impl, deleter } };
 }
 
+std::shared_ptr<IShaderByteCode> RendererImpl::GetEngineShader(std::string_view unique_id)
+{
+  return engine_shaders_->GetShaderBytecode(unique_id);
+}
+
 } // namespace oxygen::renderer::d3d12::detail
 
 using oxygen::renderer::d3d12::Renderer;
@@ -242,6 +248,47 @@ using oxygen::renderer::d3d12::Renderer;
 Renderer::Renderer()
   : oxygen::Renderer("D3D12 Renderer")
 {
+}
+
+auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> oxygen::renderer::BufferPtr
+{
+  DCHECK_NOTNULL_F(data);
+  DCHECK_GT_F(size, 0u);
+  DCHECK_GT_F(stride, 0u);
+
+  // Create the vertex buffer resource
+  D3D12_RESOURCE_DESC resourceDesc = {};
+  resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  resourceDesc.Alignment = 0;
+  resourceDesc.Width = size;
+  resourceDesc.Height = 1;
+  resourceDesc.DepthOrArraySize = 1;
+  resourceDesc.MipLevels = 1;
+  resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+  resourceDesc.SampleDesc.Count = 1;
+  resourceDesc.SampleDesc.Quality = 0;
+  resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+  D3D12MA::ALLOCATION_DESC allocDesc = {};
+  allocDesc.HeapType = D3D12_HEAP_TYPE_UPLOAD;
+
+  BufferInitInfo initInfo = {
+    .alloc_desc = allocDesc,
+    .resource_desc = resourceDesc,
+    .initial_state = D3D12_RESOURCE_STATE_GENERIC_READ,
+    .size_in_bytes = size
+  };
+
+  auto buffer = std::make_shared<renderer::d3d12::Buffer>();
+  buffer->Initialize(initInfo);
+
+  // Copy the vertex data to the buffer
+  void* mappedData = buffer->Map();
+  memcpy(mappedData, data, size);
+  buffer->Unmap();
+
+  return buffer;
 }
 
 void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
@@ -293,6 +340,11 @@ auto Renderer::GetShaderCompiler() const -> ShaderCompilerPtr
   return pimpl_->GetShaderCompiler();
 }
 
+auto Renderer::GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>
+{
+  return pimpl_->GetEngineShader(unique_id);
+}
+
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&
 {
   return pimpl_->RtvHeap();
@@ -323,9 +375,4 @@ auto Renderer::CreateWindowSurface(platform::WindowPtr window) const -> SurfaceP
     return {};
   }
   return SurfacePtr(new WindowSurface(surface_id, std::move(window), surface_impl));
-}
-
-auto Renderer::GetAllocator() const -> D3D12MA::Allocator*
-{
-  return pimpl_->GetAllocator();
 }

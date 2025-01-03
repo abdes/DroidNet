@@ -64,6 +64,7 @@ concept BasicBufferWithOwnershipTransfer = std::movable<T> && requires(T t) {
 */
 template <typename T>
 concept IsContiguousContainer = std::movable<T> && requires(T t) {
+  typename T::value_type; // Require that T has a value_type
   { t.data() } noexcept -> std::convertible_to<const uint32_t*>;
   { t.size() } noexcept -> std::convertible_to<size_t>;
 } && std::contiguous_iterator<decltype(std::declval<T>().data())>;
@@ -167,7 +168,7 @@ class ShaderByteCode<T> : public IShaderByteCode
 
   [[nodiscard]] auto Size() const noexcept -> size_t override
   {
-    return buffer_.size();
+    return buffer_.size() * sizeof(typename T::value_type);
   }
 
   [[nodiscard]] auto Data() const noexcept -> const uint32_t* override

@@ -38,21 +38,21 @@ constexpr auto GetProfileForShaderTupe(const ShaderType type) -> const wchar_t*
   switch (type) // NOLINT(clang-diagnostic-switch-enum)
   {
   case ShaderType::kVertex:
-    return L"vs_6_8";
+    return L"vs_6_6";
   case ShaderType::kGeometry:
-    return L"gs_6_8";
+    return L"gs_6_6";
   case ShaderType::kHull:
-    return L"hs_6_8";
+    return L"hs_6_6";
   case ShaderType::kDomain:
-    return L"ds_6_8";
+    return L"ds_6_6";
   case ShaderType::kPixel:
-    return L"ps_6_8";
+    return L"ps_6_6";
   case ShaderType::kCompute:
-    return L"cs_6_8";
+    return L"cs_6_6";
   case ShaderType::kMesh:
-    return L"ms_6_8";
+    return L"ms_6_6";
   case ShaderType::kAmplification:
-    return L"as_6_8";
+    return L"as_6_6";
   default:;
   }
   LOG_F(ERROR, "Invalid shader type");

@@ -15,6 +15,10 @@
 #include "Oxygen/Platform/Common/Types.h"
 
 namespace oxygen::renderer {
+class IShaderByteCode;
+}
+
+namespace oxygen::renderer {
 class PerFrameResourceManager;
 }
 

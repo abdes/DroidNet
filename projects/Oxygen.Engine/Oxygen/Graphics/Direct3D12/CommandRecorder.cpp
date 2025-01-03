@@ -6,6 +6,8 @@
 
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
 
+#include "Detail/dx12_utils.h"
+
 #include <exception>
 #include <memory>
 #include <stdexcept>
@@ -14,7 +16,9 @@
 #include <d3d12.h>
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Buffer.h"
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
@@ -118,7 +122,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
       const auto descriptor_handle = current_render_target_->Rtv().cpu;
 
       D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-      rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // Set the appropriate format
+      rtv_desc.Format = kDefaultBackBufferFormat; // Set the appropriate format
       rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
       rtv_desc.Texture2D.MipSlice = 0;
       rtv_desc.Texture2D.PlaneSlice = 0;
@@ -155,7 +159,15 @@ void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buf
 
   auto* command_list = current_command_list_->GetCommandList();
 
-  // command_list->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+  std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
+  for (uint32_t i = 0; i < num; ++i) {
+    auto buffer = std::dynamic_pointer_cast<Buffer>(vertex_buffers[i]);
+    vertex_buffer_views[i].BufferLocation = buffer->GetResource()->GetGPUVirtualAddress();
+    vertex_buffer_views[i].SizeInBytes = buffer->GetSize();
+    vertex_buffer_views[i].StrideInBytes = strides[i];
+  }
+
+  command_list->IASetVertexBuffers(0, num, vertex_buffer_views.data());
 }
 
 void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset)
@@ -168,13 +180,37 @@ void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t
   // Prepare for Draw
   command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  command_list->DrawInstanced(3, 1, 0, 0);
+  command_list->DrawInstanced(vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
 void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset)
 {
 }
 
+void CommandRecorder::InitializeCommandRecorder()
+{
+  CreateRootSignature();
+}
+void CommandRecorder::CreateRootSignature()
+{
+  D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+  root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+  Microsoft::WRL::ComPtr<ID3DBlob> signature_blob;
+  Microsoft::WRL::ComPtr<ID3DBlob> error_blob;
+  HRESULT hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature_blob, &error_blob);
+  if (FAILED(hr)) {
+    throw std::runtime_error("Failed to serialize root signature");
+  }
+
+  hr = GetMainDevice()->CreateRootSignature(
+    0,
+    signature_blob->GetBufferPointer(),
+    signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature_));
+  if (FAILED(hr)) {
+    throw std::runtime_error("Failed to create root signature");
+  }
+}
 void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_target)
 {
   DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
@@ -195,7 +231,32 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
   current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
 
   const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target_->Rtv().cpu };
-  current_command_list_->GetCommandList()->OMSetRenderTargets(static_cast<UINT>(1), render_target_views, FALSE, nullptr);
+  current_command_list_->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
+}
+
+void CommandRecorder::SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader)
+{
+  D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+  pso_desc.pRootSignature = root_signature_.Get();
+  pso_desc.VS = { .pShaderBytecode = vertex_shader->Data(), .BytecodeLength = vertex_shader->Size() };
+  pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };
+  pso_desc.BlendState = kBlendState.disabled;
+  pso_desc.SampleMask = UINT_MAX;
+  pso_desc.RasterizerState = kRasterizerState.no_cull;
+  pso_desc.DepthStencilState = kDepthState.disabled;
+  pso_desc.InputLayout = { nullptr, 0 }; // Assuming no input layout for full-screen triangle
+  pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+  pso_desc.NumRenderTargets = 1;
+  pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
+  pso_desc.SampleDesc.Count = 1;
+
+  HRESULT hr = GetMainDevice()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state_));
+  if (FAILED(hr)) {
+    throw std::runtime_error("Failed to create pipeline state object");
+  }
+
+  current_command_list_->GetCommandList()->SetPipelineState(pipeline_state_.Get());
+  current_command_list_->GetCommandList()->SetGraphicsRootSignature(root_signature_.Get());
 }
 
 void CommandRecorder::ReleaseCommandRecorder() noexcept

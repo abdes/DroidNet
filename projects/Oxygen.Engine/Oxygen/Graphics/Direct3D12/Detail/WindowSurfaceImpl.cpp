@@ -46,7 +46,7 @@ void WindowSurfaceImpl::Resize()
     ThrowOnFailed(swap_chain_->ResizeBuffers(
       kFrameBufferCount,
       width, height,
-      ToNonSrgb(format_),
+      format_, // ToNonSrgb(format_),
       DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());

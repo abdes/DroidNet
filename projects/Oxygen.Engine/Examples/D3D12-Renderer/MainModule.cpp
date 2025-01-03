@@ -13,10 +13,13 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
+#include "Oxygen/Graphics/Common/Buffer.h" // Must include for the auto deletion of Buffer shared_ptr
 #include "Oxygen/Graphics/Common/CommandList.h" // needed for CommandListPtr
 #include "Oxygen/Graphics/Common/CommandRecorder.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Graphics/Common/RenderTarget.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
+#include "Oxygen/Graphics/Common/Shaders.h"
+#include "Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "Oxygen/Input/ActionTriggers.h"
@@ -34,6 +37,7 @@ using oxygen::platform::InputSlots;
 using oxygen::renderer::CommandListPtr;
 using oxygen::renderer::CommandLists;
 using oxygen::renderer::RenderTarget;
+using oxygen::renderer::d3d12::detail::DeferredObjectRelease;
 
 void MainModule::OnInitialize(const oxygen::Renderer* renderer)
 {
@@ -102,13 +106,21 @@ auto MainModule::RenderGame(
 {
   DCHECK_NOTNULL_F(renderer);
 
+  // Pipeline state and Root Signature
+
+  auto vertex_shader = renderer->GetEngineShader(
+    oxygen::renderer::MakeShaderIdentifier(oxygen::ShaderType::kVertex, "FullScreenTriangle.hlsl"));
+  auto pixel_shader = renderer->GetEngineShader(
+    oxygen::renderer::MakeShaderIdentifier(oxygen::ShaderType::kPixel, "FullScreenTriangle.hlsl"));
+
+  //...
+
+  // End Pipeline State and Root signature
+
   const auto command_recorder = renderer->GetCommandRecorder();
   command_recorder->Begin();
   command_recorder->SetRenderTarget(&render_target);
   // Record commands
-
-  constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
-  command_recorder->Clear(oxygen::renderer::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
 
   const auto& [TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth] = render_target.GetViewPort();
   command_recorder->SetViewport(TopLeftX, Width, TopLeftY, Height, MinDepth, MaxDepth);
@@ -116,6 +128,32 @@ auto MainModule::RenderGame(
   const auto& [left, top, right, bottom] = render_target.GetScissors();
   command_recorder->SetScissors(left, top, right, bottom);
 
+  // Set pipeline state
+  command_recorder->SetPipelineState(vertex_shader, pixel_shader);
+
+  constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
+  command_recorder->Clear(oxygen::renderer::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
+
+  //// Create vertex buffer
+  // struct Vertex {
+  //   float position[3];
+  //   float color[3];
+  // };
+  // Vertex vertices[] = {
+  //   { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+  //   { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+  //   { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
+  // };
+  // auto vertex_buffer = renderer->CreateVertexBuffer(vertices, sizeof(vertices), sizeof(Vertex));
+
+  //// Set vertex buffer
+  // oxygen::renderer::BufferPtr vertex_buffers[] = { vertex_buffer };
+  // uint32_t strides[] = { sizeof(Vertex) };
+  // uint32_t offsets[] = { 0 };
+  // command_recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets);
+  // DeferredObjectRelease(vertex_buffer);
+
+  command_recorder->Draw(3, 1, 0, 0);
   // command_recorder->Draw();
 
   //...

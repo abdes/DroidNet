@@ -11,8 +11,8 @@
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Graphics.h"
-#include "Oxygen/Graphics/Direct3d12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
+#include "Oxygen/Graphics/Direct3d12/Renderer.h"
 
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
@@ -24,7 +24,7 @@ void ImGuiModule::ImGuiBackendInit(const oxygen::Renderer* renderer)
 
   font_srv_handle_ = d3d12_render->SrvHeap().Allocate();
   ImGui::SetCurrentContext(GetImGuiContext());
-  ImGui_ImplDX12_Init(GetMainDevice(), kFrameBufferCount, DXGI_FORMAT_R8G8B8A8_UNORM,
+  ImGui_ImplDX12_Init(GetMainDevice(), kFrameBufferCount, kDefaultBackBufferFormat,
     d3d12_render->SrvHeap().Heap(), font_srv_handle_.cpu, font_srv_handle_.gpu);
 }
 

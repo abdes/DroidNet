@@ -20,18 +20,23 @@ struct BufferView {
   uint32_t numElements = UINT32_MAX;
 };
 
-class Buffer
+class Buffer : public Mixin<Buffer, Curry<MixinNamed, const char*>::mixin>
 {
  public:
-  Buffer() = default;
-  virtual ~Buffer() = default;
+  Buffer()
+    : Mixin("Buffer")
+  {
+  }
+  ~Buffer() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Buffer);
-  OXYGEN_MAKE_NON_MOVEABLE(Buffer);
+  OXYGEN_DEFAULT_MOVABLE(Buffer);
 
   virtual void Bind() = 0;
   virtual void* Map() = 0;
   virtual void Unmap() = 0;
+
+  virtual void Release() noexcept = 0;
 };
 
 } // namespace oxygen::renderer
