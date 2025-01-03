@@ -12,9 +12,9 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
 #include "Oxygen/Core/Version.h"
-#include "Oxygen/Platform-SDL/Platform.h"
-#include "Oxygen/Renderers/Common/Renderer.h"
-#include "Oxygen/Renderers/Loader/RendererLoader.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
+#include "Oxygen/Graphics/Loader/RendererLoader.h"
+#include "Oxygen/Platform/SDL/Platform.h"
 
 using namespace std::chrono_literals;
 

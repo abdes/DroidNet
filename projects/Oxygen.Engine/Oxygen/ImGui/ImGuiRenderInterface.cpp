@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/ImGui/ImGuiModule.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
-#include "Oxygen/Renderers/Common/CommandList.h"
 
+#include "Oxygen/Graphics/Common/CommandList.h"
+#include "Oxygen/ImGui/ImGuiModule.h"
 
 using oxygen::imgui::ImGuiRenderInterface;
 
@@ -22,9 +22,9 @@ auto ImGuiRenderInterface::Render(const Renderer* renderer) const -> renderer::C
   DCHECK_NOTNULL_F(imgui_module_);
   DCHECK_NOTNULL_F(renderer);
 
-  if (imgui_module_ && renderer)
-  {
-    if (!new_frame_started_) throw std::runtime_error("Call NewFrame() before Render()");
+  if (imgui_module_ && renderer) {
+    if (!new_frame_started_)
+      throw std::runtime_error("Call NewFrame() before Render()");
     new_frame_started_ = true;
     return imgui_module_->ImGuiRender(renderer);
   }
@@ -36,7 +36,8 @@ void ImGuiRenderInterface::NewFrame(const Renderer* renderer) const
   DCHECK_NOTNULL_F(imgui_module_);
   DCHECK_NOTNULL_F(renderer);
 
-  if (new_frame_started_) return;
+  if (new_frame_started_)
+    return;
   if (imgui_module_ && renderer) {
     new_frame_started_ = true;
     imgui_module_->NewFrame(renderer);

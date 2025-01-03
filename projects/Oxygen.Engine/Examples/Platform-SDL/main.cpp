@@ -7,10 +7,9 @@
 #include <cstdlib>
 #include <exception>
 #include <memory>
-#include <span>
 
-#include "oxygen/base/logging.h"
-#include "oxygen/platform-sdl/platform.h"
+#include "Oxygen/Base/Logging.h"
+#include "Oxygen/Platform/SDL/Platform.h"
 
 using oxygen::platform::Display;
 using oxygen::platform::sdl::Platform;
@@ -20,7 +19,8 @@ using oxygen::platform::sdl::Platform;
 
 // NOLINTBEGIN(*-unused-return-value)
 
-auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
+auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
+{
 
   try {
     // Optional, but useful to time-stamp the start of the log.
@@ -33,12 +33,12 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
     // std::make_shared<oxygen::graphics::instance>(*core);
 
     const auto window_weak = platform->MakeWindow("Oxygen Window Playground",
-                                                  {.width = 800, .height = 600},
-                                                  {
-                                                      //.maximized = true,
-                                                      .resizable = true,
-                                                      //.borderless = true
-                                                  });
+      { .width = 800, .height = 600 },
+      {
+        //.maximized = true,
+        .resizable = true,
+        //.borderless = true
+      });
 
     if (const auto window = window_weak.lock()) {
       window->Show();
@@ -46,15 +46,13 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
 
     bool continue_running = true;
     platform->OnLastWindowClosed().connect(
-        [&continue_running]() { continue_running = false; });
+      [&continue_running]() { continue_running = false; });
 
     while (continue_running) {
       if (const auto event = platform->PollEvent()) {
         if (event->GetType() == oxygen::platform::InputEventType::kKeyEvent) {
-          const auto &key_event =
-              dynamic_cast<const oxygen::platform::KeyEvent &>(*event);
-          if (key_event.GetButtonState() ==
-              oxygen::platform::ButtonState::kPressed) {
+          const auto& key_event = dynamic_cast<const oxygen::platform::KeyEvent&>(*event);
+          if (key_event.GetButtonState() == oxygen::platform::ButtonState::kPressed) {
 
             constexpr int translate_by = 10;
 
@@ -65,7 +63,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
                   window->Restore();
                 }
                 const auto [pos_x, pos_y] = window->Position();
-                window->Position({pos_x - translate_by, pos_y});
+                window->Position({ pos_x - translate_by, pos_y });
               }
             } break;
             case oxygen::platform::Key::kRightArrow: {
@@ -74,7 +72,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
                   window->Restore();
                 }
                 const auto [pos_x, pos_y] = window->Position();
-                window->Position({pos_x + translate_by, pos_y});
+                window->Position({ pos_x + translate_by, pos_y });
               }
             } break;
             case oxygen::platform::Key::kUpArrow: {
@@ -83,7 +81,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
                   window->Restore();
                 }
                 const auto [pos_x, pos_y] = window->Position();
-                window->Position({pos_x, pos_y - translate_by});
+                window->Position({ pos_x, pos_y - translate_by });
               }
             } break;
             case oxygen::platform::Key::kDownArrow: {
@@ -92,7 +90,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
                   window->Restore();
                 }
                 const auto [pos_x, pos_y] = window->Position();
-                window->Position({pos_x, pos_y + translate_by});
+                window->Position({ pos_x, pos_y + translate_by });
               }
             } break;
             case oxygen::platform::Key::kX: {
@@ -135,7 +133,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
               if (const auto window = window_weak.lock()) {
                 LOG_F(INFO, "RequestClose(force=false) rejected");
                 auto connection = window->OnCloseRequested().connect(
-                    [&window](bool) { window->RequestNotToClose(); });
+                  [&window](bool) { window->RequestNotToClose(); });
                 window->RequestClose(false);
                 window->OnCloseRequested().disconnect(connection);
               }
@@ -143,9 +141,9 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
             case oxygen::platform::Key::kZ: {
               if (const auto window = window_weak.lock()) {
                 LOG_F(INFO,
-                      "RequestClose(force=true) rejected - should still close");
+                  "RequestClose(force=true) rejected - should still close");
                 auto connection = window->OnCloseRequested().connect(
-                    [&window](bool) { window->RequestNotToClose(); });
+                  [&window](bool) { window->RequestNotToClose(); });
                 window->RequestClose(true);
                 window->OnCloseRequested().disconnect(connection);
               }
@@ -155,7 +153,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
             }
             if (const auto window = window_weak.lock()) {
               LOG_F(INFO, "  {} | {}", nostd::to_string(window->Size()),
-                    nostd::to_string(window->Position()));
+                nostd::to_string(window->Position()));
             }
           }
         }
@@ -164,7 +162,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) -> int {
       constexpr auto wait_for = std::chrono::milliseconds(10);
       std::this_thread::sleep_for(wait_for);
     }
-  } catch (const std::exception &err) {
+  } catch (const std::exception& err) {
     LOG_F(ERROR, "A fatal error occurred: {}", err.what());
   }
 

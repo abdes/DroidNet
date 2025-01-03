@@ -11,74 +11,75 @@
 
 #include "oxygen/api_export.h"
 #include "Oxygen/Base/Signals.h"
-#include "oxygen/input/action_triggers.h"
-#include "oxygen/input/action_value.h"
-#include "oxygen/input/types.h"
+#include "Oxygen/Input/ActionTriggers.h"
+#include "Oxygen/Input/ActionValue.h"
+#include "Oxygen/Input/Types.h"
 
 namespace oxygen::input {
 
-  class Action
+class Action
+{
+ public:
+  OXYGEN_API Action(std::string name, ActionValueType value_type);
+
+  [[nodiscard]] auto GetName() const { return name_; }
+
+  [[nodiscard]] auto GetValueType() const { return value_type_; }
+
+  [[nodiscard]] auto GetValue() const -> const auto& { return value_; }
+
+  [[nodiscard]] auto ConsumesInput() const -> const auto&
   {
-  public:
-    OXYGEN_API Action(std::string name, ActionValueType value_type);
+    return consume_input_;
+  }
+  void SetConsumesInput(const bool consume) { consume_input_ = consume; }
 
-    [[nodiscard]] auto GetName() const { return name_; }
+  // -- Action events ----------------------------------------------------------
 
-    [[nodiscard]] auto GetValueType() const { return value_type_; }
+  [[nodiscard]] auto OnCanceled() -> auto& { return on_canceled_; }
+  [[nodiscard]] auto OnCompleted() -> auto& { return on_completed_; }
+  [[nodiscard]] auto OnOngoing() -> auto& { return on_ongoing_; }
+  [[nodiscard]] auto OnStarted() -> auto& { return on_started_; }
+  [[nodiscard]] auto OnTriggered() -> auto& { return on_triggered_; }
 
-    [[nodiscard]] auto GetValue() const -> const auto& { return value_; }
+  // -- Action states ----------------------------------------------------------
 
-    [[nodiscard]] auto ConsumesInput() const -> const auto& {
-      return consume_input_;
-    }
-    void SetConsumesInput(const bool consume) { consume_input_ = consume; }
+  [[nodiscard]] auto IsCanceled() const { return is_canceled_; }
+  [[nodiscard]] auto IsCompleted() const { return is_completed_; }
+  [[nodiscard]] auto IsOngoing() const { return is_ongoing_; }
+  [[nodiscard]] auto IsIdle() const { return is_idle_; }
+  [[nodiscard]] auto IsTriggered() const { return is_triggered_; }
 
-    // -- Action events ----------------------------------------------------------
+  [[nodiscard]] auto GetCurrentStates() const -> ActionStates;
 
-    [[nodiscard]] auto OnCanceled() -> auto& { return on_canceled_; }
-    [[nodiscard]] auto OnCompleted() -> auto& { return on_completed_; }
-    [[nodiscard]] auto OnOngoing() -> auto& { return on_ongoing_; }
-    [[nodiscard]] auto OnStarted() -> auto& { return on_started_; }
-    [[nodiscard]] auto OnTriggered() -> auto& { return on_triggered_; }
+  // In order to clear the action's triggered state
+  friend class InputSystem;
 
-    // -- Action states ----------------------------------------------------------
+ protected:
+  // protected so we can unit test the class
+  void ClearTriggeredState() { is_triggered_ = false; }
 
-    [[nodiscard]] auto IsCanceled() const { return is_canceled_; }
-    [[nodiscard]] auto IsCompleted() const { return is_completed_; }
-    [[nodiscard]] auto IsOngoing() const { return is_ongoing_; }
-    [[nodiscard]] auto IsIdle() const { return is_idle_; }
-    [[nodiscard]] auto IsTriggered() const { return is_triggered_; }
+ private:
+  std::string name_;
+  ActionValueType value_type_;
+  ActionValue value_;
+  bool consume_input_ { false };
+  std::vector<std::shared_ptr<ActionTrigger>> triggers_;
 
-    [[nodiscard]] auto GetCurrentStates() const->ActionStates;
+  sigslot::signal<const Action&> on_canceled_;
+  sigslot::signal<const Action&> on_completed_;
+  sigslot::signal<const Action&> on_ongoing_;
+  sigslot::signal<const Action&> on_started_;
+  sigslot::signal<const Action&, const ActionValue&> on_triggered_;
 
-    // In order to clear the action's triggered state
-    friend class InputSystem;
+  bool is_canceled_ { false };
+  bool is_completed_ { false };
+  bool is_ongoing_ { false };
+  bool is_idle_ { false };
+  bool is_triggered_ { false };
+};
 
-  protected:
-    // protected so we can unit test the class
-    void ClearTriggeredState() { is_triggered_ = false; }
-
-  private:
-    std::string name_;
-    ActionValueType value_type_;
-    ActionValue value_;
-    bool consume_input_{ false };
-    std::vector<std::shared_ptr<ActionTrigger>> triggers_;
-
-    sigslot::signal<const Action&> on_canceled_;
-    sigslot::signal<const Action&> on_completed_;
-    sigslot::signal<const Action&> on_ongoing_;
-    sigslot::signal<const Action&> on_started_;
-    sigslot::signal<const Action&, const ActionValue&> on_triggered_;
-
-    bool is_canceled_{ false };
-    bool is_completed_{ false };
-    bool is_ongoing_{ false };
-    bool is_idle_{ false };
-    bool is_triggered_{ false };
-  };
-
-}  // namespace oxygen::input
+} // namespace oxygen::input
 
 // TODO(abdes) ass some debugging counters for the action.
 

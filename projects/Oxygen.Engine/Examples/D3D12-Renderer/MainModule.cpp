@@ -11,17 +11,16 @@
 #include <glm/glm.hpp>
 #include <imgui.h>
 
-#include "Oxygen/Core/Engine.h"
-#include "Oxygen/ImGui/ImGuiRenderInterface.h"
-#include "Oxygen/Renderers/Common/CommandList.h"
-#include "Oxygen/Renderers/Common/CommandRecorder.h"
-#include "Oxygen/Renderers/Common/RenderTarget.h"
-#include "Oxygen/Renderers/Common/Renderer.h"
-#include "Oxygen/Renderers/Direct3d12/WindowSurface.h"
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Input/action_triggers.h"
+#include "Oxygen/Core/Engine.h"
+#include "Oxygen/Graphics/Common/CommandList.h" // needed for CommandListPtr
+#include "Oxygen/Graphics/Common/CommandRecorder.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
+#include "Oxygen/Graphics/Common/RenderTarget.h"
+#include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
+#include "Oxygen/ImGui/ImGuiRenderInterface.h"
+#include "Oxygen/Input/ActionTriggers.h"
 #include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/Platform.h"
 
 using oxygen::Engine;
 using oxygen::input::Action;

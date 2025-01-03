@@ -10,15 +10,15 @@
 
 namespace oxygen {
 
-  class Engine;
-  using EngineWeakPtr = std::weak_ptr<Engine>;
+class Engine;
+using EngineWeakPtr = std::weak_ptr<Engine>;
 
-  namespace core {
+namespace core {
 
-    class Module;
-    class InputHandler;
-    class System;
+  class Module;
+  class InputHandler;
+  class System;
 
-  }  // namespace core
+} // namespace core
 
-}  // namespace oxygen
+} // namespace oxygen

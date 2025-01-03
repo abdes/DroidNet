@@ -10,9 +10,9 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
+#include "Oxygen/Graphics/Common/CommandList.h"
 #include "Oxygen/Imgui/ImGuiPlatformBackend.h"
-#include "Oxygen/platform/platform.h"
-#include "Oxygen/Renderers/Common/CommandList.h"
+#include "Oxygen/Platform/Common/Platform.h"
 
 using namespace oxygen::imgui;
 

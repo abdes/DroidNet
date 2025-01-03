@@ -6,16 +6,17 @@
 
 #pragma once
 
+#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Core/Module.h"
-#include "Oxygen/ImGui/ImGuiRenderInterface.h"
-#include "Oxygen/api_export.h"
+#include "Oxygen/Graphics/Common/Types.h"
 
 struct ImGuiContext;
 struct ImDrawData;
 
 namespace oxygen::imgui {
 
+class ImGuiRenderInterface;
 class ImGuiPlatformBackend;
 
 class ImguiModule : public core::Module
