@@ -9,16 +9,17 @@
 #include <wrl/client.h>
 
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Graphics/Direct3D12/Graphics.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
-using namespace oxygen::renderer::d3d12;
 using Microsoft::WRL::ComPtr;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::windows::ThrowOnFailed;
 
 ID3D12RootSignature*
 oxygen::renderer::d3d12::create_root_signature(const D3d12RootSignatureDesc& desc)
 {
-  D3D12_VERSIONED_ROOT_SIGNATURE_DESC versioned_desc{};
+  D3D12_VERSIONED_ROOT_SIGNATURE_DESC versioned_desc {};
   versioned_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
   versioned_desc.Desc_1_1 = desc;
 
@@ -45,7 +46,7 @@ oxygen::renderer::d3d12::create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM
   CHECK_NOTNULL_F(desc.pPipelineStateSubobjectStream);
   CHECK_GT_F(0, desc.SizeInBytes);
 
-  ID3D12PipelineState* pso{ nullptr };
+  ID3D12PipelineState* pso { nullptr };
   ThrowOnFailed(GetMainDevice()->CreatePipelineState(&desc, IID_PPV_ARGS(&pso)));
   CHECK_NOTNULL_F(pso);
 
@@ -58,7 +59,7 @@ oxygen::renderer::d3d12::create_pipeline_state(void* stream, const uint64_t stre
   CHECK_NOTNULL_F(stream);
   CHECK_GT_F(0, stream_size);
 
-  D3D12_PIPELINE_STATE_STREAM_DESC desc{};
+  D3D12_PIPELINE_STATE_STREAM_DESC desc {};
   desc.SizeInBytes = stream_size;
   desc.pPipelineStateSubobjectStream = stream;
 

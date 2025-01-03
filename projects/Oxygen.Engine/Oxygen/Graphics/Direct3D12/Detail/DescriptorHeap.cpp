@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/StringUtils.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
 
 using namespace oxygen::windows;
@@ -30,7 +30,7 @@ void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, D
 {
   Release();
 
-  std::lock_guard lock{ mutex_ };
+  std::lock_guard lock { mutex_ };
   should_release_ = true;
 
   DCHECK_NOTNULL_F(device);
@@ -38,12 +38,11 @@ void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, D
   DCHECK_F(!(is_shader_visible && capacity > D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2));
   DCHECK_F(!(is_shader_visible && type_ == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER && capacity > D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE));
 
-  if (type_ == D3D12_DESCRIPTOR_HEAP_TYPE_DSV || type_ == D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
-  {
+  if (type_ == D3D12_DESCRIPTOR_HEAP_TYPE_DSV || type_ == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
     is_shader_visible = false;
   }
 
-  const D3D12_DESCRIPTOR_HEAP_DESC desc{
+  const D3D12_DESCRIPTOR_HEAP_DESC desc {
     .Type = type_,
     .NumDescriptors = static_cast<UINT>(capacity),
     .Flags = is_shader_visible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
@@ -52,25 +51,23 @@ void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, D
 
   try {
     ThrowOnFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
-    std::wstring name{};
+    std::wstring name {};
     string_utils::Utf8ToWide(ObjectName(), name);
-    NameObject(heap_, name.data());
+    NameObject(heap_, name);
 
     free_handles_ = std::make_unique<size_t[]>(capacity);
     capacity_ = capacity;
     size_ = 0;
-    for (size_t i = 0; i < capacity; ++i)
-    {
+    for (size_t i = 0; i < capacity; ++i) {
       free_handles_[i] = i;
     }
     descriptor_size_ = device->GetDescriptorHandleIncrementSize(type_);
     cpu_start_ = heap_->GetCPUDescriptorHandleForHeapStart();
-    if (is_shader_visible) gpu_start_ = heap_->GetGPUDescriptorHandleForHeapStart();
+    if (is_shader_visible)
+      gpu_start_ = heap_->GetGPUDescriptorHandleForHeapStart();
 
     LOG_F(INFO, "{} initialized (capacity={})", ObjectName(), capacity_);
-  }
-  catch (const std::exception& e)
-  {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "{} initialization failed: {}", ObjectName(), e.what());
     Release();
     throw;
@@ -79,8 +76,9 @@ void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, D
 
 void DescriptorHeap::Release()
 {
-  std::lock_guard lock{ mutex_ };
-  if (!should_release_) return;
+  std::lock_guard lock { mutex_ };
+  if (!should_release_)
+    return;
 
   ObjectRelease(heap_);
 
@@ -96,7 +94,7 @@ void DescriptorHeap::Release()
 
 auto DescriptorHeap::Allocate() -> DescriptorHandle
 {
-  std::lock_guard lock{ mutex_ };
+  std::lock_guard lock { mutex_ };
 
   DCHECK_NOTNULL_F(heap_);
   CHECK_LT_F(size_, capacity_, fmt::format("{} is full", ObjectName()).c_str());
@@ -105,8 +103,7 @@ auto DescriptorHeap::Allocate() -> DescriptorHandle
   const size_t index = free_handles_[size_];
   const auto offset = index * descriptor_size_;
   handle.cpu.ptr = cpu_start_.ptr + offset;
-  if (IsShaderVisible())
-  {
+  if (IsShaderVisible()) {
     handle.gpu.ptr = gpu_start_.ptr + offset;
   }
   ++size_;
@@ -118,9 +115,10 @@ auto DescriptorHeap::Allocate() -> DescriptorHandle
 
 void DescriptorHeap::Free(DescriptorHandle& handle)
 {
-  if (!handle.IsValid()) return;
+  if (!handle.IsValid())
+    return;
 
-  std::lock_guard lock{ mutex_ };
+  std::lock_guard lock { mutex_ };
   DCHECK_NOTNULL_F(heap_);
   DCHECK_NE_F(0, size_);
   DCHECK_EQ_F(handle.allocator, this);
@@ -128,7 +126,7 @@ void DescriptorHeap::Free(DescriptorHandle& handle)
   DCHECK_EQ_F(0, (handle.cpu.ptr - cpu_start_.ptr) % descriptor_size_);
 
   // TODO: check if this check is really correct
-  //DCHECK_LT_F(handle.index, size_);
+  // DCHECK_LT_F(handle.index, size_);
 
   DCHECK_LT_F(handle.index, capacity_);
   DCHECK_LT_F(handle.cpu.ptr, cpu_start_.ptr + descriptor_size_ * capacity_);

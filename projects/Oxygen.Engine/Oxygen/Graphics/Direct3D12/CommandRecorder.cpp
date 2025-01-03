@@ -18,10 +18,10 @@
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
-#include "Renderer.h"
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
 using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
 
 void CommandRecorder::Begin()
 {

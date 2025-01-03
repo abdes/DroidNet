@@ -7,17 +7,14 @@
 #pragma once
 
 #include <mutex>
-#include <utility>
-#include <vector>
 
 #include <d3d12.h>
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Graphics/Common/Types.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
+#include "Oxygen/Graphics/Direct3d12/Types.h"
 
 namespace oxygen::renderer::d3d12::detail {
 

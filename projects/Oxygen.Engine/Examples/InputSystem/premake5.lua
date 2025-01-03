@@ -10,5 +10,6 @@ project "Oxygen.InputSystem.Example"
     }
     links {
         "Oxygen",
+        "Oxygen.Loader",
         "Oxygen.Platform.SDL",
     }

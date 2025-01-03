@@ -8,9 +8,10 @@
 
 #include <algorithm>
 
-#include "Oxygen/Base/Time.h"
 #include "Oxygen/Base/logging.h"
+#include "Oxygen/Base/Time.h"
 #include "Oxygen/Core/Version.h"
+#include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/Platform/Common/Platform.h"
@@ -48,17 +49,18 @@ auto Engine::GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface
 
 void Engine::OnInitialize()
 {
-  const auto renderer = renderer_.lock();
-  if (!renderer) {
-    LOG_F(INFO, "No renderer attached to the engine.");
-  }
+  const auto graphics = graphics_.lock();
+  if (!graphics)
+    return;
 
   InitializeModules();
 
-  // Initialize ImGui if required
-  if (renderer && props_.enable_imgui_layer) {
+  if (!graphics->IsWithoutRenderer() && props_.enable_imgui_layer) {
+    // Initialize ImGui if required
+    const auto renderer = graphics_.lock()->GetRenderer();
+    DCHECK_NOTNULL_F(renderer);
     imgui_module_ = renderer->CreateImGuiModule(shared_from_this(), props_.main_window_id);
-    imgui_module_->Initialize(renderer.get());
+    imgui_module_->Initialize(renderer);
   }
 }
 
@@ -111,8 +113,14 @@ void Engine::SortModulesByPriority()
 
 void Engine::InitializeModules()
 {
-  const auto renderer = renderer_.lock();
-  std::ranges::for_each(modules_, [&](auto& module) { module.module->Initialize(renderer.get()); });
+  const auto graphics = graphics_.lock();
+  if (!graphics)
+    return;
+  const auto* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
+  std::ranges::for_each(modules_,
+    [&](auto& module) {
+      module.module->Initialize(renderer);
+    });
 }
 
 void Engine::ShutdownModules()
@@ -162,7 +170,9 @@ auto Engine::Run() -> void
 
         // Note that we may be running renderer-less, which means the renderer
         // is null, which is fine.
-        const auto renderer = renderer_.lock();
+        auto graphics = graphics_.lock();
+        DCHECK_NOTNULL_F(graphics);
+        const Renderer* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
 
         if (continue_running) {
           module.frame_time.Update();
@@ -189,7 +199,7 @@ auto Engine::Run() -> void
 
           // Per frame updates / render
           the_module->Update(module.frame_time.Delta());
-          the_module->Render(renderer.get());
+          the_module->Render(renderer);
           module.fps.Update();
 
           // Log FPS and UPS once every second

@@ -34,11 +34,13 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 
     const auto window_weak = platform->MakeWindow("Oxygen Window Playground",
       { .width = 800, .height = 600 },
-      {
-        //.maximized = true,
+      { .hidden = false,
+        .always_on_top = false,
+        .full_screen = false,
+        .maximized = false,
+        .minimized = false,
         .resizable = true,
-        //.borderless = true
-      });
+        .borderless = false });
 
     if (const auto window = window_weak.lock()) {
       window->Show();

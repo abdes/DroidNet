@@ -15,7 +15,6 @@
 
 using namespace std::chrono_literals;
 
-using testing::Eq;
 using testing::Return;
 
 using oxygen::ChangePerSecondType;

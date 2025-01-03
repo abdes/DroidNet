@@ -35,7 +35,7 @@ void InputActionMapping::StartEvaluation()
     action_value_.Set(Axis1D { 0.0F });
     break;
   case ActionValueType::kAxis2D:
-    action_value_.Set(Axis2D { 0.0F, 0.0F });
+    action_value_.Set(Axis2D { .x = 0.0F, .y = 0.0F });
     break;
   }
   DLOG_F(2, "action {} triggers evaluation started", action_->GetName());
@@ -147,7 +147,7 @@ auto InputActionMapping::Update(oxygen::Duration delta_time) -> bool
   const auto input_consumed = DoUpdate(delta_time);
 
   if (clear_value_after_update_) {
-    action_value_.Update({ 0.0F, 0.0F });
+    action_value_.Update({ .x = 0.0F, .y = 0.0F });
     clear_value_after_update_ = false;
   }
 

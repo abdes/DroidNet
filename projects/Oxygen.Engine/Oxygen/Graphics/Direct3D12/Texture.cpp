@@ -6,13 +6,13 @@
 
 #include "Oxygen/Graphics/Direct3d12/Texture.h"
 
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
+#include "Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
 
 using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
 void Texture::InitializeTexture(const TextureInitInfo& init_info)
@@ -22,26 +22,20 @@ void Texture::InitializeTexture(const TextureInitInfo& init_info)
   const auto device = GetMainDevice();
   DCHECK_NOTNULL_F(device);
 
-  const D3D12_CLEAR_VALUE* const clear_value
-  {
-    (init_info.desc &&
-      (init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET ||
-        init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+  const D3D12_CLEAR_VALUE* const clear_value {
+    (init_info.desc && (init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET || init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
       ? init_info.clear_value
       : nullptr
   };
 
-  if (init_info.resource)
-  {
+  if (init_info.resource) {
     DCHECK_EQ_F(nullptr, init_info.heap);
     resource_ = init_info.resource;
-  }
-  else {
+  } else {
     CHECK_NOTNULL_F(init_info.desc);
 
-    if (init_info.heap)
-    {
-      ID3D12Resource* resource{ nullptr };
+    if (init_info.heap) {
+      ID3D12Resource* resource { nullptr };
       ThrowOnFailed(device->CreatePlacedResource(
         init_info.heap,
         init_info.alloc_info.Offset,
@@ -50,10 +44,8 @@ void Texture::InitializeTexture(const TextureInitInfo& init_info)
         clear_value,
         IID_PPV_ARGS(&resource)));
       resource_ = resource;
-    }
-    else
-    {
-      ID3D12Resource* resource{ nullptr };
+    } else {
+      ID3D12Resource* resource { nullptr };
       ThrowOnFailed(device->CreateCommittedResource(
         &kHeapProperties.default_heap_props,
         D3D12_HEAP_FLAG_NONE,
@@ -65,20 +57,19 @@ void Texture::InitializeTexture(const TextureInitInfo& init_info)
     }
   }
 
-  srv_ = detail::GetRenderer().SrvHeap().Allocate();
+  srv_ = GetRenderer().SrvHeap().Allocate();
   device->CreateShaderResourceView(resource_, init_info.srv_dec, srv_.cpu);
 }
 
 void Texture::ReleaseTexture() noexcept
 {
-  detail::GetRenderer().SrvHeap().Free(srv_);
-  DeferredObjectRelease(resource_, detail::GetRenderer().GetPerFrameResourceManager());
+  GetRenderer().SrvHeap().Free(srv_);
+  detail::DeferredObjectRelease(resource_);
 }
 
 void RenderTexture::Initialize(const TextureInitInfo& info)
 {
   texture_.Initialize(info);
-
 
   const auto resource = texture_.GetResource();
 
@@ -90,16 +81,14 @@ void RenderTexture::Initialize(const TextureInitInfo& info)
   const auto device = GetMainDevice();
   DCHECK_NOTNULL_F(device);
 
-  D3D12_RENDER_TARGET_VIEW_DESC rtv_desc
-  {
+  D3D12_RENDER_TARGET_VIEW_DESC rtv_desc {
     .Format = info.desc->Format,
     .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
-    .Texture2D = {.MipSlice = 0, .PlaneSlice = 0 }
+    .Texture2D = { .MipSlice = 0, .PlaneSlice = 0 }
   };
 
-  for (uint32_t i = 0; i < mip_levels; ++i)
-  {
-    rtv_[i] = detail::GetRenderer().RtvHeap().Allocate();
+  for (uint32_t i = 0; i < mip_levels; ++i) {
+    rtv_[i] = GetRenderer().RtvHeap().Allocate();
     device->CreateRenderTargetView(resource, &rtv_desc, rtv_[i].cpu);
     rtv_desc.Texture2D.MipSlice++;
   }
@@ -107,9 +96,8 @@ void RenderTexture::Initialize(const TextureInitInfo& info)
 
 void RenderTexture::Release()
 {
-  for (uint32_t i = 0; i < mip_count_; ++i)
-  {
-    detail::GetRenderer().RtvHeap().Free(rtv_[i]);
+  for (uint32_t i = 0; i < mip_count_; ++i) {
+    GetRenderer().RtvHeap().Free(rtv_[i]);
   }
   texture_.Release();
   mip_count_ = 0;
@@ -127,9 +115,8 @@ void DepthBuffer::Initialize(TextureInitInfo info)
 
   const DXGI_FORMAT dsv_format = info.desc->Format;
 
-  D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{};
-  if (info.desc->Format == DXGI_FORMAT_D32_FLOAT)
-  {
+  D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc {};
+  if (info.desc->Format == DXGI_FORMAT_D32_FLOAT) {
     info.desc->Format = DXGI_FORMAT_R32_TYPELESS;
     srv_desc.Format = DXGI_FORMAT_R32_FLOAT;
   }
@@ -140,26 +127,24 @@ void DepthBuffer::Initialize(TextureInitInfo info)
   srv_desc.Texture2D.PlaneSlice = 0;
   srv_desc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-
   DCHECK_F(!info.srv_dec && !info.resource);
   info.srv_dec = &srv_desc;
 
   texture_.Initialize(info);
 
-  const D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc
-  {
-      .Format = dsv_format,
-      .ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D,
-      .Flags = D3D12_DSV_FLAG_NONE,
-      .Texture2D = {.MipSlice = 0 }
+  const D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc {
+    .Format = dsv_format,
+    .ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D,
+    .Flags = D3D12_DSV_FLAG_NONE,
+    .Texture2D = { .MipSlice = 0 }
   };
 
-  dsv_ = detail::GetRenderer().DsvHeap().Allocate();
+  dsv_ = GetRenderer().DsvHeap().Allocate();
   GetMainDevice()->CreateDepthStencilView(texture_.GetResource(), &dsv_desc, dsv_.cpu);
 }
 
 void DepthBuffer::Release()
 {
-  detail::GetRenderer().DsvHeap().Free(dsv_);
+  GetRenderer().DsvHeap().Free(dsv_);
   texture_.Release();
 }

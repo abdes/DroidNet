@@ -20,7 +20,7 @@ namespace oxygen::renderer::d3d12 {
 
 struct TextureInitInfo {
   ID3D12Heap1* heap { nullptr };
-  D3D12_RESOURCE_ALLOCATION_INFO1 alloc_info { .Offset = 0 };
+  D3D12_RESOURCE_ALLOCATION_INFO1 alloc_info {};
   ID3D12Resource* resource { nullptr };
   D3D12_SHADER_RESOURCE_VIEW_DESC* srv_dec { nullptr };
   D3D12_RESOURCE_DESC* desc { nullptr };
