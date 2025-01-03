@@ -11,7 +11,6 @@
 #include <string>
 
 #include "Oxygen/Base/Compilers.h"
-#include "Oxygen/Base/Platforms.h"
 
 namespace nostd {
 

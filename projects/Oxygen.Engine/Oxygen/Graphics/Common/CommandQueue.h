@@ -14,7 +14,6 @@
 #include "Oxygen/Base/MixinDisposable.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
 #include "Oxygen/Graphics/Common/SynchronizationCounter.h"
 #include "Oxygen/Graphics/Common/Types.h"
@@ -81,8 +80,6 @@ class CommandQueue
   virtual void ReleaseCommandQueue() noexcept = 0;
 
   virtual auto CreateSynchronizationCounter() -> std::unique_ptr<SynchronizationCounter> = 0;
-
-  [[nodiscard]] virtual auto GetPerFrameResourceManager() const -> PerFrameResourceManager& = 0;
 
  private:
   void OnInitialize()

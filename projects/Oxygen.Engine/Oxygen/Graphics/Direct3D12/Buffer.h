@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include "D3D12MemAlloc.h"
-
 #include <d3d12.h>
 
 #include "Oxygen/Base/Macros.h"
@@ -15,7 +13,9 @@
 #include "Oxygen/Base/MixinDisposable.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
+#include "Oxygen/Graphics/Direct3d12/D3D12MemAlloc.h"
 #include "Oxygen/Graphics/Direct3d12/D3DResource.h"
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
 namespace oxygen::renderer::d3d12 {
 
@@ -86,7 +86,7 @@ class Buffer
     try {
       // Create the buffer resource using D3D12MemAlloc
       D3D12MA::Allocation* allocation;
-      HRESULT hr = allocator->CreateResource(
+      HRESULT hr = graphics::d3d12::detail::GetAllocator().CreateResource(
         &init_info.alloc_desc,
         &init_info.resource_desc,
         init_info.initial_state,

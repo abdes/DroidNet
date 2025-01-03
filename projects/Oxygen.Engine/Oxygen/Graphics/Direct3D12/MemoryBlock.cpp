@@ -6,15 +6,13 @@
 
 #include "Oxygen/Graphics/Direct3d12/MemoryBlock.h"
 
-#include "detail/dx12_utils.h"
-#include "Oxygen/Base/logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
+#include "Oxygen/Base/logging.h"
 #include "Oxygen/Graphics/Direct3d12/D3D12MemAlloc.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
-#include "Renderer.h"
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
-using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetRenderer;
+using oxygen::renderer::d3d12::MemoryBlock;
 using oxygen::windows::ThrowOnFailed;
 
 MemoryBlock::MemoryBlock()
@@ -28,8 +26,7 @@ MemoryBlock::~MemoryBlock() = default;
 
 void MemoryBlock::Init(const MemoryBlockDesc& desc)
 {
-  if (desc.size == 0u)
-  {
+  if (desc.size == 0u) {
     LOG_F(ERROR, "Memory block size must be greater than zero.");
     throw std::invalid_argument("memory block size must be greater than zero");
   }
@@ -47,13 +44,13 @@ void MemoryBlock::Init(const MemoryBlockDesc& desc)
     .Alignment = desc.alignment,
   };
 
-  const auto& renderer = detail::GetRenderer();
+  const auto& renderer = GetRenderer();
   D3D12MA::Allocation* allocation_raw_ptr = nullptr; // Local variable to store the raw pointer
   ThrowOnFailed(renderer.GetAllocator()->AllocateMemory(
     &alloc_desc,
     &allocation_info,
     &allocation_raw_ptr));
-  allocation_ = { allocation_raw_ptr }; // Assign the raw pointer to the unique_ptr
+  allocation_ = allocation_raw_ptr; // Assign the raw pointer to the unique_ptr
 
   size_ = desc.size;
   alignment_ = desc.alignment;

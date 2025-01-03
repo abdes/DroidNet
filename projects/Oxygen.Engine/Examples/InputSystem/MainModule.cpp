@@ -15,8 +15,8 @@
 #include "Oxygen/Input/InputMappingContext.h"
 #include "Oxygen/Input/InputSystem.h"
 #include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/Common/Platform.h"
 #include "Oxygen/Platform/Common/input.h"
+#include "Oxygen/Platform/Common/Platform.h"
 // #include "Oxygen/Graphics/Common/Renderer.h"
 
 using oxygen::Engine;
@@ -38,13 +38,6 @@ void MainModule::OnInitialize(const oxygen::Renderer* renderer)
 
   // Initialize the input system.
   player_input_ = std::make_shared<InputSystem>(GetEngine().GetPlatform());
-
-  // Create a window.
-  const auto my_window = GetEngine().GetPlatform().MakeWindow(
-    "Input System Playground", { .width = 640, .height = 640 },
-    {
-      .full_screen = false,
-    });
 
   // Modifier Key actions
 

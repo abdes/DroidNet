@@ -12,16 +12,16 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
 #include "Oxygen/Core/Version.h"
+#include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Common/Renderer.h"
-#include "Oxygen/Graphics/Loader/RendererLoader.h"
+#include "Oxygen/Graphics/Loader/GraphicsBackendLoader.h"
 #include "Oxygen/Platform/SDL/Platform.h"
 
 using namespace std::chrono_literals;
 
-using oxygen::Engine;
-using oxygen::graphics::CreateRenderer;
-using oxygen::graphics::DestroyRenderer;
-using oxygen::graphics::GraphicsBackendType;
+using oxygen::graphics::BackendType;
+using oxygen::graphics::LoadBackend;
+using oxygen::graphics::UnloadBackend;
 
 auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 {
@@ -39,21 +39,25 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 
   // We want to control the destruction order of the important objects in the
   // system. For example, destroy the core before we destroy the platform.
-  std::shared_ptr<oxygen::Platform> platform;
-  std::shared_ptr<oxygen::Engine> engine;
+  std::shared_ptr<oxygen::Platform> platform {};
+  std::shared_ptr<oxygen::Engine> engine {};
+  std::shared_ptr<oxygen::Graphics> graphics {};
 
   try {
+    // 1- The platform abstraction layer
     platform = std::make_shared<oxygen::platform::sdl::Platform>();
 
-    constexpr oxygen::RendererProperties renderer_props {
-#ifdef _DEBUG
+    // 2- The graphics backend module
+    const oxygen::GraphicsBackendProperties backend_props {
       .enable_debug = true,
-#endif
       .enable_validation = false,
+      // We want a renderer
+      .renderer_props = oxygen::RendererProperties {},
     };
-    CreateRenderer(GraphicsBackendType::kDirect3D12, platform, renderer_props);
-    auto renderer = oxygen::graphics::GetRenderer().lock();
-    DCHECK_NOTNULL_F(renderer);
+
+    graphics = LoadBackend(BackendType::kDirect3D12).lock();
+    DCHECK_NOTNULL_F(graphics);
+    graphics->Initialize(platform, backend_props);
 
     // Create a window.
     constexpr oxygen::PixelExtent window_size { 1900, 1200 };
@@ -70,7 +74,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
       platform->MakeWindow("Oxygen Renderer Example", window_size, window_flags)
     };
 
-    Engine::Properties props {
+    oxygen::Engine::Properties props {
       .application = {
         .name = "Triangle",
         .version = 0x0001'0000,
@@ -81,22 +85,23 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
       .main_window_id = my_window.lock()->Id(),
     };
 
-    engine = std::make_shared<Engine>(platform, renderer, props);
+    engine = std::make_shared<oxygen::Engine>(platform, graphics, props);
     const auto my_module = std::make_shared<MainModule>(platform, engine, my_window);
     engine->AttachModule(my_module);
 
     engine->Initialize();
     engine->Run();
     engine->Shutdown();
+    graphics->Shutdown();
 
     LOG_F(INFO, "Exiting application");
-    DestroyRenderer();
   } catch (std::exception const& err) {
     LOG_F(ERROR, "A fatal error occurred: {}", err.what());
     status = EXIT_FAILURE;
   }
 
   // Explicit destruction order due to dependencies.
+  graphics.reset();
   engine.reset();
   platform.reset();
 

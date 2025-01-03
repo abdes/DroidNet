@@ -12,7 +12,6 @@
 
 // #include <vulkan/vulkan_core.h>
 
-#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinInitialize.h"
@@ -20,9 +19,10 @@
 #include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Base/Time.h"
 #include "Oxygen/Graphics/Common/Types.h"
-#include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
+#include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/api_export.h"
 
 namespace oxygen {
 
@@ -54,10 +54,10 @@ class Engine
 
   //! Constructor to forward the arguments to the mixins in the chain.
   template <typename... Args>
-  explicit Engine(PlatformPtr platform, RendererPtr renderer, Properties props, Args&&... args)
+  explicit Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props, Args&&... args)
     : Mixin(Name().c_str(), std::forward<Args>(args)...)
     , platform_(std::move(platform))
-    , renderer_(std::move(renderer))
+    , graphics_(std::move(graphics))
     , props_(std::move(props))
   {
   }
@@ -98,7 +98,7 @@ class Engine
   void DetachModule(const ModulePtr& module);
 
   PlatformPtr platform_;
-  RendererPtr renderer_;
+  GraphicsPtr graphics_;
   Properties props_;
   std::unique_ptr<imgui::ImguiModule> imgui_module_ {};
 

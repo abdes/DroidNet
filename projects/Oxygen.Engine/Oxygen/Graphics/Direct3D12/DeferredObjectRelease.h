@@ -6,29 +6,28 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/PerFrameResourceManager.h"
+#include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
+#include "Oxygen/Graphics/Direct3D12/Graphics.h"
 
-namespace oxygen::renderer {
+namespace oxygen::renderer::d3d12::detail {
 
 template <typename T>
-void DeferredObjectRelease(T*& resource,
-  PerFrameResourceManager& resource_manager) noexcept
+void DeferredObjectRelease(T*& resource) noexcept
 {
   if (resource) {
-    resource_manager.RegisterDeferredRelease(resource);
+    graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
   }
 }
 
 //! Immediately releases a resource that has a `Release()` method, and
 //! sets the provided pointer to `nullptr`.
 template <typename T>
-void DeferredObjectRelease(std::shared_ptr<T>& resource,
-  PerFrameResourceManager& resource_manager) noexcept
+void DeferredObjectRelease(std::shared_ptr<T>& resource) noexcept
   requires HasReleaseMethod<T>
 {
   if (resource) {
-    resource_manager.RegisterDeferredRelease(resource);
+    graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
   }
 }
 
-} // namespace oxygen::renderer
+} // namespace oxygen::renderer::d3d12::detail

@@ -21,7 +21,7 @@ class MainModule : public oxygen::core::Module
 
   template <typename... Args>
   explicit MainModule(oxygen::EngineWeakPtr engine, Args&&... ctor_args)
-    : Base("MainModule", engine, std::forward<Args>(ctor_args)...)
+    : Base("MainModule", std::move(engine), std::forward<Args>(ctor_args)...)
   {
   }
 

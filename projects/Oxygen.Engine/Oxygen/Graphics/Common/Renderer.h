@@ -33,29 +33,6 @@ struct DeviceInfo {
   std::vector<std::string> features; //< Supported graphics features.
 };
 
-struct RendererProperties {
-  /**
-   * Device selection guidance. The renderer will try to select the most
-   * suitable GPU based on its capabilities, but the selection can be
-   * influenced by the following properties. Note that the properties are
-   * hints and if they cannot be satisfied, the renderer will fall back to the
-   * default behavior.
-   *
-   * \note The preferred_card_name and preferred_card_device_id are mutually
-   * exclusive, and the name must point to a valid null terminated string with
-   * an indefinite lifetime.
-   * @{
-   */
-
-  const char* preferred_card_name { nullptr };
-  int32_t preferred_card_device_id { -1 };
-
-  /**@}*/
-
-  bool enable_debug { false }; //< Enable debug layer.
-  bool enable_validation { false }; //< Enable GPU validation.
-};
-
 /**
  * Base class for all renderers.
  *

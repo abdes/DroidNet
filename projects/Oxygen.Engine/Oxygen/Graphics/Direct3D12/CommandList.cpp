@@ -11,8 +11,8 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
 
 namespace {
 
@@ -42,7 +42,9 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
 
 } // namespace
 
-using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetRenderer;
+using oxygen::renderer::d3d12::CommandList;
 
 void CommandList::InitializeCommandList(CommandListType type)
 {
@@ -91,7 +93,7 @@ void CommandList::InitializeCommandList(CommandListType type)
 
 void CommandList::ReleaseCommandList() noexcept
 {
-  auto& renderer = detail::GetRenderer();
+  auto& renderer = GetRenderer();
   // TODO: refactor into a macro
   if (command_allocator_)
     DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());

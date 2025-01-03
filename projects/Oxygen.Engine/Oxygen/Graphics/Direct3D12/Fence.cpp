@@ -9,11 +9,12 @@
 #include <stdexcept>
 
 #include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h" // for GetMainDevice()
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
-#include "Renderer.h"
+using oxygen::windows::ThrowOnFailed;
 
 using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 {
@@ -21,9 +22,9 @@ void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
   current_value_ = initial_value;
   ID3DFenceV* raw_fence = nullptr;
   ThrowOnFailed(GetMainDevice()->CreateFence(initial_value,
-                                             D3D12_FENCE_FLAG_NONE,
-                                             IID_PPV_ARGS(&raw_fence)),
-                "Could not create a Fence");
+                  D3D12_FENCE_FLAG_NONE,
+                  IID_PPV_ARGS(&raw_fence)),
+    "Could not create a Fence");
   fence_ = raw_fence;
 
   fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -37,8 +38,7 @@ void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 void Fence::ReleaseSynchronizationObject() noexcept
 {
   if (fence_event_) {
-    if (!CloseHandle(fence_event_))
-    {
+    if (!CloseHandle(fence_event_)) {
       DLOG_F(WARNING, "Failed to close fence event handle");
     }
     fence_event_ = nullptr;
@@ -58,7 +58,7 @@ void Fence::Signal(const uint64_t value) const
 
   DCHECK_GT_F(value, fence_->GetCompletedValue(), "New value must be greater than the current value");
   ThrowOnFailed((command_queue_->Signal(fence_, value)),
-                fmt::format("Signal({}) on fence failed", value));
+    fmt::format("Signal({}) on fence failed", value));
   current_value_ = value;
 }
 
@@ -74,7 +74,7 @@ void Fence::Wait(const uint64_t value, const std::chrono::milliseconds timeout) 
   DCHECK_LE_F(timeout.count(), std::numeric_limits<DWORD>::max());
   if (fence_->GetCompletedValue() < value) {
     ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_),
-                  fmt::format("Wait({}) on fence failed", value));
+      fmt::format("Wait({}) on fence failed", value));
     WaitForSingleObject(fence_event_, static_cast<DWORD>(timeout.count()));
   }
 }
@@ -90,7 +90,7 @@ void Fence::QueueWaitCommand(const uint64_t value) const
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
 
   ThrowOnFailed(command_queue_->Wait(fence_, value),
-                fmt::format("QueueWaitCommand({}) on fence failed", value));
+    fmt::format("QueueWaitCommand({}) on fence failed", value));
 }
 
 void Fence::QueueSignalCommand(const uint64_t value)
@@ -98,10 +98,10 @@ void Fence::QueueSignalCommand(const uint64_t value)
   DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
   DCHECK_NOTNULL_F(fence_, "fence must be initialized");
   ThrowOnFailed(command_queue_->Signal(fence_, value),
-                fmt::format("QueueSignalCommand({}) on fence failed", value));
+    fmt::format("QueueSignalCommand({}) on fence failed", value));
 }
 
-auto Fence::GetCompletedValue() const->uint64_t
+auto Fence::GetCompletedValue() const -> uint64_t
 {
   return fence_->GetCompletedValue();
 }

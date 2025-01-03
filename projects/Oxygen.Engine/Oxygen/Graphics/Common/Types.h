@@ -56,32 +56,40 @@ namespace renderer {
   }
 } // namespace renderer
 
+struct RendererProperties {
+  // TODO: add configuration properties for the renderer
+};
+
 //! Forward declarations of renderer types and associated smart pointers.
 //! @{
+class Graphics;
+using GraphicsPtr = std::weak_ptr<Graphics>;
+
 class Renderer;
 using RendererPtr = std::weak_ptr<Renderer>;
 
 namespace renderer {
-  class Surface;
-  class WindowSurface;
-  class SynchronizationCounter;
-  class IMemoryBlock;
-  struct MemoryBlockDesc;
+  class Buffer;
   class CommandList;
   class CommandQueue;
   class CommandRecorder;
   class RenderTarget;
   class ShaderCompiler;
-  class Buffer;
+  class Surface;
+  class SynchronizationCounter;
+  class WindowSurface;
 
   using BufferPtr = std::shared_ptr<Buffer>;
-  using SurfacePtr = std::shared_ptr<Surface>;
-  using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
-  using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
   using CommandListPtr = std::unique_ptr<CommandList>;
   using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
   using RenderTargetNoDeletePtr = const RenderTarget*;
   using ShaderCompilerPtr = std::shared_ptr<ShaderCompiler>;
+  using SurfacePtr = std::shared_ptr<Surface>;
+  using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
+
+  struct MemoryBlockDesc;
+  class IMemoryBlock;
+  using MemoryBlockPtr = std::shared_ptr<IMemoryBlock>;
 
   using CommandLists = std::vector<CommandListPtr>;
   using RenderGameFunction = std::function<CommandLists(const RenderTarget& render_target)>;

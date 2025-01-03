@@ -4,33 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
 
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
+#include "Oxygen/Graphics/Direct3D12/Graphics.h"
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
 
-using oxygen::windows::ThrowOnFailed;
-using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
+using oxygen::graphics::d3d12::detail::GetFactory;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::renderer::d3d12::detail::DescriptorHandle;
+using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
+using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
-  DXGI_FORMAT ToNonSrgb(const DXGI_FORMAT format)
-  {
-    switch (format) {  // NOLINT(clang-diagnostic-switch-enum)
-    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-      return DXGI_FORMAT_R8G8B8A8_UNORM;
-    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-      return DXGI_FORMAT_B8G8R8A8_UNORM;
-    case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-      return DXGI_FORMAT_B8G8R8X8_UNORM;
-    default:
-      return format;
-    }
+DXGI_FORMAT ToNonSrgb(const DXGI_FORMAT format)
+{
+  switch (format) { // NOLINT(clang-diagnostic-switch-enum)
+  case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+    return DXGI_FORMAT_R8G8B8A8_UNORM;
+  case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    return DXGI_FORMAT_B8G8R8A8_UNORM;
+  case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+    return DXGI_FORMAT_B8G8R8X8_UNORM;
+  default:
+    return format;
   }
-}  // namespace
+}
+} // namespace
 
 void WindowSurfaceImpl::Resize()
 {
@@ -45,8 +48,7 @@ void WindowSurfaceImpl::Resize()
       width, height,
       ToNonSrgb(format_),
       DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
   }
   ShouldResize(false);
@@ -64,7 +66,8 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
 {
   // This method may be called multiple times, therefore we need to ensure that
   // any remaining resources from previous calls are released first.
-  if (swap_chain_) ReleaseSwapChain();
+  if (swap_chain_)
+    ReleaseSwapChain();
 
   // Remember the format used during swap-chain creation, and use it for the
   // render target creation in Finalize()
@@ -73,12 +76,12 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
   const auto window = window_.lock();
   CHECK_NOTNULL_F(window, "window is not valid");
 
-  const DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{
+  const DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {
     .Width = Width(),
     .Height = Height(),
     .Format = ToNonSrgb(format),
     .Stereo = FALSE,
-    .SampleDesc = {1, 0}, // Always like this for D3D12
+    .SampleDesc = { 1, 0 }, // Always like this for D3D12
     .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER, // For now we will use the back buffer as a render target
     .BufferCount = kFrameBufferCount,
     .Scaling = DXGI_SCALING_STRETCH,
@@ -87,7 +90,7 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
     .Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
   };
 
-  IDXGISwapChain1* swap_chain{ nullptr };
+  IDXGISwapChain1* swap_chain { nullptr };
   const auto window_handle = static_cast<HWND>(window->NativeWindow().window_handle);
   try {
     ThrowOnFailed(
@@ -100,8 +103,7 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
         &swap_chain));
     ThrowOnFailed(GetFactory()->MakeWindowAssociation(window_handle, DXGI_MWA_NO_ALT_ENTER));
     ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create swap chain: {}", e.what());
     ObjectRelease(swap_chain);
     ObjectRelease(swap_chain_);
@@ -121,24 +123,23 @@ void WindowSurfaceImpl::Finalize()
 
   for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
     DCHECK_F(render_targets_[i].resource == nullptr);
-    ID3D12Resource* back_buffer{ nullptr };
+    ID3D12Resource* back_buffer { nullptr };
     try {
       ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
       render_targets_[i].resource = back_buffer;
-      const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc{
+      const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc {
         .Format = format_,
         .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
-        .Texture2D = {0, 0}
+        .Texture2D = { 0, 0 }
       };
       GetMainDevice()->CreateRenderTargetView(back_buffer, &rtv_desc, render_targets_[i].rtv.cpu);
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
       LOG_F(ERROR, "Failed to create render target view: {}", e.what());
       ObjectRelease(back_buffer);
     }
   }
 
-  DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{};
+  DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {};
   ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
   const auto [width, height] = window_.lock()->GetFrameBufferSize();
   DCHECK_EQ_F(width, swap_chain_desc.Width);

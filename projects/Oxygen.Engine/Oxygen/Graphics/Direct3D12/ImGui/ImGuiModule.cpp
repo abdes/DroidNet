@@ -10,11 +10,13 @@
 
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
+#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
 
-using namespace oxygen::renderer::d3d12;
+using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetRenderer;
+using oxygen::renderer::d3d12::ImGuiModule;
 
 void ImGuiModule::ImGuiBackendInit(const oxygen::Renderer* renderer)
 {
@@ -31,7 +33,7 @@ void ImGuiModule::ImGuiBackendShutdown()
   ImGui_ImplDX12_Shutdown();
 
   // TODO: this is hacky and will be obsolete once DescriptorHandle is RAII friendly
-  detail::GetRenderer().SrvHeap().Free(font_srv_handle_);
+  GetRenderer().SrvHeap().Free(font_srv_handle_);
 }
 
 void ImGuiModule::ImGuiBackendNewFrame()
@@ -42,7 +44,7 @@ void ImGuiModule::ImGuiBackendNewFrame()
 auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* /*renderer*/, ImDrawData* draw_data)
   -> CommandListPtr
 {
-  auto& current_render_target = detail::GetRenderer().GetCurrentRenderTarget();
+  auto& current_render_target = GetRenderer().GetCurrentRenderTarget();
 
   // TODO: Refactor to remove CommandRecorder and use CommandList directly
 
@@ -72,7 +74,7 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* /*renderer*/
   const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target.Rtv().cpu };
   command_list->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
   ID3D12DescriptorHeap* heaps[] = {
-    detail::GetRenderer().SrvHeap().Heap()
+    GetRenderer().SrvHeap().Heap()
   };
   command_list->GetCommandList()->SetDescriptorHeaps(1, heaps);
 

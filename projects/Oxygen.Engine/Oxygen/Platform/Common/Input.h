@@ -6,10 +6,8 @@
 
 #pragma once
 
-#include <functional>
 #include <map>
 #include <memory>
-#include <string_view>
 #include <vector>
 
 #include "Oxygen/Platform/Common/Types.h"

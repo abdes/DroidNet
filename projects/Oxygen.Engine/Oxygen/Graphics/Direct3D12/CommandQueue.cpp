@@ -7,41 +7,42 @@
 #include "Oxygen/Graphics/Direct3d12/CommandQueue.h"
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
+#include "Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Graphics/Direct3d12/Fence.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
 
 namespace {
 
-  auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
-  {
-    auto list_type_string{ L"" };
-    switch (list_type) {
-    case D3D12_COMMAND_LIST_TYPE_DIRECT:
-      list_type_string = L"Graphics ";
-      break;
-    case D3D12_COMMAND_LIST_TYPE_COMPUTE:
-      list_type_string = L"Compute ";
-      break;
-    case D3D12_COMMAND_LIST_TYPE_COPY:
-      list_type_string = L"Copy ";
-      break;
-    case D3D12_COMMAND_LIST_TYPE_BUNDLE:
-    case D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE:
-    case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
-    case D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE:
-    case D3D12_COMMAND_LIST_TYPE_NONE:
-      list_type_string = L" ";
-    }
-
-    return std::wstring{ list_type_string } + L"Command Queue";
+auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
+{
+  auto list_type_string { L"" };
+  switch (list_type) {
+  case D3D12_COMMAND_LIST_TYPE_DIRECT:
+    list_type_string = L"Graphics ";
+    break;
+  case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+    list_type_string = L"Compute ";
+    break;
+  case D3D12_COMMAND_LIST_TYPE_COPY:
+    list_type_string = L"Copy ";
+    break;
+  case D3D12_COMMAND_LIST_TYPE_BUNDLE:
+  case D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE:
+  case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
+  case D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE:
+  case D3D12_COMMAND_LIST_TYPE_NONE:
+    list_type_string = L" ";
   }
 
-}  // namespace
+  return std::wstring { list_type_string } + L"Command Queue";
+}
 
-using namespace oxygen::renderer::d3d12;
+} // namespace
+
+using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetRenderer;
+using oxygen::renderer::d3d12::CommandQueue;
 
 void CommandQueue::InitializeCommandQueue()
 {
@@ -49,7 +50,7 @@ void CommandQueue::InitializeCommandQueue()
   DCHECK_NOTNULL_F(device);
 
   D3D12_COMMAND_LIST_TYPE d3d12_type;
-  switch (GetQueueType())  // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
+  switch (GetQueueType()) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
   {
   case CommandListType::kGraphics:
     d3d12_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -103,7 +104,7 @@ void CommandQueue::Submit(const CommandLists& command_list)
 
 void CommandQueue::ReleaseCommandQueue() noexcept
 {
-  DeferredObjectRelease(command_queue_, detail::GetRenderer().GetPerFrameResourceManager());
+  detail::DeferredObjectRelease(command_queue_);
 }
 
 auto CommandQueue::CreateSynchronizationCounter() -> std::unique_ptr<SynchronizationCounter>
