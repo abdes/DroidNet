@@ -11,24 +11,23 @@
 
 namespace oxygen::engine {
 
-  struct SystemUpdateContext
-  {
-    Duration time_since_start{};
-    Duration delta_time{};
-  };
+struct SystemUpdateContext {
+  Duration time_since_start {};
+  Duration delta_time {};
+};
 
-  class System
-  {
-  public:
-    System() = default;
-    virtual ~System() = default;
+class System
+{
+ public:
+  System() = default;
+  virtual ~System() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(System);
-    OXYGEN_DEFAULT_MOVABLE(System);
+  OXYGEN_DEFAULT_COPYABLE(System);
+  OXYGEN_DEFAULT_MOVABLE(System);
 
-    // Called by the core, every frame, to give a chance to the system to
-    // update its state.
-    virtual void Update(const SystemUpdateContext& update_context) = 0;
-  };
+  // Called by the core, every frame, to give a chance to the system to
+  // update its state.
+  virtual void Update(const SystemUpdateContext& update_context) = 0;
+};
 
-}  // namespace oxygen::engine
+} // namespace oxygen::engine

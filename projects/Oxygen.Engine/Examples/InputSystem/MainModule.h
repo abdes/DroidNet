@@ -8,16 +8,19 @@
 
 #include <memory>
 
-#include <oxygen/core/module.h>
-#include <oxygen/input/fwd.h>
+#include <Oxygen/Core/Module.h>
+
+namespace oxygen::input {
+class InputSystem;
+}
 
 class MainModule : public oxygen::core::Module
 {
-public:
+ public:
   using Base = Module;
 
   template <typename... Args>
-  explicit MainModule(oxygen::EngineWeakPtr engine, Args &&... ctor_args)
+  explicit MainModule(oxygen::EngineWeakPtr engine, Args&&... ctor_args)
     : Base("MainModule", engine, std::forward<Args>(ctor_args)...)
   {
   }
@@ -36,16 +39,15 @@ public:
 
   void OnShutdown() noexcept override;
 
-private:
-  struct State
-  {
-    float distance{ 10.0F };
-    float direction{ 1.0F };
+ private:
+  struct State {
+    float distance { 10.0F };
+    float direction { 1.0F };
   };
   State state_;
 
   std::shared_ptr<oxygen::input::InputSystem> player_input_;
 
-public:
+ public:
   [[maybe_unused]] static const char* const LOGGER_NAME;
 };

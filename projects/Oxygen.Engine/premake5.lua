@@ -32,6 +32,9 @@ end
 
 -- Workspace Configuration
 workspace "Oxygen Engine"
+    -- Get the workspace root path
+    workspace_root = os.getcwd()
+
     configurations { "Debug", "Release" }
     location "vs2022"
     platforms { default_arch() }
@@ -40,12 +43,22 @@ workspace "Oxygen Engine"
     objdir "obj/%{cfg.buildcfg}-%{cfg.platform}/%{prj.name}"
 
     -- Global settings
-    language "C++"
-    cppdialect "C++20"
-    characterset "Unicode"
-    staticruntime "On"
-    defines { "LOGURU_USE_FMTLIB=1", "FMT_HEADER_ONLY" }
-    flags { "MultiProcessorCompile" }
+    filter "language:C++"
+        cppdialect "C++20"
+        characterset "Unicode"
+        staticruntime "On"
+        defines { "LOGURU_USE_FMTLIB=1", "FMT_HEADER_ONLY" }
+        flags { "MultiProcessorCompile" }
+        includedirs { workspace_root }
+
+    filter {}
+
+    filter { "language:C++", "system:windows" }
+        defines { "WIN32", "_WINDOWS", "WIN32_LEAN_AND_MEAN", "NOMINMAX" }
+        systemversion "latest"
+        toolset "v143"
+        vsprops { VcpkgEnabled = "false" }
+    filter {}
 
     -- Vcpkg integration
     local full_vcpkg_root_path=get_vcpkg_root_path(default_arch())
@@ -55,12 +68,7 @@ workspace "Oxygen Engine"
         libdirs { full_vcpkg_root_path .. "/debug/lib" }
     filter { "configurations:Release" }
         libdirs { full_vcpkg_root_path .. "/lib" }
-
-    filter "system:windows"
-        defines { "WIN32", "_WINDOWS", "WIN32_LEAN_AND_MEAN", "NOMINMAX" }
-        systemversion "latest"
-        toolset "v143"
-        vsprops { VcpkgEnabled = "false" }
+    filter {}
 
     -- Custom vcpkg path
     -- vcpkg_root = "vcpkg_installed"
@@ -111,14 +119,10 @@ filter "configurations:Debug"
     link_lib_suffix = "d"
 filter {}
 
--- Get the workspace root path
-workspace_root = os.getcwd()
-
 -- Include project configurations
 dofile("Oxygen/premake5.lua")
-dofile("Oxygen/Platform-SDL/premake5.lua")
-dofile("Oxygen/Renderers/Direct3D12/premake5.lua")
-dofile("Oxygen/Renderers/Loader/premake5.lua")
+dofile("Oxygen/Platform/premake5.lua")
+dofile("Oxygen/Graphics/premake5.lua")
 dofile("Oxygen.Editor.Interop/premake5.lua")
 dofile("Examples/premake5.lua")
 

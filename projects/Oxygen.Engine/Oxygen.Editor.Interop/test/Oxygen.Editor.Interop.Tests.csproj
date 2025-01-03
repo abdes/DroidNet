@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\src\Oxygen.Editor.Interop.vcxproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\vs2022\Interop\Oxygen.Editor.Interop.vcxproj" />
 
         <!-- Reference the wrapped native project so that its DLL gets copied to our output directory -->
         <!--
@@ -23,7 +23,7 @@
         project's output folder.
         https://learn.microsoft.com/en-us/archive/blogs/kirillosenkov/how-to-have-a-project-reference-without-referencing-the-actual-binary
         -->
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\Oxygen\Oxygen.vcxproj">
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Engine\vs2022\Oxygen\Oxygen.vcxproj">
             <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
             <OutputItemType>Content</OutputItemType>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -6,34 +6,39 @@
 
 #pragma once
 
-#include "Oxygen/Renderers/Common/Types.h"
+#include "Oxygen/api_export.h"
+#include "Oxygen/Base/Macros.h"
+#include "Oxygen/Graphics/Common/Types.h"
 
 struct ImGuiContext;
 struct ImDrawData;
 
 namespace oxygen::imgui {
 
-  class ImguiModule;
+class ImguiModule;
 
-  class ImGuiRenderInterface
+class ImGuiRenderInterface
+{
+ public:
+  OXYGEN_API ImGuiRenderInterface() = default;
+  OXYGEN_API ~ImGuiRenderInterface() = default;
+  OXYGEN_API ImGuiContext* GetContext() const;
+
+  OXYGEN_DEFAULT_COPYABLE(ImGuiRenderInterface);
+  OXYGEN_DEFAULT_MOVABLE(ImGuiRenderInterface);
+
+  OXYGEN_API auto Render(const Renderer* renderer) const -> renderer::CommandListPtr;
+  OXYGEN_API void NewFrame(const Renderer* renderer) const;
+
+ private:
+  friend class ImguiModule;
+  explicit ImGuiRenderInterface(ImguiModule* imgui_module)
+    : imgui_module_(imgui_module)
   {
-  public:
-    OXYGEN_API ImGuiRenderInterface() = default;
-    OXYGEN_API ~ImGuiRenderInterface() = default;
-    OXYGEN_API ImGuiContext* GetContext() const;
+  }
 
-    OXYGEN_DEFAULT_COPYABLE(ImGuiRenderInterface);
-    OXYGEN_DEFAULT_MOVABLE(ImGuiRenderInterface);
+  ImguiModule* imgui_module_ { nullptr };
+  mutable bool new_frame_started_ { false };
+};
 
-    OXYGEN_API auto Render(const Renderer* renderer) const->renderer::CommandListPtr;
-    OXYGEN_API void NewFrame(const Renderer* renderer) const;
-
-  private:
-    friend class ImguiModule;
-    explicit ImGuiRenderInterface(ImguiModule* imgui_module) : imgui_module_(imgui_module) {}
-
-    ImguiModule* imgui_module_{ nullptr };
-    mutable bool new_frame_started_{ false };
-  };
-
-}  // namespace oxygen::imgui
+} // namespace oxygen::imgui

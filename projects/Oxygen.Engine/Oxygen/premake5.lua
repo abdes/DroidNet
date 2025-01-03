@@ -1,22 +1,23 @@
 -- Core Engine
 project "Oxygen"
+    language "C++"
     kind "SharedLib"
     location (workspace_root .. "/vs2022/Oxygen")
     files {
-        "Base/**.h",
         "Base/**.cpp",
-        "Core/**.h",
+        "Base/**.h",
         "Core/**.cpp",
-        "Renderers/Common/**.h",
-        "Renderers/Common/**.cpp",
-        "ImGui/**.h",
+        "Core/**.h",
         "ImGui/**.cpp",
-        "Input/**.h",
+        "ImGui/**.h",
         "Input/**.cpp",
-        "Platform/**.h",
-        "Platform/**.cpp",
-        "World/**.h",
+        "Input/**.h",
+        "Platform/Common/**.cpp",
+        "Platform/Common/**.h",
+        "Graphics/Common/**.cpp",
+        "Graphics/Common/**.h",
         "World/**.cpp",
+        "World/**.h",
         "api_export.h"
     }
     removefiles {
@@ -29,6 +30,7 @@ project "Oxygen"
 group "Oxygen Base Tests"
     -- Base Test
     project "Oxygen.Base.Platform_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -39,6 +41,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.Types_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -49,6 +52,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.Time_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -59,6 +63,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.StringUtils_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -69,6 +74,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.Macros_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -79,6 +85,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.Resource_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -91,6 +98,7 @@ group "Oxygen Base Tests"
 
     -- Base Test
     project "Oxygen.Base.Serio_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
@@ -106,6 +114,7 @@ group "Oxygen Base Tests"
     -- Base Test
     filter { "system:Windows" }
         project "Oxygen.Base.WinHelpers_Tests"
+            language "C++"
             kind "ConsoleApp"
             location (workspace_root .. "/vs2022/Oxygen/Tests")
             files {
@@ -114,14 +123,16 @@ group "Oxygen Base Tests"
                 "Base/Test/main.cpp",
             }
             links { "Oxygen", "gtest" }
+    filter {}
 
     -- Base Test
     project "Oxygen.Graphics.Common_Tests"
+        language "C++"
         kind "ConsoleApp"
         location (workspace_root .. "/vs2022/Oxygen/Tests")
         files {
-            "Renderers/Common/Test/ShaderByteCode_test.cpp",
-            "Renderers/Common/Test/main.cpp",
+            "Graphics/Common/Test/ShaderByteCode_test.cpp",
+            "Graphics/Common/Test/main.cpp",
         }
         links { "Oxygen", "gtest" }
 group ""

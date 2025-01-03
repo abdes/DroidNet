@@ -10,10 +10,10 @@
 #include <memory>
 #include <span>
 
-#include "oxygen/base/logging.h"
+#include "Oxygen/Base/logging.h"
 #include "oxygen/core/engine.h"
 #include "oxygen/core/version.h"
-#include "oxygen/platform-sdl/platform.h"
+#include "Oxygen/Platform/SDL/platform.h"
 
 using namespace std::chrono_literals;
 

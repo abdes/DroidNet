@@ -8,12 +8,12 @@
 
 #include <algorithm>
 
-#include "Oxygen/Base/logging.h"
 #include "Oxygen/Base/Time.h"
-#include "Oxygen/core/Version.h"
+#include "Oxygen/Base/logging.h"
+#include "Oxygen/Core/Version.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/ImGui/ImguiModule.h"
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Renderers/Common/Renderer.h"
+#include "Oxygen/Platform/Common/Platform.h"
 
 using oxygen::Engine;
 

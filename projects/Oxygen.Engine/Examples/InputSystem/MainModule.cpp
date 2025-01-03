@@ -7,29 +7,17 @@
 #include "MainModule.h"
 
 #include <random>
-#include <stdexcept>
-
-#include "Oxygen/Base/Compilers.h"
-// Disable compiler and linter warnings originating from 'fmt' and for which we
-// cannot do anything.
-OXYGEN_DIAGNOSTIC_PUSH
-#if defined(__clang__) || defined(ASAP_GNUC_VERSION)
-#pragma GCC diagnostic ignored "-Wswitch-enum"
-#pragma GCC diagnostic ignored "-Wswitch-default"
-#endif
-#include <fmt/core.h>
-OXYGEN_DIAGNOSTIC_POP
 
 #include "Oxygen/Core/Engine.h"
-#include "Oxygen/Input/action.h"
-#include "Oxygen/Input/action_triggers.h"
-#include "Oxygen/Input/input_action_mapping.h"
-#include "Oxygen/Input/input_mapping_context.h"
-#include "Oxygen/Input/input_system.h"
-#include "Oxygen/Input/types.h"
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Platform/input.h"
-// #include "Oxygen/Renderers/Common/Renderer.h"
+#include "Oxygen/Input/Action.h"
+#include "Oxygen/Input/ActionTriggers.h"
+#include "Oxygen/Input/InputActionMapping.h"
+#include "Oxygen/Input/InputMappingContext.h"
+#include "Oxygen/Input/InputSystem.h"
+#include "Oxygen/Input/Types.h"
+#include "Oxygen/Platform/Common/Platform.h"
+#include "Oxygen/Platform/Common/input.h"
+// #include "Oxygen/Graphics/Common/Renderer.h"
 
 using oxygen::Engine;
 using oxygen::Renderer;
