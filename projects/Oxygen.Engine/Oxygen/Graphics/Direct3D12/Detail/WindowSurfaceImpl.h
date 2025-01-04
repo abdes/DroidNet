@@ -8,6 +8,7 @@
 
 #include "Oxygen/Graphics/Common/Constants.h"
 #include "Oxygen/Graphics/Direct3D12/Buffer.h"
+#include "Oxygen/Graphics/Direct3D12/Constants.h"
 
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
@@ -41,7 +42,7 @@ class WindowSurfaceImpl : public D3DResource, public RenderTarget
   auto GetResource() const -> ID3D12Resource* override { return CurrentBackBuffer(); }
 
  private:
-  friend class oxygen::graphics::d3d12::WindowSurface;
+  friend class WindowSurface;
   void CreateSwapChain(DXGI_FORMAT format = kDefaultBackBufferFormat);
   void ReleaseSwapChain();
   void Finalize();

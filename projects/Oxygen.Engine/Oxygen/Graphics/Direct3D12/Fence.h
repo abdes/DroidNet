@@ -10,7 +10,7 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Graphics/Common/SynchronizationCounter.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 
 namespace oxygen::graphics::d3d12 {
 

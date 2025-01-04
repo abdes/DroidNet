@@ -16,7 +16,7 @@
 #include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.

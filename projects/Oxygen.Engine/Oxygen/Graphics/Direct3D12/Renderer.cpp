@@ -40,7 +40,7 @@
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
 #include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
 #include "Oxygen/ImGui/ImguiModule.h"

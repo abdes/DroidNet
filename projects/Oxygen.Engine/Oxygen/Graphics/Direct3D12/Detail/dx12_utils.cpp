@@ -10,7 +10,7 @@
 
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Direct3D12/Graphics.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::detail::GetMainDevice;

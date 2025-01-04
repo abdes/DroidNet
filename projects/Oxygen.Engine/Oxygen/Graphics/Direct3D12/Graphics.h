@@ -10,7 +10,7 @@
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h"
 #include "Oxygen/Graphics/Direct3D12/Renderer.h"
-#include "Oxygen/Graphics/Direct3D12/Types.h"
+#include "Oxygen/Graphics/Direct3D12/Forward.h"
 
 #include <wrl/client.h>
 

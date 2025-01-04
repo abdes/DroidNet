@@ -14,7 +14,7 @@
 
 namespace oxygen {
 
-// Compile-time endianness detection
+//! Compile-time endianness detection
 inline bool IsLittleEndian()
 {
   constexpr uint32_t value = 0x01234567;
