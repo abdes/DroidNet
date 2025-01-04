@@ -12,9 +12,9 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Base/Windows/Exceptions.h"
 #include "Oxygen/Graphics/Common/GraphicsModule.h"
+#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
 //===----------------------------------------------------------------------===//
@@ -53,27 +53,27 @@ auto Graphics() -> d3d12::Graphics&
   return *GetBackendInternal();
 }
 
-auto GetFactory() -> renderer::d3d12::FactoryType*
+auto GetFactory() -> FactoryType*
 {
   CHECK_NOTNULL_F(GetBackendInternal());
   return GetBackendInternal()->GetFactory();
 }
 
-auto GetMainDevice() -> renderer::d3d12::DeviceType*
+auto GetMainDevice() -> DeviceType*
 {
   CHECK_NOTNULL_F(GetBackendInternal());
   return GetBackendInternal()->GetMainDevice();
 }
 
-auto GetRenderer() -> renderer::d3d12::Renderer&
+auto GetRenderer() -> Renderer&
 {
   CHECK_NOTNULL_F(GetBackendInternal());
-  const auto renderer = dynamic_cast<renderer::d3d12::Renderer*>(GetBackendInternal()->GetRenderer());
+  const auto renderer = dynamic_cast<Renderer*>(GetBackendInternal()->GetRenderer());
   CHECK_NOTNULL_F(renderer);
   return *renderer;
 }
 
-auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&
+auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&
 {
   return GetRenderer().GetPerFrameResourceManager();
 }
@@ -102,17 +102,17 @@ extern "C" __declspec(dllexport) void* GetGraphicsModuleApi()
 // The Graphics class methods
 
 using Microsoft::WRL::ComPtr;
+using oxygen::graphics::d3d12::DeviceType;
+using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::Graphics;
-using oxygen::renderer::d3d12::DeviceType;
-using oxygen::renderer::d3d12::FactoryType;
-using oxygen::renderer::d3d12::NameObject;
+using oxygen::graphics::d3d12::NameObject;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
 #if defined(_DEBUG)
-auto GetDebugLayerInternal() -> oxygen::renderer::d3d12::DebugLayer&
+auto GetDebugLayerInternal() -> oxygen::graphics::d3d12::DebugLayer&
 {
-  static oxygen::renderer::d3d12::DebugLayer debug_layer {};
+  static oxygen::graphics::d3d12::DebugLayer debug_layer {};
   return debug_layer;
 }
 #endif
@@ -320,7 +320,7 @@ void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBac
   allocator_desc.Flags = D3D12MA::ALLOCATOR_FLAG_NONE;
   allocator_desc.pDevice = main_device_.Get();
   allocator_desc.pAdapter = best_adapter.Get();
-  ThrowOnFailed(D3D12MA::CreateAllocator(&allocator_desc, &allocator_));
+  ThrowOnFailed(CreateAllocator(&allocator_desc, &allocator_));
   LOG_F(INFO, "D3D12MA Memory Allocator initialized");
 }
 
@@ -328,7 +328,7 @@ void Graphics::ShutdownGraphicsBackend()
 {
   LOG_SCOPE_FUNCTION(INFO);
 
-  renderer::ObjectRelease(allocator_);
+  ObjectRelease(allocator_);
   allocator_ = nullptr;
   LOG_F(INFO, "D3D12MA Memory Allocator released");
 
@@ -343,7 +343,7 @@ void Graphics::ShutdownGraphicsBackend()
 #endif
 }
 
-auto Graphics::CreateRenderer() -> std::unique_ptr<Renderer>
+auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
 {
-  return std::make_unique<renderer::d3d12::Renderer>();
+  return std::make_unique<Renderer>();
 }

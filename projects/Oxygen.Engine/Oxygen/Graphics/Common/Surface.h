@@ -19,7 +19,7 @@ namespace sigslot {
 class connection; // Used for window event handling
 }
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! Represents an area where rendering occurs.
 /*!
@@ -30,7 +30,10 @@ namespace oxygen::renderer {
  */
 class Surface
   : public Resource<resources::kSurface>,
-    public Mixin<Surface, Curry<MixinNamed, const char*>::mixin, MixinDisposable, MixinInitialize // last to consume remaining args
+    public Mixin<Surface,
+      Curry<MixinNamed, const char*>::mixin,
+      MixinDisposable,
+      MixinInitialize // last to consume remaining args
       >
 {
  public:
@@ -173,4 +176,4 @@ class WindowSurface : public Surface
   std::unique_ptr<sigslot::connection> on_close_;
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

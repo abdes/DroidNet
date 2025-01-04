@@ -8,7 +8,7 @@
 
 #include <memory>
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! Requires a type `T` to have `Release()` method. Typically the case for
 //! `Direct3D` or similar objects.
@@ -51,4 +51,4 @@ void ObjectRelease(std::shared_ptr<T>& resource) noexcept
   }
 }
 
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail

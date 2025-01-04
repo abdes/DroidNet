@@ -18,10 +18,13 @@
 #include "Oxygen/Graphics/Common/SynchronizationCounter.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 class CommandQueue
-  : public Mixin<CommandQueue, Curry<MixinNamed, const char*>::mixin, MixinDisposable, MixinInitialize // last to consume remaining args
+  : public Mixin<CommandQueue,
+      Curry<MixinNamed, const char*>::mixin,
+      MixinDisposable,
+      MixinInitialize // last to consume remaining args
       >
 {
  public:
@@ -117,4 +120,4 @@ class CommandQueue
   std::shared_ptr<SynchronizationCounter> fence_ {};
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

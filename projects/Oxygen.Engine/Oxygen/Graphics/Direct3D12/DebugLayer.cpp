@@ -10,7 +10,7 @@
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
-using namespace oxygen::renderer::d3d12;
+using namespace oxygen::graphics::d3d12;
 using oxygen::windows::ThrowOnFailed;
 
 void DebugLayer::OnInitialize(const bool enable, const bool enable_validation)

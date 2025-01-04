@@ -9,7 +9,7 @@
 #include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3D12/Graphics.h"
 
-namespace oxygen::renderer::d3d12::detail {
+namespace oxygen::graphics::d3d12::detail {
 
 template <typename T>
 void DeferredObjectRelease(T*& resource) noexcept
@@ -31,4 +31,4 @@ void DeferredObjectRelease(std::shared_ptr<T>& resource) noexcept
   }
 }
 
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail

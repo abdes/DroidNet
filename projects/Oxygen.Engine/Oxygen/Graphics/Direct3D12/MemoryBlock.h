@@ -14,7 +14,7 @@ namespace D3D12MA {
   class Allocation;
 }
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
   class MemoryBlock final : public IMemoryBlock
   {
@@ -37,4 +37,4 @@ namespace oxygen::renderer::d3d12 {
     Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation_;
   };
 
-}  // namespace oxygen::renderer::d3d12
+}  // namespace oxygen::graphics::d3d12

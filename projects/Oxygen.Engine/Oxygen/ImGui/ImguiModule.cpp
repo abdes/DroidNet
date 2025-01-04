@@ -14,11 +14,11 @@
 #include "Oxygen/Imgui/ImGuiPlatformBackend.h"
 #include "Oxygen/Platform/Common/Platform.h"
 
-using namespace oxygen::imgui;
+using oxygen::imgui::ImguiModule;
 
 ImguiModule::~ImguiModule() = default;
 
-void ImguiModule::OnInitialize(const Renderer* renderer)
+void ImguiModule::OnInitialize(const graphics::Renderer* renderer)
 {
   imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
   if (!imgui_platform_) {
@@ -43,14 +43,14 @@ void ImguiModule::OnShutdown()
   ImGui::DestroyContext();
 }
 
-auto ImguiModule::NewFrame(const Renderer* /*renderer*/) -> void
+auto ImguiModule::NewFrame(const graphics::Renderer* /*renderer*/) -> void
 {
   ImGuiBackendNewFrame();
   imgui_platform_->NewFrame();
   ImGui::NewFrame();
 }
 
-auto ImguiModule::ImGuiRender(const Renderer* renderer) -> std::unique_ptr<renderer::CommandList>
+auto ImguiModule::ImGuiRender(const graphics::Renderer* renderer) -> std::unique_ptr<graphics::CommandList>
 {
   ImGui::Render();
   return ImGuiBackendRenderRawData(renderer, ImGui::GetDrawData());

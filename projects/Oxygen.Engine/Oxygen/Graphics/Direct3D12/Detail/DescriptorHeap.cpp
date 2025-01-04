@@ -12,7 +12,7 @@
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
 
 using namespace oxygen::windows;
-using namespace oxygen::renderer::d3d12::detail;
+using namespace oxygen::graphics::d3d12::detail;
 
 inline DescriptorHandle::~DescriptorHandle()
 {

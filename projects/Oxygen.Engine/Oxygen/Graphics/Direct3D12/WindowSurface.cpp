@@ -6,20 +6,18 @@
 
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 
-
 #include "Detail/WindowSurfaceImpl.h"
 
-using oxygen::renderer::resources::SurfaceId;
+using oxygen::graphics::Surface;
+using oxygen::graphics::d3d12::WindowSurface;
+using oxygen::graphics::resources::SurfaceId;
 using oxygen::platform::WindowPtr;
-using oxygen::renderer::Surface;
-using oxygen::renderer::d3d12::WindowSurface;
-
 
 WindowSurface::WindowSurface(
   const SurfaceId& surface_id,
   WindowPtr window,
   std::shared_ptr<detail::WindowSurfaceImpl> impl)
-  : renderer::WindowSurface(surface_id, std::move(window))
+  : graphics::WindowSurface(surface_id, std::move(window))
   , pimpl_(std::move(impl))
 {
 }

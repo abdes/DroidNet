@@ -13,7 +13,7 @@
 
 using oxygen::windows::ThrowOnFailed;
 
-using namespace oxygen::renderer::d3d12;
+using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)

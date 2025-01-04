@@ -15,7 +15,7 @@
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
   //! Enable several debug layer features, including live object reporting, leak
   //! tracking, and GPU-based validation.

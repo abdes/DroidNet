@@ -8,8 +8,7 @@
 
 #include "Oxygen/Graphics/Common/CommandList.h" // Needed to forward the command list ptr
 
-using namespace oxygen;
-using namespace oxygen::renderer;
+using oxygen::graphics::Renderer;
 
 void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
 {
@@ -24,19 +23,6 @@ void Renderer::OnShutdown()
   platform_.reset();
 }
 
-void Renderer::BeginFrame() const
-{
-  DLOG_F(2, "BEGIN Frame");
-  EmitBeginFrameRender(current_frame_index_);
-}
-
-void Renderer::EndFrame() const
-{
-  EmitEndFrameRender(current_frame_index_);
-  current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
-  DLOG_F(2, "END Frame");
-}
-
 void Renderer::Render(
   const resources::SurfaceId& surface_id,
   const RenderGameFunction& render_game) const
@@ -48,10 +34,11 @@ void Renderer::Render(
   auto* self = const_cast<Renderer*>(this);
 
   const auto& render_target = self->BeginFrame(surface_id);
-  BeginFrame();
+  EmitBeginFrameRender(current_frame_index_);
 
   auto command_lists = render_game(render_target);
-  self->EndFrame(command_lists, surface_id);
 
-  EndFrame();
+  self->EndFrame(command_lists, surface_id);
+  EmitEndFrameRender(current_frame_index_);
+  current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
 }

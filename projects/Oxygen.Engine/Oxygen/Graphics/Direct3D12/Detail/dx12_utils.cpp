@@ -17,7 +17,7 @@ using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::windows::ThrowOnFailed;
 
 ID3D12RootSignature*
-oxygen::renderer::d3d12::create_root_signature(const D3d12RootSignatureDesc& desc)
+oxygen::graphics::d3d12::create_root_signature(const D3d12RootSignatureDesc& desc)
 {
   D3D12_VERSIONED_ROOT_SIGNATURE_DESC versioned_desc {};
   versioned_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
@@ -41,7 +41,7 @@ oxygen::renderer::d3d12::create_root_signature(const D3d12RootSignatureDesc& des
 }
 
 ID3D12PipelineState*
-oxygen::renderer::d3d12::create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM_DESC& desc)
+oxygen::graphics::d3d12::create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM_DESC& desc)
 {
   CHECK_NOTNULL_F(desc.pPipelineStateSubobjectStream);
   CHECK_GT_F(0, desc.SizeInBytes);
@@ -54,7 +54,7 @@ oxygen::renderer::d3d12::create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM
 }
 
 ID3D12PipelineState*
-oxygen::renderer::d3d12::create_pipeline_state(void* stream, const uint64_t stream_size)
+oxygen::graphics::d3d12::create_pipeline_state(void* stream, const uint64_t stream_size)
 {
   CHECK_NOTNULL_F(stream);
   CHECK_GT_F(0, stream_size);

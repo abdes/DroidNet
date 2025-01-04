@@ -10,7 +10,7 @@
 #include <functional>
 #include <type_traits>
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! Template free interface to access ShadeByteCode instances. Provides better
 //! ABI compatibility.
@@ -273,4 +273,4 @@ class ShaderByteCode<T> : public IShaderByteCode
   Deleter deleter_;
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

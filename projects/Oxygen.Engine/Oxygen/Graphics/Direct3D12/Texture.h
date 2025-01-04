@@ -16,7 +16,7 @@
 #include "Oxygen/Graphics/Direct3d12/D3DResource.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 struct TextureInitInfo {
   ID3D12Heap1* heap { nullptr };
@@ -132,4 +132,4 @@ class DepthBuffer
   detail::DescriptorHandle dsv_ {};
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

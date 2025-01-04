@@ -20,7 +20,7 @@
 #include "Oxygen/Graphics/Common/Types.h"
 #include "Oxygen/api_export.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 struct CompiledShaderInfo {
   ShaderType shader_type;
@@ -71,8 +71,9 @@ struct ShaderManagerConfig {
 class ShaderManager
   : public Mixin<ShaderManager,
       Curry<MixinNamed, const char*>::mixin,
-      MixinInitialize,
-      MixinShutdown>
+      MixinShutdown,
+      MixinInitialize // Last to consume remaining args
+      >
 {
  public:
   template <typename... Args>
@@ -139,4 +140,4 @@ class ShaderManager
   std::filesystem::path archive_path_ {};
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

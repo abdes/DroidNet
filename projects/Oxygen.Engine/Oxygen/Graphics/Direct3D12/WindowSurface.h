@@ -8,20 +8,20 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Graphics/Common/Surface.h"
-#include "Oxygen/Graphics/Direct3d12/api_export.h"
 #include "Oxygen/Graphics/Direct3d12/D3DResource.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/api_export.h"
 #include "Oxygen/Platform/Common/Types.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 namespace detail {
   class WindowSurfaceImpl;
 } // namespace detail
 
-class WindowSurface : public renderer::WindowSurface, public D3DResource
+class WindowSurface : public graphics::WindowSurface, public D3DResource
 {
-  using Super = renderer::WindowSurface;
+  using Super = graphics::WindowSurface;
 
  public:
   OXYGEN_D3D12_API ~WindowSurface() override = default;
@@ -45,4 +45,4 @@ class WindowSurface : public renderer::WindowSurface, public D3DResource
   detail::WindowSurfaceImplPtr pimpl_ {};
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

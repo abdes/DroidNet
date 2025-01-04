@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Core/Module.h"
 #include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/api_export.h"
 
 struct ImGuiContext;
 struct ImDrawData;
@@ -46,14 +46,14 @@ class ImguiModule : public core::Module
   OXYGEN_API virtual auto GetRenderInterface() -> ImGuiRenderInterface;
 
  protected:
-  OXYGEN_API void OnInitialize(const Renderer* renderer) override;
+  OXYGEN_API void OnInitialize(const graphics::Renderer* renderer) override;
   OXYGEN_API void OnShutdown() override;
 
-  OXYGEN_API virtual void ImGuiBackendInit(const Renderer* renderer) = 0;
+  OXYGEN_API virtual void ImGuiBackendInit(const graphics::Renderer* renderer) = 0;
   OXYGEN_API virtual void ImGuiBackendShutdown() = 0;
   OXYGEN_API virtual void ImGuiBackendNewFrame() = 0;
-  OXYGEN_API virtual auto ImGuiBackendRenderRawData(const Renderer* renderer, ImDrawData* draw_data)
-    -> renderer::CommandListPtr
+  OXYGEN_API virtual auto ImGuiBackendRenderRawData(const graphics::Renderer* renderer, ImDrawData* draw_data)
+    -> graphics::CommandListPtr
     = 0;
 
   [[nodiscard]] auto GetImGuiContext() const { return imgui_context_; }
@@ -61,10 +61,10 @@ class ImguiModule : public core::Module
 
  private:
   friend class ImGuiRenderInterface;
-  auto NewFrame(const Renderer* renderer) -> void;
-  auto ImGuiRender(const Renderer* renderer) -> renderer::CommandListPtr;
+  auto NewFrame(const graphics::Renderer* renderer) -> void;
+  auto ImGuiRender(const graphics::Renderer* renderer) -> graphics::CommandListPtr;
 
-  auto Render(const Renderer* /*renderer*/) -> void override { }
+  auto Render(const graphics::Renderer* /*renderer*/) -> void override { }
 
   ImGuiContext* imgui_context_ { nullptr };
   platform::WindowIdType window_id_ {};

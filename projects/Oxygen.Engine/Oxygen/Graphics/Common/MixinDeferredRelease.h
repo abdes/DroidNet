@@ -6,13 +6,11 @@
 
 #pragma once
 
-#include <functional>
-
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Signals.h"
 #include "Oxygen/Graphics/Common/PerFrameResourceManager.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! Mixin class that provides deferred resource release functionality.
 /*!
@@ -96,4 +94,4 @@ class MixinDeferredRelease : public Base
   sigslot::connection renderer_shutdown_;
 };
 
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail

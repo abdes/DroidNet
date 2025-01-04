@@ -10,7 +10,7 @@
 #include <dxgi1_6.h>
 #include <memory>
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 constexpr static DXGI_FORMAT kDefaultBackBufferFormat { DXGI_FORMAT_R8G8B8A8_UNORM };
 
@@ -50,6 +50,6 @@ namespace detail {
 
   using WindowSurfaceImplPtr = std::shared_ptr<WindowSurfaceImpl>;
   using DescriptorHandlePtr = std::shared_ptr<DescriptorHandle>;
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

@@ -14,8 +14,8 @@
 using oxygen::graphics::d3d12::detail::GetFactory;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
-using oxygen::renderer::d3d12::detail::DescriptorHandle;
-using oxygen::renderer::d3d12::detail::WindowSurfaceImpl;
+using oxygen::graphics::d3d12::detail::DescriptorHandle;
+using oxygen::graphics::d3d12::detail::WindowSurfaceImpl;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {

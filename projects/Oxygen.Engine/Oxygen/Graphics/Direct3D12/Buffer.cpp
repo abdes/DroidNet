@@ -8,7 +8,7 @@
 
 #include "DeferredObjectRelease.h"
 
-using oxygen::renderer::d3d12::Buffer;
+using oxygen::graphics::d3d12::Buffer;
 
 Buffer::~Buffer()
 {

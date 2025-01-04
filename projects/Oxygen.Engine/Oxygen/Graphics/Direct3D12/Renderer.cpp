@@ -6,56 +6,72 @@
 
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
 
-#include "Buffer.h"
-#include "Detail/dx12_utils.h"
-
-#include <algorithm>
-#include <functional>
+#include <cstdint>
+#include <cstring>
+#include <d3d12.h>
+#include <dxgiformat.h>
+#include <exception>
 #include <memory>
+#include <span>
+#include <stdexcept>
+#include <string_view>
+#include <type_traits>
+#include <utility>
 
-#include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/ResourceTable.h"
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Graphics/Common/CommandRecorder.h"
+#include "Oxygen/Core/Types.h"
+#include "Oxygen/Graphics/Common/ObjectRelease.h"
+#include "Oxygen/Graphics/Common/RenderTarget.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
+#include "Oxygen/Graphics/Common/ShaderByteCode.h"
+#include "Oxygen/Graphics/Common/ShaderCompiler.h"
 #include "Oxygen/Graphics/Common/ShaderManager.h"
+#include "Oxygen/Graphics/Common/Shaders.h"
 #include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Direct3D12/Buffer.h"
+#include "Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h"
 #include "Oxygen/Graphics/Direct3d12/CommandQueue.h"
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
-#include "Oxygen/Graphics/Direct3d12/Graphics.h"
 #include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
 #include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
-#include "Oxygen/ImGui/ImGuiPlatformBackend.h"
+#include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
+#include "Oxygen/ImGui/ImguiModule.h"
+#include "Oxygen/Platform/Common/Types.h"
+#include <Oxygen/Base/Windows/ComError.h> // needed
 
 using Microsoft::WRL::ComPtr;
+using oxygen::graphics::ShaderType;
+using oxygen::graphics::d3d12::DeviceType;
+using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
-using oxygen::renderer::d3d12::DeviceType;
-using oxygen::renderer::d3d12::FactoryType;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
-using oxygen::renderer::resources::kSurface;
-oxygen::ResourceTable<oxygen::renderer::d3d12::detail::WindowSurfaceImpl> surfaces(kSurface, 256);
+using oxygen::graphics::resources::kSurface;
+oxygen::ResourceTable<oxygen::graphics::d3d12::detail::WindowSurfaceImpl> surfaces(kSurface, 256);
 } // namespace
 
 namespace {
 // Specification of engine shaders. Each entry is a ShaderProfile
 // corresponding to one of the shaders we want to automatically compile,
 // package and load.
-const oxygen::renderer::ShaderProfile kEngineShaders[] = {
-  { .type = oxygen::ShaderType::kPixel, .path = "FullScreenTriangle.hlsl", .entry_point = "PS" },
-  { .type = oxygen::ShaderType::kVertex, .path = "FullScreenTriangle.hlsl", .entry_point = "VS" },
+const oxygen::graphics::ShaderProfile kEngineShaders[] = {
+  { .type = ShaderType::kPixel, .path = "FullScreenTriangle.hlsl", .entry_point = "PS" },
+  { .type = ShaderType::kVertex, .path = "FullScreenTriangle.hlsl", .entry_point = "VS" },
 };
 } // namespace
 
 // Implementation details of the Renderer class
-namespace oxygen::renderer::d3d12::detail {
+namespace oxygen::graphics::d3d12::detail {
 // Anonymous namespace for command frame management
 namespace {
 
@@ -80,7 +96,7 @@ class RendererImpl final
   void ShutdownRenderer();
 
   auto BeginFrame(const resources::SurfaceId& surface_id) const
-    -> const renderer::RenderTarget&;
+    -> const graphics::RenderTarget&;
   void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const;
   auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
     -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
@@ -91,7 +107,7 @@ class RendererImpl final
   [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
   CommandRecorderPtr GetCommandRecorder() { return command_recorder_; }
-  ShaderCompilerPtr GetShaderCompiler() const { return std::dynamic_pointer_cast<renderer::ShaderCompiler>(shader_compiler_); }
+  ShaderCompilerPtr GetShaderCompiler() const { return std::dynamic_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
   std::shared_ptr<IShaderByteCode> GetEngineShader(std::string_view unique_id);
 
  private:
@@ -174,7 +190,7 @@ void RendererImpl::ShutdownRenderer()
 }
 
 auto RendererImpl::BeginFrame(const resources::SurfaceId& surface_id) const
-  -> const renderer::RenderTarget&
+  -> const graphics::RenderTarget&
 {
   DCHECK_NOTNULL_F(command_recorder_);
 
@@ -241,16 +257,16 @@ std::shared_ptr<IShaderByteCode> RendererImpl::GetEngineShader(std::string_view 
   return engine_shaders_->GetShaderBytecode(unique_id);
 }
 
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail
 
-using oxygen::renderer::d3d12::Renderer;
+using oxygen::graphics::d3d12::Renderer;
 
 Renderer::Renderer()
-  : oxygen::Renderer("D3D12 Renderer")
+  : graphics::Renderer("D3D12 Renderer")
 {
 }
 
-auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> oxygen::renderer::BufferPtr
+auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr
 {
   DCHECK_NOTNULL_F(data);
   DCHECK_GT_F(size, 0u);
@@ -280,7 +296,7 @@ auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride
     .size_in_bytes = size
   };
 
-  auto buffer = std::make_shared<renderer::d3d12::Buffer>();
+  auto buffer = std::make_shared<Buffer>();
   buffer->Initialize(initInfo);
 
   // Copy the vertex data to the buffer
@@ -296,7 +312,7 @@ void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& prop
   if (IsInitialized())
     OnShutdown();
 
-  oxygen::Renderer::OnInitialize(std::move(platform), props);
+  graphics::Renderer::OnInitialize(std::move(platform), props);
   pimpl_ = std::make_shared<detail::RendererImpl>();
   try {
     pimpl_->Init(GetInitProperties());
@@ -310,11 +326,11 @@ void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& prop
 void Renderer::OnShutdown()
 {
   pimpl_->ShutdownRenderer();
-  oxygen::Renderer::OnShutdown();
+  graphics::Renderer::OnShutdown();
 }
 
 auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
-  -> const renderer::RenderTarget&
+  -> const graphics::RenderTarget&
 {
   current_render_target_ = &pimpl_->BeginFrame(surface_id);
   return *current_render_target_;

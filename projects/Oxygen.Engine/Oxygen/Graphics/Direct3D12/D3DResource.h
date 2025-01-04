@@ -11,7 +11,7 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 enum class ResourceType : uint8_t {
   kTexture,
@@ -50,4 +50,4 @@ class D3DResource
   ResourceAccessMode mode_ { ResourceAccessMode::kImmutable };
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

@@ -9,29 +9,28 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Types.h"
 
-namespace oxygen::renderer {
-  //! Description of a GPU memory block.
-  struct MemoryBlockDesc
+namespace oxygen::graphics {
+//! Description of a GPU memory block.
+struct MemoryBlockDesc {
+  uint64_t size;
+  uint32_t alignment;
+
+  explicit MemoryBlockDesc(const uint64_t size = 0u)
+    : size(size)
+    , alignment(0u)
   {
-    uint64_t size;
-    uint32_t alignment;
+  }
+};
 
-    explicit MemoryBlockDesc(const uint64_t size = 0u)
-      : size(size)
-      , alignment(0u)
-    {
-    }
-  };
+//! GPU memory block.
+class IMemoryBlock
+{
+ public:
+  IMemoryBlock() = default;
+  virtual ~IMemoryBlock() = default;
 
-  //! GPU memory block.
-  class IMemoryBlock
-  {
-  public:
-    IMemoryBlock() = default;
-    virtual ~IMemoryBlock() = default;
+  OXYGEN_MAKE_NON_COPYABLE(IMemoryBlock);
+  OXYGEN_MAKE_NON_MOVEABLE(IMemoryBlock);
+};
 
-    OXYGEN_MAKE_NON_COPYABLE(IMemoryBlock);
-    OXYGEN_MAKE_NON_MOVEABLE(IMemoryBlock);
-  };
-
-}  // namespace oxygen::renderer
+} // namespace oxygen::graphics

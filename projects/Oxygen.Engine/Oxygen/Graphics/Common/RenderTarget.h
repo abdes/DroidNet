@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Macros.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 struct ViewPort {
   ViewPort() = default;

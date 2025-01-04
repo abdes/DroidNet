@@ -10,17 +10,8 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Core/Engine.h"
 #include "Oxygen/Graphics/Common/Types.h"
 #include "Oxygen/Platform/Common/Types.h"
-
-namespace oxygen::renderer {
-class IShaderByteCode;
-}
-
-namespace oxygen::renderer {
-class PerFrameResourceManager;
-}
 
 namespace oxygen {
 
@@ -47,14 +38,15 @@ struct GraphicsBackendProperties {
   //! Optional renderer configuration properties. When not set, it indicates the
   //! the engine is running renderer-less and the graphics backend will never
   //! create a renderer instance.
-  std::optional<RendererProperties> renderer_props;
+  std::optional<graphics::RendererProperties> renderer_props;
 };
 
 class Graphics
   : public Mixin<Graphics,
       Curry<MixinNamed, const char*>::mixin,
-      MixinInitialize,
-      MixinShutdown>
+      MixinShutdown,
+      MixinInitialize // last to consume remaining args
+      >
 {
  public:
   //! Constructor to forward the arguments to the mixins in the chain. Requires
@@ -85,10 +77,11 @@ class Graphics
     Once created, the instance stays alive for as long as the graphics backend
     is not shutdown. It can always be obtained by calling `GetRenderer()`.
   */
-  OXYGEN_API [[nodiscard]] auto GetRenderer() const noexcept -> const Renderer*;
-  OXYGEN_API [[nodiscard]] auto GetRenderer() noexcept -> Renderer*;
+  OXYGEN_API [[nodiscard]] auto GetRenderer() const noexcept -> const graphics::Renderer*;
+  OXYGEN_API [[nodiscard]] auto GetRenderer() noexcept -> graphics::Renderer*;
 
-  OXYGEN_API [[nodiscard]] auto GetPerFrameResourceManager() const noexcept -> const renderer::PerFrameResourceManager&;
+  OXYGEN_API [[nodiscard]] auto GetPerFrameResourceManager() const noexcept
+    -> const graphics::PerFrameResourceManager&;
 
  protected:
   //! Initialize the graphics backend module.
@@ -97,7 +90,7 @@ class Graphics
   virtual void ShutdownGraphicsBackend() = 0;
 
   //! Create a renderer for this graphics backend.
-  virtual auto CreateRenderer() -> std::unique_ptr<Renderer> = 0;
+  virtual auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> = 0;
 
  private:
   OXYGEN_API virtual void OnInitialize(PlatformPtr platform, const GraphicsBackendProperties& props);
@@ -111,7 +104,7 @@ class Graphics
   PlatformPtr platform_ {}; //< The platform abstraction layer.
 
   bool is_renderer_less_ { true }; //< Indicates if the backend is renderer-less.
-  std::shared_ptr<Renderer> renderer_ {}; //< The renderer instance.
+  std::shared_ptr<graphics::Renderer> renderer_ {}; //< The renderer instance.
 };
 
 } // namespace oxygen

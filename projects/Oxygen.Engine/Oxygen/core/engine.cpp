@@ -8,8 +8,8 @@
 
 #include <algorithm>
 
-#include "Oxygen/Base/logging.h"
 #include "Oxygen/Base/Time.h"
+#include "Oxygen/Base/logging.h"
 #include "Oxygen/Core/Version.h"
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Common/Renderer.h"
@@ -172,7 +172,7 @@ auto Engine::Run() -> void
         // is null, which is fine.
         auto graphics = graphics_.lock();
         DCHECK_NOTNULL_F(graphics);
-        const Renderer* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
+        const graphics::Renderer* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
 
         if (continue_running) {
           module.frame_time.Update();

@@ -34,4 +34,4 @@ void UnloadBackend() noexcept;
 */
 auto GetBackend() noexcept -> GraphicsPtr;
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

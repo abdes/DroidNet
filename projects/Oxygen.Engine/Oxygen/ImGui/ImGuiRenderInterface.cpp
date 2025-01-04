@@ -17,7 +17,7 @@ ImGuiContext* ImGuiRenderInterface::GetContext() const
   return imgui_module_->GetImGuiContext();
 }
 
-auto ImGuiRenderInterface::Render(const Renderer* renderer) const -> renderer::CommandListPtr
+auto ImGuiRenderInterface::Render(const graphics::Renderer* renderer) const -> graphics::CommandListPtr
 {
   DCHECK_NOTNULL_F(imgui_module_);
   DCHECK_NOTNULL_F(renderer);
@@ -31,7 +31,7 @@ auto ImGuiRenderInterface::Render(const Renderer* renderer) const -> renderer::C
   return {};
 }
 
-void ImGuiRenderInterface::NewFrame(const Renderer* renderer) const
+void ImGuiRenderInterface::NewFrame(const graphics::Renderer* renderer) const
 {
   DCHECK_NOTNULL_F(imgui_module_);
   DCHECK_NOTNULL_F(renderer);

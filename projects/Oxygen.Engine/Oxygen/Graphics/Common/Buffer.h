@@ -10,7 +10,7 @@
 
 #include "Oxygen/Base/Macros.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 /**
  * Buffer's view for binding
@@ -39,4 +39,4 @@ class Buffer : public Mixin<Buffer, Curry<MixinNamed, const char*>::mixin>
   virtual void Release() noexcept = 0;
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

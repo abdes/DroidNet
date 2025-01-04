@@ -16,7 +16,7 @@
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
-namespace oxygen::renderer::d3d12::detail {
+namespace oxygen::graphics::d3d12::detail {
 
 inline size_t kInvalidIndex { std::numeric_limits<size_t>::max() };
 
@@ -107,4 +107,4 @@ class DescriptorHeap
   std::unique_ptr<size_t[]> free_handles_ {};
 };
 
-} // namespace oxygen::renderer::d3d12::detail
+} // namespace oxygen::graphics::d3d12::detail

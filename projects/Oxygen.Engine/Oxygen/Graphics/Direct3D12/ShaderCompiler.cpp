@@ -11,9 +11,9 @@
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-using namespace oxygen::renderer::d3d12;
+using namespace oxygen::graphics::d3d12;
 using Microsoft::WRL::ComPtr;
-using oxygen::ShaderType;
+using oxygen::graphics::ShaderType;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
@@ -62,7 +62,7 @@ constexpr auto GetProfileForShaderTupe(const ShaderType type) -> const wchar_t*
 
 void ShaderCompiler::OnInitialize()
 {
-  renderer::ShaderCompiler::OnInitialize();
+  graphics::ShaderCompiler::OnInitialize();
 
   ThrowOnFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils_)));
   ThrowOnFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler_)));

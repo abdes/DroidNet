@@ -12,7 +12,7 @@
 #include "Oxygen/Graphics/Common/SynchronizationCounter.h"
 #include "Oxygen/Graphics/Direct3d12/Types.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 class Fence final : public SynchronizationCounter
 {
@@ -50,4 +50,4 @@ class Fence final : public SynchronizationCounter
   HANDLE fence_event_ { nullptr };
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

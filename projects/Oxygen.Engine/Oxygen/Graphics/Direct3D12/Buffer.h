@@ -18,7 +18,7 @@
 #include "Oxygen/Graphics/Direct3d12/D3DResource.h"
 #include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 /**
  * Buffer's usage flags. The buffer usage must be determined upon creation.
@@ -50,9 +50,7 @@ struct BufferInitInfo {
   uint64_t size_in_bytes;
 };
 
-class Buffer
-  : public renderer::Buffer,
-    public D3DResource
+class Buffer : public graphics::Buffer, public D3DResource
 {
  public:
   Buffer()
@@ -85,4 +83,4 @@ class Buffer
   bool should_release_ { false };
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

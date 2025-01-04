@@ -14,11 +14,11 @@
 
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
-class ShaderCompiler : public renderer::ShaderCompiler
+class ShaderCompiler : public graphics::ShaderCompiler
 {
-  using Base = renderer::ShaderCompiler;
+  using Base = graphics::ShaderCompiler;
 
  public:
   template <typename... Args>
