@@ -44,7 +44,7 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
 
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
-using oxygen::renderer::d3d12::CommandList;
+using oxygen::graphics::d3d12::CommandList;
 
 void CommandList::InitializeCommandList(CommandListType type)
 {

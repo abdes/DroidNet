@@ -124,4 +124,4 @@ namespace oxygen {
     std::string debug_object_name_{ };
   };
 
-}  // namespace oxygen::renderer
+}  // namespace oxygen::graphics

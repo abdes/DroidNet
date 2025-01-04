@@ -16,16 +16,21 @@
 #include "Oxygen/Graphics/Common/Buffer.h" // Must include for the auto deletion of Buffer shared_ptr
 #include "Oxygen/Graphics/Common/CommandList.h" // needed for CommandListPtr
 #include "Oxygen/Graphics/Common/CommandRecorder.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Graphics/Common/RenderTarget.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h"
+#include "Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h" // Needed
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "Oxygen/Input/ActionTriggers.h"
 #include "Oxygen/Input/Types.h"
 
 using oxygen::Engine;
+using oxygen::graphics::CommandListPtr;
+using oxygen::graphics::CommandLists;
+using oxygen::graphics::RenderTarget;
+using oxygen::graphics::ShaderType;
+using oxygen::graphics::d3d12::detail::DeferredObjectRelease;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
@@ -34,12 +39,8 @@ using oxygen::input::InputActionMapping;
 using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
-using oxygen::renderer::CommandListPtr;
-using oxygen::renderer::CommandLists;
-using oxygen::renderer::RenderTarget;
-using oxygen::renderer::d3d12::detail::DeferredObjectRelease;
 
-void MainModule::OnInitialize(const oxygen::Renderer* renderer)
+void MainModule::OnInitialize(const oxygen::graphics::Renderer* renderer)
 {
   DCHECK_NOTNULL_F(renderer);
   DCHECK_F(!my_window_.expired());
@@ -61,7 +62,7 @@ void MainModule::FixedUpdate()
 {
 }
 
-void MainModule::Render(const oxygen::Renderer* renderer)
+void MainModule::Render(const oxygen::graphics::Renderer* renderer)
 {
   DCHECK_NOTNULL_F(renderer);
 
@@ -101,17 +102,22 @@ void MainModule::OnShutdown() noexcept
 }
 
 auto MainModule::RenderGame(
-  const oxygen::Renderer* renderer,
+  const oxygen::graphics::Renderer* renderer,
   const RenderTarget& render_target) const -> CommandLists
 {
   DCHECK_NOTNULL_F(renderer);
 
   // Pipeline state and Root Signature
 
-  auto vertex_shader = renderer->GetEngineShader(
-    oxygen::renderer::MakeShaderIdentifier(oxygen::ShaderType::kVertex, "FullScreenTriangle.hlsl"));
-  auto pixel_shader = renderer->GetEngineShader(
-    oxygen::renderer::MakeShaderIdentifier(oxygen::ShaderType::kPixel, "FullScreenTriangle.hlsl"));
+  const auto vertex_shader = renderer->GetEngineShader(
+    MakeShaderIdentifier(
+      ShaderType::kVertex,
+      "FullScreenTriangle.hlsl"));
+
+  const auto pixel_shader = renderer->GetEngineShader(
+    MakeShaderIdentifier(
+      ShaderType::kPixel,
+      "FullScreenTriangle.hlsl"));
 
   //...
 
@@ -132,7 +138,7 @@ auto MainModule::RenderGame(
   command_recorder->SetPipelineState(vertex_shader, pixel_shader);
 
   constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
-  command_recorder->Clear(oxygen::renderer::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
+  command_recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
 
   //// Create vertex buffer
   // struct Vertex {
@@ -147,7 +153,7 @@ auto MainModule::RenderGame(
   // auto vertex_buffer = renderer->CreateVertexBuffer(vertices, sizeof(vertices), sizeof(Vertex));
 
   //// Set vertex buffer
-  // oxygen::renderer::BufferPtr vertex_buffers[] = { vertex_buffer };
+  // oxygen::graphics::BufferPtr vertex_buffers[] = { vertex_buffer };
   // uint32_t strides[] = { sizeof(Vertex) };
   // uint32_t offsets[] = { 0 };
   // command_recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets);
@@ -165,7 +171,7 @@ auto MainModule::RenderGame(
     return command_lists;
   }
 
-  auto imgui = GetEngine().GetImGuiRenderInterface();
+  const auto imgui = GetEngine().GetImGuiRenderInterface();
   ImGui::SetCurrentContext(imgui.GetContext());
   imgui.NewFrame(renderer);
   ImGui::ShowDemoWindow();

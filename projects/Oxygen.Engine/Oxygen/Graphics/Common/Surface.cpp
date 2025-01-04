@@ -10,8 +10,8 @@
 #include "Oxygen/Base/Signals.h"
 #include "Oxygen/Platform/Common/Window.h"
 
-using namespace oxygen::renderer;
-using namespace oxygen::renderer::resources;
+using namespace oxygen::graphics;
+using namespace oxygen::graphics::resources;
 
 auto WindowSurface::Width() const -> uint32_t
 {

@@ -52,7 +52,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
       .enable_debug = true,
       .enable_validation = false,
       // We want a renderer
-      .renderer_props = oxygen::RendererProperties {},
+      .renderer_props = oxygen::graphics::RendererProperties {},
     };
 
     graphics = LoadBackend(BackendType::kDirect3D12).lock();

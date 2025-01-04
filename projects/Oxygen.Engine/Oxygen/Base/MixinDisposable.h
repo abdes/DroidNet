@@ -53,4 +53,4 @@ namespace oxygen {
     bool should_release_{ false };
   };
 
-}  // namespace oxygen::renderer
+}  // namespace oxygen::graphics

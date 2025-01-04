@@ -14,11 +14,11 @@
 #include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
 #include "Oxygen/Graphics/Direct3d12/Renderer.h"
 
+using oxygen::graphics::d3d12::ImGuiModule;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
-using oxygen::renderer::d3d12::ImGuiModule;
 
-void ImGuiModule::ImGuiBackendInit(const oxygen::Renderer* renderer)
+void ImGuiModule::ImGuiBackendInit(const graphics::Renderer* renderer)
 {
   const auto d3d12_render = dynamic_cast<const Renderer*>(renderer);
 
@@ -41,7 +41,7 @@ void ImGuiModule::ImGuiBackendNewFrame()
   ImGui_ImplDX12_NewFrame();
 }
 
-auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Renderer* /*renderer*/, ImDrawData* draw_data)
+auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::graphics::Renderer* /*renderer*/, ImDrawData* draw_data)
   -> CommandListPtr
 {
   auto& current_render_target = GetRenderer().GetCurrentRenderTarget();

@@ -9,9 +9,9 @@
 #include <filesystem>
 #include <string>
 
-using namespace oxygen::renderer;
+using namespace oxygen::graphics;
 
-auto oxygen::renderer::MakeShaderIdentifier(
+auto oxygen::graphics::MakeShaderIdentifier(
   const ShaderType shader_type,
   const std::string& relative_path) -> std::string
 {
@@ -55,7 +55,7 @@ auto oxygen::renderer::MakeShaderIdentifier(
   return prefix + "@" + normalized_path;
 }
 
-auto oxygen::renderer::MakeShaderIdentifier(const ShaderProfile& shader) -> std::string
+auto oxygen::graphics::MakeShaderIdentifier(const ShaderProfile& shader) -> std::string
 {
   return MakeShaderIdentifier(shader.type, shader.path);
 }

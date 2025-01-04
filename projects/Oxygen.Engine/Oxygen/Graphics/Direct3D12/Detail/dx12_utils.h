@@ -17,7 +17,7 @@
 
 using oxygen::windows::ThrowOnFailed;
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 inline void NameObject(ID3D12Object* const object, const std::wstring& name)
 {
@@ -509,4 +509,4 @@ struct D3d12PipelineStateSubObjectStream {
 ID3D12PipelineState* create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM_DESC& desc);
 ID3D12PipelineState* create_pipeline_state(void* stream, uint64_t stream_size);
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

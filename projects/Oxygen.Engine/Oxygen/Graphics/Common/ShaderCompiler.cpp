@@ -15,7 +15,7 @@
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/Shaders.h"
 
-using namespace oxygen::renderer;
+using namespace oxygen::graphics;
 using namespace std::filesystem;
 
 auto ShaderCompiler::CompileFromFile(

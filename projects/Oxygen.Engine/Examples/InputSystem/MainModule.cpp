@@ -9,18 +9,19 @@
 #include <random>
 
 #include "Oxygen/Core/Engine.h"
+#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Input/Action.h"
 #include "Oxygen/Input/ActionTriggers.h"
 #include "Oxygen/Input/InputActionMapping.h"
 #include "Oxygen/Input/InputMappingContext.h"
 #include "Oxygen/Input/InputSystem.h"
 #include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/Common/input.h"
 #include "Oxygen/Platform/Common/Platform.h"
+#include "Oxygen/Platform/Common/input.h"
 // #include "Oxygen/Graphics/Common/Renderer.h"
 
 using oxygen::Engine;
-using oxygen::Renderer;
+using oxygen::graphics::Renderer;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
@@ -32,7 +33,7 @@ using oxygen::platform::InputSlots;
 
 const char* const MainModule::LOGGER_NAME = "MainModule";
 
-void MainModule::OnInitialize(const oxygen::Renderer* renderer)
+void MainModule::OnInitialize(const Renderer* /*renderer*/)
 {
   // DCHECK_NOTNULL_F(renderer);
 
@@ -148,7 +149,7 @@ void MainModule::FixedUpdate()
   state_.distance = new_distance;
 }
 
-void MainModule::Render(const Renderer* renderer)
+void MainModule::Render(const Renderer* /*renderer*/)
 {
   // DCHECK_NOTNULL_F(renderer);
 

@@ -17,11 +17,11 @@ namespace oxygen {
 class Engine;
 }
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 class WindowSurface;
 }
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 namespace detail {
   class RendererImpl;
@@ -30,7 +30,7 @@ namespace detail {
 } // namespace detail
 
 class Renderer final
-  : public oxygen::Renderer,
+  : public graphics::Renderer,
     public std::enable_shared_from_this<Renderer>
 {
  public:
@@ -65,7 +65,7 @@ class Renderer final
   void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
   void OnShutdown() override;
 
-  auto BeginFrame(const resources::SurfaceId& surface_id) -> const renderer::RenderTarget& override;
+  auto BeginFrame(const resources::SurfaceId& surface_id) -> const graphics::RenderTarget& override;
   void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const override;
 
  private:
@@ -75,4 +75,4 @@ class Renderer final
   const RenderTarget* current_render_target_ { nullptr };
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

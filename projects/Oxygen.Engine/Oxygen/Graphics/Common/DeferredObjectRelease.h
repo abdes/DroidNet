@@ -8,7 +8,7 @@
 
 #include "Oxygen/Graphics/Common/PerFrameResourceManager.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 template <typename T>
 void DeferredObjectRelease(T*& resource,
@@ -31,4 +31,4 @@ void DeferredObjectRelease(std::shared_ptr<T>& resource,
   }
 }
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

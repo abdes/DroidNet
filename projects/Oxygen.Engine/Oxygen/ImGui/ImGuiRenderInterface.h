@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/api_export.h"
 
 struct ImGuiContext;
 struct ImDrawData;
@@ -27,8 +27,8 @@ class ImGuiRenderInterface
   OXYGEN_DEFAULT_COPYABLE(ImGuiRenderInterface);
   OXYGEN_DEFAULT_MOVABLE(ImGuiRenderInterface);
 
-  OXYGEN_API auto Render(const Renderer* renderer) const -> renderer::CommandListPtr;
-  OXYGEN_API void NewFrame(const Renderer* renderer) const;
+  OXYGEN_API auto Render(const graphics::Renderer* renderer) const -> graphics::CommandListPtr;
+  OXYGEN_API void NewFrame(const graphics::Renderer* renderer) const;
 
  private:
   friend class ImguiModule;

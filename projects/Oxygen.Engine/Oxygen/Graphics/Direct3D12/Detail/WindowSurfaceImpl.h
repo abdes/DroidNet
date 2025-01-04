@@ -13,7 +13,7 @@
 #include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
 
 
-namespace oxygen::renderer::d3d12::detail {
+namespace oxygen::graphics::d3d12::detail {
 
   class WindowSurfaceImpl : public D3DResource, public RenderTarget
   {
@@ -41,7 +41,7 @@ namespace oxygen::renderer::d3d12::detail {
     auto GetResource() const -> ID3D12Resource* override { return CurrentBackBuffer(); }
 
   private:
-    friend class oxygen::renderer::d3d12::WindowSurface;
+    friend class oxygen::graphics::d3d12::WindowSurface;
     void CreateSwapChain(DXGI_FORMAT format = kDefaultBackBufferFormat);
     void ReleaseSwapChain();
     void Finalize();
@@ -64,4 +64,4 @@ namespace oxygen::renderer::d3d12::detail {
     RenderTargetData render_targets_[kFrameBufferCount]{};
   };
 
-}  // namespace oxygen::renderer::d3d12::detail
+}  // namespace oxygen::graphics::d3d12::detail

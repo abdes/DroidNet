@@ -11,13 +11,13 @@
 
 #include <wrl/client.h>
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
 class RenderTarget;
 
-class CommandRecorder final : public renderer::CommandRecorder
+class CommandRecorder final : public graphics::CommandRecorder
 {
-  using Base = renderer::CommandRecorder;
+  using Base = graphics::CommandRecorder;
 
  public:
   explicit CommandRecorder(const CommandListType type)
@@ -58,4 +58,4 @@ class CommandRecorder final : public renderer::CommandRecorder
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

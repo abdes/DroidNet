@@ -10,11 +10,11 @@
 
 #include "Oxygen/Graphics/Common/CommandQueue.h"
 
-namespace oxygen::renderer::d3d12 {
+namespace oxygen::graphics::d3d12 {
 
-class CommandQueue final : public renderer::CommandQueue
+class CommandQueue final : public graphics::CommandQueue
 {
-  using Base = renderer::CommandQueue;
+  using Base = graphics::CommandQueue;
 
  public:
   explicit CommandQueue(const CommandListType type)
@@ -41,4 +41,4 @@ class CommandQueue final : public renderer::CommandQueue
   ID3D12CommandQueue* command_queue_ {};
 };
 
-} // namespace oxygen::renderer::d3d12
+} // namespace oxygen::graphics::d3d12

@@ -14,7 +14,7 @@
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! Tracks resources allocated during the rendering of a frame and releases
 //! them when no longer used by the GPU (i.e. at the beginning of the new

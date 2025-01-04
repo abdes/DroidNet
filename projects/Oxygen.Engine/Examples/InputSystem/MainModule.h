@@ -30,12 +30,12 @@ class MainModule : public oxygen::core::Module
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVEABLE(MainModule);
 
-  void OnInitialize(const oxygen::Renderer* renderer) override;
+  void OnInitialize(const oxygen::graphics::Renderer* renderer) override;
 
   void ProcessInput(const oxygen::platform::InputEvent& event) override;
   void Update(oxygen::Duration delta_time) override;
   void FixedUpdate() override;
-  void Render(const oxygen::Renderer* renderer) override;
+  void Render(const oxygen::graphics::Renderer* renderer) override;
 
   void OnShutdown() noexcept override;
 

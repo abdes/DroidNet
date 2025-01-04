@@ -24,7 +24,7 @@
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
 #include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
-using namespace oxygen::renderer::d3d12;
+using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 
 void CommandRecorder::Begin()
@@ -50,7 +50,7 @@ void CommandRecorder::Begin()
   ResetState();
 }
 
-oxygen::renderer::CommandListPtr CommandRecorder::End()
+oxygen::graphics::CommandListPtr CommandRecorder::End()
 {
   if (!current_command_list_) {
     throw std::runtime_error("No CommandList is being recorded");

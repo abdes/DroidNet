@@ -9,11 +9,11 @@
 #include "Oxygen/Graphics/Common/Types.h"
 #include "Oxygen/api_export.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 struct CompiledShaderInfo;
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 // note: the shader name is the file name component of the path including the extension
 struct ShaderProfile {
@@ -22,7 +22,9 @@ struct ShaderProfile {
   std::string entry_point { "main" }; //< Entry point function name.
 };
 
-OXYGEN_API [[nodiscard]] auto MakeShaderIdentifier(ShaderType shader_type, const std::string& relative_path) -> std::string;
-OXYGEN_API [[nodiscard]] auto MakeShaderIdentifier(const ShaderProfile& shader) -> std::string;
+OXYGEN_API [[nodiscard]]
+auto MakeShaderIdentifier(ShaderType shader_type, const std::string& relative_path) -> std::string;
+OXYGEN_API [[nodiscard]]
+auto MakeShaderIdentifier(const ShaderProfile& shader) -> std::string;
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

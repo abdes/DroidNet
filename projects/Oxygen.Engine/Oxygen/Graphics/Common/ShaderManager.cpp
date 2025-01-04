@@ -21,7 +21,7 @@
 #include "Oxygen/Graphics/Common/Shaders.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-using namespace oxygen::renderer;
+using namespace oxygen::graphics;
 
 namespace {
 

@@ -14,7 +14,7 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 //! A synchronization counter, for a timeline oriented CPU-GPU command queue.
 /*!
@@ -39,7 +39,10 @@ namespace oxygen::renderer {
   execution to the user.
 */
 class SynchronizationCounter
-  : public Mixin<SynchronizationCounter, Curry<MixinNamed, const char*>::mixin, MixinDisposable, MixinInitialize // last to consume remaining args
+  : public Mixin<SynchronizationCounter,
+      Curry<MixinNamed, const char*>::mixin,
+      MixinDisposable,
+      MixinInitialize // last to consume remaining args
       >
 {
  public:
@@ -132,4 +135,4 @@ class SynchronizationCounter
   friend class MixinDisposable; //< Allow access to OnRelease.
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

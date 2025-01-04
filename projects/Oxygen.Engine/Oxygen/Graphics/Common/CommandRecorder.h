@@ -16,7 +16,7 @@
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Graphics/Common/Types.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 class IShaderByteCode;
 
 enum ClearFlags : uint8_t {
@@ -26,7 +26,10 @@ enum ClearFlags : uint8_t {
 };
 
 class CommandRecorder
-  : public Mixin<CommandRecorder, Curry<MixinNamed, const char*>::mixin, MixinDisposable, MixinInitialize // last to consume remaining args
+  : public Mixin<CommandRecorder,
+      Curry<MixinNamed, const char*>::mixin,
+      MixinDisposable,
+      MixinInitialize // last to consume remaining args
       >
 {
  public:
@@ -101,4 +104,4 @@ class CommandRecorder
   CommandListType type_ { CommandListType::kNone };
 };
 
-} // namespace oxygen::renderer
+} // namespace oxygen::graphics

@@ -30,18 +30,18 @@ class Graphics final : public oxygen::Graphics
   OXYGEN_MAKE_NON_COPYABLE(Graphics);
   OXYGEN_MAKE_NON_MOVEABLE(Graphics);
 
-  OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> renderer::d3d12::FactoryType*;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> renderer::d3d12::DeviceType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> FactoryType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> DeviceType*;
   OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator* { return allocator_; }
 
  protected:
   void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) override;
   void ShutdownGraphicsBackend() override;
-  auto CreateRenderer() -> std::unique_ptr<Renderer> override;
+  auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> override;
 
  private:
-  Microsoft::WRL::ComPtr<renderer::d3d12::FactoryType> factory_ {};
-  Microsoft::WRL::ComPtr<renderer::d3d12::DeviceType> main_device_ {};
+  Microsoft::WRL::ComPtr<FactoryType> factory_ {};
+  Microsoft::WRL::ComPtr<DeviceType> main_device_ {};
   D3D12MA::Allocator* allocator_ { nullptr };
 };
 
@@ -57,10 +57,10 @@ namespace detail {
   */
   //! @{
   OXYGEN_D3D12_API [[nodiscard]] auto Graphics() -> Graphics&;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() -> renderer::d3d12::FactoryType*;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() -> renderer::d3d12::DeviceType*;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetRenderer() -> renderer::d3d12::Renderer&;
-  OXYGEN_D3D12_API [[nodiscard]] auto GetPerFrameResourceManager() -> renderer::PerFrameResourceManager&;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() -> FactoryType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() -> DeviceType*;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetRenderer() -> Renderer&;
+  OXYGEN_D3D12_API [[nodiscard]] auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&;
   OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
   //! Get the backend memory allocator
   // TODO: Add the allocator

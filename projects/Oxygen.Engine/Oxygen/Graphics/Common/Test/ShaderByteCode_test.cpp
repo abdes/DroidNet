@@ -12,7 +12,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace oxygen::renderer;
+using namespace oxygen::graphics;
 
 // Test classes
 namespace {

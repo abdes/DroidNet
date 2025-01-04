@@ -11,14 +11,14 @@
 #include <memory>
 #include <string>
 
-#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/Shaders.h"
+#include "Oxygen/api_export.h"
 
-namespace oxygen::renderer {
+namespace oxygen::graphics {
 
 struct ShaderCompilerConfig {
   //! A map of defines to be used when compiling shaders. The key is the name
