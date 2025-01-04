@@ -43,6 +43,7 @@ concept ManagedBuffer = std::movable<T> && requires(T t) {
   { t->GetBufferPointer() } -> std::convertible_to<void*>;
   { t->GetBufferSize() } -> std::convertible_to<size_t>;
   { t->Release() };
+  { static_cast<bool>(t) } -> std::convertible_to<bool>;
 };
 
 //! Concept to specify a basic buffer with `size` and `data` members. The
@@ -135,7 +136,9 @@ class ShaderByteCode<T> : public IShaderByteCode
   //! Destructor, releases the buffer data.
   ~ShaderByteCode() noexcept override
   {
-    buffer_->Release();
+    if (buffer_) {
+      buffer_->Release();
+    }
   }
 
  private:

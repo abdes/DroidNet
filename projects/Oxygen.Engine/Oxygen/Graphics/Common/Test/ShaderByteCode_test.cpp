@@ -146,6 +146,7 @@ class ManagedResourceBuffer final
   }
 
   ResourceBuffer* operator->() const noexcept { return buffer_; }
+  operator bool() const noexcept { return buffer_ != nullptr; }
 
  private:
   ResourceBuffer* buffer_ { nullptr };
@@ -159,7 +160,10 @@ template <IsContiguousContainer BufferType>
 auto GetTestValue() -> std::tuple<BufferType, size_t, const uint32_t*>
 {
   BufferType buffer = { 1, 2, 3, 4 };
-  return std::make_tuple(std::move(buffer), buffer.size(), buffer.data());
+  return std::make_tuple(
+    std::move(buffer),
+    buffer.size() * sizeof(typename BufferType::value_type),
+    buffer.data());
 }
 
 // Helper function to initialize buffer for custom struct with size and data
@@ -194,13 +198,13 @@ class ShaderByteCodeTest : public ::testing::Test
  public:
   using BufferType = T;
 
-  [[nodiscard]] auto CreateShaderByteCode() -> ShaderByteCode<BufferType>
+  [[nodiscard]] auto CreateShaderByteCode() -> std::pair<ShaderByteCode<BufferType>, size_t>
   {
     auto [buffer, size, data] = GetTestValue<BufferType>();
     if constexpr (std::is_same_v<BufferType, BasicBuffer>) {
-      return ShaderByteCode<BufferType>(std::move(buffer), BasicBufferDeleter);
+      return { ShaderByteCode<BufferType>(std::move(buffer), BasicBufferDeleter), size };
     } else {
-      return ShaderByteCode<BufferType>(std::move(buffer));
+      return { ShaderByteCode<BufferType>(std::move(buffer)), size };
     }
   }
 
@@ -211,23 +215,26 @@ class ShaderByteCodeTest : public ::testing::Test
   }
 };
 
-using TestTypes = ::testing::Types<std::vector<uint32_t>, std::array<uint32_t, 4>,
-  BasicBuffer, ManagedResourceBuffer>;
+using TestTypes = ::testing::Types<
+  std::vector<uint32_t>,
+  std::array<uint32_t, 4>,
+  BasicBuffer,
+  ManagedResourceBuffer>;
 
 TYPED_TEST_SUITE(ShaderByteCodeTest, TestTypes);
 
 // Test instantiation of ShaderByteCode for all supported types
 TYPED_TEST(ShaderByteCodeTest, InstantiationTest)
 {
-  auto shader_byte_code = this->CreateShaderByteCode();
+  auto [shader_byte_code, size] = this->CreateShaderByteCode();
   EXPECT_TRUE(shader_byte_code.Size() > 0);
 }
 
 // Test basic accessors for Size() and Data()
 TYPED_TEST(ShaderByteCodeTest, AccessorsTest)
 {
-  auto shader_byte_code = this->CreateShaderByteCode();
-  EXPECT_EQ(shader_byte_code.Size(), 4);
+  auto [shader_byte_code, size] = this->CreateShaderByteCode();
+  EXPECT_EQ(shader_byte_code.Size(), size);
   EXPECT_NE(shader_byte_code.Data(), nullptr);
 }
 
@@ -313,7 +320,7 @@ TEST_P(VectorBufferTest, SizeTest)
   const size_t original_size = buffer.size();
   const ShaderByteCode<std::vector<uint32_t>> shader_byte_code(
     std::move(buffer));
-  EXPECT_EQ(shader_byte_code.Size(), original_size);
+  EXPECT_EQ(shader_byte_code.Size(), original_size * sizeof(uint32_t));
 }
 
 TEST_P(VectorBufferTest, DataTest)
