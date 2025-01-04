@@ -14,7 +14,7 @@
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
-#include "Oxygen/Graphics/Direct3d12/Types.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 
 namespace oxygen::graphics::d3d12::detail {
 
