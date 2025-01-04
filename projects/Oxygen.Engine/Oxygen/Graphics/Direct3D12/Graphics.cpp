@@ -6,11 +6,12 @@
 
 #include "Oxygen/Graphics/Direct3D12/Graphics.h"
 
+#include <iomanip>
+#include <sstream>
+
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Base/Windows/Exceptions.h"
 #include "Oxygen/Graphics/Common/GraphicsModule.h"
 #include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
@@ -335,7 +336,7 @@ void Graphics::ShutdownGraphicsBackend()
   factory_.Reset();
   LOG_F(INFO, "D3D12 DXGI Factory reset");
 
-  CHECK_EQ_F(main_device_.Reset(), 0);
+  CHECK_EQ_F(main_device_.Reset(), 0U);
   LOG_F(INFO, "D3D12 Main Device reset");
 
 #if defined(_DEBUG)

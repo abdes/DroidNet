@@ -6,15 +6,13 @@
 
 #pragma once
 
-#include <cstdint>
-
 namespace oxygen {
 
-//! The number of frame buffers we manage
-constexpr uint32_t kFrameBufferCount { 3 };
-
-//! The maximum number of render targets that can be bound to a command list or
-//! configured in a pipeline state.
-constexpr uint32_t kMaxRenderTargets = 8;
+template <class... Ts>
+struct Overload : Ts... {
+  using Ts::operator()...;
+};
+template <class... Ts>
+Overload(Ts...) -> Overload<Ts...>;
 
 } // namespace oxygen

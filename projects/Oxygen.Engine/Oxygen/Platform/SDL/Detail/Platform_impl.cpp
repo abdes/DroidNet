@@ -17,7 +17,6 @@
 #include <span>
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Types.h"
 #include "Oxygen/Platform/Common/InputEvent.h"
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/Platform/Common/Window.h"

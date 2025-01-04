@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Base/NoStd.h"
 
 namespace oxygen {
 

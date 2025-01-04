@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include "Oxygen/Base/Types.h"
-
 namespace oxygen::graphics {
 
 //! GPU resource access modes.

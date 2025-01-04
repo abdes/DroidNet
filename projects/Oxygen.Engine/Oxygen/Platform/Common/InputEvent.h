@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Base/Time.h"
+#include "Oxygen/Base/Types/Geometry.h"
 #include "Oxygen/Platform/Common/Types.h"
 
 namespace oxygen::platform {

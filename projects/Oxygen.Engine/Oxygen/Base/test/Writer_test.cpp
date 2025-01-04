@@ -11,7 +11,6 @@
 #include <gtest/gtest.h>
 
 #include "Mocks/MockStream.h"
-#include "Oxygen/Base/Types.h"
 
 using namespace oxygen::serio;
 using namespace oxygen::serio::testing;

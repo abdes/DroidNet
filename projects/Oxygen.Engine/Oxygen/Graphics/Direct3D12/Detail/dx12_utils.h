@@ -15,14 +15,12 @@
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Base/logging.h"
 
-using oxygen::windows::ThrowOnFailed;
-
 namespace oxygen::graphics::d3d12 {
 
 inline void NameObject(ID3D12Object* const object, const std::wstring& name)
 {
 #ifdef _DEBUG
-  ThrowOnFailed(object->SetName(name.c_str()));
+  windows::ThrowOnFailed(object->SetName(name.c_str()));
   std::string narrow_name {};
   string_utils::WideToUtf8(name, narrow_name);
   LOG_F(3, "+D3D12 named object created: {}", narrow_name);

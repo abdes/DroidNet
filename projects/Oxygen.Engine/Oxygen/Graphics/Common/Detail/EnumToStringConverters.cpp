@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Graphics/Common/Types/CommandListType.h"
 #include "Oxygen/Graphics/Common/Types/ShaderType.h"
 
-auto oxygen::graphics::to_string(const CommandListType ct) -> const char*
+auto oxygen::graphics::to_string(const CommandListType value) -> const char*
 {
-  switch (ct) {
+  switch (value) {
   case CommandListType::kGraphics:
     return "Graphics";
   case CommandListType::kCompute:

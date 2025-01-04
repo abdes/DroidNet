@@ -7,7 +7,6 @@
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Types.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
@@ -42,9 +41,10 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
 
 } // namespace
 
+using oxygen::graphics::d3d12::CommandList;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
-using oxygen::graphics::d3d12::CommandList;
+using oxygen::windows::ThrowOnFailed;
 
 void CommandList::InitializeCommandList(CommandListType type)
 {

@@ -11,8 +11,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "Oxygen/Base/Types.h"
-
 using namespace std::chrono_literals;
 
 using testing::Return;

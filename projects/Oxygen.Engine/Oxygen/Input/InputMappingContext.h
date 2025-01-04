@@ -6,12 +6,13 @@
 
 #pragma once
 
+#include "Oxygen/Base/Time.h"
+
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "oxygen/api_export.h"
-#include "Oxygen/Base/Types.h"
 
 namespace oxygen {
 
