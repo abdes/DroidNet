@@ -6,15 +6,25 @@
 
 #pragma once
 
-#include <cstdint>
+#include <string>
 
-namespace oxygen {
+namespace nostd {
 
-//! The number of frame buffers we manage
-constexpr uint32_t kFrameBufferCount { 3 };
+namespace adl_helper {
 
-//! The maximum number of render targets that can be bound to a command list or
-//! configured in a pipeline state.
-constexpr uint32_t kMaxRenderTargets = 8;
+  template <class T>
+  auto as_string(T&& value)
+  {
+    using std::to_string;
+    return to_string(std::forward<T>(value));
+  }
 
-} // namespace oxygen
+} // namespace adl_helper
+
+template <class T>
+auto to_string(T&& value)
+{
+  return adl_helper::as_string(std::forward<T>(value));
+}
+
+} // namespace nostd

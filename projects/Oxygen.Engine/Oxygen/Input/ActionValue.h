@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <cstdlib>
 #include <variant>
 
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Base/Types/Geometry.h"
+#include "Oxygen/Base/Types/Overload.h"
 
 namespace oxygen::input {
 

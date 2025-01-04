@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Base/Types.h"
+#include <cstdint>
+
 #include "Oxygen/api_export.h"
 
 namespace oxygen::graphics {

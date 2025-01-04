@@ -9,9 +9,16 @@
 #include <chrono>
 #include <concepts>
 
-#include "Oxygen/Base/Types.h"
-
 namespace oxygen {
+
+using Duration = std::chrono::microseconds;
+using TimePoint = std::chrono::microseconds;
+
+inline auto SecondsToDuration(const float seconds) -> Duration
+{
+  static constexpr auto micro_seconds_in_second = 1'000'000;
+  return Duration(static_cast<uint64_t>(micro_seconds_in_second * seconds));
+}
 
   struct Time
   {

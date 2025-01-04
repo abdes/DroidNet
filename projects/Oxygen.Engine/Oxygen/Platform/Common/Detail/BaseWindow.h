@@ -6,9 +6,9 @@
 
 #pragma once
 
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Signals.h"
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Types.h>
+#include "Oxygen/Base/Types/Geometry.h"
 
 namespace oxygen::platform {
 

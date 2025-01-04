@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
+
 // ReSharper disable once CppUnusedIncludeDirective (unreachable code)
 #include "Oxygen/Base/Compilers.h"
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Base/NoStd.h"
 
 namespace oxygen::graphics {
 
@@ -92,17 +94,6 @@ constexpr auto to_string(const BackendType value) -> std::string
     return "Vulkan 1.3";
   }
   OXYGEN_UNREACHABLE_RETURN("_UNKNOWN_");
-}
-
-//! Output stream operator for GraphicsBackendType.
-/*!
-  \param out The output stream.
-  \param value The GraphicsBackendType value to output.
-  \return The output stream.
- */
-inline auto operator<<(std::ostream& out, const BackendType value) -> auto&
-{
-  return out << to_string(value);
 }
 
 } // namespace oxygen::graphics

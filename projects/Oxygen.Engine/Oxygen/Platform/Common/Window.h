@@ -10,6 +10,7 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Signals.h"
+#include "Oxygen/Base/Types/Geometry.h"
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/api_export.h"
 

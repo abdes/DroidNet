@@ -7,6 +7,7 @@
 #pragma once
 
 #include "Oxygen/Base/Macros.h"
+#include "Oxygen/Base/Types/Geometry.h"
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/Platform/Common/Window.h"
 

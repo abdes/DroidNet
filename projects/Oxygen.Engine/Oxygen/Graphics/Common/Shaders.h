@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "Oxygen/Graphics/Common/Types/ShaderType.h"
 #include "Oxygen/api_export.h"
 

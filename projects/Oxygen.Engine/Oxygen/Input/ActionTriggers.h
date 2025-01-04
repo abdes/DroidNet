@@ -10,10 +10,10 @@
 #include <memory>
 #include <vector>
 
-#include "Oxygen/api_export.h"
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Types.h"
+#include "Oxygen/Base/Time.h"
 #include "Oxygen/Input/Types.h"
+#include "Oxygen/api_export.h"
 
 namespace oxygen::input {
 
