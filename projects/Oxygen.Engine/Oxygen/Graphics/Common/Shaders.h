@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Types/ShaderType.h"
 #include "Oxygen/api_export.h"
 
 namespace oxygen::graphics {

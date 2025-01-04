@@ -7,7 +7,7 @@
 #pragma once
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/api_export.h"
 
 struct ImGuiContext;

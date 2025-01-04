@@ -17,7 +17,7 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/Buffer.h"
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"

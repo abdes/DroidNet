@@ -17,7 +17,7 @@
 #include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/api_export.h"
 
 namespace oxygen::graphics {

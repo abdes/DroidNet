@@ -9,7 +9,7 @@
 #include <d3d12.h>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Types/ResourceAccessMode.h"
 
 namespace oxygen::graphics::d3d12 {
 
@@ -20,9 +20,7 @@ enum class ResourceType : uint8_t {
   kMax,
 };
 
-/**
- * Common description of renderer's resource (buffer or texture)
- */
+//! Common description of a graphics resource (buffer or texture)
 struct CommonResourceDesc {
   //// memory block to allocate the buffer from
   //// if not provided, renderer will automatically manage memory for the resource

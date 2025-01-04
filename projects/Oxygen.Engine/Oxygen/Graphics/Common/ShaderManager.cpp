@@ -19,7 +19,7 @@
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
 #include "Oxygen/Graphics/Common/ShaderCompiler.h"
 #include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 
 using namespace oxygen::graphics;
 

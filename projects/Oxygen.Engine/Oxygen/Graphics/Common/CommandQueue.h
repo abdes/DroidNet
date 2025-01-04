@@ -14,9 +14,10 @@
 #include "Oxygen/Base/MixinDisposable.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
 #include "Oxygen/Graphics/Common/SynchronizationCounter.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Types/CommandListType.h"
 
 namespace oxygen::graphics {
 

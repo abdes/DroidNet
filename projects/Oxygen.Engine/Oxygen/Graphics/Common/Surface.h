@@ -12,7 +12,7 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/Resource.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Types/EngineResources.h"
 #include "Oxygen/Platform/Common/Types.h"
 
 namespace sigslot {

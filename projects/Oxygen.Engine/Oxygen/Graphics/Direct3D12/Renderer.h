@@ -9,17 +9,7 @@
 #include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
 #include "Oxygen/Platform/Common/Types.h"
-#include <Oxygen/Graphics/Common/Types.h>
-
-#include "D3D12MemAlloc.h"
-
-namespace oxygen {
-class Engine;
-}
-
-namespace oxygen::graphics {
-class WindowSurface;
-}
+#include <Oxygen/Graphics/Common/Forward.h>
 
 namespace oxygen::graphics::d3d12 {
 
