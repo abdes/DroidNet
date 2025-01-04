@@ -15,7 +15,7 @@
 #include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Base/Types.h"
 #include "Oxygen/Core/Types.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Platform/Common/InputEvent.h"
 
 namespace oxygen::core {

@@ -14,10 +14,10 @@
 #include "Oxygen/Base/MixinDisposable.h"
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
+#include "Oxygen/Graphics/Common/Types/CommandListType.h"
 
 namespace oxygen::graphics {
-class IShaderByteCode;
 
 enum ClearFlags : uint8_t {
   kClearFlagsColor = (1 << 0),

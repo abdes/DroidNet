@@ -11,8 +11,8 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Macros.h"
+#include "Oxygen/Graphics/Common/Constants.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
-#include "Oxygen/Graphics/Common/Types.h"
 
 namespace oxygen::graphics {
 

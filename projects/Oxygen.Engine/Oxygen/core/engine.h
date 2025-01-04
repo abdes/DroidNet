@@ -18,7 +18,7 @@
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Base/Time.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/Platform/Common/Types.h"

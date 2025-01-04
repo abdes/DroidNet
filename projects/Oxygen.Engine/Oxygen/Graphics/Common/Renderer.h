@@ -12,9 +12,11 @@
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Core/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Graphics/Common/MixinDeferredRelease.h"
 #include "Oxygen/Graphics/Common/MixinRendererEvents.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Types/EngineResources.h"
+#include "Oxygen/Graphics/Common/Types/RenderGameFunction.h"
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/api_export.h"
 

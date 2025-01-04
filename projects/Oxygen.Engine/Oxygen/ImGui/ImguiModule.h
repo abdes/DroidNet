@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Core/Module.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/api_export.h"
 
 struct ImGuiContext;

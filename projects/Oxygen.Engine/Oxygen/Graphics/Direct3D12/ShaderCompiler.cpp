@@ -9,7 +9,6 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/Types.h"
 
 using namespace oxygen::graphics::d3d12;
 using Microsoft::WRL::ComPtr;

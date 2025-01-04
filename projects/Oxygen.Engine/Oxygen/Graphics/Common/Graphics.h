@@ -10,7 +10,7 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Graphics/Common/Types.h"
+#include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Platform/Common/Types.h"
 
 namespace oxygen {
