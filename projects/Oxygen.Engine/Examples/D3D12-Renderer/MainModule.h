@@ -31,18 +31,18 @@ class MainModule final : public oxygen::core::Module
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVEABLE(MainModule);
 
-  void OnInitialize(const oxygen::graphics::Renderer* renderer) override;
+  void OnInitialize(const oxygen::Graphics* gfx) override;
 
   void ProcessInput(const oxygen::platform::InputEvent& event) override;
   void Update(oxygen::Duration delta_time) override;
   void FixedUpdate() override;
-  void Render(const oxygen::graphics::Renderer* renderer) override;
+  void Render(const oxygen::Graphics* gfx) override;
 
   void OnShutdown() noexcept override;
 
  private:
   [[nodiscard]] auto RenderGame(
-    const oxygen::graphics::Renderer* renderer,
+    const oxygen::Graphics* gfx,
     const oxygen::graphics::RenderTarget& render_target) const
     -> oxygen::graphics::CommandLists;
 

@@ -10,10 +10,15 @@
 #include "Oxygen/Base/MixinInitialize.h"
 #include "Oxygen/Base/MixinNamed.h"
 #include "Oxygen/Base/MixinShutdown.h"
+#include "Oxygen/Core/Types.h"
 #include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Platform/Common/Types.h"
 
 namespace oxygen {
+
+namespace imgui {
+  class ImguiModule;
+} // namespace imgui
 
 struct GraphicsBackendProperties {
   //! Device selection guidance.
@@ -82,6 +87,11 @@ class Graphics
 
   OXYGEN_API [[nodiscard]] auto GetPerFrameResourceManager() const noexcept
     -> const graphics::PerFrameResourceManager&;
+
+  [[nodiscard]]
+  virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
+    -> std::unique_ptr<imgui::ImguiModule>
+    = 0;
 
  protected:
   //! Initialize the graphics backend module.

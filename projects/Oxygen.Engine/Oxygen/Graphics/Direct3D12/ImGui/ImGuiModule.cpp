@@ -19,9 +19,13 @@ using oxygen::graphics::d3d12::ImGuiModule;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
 
-void ImGuiModule::ImGuiBackendInit(const graphics::Renderer* renderer)
+void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
 {
-  const auto d3d12_render = dynamic_cast<const Renderer*>(renderer);
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_F(!gfx->IsWithoutRenderer());
+  DCHECK_NOTNULL_F(gfx->GetRenderer());
+
+  const auto d3d12_render = dynamic_cast<const Renderer*>(gfx->GetRenderer());
 
   font_srv_handle_ = d3d12_render->SrvHeap().Allocate();
   ImGui::SetCurrentContext(GetImGuiContext());
@@ -42,10 +46,16 @@ void ImGuiModule::ImGuiBackendNewFrame()
   ImGui_ImplDX12_NewFrame();
 }
 
-auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::graphics::Renderer* /*renderer*/, ImDrawData* draw_data)
+auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawData* draw_data)
   -> CommandListPtr
 {
-  auto& current_render_target = GetRenderer().GetCurrentRenderTarget();
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_F(!gfx->IsWithoutRenderer());
+  DCHECK_NOTNULL_F(gfx->GetRenderer());
+
+  const auto d3d12_render = dynamic_cast<const Renderer*>(gfx->GetRenderer());
+  DCHECK_NOTNULL_F(d3d12_render);
+  auto& current_render_target = d3d12_render->GetCurrentRenderTarget();
 
   // TODO: Refactor to remove CommandRecorder and use CommandList directly
 

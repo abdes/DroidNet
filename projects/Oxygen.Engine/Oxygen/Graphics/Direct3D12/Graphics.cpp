@@ -17,6 +17,7 @@
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
 #include "Oxygen/Graphics/Direct3d12/Forward.h"
+#include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -288,6 +289,11 @@ auto Graphics::GetMainDevice() const -> DeviceType*
 {
   CHECK_NOTNULL_F(main_device_, "graphics backend not properly initialized");
   return main_device_.Get();
+}
+
+auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
+{
+  return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }
 
 void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props)

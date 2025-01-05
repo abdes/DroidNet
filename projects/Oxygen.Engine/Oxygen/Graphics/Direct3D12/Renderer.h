@@ -40,7 +40,6 @@ class Renderer final
   OXYGEN_D3D12_API [[nodiscard]] auto UavHeap() const -> detail::DescriptorHeap&;
 
   OXYGEN_D3D12_API [[nodiscard]] auto CreateWindowSurface(platform::WindowPtr window) const -> SurfacePtr override;
-  OXYGEN_D3D12_API [[nodiscard]] auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
   // OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
   //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;

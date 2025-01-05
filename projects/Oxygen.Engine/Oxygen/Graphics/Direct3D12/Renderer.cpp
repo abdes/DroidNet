@@ -38,9 +38,9 @@
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
+#include "Oxygen/Graphics/Direct3d12/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
 #include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
-#include "Oxygen/Graphics/Direct3d12/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
 #include "Oxygen/ImGui/ImguiModule.h"
@@ -338,11 +338,6 @@ auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
 void Renderer::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
 {
   pimpl_->EndFrame(command_lists, surface_id);
-}
-
-auto Renderer::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
-{
-  return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }
 
 auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr

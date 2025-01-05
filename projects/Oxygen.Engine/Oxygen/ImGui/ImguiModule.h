@@ -46,13 +46,13 @@ class ImguiModule : public core::Module
   OXYGEN_API virtual auto GetRenderInterface() -> ImGuiRenderInterface;
 
  protected:
-  OXYGEN_API void OnInitialize(const graphics::Renderer* renderer) override;
+  OXYGEN_API void OnInitialize(const Graphics* gfx) override;
   OXYGEN_API void OnShutdown() override;
 
-  OXYGEN_API virtual void ImGuiBackendInit(const graphics::Renderer* renderer) = 0;
+  OXYGEN_API virtual void ImGuiBackendInit(const Graphics* gfx) = 0;
   OXYGEN_API virtual void ImGuiBackendShutdown() = 0;
   OXYGEN_API virtual void ImGuiBackendNewFrame() = 0;
-  OXYGEN_API virtual auto ImGuiBackendRenderRawData(const graphics::Renderer* renderer, ImDrawData* draw_data)
+  OXYGEN_API virtual auto ImGuiBackendRenderRawData(const Graphics* gfx, ImDrawData* draw_data)
     -> graphics::CommandListPtr
     = 0;
 
@@ -61,14 +61,14 @@ class ImguiModule : public core::Module
 
  private:
   friend class ImGuiRenderInterface;
-  auto NewFrame(const graphics::Renderer* renderer) -> void;
-  auto ImGuiRender(const graphics::Renderer* renderer) -> graphics::CommandListPtr;
+  auto NewFrame(const Graphics* gfx) -> void;
+  auto ImGuiRender(const Graphics* gfx) -> graphics::CommandListPtr;
 
-  auto Render(const graphics::Renderer* /*renderer*/) -> void override { }
+  auto Render(const Graphics* /*gfx*/) -> void override { }
 
   ImGuiContext* imgui_context_ { nullptr };
   platform::WindowIdType window_id_ {};
-  std::unique_ptr<ImGuiPlatformBackend> imgui_platform_ {};
+  std::shared_ptr<ImGuiPlatformBackend> imgui_platform_ {};
 };
 
 } // namespace oxygen

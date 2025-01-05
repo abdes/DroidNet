@@ -31,10 +31,10 @@ class ImGuiModule final : public imgui::ImguiModule
   OXYGEN_MAKE_NON_MOVEABLE(ImGuiModule);
 
  protected:
-  void ImGuiBackendInit(const graphics::Renderer* renderer) override;
+  void ImGuiBackendInit(const oxygen::Graphics* gfx) override;
   void ImGuiBackendShutdown() override;
   void ImGuiBackendNewFrame() override;
-  auto ImGuiBackendRenderRawData(const graphics::Renderer* renderer, ImDrawData* draw_data)
+  auto ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawData* draw_data)
     -> CommandListPtr override;
 
  private:
