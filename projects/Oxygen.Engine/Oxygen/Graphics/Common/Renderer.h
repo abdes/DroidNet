@@ -108,10 +108,6 @@ namespace graphics {
      */
 
     [[nodiscard]]
-    virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
-      -> std::unique_ptr<imgui::ImguiModule>
-      = 0;
-    [[nodiscard]]
     virtual auto CreateWindowSurface(platform::WindowPtr weak) const
       -> SurfacePtr
       = 0;

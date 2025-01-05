@@ -40,11 +40,14 @@ using oxygen::input::InputMappingContext;
 using oxygen::input::InputSystem;
 using oxygen::platform::InputSlots;
 
-void MainModule::OnInitialize(const oxygen::graphics::Renderer* renderer)
+void MainModule::OnInitialize(const oxygen::Graphics* gfx)
 {
-  DCHECK_NOTNULL_F(renderer);
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_F(!gfx->IsWithoutRenderer());
   DCHECK_F(!my_window_.expired());
 
+  const auto renderer = gfx->GetRenderer();
+  DCHECK_NOTNULL_F(renderer);
   surface_ = renderer->CreateWindowSurface(my_window_);
   DCHECK_F(surface_->IsValid());
   surface_->Initialize();
@@ -62,8 +65,10 @@ void MainModule::FixedUpdate()
 {
 }
 
-void MainModule::Render(const oxygen::graphics::Renderer* renderer)
+void MainModule::Render(const oxygen::Graphics* gfx)
 {
+  DCHECK_NOTNULL_F(gfx);
+  const auto renderer = gfx->GetRenderer();
   DCHECK_NOTNULL_F(renderer);
 
   // Create a random number core.
@@ -89,8 +94,8 @@ void MainModule::Render(const oxygen::graphics::Renderer* renderer)
   // renderer->ExecuteCommandList(command_list);
 
   renderer->Render(surface_->GetId(),
-    [this, &renderer](const RenderTarget& render_target) {
-      return RenderGame(renderer, render_target);
+    [this, &gfx](const RenderTarget& render_target) {
+      return RenderGame(gfx, render_target);
     });
   std::this_thread::sleep_for(std::chrono::milliseconds(distribution(gen)));
 }
@@ -102,9 +107,11 @@ void MainModule::OnShutdown() noexcept
 }
 
 auto MainModule::RenderGame(
-  const oxygen::graphics::Renderer* renderer,
-  const RenderTarget& render_target) const -> CommandLists
+  const oxygen::Graphics* gfx, const RenderTarget& render_target) const
+  -> CommandLists
 {
+  DCHECK_NOTNULL_F(gfx);
+  const auto renderer = gfx->GetRenderer();
   DCHECK_NOTNULL_F(renderer);
 
   // Pipeline state and Root Signature
@@ -140,24 +147,24 @@ auto MainModule::RenderGame(
   constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
   command_recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
 
-  //// Create vertex buffer
-  // struct Vertex {
-  //   float position[3];
-  //   float color[3];
-  // };
-  // Vertex vertices[] = {
-  //   { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-  //   { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-  //   { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
-  // };
-  // auto vertex_buffer = renderer->CreateVertexBuffer(vertices, sizeof(vertices), sizeof(Vertex));
+  // Create vertex buffer
+  struct Vertex {
+    float position[3];
+    float color[3];
+  };
+  Vertex vertices[] = {
+    { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+    { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
+  };
+  auto vertex_buffer = renderer->CreateVertexBuffer(vertices, sizeof(vertices), sizeof(Vertex));
 
   //// Set vertex buffer
   // oxygen::graphics::BufferPtr vertex_buffers[] = { vertex_buffer };
   // uint32_t strides[] = { sizeof(Vertex) };
   // uint32_t offsets[] = { 0 };
   // command_recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets);
-  // DeferredObjectRelease(vertex_buffer);
+  DeferredObjectRelease(vertex_buffer);
 
   command_recorder->Draw(3, 1, 0, 0);
   // command_recorder->Draw();
@@ -173,9 +180,9 @@ auto MainModule::RenderGame(
 
   const auto imgui = GetEngine().GetImGuiRenderInterface();
   ImGui::SetCurrentContext(imgui.GetContext());
-  imgui.NewFrame(renderer);
+  imgui.NewFrame(gfx);
   ImGui::ShowDemoWindow();
-  auto imgui_command_list = imgui.Render(renderer);
+  auto imgui_command_list = imgui.Render(gfx);
   command_lists.emplace_back(std::move(imgui_command_list));
 
   return command_lists;

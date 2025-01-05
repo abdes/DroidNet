@@ -11,15 +11,22 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
 #include "Oxygen/Graphics/Common/CommandList.h"
+#include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Imgui/ImGuiPlatformBackend.h"
 #include "Oxygen/Platform/Common/Platform.h"
 
 using oxygen::imgui::ImguiModule;
 
-ImguiModule::~ImguiModule() = default;
-
-void ImguiModule::OnInitialize(const graphics::Renderer* renderer)
+ImguiModule::~ImguiModule()
 {
+}
+
+void ImguiModule::OnInitialize(const Graphics* gfx)
+{
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_F(!gfx->IsWithoutRenderer());
+  DCHECK_NOTNULL_F(gfx->GetRenderer());
+
   imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
   if (!imgui_platform_) {
     LOG_F(ERROR, "Failed to create ImGui platform backend.");
@@ -31,9 +38,9 @@ void ImguiModule::OnInitialize(const graphics::Renderer* renderer)
   ImGui::StyleColorsDark();
 
   imgui_platform_->Initialize(imgui_context_);
-  ImGuiBackendInit(renderer);
+  ImGuiBackendInit(gfx);
 
-  LOG_F(INFO, "[{}] initialized with `{}`", ObjectName(), imgui_platform_->ObjectName());
+  LOG_F(INFO, "[{}] initialized with `{}`", Name(), imgui_platform_->ObjectName());
 }
 
 void ImguiModule::OnShutdown()
@@ -43,30 +50,39 @@ void ImguiModule::OnShutdown()
   ImGui::DestroyContext();
 }
 
-auto ImguiModule::NewFrame(const graphics::Renderer* /*renderer*/) -> void
+auto ImguiModule::NewFrame(const Graphics* gfx) -> void
 {
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_NOTNULL_F(imgui_context_);
+
   ImGuiBackendNewFrame();
   imgui_platform_->NewFrame();
   ImGui::NewFrame();
 }
 
-auto ImguiModule::ImGuiRender(const graphics::Renderer* renderer) -> std::unique_ptr<graphics::CommandList>
+auto ImguiModule::ImGuiRender(const Graphics* gfx) -> std::unique_ptr<graphics::CommandList>
 {
+  DCHECK_NOTNULL_F(gfx);
+  DCHECK_NOTNULL_F(imgui_context_);
+
   ImGui::Render();
-  return ImGuiBackendRenderRawData(renderer, ImGui::GetDrawData());
+  return ImGuiBackendRenderRawData(gfx, ImGui::GetDrawData());
 }
 
 void ImguiModule::ProcessInput(const platform::InputEvent& /*event*/)
 {
+  DCHECK_NOTNULL_F(imgui_context_);
   // Input is processed directly by the platform backend.
 }
 
 void ImguiModule::Update(Duration /*delta_time*/)
 {
+  DCHECK_NOTNULL_F(imgui_context_);
 }
 
 void ImguiModule::FixedUpdate()
 {
+  DCHECK_NOTNULL_F(imgui_context_);
 }
 
 auto ImguiModule::GetRenderInterface() -> ImGuiRenderInterface

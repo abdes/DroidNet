@@ -9,8 +9,8 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h"
-#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 #include "Oxygen/Graphics/Direct3D12/Forward.h"
+#include "Oxygen/Graphics/Direct3D12/Renderer.h"
 
 #include <wrl/client.h>
 
@@ -34,6 +34,8 @@ class Graphics final : public oxygen::Graphics
   OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> FactoryType*;
   OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> DeviceType*;
   OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator* { return allocator_; }
+
+  OXYGEN_D3D12_API [[nodiscard]] auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
  protected:
   void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) override;

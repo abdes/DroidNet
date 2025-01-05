@@ -41,7 +41,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
   // system. For example, destroy the core before we destroy the platform.
   std::shared_ptr<oxygen::Platform> platform {};
   std::shared_ptr<oxygen::Engine> engine {};
-  std::shared_ptr<oxygen::Graphics> graphics {};
+  std::shared_ptr<oxygen::Graphics> gfx {};
 
   try {
     // 1- The platform abstraction layer
@@ -55,9 +55,9 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
       .renderer_props = oxygen::graphics::RendererProperties {},
     };
 
-    graphics = LoadBackend(BackendType::kDirect3D12).lock();
-    DCHECK_NOTNULL_F(graphics);
-    graphics->Initialize(platform, backend_props);
+    gfx = LoadBackend(BackendType::kDirect3D12).lock();
+    DCHECK_NOTNULL_F(gfx);
+    gfx->Initialize(platform, backend_props);
 
     // Create a window.
     constexpr oxygen::PixelExtent window_size { 1900, 1200 };
@@ -85,14 +85,14 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
       .main_window_id = my_window.lock()->Id(),
     };
 
-    engine = std::make_shared<oxygen::Engine>(platform, graphics, props);
+    engine = std::make_shared<oxygen::Engine>(platform, gfx, props);
     const auto my_module = std::make_shared<MainModule>(platform, engine, my_window);
     engine->AttachModule(my_module);
 
     engine->Initialize();
     engine->Run();
     engine->Shutdown();
-    graphics->Shutdown();
+    gfx->Shutdown();
 
     LOG_F(INFO, "Exiting application");
   } catch (std::exception const& err) {
@@ -101,7 +101,7 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
   }
 
   // Explicit destruction order due to dependencies.
-  graphics.reset();
+  gfx.reset();
   engine.reset();
   platform.reset();
 

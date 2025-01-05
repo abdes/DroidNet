@@ -40,15 +40,15 @@ class Module
   OXYGEN_MAKE_NON_COPYABLE(Module);
   OXYGEN_MAKE_NON_MOVEABLE(Module);
 
-  [[nodiscard]] auto Name() const -> const std::string& { return ObjectName(); }
+  [[nodiscard]] auto Name() const -> const std::string& { return this->ObjectName(); }
 
   virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
   virtual auto Update(Duration delta_time) -> void = 0;
   virtual auto FixedUpdate() -> void = 0;
-  virtual auto Render(const graphics::Renderer*) -> void = 0;
+  virtual auto Render(const Graphics* gfx) -> void = 0;
 
  protected:
-  virtual void OnInitialize(const graphics::Renderer* renderer) = 0;
+  virtual void OnInitialize(const Graphics* gfx) = 0;
   template <typename Base, typename... CtorArgs>
   friend class MixinInitialize; //< Allow access to OnInitialize.
 

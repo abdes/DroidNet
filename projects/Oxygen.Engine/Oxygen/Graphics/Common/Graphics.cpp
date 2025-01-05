@@ -13,15 +13,15 @@ using oxygen::Graphics;
 
 auto Graphics::GetRenderer() const noexcept -> const graphics::Renderer*
 {
-  CHECK_F(IsInitialized(), "graphics backend has not been initialized before being used");
-  CHECK_F(is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
+  CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
+  CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
   return renderer_.get();
 }
 
 auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
 {
-  CHECK_F(IsInitialized(), "graphics backend has not been initialized before being used");
+  CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
   CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
   return renderer_.get();
@@ -29,7 +29,7 @@ auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
 
 auto Graphics::GetPerFrameResourceManager() const noexcept -> const graphics::PerFrameResourceManager&
 {
-  CHECK_F(IsInitialized(), "graphics backend has not been initialized before being used");
+  CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
   CHECK_F(is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
   return renderer_->GetPerFrameResourceManager();

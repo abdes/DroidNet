@@ -4,21 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainModule.h"
+#include "./MainModule.h"
 
 #include <random>
 
 #include "Oxygen/Core/Engine.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Input/Action.h"
 #include "Oxygen/Input/ActionTriggers.h"
 #include "Oxygen/Input/InputActionMapping.h"
 #include "Oxygen/Input/InputMappingContext.h"
 #include "Oxygen/Input/InputSystem.h"
 #include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/Common/Platform.h"
 #include "Oxygen/Platform/Common/input.h"
-// #include "Oxygen/Graphics/Common/Renderer.h"
 
 using oxygen::Engine;
 using oxygen::graphics::Renderer;
@@ -33,9 +30,9 @@ using oxygen::platform::InputSlots;
 
 const char* const MainModule::LOGGER_NAME = "MainModule";
 
-void MainModule::OnInitialize(const Renderer* /*renderer*/)
+void MainModule::OnInitialize(const oxygen::Graphics* gfx)
 {
-  // DCHECK_NOTNULL_F(renderer);
+  DCHECK_NOTNULL_F(gfx);
 
   // Initialize the input system.
   player_input_ = std::make_shared<InputSystem>(GetEngine().GetPlatform());
@@ -149,9 +146,9 @@ void MainModule::FixedUpdate()
   state_.distance = new_distance;
 }
 
-void MainModule::Render(const Renderer* /*renderer*/)
+void MainModule::Render(const oxygen::Graphics* gfx)
 {
-  // DCHECK_NOTNULL_F(renderer);
+  DCHECK_NOTNULL_F(gfx);
 
   // Create a random number core.
   static std::random_device rd;

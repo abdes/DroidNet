@@ -27,8 +27,8 @@ class ImGuiRenderInterface
   OXYGEN_DEFAULT_COPYABLE(ImGuiRenderInterface);
   OXYGEN_DEFAULT_MOVABLE(ImGuiRenderInterface);
 
-  OXYGEN_API auto Render(const graphics::Renderer* renderer) const -> graphics::CommandListPtr;
-  OXYGEN_API void NewFrame(const graphics::Renderer* renderer) const;
+  OXYGEN_API auto Render(const Graphics* gfx) const -> graphics::CommandListPtr;
+  OXYGEN_API void NewFrame(const Graphics* gfx) const;
 
  private:
   friend class ImguiModule;

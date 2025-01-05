@@ -49,18 +49,17 @@ auto Engine::GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface
 
 void Engine::OnInitialize()
 {
-  const auto graphics = graphics_.lock();
-  if (!graphics)
+  const auto gfx = graphics_.lock();
+  if (!gfx)
     return;
 
   InitializeModules();
 
-  if (!graphics->IsWithoutRenderer() && props_.enable_imgui_layer) {
+  if (!gfx->IsWithoutRenderer() && props_.enable_imgui_layer) {
     // Initialize ImGui if required
-    const auto renderer = graphics_.lock()->GetRenderer();
-    DCHECK_NOTNULL_F(renderer);
-    imgui_module_ = renderer->CreateImGuiModule(shared_from_this(), props_.main_window_id);
-    imgui_module_->Initialize(renderer);
+    DCHECK_NOTNULL_F(gfx->GetRenderer());
+    imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
+    imgui_module_->Initialize(gfx.get());
   }
 }
 
@@ -113,13 +112,12 @@ void Engine::SortModulesByPriority()
 
 void Engine::InitializeModules()
 {
-  const auto graphics = graphics_.lock();
-  if (!graphics)
+  const auto gfx = graphics_.lock();
+  if (!gfx)
     return;
-  const auto* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
   std::ranges::for_each(modules_,
     [&](auto& module) {
-      module.module->Initialize(renderer);
+      module.module->Initialize(gfx.get());
     });
 }
 
@@ -172,7 +170,6 @@ auto Engine::Run() -> void
         // is null, which is fine.
         auto graphics = graphics_.lock();
         DCHECK_NOTNULL_F(graphics);
-        const graphics::Renderer* renderer = graphics->IsWithoutRenderer() ? nullptr : graphics->GetRenderer();
 
         if (continue_running) {
           module.frame_time.Update();
@@ -199,7 +196,7 @@ auto Engine::Run() -> void
 
           // Per frame updates / render
           the_module->Update(module.frame_time.Delta());
-          the_module->Render(renderer);
+          the_module->Render(graphics.get());
           module.fps.Update();
 
           // Log FPS and UPS once every second
