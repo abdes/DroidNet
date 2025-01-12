@@ -111,6 +111,39 @@ group "Oxygen Base Tests"
         }
         links { "Oxygen", "gtest" }
 
+    -- Base / Type System Test
+    project "Oxygen.Base.TypeSystem_Tests"
+        language "C++"
+        kind "ConsoleApp"
+        location (workspace_root .. "/vs2022/Oxygen/Tests")
+        files {
+            "Base/Test/TypeSystem_test.cpp",
+            "Base/Test/main.cpp",
+        }
+        links { "Oxygen", "gtest" }
+
+    -- Base / Composition Test
+    project "Oxygen.Base.Composition_Tests"
+        language "C++"
+        kind "ConsoleApp"
+        location (workspace_root .. "/vs2022/Oxygen/Tests")
+        files {
+            "Base/Test/Composition_test.cpp",
+            "Base/Test/main.cpp",
+        }
+        links { "Oxygen", "gtest" }
+
+    -- Base / ObjectMetaData Component Test
+    project "Oxygen.Base.ObjectMetaData_Tests"
+        language "C++"
+        kind "ConsoleApp"
+        location (workspace_root .. "/vs2022/Oxygen/Tests")
+        files {
+            "Base/Test/ObjectMetaData_test.cpp",
+            "Base/Test/main.cpp",
+        }
+        links { "Oxygen", "gtest" }
+
     -- Base Test
     filter { "system:Windows" }
         project "Oxygen.Base.WinHelpers_Tests"
