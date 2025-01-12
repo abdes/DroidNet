@@ -50,6 +50,7 @@ workspace "Oxygen Engine"
         defines { "LOGURU_USE_FMTLIB=1", "FMT_HEADER_ONLY" }
         flags { "MultiProcessorCompile" }
         includedirs { workspace_root }
+        usestandardpreprocessor "On"
 
     filter {}
 
