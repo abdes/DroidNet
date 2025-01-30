@@ -6,8 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Types.h"
 
 namespace oxygen::graphics {
 //! Description of a GPU memory block.
