@@ -1,23 +1,26 @@
+---
 UseColor: true
 
 Checks: >
-  bugprone-*,
-  clang-analyzer-*,
-  cppcoreguidelines-*,
-  google-*,
-  hicpp-*,
-  modernize-*,
-  performance-*,
-  portability-*,
-  readability-*,
-  -cppcoreguidelines-macro-usage,
-  -google-runtime-references
-  -hicpp-exception-baseclass,
-  -hicpp-signed-bitwise,
-  -readability-function-cognitive-complexity,
-  -readability-braces-around-statements,
-  -used-but-marked-unused,
+    bugprone-*,
+    clang-analyzer-*,
+    cppcoreguidelines-*,
+    google-*,
+    hicpp-*,
+    modernize-*,
+    performance-*,
+    portability-*,
+    readability-*,
+    -cppcoreguidelines-macro-usage,
+    -google-runtime-references
+    -hicpp-exception-baseclass,
+    -hicpp-signed-bitwise,
+    -readability-function-cognitive-complexity,
+    -used-but-marked-unused,
+    -*-pro-type-union-access,
+    -readability-identifier-length,
 
 CheckOptions:
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: true
+...
