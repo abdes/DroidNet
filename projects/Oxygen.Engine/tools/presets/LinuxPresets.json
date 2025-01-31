@@ -1,0 +1,40 @@
+{
+  "version": 6,
+  "include": [
+    "./BasePresets.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "linux",
+      "inherits": "base",
+      "installDir": "${sourceDir}/out/install",
+      "environment": {
+        "caexcludepath": "${sourceDir}/third_party;${sourceDir}/out;$env{userprofile}/.cache/CPM"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-debug",
+      "inherits": "base-debug",
+      "configurePreset": "linux"
+    },
+    {
+      "name": "linux-release",
+      "inherits": "base-release",
+      "configurePreset": "linux"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-linux",
+      "inherits": ["test-base"],
+      "configurePreset": "linux",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "version": 6,
+  "include": [
+    "../../ConanPresets.json"
+  ],
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 29,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "inherits": "conan-default",
+      "hidden": true,
+      "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "OXYGEN_USE_CCACHE": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "base-debug",
+      "hidden": true,
+      "configuration": "Debug",
+      "jobs": 8,
+      "verbose": false
+    },
+    {
+      "name": "base-release",
+      "hidden": true,
+      "configuration": "Release",
+      "jobs": 8,
+      "verbose": false
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-base",
+      "description": "Enable output on failure",
+      "hidden": true
+    }
+  ]
+}

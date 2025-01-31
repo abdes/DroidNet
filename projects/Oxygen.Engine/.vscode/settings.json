@@ -101,5 +101,30 @@
     "Lua.diagnostics.globals": [
         "link_lib_suffix",
         "workspace_root"
-    ]
+    ],
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/compile_commands.json",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/src",
+        "~/.conan2/**"
+    ],
+    "C_Cpp.default.cppStandard": "c++20",
+    "C_Cpp.default.cStandard": "c17",
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "externalFormatters.languages": {
+        "cmake": {
+            "command": "F:\\projects\\venv\\Scripts\\gersemi.exe",
+            "arguments": [
+                "-i"
+            ]
+        }
+    },
+    "[cmake]": {
+        "editor.defaultFormatter": "lxl66566.anyformatter-vscode"
+    },
+    "anyformatter": {
+        "cmake": {
+            "command": "gersemi -i",
+            "file": true,
+        }
+    },
 }

@@ -1,0 +1,37 @@
+{
+  "version": 6,
+  "include": [
+    "./BasePresets.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "windows",
+      "inherits": "base",
+      "installDir": "${sourceDir}/out/install"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-debug",
+      "inherits": "base-debug",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-release",
+      "inherits": "base-release",
+      "configurePreset": "windows"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-windows",
+      "inherits": ["test-base"],
+      "configurePreset": "windows",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ]
+}

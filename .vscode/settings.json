@@ -9,5 +9,6 @@
             "column": 130,
             "color": "#ff0000"
         }
-    ]
+    ],
+    "cmake.sourceDirectory": "F:/projects/DroidNet/projects/Oxygen.Engine"
 }
