@@ -10,11 +10,67 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Core/Engine.h"
 #include "Oxygen/Core/Version.h"
+#include "Oxygen/OxCo/Co.h"
 #include "Oxygen/Platform/SDL/platform.h"
 
+#include "AsyncEngineRunner.h"
+#include "Awaitables.h"
 #include "SimpleModule.h"
 
 using namespace std::chrono_literals;
+
+template <typename Callable, typename... Args>
+    requires(std::is_invocable_v<Callable, Args...>)
+class SignalAwaitable {
+    sigslot::signal<Args...>& signal_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
+    sigslot::connection conn_;
+    Callable callable_;
+
+public:
+    SignalAwaitable(sigslot::signal<Args...>& signal, Callable callable)
+        : signal_(signal)
+        , callable_(std::move(callable))
+    {
+    }
+
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
+    void await_suspend(std::coroutine_handle<> h)
+    {
+        conn_ = signal_.connect(
+            [this, h](Args&&... args) {
+                // Invoke the callable method on obj_ with the arguments
+                // received from the signal.
+                std::invoke(callable_, std::forward<Args>(args)...);
+                // Disconnect the signal after the first emission.
+                conn_.disconnect();
+                h.resume();
+            });
+    }
+    void await_resume() { /* no return value*/ }
+    auto await_cancel(std::coroutine_handle<> /*h*/)
+    {
+        conn_.disconnect();
+        return std::true_type {};
+    }
+    // ReSharper restore CppMemberFunctionMayBeStatic
+};
+
+namespace {
+
+auto AsyncMain(std::shared_ptr<oxygen::Engine> engine) -> oxygen::co::Co<int>
+{
+    auto& platform = engine->GetPlatform();
+    co_await SignalAwaitable(
+        platform.OnLastWindowClosed(),
+        [&engine] {
+            engine->Stop();
+        });
+
+    co_return EXIT_SUCCESS;
+}
+
+} // namespace
 
 auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 {
@@ -78,9 +134,8 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
         const auto simple_module = std::make_shared<SimpleModule>(engine);
         engine->AttachModule(simple_module);
 
-        engine->Run();
+        oxygen::co::Run(*engine, AsyncMain(engine));
 
-        LOG_F(INFO, "Exiting application");
     } catch (std::exception const& err) {
         LOG_F(ERROR, "A fatal error occurred: {}", err.what());
         status = EXIT_FAILURE;
@@ -91,5 +146,14 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
     platform.reset();
 
     loguru::shutdown();
+
+    LOG_F(INFO, "Exit with status: {}", status);
     return status;
 }
+
+//// Listen for the last window closed event
+// auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
+//     [this] {
+//         DLOG_F(INFO, "Last window closed -> stopping engine");
+//         this->Stop();
+//     });

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <string>
@@ -61,6 +62,8 @@ public:
     OXYGEN_CORE_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
 
     OXYGEN_CORE_API auto Run() -> void;
+    constexpr auto IsRunning() const -> bool { return is_running_; }
+    OXYGEN_CORE_API void Stop();
 
     OXYGEN_CORE_API [[nodiscard]] static auto Name() -> const std::string&;
     OXYGEN_CORE_API [[nodiscard]] static auto Version() -> uint32_t;
@@ -79,6 +82,7 @@ private:
     Properties props_;
     std::unique_ptr<imgui::ImguiModule> imgui_module_ {};
     bool is_running_ { false };
+    std::atomic_bool is_stop_requested_ { false };
 
     DeltaTimeCounter engine_clock_ {};
 
