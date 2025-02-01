@@ -13,16 +13,12 @@
 // #include <vulkan/vulkan_core.h>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Base/TimeUtils.h"
+#include "Oxygen/Core/api_export.h"
 #include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/Platform/Common/Types.h"
-#include "Oxygen/Core/api_export.h"
 
 namespace oxygen {
 
@@ -33,9 +29,7 @@ namespace core {
     class Module;
 } // namespace core
 
-class Engine
-    : public Mixin<Engine, Curry<MixinNamed, const char*>::mixin, MixinInitialize, MixinShutdown>,
-      public std::enable_shared_from_this<Engine> {
+class Engine : public std::enable_shared_from_this<Engine> {
 public:
     using ModulePtr = std::shared_ptr<core::Module>;
 
@@ -51,28 +45,20 @@ public:
         platform::WindowIdType main_window_id {};
     };
 
-    //! Constructor to forward the arguments to the mixins in the chain.
-    template <typename... Args>
-    explicit Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props, Args&&... args)
-        : Mixin(Name().c_str(), std::forward<Args>(args)...)
-        , platform_(std::move(platform))
-        , graphics_(std::move(graphics))
-        , props_(std::move(props))
-    {
-    }
+    OXYGEN_CORE_API Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props);
 
-    OXYGEN_CORE_API ~Engine() override = default;
+    OXYGEN_CORE_API ~Engine() noexcept;
 
-    OXYGEN_MAKE_NON_COPYABLE(Engine);
-    OXYGEN_MAKE_NON_MOVEABLE(Engine);
+    OXYGEN_MAKE_NON_COPYABLE(Engine)
+    OXYGEN_MAKE_NON_MOVEABLE(Engine)
 
     OXYGEN_CORE_API [[nodiscard]] auto GetPlatform() const -> Platform&;
 
     //! Attaches the given Module to the engine, to be updated, rendered, etc.
     //! \param module module to be attached.
-    //! \param priority layer to determine the order of invocation. Default is the main layer (`0`).
+    //! \param layer layer to determine the order of invocation. Default is the main layer (`0`).
     //! \throws std::invalid_argument if the module is attached or the weak_ptr is expired.
-    OXYGEN_CORE_API void AttachModule(const ModulePtr& module, uint32_t priority = 0);
+    OXYGEN_CORE_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
 
     OXYGEN_CORE_API auto Run() -> void;
 
@@ -83,14 +69,6 @@ public:
     OXYGEN_CORE_API [[nodiscard]] auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
 
 private:
-    OXYGEN_CORE_API virtual void OnInitialize();
-    template <typename Base, typename... CtorArgs>
-    friend class MixinInitialize; //< Allow access to OnInitialize.
-
-    OXYGEN_CORE_API virtual void OnShutdown();
-    template <typename Base>
-    friend class MixinShutdown; //< Allow access to OnShutdown.
-
     //! Detach the given Module from the engine.
     //! @param module the module to be detached.
     //! \throws std::invalid_argument if the module is not attached or the weak_ptr is expired.
@@ -100,6 +78,7 @@ private:
     GraphicsPtr graphics_;
     Properties props_;
     std::unique_ptr<imgui::ImguiModule> imgui_module_ {};
+    bool is_running_ { false };
 
     DeltaTimeCounter engine_clock_ {};
 
@@ -116,9 +95,11 @@ private:
     };
     std::list<ModuleContext> modules_;
 
-    void SortModulesByPriority();
+    void ReorderLayers();
     void InitializeModules();
-    void ShutdownModules();
+    void ShutdownModules() noexcept;
+    void InitializeImGui();
+    void ShutdownImGui() noexcept;
 };
 
 } // namespace oxygen

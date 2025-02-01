@@ -6,59 +6,51 @@
 
 #pragma once
 
-#include <string>
-
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
 #include "Oxygen/Core/Types.h"
-#include "Oxygen/Graphics/Common/Forward.h"
-#include "Oxygen/Platform/Common/InputEvent.h"
+#include "Oxygen/Core/api_export.h"
+#include <Oxygen/Base/Composition.h>
+#include <Oxygen/Base/TimeUtils.h>
 
-namespace oxygen::core {
+namespace oxygen {
 
-class Module
-    : public Mixin<Module,
-          Curry<MixinNamed, const char*>::mixin,
-          MixinShutdown,
-          MixinInitialize // Last to consume remaining args
-          > {
-public:
-    //! Constructor to forward the arguments to the mixins in the chain.
-    template <typename... Args>
-    constexpr explicit Module(const char* name, EngineWeakPtr engine, Args&&... args)
-        : Mixin(name, std::forward<Args>(args)...)
-        , engine_(std::move(engine))
-    {
-    }
+class Graphics;
 
-    ~Module() override = default;
+namespace platform {
+    class InputEvent;
+} // namespace platform
 
-    OXYGEN_MAKE_NON_COPYABLE(Module);
-    OXYGEN_MAKE_NON_MOVEABLE(Module);
+namespace core {
 
-    [[nodiscard]] auto Name() const -> const std::string& { return this->ObjectName(); }
+    class Module : public Composition {
+    public:
+        OXYGEN_CORE_API Module(std::string_view name, EngineWeakPtr engine);
 
-    virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
-    virtual auto Update(Duration delta_time) -> void = 0;
-    virtual auto FixedUpdate() -> void = 0;
-    virtual auto Render(const Graphics* gfx) -> void = 0;
+        OXYGEN_CORE_API ~Module() override;
 
-protected:
-    virtual void OnInitialize(const Graphics* gfx) = 0;
-    template <typename Base, typename... CtorArgs>
-    friend class MixinInitialize; //< Allow access to OnInitialize.
+        OXYGEN_MAKE_NON_COPYABLE(Module)
+        OXYGEN_MAKE_NON_MOVEABLE(Module)
 
-    virtual void OnShutdown() = 0;
-    template <typename Base>
-    friend class MixinShutdown; //< Allow access to OnShutdown.
+        [[nodiscard]] auto Name() const -> std::string_view;
 
-    [[nodiscard]] auto GetEngine() const -> const Engine& { return *(engine_.lock()); }
+        virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
+        virtual auto Update(Duration delta_time) -> void = 0;
+        virtual auto FixedUpdate() -> void = 0;
+        virtual auto Render(const Graphics* gfx) -> void = 0;
 
-private:
-    EngineWeakPtr engine_;
-};
+        OXYGEN_CORE_API void Initialize(const Graphics* gfx);
+        OXYGEN_CORE_API void Shutdown() noexcept;
+
+    protected:
+        virtual void OnInitialize(const Graphics* gfx) = 0;
+        virtual void OnShutdown() noexcept = 0;
+        [[nodiscard]] auto GetEngine() const -> const Engine& { return *(engine_.lock()); }
+
+    private:
+        EngineWeakPtr engine_;
+        bool is_initialized_ { false };
+    };
+
+} // namespace core
 
 } // namespace core
