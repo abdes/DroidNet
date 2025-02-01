@@ -18,6 +18,23 @@
 
 using oxygen::Engine;
 
+Engine::Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props)
+    : platform_(std::move(platform))
+    , graphics_(std::move(graphics))
+    , props_(std::move(props))
+{
+    if (graphics_.expired())
+        DLOG_F(INFO, "Engine created without a graphics backend");
+    else
+        DLOG_F(INFO, "Engine created");
+}
+
+Engine::~Engine() noexcept
+{
+    DCHECK_F(!is_running_);
+    DLOG_F(INFO, "Engine destroyed");
+}
+
 auto Engine::GetPlatform() const -> Platform&
 {
     return *platform_;
@@ -47,40 +64,11 @@ auto Engine::GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface
     return imgui_module_->GetRenderInterface();
 }
 
-void Engine::OnInitialize()
+void Engine::AttachModule(const ModulePtr& module, const uint32_t layer)
 {
-    if (graphics_.expired())
-        DLOG_F(INFO, "Engine is created without a graphics backend");
-
-    InitializeModules();
-
-    if (graphics_.expired())
-        return;
-
-    const auto gfx = graphics_.lock();
-    DCHECK_NOTNULL_F(gfx);
-    if (!gfx->IsWithoutRenderer() && props_.enable_imgui_layer) {
-        // Initialize ImGui if required
-        DCHECK_NOTNULL_F(gfx->GetRenderer());
-        imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
-        imgui_module_->Initialize(gfx.get());
-    }
-}
-
-void Engine::OnShutdown()
-{
-    if (imgui_module_) {
-        imgui_module_->Shutdown();
-        imgui_module_.reset();
-    }
-
-    ShutdownModules();
-}
-
-void Engine::AttachModule(const ModulePtr& module, const uint32_t priority)
-{
-    DCHECK_F(!IsInitialized());
-
+    LOG_SCOPE_FUNCTION(INFO);
+    DLOG_F(INFO, "module name: {}", module->Name());
+    DLOG_F(1, "module layer: {}", layer);
     if (std::ranges::find_if(
             modules_,
             [&module](const auto& module_ctx) {
@@ -90,12 +78,18 @@ void Engine::AttachModule(const ModulePtr& module, const uint32_t priority)
         throw std::invalid_argument("The module is already attached.");
     }
 
-    modules_.push_back(ModuleContext { .module = module, .layer = priority });
-    SortModulesByPriority();
+    modules_.push_back(ModuleContext { .module = module, .layer = layer });
+    ReorderLayers();
+
+    if (is_running_) {
+        module->Initialize(graphics_.lock().get());
+    }
 }
 
 void Engine::DetachModule(const ModulePtr& module)
 {
+    LOG_SCOPE_FUNCTION(INFO);
+    DLOG_F(INFO, "module name: {}", module->Name());
     if (const auto it = std::ranges::find_if(
             modules_,
             [&module](const auto& module_ctx) {
@@ -104,10 +98,14 @@ void Engine::DetachModule(const ModulePtr& module)
         it != modules_.end()) {
         modules_.erase(it);
     }
+    if (is_running_) {
+        module->Shutdown();
+    }
 }
 
-void Engine::SortModulesByPriority()
+void Engine::ReorderLayers()
 {
+    DLOG_F(1, "reordering ({}) modules by layer", modules_.size());
     modules_.sort(
         [](const ModuleContext& a, const ModuleContext& b) {
             return a.layer < b.layer;
@@ -124,31 +122,54 @@ void Engine::InitializeModules()
         });
 }
 
-void Engine::ShutdownModules()
+void Engine::ShutdownModules() noexcept
 {
     std::ranges::for_each(modules_, [](auto& module) { module.module->Shutdown(); });
 }
 
+void Engine::InitializeImGui()
+{
+    const auto gfx = graphics_.lock();
+    if (gfx && !gfx->IsWithoutRenderer() && props_.enable_imgui_layer) {
+        // Initialize ImGui if required
+        DCHECK_NOTNULL_F(gfx->GetRenderer());
+        imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
+        imgui_module_->Initialize(gfx.get());
+    }
+}
+
+void Engine::ShutdownImGui() noexcept
+{
+    if (imgui_module_) {
+        imgui_module_->Shutdown();
+        imgui_module_.reset();
+    }
+}
+
 auto Engine::Run() -> void
 {
-    DCHECK_F(IsInitialized(), "engine must be initialized before Run() is called");
-
+    is_running_ = true;
     bool continue_running { true };
 
     // Listen for the last window closed event
     auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
         [&continue_running]() { continue_running = false; });
 
-    // Start the master clock
-    engine_clock_.Reset();
+    {
+        LOG_SCOPE_F(INFO, "Engine pre-Run init");
+        InitializeModules();
+        InitializeImGui();
 
-    // https://gafferongames.com/post/fix_your_timestep/
-    std::ranges::for_each(
-        modules_,
-        [](auto& module) {
-            module.frame_time.Reset();
-        });
+        // Start the master clock
+        engine_clock_.Reset();
 
+        // https://gafferongames.com/post/fix_your_timestep/
+        std::ranges::for_each(
+            modules_,
+            [](auto& module) {
+                module.frame_time.Reset();
+            });
+    }
     while (continue_running) {
         // Poll for platform events
         auto event = GetPlatform().PollEvent();
@@ -212,8 +233,16 @@ auto Engine::Run() -> void
             });
     }
     LOG_F(INFO, "Engine stopped.");
+    {
+        LOG_SCOPE_F(INFO, "Engine post-Run shutdown");
 
-    // TODO: we may want to have this become the responsibility of the application main
-    // Stop listening for the last window closed event
-    last_window_closed_con.disconnect();
+        is_running_ = false;
+
+        ShutdownImGui();
+        ShutdownModules();
+
+        // TODO: we may want to have this become the responsibility of the application main
+        // Stop listening for the last window closed event
+        last_window_closed_con.disconnect();
+    }
 }

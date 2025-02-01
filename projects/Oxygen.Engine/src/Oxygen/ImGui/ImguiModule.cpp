@@ -43,11 +43,15 @@ void ImguiModule::OnInitialize(const Graphics* gfx)
     LOG_F(INFO, "[{}] initialized with `{}`", Name(), imgui_platform_->ObjectName());
 }
 
-void ImguiModule::OnShutdown()
+void ImguiModule::OnShutdown() noexcept
 {
-    ImGuiBackendShutdown();
-    imgui_platform_->Shutdown();
-    ImGui::DestroyContext();
+    try {
+        ImGuiBackendShutdown();
+        imgui_platform_->Shutdown();
+        ImGui::DestroyContext();
+    } catch (const std::exception& e) {
+        LOG_F(ERROR, "Failed to shutdown ImGui module: {}", e.what());
+    }
 }
 
 auto ImguiModule::NewFrame(const Graphics* gfx) -> void

@@ -10,6 +10,7 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Core/Module.h"
 #include "Oxygen/Graphics/Common/Forward.h"
+#include "Oxygen/Platform/Common/Types.h"
 
 struct ImGuiContext;
 struct ImDrawData;
@@ -46,7 +47,7 @@ public:
 
 protected:
     OXYGEN_GFX_API void OnInitialize(const Graphics* gfx) override;
-    OXYGEN_GFX_API void OnShutdown() override;
+    OXYGEN_GFX_API void OnShutdown() noexcept override;
 
     OXYGEN_GFX_API virtual void ImGuiBackendInit(const Graphics* gfx) = 0;
     OXYGEN_GFX_API virtual void ImGuiBackendShutdown() = 0;
