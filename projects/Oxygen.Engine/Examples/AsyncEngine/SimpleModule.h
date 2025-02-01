@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <memory>
-
 #include <Oxygen/Core/Module.h>
 
 class SimpleModule final : public oxygen::core::Module {

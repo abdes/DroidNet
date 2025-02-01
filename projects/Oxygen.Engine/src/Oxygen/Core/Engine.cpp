@@ -146,15 +146,19 @@ void Engine::ShutdownImGui() noexcept
     }
 }
 
+void Engine::Stop()
+{
+    if (!is_running_ || is_stop_requested_.load())
+        return;
+
+    is_stop_requested_.store(true);
+    LOG_F(INFO, "Engine stop requested");
+}
+
 auto Engine::Run() -> void
 {
     is_running_ = true;
     bool continue_running { true };
-
-    // Listen for the last window closed event
-    auto last_window_closed_con = GetPlatform().OnLastWindowClosed().connect(
-        [&continue_running]() { continue_running = false; });
-
     {
         LOG_SCOPE_F(INFO, "Engine pre-Run init");
         InitializeModules();
@@ -170,7 +174,7 @@ auto Engine::Run() -> void
                 module.frame_time.Reset();
             });
     }
-    while (continue_running) {
+    while (continue_running && !is_stop_requested_.load()) {
         // Poll for platform events
         auto event = GetPlatform().PollEvent();
 
@@ -232,17 +236,14 @@ auto Engine::Run() -> void
                 }
             });
     }
-    LOG_F(INFO, "Engine stopped.");
+    LOG_F(INFO, "Engine stopped");
     {
         LOG_SCOPE_F(INFO, "Engine post-Run shutdown");
 
+        is_stop_requested_ = false;
         is_running_ = false;
 
         ShutdownImGui();
         ShutdownModules();
-
-        // TODO: we may want to have this become the responsibility of the application main
-        // Stop listening for the last window closed event
-        last_window_closed_con.disconnect();
     }
 }
