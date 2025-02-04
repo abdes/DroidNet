@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#define ASIO_NO_TYPEID
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 #include <asio/write.hpp>

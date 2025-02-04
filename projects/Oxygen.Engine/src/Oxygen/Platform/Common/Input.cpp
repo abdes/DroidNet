@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Common/input.h"
+#include "Oxygen/Platform/Common/Input.h"
 
 #include <cassert>
 #include <memory>
@@ -90,7 +90,7 @@ private:
 namespace {
 using oxygen::platform::detail::InputSlotDetails;
 
-constexpr auto operator|=(InputSlotDetails::Flags& mods,
+[[maybe_unused]] constexpr auto operator|=(InputSlotDetails::Flags& mods,
     const InputSlotDetails::Flags other) -> auto&
 {
     mods = static_cast<InputSlotDetails::Flags>(

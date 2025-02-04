@@ -14,8 +14,8 @@
 #include "Oxygen/Base/Signals.h"
 #include "Oxygen/Platform/Common/InputEvent.h"
 #include "Oxygen/Platform/Common/Types.h"
-#include "Oxygen/Platform/Common/display.h"
-#include "Oxygen/Platform/Common/window.h"
+#include "Oxygen/Platform/Common/Display.h"
+#include "Oxygen/Platform/Common/Window.h"
 #include "Oxygen/Platform/Common/api_export.h"
 
 namespace oxygen {

@@ -1,9 +1,0 @@
-{
-  "version": 4,
-  "vendor": {
-    "conan": {}
-  },
-  "include": [
-    "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build\\generators\\CMakePresets.json"
-  ]
-}

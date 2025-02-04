@@ -26,8 +26,8 @@ public:
     ObjectMetaData(ObjectMetaData&&) noexcept = default;
     ObjectMetaData& operator=(ObjectMetaData&&) noexcept = default;
 
-    [[nodiscard]] constexpr std::string_view GetName() const noexcept { return name_; }
-    constexpr void SetName(const std::string_view name) noexcept { name_ = name; }
+    [[nodiscard]] std::string_view GetName() const noexcept { return name_; }
+    void SetName(const std::string_view name) noexcept { name_ = name; }
 
     [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override

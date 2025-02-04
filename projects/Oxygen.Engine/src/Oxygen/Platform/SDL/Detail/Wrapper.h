@@ -8,8 +8,8 @@
 
 #include <string>
 
-#include "Oxygen/Platform/Common/window.h"
-#include "Oxygen/Platform/SDL/window.h"
+#include "Oxygen/Platform/Common/Window.h"
+#include "Oxygen/Platform/SDL/Window.h"
 #include "SDL3/SDL.h"
 
 namespace oxygen::platform::sdl::detail {
@@ -220,7 +220,7 @@ public:
             nullptr);
         native_window.window_handle = native_window_handle;
 #elif defined(SDL_PLATFORM_MACOS)
-        NSWindow* nswindow = (__bridge NSWindow*)SDL_GetPointerProperty(
+        void* nswindow = SDL_GetPointerProperty(
             SDL_GetWindowProperties(window),
             SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,
             NULL);

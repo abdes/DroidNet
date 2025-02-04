@@ -83,7 +83,7 @@ public:
     }
 
     //! Constructor that initializes the Result with an error code.
-    constexpr Result(std::error_code error) noexcept
+    Result(std::error_code error) noexcept
         : value_(error)
     {
     }

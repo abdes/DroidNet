@@ -7,7 +7,7 @@
 #include <cassert>
 #include <cstdint>
 
-#include "SDL3/SDL_events.h"
+#include <SDL3/SDL_events.h>
 
 namespace oxygen::platform::sdl::detail {
 
@@ -228,9 +228,7 @@ auto SdlEventName(std::uint32_t event_type) -> const char*
         return "SDL_EVENT_ENUM_PADDING(2147483647)";
 
     default:
-        assert(
-            ("Unexpected event type. Please regenerate the code using the tool.",
-                false));
+        assert(false && "Unexpected event type. Please regenerate the code using the tool.");
     }
     return "__UNKNOWN_SDL_EVENT_REGENERATE__";
 }

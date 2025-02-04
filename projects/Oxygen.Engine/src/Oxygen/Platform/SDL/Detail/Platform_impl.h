@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "Oxygen/Base/Signals.h"
-#include "Oxygen/Platform/SDL/platform.h"
+#include "Oxygen/Platform/SDL/Platform.h"
 
 // ReSharper disable once CppInconsistentNaming (external library)
 union SDL_Event;

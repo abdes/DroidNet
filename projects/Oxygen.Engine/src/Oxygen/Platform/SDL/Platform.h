@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Platform/Common/platform.h"
+#include "Oxygen/Platform/Common/Platform.h"
 #include "Oxygen/Platform/SDL/api_export.h"
 
 // Forward declare SDL_Event

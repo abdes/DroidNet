@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Common/window.h"
+#include "Oxygen/Platform/Common/Window.h"
 
 #include "./Detail/BaseWindow.h"
 #include "Oxygen/Base/Logging.h"

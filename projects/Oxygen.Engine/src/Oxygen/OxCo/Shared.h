@@ -7,8 +7,12 @@
 #pragma once
 
 #include "Oxygen/OxCo/Concepts/Awaitable.h"
+#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
+#include "Oxygen/OxCo/Detail/GetAwaitable.h"
 #include "Oxygen/OxCo/Detail/IntrusiveList.h"
 #include "Oxygen/OxCo/Detail/IntrusivePtr.h"
+#include "Oxygen/OxCo/Detail/ProxyFrame.h"
+#include "Oxygen/OxCo/Detail/Result.h"
 
 namespace oxygen::co {
 
@@ -53,7 +57,7 @@ public:
     explicit Shared(Object&& obj);
     template <class... Args>
         requires(std::is_constructible_v<Object, Args...>)
-    explicit Shared(std::in_place_t, Args&&... args);
+    explicit Shared(std::in_place_t tag, Args&&... args);
 
     [[nodiscard]] auto Get() const -> Object*;
     explicit operator bool() const { return !state_; }
@@ -62,7 +66,7 @@ public:
 
     [[nodiscard]] auto Closed() const noexcept -> bool;
 
-    co::Awaitable auto operator co_await() -> co::Awaitable auto;
+    auto operator co_await() -> co::Awaitable auto;
 
 private:
     detail::IntrusivePtr<State> state_;
@@ -129,16 +133,11 @@ private:
         static_cast<State*>(frame)->Invoke();
     }
 
-private:
     [[no_unique_address]] Object object_;
     detail::AwaitableAdapter<AwaitableObj> awaitable_;
     detail::IntrusiveList<Awaitable> parents_;
-    std::variant<std::monostate,
-        std::monostate,
-        typename Storage::Type,
-        std::exception_ptr,
-        std::monostate,
-        std::monostate>
+    std::variant<std::monostate, std::monostate, typename Storage::Type,
+        std::exception_ptr, std::monostate, std::monostate>
         result_;
 
     // Indices of types stored in the variant
@@ -228,7 +227,8 @@ auto Shared<Object>::State::Suspend(Awaitable* ptr) -> detail::Handle
             return awaitable_.await_suspend(this->ToHandle());
         } catch (...) {
             auto ex = std::current_exception();
-            DCHECK_NOTNULL_F(ex, "foreign exceptions and forced unwinds are not supported");
+            DCHECK_NOTNULL_F(
+                ex, "foreign exceptions and forced unwinds are not supported");
             result_.template emplace<Exception>(std::move(ex));
             Invoke();
             return std::noop_coroutine(); // already woke up
@@ -281,8 +281,9 @@ template <class Object>
 auto Shared<Object>::State::Cancel(Awaitable* ptr) noexcept
 {
     if (parents_.ContainsOneItem()) {
-        DLOG_F(1, "cancelling shared awaitable {} (holding {}); "
-                  "forwarding cancellation",
+        DLOG_F(1,
+            "cancelling shared awaitable {} (holding {}); "
+            "forwarding cancellation",
             fmt::ptr(this), fmt::ptr(&awaitable_));
         DCHECK_EQ_F(&parents_.Front(), ptr);
         // Prevent new parents from joining, and forward the cancellation
@@ -295,34 +296,34 @@ auto Shared<Object>::State::Cancel(Awaitable* ptr) noexcept
             ptr->state_ = nullptr;
         }
         return sync_cancelled;
+    }
+    // Note that we also get here if parents_ is empty, which can occur if
+    // the resumption of one parent cancels another (imagine corral::anyOf()
+    // on multiple copies of the same Shared<T>). We're still linked into
+    // the list, it's just a local variable in invoke(). We'll let these
+    // additional parents propagate cancellation and assume that the first
+    // one will do a good enough job of carrying the value. This is
+    // important to allow Shared<T> to be abortable/disposable if T is.
+    DLOG_F(1,
+        "cancelling shared awaitable {} (holding {}); "
+        "dropping parent",
+        fmt::ptr(this), fmt::ptr(&awaitable_));
+    ptr->Unlink();
+    ptr->state_ = nullptr;
+
+    // If the cancelled parent was previously the first one, then we should
+    // choose a new first one to avoid backtracking into something dangling.
+    // (If we have no parents_, then the shared task has completed, so it
+    // doesn't matter what it declares as its caller.)
+    if (!parents_.Empty()) {
+        ProxyFrame::LinkTo(parents_.Front().parent_);
+    }
+
+    // Match the type of 'return syncCancelled;' above:
+    if constexpr (detail::Abortable<AwaitableObj>) {
+        return std::true_type {};
     } else {
-        // Note that we also get here if parents_ is empty, which can occur if
-        // the resumption of one parent cancels another (imagine corral::anyOf()
-        // on multiple copies of the same Shared<T>). We're still linked into
-        // the list, it's just a local variable in invoke(). We'll let these
-        // additional parents propagate cancellation and assume that the first
-        // one will do a good enough job of carrying the value. This is
-        // important to allow Shared<T> to be abortable/disposable if T is.
-        DLOG_F(1, "cancelling shared awaitable {} (holding {}); "
-                  "dropping parent",
-            fmt::ptr(this), fmt::ptr(&awaitable_));
-        ptr->Unlink();
-        ptr->state_ = nullptr;
-
-        // If the cancelled parent was previously the first one, then we should
-        // choose a new first one to avoid backtracking into something dangling.
-        // (If we have no parents_, then the shared task has completed, so it
-        // doesn't matter what it declares as its caller.)
-        if (!parents_.Empty()) {
-            ProxyFrame::LinkTo(parents_.Front().parent_);
-        }
-
-        // Match the type of 'return syncCancelled;' above:
-        if constexpr (detail::Abortable<AwaitableObj>) {
-            return std::true_type {};
-        } else {
-            return true;
-        }
+        return true;
     }
 }
 
@@ -360,7 +361,8 @@ auto Shared<Object>::State::MustResume() const noexcept
 template <class Object>
 void Shared<Object>::State::Invoke()
 {
-    DLOG_F(1, "shared awaitable {} (holding {}) resumed", fmt::ptr(this), fmt::ptr(&awaitable_));
+    DLOG_F(1, "shared awaitable {} (holding {}) resumed", fmt::ptr(this),
+        fmt::ptr(&awaitable_));
     if (result_.index() == Cancelling) {
         if (awaitable_.await_must_resume()) {
             result_.template emplace<Incomplete>();
@@ -395,7 +397,8 @@ auto Shared<Object>::Awaitable::await_early_cancel() noexcept
 }
 
 template <class Object>
-auto Shared<Object>::Awaitable::await_suspend(const detail::Handle h) -> detail::Handle
+auto Shared<Object>::Awaitable::await_suspend(const detail::Handle h)
+    -> detail::Handle
 {
     parent_ = h;
     return state_->Suspend(this);
@@ -415,7 +418,7 @@ auto Shared<Object>::Awaitable::await_resume() -> ConstRef
 }
 
 template <class Object>
-auto Shared<Object>::Awaitable::await_cancel(detail::Handle) noexcept
+auto Shared<Object>::Awaitable::await_cancel(detail::Handle /*h*/) noexcept
 {
     return state_ ? state_->Cancel(this) : std::true_type {};
 }
@@ -427,8 +430,9 @@ auto Shared<Object>::Awaitable::await_must_resume() const noexcept
 }
 
 template <class Object>
-Shared<Object>::Shared(Object&& obj) // NOLINT(*-rvalue-reference-param-not-moved)
-                                     // Perfect forwarding
+Shared<Object>::Shared(
+    Object&& obj) // NOLINT(*-rvalue-reference-param-not-moved)
+                  // Perfect forwarding
     : state_(new State(std::forward<Object>(obj)))
 {
 }
@@ -436,7 +440,7 @@ Shared<Object>::Shared(Object&& obj) // NOLINT(*-rvalue-reference-param-not-move
 template <class Object>
 template <class... Args>
     requires(std::is_constructible_v<Object, Args...>)
-Shared<Object>::Shared(std::in_place_t, Args&&... args)
+Shared<Object>::Shared(std::in_place_t /*tag*/, Args&&... args)
     : state_(new State(std::forward<Args>(args)...))
 {
 }

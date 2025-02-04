@@ -4,13 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "window.h"
-
 #include <cassert>
 
-#include "Oxygen/Base/logging.h"
-#include "SDL3/SDL.h"
-#include "detail/wrapper.h"
+#include "Oxygen/Base/Logging.h"
+#include "Oxygen/Platform/SDL/Detail/Wrapper.h"
+#include "Oxygen/Platform/SDL/Window.h"
 
 using oxygen::platform::sdl::Window;
 
@@ -19,52 +17,34 @@ constexpr oxygen::platform::sdl::detail::Wrapper kSdl;
 } // namespace
 
 Window::Window(const std::string& title, const PixelExtent& extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-          SDL_WINDOWPOS_CENTERED,
-          SDL_WINDOWPOS_CENTERED,
-          extent.width,
-          extent.height,
-          {}))
+    : sdl_window_(kSdl.MakeWindow(title.c_str(), SDL_WINDOWPOS_CENTERED,
+          SDL_WINDOWPOS_CENTERED, extent.width,
+          extent.height, {}))
 {
     LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string& title,
-    const PixelPosition& position,
+Window::Window(const std::string& title, const PixelPosition& position,
     const PixelExtent& extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-          position.x,
-          position.y,
-          extent.width,
-          extent.height,
-          {}))
+    : sdl_window_(kSdl.MakeWindow(title.c_str(), position.x, position.y,
+          extent.width, extent.height, {}))
 {
     LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string& title,
-    const PixelExtent& extent,
+Window::Window(const std::string& title, const PixelExtent& extent,
     const InitialFlags& flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-          SDL_WINDOWPOS_CENTERED,
-          SDL_WINDOWPOS_CENTERED,
-          extent.width,
-          extent.height,
-          flags))
+    : sdl_window_(kSdl.MakeWindow(title.c_str(), SDL_WINDOWPOS_CENTERED,
+          SDL_WINDOWPOS_CENTERED, extent.width,
+          extent.height, flags))
 {
     LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
 
-Window::Window(const std::string& title,
-    const PixelPosition& position,
-    const PixelExtent& extent,
-    const InitialFlags& flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(),
-          position.x,
-          position.y,
-          extent.width,
-          extent.height,
-          flags))
+Window::Window(const std::string& title, const PixelPosition& position,
+    const PixelExtent& extent, const InitialFlags& flags)
+    : sdl_window_(kSdl.MakeWindow(title.c_str(), position.x, position.y,
+          extent.width, extent.height, flags))
 {
     LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
@@ -89,15 +69,9 @@ auto Window::NativeWindow() const -> oxygen::platform::NativeWindowInfo
                                   : kSdl.GetNativeWindow(sdl_window_);
 }
 
-void Window::Show()
-{
-    kSdl.ShowWindow(sdl_window_);
-}
+void Window::Show() { kSdl.ShowWindow(sdl_window_); }
 
-void Window::Hide()
-{
-    kSdl.HideWindow(sdl_window_);
-}
+void Window::Hide() { kSdl.HideWindow(sdl_window_); }
 
 void Window::FullScreen(const bool full_screen)
 {
@@ -120,13 +94,10 @@ void Window::DoMaximize()
         // Get display usable bounds
         SDL_Rect usable_area {};
         SDL_GetDisplayUsableBounds(display_id, &usable_area);
-        LOG_SCOPE_F(1, "Window maximized to size {}", nostd::to_string(Size()).c_str());
-        DLOG_F(INFO,
-            "Display usable bounds x={} y={} w={} h={}",
-            usable_area.x,
-            usable_area.y,
-            usable_area.w,
-            usable_area.h);
+        LOG_SCOPE_F(1, "Window maximized");
+        DLOG_F(1, "Window size {}", nostd::to_string(Size()).c_str());
+        DLOG_F(INFO, "Display usable bounds x={} y={} w={} h={}", usable_area.x,
+            usable_area.y, usable_area.w, usable_area.h);
         DLOG_F(INFO, "Window position {}", nostd::to_string(Position()));
     }
 }
@@ -137,10 +108,7 @@ auto Window::IsMaximized() const -> bool
     return (flag & SDL_WINDOW_MAXIMIZED) != 0U;
 }
 
-void Window::Minimize()
-{
-    kSdl.MinimizeWindow(sdl_window_);
-}
+void Window::Minimize() { kSdl.MinimizeWindow(sdl_window_); }
 
 auto Window::IsMinimized() const -> bool
 {
@@ -148,10 +116,7 @@ auto Window::IsMinimized() const -> bool
     return (flag & SDL_WINDOW_MINIMIZED) != 0U;
 }
 
-void Window::DoRestore()
-{
-    kSdl.RestoreWindow(sdl_window_);
-}
+void Window::DoRestore() { kSdl.RestoreWindow(sdl_window_); }
 
 void Window::DoResize(const PixelExtent& extent)
 {
@@ -218,10 +183,7 @@ auto Window::Title() const -> std::string
     return kSdl.GetWindowTitle(sdl_window_);
 }
 
-void Window::Activate()
-{
-    kSdl.RaiseWindow(sdl_window_);
-}
+void Window::Activate() { kSdl.RaiseWindow(sdl_window_); }
 
 void Window::AlwaysOnTop(const bool always_on_top)
 {

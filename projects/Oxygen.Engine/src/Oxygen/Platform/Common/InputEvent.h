@@ -29,8 +29,8 @@ namespace input {
         {
         }
 
-        [[nodiscard]] constexpr auto GetWindowId() const { return window_id_; }
-        [[nodiscard]] constexpr auto GetTime() const { return time_; }
+        [[nodiscard]] auto GetWindowId() const { return window_id_; }
+        [[nodiscard]] auto GetTime() const { return time_; }
 
     private:
         WindowIdType window_id_ { kInvalidWindowId };
@@ -44,7 +44,7 @@ namespace input {
             : position_(position)
         {
         }
-        [[nodiscard]] constexpr auto GetPosition() const { return position_; }
+        [[nodiscard]] auto GetPosition() const { return position_; }
 
     private:
         SubPixelPosition position_; // relative to window
@@ -57,7 +57,7 @@ namespace input {
             : state_(state)
         {
         }
-        [[nodiscard]] constexpr auto GetState() const { return state_; }
+        [[nodiscard]] auto GetState() const { return state_; }
 
     private:
         ButtonState state_;
@@ -65,6 +65,7 @@ namespace input {
 
     class KeyInfo {
     public:
+        constexpr KeyInfo() = default;
         constexpr explicit KeyInfo(const Key key_code, const bool repeat = false)
             : key_code_(key_code)
             , repeat_(repeat)
@@ -75,8 +76,8 @@ namespace input {
         [[nodiscard]] constexpr auto IsRepeat() const { return repeat_; }
 
     private:
-        Key key_code_;
-        bool repeat_;
+        Key key_code_{Key::kNone};
+        bool repeat_{false};
     };
 
     class KeyComponent final : public Component {
@@ -86,10 +87,10 @@ namespace input {
             : key_info_(key_info)
         {
         }
-        [[nodiscard]] constexpr auto GetKeyInfo() const { return key_info_; }
+        [[nodiscard]] auto GetKeyInfo() const { return key_info_; }
 
     private:
-        KeyInfo key_info_;
+        KeyInfo key_info_{};
     };
 
     class MouseButtonComponent final : public Component {
@@ -99,7 +100,7 @@ namespace input {
             : button_(button)
         {
         }
-        [[nodiscard]] constexpr auto GetButton() const { return button_; }
+        [[nodiscard]] auto GetButton() const { return button_; }
 
     private:
         MouseButton button_;
@@ -112,7 +113,7 @@ namespace input {
             : motion_(motion)
         {
         }
-        [[nodiscard]] constexpr auto GetMotion() const { return motion_; }
+        [[nodiscard]] auto GetMotion() const { return motion_; }
 
     private:
         SubPixelMotion motion_;
@@ -125,7 +126,7 @@ namespace input {
             : scroll_amount_(scroll_amount)
         {
         }
-        [[nodiscard]] constexpr auto GetScrollAmount() const { return scroll_amount_; }
+        [[nodiscard]] auto GetScrollAmount() const { return scroll_amount_; }
 
     private:
         // The amount scrolled, positive horizontally to the right and vertically

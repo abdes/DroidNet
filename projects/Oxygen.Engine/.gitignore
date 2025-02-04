@@ -9,6 +9,7 @@ out/
 vcpkg_installed/
 /bazel-*
 vs2022
+ConanPresets.json
 
 .clwb
 .vs

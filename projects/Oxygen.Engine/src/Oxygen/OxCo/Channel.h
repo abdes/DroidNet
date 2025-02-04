@@ -264,7 +264,7 @@ public:
         : buf_(max_size)
         , bounded_(true)
     {
-        DCHECK_GT_F(max_size, 0);
+        DCHECK_GT_F(max_size, 0UL);
     }
 
     //! Detect some uses of 'Channel(0)' and fail at compile time.

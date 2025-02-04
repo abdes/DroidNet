@@ -6,5 +6,5 @@
 
 CompileFlags:
   CompilationDatabase: "@CMAKE_BINARY_DIR@"
-  Add: -Wno-unknown-warning-option
+  Add: [-std=c++20, -Wno-unknown-warning-option]
   Remove: [-m*, -f*]
