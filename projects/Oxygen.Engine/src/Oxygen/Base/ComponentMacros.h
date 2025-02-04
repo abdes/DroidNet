@@ -69,8 +69,8 @@ private:                                                                        
                                                                                                               \
 public:                                                                                                       \
     static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> { return { dependencies }; } \
-    bool HasDependencies() const override { return true; }                                          \
-    std::span<const oxygen::TypeId> Dependencies() const override { return { dependencies }; }      \
+    bool HasDependencies() const override { return true; }                                                    \
+    std::span<const oxygen::TypeId> Dependencies() const override { return { dependencies }; }                \
                                                                                                               \
 private:
 
