@@ -54,10 +54,7 @@ target_link_libraries(
 find_package(SDL3 CONFIG REQUIRED)
 
 set(program_name "Oxygen.Tools.Sdl.PrintCodeNames")
-add_executable(
-  ${program_name}
-  "print_sdl_code_names.cpp"
-)
+add_executable(${program_name} "print_sdl_code_names.cpp")
 set_target_properties(
   ${program_name}
   PROPERTIES
@@ -65,11 +62,7 @@ set_target_properties(
       "Tools"
 )
 target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(
-  ${program_name}
-  PRIVATE
-    SDL3::SDL3
-)
+target_link_libraries(${program_name} PRIVATE SDL3::SDL3)
 
 # ==============================================================================
 # Deployment instructions

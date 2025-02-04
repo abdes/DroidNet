@@ -31,7 +31,7 @@ add_executable(
   "ts_init.cpp"
   "SimpleModule.h"
   "AsyncEngineRunner.h"
- )
+)
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES

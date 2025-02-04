@@ -127,8 +127,17 @@ target_compile_options(
     ${OXYGEN_COMMON_CXX_FLAGS}
     $<$<CXX_COMPILER_ID:MSVC>:/wd4702> # Unreachable code
 )
-target_compile_definitions(${META_MODULE_TARGET} INTERFACE $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=0x0A00>)
-target_link_libraries(${META_MODULE_TARGET} INTERFACE oxygen::base asio::asio)
+target_compile_definitions(
+  ${META_MODULE_TARGET}
+  INTERFACE
+    $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=0x0A00>
+)
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  INTERFACE
+    oxygen::base
+    asio::asio
+)
 
 # Header only libraries don't get a Visual Studio project file generated for
 # them. This is a workaround to make sure the header files are visible in the
