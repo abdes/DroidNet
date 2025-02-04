@@ -92,10 +92,10 @@ public:
     //! Waits for a transition from `from` to `to`.
     auto UntilChanged(T from, T to) -> co::Awaitable<std::pair<T, T>> auto
     {
-        return UntilChanged([from = std::move(from),
-                                to = std::move(to)](const T& f, const T& t) {
-            return f == from && t == to;
-        });
+        return UntilChanged(
+            [from = std::move(from), to = std::move(to)](const T& f, const T& t) {
+                return f == from && t == to;
+            });
     }
 
 private:

@@ -13,15 +13,16 @@
 include(GTestHelpers)
 
 m_gtest_program(Concepts SOURCES Concepts_test.cpp)
-m_gtest_program(Optional SOURCES Optional_test.cpp)
-m_gtest_program(PointerBits SOURCES PointerBits_test.cpp)
-m_gtest_program(Queue SOURCES Queue_test.cpp)
-m_gtest_program(ScopeGuard SOURCES ScopeGuard_test.cpp)
-m_gtest_program(List SOURCES IntrusiveList_test.cpp)
-m_gtest_program(ParkingLot SOURCES ParkingLot_test.cpp)
-m_gtest_program(Result SOURCES Result_test.cpp)
 m_gtest_program(Executor SOURCES Executor_test.cpp)
 m_gtest_program(Frames SOURCES Frames_test.cpp)
+m_gtest_program(IntrusiveList SOURCES IntrusiveList_test.cpp)
+m_gtest_program(IntrusivePtr SOURCES IntrusivePtr_test.cpp)
+m_gtest_program(Optional SOURCES Optional_test.cpp)
+m_gtest_program(ParkingLot SOURCES ParkingLot_test.cpp)
+m_gtest_program(PointerBits SOURCES PointerBits_test.cpp)
+m_gtest_program(Queue SOURCES Queue_test.cpp)
+m_gtest_program(Result SOURCES Result_test.cpp)
+m_gtest_program(ScopeGuard SOURCES ScopeGuard_test.cpp)
 m_gtest_program(
   Mux
   SOURCES
@@ -32,6 +33,9 @@ m_gtest_program(
     AllOf_test.cpp
     MuxRange_test.cpp
 )
+m_gtest_program(ChannelTest SOURCES Channel_test.cpp)
+m_gtest_program(AsioTest SOURCES Asio_test.cpp)
+m_gtest_program(SharedTest SOURCES Shared_test.cpp)
 
 # -- Catch2 Test Programs ------------------------------------------------------
 

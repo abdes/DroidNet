@@ -17,7 +17,7 @@ namespace oxygen::co {
  To enter `co_await parking_lot.Park();`. Once parked, the coroutine is suspended
  until explicitly resumed by calling `UnParkOne()` or `UnParkAll()`.
 */
-class ParkingLot final : public detail::ParkingLotImpl<ParkingLot> {
+class ParkingLot : public detail::ParkingLotImpl<ParkingLot> {
 public:
     using Base = ParkingLotImpl;
     class Awaitable final : public Parked {

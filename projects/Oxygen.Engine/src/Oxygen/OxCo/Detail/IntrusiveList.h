@@ -108,7 +108,12 @@ public:
     [[nodiscard]] auto end() -> iterator { return iterator(this); }
     [[nodiscard]] auto end() const -> const_iterator { return const_iterator(this); }
 
-    [[nodiscard]] auto Empty() const -> bool { return this->next_ == this; }
+    [[nodiscard]] auto Empty() const { return this->next_ == this; }
+
+    [[nodiscard]] auto ContainsOneItem() const
+    {
+        return !Empty() && this->next_->next_ == this;
+    }
 
     void PushBack(T& item)
     {
