@@ -51,7 +51,7 @@ target_sources(
   PRIVATE
     "Engine.cpp"
     "Version.cpp"
-     "Module.cpp"
+    "Module.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
