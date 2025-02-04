@@ -52,8 +52,8 @@ protected:
 private:
     friend class Composition;
     static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> { return {}; }
-    [[nodiscard]] virtual constexpr auto HasDependencies() const -> bool { return false; }
-    [[nodiscard]] virtual constexpr auto Dependencies() const -> std::span<const oxygen::TypeId> { return ClassDependencies(); }
+    [[nodiscard]] virtual auto HasDependencies() const -> bool { return false; }
+    [[nodiscard]] virtual auto Dependencies() const -> std::span<const oxygen::TypeId> { return ClassDependencies(); }
 };
 
 //! Specifies the requirements on a type to be considered as a Component.

@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "display.h"
+#include <SDL3/SDL.h>
 
-#include "SDL3/SDL.h"
-#include "detail/wrapper.h"
+#include "Oxygen/Platform/SDL/Detail/Wrapper.h"
+#include "Oxygen/Platform/SDL/Display.h"
 
 using oxygen::platform::sdl::Display;
 
@@ -30,10 +30,7 @@ auto Display::IsPrimaryDisplay() const -> bool
     return primary_display == Id();
 }
 
-auto Display::Name() const -> std::string
-{
-    return kSdl.GetDisplayName(Id());
-}
+auto Display::Name() const -> std::string { return kSdl.GetDisplayName(Id()); }
 
 auto Display::Bounds() const -> PixelBounds
 {

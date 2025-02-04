@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "Oxygen/Base/TimeUtils.h"
-#include "oxygen/Input/api_export.h"
+#include "Oxygen/Input/api_export.h"
 
 namespace oxygen {
 
@@ -42,5 +42,5 @@ namespace input {
         std::vector<std::shared_ptr<InputActionMapping>> mappings_;
     };
 
-}
-} // namespace oxygen::input
+} // namespace input
+} // namespace oxygen

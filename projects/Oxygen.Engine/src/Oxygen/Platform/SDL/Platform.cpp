@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "platform.h"
+#include "Oxygen/Platform/SDL/Platform.h"
 
 #include <memory>
 #include <vector>
 
-#include "ImGui/ImGuiSdl3Backend.h"
-#include "detail/platform_impl.h"
+#include "Oxygen/Platform/SDL/Detail/Platform_impl.h"
+#include "Oxygen/Platform/SDL/ImGui/ImGuiSdl3Backend.h"
 
 namespace oxygen::platform::sdl {
 
@@ -35,8 +35,7 @@ auto Platform::MakeWindow(std::string const& title, PixelExtent const& extent)
     return impl_->MakeWindow(title, extent);
 }
 
-auto Platform::MakeWindow(std::string const& title,
-    PixelExtent const& extent,
+auto Platform::MakeWindow(std::string const& title, PixelExtent const& extent,
     platform::Window::InitialFlags flags)
     -> std::weak_ptr<platform::Window>
 {
@@ -80,15 +79,18 @@ auto Platform::PollEvent() -> std::unique_ptr<platform::InputEvent>
 auto Platform::CreateImGuiBackend(WindowIdType window_id) const
     -> std::unique_ptr<imgui::ImGuiPlatformBackend>
 {
-    return std::make_unique<imgui::sdl3::ImGuiSdl3Backend>(shared_from_this(), window_id);
+    return std::make_unique<imgui::sdl3::ImGuiSdl3Backend>(shared_from_this(),
+        window_id);
 }
 
-auto Platform::OnPlatformEvent() const -> sigslot::signal<const SDL_Event&, bool&, bool&>&
+auto Platform::OnPlatformEvent() const
+    -> sigslot::signal<const SDL_Event&, bool&, bool&>&
 {
     return impl_->OnPlatformEvent();
 }
 
-auto Platform::OnUnhandledEvent() const -> sigslot::signal<const SDL_Event&>&
+auto Platform::OnUnhandledEvent() const
+    -> sigslot::signal<const SDL_Event&>&
 {
     return impl_->OnUnhandledEvent();
 }

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <span>
 
 #include "Oxygen/Base/MemoryStream.h"
 

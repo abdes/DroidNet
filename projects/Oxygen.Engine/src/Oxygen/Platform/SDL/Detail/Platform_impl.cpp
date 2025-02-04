@@ -21,9 +21,9 @@
 #include "Oxygen/Platform/Common/Types.h"
 #include "Oxygen/Platform/Common/Window.h"
 #include "Oxygen/Platform/SDL/Detail/Wrapper.h"
-#include "Oxygen/Platform/SDL/display.h"
-#include "Oxygen/Platform/SDL/platform.h"
-#include "Oxygen/Platform/SDL/window.h"
+#include "Oxygen/Platform/SDL/Display.h"
+#include "Oxygen/Platform/SDL/Platform.h"
+#include "Oxygen/Platform/SDL/Window.h"
 
 using oxygen::Duration;
 using oxygen::SubPixelMotion;

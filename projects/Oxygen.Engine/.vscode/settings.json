@@ -127,4 +127,6 @@
             "file": true,
         }
     },
+    "clangd.path": "",
+    "editor.formatOnSave": true,
 }
