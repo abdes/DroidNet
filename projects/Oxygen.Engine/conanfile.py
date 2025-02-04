@@ -71,6 +71,7 @@ class OxygenConan(ConanFile):
         self.requires("fmt/11.1.2")
         self.requires("sdl/3.2.0")
         self.requires("imgui/1.91.5")
+        self.requires("asio/1.32.0")
 
         self.test_requires("gtest/master")
         self.test_requires("catch2/3.8.0")

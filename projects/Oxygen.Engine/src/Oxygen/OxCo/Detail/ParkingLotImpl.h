@@ -25,6 +25,13 @@ protected:
         {
         }
 
+        auto await_cancel(Handle) noexcept
+        {
+            this->Unlink();
+            handle_ = std::noop_coroutine();
+            return std::true_type {};
+        }
+
         friend class ParkingLotImpl;
 
     protected:
@@ -56,7 +63,7 @@ protected:
         }
     }
 
-    //! Wake all waiters that were waiting when the call to `UnpPrkAll()` began.
+    //! Wake all waiters that were waiting when the call to `UnParkAll()` began.
     void UnParkAll()
     {
         auto parked = std::move(parked_);

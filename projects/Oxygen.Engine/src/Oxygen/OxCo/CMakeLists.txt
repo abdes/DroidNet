@@ -15,6 +15,12 @@ asap_module_declare(
 )
 asap_push_module("${META_MODULE_NAME}")
 
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(asio CONFIG REQUIRED)
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -28,8 +34,10 @@ add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
 set(
   header_files
+  "asio.h"
   "Algorithms.h"
   "Awaitables.h"
+  "Channel.h"
   "Co.h"
   "Coroutine.h"
   "Event.h"
@@ -38,6 +46,7 @@ set(
   "Nursery.h"
   "ParkingLot.h"
   "Run.h"
+  "Shared.h"
   "SuspendForever.h"
   "TaskCancelledException.h"
   "Yield.h"
@@ -56,6 +65,7 @@ set(
   "Detail/DisposableAdapter.h"
   "Detail/GetAwaitable.h"
   "Detail/IntrusiveList.h"
+  "Detail/IntrusivePtr.h"
   "Detail/MuxBase.h"
   "Detail/MuxHelper.h"
   "Detail/MuxRange.h"
@@ -117,7 +127,8 @@ target_compile_options(
     ${OXYGEN_COMMON_CXX_FLAGS}
     $<$<CXX_COMPILER_ID:MSVC>:/wd4702> # Unreachable code
 )
-target_link_libraries(${META_MODULE_TARGET} INTERFACE oxygen::base)
+target_compile_definitions(${META_MODULE_TARGET} INTERFACE $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=0x0A00>)
+target_link_libraries(${META_MODULE_TARGET} INTERFACE oxygen::base asio::asio)
 
 # Header only libraries don't get a Visual Studio project file generated for
 # them. This is a workaround to make sure the header files are visible in the

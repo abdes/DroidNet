@@ -141,7 +141,7 @@ private:
 
     void Grow()
     {
-        Queue q(capacity_ * 2);
+        Queue q(std::max<size_t>(8, capacity_ * 2));
         auto move_range = [&](std::span<T> range) {
             if constexpr (std::is_nothrow_move_constructible_v<T>) {
                 q.tail_ = std::uninitialized_move(range.begin(), range.end(),
