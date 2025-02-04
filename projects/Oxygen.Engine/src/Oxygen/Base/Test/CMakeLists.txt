@@ -75,6 +75,7 @@ m_gtest_program(Macros SOURCES "Macros_test.cpp")
 m_gtest_program(Config SOURCES "Platform_test.cpp")
 m_gtest_program(TimeUtils SOURCES "Time_test.cpp")
 m_gtest_program(Types SOURCES "Types_test.cpp")
+m_gtest_program(StringUtils SOURCES "StringUtils_test.cpp")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   m_gtest_program(
@@ -82,7 +83,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     SOURCES
       "Exceptions_test.cpp"
       "ComError_test.cpp"
-      "StringUtils_test.cpp"
   )
 endif()
 

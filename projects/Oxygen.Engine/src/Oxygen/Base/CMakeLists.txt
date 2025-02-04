@@ -80,6 +80,7 @@ target_sources(
       "ReturnAddress.h"
       "Signals.h"
       "Stream.h"
+      "StringTypes.h"
       "StringUtils.h"
       "TimeUtils.h"
       "Types/Geometry.h"

@@ -6,8 +6,8 @@
 
 #pragma once
 
+#include "Oxygen/Base/StringTypes.h"
 #include "Oxygen/Base/StringUtils.h"
-#include "Oxygen/Base/Windows/StringUtils.h"
 
 namespace oxygen {
 

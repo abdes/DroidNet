@@ -4,20 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Base/StringUtils.h"
+
+#include <array>
+#include <variant>
+
+#include <gmock/gmock-matchers.h>
+#include <gtest/gtest.h>
+
 #include "Oxygen/Base/Platforms.h"
+
 #if defined(OXYGEN_WINDOWS)
-
-#  include <windows.h>
-
-#  include <array>
-#  include <variant>
-
-#  include <gmock/gmock-matchers.h>
-#  include <gtest/gtest.h>
-
-#  include "Oxygen/Base/Windows/StringUtils.h"
-
 using oxygen::windows::WindowsException;
+#endif
 
 namespace oxygen::string_utils {
 
@@ -77,10 +76,12 @@ TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
     try {
         Utf8ToWide(invalid_utf8, output);
         FAIL() << "Expected oxygen::windows::WindowsException";
+#if defined(OXYGEN_WINDOWS)
     } catch (const WindowsException& ex) {
         static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
         EXPECT_EQ(ex.GetErrorCode(), static_cast<DWORD>(ERROR_NO_UNICODE_TRANSLATION)); // Replace with the expected error code
         EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+#endif
     } catch (...) {
         FAIL() << "Expected oxygen::windows::WindowsException";
     }
@@ -162,10 +163,12 @@ TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
     try {
         WideToUtf8(invalid_wide, output);
         FAIL() << "Expected oxygen::windows::WindowsException";
+#if defined(OXYGEN_WINDOWS)
     } catch (const WindowsException& ex) {
         static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
         EXPECT_EQ(ex.GetErrorCode(), static_cast<DWORD>(ERROR_NO_UNICODE_TRANSLATION));
         EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+#endif
     } catch (...) {
         FAIL() << "Expected oxygen::windows::WindowsException";
     }
@@ -188,5 +191,3 @@ TEST_F(ToUtf8Test, CanConvertLargeWideString)
 }
 
 } // namespace oxygen::string_utils
-
-#endif // OXYGEN_WINDOWS
