@@ -76,8 +76,8 @@ namespace input {
         [[nodiscard]] constexpr auto IsRepeat() const { return repeat_; }
 
     private:
-        Key key_code_{Key::kNone};
-        bool repeat_{false};
+        Key key_code_ { Key::kNone };
+        bool repeat_ { false };
     };
 
     class KeyComponent final : public Component {
@@ -90,7 +90,7 @@ namespace input {
         [[nodiscard]] auto GetKeyInfo() const { return key_info_; }
 
     private:
-        KeyInfo key_info_{};
+        KeyInfo key_info_ {};
     };
 
     class MouseButtonComponent final : public Component {

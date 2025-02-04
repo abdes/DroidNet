@@ -13,10 +13,8 @@ using namespace System::Runtime::InteropServices;
 
 namespace Oxygen::Interop {
 
-
-  public
-  ref class OxygenWrapper
-  {
-  };
+public
+ref class OxygenWrapper {
+};
 
 } // namespace Oxygen::Interop::World

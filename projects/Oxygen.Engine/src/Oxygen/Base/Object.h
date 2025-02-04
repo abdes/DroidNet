@@ -35,7 +35,7 @@ public:                                                                         
         static oxygen::TypeId typeId = oxygen::TypeRegistry::Get().RegisterType(arg_type::ClassTypeName()); \
         return typeId;                                                                                      \
     }                                                                                                       \
-    const char* GetTypeName() const override { return ClassTypeName(); }                          \
+    const char* GetTypeName() const override { return ClassTypeName(); }                                    \
     inline oxygen::TypeId GetTypeId() const override { return ClassTypeId(); }                              \
                                                                                                             \
 private:

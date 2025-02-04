@@ -14,40 +14,39 @@ namespace oxygen::input {
 class InputSystem;
 }
 
-class MainModule : public oxygen::core::Module
-{
- public:
-  using Base = Module;
+class MainModule : public oxygen::core::Module {
+public:
+    using Base = Module;
 
-  template <typename... Args>
-  explicit MainModule(oxygen::EngineWeakPtr engine, Args&&... ctor_args)
-    : Base("MainModule", std::move(engine), std::forward<Args>(ctor_args)...)
-  {
-  }
+    template <typename... Args>
+    explicit MainModule(oxygen::EngineWeakPtr engine, Args&&... ctor_args)
+        : Base("MainModule", std::move(engine), std::forward<Args>(ctor_args)...)
+    {
+    }
 
-  ~MainModule() override = default;
+    ~MainModule() override = default;
 
-  OXYGEN_MAKE_NON_COPYABLE(MainModule);
-  OXYGEN_MAKE_NON_MOVEABLE(MainModule);
+    OXYGEN_MAKE_NON_COPYABLE(MainModule);
+    OXYGEN_MAKE_NON_MOVEABLE(MainModule);
 
-  void OnInitialize(const oxygen::Graphics* gfx) override;
+    void OnInitialize(const oxygen::Graphics* gfx) override;
 
-  void ProcessInput(const oxygen::platform::InputEvent& event) override;
-  void Update(oxygen::Duration delta_time) override;
-  void FixedUpdate() override;
-  void Render(const oxygen::Graphics* gfx) override;
+    void ProcessInput(const oxygen::platform::InputEvent& event) override;
+    void Update(oxygen::Duration delta_time) override;
+    void FixedUpdate() override;
+    void Render(const oxygen::Graphics* gfx) override;
 
-  void OnShutdown() noexcept override;
+    void OnShutdown() noexcept override;
 
- private:
-  struct State {
-    float distance { 10.0F };
-    float direction { 1.0F };
-  };
-  State state_;
+private:
+    struct State {
+        float distance { 10.0F };
+        float direction { 1.0F };
+    };
+    State state_;
 
-  std::shared_ptr<oxygen::input::InputSystem> player_input_;
+    std::shared_ptr<oxygen::input::InputSystem> player_input_;
 
- public:
-  [[maybe_unused]] static const char* const LOGGER_NAME;
+public:
+    [[maybe_unused]] static const char* const LOGGER_NAME;
 };
