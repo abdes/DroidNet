@@ -96,7 +96,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
       "Windows/Exceptions.cpp"
     PUBLIC
       FILE_SET HEADERS
-      FILES "Windows/StringUtils.h" "Windows/ComError.h" "Windows/Exceptions.h"
+      FILES "Windows/ComError.h" "Windows/Exceptions.h"
   )
 endif()
 

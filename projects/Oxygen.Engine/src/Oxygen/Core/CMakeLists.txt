@@ -62,7 +62,7 @@ target_sources(
       "System.h"
       "Module.h"
       "InputHandler.h"
-)
+ )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

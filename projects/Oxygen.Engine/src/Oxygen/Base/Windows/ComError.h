@@ -16,7 +16,7 @@
 
 #  include <comdef.h>
 
-#  include "Oxygen/Base/Windows/StringUtils.h"
+#  include "Oxygen/Base/StringUtils.h"
 #  include "Oxygen/Base/api_export.h"
 
 namespace oxygen {

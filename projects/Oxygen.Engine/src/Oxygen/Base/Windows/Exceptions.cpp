@@ -15,7 +15,7 @@
 #  include <fmt/format.h>
 
 #  include "Oxygen/Base/Logging.h"
-#  include "Oxygen/Base/Windows/StringUtils.h"
+#  include "Oxygen/Base/StringUtils.h"
 
 using oxygen::string_utils::WideToUtf8;
 using oxygen::windows::WindowsException;
