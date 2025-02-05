@@ -6,7 +6,9 @@
 
 #include "Oxygen/OxCo/Channel.h"
 
-#include <gtest/gtest.h>
+#include <array>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Co.h"
@@ -14,8 +16,6 @@
 #include "Oxygen/OxCo/Run.h"
 
 #include "Utils/OxCoTestFixture.h"
-
-#include <array>
 
 using namespace std::chrono_literals;
 using oxygen::co::Channel;
@@ -25,7 +25,6 @@ using oxygen::co::testing::OxCoTestFixture;
 
 // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
 // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
-// NOLINTBEGIN(*-avoid-do-while)
 
 namespace {
 
@@ -34,7 +33,7 @@ protected:
     Channel<int> channel_ { 3 };
 };
 
-TEST_F(BoundedChannelTest, Smoke)
+NOLINT_TEST_F(BoundedChannelTest, Smoke)
 {
     ::Run(*el_, [this]() -> Co<> {
         std::vector<std::optional<int>> results;
@@ -57,7 +56,7 @@ TEST_F(BoundedChannelTest, Smoke)
     });
 }
 
-TEST_F(BoundedChannelTest, Blocking)
+NOLINT_TEST_F(BoundedChannelTest, Blocking)
 {
     ::Run(*el_, [this]() -> Co<> {
         OXCO_WITH_NURSERY(n)
@@ -97,7 +96,7 @@ TEST_F(BoundedChannelTest, Blocking)
     });
 }
 
-TEST_F(BoundedChannelTest, Alternating)
+NOLINT_TEST_F(BoundedChannelTest, Alternating)
 {
     ::Run(*el_, [this]() -> Co<> {
         std::vector<int> results;
@@ -122,7 +121,7 @@ TEST_F(BoundedChannelTest, Alternating)
     });
 }
 
-TEST_F(BoundedChannelTest, TrySendReceive)
+NOLINT_TEST_F(BoundedChannelTest, TrySendReceive)
 {
     // False because channel empty
     EXPECT_TRUE(!channel_.TryReceive());
@@ -150,7 +149,7 @@ TEST_F(BoundedChannelTest, TrySendReceive)
     EXPECT_TRUE(!channel_.TrySend(5));
 }
 
-TEST_F(BoundedChannelTest, Close)
+NOLINT_TEST_F(BoundedChannelTest, Close)
 {
     ::Run(*el_, [this]() -> Co<> {
         std::vector<std::optional<int>> results;
@@ -202,7 +201,7 @@ protected:
     Channel<int> channel_;
 };
 
-TEST_F(UnboundedChannelTest, Many)
+NOLINT_TEST_F(UnboundedChannelTest, Many)
 {
     ::Run(*el_, [this]() -> Co<> {
         for (int i = 0; i < 10'000; i++) {
@@ -222,7 +221,7 @@ TEST_F(UnboundedChannelTest, Many)
     });
 }
 
-TEST_F(UnboundedChannelTest, Close)
+NOLINT_TEST_F(UnboundedChannelTest, Close)
 {
     ::Run(*el_, [this]() -> Co<> {
         std::vector<std::optional<int>> results;
@@ -246,6 +245,5 @@ TEST_F(UnboundedChannelTest, Close)
 
 } // namespace
 
-// NOLINTEND(*-avoid-do-while)
 // NOLINTEND(*-avoid-capturing-lambda-coroutines)
 // NOLINTEND(*-avoid-reference-coroutine-parameters)

@@ -46,7 +46,7 @@ namespace {
 TEST_CASE("Nursery is a scope for its started tasks")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         size_t count = 0;
         auto increment_after = [&](const milliseconds delay) -> Co<> {
             co_await el.Sleep(delay);
@@ -71,7 +71,7 @@ TEST_CASE("Nursery is a scope for its started tasks")
 TEST_CASE("Nursery::Start() ensures args live as long as task")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         auto func = [&](const std::string& s) -> Co<> {
             co_await el.Sleep(1ms);
             CHECK(s == "hello world! I am a long(ish) string.");
@@ -119,7 +119,7 @@ TEST_CASE("Nursery can start a task with a member function")
 
     Test obj;
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         OXCO_WITH_NURSERY(n)
         {
             SECTION("passing the object as a pointer")
@@ -148,8 +148,8 @@ TEST_CASE("Nursery can start a task with a member function")
 TEST_CASE("Nursery completion policies")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
-        auto sleep = [&](const milliseconds delay) -> Co<void> {
+    Run(el, [&]() -> Co<> {
+        auto sleep = [&](const milliseconds delay) -> Co<> {
             co_await el.Sleep(delay);
         };
 
@@ -177,7 +177,7 @@ TEST_CASE("Nursery completion policies")
         {
             co_await AnyOf(
                 sleep(5ms),
-                [&]() -> Co<void> {
+                [&]() -> Co<> {
                     OXCO_WITH_NURSERY(/*unused*/)
                     {
                         co_await kSuspendForever;
@@ -192,7 +192,7 @@ TEST_CASE("Nursery completion policies")
 TEST_CASE("Nursery early cancels tasks")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         bool started = false;
         OXCO_WITH_NURSERY(nursery)
         {
@@ -213,7 +213,7 @@ TEST_CASE("Nursery early cancels tasks")
 TEST_CASE("Nursery synchronous cancellation")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         bool cancelled = false;
         OXCO_WITH_NURSERY(n)
         {
@@ -236,7 +236,7 @@ TEST_CASE("Nursery synchronous cancellation")
 TEST_CASE("Nursery can handle multiple cancelled tasks")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         auto task = [&](Nursery& n) -> Co<> {
             co_await el.Sleep(1ms, kNonCancellable);
             n.Cancel();
@@ -254,7 +254,7 @@ TEST_CASE("Nursery can handle multiple cancelled tasks")
 TEST_CASE("Nursery can handle multiple exceptions")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         auto task = [&]([[maybe_unused]] Nursery& n) -> Co<> {
             co_await el.Sleep(1ms, kNonCancellable);
             throw std::runtime_error("boo!");
@@ -277,7 +277,7 @@ TEST_CASE("Nursery can handle multiple exceptions")
 TEST_CASE("Nursery cancel and exception")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         CHECK_THROWS_WITH(
             OXCO_WITH_NURSERY(n) {
                 // This task will throw an exception that get propagated to the
@@ -305,7 +305,7 @@ TEST_CASE("Nursery cancel and exception")
 TEST_CASE("Nursery cancel from outside")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         OXCO_WITH_NURSERY(n)
         {
             n.Start([&]() -> Co<> { co_await el.Sleep(10ms); });
@@ -320,7 +320,7 @@ TEST_CASE("Nursery cancel from outside")
 TEST_CASE("Nursery propagates exceptions")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         // This task can be cancelled, and will be early cancelled due to the
         // early exception thrown in the next task
         auto t1 = [&]() -> Co<> { co_await el.Sleep(2ms); };
@@ -347,7 +347,7 @@ TEST_CASE("Nursery propagates exceptions")
 TEST_CASE("Nursery `Start` with `TaskStarted`")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         SECTION("started, co_await initialization")
         {
             OXCO_WITH_NURSERY(n)
@@ -439,8 +439,8 @@ TEST_CASE("Nursery `Start` with `TaskStarted`")
         {
             OXCO_WITH_NURSERY(n)
             {
-                int ret = co_await n.Start([](
-                                               TaskStarted<int> started) -> Co<> {
+                const int ret = co_await n.Start([](
+                                                     TaskStarted<int> started) -> Co<> {
                     co_await kYield; // make this a coroutine
                     started(42);
                 });
@@ -572,7 +572,7 @@ TEST_CASE("Nursery `Start` with `TaskStarted`")
 TEST_CASE("Open inner nursery")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         Nursery* inner = nullptr;
         OXCO_WITH_NURSERY(outer)
         {
@@ -586,7 +586,7 @@ TEST_CASE("Open inner nursery")
 TEST_CASE("Open inner nursery and cancel")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         Nursery* n = nullptr;
         OXCO_WITH_NURSERY(n2)
         {

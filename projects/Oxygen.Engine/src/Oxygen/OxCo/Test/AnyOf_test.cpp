@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/Base/Unreachable.h"
 #include "Oxygen/OxCo/Algorithms.h"
@@ -53,7 +53,7 @@ class AnyOfTest : public OxCoTestFixture { };
 
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
-TEST_F(AnyOfTest, Smoke)
+NOLINT_TEST_F(AnyOfTest, Smoke)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto [a, b, c] = co_await AnyOf(
@@ -69,7 +69,7 @@ TEST_F(AnyOfTest, Smoke)
     });
 }
 
-TEST_F(AnyOfTest, Empty)
+NOLINT_TEST_F(AnyOfTest, Empty)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         [[maybe_unused]] auto r = co_await AnyOf();
@@ -77,7 +77,7 @@ TEST_F(AnyOfTest, Empty)
     });
 }
 
-TEST_F(AnyOfTest, ImmediateFront)
+NOLINT_TEST_F(AnyOfTest, ImmediateFront)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AnyOf(
@@ -90,7 +90,7 @@ TEST_F(AnyOfTest, ImmediateFront)
     });
 }
 
-TEST_F(AnyOfTest, ImmediateBack)
+NOLINT_TEST_F(AnyOfTest, ImmediateBack)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AnyOf(
@@ -103,7 +103,7 @@ TEST_F(AnyOfTest, ImmediateBack)
     });
 }
 
-TEST_F(AnyOfTest, ImmediateBoth)
+NOLINT_TEST_F(AnyOfTest, ImmediateBoth)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto [a, b] = co_await AnyOf(Ready {}, Ready {});
@@ -118,7 +118,7 @@ TEST_F(AnyOfTest, ImmediateBoth)
     });
 }
 
-TEST_F(AnyOfTest, NonCancellable)
+NOLINT_TEST_F(AnyOfTest, NonCancellable)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto [a, b, c] = co_await AnyOf(
@@ -132,7 +132,7 @@ TEST_F(AnyOfTest, NonCancellable)
     });
 }
 
-TEST_F(AnyOfTest, ReturnRef)
+NOLINT_TEST_F(AnyOfTest, ReturnRef)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         int x = 42;
@@ -150,7 +150,7 @@ TEST_F(AnyOfTest, ReturnRef)
     });
 }
 
-TEST_F(AnyOfTest, ImmediateLambda)
+NOLINT_TEST_F(AnyOfTest, ImmediateLambda)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AnyOf(
@@ -160,11 +160,11 @@ TEST_F(AnyOfTest, ImmediateLambda)
     });
 }
 
-TEST_F(AnyOfTest, Exception)
+NOLINT_TEST_F(AnyOfTest, Exception)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         bool cancelled = false;
-        EXPECT_THROW(
+        NOLINT_EXPECT_THROW(
             co_await AnyOf(
                 [&]() -> Co<> {
                     ScopeGuard guard([&]() noexcept { cancelled = true; });

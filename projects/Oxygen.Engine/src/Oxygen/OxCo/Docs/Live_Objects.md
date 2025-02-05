@@ -3,7 +3,7 @@
 As described previously, Corral adheres to structured concurrency
 principles, requiring each running task to be awaited by a parent task
 that can accept its result (or exception) when the child terminates
-and can cancel the child if the parent needs to exit.  Typically this
+and can cancel the child if the parent needs to exit. Typically, this
 is done by letting the parent `co_await` the child, either directly or
 through `anyOf()` or `allOf()` combiners, or having the parent open a
 nursery using `CORRAL_WITH_NURSERY()` and start the child in that
@@ -20,7 +20,7 @@ Luckily, there is an escape! The requirement is that _someone_
 await/supervise each task, not that it be the same code that spawns
 the task. If you obtain a nursery reference using
 `CORRAL_WITH_NURSERY(n) { ... }`, you can pass it to another function,
-store it in a variable, etc; and as long as the nursery object is
+store it in a variable, etc.; and as long as the nursery object is
 alive (i.e. until the block completes), any function which has access
 to that reference may use it to spawn tasks into that nursery:
 
@@ -73,8 +73,8 @@ perhaps you have an object that represents an HTTP/2 connection, and you
 want to allow different tasks to manage sending and receiving on the various
 streams that are multiplexed over this connection. You might find it useful
 to have a single task, owned by the connection, which reads messages from the
-network socket and either responds to them directly (for session-level
-traffic such as PING) or distributes them to the appropriate stream. Or if
+network socket and either, responds to them directly (for session-level
+traffic such as PING), or distributes them to the appropriate stream. Or if
 you're implementing a class that talks to a set of remote servers, you might
 want it to have an associated task that periodically pings the ones you think
 are down, so you can notice promptly when they come back up.

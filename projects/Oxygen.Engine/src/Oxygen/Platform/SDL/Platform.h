@@ -40,30 +40,30 @@ public:
 
     OXYGEN_SDL3_API auto MakeWindow(std::string const& title,
         PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window> override;
+        -> std::weak_ptr<Window> override;
     OXYGEN_SDL3_API auto MakeWindow(std::string const& title,
         PixelExtent const& extent,
         Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window> override;
+        -> std::weak_ptr<Window> override;
     OXYGEN_SDL3_API auto MakeWindow(std::string const& title,
         PixelPosition const& position,
         PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window> override;
+        -> std::weak_ptr<Window> override;
     OXYGEN_SDL3_API auto MakeWindow(std::string const& title,
         PixelPosition const& position,
         PixelExtent const& extent,
         Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window> override;
+        -> std::weak_ptr<Window> override;
 
     OXYGEN_SDL3_API [[nodiscard]] auto Displays() const
-        -> std::vector<std::unique_ptr<platform::Display>> override;
+        -> std::vector<std::unique_ptr<Display>> override;
 
     OXYGEN_SDL3_API [[nodiscard]] auto DisplayFromId(
         const Display::IdType& display_id) const
-        -> std::unique_ptr<platform::Display> override;
+        -> std::unique_ptr<Display> override;
 
     OXYGEN_SDL3_API auto PollEvent()
-        -> std::unique_ptr<platform::InputEvent> override;
+        -> std::unique_ptr<InputEvent> override;
 
     OXYGEN_SDL3_API [[nodiscard]] auto OnUnhandledEvent() const -> sigslot::signal<const SDL_Event&>&;
     OXYGEN_SDL3_API [[nodiscard]] auto OnPlatformEvent() const -> sigslot::signal<const SDL_Event&, bool&, bool&>&;

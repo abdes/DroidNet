@@ -213,7 +213,7 @@ public:
     auto operator++(int) -> IntrusiveListIterator
     {
         IntrusiveListIterator tmp = *this;
-        ++(*this);
+        ++*this;
         return tmp;
     }
 

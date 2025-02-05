@@ -13,3 +13,7 @@ add_subdirectory("Platform")
 add_subdirectory("Core")
 add_subdirectory("Input")
 add_subdirectory("Graphics")
+
+if(OXYGEN_BUILD_TESTS)
+    add_subdirectory("Testing")
+endif()

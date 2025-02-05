@@ -19,7 +19,7 @@ extern "C" bool initialize_called { false };
 namespace {
 
 extern "C" {
-EXPORT_SYMBOL oxygen::TypeRegistry* InitializeTypeRegistry()
+EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*
 {
     // Single instance of the type registry provided by the main executable module.
     static oxygen::TypeRegistry registry {};

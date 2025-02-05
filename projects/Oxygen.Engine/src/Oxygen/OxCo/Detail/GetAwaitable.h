@@ -163,7 +163,7 @@ constexpr bool kThisIsAwaitableTrustMe<Callable, Ret> = true;
 /// temporarily suspended.
 /// Can be used to add a suspension point.
 template <class Callable, class ReturnType>
-class [[nodiscard]] YieldToRunImpl : private Callable {
+class [[nodiscard]] YieldToRunImpl : /*private*/ Callable {
 public:
     explicit YieldToRunImpl(Callable cb)
         : Callable(std::move(cb))
@@ -184,7 +184,7 @@ private:
 };
 
 template <class Callable, class ReturnType>
-class [[nodiscard]] YieldToRunImpl<Callable, ReturnType&&> : private Callable {
+class [[nodiscard]] YieldToRunImpl<Callable, ReturnType&&> : /*private*/ Callable {
 public:
     explicit YieldToRunImpl(Callable cb)
         : Callable(std::move(cb))
@@ -194,7 +194,7 @@ public:
     [[nodiscard]] auto await_ready() const noexcept { return false; }
     [[nodiscard]] auto await_suspend([[maybe_unused]] Handle h)
     {
-        result_ = &(Callable::operator()());
+        result_ = &Callable::operator()();
         return false;
     }
     auto await_resume() -> ReturnType&& { return static_cast<ReturnType&&>(result_); }
@@ -205,7 +205,7 @@ private:
 };
 
 template <class Callable>
-class [[nodiscard]] YieldToRunImpl<Callable, void> : private Callable {
+class [[nodiscard]] YieldToRunImpl<Callable, void> : /*private*/ Callable {
 public:
     explicit YieldToRunImpl(Callable cb)
         : Callable(std::move(cb))

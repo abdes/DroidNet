@@ -12,7 +12,7 @@
 
 using oxygen::platform::Display;
 
-Display::Display(const Display::IdType display_id)
+Display::Display(const IdType display_id)
     : display_id_(display_id)
 {
     assert(display_id != kInvalidDisplayId);

@@ -6,10 +6,11 @@
 
 #include "Oxygen/Base/TypeSystem.h"
 
-#include <gtest/gtest.h>
 #include <ranges>
 #include <thread>
 #include <unordered_set>
+
+#include <Oxygen/Testing/GTest.h>
 
 extern "C" bool initialize_called;
 
@@ -26,35 +27,35 @@ protected:
     oxygen::TypeRegistry& registry_;
 };
 
-TEST_F(TypeSystemTests, UsesMainInitializer)
+NOLINT_TEST_F(TypeSystemTests, UsesMainInitializer)
 {
     EXPECT_TRUE(initialize_called);
 }
 
-TEST_F(TypeSystemTests, CanRegisterAndGetTypes)
+NOLINT_TEST_F(TypeSystemTests, CanRegisterAndGetTypes)
 {
     const auto id = registry_.RegisterType("test::MyType");
     EXPECT_EQ(id, registry_.GetTypeId("test::MyType"));
 }
 
-TEST_F(TypeSystemTests, HandlesBadInput)
+NOLINT_TEST_F(TypeSystemTests, HandlesBadInput)
 {
     EXPECT_THROW(registry_.RegisterType(nullptr), std::invalid_argument);
     EXPECT_THROW(registry_.RegisterType(""), std::invalid_argument);
 }
 
-TEST_F(TypeSystemTests, DoubleRegistrationReturnsSameId)
+NOLINT_TEST_F(TypeSystemTests, DoubleRegistrationReturnsSameId)
 {
     const auto id = registry_.RegisterType("test::MyType");
     EXPECT_EQ(id, registry_.RegisterType("test::MyType"));
 }
 
-TEST_F(TypeSystemTests, TypeNotRegistered)
+NOLINT_TEST_F(TypeSystemTests, TypeNotRegistered)
 {
     EXPECT_THROW(registry_.GetTypeId("NotThere"), std::invalid_argument);
 }
 
-TEST_F(TypeSystemTests, ThreadSafety)
+NOLINT_TEST_F(TypeSystemTests, ThreadSafety)
 {
     std::vector<std::thread> threads;
     for (int i = 0; i < 10; ++i) {
@@ -69,14 +70,14 @@ TEST_F(TypeSystemTests, ThreadSafety)
     }
 }
 
-TEST_F(TypeSystemTests, LongTypeName)
+NOLINT_TEST_F(TypeSystemTests, LongTypeName)
 {
     const std::string longTypeName(1000, 'a');
     const auto id = registry_.RegisterType(longTypeName.c_str());
     EXPECT_EQ(id, registry_.GetTypeId(longTypeName.c_str()));
 }
 
-TEST_F(TypeSystemTests, StressTest)
+NOLINT_TEST_F(TypeSystemTests, StressTest)
 {
     std::unordered_map<std::string, oxygen::TypeId> registeredTypes;
     constexpr int numTypes = 10'000;

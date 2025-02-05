@@ -24,11 +24,13 @@ auto GetComErrorMessage(const HRESULT hr, IErrorInfo* help) -> std::string
     using ComStringPtr = std::unique_ptr<OLECHAR[], decltype(SysFreeString)*>;
     auto get_description = [](IErrorInfo* info) -> ComStringPtr {
         BSTR description = nullptr;
-        if (info)
+        if (info) {
             // Try to get the description of the error. If it fails, we cannot do
             // anything about it.
             [[maybe_unused]]
-            auto _ = info->GetDescription(&description);
+            auto _
+                = info->GetDescription(&description);
+        }
         return { description, &SysFreeString };
     };
 
@@ -42,10 +44,10 @@ auto GetComErrorMessage(const HRESULT hr, IErrorInfo* help) -> std::string
             }
             break;
         }
-        if (n < length && n)
+        description[0] = ch0;
+        if (n < length) {
             description[n] = L'\0';
-        if (n)
-            description[0] = ch0;
+        }
 
         std::string utf_8description;
         try {
@@ -71,7 +73,7 @@ auto GetComErrorMessage(const HRESULT hr, IErrorInfo* help) -> std::string
 
 auto oxygen::windows::ComCategory() noexcept -> const std::error_category&
 {
-    static windows::ComErrorCategory com_error_category;
+    static ComErrorCategory com_error_category;
     return com_error_category;
 }
 

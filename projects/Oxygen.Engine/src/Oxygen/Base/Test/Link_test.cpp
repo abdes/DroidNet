@@ -6,7 +6,7 @@
 
 #include "Oxygen/Base/Logging.h"
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
     loguru::g_preamble_date = false;
     loguru::g_preamble_time = false;

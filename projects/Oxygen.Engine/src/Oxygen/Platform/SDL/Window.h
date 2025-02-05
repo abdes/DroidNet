@@ -22,8 +22,8 @@ namespace detail {
     class WrapperInterface;
 } // namespace detail
 
-class Window final : public oxygen::platform::Window {
-    using Base = oxygen::platform::Window;
+class Window final : public platform::Window {
+    using Base = platform::Window;
 
 public:
     OXYGEN_SDL3_API Window(std::string const& title, PixelExtent const& extent);

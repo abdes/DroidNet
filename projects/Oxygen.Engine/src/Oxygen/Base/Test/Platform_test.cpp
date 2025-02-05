@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "gtest/gtest.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -27,8 +27,7 @@ auto PlatformInfo() -> std::string
 #endif
 }
 
-// NOLINTNEXTLINE
-TEST(Platform, PlatformDefinitionExists)
+NOLINT_TEST(Platform, PlatformDefinitionExists)
 {
     const auto platform = PlatformInfo();
 

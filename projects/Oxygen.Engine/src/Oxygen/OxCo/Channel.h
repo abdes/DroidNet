@@ -114,7 +114,7 @@ namespace detail::channel {
 
         [[nodiscard]] auto HasWaiters() const noexcept
         {
-            return !this->ParkingLotImpl<Reader<T>>::Empty();
+            return !this->ParkingLotImpl<Reader>::Empty();
         }
     };
 
@@ -191,11 +191,10 @@ namespace detail::channel {
         {
             if (GetChannel().Closed() || GetChannel().Full()) {
                 return false;
-            } else {
-                GetChannel().buf_.PushBack(std::forward<U>(value));
-                GetChannel().GetReader().UnParkOne();
-                return true;
             }
+            GetChannel().buf_.PushBack(std::forward<U>(value));
+            GetChannel().GetReader().UnParkOne();
+            return true;
         }
         void Close() { GetChannel().Close(); }
 
@@ -211,7 +210,7 @@ namespace detail::channel {
 
         [[nodiscard]] auto HasWaiters() const noexcept -> bool
         {
-            return !this->ParkingLotImpl<Writer<T>>::Empty();
+            return !this->ParkingLotImpl<Writer>::Empty();
         }
     };
 
@@ -301,7 +300,7 @@ public:
         if (closed_) {
             return 0;
         }
-        if (!bounded_ && !closed_) {
+        if (!bounded_) {
             return std::numeric_limits<size_t>::max();
         }
         return buf_.Capacity() - buf_.Size();

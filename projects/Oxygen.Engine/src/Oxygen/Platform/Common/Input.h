@@ -403,7 +403,7 @@ public:
     // Mouse buttons
     // NOLINTEND
 
-    friend class oxygen::Platform;
+    friend class Platform;
     friend class InputSlot;
 
     // TODO: review visibility and keep safe methods public
@@ -427,9 +427,9 @@ public:
     // TODO(abdes) add user defined slots and categories
     static void AddCategory(std::string_view category_name,
         std::string_view display_string);
-    static void AddInputSlot(const detail::InputSlotDetails& detail);
+    static void AddInputSlot(const detail::InputSlotDetails& details);
     static void AddKeyInputSlot(Key key_code,
-        const detail::InputSlotDetails& detail);
+        const detail::InputSlotDetails& details);
     [[nodiscard]] static auto GetInputSlotDetails(const InputSlot& slot)
         -> std::shared_ptr<detail::InputSlotDetails>;
 };

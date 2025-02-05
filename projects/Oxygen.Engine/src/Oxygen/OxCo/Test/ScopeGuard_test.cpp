@@ -6,13 +6,13 @@
 
 #include "Oxygen/OxCo/Detail/ScopeGuard.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co::detail;
 
 namespace {
 
-TEST(ScopeGuardTest, ExecutesFunctionOnScopeExit)
+NOLINT_TEST(ScopeGuardTest, ExecutesFunctionOnScopeExit)
 {
     bool called = false;
     {
@@ -24,7 +24,7 @@ TEST(ScopeGuardTest, ExecutesFunctionOnScopeExit)
     EXPECT_TRUE(called);
 }
 
-TEST(ScopeGuardTest, ExecutesFunctionWithExceptionSafety)
+NOLINT_TEST(ScopeGuardTest, ExecutesFunctionWithExceptionSafety)
 {
     bool called = false;
     try {
@@ -39,7 +39,7 @@ TEST(ScopeGuardTest, ExecutesFunctionWithExceptionSafety)
     EXPECT_TRUE(called);
 }
 
-TEST(ScopeGuardTest, ExecutesFunctionWithMultipleGuards)
+NOLINT_TEST(ScopeGuardTest, ExecutesFunctionWithMultipleGuards)
 {
     bool called1 = false;
     bool called2 = false;

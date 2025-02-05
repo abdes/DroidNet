@@ -9,7 +9,7 @@
 #include <fstream>
 #include <random>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::serio;
 using namespace testing;
@@ -134,17 +134,17 @@ protected:
         const auto temp_dir = std::filesystem::temp_directory_path();
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 999999);
+        std::uniform_int_distribution dis(0, 999999);
         std::filesystem::path temp_path;
         do {
             temp_path = temp_dir / ("temp_file_" + std::to_string(dis(gen)));
-        } while (std::filesystem::exists(temp_path));
+        } while (exists(temp_path));
         std::ofstream(temp_path).close();
         return temp_path;
     }
 
     // Helper method for large data operations
-    static auto create_large_test_data(size_t size) -> std::vector<char>
+    static auto create_large_test_data(const size_t size) -> std::vector<char>
     {
         std::vector<char> data(size);
         for (size_t i = 0; i < size; ++i) {
@@ -154,27 +154,27 @@ protected:
     }
 };
 
-TEST_F(FileStreamTest, Constructor_Success)
+NOLINT_TEST_F(FileStreamTest, Constructor_Success)
 {
-    EXPECT_NO_THROW(FileStream(test_path_,
+    NOLINT_EXPECT_NO_THROW(FileStream(test_path_,
         std::ios::in | std::ios::out, std::make_unique<MockStream>()));
 }
 
-TEST_F(FileStreamTest, DefaultStreamTypeConstructor_Success)
+NOLINT_TEST_F(FileStreamTest, DefaultStreamTypeConstructor_Success)
 {
     const auto temp_path = create_temp_file();
-    EXPECT_NO_THROW(FileStream(temp_path, std::ios::in | std::ios::out));
+    NOLINT_EXPECT_NO_THROW(FileStream(temp_path, std::ios::in | std::ios::out));
     std::filesystem::remove(temp_path);
 }
 
-TEST_F(FileStreamTest, Write_Success)
+NOLINT_TEST_F(FileStreamTest, Write_Success)
 {
     const auto result = sut_->write("hello", 5);
     EXPECT_TRUE(result);
     EXPECT_EQ(mock_stream_->get_data(), "hello");
 }
 
-TEST_F(FileStreamTest, Read_Success)
+NOLINT_TEST_F(FileStreamTest, Read_Success)
 {
     mock_stream_->set_data("hello");
     char buffer[5];
@@ -183,7 +183,7 @@ TEST_F(FileStreamTest, Read_Success)
     EXPECT_EQ(std::string(buffer, 5), "hello");
 }
 
-TEST_F(FileStreamTest, Seek_Success)
+NOLINT_TEST_F(FileStreamTest, Seek_Success)
 {
     mock_stream_->set_data("hello world");
     const auto result = sut_->seek(6);
@@ -194,7 +194,7 @@ TEST_F(FileStreamTest, Seek_Success)
     EXPECT_EQ(std::string(buffer, 5), "world");
 }
 
-TEST_F(FileStreamTest, Write_Fails_WhenSizeExceedsLimit)
+NOLINT_TEST_F(FileStreamTest, Write_Fails_WhenSizeExceedsLimit)
 {
     constexpr auto too_high = 1ULL + std::numeric_limits<std::streamsize>::max();
     const auto result = sut_->write("data", too_high);
@@ -202,7 +202,7 @@ TEST_F(FileStreamTest, Write_Fails_WhenSizeExceedsLimit)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
 }
 
-TEST_F(FileStreamTest, Write_Fails_OnStreamError)
+NOLINT_TEST_F(FileStreamTest, Write_Fails_OnStreamError)
 {
     mock_stream_->set_force_fail(true);
     const auto result = sut_->write("hello", 5);
@@ -210,7 +210,7 @@ TEST_F(FileStreamTest, Write_Fails_OnStreamError)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(FileStreamTest, Read_Fails_WhenSizeExceedsLimit)
+NOLINT_TEST_F(FileStreamTest, Read_Fails_WhenSizeExceedsLimit)
 {
     char buffer[1];
     constexpr auto too_high = 1ULL + std::numeric_limits<std::streamsize>::max();
@@ -219,7 +219,7 @@ TEST_F(FileStreamTest, Read_Fails_WhenSizeExceedsLimit)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
 }
 
-TEST_F(FileStreamTest, Read_Fails_OnStreamError)
+NOLINT_TEST_F(FileStreamTest, Read_Fails_OnStreamError)
 {
     mock_stream_->set_force_fail(true);
     char buffer[5];
@@ -228,7 +228,7 @@ TEST_F(FileStreamTest, Read_Fails_OnStreamError)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(FileStreamTest, Size_Success)
+NOLINT_TEST_F(FileStreamTest, Size_Success)
 {
     mock_stream_->set_data("hello world");
     auto result = sut_->size();
@@ -236,13 +236,13 @@ TEST_F(FileStreamTest, Size_Success)
     EXPECT_EQ(*result, 11);
 }
 
-TEST_F(FileStreamTest, Flush_Success)
+NOLINT_TEST_F(FileStreamTest, Flush_Success)
 {
     const auto result = sut_->flush();
     EXPECT_TRUE(result);
 }
 
-TEST_F(FileStreamTest, Position_Success)
+NOLINT_TEST_F(FileStreamTest, Position_Success)
 {
     mock_stream_->set_data("hello world");
     const auto success = sut_->seek(6);
@@ -252,7 +252,7 @@ TEST_F(FileStreamTest, Position_Success)
     EXPECT_EQ(*result, 6);
 }
 
-TEST_F(FileStreamTest, Flush_Fails_OnStreamError)
+NOLINT_TEST_F(FileStreamTest, Flush_Fails_OnStreamError)
 {
     mock_stream_->set_force_fail(true);
     const auto result = sut_->flush();
@@ -260,7 +260,7 @@ TEST_F(FileStreamTest, Flush_Fails_OnStreamError)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(FileStreamTest, Position_Fails_OnStreamError)
+NOLINT_TEST_F(FileStreamTest, Position_Fails_OnStreamError)
 {
     mock_stream_->set_force_fail(true);
     const auto result = sut_->position();
@@ -268,7 +268,7 @@ TEST_F(FileStreamTest, Position_Fails_OnStreamError)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(FileStreamTest, MoveOperations_Success)
+NOLINT_TEST_F(FileStreamTest, MoveOperations_Success)
 {
     const auto temp_file = create_temp_file();
     const std::string test_data = "test_data";
@@ -286,7 +286,7 @@ TEST_F(FileStreamTest, MoveOperations_Success)
     EXPECT_EQ(std::string_view(buffer, test_data.size()), test_data);
 }
 
-TEST_F(FileStreamTest, LargeFileOperations_Success)
+NOLINT_TEST_F(FileStreamTest, LargeFileOperations_Success)
 {
     const auto temp_file = create_temp_file();
     const auto large_data = create_large_test_data(1024ULL * 1024); // 1MB
@@ -302,7 +302,7 @@ TEST_F(FileStreamTest, LargeFileOperations_Success)
     EXPECT_EQ(read_buffer, large_data);
 }
 
-TEST_F(FileStreamTest, PartialReadWrite_Success)
+NOLINT_TEST_F(FileStreamTest, PartialReadWrite_Success)
 {
     const auto temp_file = create_temp_file();
     const std::string data = "hello world";
@@ -322,7 +322,7 @@ TEST_F(FileStreamTest, PartialReadWrite_Success)
     EXPECT_EQ(std::string_view(buffer, 5), " worl");
 }
 
-TEST_F(FileStreamTest, EOFHandling_Success)
+NOLINT_TEST_F(FileStreamTest, EOFHandling_Success)
 {
     const auto temp_file = create_temp_file();
     const std::string data = "test";

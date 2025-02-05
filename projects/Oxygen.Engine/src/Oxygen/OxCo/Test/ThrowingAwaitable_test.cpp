@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Co.h"
@@ -15,8 +15,10 @@
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 
-using namespace oxygen::co;
-using namespace oxygen::co::testing;
+using oxygen::co::AnyOf;
+using oxygen::co::Co;
+using oxygen::co::Run;
+using oxygen::co::testing::OxCoTestFixture;
 using namespace std::chrono_literals;
 
 namespace {
@@ -26,7 +28,7 @@ struct ThrowingAwaitable {
     // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
     // NOLINTNEXTLINE(*-convert-member-functions-to-static)
-    [[noreturn]] void await_suspend(detail::Handle /*unused*/) { throw std::runtime_error("test"); }
+    [[noreturn]] void await_suspend(oxygen::co::detail::Handle /*unused*/) { throw std::runtime_error("test"); }
     void await_resume() noexcept { }
     // ReSharper restore CppMemberFunctionMayBeStatic
 };
@@ -35,8 +37,7 @@ struct ThrowingAwaitable {
 
 class ThrowingAwaitableTest : public OxCoTestFixture { };
 
-// NOLINTNEXTLINE
-TEST_F(ThrowingAwaitableTest, Immediate)
+NOLINT_TEST_F(ThrowingAwaitableTest, Immediate)
 {
     ::Run(*el_, []() -> Co<> {
         // NOLINTNEXTLINE
@@ -44,8 +45,7 @@ TEST_F(ThrowingAwaitableTest, Immediate)
     });
 }
 
-// NOLINTNEXTLINE
-TEST_F(ThrowingAwaitableTest, FirstInsideMux)
+NOLINT_TEST_F(ThrowingAwaitableTest, FirstInsideMux)
 {
     ::Run(*el_, [&]() -> Co<> {
         // NOLINTNEXTLINE
@@ -58,8 +58,7 @@ TEST_F(ThrowingAwaitableTest, FirstInsideMux)
     });
 }
 
-// NOLINTNEXTLINE
-TEST_F(ThrowingAwaitableTest, LastInsideMux)
+NOLINT_TEST_F(ThrowingAwaitableTest, LastInsideMux)
 {
     ::Run(*el_, [&]() -> Co<> {
         // NOLINTNEXTLINE
@@ -72,14 +71,13 @@ TEST_F(ThrowingAwaitableTest, LastInsideMux)
     });
 }
 
-// NOLINTNEXTLINE
-TEST_F(ThrowingAwaitableTest, InsideNonCancellableMux)
+NOLINT_TEST_F(ThrowingAwaitableTest, InsideNonCancellableMux)
 {
     ::Run(*el_, [&]() -> Co<> {
         // NOLINTNEXTLINE
         EXPECT_THROW(
             co_await AnyOf(
-                el_->Sleep(5ms, kNonCancellable),
+                el_->Sleep(5ms, oxygen::co::testing::kNonCancellable),
                 ThrowingAwaitable()),
             std::runtime_error);
         EXPECT_EQ(el_->Now(), 5ms);

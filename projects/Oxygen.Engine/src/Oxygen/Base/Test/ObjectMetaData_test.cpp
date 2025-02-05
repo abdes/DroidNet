@@ -4,23 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/Base/ObjectMetaData.h"
 
 namespace {
 
-using namespace oxygen;
+using oxygen::ObjectMetaData;
 
 // Constructor Tests
-TEST(ObjectMetaDataTest, Constructor)
+NOLINT_TEST(ObjectMetaDataTest, Constructor)
 {
     const ObjectMetaData md("TestObject");
     EXPECT_EQ(md.GetName(), "TestObject");
 }
 
 // Setter Tests
-TEST(ObjectMetaDataTest, SetName)
+NOLINT_TEST(ObjectMetaDataTest, SetName)
 {
     ObjectMetaData md("TestObject");
     md.SetName("NewName");
@@ -28,11 +28,11 @@ TEST(ObjectMetaDataTest, SetName)
 }
 
 // Clone Tests
-TEST(ObjectMetaDataTest, Clone)
+NOLINT_TEST(ObjectMetaDataTest, Clone)
 {
     const ObjectMetaData original("TestObject");
     const auto cloned = original.Clone();
-    auto* cloned_meta_data = reinterpret_cast<ObjectMetaData*>(cloned.get());
+    auto* cloned_meta_data = reinterpret_cast<ObjectMetaData*>(cloned.get()); // NOLINT(*-pro-type-reinterpret-cast)
     ASSERT_NE(cloned_meta_data, nullptr);
     EXPECT_EQ(cloned_meta_data->GetName(), "TestObject");
     cloned_meta_data->SetName("NewName");
@@ -41,7 +41,7 @@ TEST(ObjectMetaDataTest, Clone)
 }
 
 // Copy/Move Tests
-TEST(ObjectMetaDataTest, CopyConstructor)
+NOLINT_TEST(ObjectMetaDataTest, CopyConstructor)
 {
     const ObjectMetaData original("TestObject");
     ObjectMetaData copy(original);
@@ -51,14 +51,14 @@ TEST(ObjectMetaDataTest, CopyConstructor)
     EXPECT_EQ(original.GetName(), "TestObject");
 }
 
-TEST(ObjectMetaDataTest, MoveConstructor)
+NOLINT_TEST(ObjectMetaDataTest, MoveConstructor)
 {
     ObjectMetaData original("TestObject");
     const ObjectMetaData moved(std::move(original));
     EXPECT_EQ(moved.GetName(), "TestObject");
 }
 
-TEST(ObjectMetaDataTest, CopyAssignment)
+NOLINT_TEST(ObjectMetaDataTest, CopyAssignment)
 {
     const ObjectMetaData original("TestObject");
     ObjectMetaData copy = original;
@@ -68,7 +68,7 @@ TEST(ObjectMetaDataTest, CopyAssignment)
     EXPECT_EQ(original.GetName(), "TestObject");
 }
 
-TEST(ObjectMetaDataTest, MoveAssignment)
+NOLINT_TEST(ObjectMetaDataTest, MoveAssignment)
 {
     ObjectMetaData original("TestObject");
     const ObjectMetaData moved = std::move(original);

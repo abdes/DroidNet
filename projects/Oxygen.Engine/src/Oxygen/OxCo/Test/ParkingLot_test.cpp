@@ -8,9 +8,10 @@
 
 #include <array>
 #include <coroutine>
-#include <gtest/gtest.h>
 
-using namespace oxygen::co;
+#include <Oxygen/Testing/GTest.h>
+
+using oxygen::co::ParkingLot;
 
 class MockCoroutine {
 public:
@@ -28,7 +29,7 @@ public:
     };
 };
 
-TEST(ParkingLotTest, ParkAndUnParkOne)
+NOLINT_TEST(ParkingLotTest, ParkAndUnParkOne)
 {
     ParkingLot lot;
     constexpr size_t num_coroutines = 10;
@@ -56,7 +57,7 @@ TEST(ParkingLotTest, ParkAndUnParkOne)
     EXPECT_TRUE(lot.Empty());
 }
 
-TEST(ParkingLotTest, ParkAndUnParkAll)
+NOLINT_TEST(ParkingLotTest, ParkAndUnParkAll)
 {
     ParkingLot lot;
     constexpr size_t num_coroutines = 10;
@@ -84,7 +85,7 @@ TEST(ParkingLotTest, ParkAndUnParkAll)
     }
 }
 
-TEST(ParkingLotTest, Empty)
+NOLINT_TEST(ParkingLotTest, Empty)
 {
     ParkingLot lot;
     bool parked { true };

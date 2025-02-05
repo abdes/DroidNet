@@ -5,13 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Oxygen/OxCo/Detail/Queue.h"
-#include <gtest/gtest.h>
 
-using namespace oxygen::co::detail;
+#include <Oxygen/Testing/GTest.h>
+
+using oxygen::co::detail::Queue;
 
 namespace {
 
-TEST(QueueTest, ConstructWithInitialCapacity)
+NOLINT_TEST(QueueTest, ConstructWithInitialCapacity)
 {
     const Queue<int> q(10);
     EXPECT_EQ(q.Capacity(), 10);
@@ -19,7 +20,7 @@ TEST(QueueTest, ConstructWithInitialCapacity)
     EXPECT_TRUE(q.Empty());
 }
 
-TEST(QueueTest, MoveConstructor)
+NOLINT_TEST(QueueTest, MoveConstructor)
 {
     Queue<int> q1(10);
     q1.PushBack(1);
@@ -28,7 +29,7 @@ TEST(QueueTest, MoveConstructor)
     EXPECT_EQ(q2.Front(), 1);
 }
 
-TEST(QueueTest, MoveAssignment)
+NOLINT_TEST(QueueTest, MoveAssignment)
 {
     Queue<int> q1(10);
     q1.PushBack(1);
@@ -38,7 +39,7 @@ TEST(QueueTest, MoveAssignment)
     EXPECT_EQ(q2.Front(), 1);
 }
 
-TEST(QueueTest, PushBackSingleElement)
+NOLINT_TEST(QueueTest, PushBackSingleElement)
 {
     Queue<int> q(10);
     q.PushBack(1);
@@ -46,7 +47,7 @@ TEST(QueueTest, PushBackSingleElement)
     EXPECT_EQ(q.Front(), 1);
 }
 
-TEST(QueueTest, PushBackMultipleElements)
+NOLINT_TEST(QueueTest, PushBackMultipleElements)
 {
     Queue<int> q(10);
     q.PushBack(1);
@@ -55,7 +56,7 @@ TEST(QueueTest, PushBackMultipleElements)
     EXPECT_EQ(q.Front(), 1);
 }
 
-TEST(QueueTest, PopFrontSingleElement)
+NOLINT_TEST(QueueTest, PopFrontSingleElement)
 {
     Queue<int> q(10);
     q.PushBack(1);
@@ -64,7 +65,7 @@ TEST(QueueTest, PopFrontSingleElement)
     EXPECT_TRUE(q.Empty());
 }
 
-TEST(QueueTest, PopFrontMultipleElements)
+NOLINT_TEST(QueueTest, PopFrontMultipleElements)
 {
     Queue<int> q(10);
     q.PushBack(1);
@@ -74,20 +75,20 @@ TEST(QueueTest, PopFrontMultipleElements)
     EXPECT_EQ(q.Front(), 2);
 }
 
-TEST(QueueTest, CapacityCheck)
+NOLINT_TEST(QueueTest, CapacityCheck)
 {
     const Queue<int> q(10);
     EXPECT_EQ(q.Capacity(), 10);
 }
 
-TEST(QueueTest, SizeCheck)
+NOLINT_TEST(QueueTest, SizeCheck)
 {
     Queue<int> q(10);
     q.PushBack(1);
     EXPECT_EQ(q.Size(), 1);
 }
 
-TEST(QueueTest, EmptyCheck)
+NOLINT_TEST(QueueTest, EmptyCheck)
 {
     Queue<int> q(10);
     EXPECT_TRUE(q.Empty());
@@ -95,7 +96,7 @@ TEST(QueueTest, EmptyCheck)
     EXPECT_FALSE(q.Empty());
 }
 
-TEST(QueueTest, PushBackUntilGrow)
+NOLINT_TEST(QueueTest, PushBackUntilGrow)
 {
     Queue<int> q(2);
     q.PushBack(1);
@@ -105,7 +106,7 @@ TEST(QueueTest, PushBackUntilGrow)
     EXPECT_EQ(q.Size(), 3);
 }
 
-TEST(QueueTest, PushBackAndPopFrontWrapAround)
+NOLINT_TEST(QueueTest, PushBackAndPopFrontWrapAround)
 {
     Queue<int> q(3);
     q.PushBack(1);
@@ -117,7 +118,7 @@ TEST(QueueTest, PushBackAndPopFrontWrapAround)
     EXPECT_EQ(q.Front(), 2);
 }
 
-TEST(QueueTest, Destructor)
+NOLINT_TEST(QueueTest, Destructor)
 {
     Queue<int> q(10);
     q.PushBack(1);
@@ -125,13 +126,13 @@ TEST(QueueTest, Destructor)
     // Destructor will be called at the end of the scope
 }
 
-TEST(QueueTest, PopFrontFromEmptyQueue)
+NOLINT_TEST(QueueTest, PopFrontFromEmptyQueue)
 {
     Queue<int> q(10);
     EXPECT_NO_THROW(q.PopFront());
 }
 
-TEST(QueueTest, EmplaceBackSingleElement)
+NOLINT_TEST(QueueTest, EmplaceBackSingleElement)
 {
     Queue<std::pair<int, int>> q(10);
     q.EmplaceBack(1, 2);
@@ -140,7 +141,7 @@ TEST(QueueTest, EmplaceBackSingleElement)
     EXPECT_EQ(q.Front().second, 2);
 }
 
-TEST(QueueTest, EmplaceBackMultipleElements)
+NOLINT_TEST(QueueTest, EmplaceBackMultipleElements)
 {
     Queue<std::pair<int, int>> q(10);
     q.EmplaceBack(1, 2);
@@ -153,7 +154,7 @@ TEST(QueueTest, EmplaceBackMultipleElements)
     EXPECT_EQ(q.Front().second, 4);
 }
 
-TEST(QueueTest, EmplaceBackUntilGrow)
+NOLINT_TEST(QueueTest, EmplaceBackUntilGrow)
 {
     Queue<std::pair<int, int>> q(2);
     q.EmplaceBack(1, 2);
@@ -173,7 +174,7 @@ struct Item {
     OXYGEN_DEFAULT_MOVABLE(Item)
 };
 
-TEST(QueueTest, PopFrontCallsDestructor)
+NOLINT_TEST(QueueTest, PopFrontCallsDestructor)
 {
     EXPECT_EQ(0, Item::destruction_count);
     {

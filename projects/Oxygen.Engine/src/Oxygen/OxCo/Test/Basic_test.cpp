@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Awaitables.h"
 #include "Oxygen/OxCo/Co.h"
@@ -20,7 +20,7 @@ namespace {
 
 class OxCoBasicTest : public OxCoTestFixture { };
 
-TEST_F(OxCoBasicTest, SmokeTest)
+NOLINT_TEST_F(OxCoBasicTest, SmokeTest)
 {
     ::Run(*el_, []() -> Co<> {
         auto one = [&]() -> Co<int> { co_return 1; };
@@ -39,7 +39,7 @@ TEST_F(OxCoBasicTest, SmokeTest)
     });
 }
 
-TEST_F(OxCoBasicTest, AwaitableTask)
+NOLINT_TEST_F(OxCoBasicTest, AwaitableTask)
 {
     ::Run(*el_, []() -> Co<> {
         auto task_lambda = []() -> Co<int> { co_return 42; };
@@ -49,7 +49,7 @@ TEST_F(OxCoBasicTest, AwaitableTask)
     });
 }
 
-TEST_F(OxCoBasicTest, AwaitableCallable)
+NOLINT_TEST_F(OxCoBasicTest, AwaitableCallable)
 {
     ::Run(*el_, []() -> Co<> {
         const int x = co_await []() -> Co<int> { co_return 43; };
@@ -57,7 +57,7 @@ TEST_F(OxCoBasicTest, AwaitableCallable)
     });
 }
 
-TEST_F(OxCoBasicTest, ReturnTypes)
+NOLINT_TEST_F(OxCoBasicTest, ReturnTypes)
 {
     ::Run(*el_, []() -> Co<> {
         int x = 42;
@@ -78,7 +78,7 @@ TEST_F(OxCoBasicTest, ReturnTypes)
     });
 }
 
-TEST_F(OxCoBasicTest, Frames)
+NOLINT_TEST_F(OxCoBasicTest, Frames)
 {
     ::Run(*el_, []() -> Co<> {
         using detail::CoroutineFrame;
@@ -114,18 +114,18 @@ TEST_F(OxCoBasicTest, Frames)
     });
 }
 
-TEST_F(OxCoBasicTest, Exceptions)
+NOLINT_TEST_F(OxCoBasicTest, Exceptions)
 {
     ::Run(*el_, []() -> Co<> {
         auto bad = [&]() -> Co<> {
             co_await std::suspend_never();
             throw std::runtime_error("boo!");
         };
-        EXPECT_THROW(co_await bad, std::runtime_error);
+        NOLINT_EXPECT_THROW(co_await bad, std::runtime_error);
     });
 }
 
-TEST_F(OxCoBasicTest, Just)
+NOLINT_TEST_F(OxCoBasicTest, Just)
 {
     ::Run(*el_, []() -> Co<> {
         auto mk_async = [](int n) { return [n]() -> Co<int> { return Just(n); }; };
@@ -147,7 +147,7 @@ TEST_F(OxCoBasicTest, Just)
     });
 }
 
-TEST_F(OxCoBasicTest, NoOp)
+NOLINT_TEST_F(OxCoBasicTest, NoOp)
 {
     ::Run(*el_, []() -> Co<> {
         auto mk_noop = []() -> Co<> { return NoOp(); };

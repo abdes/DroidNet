@@ -8,18 +8,18 @@
 
 #include <span>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Mocks/MockStream.h"
 
-using namespace oxygen::serio;
-using namespace oxygen::serio::testing;
 using oxygen::ByteSwap;
 using oxygen::IsLittleEndian;
+using oxygen::serio::Writer;
+using oxygen::serio::testing::MockStream;
 
 namespace {
 
-class WriterTest : public ::testing::Test {
+class WriterTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -78,7 +78,7 @@ protected:
     size_t verify_pos_ { 0 };
 };
 
-TEST_F(WriterTest, WritePOD_Success)
+NOLINT_TEST_F(WriterTest, WritePOD_Success)
 {
     constexpr uint8_t test_byte = 0x42;
     constexpr uint32_t test_int = 0x12345678;
@@ -93,28 +93,28 @@ TEST_F(WriterTest, WritePOD_Success)
     verify_written(test_float);
 }
 
-TEST_F(WriterTest, WriteString_Success)
+NOLINT_TEST_F(WriterTest, WriteString_Success)
 {
     const std::string test_str = "Hello, World!";
     ASSERT_TRUE(sut_.write_string(test_str));
     verify_written_string(test_str);
 }
 
-TEST_F(WriterTest, WriteEmptyString_Success)
+NOLINT_TEST_F(WriterTest, WriteEmptyString_Success)
 {
     ASSERT_TRUE(sut_.write_string(""));
     verify_written_string("");
 }
 
-TEST_F(WriterTest, WriteString_Fails_WhenTooLarge)
+NOLINT_TEST_F(WriterTest, WriteString_Fails_WhenTooLarge)
 {
-    const std::string large_str(limits::kMaxStringLength + 1, 'x');
+    const std::string large_str(oxygen::serio::limits::kMaxStringLength + 1, 'x');
     const auto result = sut_.write_string(large_str);
     EXPECT_FALSE(result);
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
 }
 
-TEST_F(WriterTest, WriteArray_Success)
+NOLINT_TEST_F(WriterTest, WriteArray_Success)
 {
     const std::vector<uint32_t> test_array = { 1, 2, 3, 4, 5 };
     ASSERT_TRUE(sut_.write_array(std::span(test_array)));
@@ -125,7 +125,7 @@ TEST_F(WriterTest, WriteArray_Success)
     }
 }
 
-TEST_F(WriterTest, WriteMixedTypes_MaintainsAlignment)
+NOLINT_TEST_F(WriterTest, WriteMixedTypes_MaintainsAlignment)
 {
     constexpr uint8_t byte = 0x42;
     constexpr uint32_t int_val = 0x12345678;
@@ -140,9 +140,9 @@ TEST_F(WriterTest, WriteMixedTypes_MaintainsAlignment)
     verify_written_string(str);
 }
 
-TEST_F(WriterTest, WriteArray_Fails_WhenTooLarge)
+NOLINT_TEST_F(WriterTest, WriteArray_Fails_WhenTooLarge)
 {
-    const std::vector<uint32_t> large_array(limits::kMaxArrayLength + 1);
+    const std::vector<uint32_t> large_array(oxygen::serio::limits::kMaxArrayLength + 1);
     const auto result = sut_.write_array(std::span(large_array));
     EXPECT_FALSE(result);
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::message_size));

@@ -95,7 +95,7 @@ void InputMappingContext::HandleInput(const InputSlot& slot,
     }
 }
 
-auto InputMappingContext::Update(Duration delta_time) const -> bool
+auto InputMappingContext::Update(const Duration delta_time) const -> bool
 {
     // Iterate over all mapping contexts associated with the slot that had the
     // input event.

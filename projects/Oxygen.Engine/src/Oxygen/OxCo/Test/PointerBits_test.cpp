@@ -5,20 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "Oxygen/OxCo/Detail/PointerBits.h"
-#include <gtest/gtest.h>
+
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co::detail;
 
 namespace {
 
-TEST(PointerBitsTest, DefaultConstructor)
+NOLINT_TEST(PointerBitsTest, DefaultConstructor)
 {
     constexpr PointerBits<int, uint8_t, 2> pb;
     EXPECT_EQ(pb.Ptr(), nullptr);
     EXPECT_EQ(pb.Bits(), 0);
 }
 
-TEST(PointerBitsTest, ParameterizedConstructor)
+NOLINT_TEST(PointerBitsTest, ParameterizedConstructor)
 {
     int value = 42;
     const PointerBits<int, uint8_t, 2> pb(&value, 3);
@@ -26,7 +27,7 @@ TEST(PointerBitsTest, ParameterizedConstructor)
     EXPECT_EQ(pb.Bits(), 3);
 }
 
-TEST(PointerBitsTest, SetMethod)
+NOLINT_TEST(PointerBitsTest, SetMethod)
 {
     int value1 = 42;
     int value2 = 84;
@@ -36,7 +37,7 @@ TEST(PointerBitsTest, SetMethod)
     EXPECT_EQ(pb.Bits(), 2);
 }
 
-TEST(PointerBitsTest, BitsMaskCheck)
+NOLINT_TEST(PointerBitsTest, BitsMaskCheck)
 {
     int value = 42;
     PointerBits<int, uint8_t, 2> pb(&value, 3);
@@ -45,7 +46,7 @@ TEST(PointerBitsTest, BitsMaskCheck)
     EXPECT_EQ(pb.Bits(), 0);
 }
 
-TEST(PointerBitsTest, AlignmentCheck)
+NOLINT_TEST(PointerBitsTest, AlignmentCheck)
 {
     struct alignas(4) AlignedStruct {
         int data;
@@ -57,21 +58,21 @@ TEST(PointerBitsTest, AlignmentCheck)
     EXPECT_EQ(pb.Bits(), 3);
 }
 
-TEST(PointerBitsTest, InvalidBits)
+NOLINT_TEST(PointerBitsTest, InvalidBits)
 {
     int value = 42;
     PointerBits<int, uint8_t, 2> pb;
     EXPECT_DEATH(pb.Set(&value, 4), ".*"); // 4 is out of range for 2-bit width
 }
 
-TEST(PointerBitsTest, NullPointer)
+NOLINT_TEST(PointerBitsTest, NullPointer)
 {
     const PointerBits<int, uint8_t, 2> pb(nullptr, 3);
     EXPECT_EQ(pb.Ptr(), nullptr);
     EXPECT_EQ(pb.Bits(), 3);
 }
 
-TEST(PointerBitsTest, LargeWidth)
+NOLINT_TEST(PointerBitsTest, LargeWidth)
 {
     int value = 42;
     const PointerBits<int, uint16_t, 16> pb(&value, 65535);

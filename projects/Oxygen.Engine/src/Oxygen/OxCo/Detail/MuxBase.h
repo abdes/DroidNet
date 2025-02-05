@@ -193,12 +193,12 @@ private:
     void Invoke(const std::exception_ptr& ex)
     {
         auto i = ++count_;
-        bool first_fail = (ex && !exception_);
+        bool first_fail = ex && !exception_;
         if (first_fail) {
             exception_ = ex;
         }
         DLOG_F(1, "Mux<{}/{}> {} invocation {}{}", self().MinReady(),
-            self().Size(), fmt::ptr(this), i, (ex ? " with exception" : ""));
+            self().Size(), fmt::ptr(this), i, ex ? " with exception" : "");
         if (i == self().Size()) {
             parent_.resume();
         } else if (first_fail || i == self().MinReady()) {

@@ -61,7 +61,8 @@ protected:                            \
  Composition::AddComponent
  \see https://www.scs.stanford.edu/~dm/blog/va-opt.html
 */
-#define OXYGEN_COMPONENT_REQUIRES(...)                                                                        \
+#define OXYGEN_COMPONENT_REQUIRES(...) OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__) // NOLINT(*-avoid-c-arrays)
+#define OXYGEN_COMPONENT_REQUIRES_WARN_(...)                                                                  \
 private:                                                                                                      \
     inline static const oxygen::TypeId dependencies[] = {                                                     \
         __VA_OPT__(OXYGEN_EXPAND(FOR_EACH_HELPER(__VA_ARGS__)))                                               \
@@ -69,8 +70,8 @@ private:                                                                        
                                                                                                               \
 public:                                                                                                       \
     static constexpr auto ClassDependencies() -> std::span<const oxygen::TypeId> { return { dependencies }; } \
-    bool HasDependencies() const override { return true; }                                                    \
-    std::span<const oxygen::TypeId> Dependencies() const override { return { dependencies }; }                \
+    auto HasDependencies() const -> bool override { return true; }                                            \
+    auto Dependencies() const -> std::span<const oxygen::TypeId> override { return { dependencies }; }        \
                                                                                                               \
 private:
 

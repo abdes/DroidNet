@@ -6,7 +6,7 @@
 
 #include "Oxygen/Base/MemoryStream.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::serio;
 using namespace testing;
@@ -17,7 +17,7 @@ protected:
     MemoryStream sut_ { std::span(buffer_) };
 };
 
-TEST_F(MemoryStreamTest, Constructor_Success)
+NOLINT_TEST_F(MemoryStreamTest, Constructor_Success)
 {
     const auto size_result = sut_.size();
     EXPECT_TRUE(size_result);
@@ -30,7 +30,7 @@ TEST_F(MemoryStreamTest, Constructor_Success)
     EXPECT_FALSE(sut_.eof());
 }
 
-TEST_F(MemoryStreamTest, Write_Success)
+NOLINT_TEST_F(MemoryStreamTest, Write_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -46,7 +46,7 @@ TEST_F(MemoryStreamTest, Write_Success)
     EXPECT_EQ(std::string(buffer_.begin(), buffer_.end()), "hello");
 }
 
-TEST_F(MemoryStreamTest, Read_Success)
+NOLINT_TEST_F(MemoryStreamTest, Read_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -60,13 +60,13 @@ TEST_F(MemoryStreamTest, Read_Success)
     EXPECT_EQ(std::string(buffer, 5), "hello");
 }
 
-TEST_F(MemoryStreamTest, Flush_Success)
+NOLINT_TEST_F(MemoryStreamTest, Flush_Success)
 {
     const auto flush_result = sut_.flush();
     EXPECT_TRUE(flush_result);
 }
 
-TEST_F(MemoryStreamTest, Position_Success)
+NOLINT_TEST_F(MemoryStreamTest, Position_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -79,7 +79,7 @@ TEST_F(MemoryStreamTest, Position_Success)
     EXPECT_EQ(position_result.value(), 2);
 }
 
-TEST_F(MemoryStreamTest, Seek_Success)
+NOLINT_TEST_F(MemoryStreamTest, Seek_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -92,7 +92,7 @@ TEST_F(MemoryStreamTest, Seek_Success)
     EXPECT_EQ(position_result.value(), 2);
 }
 
-TEST_F(MemoryStreamTest, Size_Success)
+NOLINT_TEST_F(MemoryStreamTest, Size_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -102,7 +102,7 @@ TEST_F(MemoryStreamTest, Size_Success)
     EXPECT_EQ(size_result.value(), buffer_.size());
 }
 
-TEST_F(MemoryStreamTest, Data_Success)
+NOLINT_TEST_F(MemoryStreamTest, Data_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -112,7 +112,7 @@ TEST_F(MemoryStreamTest, Data_Success)
     EXPECT_EQ(data_str, "hello");
 }
 
-TEST_F(MemoryStreamTest, Reset_Success)
+NOLINT_TEST_F(MemoryStreamTest, Reset_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -126,7 +126,7 @@ TEST_F(MemoryStreamTest, Reset_Success)
     EXPECT_FALSE(sut_.eof());
 }
 
-TEST_F(MemoryStreamTest, Clear_Success)
+NOLINT_TEST_F(MemoryStreamTest, Clear_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -145,7 +145,7 @@ TEST_F(MemoryStreamTest, Clear_Success)
     EXPECT_FALSE(sut_.eof());
 }
 
-TEST_F(MemoryStreamTest, EOF_Success)
+NOLINT_TEST_F(MemoryStreamTest, EOF_Success)
 {
     const auto write_result = sut_.write("hello", 5);
     EXPECT_TRUE(write_result);
@@ -156,14 +156,14 @@ TEST_F(MemoryStreamTest, EOF_Success)
     EXPECT_TRUE(sut_.eof());
 }
 
-TEST_F(MemoryStreamTest, Write_Fails_WhenSizeExceedsLimit)
+NOLINT_TEST_F(MemoryStreamTest, Write_Fails_WhenSizeExceedsLimit)
 {
     const auto result = sut_.write("data", buffer_.size() + 1);
     EXPECT_FALSE(result);
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::no_buffer_space));
 }
 
-TEST_F(MemoryStreamTest, Read_Fails_WhenSizeExceedsLimit)
+NOLINT_TEST_F(MemoryStreamTest, Read_Fails_WhenSizeExceedsLimit)
 {
     char buffer[1];
     const auto result = sut_.read(buffer, buffer_.size() + 1);
@@ -171,14 +171,14 @@ TEST_F(MemoryStreamTest, Read_Fails_WhenSizeExceedsLimit)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(MemoryStreamTest, Seek_Fails_WhenPositionExceedsLimit)
+NOLINT_TEST_F(MemoryStreamTest, Seek_Fails_WhenPositionExceedsLimit)
 {
     const auto result = sut_.seek(buffer_.size() + 1);
     EXPECT_FALSE(result);
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_seek));
 }
 
-TEST_F(MemoryStreamTest, PartialRead_Success)
+NOLINT_TEST_F(MemoryStreamTest, PartialRead_Success)
 {
     // Initialize with known data
     const auto write_result = sut_.write("hello", 5);
@@ -206,7 +206,7 @@ TEST_F(MemoryStreamTest, PartialRead_Success)
     EXPECT_EQ(std::string_view(remaining, 3), "llo");
 }
 
-TEST_F(MemoryStreamTest, ZeroSizeOperations)
+NOLINT_TEST_F(MemoryStreamTest, ZeroSizeOperations)
 {
     const auto write_result = sut_.write("", 0);
     EXPECT_TRUE(write_result);
@@ -216,7 +216,7 @@ TEST_F(MemoryStreamTest, ZeroSizeOperations)
     EXPECT_TRUE(read_result);
 }
 
-TEST_F(MemoryStreamTest, MoveConstruction)
+NOLINT_TEST_F(MemoryStreamTest, MoveConstruction)
 {
     {
         const MemoryStream moved_stream { std::move(sut_) };
@@ -228,7 +228,7 @@ TEST_F(MemoryStreamTest, MoveConstruction)
     EXPECT_TRUE(true);
 }
 
-TEST_F(MemoryStreamTest, SequentialReadWrite)
+NOLINT_TEST_F(MemoryStreamTest, SequentialReadWrite)
 {
     const std::string data = "hello";
     char read_buffer[2];
@@ -244,7 +244,7 @@ TEST_F(MemoryStreamTest, SequentialReadWrite)
     EXPECT_EQ(std::string(read_buffer, 2), "ll");
 }
 
-TEST_F(MemoryStreamTest, MoveAssignment_Success)
+NOLINT_TEST_F(MemoryStreamTest, MoveAssignment_Success)
 {
     MemoryStream other_stream;
     other_stream = std::move(sut_);
@@ -258,7 +258,7 @@ TEST_F(MemoryStreamTest, MoveAssignment_Success)
         std::string_view(buffer_.data(), buffer_.size()));
 }
 
-TEST_F(MemoryStreamTest, InterleavedOperations_Success)
+NOLINT_TEST_F(MemoryStreamTest, InterleavedOperations_Success)
 {
     constexpr char write_data[] = "test";
     char read_buffer[2];
@@ -273,7 +273,7 @@ TEST_F(MemoryStreamTest, InterleavedOperations_Success)
     EXPECT_EQ(std::string_view(read_buffer, 2), "te");
 }
 
-TEST_F(MemoryStreamTest, BoundaryConditions)
+NOLINT_TEST_F(MemoryStreamTest, BoundaryConditions)
 {
     // Fill buffer to exact capacity
     EXPECT_TRUE(sut_.write(buffer_.data(), buffer_.size()));
@@ -285,7 +285,7 @@ TEST_F(MemoryStreamTest, BoundaryConditions)
     EXPECT_TRUE(sut_.read(&single_byte, 1));
 }
 
-TEST_F(MemoryStreamTest, DataIntegrity_MultipleOperations)
+NOLINT_TEST_F(MemoryStreamTest, DataIntegrity_MultipleOperations)
 {
     const std::string test_pattern = "12345";
 
@@ -306,7 +306,7 @@ protected:
     MemoryStream sut_; // Uses internal buffer
 };
 
-TEST_F(InternalBufferMemoryStreamTest, Write_GrowsInternalBuffer)
+NOLINT_TEST_F(InternalBufferMemoryStreamTest, Write_GrowsInternalBuffer)
 {
     const auto write_result = sut_.write("hello world", 11);
     EXPECT_TRUE(write_result);
@@ -316,7 +316,7 @@ TEST_F(InternalBufferMemoryStreamTest, Write_GrowsInternalBuffer)
     EXPECT_EQ(size_result.value(), 11);
 }
 
-TEST_F(InternalBufferMemoryStreamTest, WriteGrowsAndMaintainsContent)
+NOLINT_TEST_F(InternalBufferMemoryStreamTest, WriteGrowsAndMaintainsContent)
 {
     const std::string data1 = "hello";
     const std::string data2 = " world";
@@ -330,7 +330,7 @@ TEST_F(InternalBufferMemoryStreamTest, WriteGrowsAndMaintainsContent)
     EXPECT_EQ(std::string(buffer, 11), "hello world");
 }
 
-TEST_F(InternalBufferMemoryStreamTest, StressTest_LargeData)
+NOLINT_TEST_F(InternalBufferMemoryStreamTest, StressTest_LargeData)
 {
     constexpr size_t test_size = 1024ULL * 1024; // 1MB
     const std::vector large_data(test_size, 'A');

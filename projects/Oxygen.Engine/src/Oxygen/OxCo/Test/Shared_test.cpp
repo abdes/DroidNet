@@ -4,27 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include "Oxygen/OxCo/Shared.h"
+
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Awaitables.h"
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Run.h"
-#include "Oxygen/OxCo/Shared.h"
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 
 using namespace std::chrono_literals;
-using namespace oxygen::co::detail;
-using namespace oxygen::co;
-using namespace oxygen::co::testing;
+using oxygen::co::Co;
+using oxygen::co::Shared;
+using oxygen::co::testing::OxCoTestFixture;
 
 namespace {
 
 class SharedTest : public OxCoTestFixture {
 protected:
-    using UseFunction = std::function<Co<int>(std::chrono::milliseconds)>;
+    using UseFunction = std::function<Co<int>(milliseconds)>;
     using SharedProducer = std::function<Co<int>()>;
 
     Shared<SharedProducer> shared_ {};
@@ -39,14 +38,14 @@ protected:
             co_return 42;
         });
 
-        use_ = std::make_unique<UseFunction>([&](milliseconds delay = 0ms) -> Co<int> {
+        use_ = std::make_unique<UseFunction>([&](const milliseconds delay = 0ms) -> Co<int> {
             if (delay != 0ms) {
                 co_await el_->Sleep(delay);
             }
             int ret = co_await shared_;
             EXPECT_EQ(el_->Now(), 5ms);
             EXPECT_EQ(ret, 42);
-            co_return std::move(ret);
+            co_return ret;
         });
     }
 
@@ -55,7 +54,7 @@ protected:
 
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
-TEST_F(SharedTest, Smoke)
+NOLINT_TEST_F(SharedTest, Smoke)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto [x, y] = co_await AllOf(Use(), Use(1ms));

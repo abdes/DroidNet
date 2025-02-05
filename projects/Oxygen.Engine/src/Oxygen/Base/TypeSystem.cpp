@@ -98,7 +98,7 @@ auto TypeRegistry::Get() -> TypeRegistry&
     return *instance;
 }
 
-auto TypeRegistry::RegisterType(const char* name) const -> oxygen::TypeId
+auto TypeRegistry::RegisterType(const char* name) const -> TypeId
 {
     if (!name || strnlen(name, 1) == 0)
         throw std::invalid_argument("cannot use `null` or empty type name to register a type");
@@ -112,7 +112,7 @@ auto TypeRegistry::RegisterType(const char* name) const -> oxygen::TypeId
     return id;
 }
 
-auto TypeRegistry::GetTypeId(const char* name) const -> oxygen::TypeId
+auto TypeRegistry::GetTypeId(const char* name) const -> TypeId
 {
     std::shared_lock lock(impl_->mutex_);
     if (!impl_->type_map_.contains(name))

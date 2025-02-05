@@ -6,25 +6,26 @@
 
 #include "Oxygen/Base/ResourceHandle.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::ResourceHandle;
 
-namespace base::resources {
-TEST(ResourceHandleTest, InvalidHandle)
+namespace {
+
+NOLINT_TEST(ResourceHandleTest, InvalidHandle)
 {
     const ResourceHandle handle;
     ASSERT_FALSE(handle.IsValid());
 }
 
-TEST(ResourceHandleTest, ToString)
+NOLINT_TEST(ResourceHandleTest, ToString)
 {
     const ResourceHandle handle(1U, 0x04);
     const std::string expected_string = "ResourceHandle(Index: 1, ResourceType: 4, Generation: 0, IsFree: false)";
     EXPECT_EQ(handle.ToString(), expected_string);
 }
 
-TEST(ResourceHandleTest, ToString_InvalidHandle)
+NOLINT_TEST(ResourceHandleTest, ToString_InvalidHandle)
 {
     const ResourceHandle handle;
     ASSERT_FALSE(handle.IsValid());
@@ -32,7 +33,7 @@ TEST(ResourceHandleTest, ToString_InvalidHandle)
     EXPECT_EQ(handle.ToString(), expected_string);
 }
 
-TEST(ResourceHandleTest, ValidHandle)
+NOLINT_TEST(ResourceHandleTest, ValidHandle)
 {
     const ResourceHandle handle(1U, 0x04);
     EXPECT_EQ(handle.Index(), 1U);
@@ -40,7 +41,7 @@ TEST(ResourceHandleTest, ValidHandle)
     EXPECT_EQ(handle.Generation(), 0);
 }
 
-TEST(ResourceHandleTest, Comparison)
+NOLINT_TEST(ResourceHandleTest, Comparison)
 {
     // Arrange & Act
     const ResourceHandle handle1(1U, 0x04);
@@ -53,14 +54,14 @@ TEST(ResourceHandleTest, Comparison)
     EXPECT_TRUE(handle1 != handle3);
 }
 
-TEST(ResourceHandleTest, GetHandle)
+NOLINT_TEST(ResourceHandleTest, GetHandle)
 {
     const ResourceHandle handle(1U, 0x04);
     const ResourceHandle::HandleT the_handle = handle.Handle();
     EXPECT_EQ(the_handle, 0x0004'0000'0000'0001ULL);
 }
 
-TEST(ResourceHandleTest, NewGeneration)
+NOLINT_TEST(ResourceHandleTest, NewGeneration)
 {
     ResourceHandle handle(1U, 0x03);
     ASSERT_EQ(handle.Generation(), 0);
@@ -80,7 +81,7 @@ TEST(ResourceHandleTest, NewGeneration)
 #endif
 }
 
-TEST(ResourceHandleTest, SetResourceType)
+NOLINT_TEST(ResourceHandleTest, SetResourceType)
 {
     ResourceHandle handle(1U);
     EXPECT_EQ(handle.ResourceType(), ResourceHandle::kTypeNotInitialized);
@@ -88,7 +89,7 @@ TEST(ResourceHandleTest, SetResourceType)
     EXPECT_EQ(handle.ResourceType(), 0x12);
 }
 
-TEST(ResourceHandleTest, SetIndex)
+NOLINT_TEST(ResourceHandleTest, SetIndex)
 {
     ResourceHandle handle;
     handle.SetIndex(0);
@@ -98,7 +99,7 @@ TEST(ResourceHandleTest, SetIndex)
     EXPECT_EQ(handle.Index(), kValidIndex);
 }
 
-TEST(ResourceHandleTest, SetFree)
+NOLINT_TEST(ResourceHandleTest, SetFree)
 {
     ResourceHandle handle(1U, 0x03);
     handle.NewGeneration();
@@ -118,21 +119,21 @@ TEST(ResourceHandleTest, SetFree)
     ASSERT_EQ(handle.Generation(), 1);
 }
 
-TEST(ResourceHandleTest, CopyConstructor)
+NOLINT_TEST(ResourceHandleTest, CopyConstructor)
 {
     const ResourceHandle handle1(1U, 0x04);
     const auto handle2(handle1);
     EXPECT_EQ(handle1, handle2);
 }
 
-TEST(ResourceHandleTest, CopyAssignment)
+NOLINT_TEST(ResourceHandleTest, CopyAssignment)
 {
     const ResourceHandle handle1(1U, 0x04);
     const auto handle2 = handle1;
     EXPECT_EQ(handle1, handle2);
 }
 
-TEST(ResourceHandleTest, MoveConstructor)
+NOLINT_TEST(ResourceHandleTest, MoveConstructor)
 {
     ResourceHandle handle1(1U, 0x04);
     const auto handle2(std::move(handle1));
@@ -142,7 +143,7 @@ TEST(ResourceHandleTest, MoveConstructor)
     EXPECT_FALSE(handle1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-TEST(ResourceHandleTest, MoveAssignment)
+NOLINT_TEST(ResourceHandleTest, MoveAssignment)
 {
     ResourceHandle handle1(1U, 0x04);
     const auto handle2 = std::move(handle1);
@@ -153,11 +154,12 @@ TEST(ResourceHandleTest, MoveAssignment)
     EXPECT_FALSE(handle1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-TEST(ResourceHandleTest, Invalidate)
+NOLINT_TEST(ResourceHandleTest, Invalidate)
 {
     ResourceHandle handle(1U, 0x04);
     ASSERT_TRUE(handle.IsValid());
     handle.Invalidate();
     ASSERT_FALSE(handle.IsValid());
 }
-}
+
+} // namespace

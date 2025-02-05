@@ -66,7 +66,7 @@ public:
 
     virtual auto GetWindowFlags(SDL_Window* window) const -> uint64_t = 0;
     virtual auto GetWindowId(SDL_Window* window) const
-        -> platform::WindowIdType
+        -> WindowIdType
         = 0;
     virtual auto GetNativeWindow(SDL_Window* window) const
         -> NativeWindowInfo

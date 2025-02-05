@@ -31,7 +31,7 @@ TEST_CASE("Value")
     TestEventLoop el;
     SECTION("wakes tasks when its value changes")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(
@@ -76,7 +76,7 @@ TEST_CASE("Value")
 
     SECTION("updates value and wakes tasks when Set() is called")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(
@@ -95,7 +95,7 @@ TEST_CASE("Value")
 
     SECTION("updates value and wakes tasks when assigned another object")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(
@@ -114,7 +114,7 @@ TEST_CASE("Value")
 
     SECTION("`UntilMatches` suspends until predicate matches")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(
@@ -137,7 +137,7 @@ TEST_CASE("Value")
 
     SECTION("`UntilChanged` with custom predicate")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(
@@ -157,7 +157,7 @@ TEST_CASE("Value")
 
     SECTION("`UntilChanged` with specific from and to values")
     {
-        ::Run(el, [&]() -> Co<> {
+        Run(el, [&]() -> Co<> {
             Value v { 0 };
 
             co_await AllOf(

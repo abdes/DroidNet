@@ -68,7 +68,7 @@ public:
 
     auto await_suspend(Handle h) -> bool
     {
-        bool ret = this->DoSuspend(h);
+        const bool ret = this->DoSuspend(h);
         for (auto& awaitable : awaitables_) {
             awaitable.Bind(*this);
         }
@@ -171,7 +171,7 @@ public:
 
     [[nodiscard]] auto await_must_resume() const noexcept -> bool
     {
-        bool allMustResume = (this->Size() > 0);
+        bool allMustResume = this->Size() > 0;
         for (auto& awaitable : this->GetAwaitables()) {
             allMustResume &= awaitable.MustResume();
         }

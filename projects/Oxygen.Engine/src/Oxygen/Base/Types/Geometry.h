@@ -15,7 +15,7 @@ struct Point {
     T x;
     T y;
 
-    friend auto to_string(Point<T> const& self)
+    friend auto to_string(Point const& self)
     {
         std::string out = "x: ";
         out.append(nostd::to_string(self.x));
@@ -30,7 +30,7 @@ struct Extent {
     T width;
     T height;
 
-    friend auto to_string(Extent<T> const& self)
+    friend auto to_string(Extent const& self)
     {
         std::string out = "w: ";
         out.append(nostd::to_string(self.width));
@@ -47,7 +47,7 @@ struct Bounds {
     // Width and height
     Extent<T> extent;
 
-    friend auto to_string(Bounds<T> const& self)
+    friend auto to_string(Bounds const& self)
     {
         std::string out = "x: ";
         out.append(nostd::to_string(self.origin.x));
@@ -66,7 +66,7 @@ struct Motion {
     T dx;
     T dy;
 
-    friend auto to_string(Motion<T> const& self)
+    friend auto to_string(Motion const& self)
     {
         std::string out = "dx: ";
         out.append(nostd::to_string(self.dx));

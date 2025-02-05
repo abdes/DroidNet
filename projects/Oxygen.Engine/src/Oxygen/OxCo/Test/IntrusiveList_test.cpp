@@ -6,8 +6,9 @@
 
 #include "Oxygen/OxCo/Detail/IntrusiveList.h"
 
-#include <gtest/gtest.h>
 #include <ranges>
+
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co::detail;
 
@@ -26,7 +27,7 @@ private:
 static_assert(std::ranges::forward_range<IntrusiveList<TestItem>>);
 
 // Keep existing test
-TEST(IntrusiveListTest, PushBack)
+NOLINT_TEST(IntrusiveListTest, PushBack)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);
@@ -46,17 +47,19 @@ TEST(IntrusiveListTest, PushBack)
 }
 
 // Add new tests
-TEST(IntrusiveListTest, EmptyList)
+NOLINT_TEST(IntrusiveListTest, EmptyList)
 {
     IntrusiveList<TestItem> list;
     EXPECT_TRUE(list.Empty());
-    auto front = [&list]() { const auto &f = list.Front(); (void)f; };
+    auto front = [&list] { const auto &f = list.Front(); (void)f; };
+    // NOLINTNEXTLINE
     EXPECT_THROW(front(), std::out_of_range);
-    auto back = [&list]() { const auto &b = list.Back(); (void)b; };
+    auto back = [&list] { const auto &b = list.Back(); (void)b; };
+    // NOLINTNEXTLINE
     EXPECT_THROW(back(), std::out_of_range);
 }
 
-TEST(IntrusiveListTest, PushFront)
+NOLINT_TEST(IntrusiveListTest, PushFront)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);
@@ -74,7 +77,7 @@ TEST(IntrusiveListTest, PushFront)
     EXPECT_EQ(list.Back().GetValue(), 1);
 }
 
-TEST(IntrusiveListTest, PopOperations)
+NOLINT_TEST(IntrusiveListTest, PopOperations)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);
@@ -96,7 +99,7 @@ TEST(IntrusiveListTest, PopOperations)
     EXPECT_TRUE(list.Empty());
 }
 
-TEST(IntrusiveListTest, IteratorOperations)
+NOLINT_TEST(IntrusiveListTest, IteratorOperations)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);
@@ -120,7 +123,7 @@ TEST(IntrusiveListTest, IteratorOperations)
     EXPECT_EQ(it, list.end());
 }
 
-TEST(IntrusiveListTest, RangeBasedFor)
+NOLINT_TEST(IntrusiveListTest, RangeBasedFor)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);
@@ -138,7 +141,7 @@ TEST(IntrusiveListTest, RangeBasedFor)
     EXPECT_EQ(sum, 6);
 }
 
-TEST(IntrusiveListTest, MoveOperations)
+NOLINT_TEST(IntrusiveListTest, MoveOperations)
 {
     IntrusiveList<TestItem> list1;
     TestItem item1(1);
@@ -153,7 +156,7 @@ TEST(IntrusiveListTest, MoveOperations)
     EXPECT_EQ(list2.Back().GetValue(), 2);
 }
 
-TEST(IntrusiveListTest, EmptyOperations)
+NOLINT_TEST(IntrusiveListTest, EmptyOperations)
 {
     IntrusiveList<TestItem> list;
     list.PopFront(); // Should not crash
@@ -161,7 +164,7 @@ TEST(IntrusiveListTest, EmptyOperations)
     EXPECT_TRUE(list.Empty());
 }
 
-TEST(IntrusiveListTest, ConstAccess)
+NOLINT_TEST(IntrusiveListTest, ConstAccess)
 {
     IntrusiveList<TestItem> list;
     TestItem item1(1);

@@ -185,8 +185,8 @@ auto TranslateKeyboardEvent(SDL_Event const& event)
     if (key_code == Key::kNone) {
         // This is not a key code we are interested to handle.
         // Do not generate an event for it
-        uint32_t key = event.key.key;
-        uint32_t scan_code = event.key.scancode;
+        const uint32_t key = event.key.key;
+        const uint32_t scan_code = event.key.scancode;
         DLOG_F(2,
             "Keyboard event with key code = {} (scan code = {}) is not "
             "something we can handle. Ignoring event.",

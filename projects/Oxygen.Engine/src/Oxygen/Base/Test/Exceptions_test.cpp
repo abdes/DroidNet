@@ -12,11 +12,11 @@
 #  include "Oxygen/Base/Compilers.h"
 #  include "Oxygen/Base/Windows/Exceptions.h"
 
+#  include <Oxygen/Testing/GTest.h>
 #  include <gmock/gmock-matchers.h>
-#  include <gtest/gtest.h>
 
 using oxygen::windows::WindowsException;
-using ::testing::StartsWith;
+using testing::StartsWith;
 
 namespace oxygen::windows {
 
@@ -50,7 +50,7 @@ TEST(WindowsExceptionTest, WhatMethod)
 
 TEST(WindowsExceptionTest, FromLastError)
 {
-    ::SetLastError(ERROR_ACCESS_DENIED);
+    SetLastError(ERROR_ACCESS_DENIED);
     const std::exception_ptr ex_ptr = WindowsException::FromLastError();
     try {
         std::rethrow_exception(ex_ptr);
@@ -87,7 +87,7 @@ OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE(4702)
 TEST(WindowsExceptionTest, ThrowFromLastError)
 {
-    ::SetLastError(ERROR_ACCESS_DENIED);
+    SetLastError(ERROR_ACCESS_DENIED);
     try {
         WindowsException::ThrowFromLastError();
         OXYGEN_DIAGNOSTIC_PUSH

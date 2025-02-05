@@ -932,7 +932,7 @@ bool add_file(const char* path_in, FileMode mode, Verbosity verbosity)
         LOG_F(ERROR, "Failed to create directories to '" LOGURU_FMT(s) "'", path);
     }
 
-    const char* mode_str = (mode == FileMode::Truncate ? "w" : "a");
+    const char* mode_str = (mode == Truncate ? "w" : "a");
     FILE* file;
 #  ifdef _WIN32
     file = _fsopen(path, mode_str, _SH_DENYNO);
@@ -955,7 +955,7 @@ bool add_file(const char* path_in, FileMode mode, Verbosity verbosity)
     add_callback(path_in, file_log, file, verbosity, file_close, file_flush);
 #  endif
 
-    if (mode == FileMode::Append) {
+    if (mode == Append) {
         fprintf(file, "\n\n\n\n\n");
     }
     if (!s_arguments.empty()) {
@@ -1072,7 +1072,7 @@ void add_callback(const char* id,
     close_handler_t on_close,
     flush_handler_t on_flush)
 {
-    std::lock_guard<std::recursive_mutex> lock(s_mutex);
+    std::lock_guard lock(s_mutex);
     s_callbacks.push_back(
         Callback { id, callback, user_data, verbosity, on_close, on_flush, 0 });
     on_callback_change();
@@ -1130,7 +1130,7 @@ Verbosity get_verbosity_from_name(const char* name)
 
 bool remove_callback(const char* id)
 {
-    std::lock_guard<std::recursive_mutex> lock(s_mutex);
+    std::lock_guard lock(s_mutex);
     auto it = std::find_if(begin(s_callbacks),
         end(s_callbacks),
         [&](const Callback& c) { return c.id == id; });
@@ -1149,7 +1149,7 @@ bool remove_callback(const char* id)
 
 void remove_all_callbacks()
 {
-    std::lock_guard<std::recursive_mutex> lock(s_mutex);
+    std::lock_guard lock(s_mutex);
     for (auto& callback : s_callbacks) {
         if (callback.close) {
             callback.close(callback.user_data);
@@ -1595,15 +1595,15 @@ static void log_message(int stack_trace_skip,
     bool abort_if_fatal)
 {
     const auto verbosity = message.verbosity;
-    std::lock_guard<std::recursive_mutex> lock(s_mutex);
+    std::lock_guard lock(s_mutex);
 
     if (message.verbosity == Verbosity_FATAL) {
-        auto st = loguru::stacktrace(stack_trace_skip + 2);
+        auto st = stacktrace(stack_trace_skip + 2);
         if (!st.empty()) {
             RAW_LOG_F(ERROR, "Stack trace:\n" LOGURU_FMT(s) "", st.c_str());
         }
 
-        auto ec = loguru::get_error_context();
+        auto ec = get_error_context();
         if (!ec.empty()) {
             RAW_LOG_F(ERROR, "" LOGURU_FMT(s) "", ec.c_str());
         }
@@ -1678,7 +1678,7 @@ static void log_message(int stack_trace_skip,
                     flush();
                 }
                 std::this_thread::sleep_for(
-                    std::chrono::milliseconds(g_flush_interval_ms));
+                    milliseconds(g_flush_interval_ms));
             }
         });
     }
@@ -1724,7 +1724,7 @@ void vlog(Verbosity verbosity,
     const char* format,
     fmt::format_args args)
 {
-    auto formatted = fmt::vformat(format, args);
+    auto formatted = vformat(format, args);
     log_to_everywhere(1, verbosity, file, line, "", formatted.c_str());
 }
 
@@ -1734,7 +1734,7 @@ void raw_vlog(Verbosity verbosity,
     const char* format,
     fmt::format_args args)
 {
-    auto formatted = fmt::vformat(format, args);
+    auto formatted = vformat(format, args);
     auto message = Message { verbosity, file, line, "", "", "", formatted.c_str() };
     log_message(1, message, false, true);
 }
@@ -1778,7 +1778,7 @@ void raw_log(Verbosity verbosity,
 
 void flush()
 {
-    std::lock_guard<std::recursive_mutex> lock(s_mutex);
+    std::lock_guard lock(s_mutex);
     fflush(stderr);
     for (const auto& callback : s_callbacks) {
         if (callback.flush) {
@@ -1818,7 +1818,7 @@ LogScopeRAII::LogScopeRAII(Verbosity verbosity,
 LogScopeRAII::~LogScopeRAII()
 {
     if (_file) {
-        std::lock_guard<std::recursive_mutex> lock(s_mutex);
+        std::lock_guard lock(s_mutex);
         if (_indent_stderr && s_stderr_indentation > 0) {
             --s_stderr_indentation;
         }
@@ -1850,7 +1850,7 @@ LogScopeRAII::~LogScopeRAII()
 void LogScopeRAII::Init(const char* format, va_list vlist)
 {
     if (_verbosity <= current_verbosity_cutoff()) {
-        std::lock_guard<std::recursive_mutex> lock(s_mutex);
+        std::lock_guard lock(s_mutex);
         _indent_stderr = (_verbosity <= g_stderr_verbosity);
         _start_time_ns = now_ns();
         vsnprintf(_name, sizeof(_name), format, vlist);
@@ -1878,7 +1878,7 @@ void vlog_and_abort(int stack_trace_skip,
     const char* format,
     fmt::format_args args)
 {
-    auto formatted = fmt::vformat(format, args);
+    auto formatted = vformat(format, args);
     log_to_everywhere(stack_trace_skip + 1,
         Verbosity_FATAL,
         file,
