@@ -33,27 +33,27 @@ public:
 #endif // OXYGEN_VULKAN
 
     auto MakeWindow(std::string const& title, PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window>;
+        -> std::weak_ptr<Window>;
     auto MakeWindow(std::string const& title,
         PixelExtent const& extent,
-        platform::Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window>;
+        Window::InitialFlags flags)
+        -> std::weak_ptr<Window>;
     auto MakeWindow(std::string const& title,
         PixelPosition const& position,
         PixelExtent const& extent)
-        -> std::weak_ptr<platform::Window>;
+        -> std::weak_ptr<Window>;
     auto MakeWindow(std::string const& title,
         PixelPosition const& position,
         PixelExtent const& extent,
-        platform::Window::InitialFlags flags)
-        -> std::weak_ptr<platform::Window>;
+        Window::InitialFlags flags)
+        -> std::weak_ptr<Window>;
 
     [[nodiscard]] auto Displays() const
-        -> std::vector<std::unique_ptr<platform::Display>>;
+        -> std::vector<std::unique_ptr<Display>>;
     [[nodiscard]] auto DisplayFromId(const Display::IdType& display_id) const
-        -> std::unique_ptr<platform::Display>;
+        -> std::unique_ptr<Display>;
 
-    auto PollEvent() -> std::unique_ptr<platform::InputEvent>;
+    auto PollEvent() -> std::unique_ptr<InputEvent>;
 
     [[nodiscard]] auto OnUnhandledEvent() const -> sigslot::signal<const SDL_Event&>&
     {
@@ -79,7 +79,7 @@ public:
     }
 
 private:
-    [[nodiscard]] auto WindowFromId(WindowIdType window_id) const -> platform::Window&;
+    [[nodiscard]] auto WindowFromId(WindowIdType window_id) const -> Window&;
     void DispatchDisplayEvent(SDL_Event const& event) const;
     void DispatchWindowEvent(SDL_Event const& event);
 

@@ -26,7 +26,7 @@ Display::~Display() = default;
 
 auto Display::IsPrimaryDisplay() const -> bool
 {
-    const Display::IdType primary_display = kSdl.GetPrimaryDisplay();
+    const IdType primary_display = kSdl.GetPrimaryDisplay();
     return primary_display == Id();
 }
 

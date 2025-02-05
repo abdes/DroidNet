@@ -6,30 +6,31 @@
 
 #include "Oxygen/Base/Reader.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Mocks/MockStream.h"
 
-using namespace oxygen::serio;
-using namespace oxygen::serio::testing;
 using oxygen::ByteSwap;
 using oxygen::IsLittleEndian;
+using oxygen::serio::Reader;
+using oxygen::serio::limits::SequenceSizeType;
+using oxygen::serio::testing::MockStream;
 
 namespace {
 
-class ReaderTest : public ::testing::Test {
+class ReaderTest : public testing::Test {
 protected:
     void SetUp() override
     {
         stream_.seek(0);
     }
 
-    void write_padding(size_t alignment)
+    void write_padding(const size_t alignment)
     {
         const auto pos = stream_.position().value();
         const size_t padding = (alignment - (pos % alignment)) % alignment;
         if (padding > 0) {
-            std::vector<char> zeros(padding, 0);
+            const std::vector<char> zeros(padding, 0);
             ASSERT_TRUE(stream_.write(zeros.data(), padding));
         }
     }
@@ -55,7 +56,7 @@ protected:
         // Align length field
         write_padding(alignof(uint32_t));
 
-        uint32_t length = static_cast<uint32_t>(str.length());
+        auto length = static_cast<uint32_t>(str.length());
         if (!IsLittleEndian()) {
             length = ByteSwap(length);
         }
@@ -94,7 +95,7 @@ protected:
     Reader<MockStream> sut_ { stream_ };
 };
 
-TEST_F(ReaderTest, ReadPOD_Success)
+NOLINT_TEST_F(ReaderTest, ReadPOD_Success)
 {
     // Setup
     constexpr uint32_t test_int = 0x12345678;
@@ -116,7 +117,7 @@ TEST_F(ReaderTest, ReadPOD_Success)
     EXPECT_FLOAT_EQ(float_result.value(), test_float);
 }
 
-TEST_F(ReaderTest, ReadString_Success)
+NOLINT_TEST_F(ReaderTest, ReadString_Success)
 {
     const std::string test_str = "Hello, World!";
     write_string(test_str);
@@ -129,7 +130,7 @@ TEST_F(ReaderTest, ReadString_Success)
     EXPECT_EQ(result.value(), test_str);
 }
 
-TEST_F(ReaderTest, ReadEmptyString_Success)
+NOLINT_TEST_F(ReaderTest, ReadEmptyString_Success)
 {
     write_string("");
 
@@ -141,9 +142,9 @@ TEST_F(ReaderTest, ReadEmptyString_Success)
     EXPECT_TRUE(result.value().empty());
 }
 
-TEST_F(ReaderTest, ReadString_Fails_WhenTooLarge)
+NOLINT_TEST_F(ReaderTest, ReadString_Fails_WhenTooLarge)
 {
-    write_pod<limits::SequenceSizeType>(limits::kMaxStringLength + 1);
+    write_pod<SequenceSizeType>(oxygen::serio::limits::kMaxStringLength + 1);
 
     seek_to(0); // Reset cursor before reading
     EXPECT_EQ(stream_.position().value(), 0);
@@ -153,7 +154,7 @@ TEST_F(ReaderTest, ReadString_Fails_WhenTooLarge)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
 }
 
-TEST_F(ReaderTest, ReadArray_Success)
+NOLINT_TEST_F(ReaderTest, ReadArray_Success)
 {
     const std::vector<uint32_t> test_array = { 1, 2, 3, 4, 5 };
     write_array(test_array);
@@ -166,7 +167,7 @@ TEST_F(ReaderTest, ReadArray_Success)
     EXPECT_EQ(result.value(), test_array);
 }
 
-TEST_F(ReaderTest, ReadEmptyArray_Success)
+NOLINT_TEST_F(ReaderTest, ReadEmptyArray_Success)
 {
     const std::vector<uint32_t> empty_array;
     write_array(empty_array);
@@ -179,9 +180,9 @@ TEST_F(ReaderTest, ReadEmptyArray_Success)
     EXPECT_TRUE(result.value().empty());
 }
 
-TEST_F(ReaderTest, ReadArray_Fails_WhenTooLarge)
+NOLINT_TEST_F(ReaderTest, ReadArray_Fails_WhenTooLarge)
 {
-    write_pod<limits::SequenceSizeType>(limits::kMaxArrayLength + 1);
+    write_pod<SequenceSizeType>(oxygen::serio::limits::kMaxArrayLength + 1);
 
     seek_to(0); // Reset cursor before reading
     EXPECT_EQ(stream_.position().value(), 0);
@@ -191,7 +192,7 @@ TEST_F(ReaderTest, ReadArray_Fails_WhenTooLarge)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
 }
 
-TEST_F(ReaderTest, Read_Fails_OnStreamError)
+NOLINT_TEST_F(ReaderTest, Read_Fails_OnStreamError)
 {
     write_pod(uint32_t { 42 });
 
@@ -204,12 +205,12 @@ TEST_F(ReaderTest, Read_Fails_OnStreamError)
     EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
 }
 
-TEST_F(ReaderTest, ReadMixedTypes_MaintainsAlignment)
+NOLINT_TEST_F(ReaderTest, ReadMixedTypes_MaintainsAlignment)
 {
     // Write mixed-size types
-    uint8_t byte = 0x42;
-    uint32_t integer = 0x12345678;
-    std::string str = "test";
+    const uint8_t byte = 0x42;
+    const uint32_t integer = 0x12345678;
+    const std::string str = "test";
 
     write_pod(byte);
     write_pod(integer);
@@ -218,20 +219,20 @@ TEST_F(ReaderTest, ReadMixedTypes_MaintainsAlignment)
     // Read and verify
     seek_to(0);
 
-    auto byte_result = sut_.read<uint8_t>();
+    const auto byte_result = sut_.read<uint8_t>();
     ASSERT_TRUE(byte_result);
     EXPECT_EQ(byte_result.value(), byte);
 
-    auto int_result = sut_.read<uint32_t>();
+    const auto int_result = sut_.read<uint32_t>();
     ASSERT_TRUE(int_result);
     EXPECT_EQ(int_result.value(), integer);
 
-    auto str_result = sut_.read_string();
+    const auto str_result = sut_.read_string();
     ASSERT_TRUE(str_result);
     EXPECT_EQ(str_result.value(), str);
 }
 
-TEST_F(ReaderTest, ReadString_Fails_OnStreamError)
+NOLINT_TEST_F(ReaderTest, ReadString_Fails_OnStreamError)
 {
     write_string("test");
 
@@ -243,7 +244,7 @@ TEST_F(ReaderTest, ReadString_Fails_OnStreamError)
     EXPECT_FALSE(result);
 }
 
-TEST_F(ReaderTest, ReadArray_Fails_OnStreamError)
+NOLINT_TEST_F(ReaderTest, ReadArray_Fails_OnStreamError)
 {
     const std::vector<uint32_t> test_array = { 1, 2, 3 };
     write_array(test_array);

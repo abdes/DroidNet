@@ -62,7 +62,7 @@ struct RValueQualified {
 TEST_CASE("Sequence")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         SECTION("basic operation")
         {
             co_await (el.Sleep(2ms) | Then([&] { return el.Sleep(3ms); }));
@@ -105,14 +105,14 @@ TEST_CASE("Sequence")
 
         SECTION("with exception (throw in then)")
         {
-            CHECK_THROWS(co_await (Just(42) | Then([](int) -> Co<void> {
+            CHECK_THROWS(co_await (Just(42) | Then([](int) -> Co<> {
                 throw std::runtime_error("test");
             })));
         }
 
         SECTION("with exception (throw after yield)")
         {
-            CHECK_THROWS(co_await (Just(42) | Then([](int) -> Co<void> {
+            CHECK_THROWS(co_await (Just(42) | Then([](int) -> Co<> {
                 co_await kYield;
                 throw std::runtime_error("test");
             })));

@@ -7,28 +7,24 @@
 #include "oxygen/core/version.h"
 
 #include "oxygen/version-info.h"
-#include "gtest/gtest.h"
+#include <Oxygen/Testing/GTest.h>
 
-// NOLINTNEXTLINE
-TEST(VersionTests, Major)
+NOLINT_TEST(VersionTests, Major)
 {
     EXPECT_EQ(oxygen::version::Major(), oxygen::info::cVersionMajor);
 }
 
-// NOLINTNEXTLINE
-TEST(VersionTests, Minor)
+NOLINT_TEST(VersionTests, Minor)
 {
     EXPECT_EQ(oxygen::version::Minor(), oxygen::info::cVersionMinor);
 }
 
-// NOLINTNEXTLINE
-TEST(VersionTests, Patch)
+NOLINT_TEST(VersionTests, Patch)
 {
     EXPECT_EQ(oxygen::version::Patch(), oxygen::info::cVersionPatch);
 }
 
-// NOLINTNEXTLINE
-TEST(VersionTests, Version)
+NOLINT_TEST(VersionTests, Version)
 {
     const std::string expectedVersion = std::to_string(oxygen::version::Major())
         + "." + std::to_string(oxygen::version::Minor()) + "."
@@ -36,16 +32,14 @@ TEST(VersionTests, Version)
     EXPECT_EQ(oxygen::version::Version(), expectedVersion);
 }
 
-// NOLINTNEXTLINE
-TEST(VersionTests, VersionFull)
+NOLINT_TEST(VersionTests, VersionFull)
 {
     const std::string version = oxygen::version::Version();
     const std::string versionFull = oxygen::version::VersionFull();
     EXPECT_TRUE(versionFull.find(version) != std::string::npos);
 }
 
-// NOLINTNEXTLINE
-TEST(VersionTests, NameVersion)
+NOLINT_TEST(VersionTests, NameVersion)
 {
     const std::string version = oxygen::version::Version();
     const std::string nameVersion = oxygen::version::NameVersion();

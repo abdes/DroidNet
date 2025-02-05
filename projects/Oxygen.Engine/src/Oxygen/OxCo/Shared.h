@@ -110,15 +110,17 @@ private:
 
 /// Storage and lifetime management for the shared task underlying a Shared<T>
 template <class Object>
-class Shared<Object>::State : private detail::ProxyFrame,
+class Shared<Object>::State : /*private*/ detail::ProxyFrame,
                               public detail::RefCounted<State> {
 public:
     template <class... Args>
     explicit State(Args&&... args);
     auto Get() -> Object* { return &object_; }
-    auto Closed() const noexcept -> bool { return result_.index() >= Cancelling; }
-
-    auto Ready() const noexcept -> bool;
+    [[nodiscard]] auto Closed() const noexcept -> bool
+    {
+        return result_.index() >= Cancelling;
+    }
+    [[nodiscard]] auto Ready() const noexcept -> bool;
     auto EarlyCancel(Awaitable* ptr) noexcept;
     void SetExecutor(Executor* ex) noexcept;
     auto Suspend(Awaitable* ptr) -> detail::Handle;
@@ -128,7 +130,7 @@ public:
 
 private:
     void Invoke();
-    static void Trampoline(detail::CoroutineFrame* frame)
+    static void Trampoline(CoroutineFrame* frame)
     {
         static_cast<State*>(frame)->Invoke();
     }
@@ -213,9 +215,9 @@ auto Shared<Object>::State::Suspend(Awaitable* ptr) -> detail::Handle
 {
     DLOG_F(1, "    ...on shared awaitable {} (holding {})", fmt::ptr(this),
         fmt::ptr(&awaitable_));
-    bool isFirst = parents_.Empty();
+    const bool is_first = parents_.Empty();
     parents_.PushBack(*ptr);
-    if (isFirst) {
+    if (is_first) {
         // Taking an async backtrace from within a shared task will show its
         // oldest un-cancelled parent as the caller.
         ProxyFrame::LinkTo(ptr->parent_);
@@ -233,9 +235,8 @@ auto Shared<Object>::State::Suspend(Awaitable* ptr) -> detail::Handle
             Invoke();
             return std::noop_coroutine(); // already woke up
         }
-    } else {
-        return std::noop_coroutine();
     }
+    return std::noop_coroutine();
 }
 
 template <class Object>
@@ -260,21 +261,21 @@ auto Shared<Object>::State::GetResult() -> ConstRef
 
     if (result_.index() == Value) [[likely]] {
         return Storage::UnwrapCRef(std::get<Value>(result_));
-    } else if (result_.index() == Exception) {
-        std::rethrow_exception(std::get<Exception>(result_));
-    } else {
-        // We get here if a new parent tries to join the shared operation
-        // after all of its existing parents were cancelled and
-        // thus the shared task was cancelled. The new parent never
-        // called suspend() so we don't have to worry about removing
-        // it from the list of parents. We can't propagate the
-        // cancellation in a different context than the context that
-        // was cancelled, so we throw an exception instead.
-        throw std::runtime_error(
-            "Shared task was cancelled because all of its parent "
-            "tasks were previously cancelled, so there is no "
-            "value for new arrivals to retrieve");
     }
+    if (result_.index() == Exception) {
+        std::rethrow_exception(std::get<Exception>(result_));
+    }
+    // We get here if a new parent tries to join the shared operation
+    // after all of its existing parents were cancelled and
+    // thus the shared task was cancelled. The new parent never
+    // called suspend() so we don't have to worry about removing
+    // it from the list of parents. We can't propagate the
+    // cancellation in a different context than the context that
+    // was cancelled, so we throw an exception instead.
+    throw std::runtime_error(
+        "Shared task was cancelled because all of its parent "
+        "tasks were previously cancelled, so there is no "
+        "value for new arrivals to retrieve");
 }
 
 template <class Object>

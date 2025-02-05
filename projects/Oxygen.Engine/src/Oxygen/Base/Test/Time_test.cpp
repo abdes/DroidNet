@@ -8,8 +8,8 @@
 
 #include <chrono>
 
+#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 using namespace std::chrono_literals;
 
@@ -34,7 +34,7 @@ struct MockTime {
     static auto Now() -> TimePoint { return mock->Now(); }
 };
 
-class TimeTest : public ::testing::Test {
+class TimeTest : public testing::Test {
 protected:
     void SetUp() override { MockTime::mock = &mock_now; }
     void TearDown() override { MockTime::mock = nullptr; }
@@ -45,8 +45,7 @@ public:
 
 using ElapsedTimeTest = TimeTest;
 
-// NOLINTNEXTLINE
-TEST_F(ElapsedTimeTest, StartTime)
+NOLINT_TEST_F(ElapsedTimeTest, StartTime)
 {
     EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
@@ -54,8 +53,7 @@ TEST_F(ElapsedTimeTest, StartTime)
     EXPECT_EQ(elapsed.StartTime(), 10us);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ElapsedTimeTest, ElapsedTime)
+NOLINT_TEST_F(ElapsedTimeTest, ElapsedTime)
 {
     EXPECT_CALL(mock_now, Now)
         .Times(2)
@@ -69,8 +67,7 @@ TEST_F(ElapsedTimeTest, ElapsedTime)
 
 using DeltaTimeTest = TimeTest;
 
-// NOLINTNEXTLINE
-TEST_F(DeltaTimeTest, AtCreation)
+NOLINT_TEST_F(DeltaTimeTest, AtCreation)
 {
     EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
@@ -79,8 +76,7 @@ TEST_F(DeltaTimeTest, AtCreation)
     EXPECT_EQ(delta.Delta(), 0us);
 }
 
-// NOLINTNEXTLINE
-TEST_F(DeltaTimeTest, AfterUpdate)
+NOLINT_TEST_F(DeltaTimeTest, AfterUpdate)
 {
     EXPECT_CALL(mock_now, Now)
         .Times(2)
@@ -95,8 +91,7 @@ TEST_F(DeltaTimeTest, AfterUpdate)
 
 using ChangePerSecondTest = TimeTest;
 
-// NOLINTNEXTLINE
-TEST_F(ChangePerSecondTest, AtCreation)
+NOLINT_TEST_F(ChangePerSecondTest, AtCreation)
 {
     EXPECT_CALL(mock_now, Now).Times(1).WillOnce(Return(10us));
 
@@ -105,8 +100,7 @@ TEST_F(ChangePerSecondTest, AtCreation)
     EXPECT_TRUE(cps.ValueTime() == 10us);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ChangePerSecondTest, AfterUpdate)
+NOLINT_TEST_F(ChangePerSecondTest, AfterUpdate)
 {
     EXPECT_CALL(mock_now, Now)
         .Times(4)

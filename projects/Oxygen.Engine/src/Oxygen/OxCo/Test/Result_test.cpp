@@ -5,12 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "Oxygen/OxCo/Detail/Result.h"
+
 #include <exception>
-#include <gtest/gtest.h>
 #include <string>
 
-using namespace oxygen::co;
-using namespace oxygen::co::detail;
+#include <Oxygen/Testing/GTest.h>
+
+using oxygen::co::TaskCancelledException;
+using oxygen::co::detail::Result;
+using oxygen::co::detail::Storage;
 
 namespace {
 
@@ -35,7 +38,7 @@ private:
 
 // Test fixture for Storage class
 template <typename T>
-class StorageTest : public ::testing::Test {
+class StorageTest : public testing::Test {
 protected:
     // Overload for lvalue references
     template <typename U = T>
@@ -66,16 +69,16 @@ protected:
 
 using ValueStorageTest = StorageTest<int>;
 
-TEST_F(ValueStorageTest, NoDanglingReferences)
+NOLINT_TEST_F(ValueStorageTest, NoDanglingReferences)
 {
     using St = Storage<int>;
     EXPECT_EQ(St::Unwrap(St::Wrap(14)), 14);
     EXPECT_EQ(St::UnwrapCRef(St::Wrap(14)), 14);
 
     // No dangling references
-    auto* value = new int(14);
+    auto value = std::make_unique<int>(14);
     auto wrapped = St::Wrap(std::move(*value)); // NOLINT(*-move-const-arg)
-    delete value;
+    value.reset();
     EXPECT_EQ(St::Unwrap(std::move(wrapped)), 14); // NOLINT(*-move-const-arg)
 
     // Does not compile
@@ -89,7 +92,7 @@ TEST_F(ValueStorageTest, NoDanglingReferences)
 // Test cases for Storage<NonTrivialType>
 using RefStorageTest = StorageTest<int&>;
 
-TEST_F(RefStorageTest, WrapAndUnwrapValue)
+NOLINT_TEST_F(RefStorageTest, WrapAndUnwrapValue)
 {
     using St = Storage<int&>;
     int value = 14;
@@ -113,7 +116,7 @@ TEST_F(RefStorageTest, WrapAndUnwrapValue)
 // Test cases for Storage<NonTrivialType>
 using RRefStorageTest = StorageTest<int&&>;
 
-TEST_F(RRefStorageTest, WrapAndUnwrapValue)
+NOLINT_TEST_F(RRefStorageTest, WrapAndUnwrapValue)
 {
     using St = Storage<int&&>;
     EXPECT_EQ(St::Unwrap(St::Wrap(Value(14))), 14);
@@ -134,14 +137,14 @@ TEST_F(RRefStorageTest, WrapAndUnwrapValue)
 // Test cases for Storage<NonTrivialType>
 using NonTrivialStorageTest = StorageTest<NonTrivialType>;
 
-TEST_F(NonTrivialStorageTest, WrapAndUnwrapValue)
+NOLINT_TEST_F(NonTrivialStorageTest, WrapAndUnwrapValue)
 {
     using St = Storage<NonTrivialType>;
     EXPECT_EQ(St::Unwrap(St::Wrap(NonTrivialType("Hello, World!"))).data(), "Hello, World!");
     EXPECT_EQ(St::UnwrapCRef(St::Wrap(NonTrivialType("Hello, World!"))).data(), "Hello, World!");
 }
 
-TEST_F(NonTrivialStorageTest, WrapAndUnwrapLValueRef)
+NOLINT_TEST_F(NonTrivialStorageTest, WrapAndUnwrapLValueRef)
 {
     using St = Storage<NonTrivialType&>;
     NonTrivialType value("Hello, World!");
@@ -150,7 +153,7 @@ TEST_F(NonTrivialStorageTest, WrapAndUnwrapLValueRef)
     EXPECT_EQ(St::UnwrapCRef(wrapped).data(), "Hello, World!");
 }
 
-TEST_F(NonTrivialStorageTest, WrapAndUnwrapRValueRef)
+NOLINT_TEST_F(NonTrivialStorageTest, WrapAndUnwrapRValueRef)
 {
     using St = Storage<NonTrivialType&&>;
     NonTrivialType value("Hello, World!");
@@ -159,18 +162,18 @@ TEST_F(NonTrivialStorageTest, WrapAndUnwrapRValueRef)
     EXPECT_EQ(St::UnwrapCRef(wrapped).data(), "Hello, World!");
 }
 
-TEST_F(NonTrivialStorageTest, WrapAndUnwrapConstRef)
+NOLINT_TEST_F(NonTrivialStorageTest, WrapAndUnwrapConstRef)
 {
     using St = Storage<const NonTrivialType&>;
     const NonTrivialType value("Hello, World!");
-    auto* wrapped = St::Wrap(value);
+    const auto* wrapped = St::Wrap(value);
     EXPECT_EQ(St::Unwrap(wrapped).data(), "Hello, World!");
     EXPECT_EQ(St::UnwrapCRef(wrapped).data(), "Hello, World!");
 }
 
 // Test fixture for Result class
 template <typename T>
-class ResultTest : public ::testing::Test {
+class ResultTest : public testing::Test {
 protected:
     Result<T> result_;
 };
@@ -178,7 +181,7 @@ protected:
 // Test cases for Result<NonTrivialType>
 using NonTrivialResultTest = ResultTest<NonTrivialType>;
 
-TEST_F(NonTrivialResultTest, StoreValue)
+NOLINT_TEST_F(NonTrivialResultTest, StoreValue)
 {
     result_.StoreValue(NonTrivialType("Hello, World!"));
     EXPECT_FALSE(result_.WasCancelled());
@@ -188,7 +191,7 @@ TEST_F(NonTrivialResultTest, StoreValue)
     EXPECT_EQ(std::move(result_).Value().data(), "Hello, World!");
 }
 
-TEST_F(NonTrivialResultTest, StoreException)
+NOLINT_TEST_F(NonTrivialResultTest, StoreException)
 {
     try {
         throw std::runtime_error("Test exception");
@@ -199,10 +202,10 @@ TEST_F(NonTrivialResultTest, StoreException)
     EXPECT_TRUE(result_.Completed());
     EXPECT_FALSE(result_.HasValue());
     EXPECT_TRUE(result_.HasException());
-    EXPECT_THROW(std::move(result_).Value(), std::runtime_error);
+    NOLINT_EXPECT_THROW(std::move(result_).Value(), std::runtime_error);
 }
 
-TEST_F(NonTrivialResultTest, MarkCancelled)
+NOLINT_TEST_F(NonTrivialResultTest, MarkCancelled)
 {
     result_.MarkCancelled();
     EXPECT_TRUE(result_.WasCancelled());
@@ -211,13 +214,13 @@ TEST_F(NonTrivialResultTest, MarkCancelled)
     EXPECT_FALSE(result_.HasException());
 }
 
-TEST_F(NonTrivialResultTest, ValueOfCancelledTaskThrows)
+NOLINT_TEST_F(NonTrivialResultTest, ValueOfCancelledTaskThrows)
 {
     result_.MarkCancelled();
-    EXPECT_THROW(std::move(result_).Value(), TaskCancelledException);
+    NOLINT_EXPECT_THROW(std::move(result_).Value(), TaskCancelledException);
 }
 
-TEST_F(NonTrivialResultTest, StoreAndRetrieveLValueRef)
+NOLINT_TEST_F(NonTrivialResultTest, StoreAndRetrieveLValueRef)
 {
     NonTrivialType lvalue("Lvalue");
     result_.StoreValue(std::move(lvalue));
@@ -225,14 +228,14 @@ TEST_F(NonTrivialResultTest, StoreAndRetrieveLValueRef)
     EXPECT_EQ(std::move(result_).Value().data(), "Lvalue");
 }
 
-TEST_F(NonTrivialResultTest, StoreAndRetrieveRValueRef)
+NOLINT_TEST_F(NonTrivialResultTest, StoreAndRetrieveRValueRef)
 {
     result_.StoreValue(NonTrivialType("Rvalue"));
     EXPECT_TRUE(result_.HasValue());
     EXPECT_EQ(std::move(result_).Value().data(), "Rvalue");
 }
 
-TEST_F(NonTrivialResultTest, StoreAndRetrieveConstRef)
+NOLINT_TEST_F(NonTrivialResultTest, StoreAndRetrieveConstRef)
 {
     const NonTrivialType const_value("ConstRef");
     result_.StoreValue(const_value);
@@ -243,17 +246,17 @@ TEST_F(NonTrivialResultTest, StoreAndRetrieveConstRef)
 // Test cases for Result<void>
 using VoidResultTest = ResultTest<void>;
 
-TEST_F(VoidResultTest, StoreSuccess)
+NOLINT_TEST_F(VoidResultTest, StoreSuccess)
 {
     result_.StoreSuccess();
     EXPECT_FALSE(result_.WasCancelled());
     EXPECT_TRUE(result_.Completed());
     EXPECT_TRUE(result_.HasValue());
     EXPECT_FALSE(result_.HasException());
-    EXPECT_NO_THROW(std::move(result_).Value());
+    NOLINT_EXPECT_NO_THROW(std::move(result_).Value());
 }
 
-TEST_F(VoidResultTest, StoreExceptionAndCheckValue)
+NOLINT_TEST_F(VoidResultTest, StoreExceptionAndCheckValue)
 {
     try {
         throw std::runtime_error("Test exception");
@@ -264,10 +267,10 @@ TEST_F(VoidResultTest, StoreExceptionAndCheckValue)
     EXPECT_TRUE(result_.Completed());
     EXPECT_FALSE(result_.HasValue());
     EXPECT_TRUE(result_.HasException());
-    EXPECT_THROW(std::move(result_).Value(), std::runtime_error);
+    NOLINT_EXPECT_THROW(std::move(result_).Value(), std::runtime_error);
 }
 
-TEST_F(VoidResultTest, MarkCancelled)
+NOLINT_TEST_F(VoidResultTest, MarkCancelled)
 {
     result_.MarkCancelled();
     EXPECT_TRUE(result_.WasCancelled());
@@ -276,15 +279,15 @@ TEST_F(VoidResultTest, MarkCancelled)
     EXPECT_FALSE(result_.HasException());
 }
 
-TEST_F(VoidResultTest, ValueOfCancelledTaskThrows)
+NOLINT_TEST_F(VoidResultTest, ValueOfCancelledTaskThrows)
 {
     result_.MarkCancelled();
-    EXPECT_THROW(std::move(result_).Value(), TaskCancelledException);
+    NOLINT_EXPECT_THROW(std::move(result_).Value(), TaskCancelledException);
 }
 
 using PointerResultTest = ResultTest<std::unique_ptr<int>>;
 
-TEST_F(PointerResultTest, StoreValue)
+NOLINT_TEST_F(PointerResultTest, StoreValue)
 {
     auto value = std::make_unique<int>(42);
     result_.StoreValue(std::move(value));

@@ -6,7 +6,7 @@
 
 #include "Oxygen/OxCo/Detail/IntrusivePtr.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::detail::IntrusivePtr;
 using oxygen::co::detail::RefCounted;
@@ -24,21 +24,21 @@ public:
     inline static bool destroyed_;
 };
 
-TEST(IntrusivePtrTest, DefaultConstructor)
+NOLINT_TEST(IntrusivePtrTest, DefaultConstructor)
 {
     const IntrusivePtr<TestObject> ptr;
     EXPECT_EQ(ptr.Get(), nullptr);
     EXPECT_FALSE(ptr);
 }
 
-TEST(IntrusivePtrTest, NullptrConstructor)
+NOLINT_TEST(IntrusivePtrTest, NullptrConstructor)
 {
     const IntrusivePtr<TestObject> ptr(nullptr);
     EXPECT_EQ(ptr.Get(), nullptr);
     EXPECT_FALSE(ptr);
 }
 
-TEST(IntrusivePtrTest, PointerConstructor)
+NOLINT_TEST(IntrusivePtrTest, PointerConstructor)
 {
     auto* obj = new TestObject();
     const IntrusivePtr ptr(obj);
@@ -46,7 +46,7 @@ TEST(IntrusivePtrTest, PointerConstructor)
     EXPECT_TRUE(ptr);
 }
 
-TEST(IntrusivePtrTest, CopyConstructor)
+NOLINT_TEST(IntrusivePtrTest, CopyConstructor)
 {
     auto* obj = new TestObject();
     const IntrusivePtr ptr1(obj);
@@ -58,7 +58,7 @@ TEST(IntrusivePtrTest, CopyConstructor)
     EXPECT_TRUE(ptr2);
 }
 
-TEST(IntrusivePtrTest, MoveConstructor)
+NOLINT_TEST(IntrusivePtrTest, MoveConstructor)
 {
     auto* obj = new TestObject();
     IntrusivePtr ptr1(obj);
@@ -67,7 +67,7 @@ TEST(IntrusivePtrTest, MoveConstructor)
     EXPECT_TRUE(ptr2);
 }
 
-TEST(IntrusivePtrTest, CopyAssignment)
+NOLINT_TEST(IntrusivePtrTest, CopyAssignment)
 {
     auto* obj1 = new TestObject();
     auto* obj2 = new TestObject();
@@ -80,7 +80,7 @@ TEST(IntrusivePtrTest, CopyAssignment)
     EXPECT_TRUE(ptr2);
 }
 
-TEST(IntrusivePtrTest, MoveAssignment)
+NOLINT_TEST(IntrusivePtrTest, MoveAssignment)
 {
     auto* obj1 = new TestObject();
     auto* obj2 = new TestObject();
@@ -91,7 +91,7 @@ TEST(IntrusivePtrTest, MoveAssignment)
     EXPECT_TRUE(ptr2);
 }
 
-TEST(IntrusivePtrTest, Destructor)
+NOLINT_TEST(IntrusivePtrTest, Destructor)
 {
     {
         auto* obj = new TestObject();
@@ -100,7 +100,7 @@ TEST(IntrusivePtrTest, Destructor)
     EXPECT_TRUE(TestObject::destroyed_);
 }
 
-TEST(IntrusivePtrTest, ReferenceCounting)
+NOLINT_TEST(IntrusivePtrTest, ReferenceCounting)
 {
     TestObject::destroyed_ = false;
     {

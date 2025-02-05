@@ -65,7 +65,7 @@ namespace detail {
 
     protected:
         struct DoneCallBack {
-            AsioAwaitableBase* aw;
+            AsioAwaitableBase* aw { nullptr };
 
             void operator()(Err err, Ret... ret) const
             {
@@ -99,7 +99,7 @@ namespace detail {
                 }
 
                 if constexpr (sizeof...(Ret) == 0) {
-                    return;
+                    // return
                 } else if constexpr (sizeof...(Ret) == 1) {
                     return std::move(std::get<0>(*ret_));
                 } else {
@@ -114,7 +114,7 @@ namespace detail {
             }
         }
 
-        [[nodiscard]] auto await_cancel(Handle) noexcept -> bool
+        [[nodiscard]] auto await_cancel(Handle /*h*/) noexcept -> bool
         {
             CancelSignal().emit(asio::cancellation_type::all);
             return false;
@@ -138,8 +138,8 @@ namespace detail {
         [[nodiscard]] auto CancelSignal() -> asio::cancellation_signal&
         {
             return *std::launder(
-                reinterpret_cast<asio::cancellation_signal*>(
-                    &cancel_sig_));
+                // NOLINTNEXTLINE(*-pro-type-reinterpret-cast) - see comment below
+                reinterpret_cast<asio::cancellation_signal*>(&cancel_sig_));
         }
 
         void Done(const Err ec, Ret... ret)
@@ -195,7 +195,6 @@ namespace detail {
             std::apply(impl, args_);
         }
 
-    private /*fields*/:
         Init init_;
         [[no_unique_address]] Args args_;
         template <bool, class...>
@@ -269,8 +268,8 @@ namespace detail {
 //! `asio::io_context`.
 /*!
  Note that this is useful when the event loop is totally delegated to `asio`. An
- alternate possible approach is define a custom event loop that calls `poll()`
- on the `io_context` to handle events on demand.
+ alternate possible approach is to define a custom event loop that calls
+ `poll()` on the `io_context` to handle events on demand.
 */
 template <>
 struct EventLoopTraits<asio::io_context> {
@@ -288,7 +287,7 @@ struct EventLoopTraits<asio::io_context> {
     static void Stop(asio::io_context& io) { io.stop(); }
 };
 
-} // namespace corral
+} // namespace oxygen::co
 
 template <class Executor, bool ThrowOnError, class X, class... Ret>
 class asio::async_result<oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
@@ -302,7 +301,7 @@ public:
     template <class Init, class... Args>
     static auto initiate(
         Init&& init,
-        oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
+        oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError> /*unused*/,
         Args... args)
     {
         return oxygen::co::detail::AsioAwaitable<ThrowOnError, Init,
@@ -333,7 +332,7 @@ namespace detail {
     };
 } // namespace detail
 
-//! A utility function, returning an awaitable suspending the caller for
+//! A utility function, returning an awaitable suspending the caller for a
 //! specified duration. Suitable for use with `AnyOf()` etc.
 template <class R, class P>
 auto SleepFor(asio::io_context& io, std::chrono::duration<R, P> delay)

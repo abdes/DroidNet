@@ -9,13 +9,13 @@
 
 #include <coroutine>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co::detail;
 
 namespace {
 
-class ProxyFrameTest : public ::testing::Test {
+class ProxyFrameTest : public testing::Test {
 protected:
     ProxyFrame proxy_frame_;
     TaskFrame task_frame_;
@@ -23,7 +23,7 @@ protected:
 
 void DummyDestroyFn(CoroutineFrame*) { }
 
-TEST_F(ProxyFrameTest, LinkToAndFollowLink)
+NOLINT_TEST_F(ProxyFrameTest, LinkToAndFollowLink)
 {
     CoroutineFrame frame;
     frame.destroy_fn = DummyDestroyFn;
@@ -35,20 +35,20 @@ TEST_F(ProxyFrameTest, LinkToAndFollowLink)
     EXPECT_EQ(linked_handle.address(), handle.address());
 }
 
-TEST_F(ProxyFrameTest, IsTagged)
+NOLINT_TEST_F(ProxyFrameTest, IsTagged)
 {
     EXPECT_TRUE(ProxyFrame::IsTagged(ProxyFrame::kTag, &proxy_frame_));
     EXPECT_TRUE(ProxyFrame::IsTagged(TaskFrame::kTag, &task_frame_));
 }
 
-TEST_F(ProxyFrameTest, TaskFrameProgramCounter)
+NOLINT_TEST_F(ProxyFrameTest, TaskFrameProgramCounter)
 {
     constexpr uintptr_t pc = 42;
     task_frame_.ProgramCounter(pc);
     EXPECT_EQ(task_frame_.ProgramCounter(), pc);
 }
 
-TEST_F(ProxyFrameTest, FrameCast)
+NOLINT_TEST_F(ProxyFrameTest, FrameCast)
 {
     CoroutineFrame* frame = &task_frame_;
     auto* cast_frame = FrameCast<TaskFrame>(frame);

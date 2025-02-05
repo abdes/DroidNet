@@ -68,6 +68,7 @@ struct AwaitableStateChecker {
 
 #else // defined(OXCO_AWAITABLE_STATE_DEBUG)
 #  include "Oxygen/Base/Logging.h"
+#  include "Oxygen/Base/Macros.h"
 #  include "Oxygen/Base/Unreachable.h"
 #  include "Oxygen/OxCo/Detail/ProxyFrame.h"
 

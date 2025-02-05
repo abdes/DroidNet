@@ -6,9 +6,10 @@
 
 #pragma once
 
+#include <vector>
+
 #include "Oxygen/Base/Result.h"
 #include "Oxygen/Base/Stream.h"
-#include <vector>
 
 namespace oxygen::serio::testing {
 

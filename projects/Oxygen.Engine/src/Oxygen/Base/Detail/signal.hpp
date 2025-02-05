@@ -57,7 +57,7 @@ struct voider {
 
 // void_t from c++17
 template <typename... T>
-using void_t = typename detail::voider<T...>::type;
+using void_t = typename voider<T...>::type;
 
 template <typename, typename = void>
 struct has_call_operator : std::false_type {};
@@ -142,7 +142,7 @@ constexpr bool is_pmf_v = std::is_member_function_pointer<T>::value;
 
 template <typename T>
 constexpr bool is_observer_v =
-    std::is_base_of<::sigslot::detail::observer_type,
+    std::is_base_of<sigslot::detail::observer_type,
                     std::remove_pointer_t<std::remove_reference_t<T>>>::value;
 
 template <typename S>
@@ -572,7 +572,7 @@ class slot_state {
 
  private:
   template <typename, typename...>
-  friend class ::sigslot::signal_base;
+  friend class signal_base;
 
   std::size_t
       m_index;  // index into the array of slot pointers inside the signal
@@ -798,7 +798,7 @@ class slot_base : public slot_state {
 
   template <typename... U>
   void operator()(U &&...u) {
-    if (slot_state::connected() && !slot_state::blocked()) {
+    if (slot_state::connected() && !blocked()) {
       call_slot(std::forward<U>(u)...);
     }
   }

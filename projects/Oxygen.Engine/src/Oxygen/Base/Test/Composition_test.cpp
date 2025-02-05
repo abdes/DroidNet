@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <ranges>
 #include <thread>
@@ -53,7 +53,7 @@ public:
     using Base = Composition;
 
     template <typename T, typename... Args>
-    T& AddComponent(Args&&... args)
+    auto AddComponent(Args&&... args) -> T&
     {
         return Base::AddComponent<T>(std::forward<Args>(args)...);
     }
@@ -66,7 +66,7 @@ public:
 
     template <typename OldT, typename NewT = OldT, typename... Args>
     // ReSharper disable once CppDFAConstantParameter
-    NewT& ReplaceComponent(Args&&... args)
+    auto ReplaceComponent(Args&&... args) -> NewT&
     {
         return Base::ReplaceComponent<OldT, NewT>(std::forward<Args>(args)...);
     }
@@ -98,22 +98,22 @@ protected:
 };
 
 // Test for empty composition operations
-TEST_F(CompositionTest, EmptyCompositionOperations)
+NOLINT_TEST_F(CompositionTest, EmptyCompositionOperations)
 {
     EXPECT_FALSE(composition_.HasComponent<SimpleComponent>());
-    EXPECT_THROW([[maybe_unused]] auto _ = composition_.GetComponent<SimpleComponent>(), oxygen::ComponentError);
+    NOLINT_EXPECT_THROW([[maybe_unused]] auto _ = composition_.GetComponent<SimpleComponent>(), oxygen::ComponentError);
     EXPECT_NO_THROW(composition_.RemoveComponent<SimpleComponent>());
 }
 
 // Basic Operations Tests
-TEST_F(CompositionTest, AddAndVerifyComponent)
+NOLINT_TEST_F(CompositionTest, AddAndVerifyComponent)
 {
     auto& component = composition_.AddComponent<SimpleComponent>();
     EXPECT_TRUE(composition_.HasComponent<SimpleComponent>());
     EXPECT_EQ(&component, &composition_.GetComponent<SimpleComponent>());
 }
 
-TEST_F(CompositionTest, RemoveComponent)
+NOLINT_TEST_F(CompositionTest, RemoveComponent)
 {
     composition_.AddComponent<SimpleComponent>();
     composition_.RemoveComponent<SimpleComponent>();
@@ -121,14 +121,14 @@ TEST_F(CompositionTest, RemoveComponent)
 }
 
 // Copy/Move Tests
-TEST_F(CompositionTest, CopyConstructor)
+NOLINT_TEST_F(CompositionTest, CopyConstructor)
 {
     composition_.AddComponent<SimpleComponent>();
     const TestComposition copy(composition_);
     EXPECT_TRUE(copy.HasComponent<SimpleComponent>());
 }
 
-TEST_F(CompositionTest, MoveConstructor)
+NOLINT_TEST_F(CompositionTest, MoveConstructor)
 {
     composition_.AddComponent<SimpleComponent>();
     const TestComposition moved(std::move(composition_));
@@ -136,7 +136,7 @@ TEST_F(CompositionTest, MoveConstructor)
 }
 
 // Dependency Tests
-TEST_F(CompositionTest, DependencyValidation)
+NOLINT_TEST_F(CompositionTest, DependencyValidation)
 {
     composition_.AddComponent<SimpleComponent>();
     EXPECT_NO_THROW(composition_.AddComponent<DependentComponent>());
@@ -144,7 +144,7 @@ TEST_F(CompositionTest, DependencyValidation)
     EXPECT_NE(dependent.simple_, nullptr);
 }
 
-TEST_F(CompositionTest, MissingDependencyThrows)
+NOLINT_TEST_F(CompositionTest, MissingDependencyThrows)
 {
     EXPECT_THROW(composition_.AddComponent<DependentComponent>(), oxygen::ComponentError);
 }
@@ -172,7 +172,7 @@ namespace destruction {
     };
 } // namespace destruction
 
-TEST_F(CompositionTest, ComponentsDestroyedInReverseOrder)
+NOLINT_TEST_F(CompositionTest, ComponentsDestroyedInReverseOrder)
 {
     {
         destruction::order.clear();
@@ -203,7 +203,7 @@ public:
     DependentComponent* dependent_ { nullptr };
 };
 
-TEST_F(CompositionTest, ComplexDependencyChains)
+NOLINT_TEST_F(CompositionTest, ComplexDependencyChains)
 {
     composition_.AddComponent<SimpleComponent>();
     composition_.AddComponent<DependentComponent>();
@@ -214,20 +214,20 @@ TEST_F(CompositionTest, ComplexDependencyChains)
 }
 
 // Error Cases
-TEST_F(CompositionTest, DuplicateComponentThrows)
+NOLINT_TEST_F(CompositionTest, DuplicateComponentThrows)
 {
     composition_.AddComponent<SimpleComponent>();
     EXPECT_THROW(composition_.AddComponent<SimpleComponent>(), oxygen::ComponentError);
 }
 
-TEST_F(CompositionTest, RemoveRequiredComponentThrows)
+NOLINT_TEST_F(CompositionTest, RemoveRequiredComponentThrows)
 {
     composition_.AddComponent<SimpleComponent>();
     composition_.AddComponent<DependentComponent>();
     EXPECT_THROW(composition_.RemoveComponent<SimpleComponent>(), oxygen::ComponentError);
 }
 
-TEST_F(CompositionTest, ThreadSafetyCoordinatedOperations)
+NOLINT_TEST_F(CompositionTest, ThreadSafetyCoordinatedOperations)
 {
     constexpr int READER_COUNT = 4;
     constexpr int WRITER_COUNT = 2;
@@ -311,13 +311,13 @@ TEST_F(CompositionTest, ThreadSafetyCoordinatedOperations)
 }
 
 // Component Replacement Tests
-TEST_F(CompositionTest, ReplaceComponent)
+NOLINT_TEST_F(CompositionTest, ReplaceComponent)
 {
     auto& original = composition_.AddComponent<SimpleComponent>();
     auto& replaced = composition_.ReplaceComponent<SimpleComponent>();
     EXPECT_NE(&original, &replaced);
 }
-TEST_F(CompositionTest, ReplaceComponentWithNewType)
+NOLINT_TEST_F(CompositionTest, ReplaceComponentWithNewType)
 {
     [[maybe_unused]] auto& original = composition_.AddComponent<SimpleComponent>();
     EXPECT_FALSE(composition_.Value());
@@ -326,7 +326,7 @@ TEST_F(CompositionTest, ReplaceComponentWithNewType)
 }
 
 // Component Manager Tests
-TEST_F(CompositionTest, ComponentManagerOperations)
+NOLINT_TEST_F(CompositionTest, ComponentManagerOperations)
 {
     composition_.AddComponent<SimpleComponent>();
     EXPECT_TRUE(composition_.HasComponent<SimpleComponent>());
@@ -335,13 +335,13 @@ TEST_F(CompositionTest, ComponentManagerOperations)
 }
 
 // Error Recovery Tests
-TEST_F(CompositionTest, GetNonExistentComponent)
+NOLINT_TEST_F(CompositionTest, GetNonExistentComponent)
 {
     EXPECT_THROW([[maybe_unused]] auto& _ = composition_.GetComponent<SimpleComponent>(), oxygen::ComponentError);
 }
 
 // Multiple Component Tests
-TEST_F(CompositionTest, MultipleComponents)
+NOLINT_TEST_F(CompositionTest, MultipleComponents)
 {
     composition_.AddComponent<SimpleComponent>();
     EXPECT_NO_THROW(composition_.AddComponent<DependentComponent>());
@@ -391,7 +391,7 @@ protected:
 };
 
 // Test Cases
-TEST_F(CompositionCloningTest, CloneableComponentsSupport)
+NOLINT_TEST_F(CompositionCloningTest, CloneableComponentsSupport)
 {
     composition_.AddComponent<CloneableComponent>();
     const auto clone { composition_.Clone() };
@@ -402,7 +402,7 @@ TEST_F(CompositionCloningTest, CloneableComponentsSupport)
     EXPECT_TRUE(composition_.HasComponent<CloneableComponent>());
 }
 
-TEST_F(CompositionCloningTest, NonCloneableComponentPreventsCloning)
+NOLINT_TEST_F(CompositionCloningTest, NonCloneableComponentPreventsCloning)
 {
     composition_.AddComponent<NonCloneableComponent>();
     composition_.AddComponent<CloneableComponent>();
@@ -410,7 +410,7 @@ TEST_F(CompositionCloningTest, NonCloneableComponentPreventsCloning)
     EXPECT_THROW(auto clone { composition_.Clone() }, oxygen::ComponentError);
 }
 
-TEST_F(CompositionCloningTest, ClonedComponentsHaveUpdatedDependencies)
+NOLINT_TEST_F(CompositionCloningTest, ClonedComponentsHaveUpdatedDependencies)
 {
     composition_.AddComponent<CloneableComponent>();
     EXPECT_NO_THROW({
@@ -425,13 +425,13 @@ TEST_F(CompositionCloningTest, ClonedComponentsHaveUpdatedDependencies)
     EXPECT_NE(dependent.dependency_, nullptr);
 }
 
-TEST_F(CompositionTest, IterateEmptyComposition)
+NOLINT_TEST_F(CompositionTest, IterateEmptyComposition)
 {
     EXPECT_EQ(composition_.begin(), composition_.end());
     EXPECT_EQ(composition_.cbegin(), composition_.cend());
 }
 
-TEST_F(CompositionTest, IterateSingleComponent)
+NOLINT_TEST_F(CompositionTest, IterateSingleComponent)
 {
     auto& simple = composition_.AddComponent<SimpleComponent>();
 
@@ -441,7 +441,7 @@ TEST_F(CompositionTest, IterateSingleComponent)
     EXPECT_EQ(it, composition_.end());
 }
 
-TEST_F(CompositionTest, IterateMultipleComponents)
+NOLINT_TEST_F(CompositionTest, IterateMultipleComponents)
 {
     [[maybe_unused]] auto& simple = composition_.AddComponent<SimpleComponent>();
     [[maybe_unused]] auto& dependent = composition_.AddComponent<DependentComponent>();
@@ -455,7 +455,7 @@ TEST_F(CompositionTest, IterateMultipleComponents)
     EXPECT_EQ(count, 3);
 }
 
-TEST_F(CompositionTest, IterateConstComposition)
+NOLINT_TEST_F(CompositionTest, IterateConstComposition)
 {
     composition_.AddComponent<SimpleComponent>();
     composition_.AddComponent<CloneableComponent>();
@@ -469,7 +469,7 @@ TEST_F(CompositionTest, IterateConstComposition)
     EXPECT_EQ(count, 2);
 }
 
-TEST_F(CompositionTest, IterateWithRanges)
+NOLINT_TEST_F(CompositionTest, IterateWithRanges)
 {
     [[maybe_unused]] auto& simple = composition_.AddComponent<SimpleComponent>();
     [[maybe_unused]] auto& dependent = composition_.AddComponent<DependentComponent>();
@@ -502,7 +502,7 @@ TEST_F(CompositionTest, IterateWithRanges)
     EXPECT_EQ(simpleCount, 1);
 }
 
-TEST_F(CompositionTest, PrintComponents)
+NOLINT_TEST_F(CompositionTest, PrintComponents)
 {
     // Add some components to the composition
     composition_.AddComponent<SimpleComponent>();

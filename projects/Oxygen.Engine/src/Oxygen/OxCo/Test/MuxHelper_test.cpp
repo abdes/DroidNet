@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
-#include "Oxygen/OxCo/Detail/GetAwaitable.h"
 #include "Oxygen/OxCo/Detail/MuxHelper.h"
+
+#include <Oxygen/Testing/GTest.h>
+#include <gmock/gmock.h>
+
 #include "Utils/MockAwaitable.h"
 #include "Utils/MockMux.h"
 
@@ -61,7 +61,7 @@ class ResultRetrieval : public BaseFixture { };
 //    -> await_ready() is called and returns true.
 //    -> await_resume() is called and returns the result.
 //    -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(StartWithoutCancellation, ImmediateCompletion)
+NOLINT_TEST_F(StartWithoutCancellation, ImmediateCompletion)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -95,7 +95,7 @@ TEST_F(StartWithoutCancellation, ImmediateCompletion)
 //     -> await_resume() is called and returns the result.
 //     -> MuxHelper transitions to State::kSucceeded after resuming.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(StartWithoutCancellation, SuspensionRequired)
+NOLINT_TEST_F(StartWithoutCancellation, SuspensionRequired)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -132,7 +132,7 @@ TEST_F(StartWithoutCancellation, SuspensionRequired)
 //     -> MuxHelper transitions to State::kCancelled.
 //     -> await_early_cancel() is called and returns true.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationBeforeStart, EarlyCancellationSucceeds)
+NOLINT_TEST_F(CancellationBeforeStart, EarlyCancellationSucceeds)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -164,7 +164,7 @@ TEST_F(CancellationBeforeStart, EarlyCancellationSucceeds)
 //     -> MuxHelper transitions to State::kCancellationPending.
 //     -> await_early_cancel() is called and returns false.
 //     -> No methods are called on Mux at this point.
-TEST_F(CancellationBeforeStart, EarlyCancellationFails)
+NOLINT_TEST_F(CancellationBeforeStart, EarlyCancellationFails)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -195,7 +195,7 @@ TEST_F(CancellationBeforeStart, EarlyCancellationFails)
 //     -> await_ready() is called and returns true.
 //     -> await_must_resume() is called and returns false.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationPending, AwaitableReadyMustNotResume)
+NOLINT_TEST_F(CancellationPending, AwaitableReadyMustNotResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -237,7 +237,7 @@ TEST_F(CancellationPending, AwaitableReadyMustNotResume)
 //     -> await_must_resume() is called and returns true.
 //     -> await_resume() is called and returns the result.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationPending, AwaitableReadyMustResume)
+NOLINT_TEST_F(CancellationPending, AwaitableReadyMustResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -286,7 +286,7 @@ TEST_F(CancellationPending, AwaitableReadyMustResume)
 //     -> await_must_resume() is called and returns false.
 //     -> MuxHelper transitions to State::kCancelled.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationPending, AwaitableNeedsSuspension)
+NOLINT_TEST_F(CancellationPending, AwaitableNeedsSuspension)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -333,7 +333,7 @@ TEST_F(CancellationPending, AwaitableNeedsSuspension)
 //     -> MuxHelper transitions to State::kCancelled.
 //     -> await_cancel() is called and returns true.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationAfterRunning, ImmediateCancellationSucceeds)
+NOLINT_TEST_F(CancellationAfterRunning, ImmediateCancellationSucceeds)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -372,7 +372,7 @@ TEST_F(CancellationAfterRunning, ImmediateCancellationSucceeds)
 //     -> MuxHelper transitions to State::kCancelling.
 //     -> await_cancel() is called and returns false.
 //     -> No methods are called on Mux at this point.
-TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
+NOLINT_TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -410,7 +410,7 @@ TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
 //     -> MuxHelper transitions to State::kCancelled.
 //     -> await_must_resume() is called and returns false.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
+NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -459,7 +459,7 @@ TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
 //     -> await_must_resume() is called and returns true.
 //     -> await_resume() is called and returns the result.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(CancellationPendingAwaitableResumes, MustResume)
+NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -511,7 +511,7 @@ TEST_F(CancellationPendingAwaitableResumes, MustResume)
 //     -> await_must_resume() is called and returns true.
 //     -> await_resume() is called and throws.
 //     -> Invoke(exception_ptr) is called with the exception.
-TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
+NOLINT_TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -563,7 +563,7 @@ TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
 //     -> MuxHelper transitions to State::kCancelled.
 //     -> await_must_resume() is called and returns false.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(ReportImmediateResult, CancellationPendingMustNotResume)
+NOLINT_TEST_F(ReportImmediateResult, CancellationPendingMustNotResume)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -601,7 +601,7 @@ TEST_F(ReportImmediateResult, CancellationPendingMustNotResume)
 //     -> await_ready() is called and returns true.
 //     -> await_resume() is called and returns the result.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(ReportImmediateResult, AwaitableIsReady)
+NOLINT_TEST_F(ReportImmediateResult, AwaitableIsReady)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -636,7 +636,7 @@ TEST_F(ReportImmediateResult, AwaitableIsReady)
 //     -> await_ready() is called and returns false.
 //     -> await_early_cancel() is called and returns true.
 //     -> Invoke(nullptr) is called (with ex = nullptr).
-TEST_F(ReportImmediateResult, AwaitableNotReadyCancelled)
+NOLINT_TEST_F(ReportImmediateResult, AwaitableNotReadyCancelled)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -666,7 +666,7 @@ TEST_F(ReportImmediateResult, AwaitableNotReadyCancelled)
 //     => Result() can be called to retrieve the stored result
 //     -> No state change occurs.
 //     -> No additional methods are called.
-TEST_F(ResultRetrieval, RetrieveResultAfterSuccess)
+NOLINT_TEST_F(ResultRetrieval, RetrieveResultAfterSuccess)
 {
     MockAwaitable awaitable;
     MockMux mux;
@@ -699,7 +699,7 @@ TEST_F(ResultRetrieval, RetrieveResultAfterSuccess)
 //     -> Returns an empty optional.
 //     -> No state change occurs.
 //     -> No additional methods are called.
-TEST_F(ResultRetrieval, AsOptionalAfterCancellation)
+NOLINT_TEST_F(ResultRetrieval, AsOptionalAfterCancellation)
 {
     MockAwaitable awaitable;
     MockMux mux;

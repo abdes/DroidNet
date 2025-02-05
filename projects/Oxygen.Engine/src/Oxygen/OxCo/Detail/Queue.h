@@ -48,7 +48,7 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(Queue)
 
-    Queue(Queue<T>&& rhs) noexcept
+    Queue(Queue&& rhs) noexcept
         : buffer_(std::exchange(rhs.buffer_, nullptr))
         , capacity_(std::exchange(rhs.capacity_, 0))
         , head_(std::exchange(rhs.head_, nullptr))
@@ -57,7 +57,7 @@ public:
     {
     }
 
-    auto operator=(Queue<T>&& rhs) noexcept -> Queue&
+    auto operator=(Queue&& rhs) noexcept -> Queue&
     {
         if (this != &rhs) {
             std::swap(buffer_, rhs.buffer_);

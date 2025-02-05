@@ -14,7 +14,6 @@
 #include "Oxygen/OxCo/Detail/Result.h"
 #include "Oxygen/OxCo/Detail/TaskParent.h"
 
-#include <cassert>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -51,7 +50,7 @@ namespace detail {
     //! until the task finishes initializing.
     //! \see TaskStarted
     class TaskStartedTag {
-        explicit constexpr TaskStartedTag(TagCtor) { }
+        explicit constexpr TaskStartedTag(TagCtor /*tag*/) { }
     };
 
 }; // namespace detail
@@ -111,7 +110,7 @@ class TaskStarted;
  not to preserve a reference/pointer to the nursery outside the lifetime of some
  specific task in the nursery.
 */
-class Nursery : private detail::TaskParent<void> {
+class Nursery : /*private*/ detail::TaskParent<void> {
     template <class Ret>
     class StartAwaitableBase;
     template <class Ret, class Callable, class... Args>
@@ -372,7 +371,7 @@ protected:
 auto OpenNursery(Nursery*& ptr, TaskStarted<> started = {}) -> Co<>;
 
 template <class Ret>
-class Nursery::StartAwaitableBase : protected TaskParent<void> {
+class Nursery::StartAwaitableBase : protected TaskParent {
     friend TaskStarted<Ret>;
 
 public:
@@ -486,13 +485,12 @@ public:
             // ourselves.
             std::exchange(this->nursery_, nullptr)->DoStart(promise.release());
             return h;
-        } else {
-            ++this->nursery_->pending_task_count_;
-            this->handle_ = h;
-            promise->SetExecutor(this->executor_);
-            this->promise_ = std::move(promise);
-            return this->promise_->Start(this, h);
         }
+        ++this->nursery_->pending_task_count_;
+        this->handle_ = h;
+        promise->SetExecutor(this->executor_);
+        this->promise_ = std::move(promise);
+        return this->promise_->Start(this, h);
     }
 
     auto await_resume() && -> Ret { return std::move(this->result_).Value(); }
@@ -650,7 +648,7 @@ auto Nursery::MakePromise(Callable callable, Args... args) -> detail::Promise<vo
             }(std::move(callable), std::move(args)...);
         } else {
             ret = [](Callable c, Args... a) -> Co<> {
-                co_await (std::move(c))(std::move(a)...);
+                co_await std::move(c)(std::move(a)...);
             }(std::move(callable), std::move(args)...);
         }
     }
@@ -730,7 +728,7 @@ inline void Nursery::StoreException()
         // one we can pass our exception to, so we have no choice but to...
         std::terminate();
     }
-    const bool need_cancel = (!exception_);
+    const bool need_cancel = !exception_;
     if (!exception_ || exception_ == CancellationRequest()) {
         exception_ = std::current_exception();
     }
@@ -846,7 +844,7 @@ public:
 template <class Callable>
 class Nursery::Scope final : public detail::NurseryScopeBase,
                              public ParentAwaitable<Scope<Callable>>,
-                             private TaskParent<detail::NurseryBodyRetVal> {
+                             /*private*/ TaskParent<detail::NurseryBodyRetVal> {
     class Impl final : public Nursery {
     public:
         Impl() = default;
@@ -917,7 +915,7 @@ namespace detail {
             executor_ = executor;
         }
 
-        auto Continuation(detail::BasePromise* p) noexcept -> Handle override
+        auto Continuation(BasePromise* p) noexcept -> Handle override
         {
             if (task_count_ == 1 && pending_task_count_ == 0) {
                 backref_ = nullptr;

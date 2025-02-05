@@ -9,8 +9,8 @@
 #include <array>
 #include <variant>
 
+#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock-matchers.h>
-#include <gtest/gtest.h>
 
 #include "Oxygen/Base/Platforms.h"
 
@@ -25,15 +25,15 @@ struct StringConversionTestParam {
     std::wstring expected_output;
 };
 
-class ToWideTest : public ::testing::TestWithParam<StringConversionTestParam> {
+class ToWideTest : public testing::TestWithParam<StringConversionTestParam> {
 };
 
-TEST_P(ToWideTest, ConvertsValidUtf8SequenceToWideString)
+NOLINT_TEST_P(ToWideTest, ConvertsValidUtf8SequenceToWideString)
 {
     const auto& [input, expected_output] = GetParam();
     std::wstring output;
 
-    EXPECT_NO_THROW(
+    NOLINT_EXPECT_NO_THROW(
         std::visit([&](auto&& arg) {
             Utf8ToWide(arg, output);
         },
@@ -42,7 +42,7 @@ TEST_P(ToWideTest, ConvertsValidUtf8SequenceToWideString)
     EXPECT_EQ(output, expected_output);
 }
 
-INSTANTIATE_TEST_SUITE_P(
+INSTANTIATE_TEST_SUITE_P( // NOLINT
     ToWideTests,
     ToWideTest,
     ::testing::Values(
@@ -65,16 +65,16 @@ INSTANTIATE_TEST_SUITE_P(
         // Return a simple name based on the index
         return std::to_string(info.index);
     });
-void PrintTo(const StringConversionTestParam&, std::ostream*)
+void PrintTo(const StringConversionTestParam& /*unused*/, std::ostream* /*unused*/)
 {
 }
 
-TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
+NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
 {
     constexpr char invalid_utf8[] = { '\xC3', '\x28', '\0' }; // 0xC3 0x28 is invalid UTF-8
     std::wstring output {};
     try {
-        Utf8ToWide(invalid_utf8, output);
+        Utf8ToWide(&invalid_utf8[0], output);
         FAIL() << "Expected oxygen::windows::WindowsException";
 #if defined(OXYGEN_WINDOWS)
     } catch (const WindowsException& ex) {
@@ -89,18 +89,18 @@ TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
     EXPECT_TRUE(output.empty());
 }
 
-TEST_F(ToWideTest, CanConvertLargeUtf8String)
+NOLINT_TEST_F(ToWideTest, CanConvertLargeUtf8String)
 {
     constexpr size_t length = 1000;
     constexpr char8_t value = 42;
     // Create an array and fill it with the same value
-    std::array<char8_t, length> big_utf8;
+    std::array<char8_t, length> big_utf8 {};
     big_utf8.fill(value);
     big_utf8.back() = '\0'; // Null-terminate the string
 
     std::wstring output {};
     const std::string_view view(reinterpret_cast<const char*>(big_utf8.data()));
-    EXPECT_NO_THROW(Utf8ToWide(view, output));
+    NOLINT_EXPECT_NO_THROW(Utf8ToWide(view, output));
 
     EXPECT_EQ(length - 1, output.size());
 }
@@ -110,15 +110,15 @@ struct WideStringConversionTestParam {
     std::variant<const char*, const char8_t*> expected_output;
 };
 
-class ToUtf8Test : public ::testing::TestWithParam<WideStringConversionTestParam> {
+class ToUtf8Test : public testing::TestWithParam<WideStringConversionTestParam> {
 };
 
-TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
+NOLINT_TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
 {
     const auto& [input, expected_output] = GetParam();
     std::string output;
 
-    EXPECT_NO_THROW(
+    NOLINT_EXPECT_NO_THROW(
         std::visit(
             [&](auto&& arg) {
                 WideToUtf8(arg, output);
@@ -135,7 +135,7 @@ TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
     EXPECT_EQ(output, expected);
 }
 
-INSTANTIATE_TEST_SUITE_P(
+INSTANTIATE_TEST_SUITE_P( // NOLINT
     ToUtf8Tests,
     ToUtf8Test,
     ::testing::Values(
@@ -152,16 +152,16 @@ INSTANTIATE_TEST_SUITE_P(
         // Return a simple name based on the index
         return std::to_string(info.index);
     });
-void PrintTo(const WideStringConversionTestParam&, std::ostream*)
+void PrintTo(const WideStringConversionTestParam& /*unused*/, std::ostream* /*unused*/)
 {
 }
 
-TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
+NOLINT_TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
 {
     constexpr wchar_t invalid_wide[] = { 0xD800, L'a', L'\0' };
     std::string output {};
     try {
-        WideToUtf8(invalid_wide, output);
+        WideToUtf8(&invalid_wide[0], output);
         FAIL() << "Expected oxygen::windows::WindowsException";
 #if defined(OXYGEN_WINDOWS)
     } catch (const WindowsException& ex) {
@@ -175,17 +175,17 @@ TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
     EXPECT_TRUE(output.empty());
 }
 
-TEST_F(ToUtf8Test, CanConvertLargeWideString)
+NOLINT_TEST_F(ToUtf8Test, CanConvertLargeWideString)
 {
     constexpr size_t length = 200;
     constexpr wchar_t value = L'a';
     // Create an array and fill it with the same value
-    std::array<wchar_t, length> big_wide;
+    std::array<wchar_t, length> big_wide {};
     big_wide.fill(value);
     big_wide.back() = L'\0'; // Null-terminate the string
 
     std::string output {};
-    EXPECT_NO_THROW(WideToUtf8(big_wide.data(), output););
+    NOLINT_EXPECT_NO_THROW(WideToUtf8(big_wide.data(), output););
 
     EXPECT_EQ(length - 1, output.size());
 }

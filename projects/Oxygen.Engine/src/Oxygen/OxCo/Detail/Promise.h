@@ -41,7 +41,7 @@ namespace detail {
      result of the coroutine execution, is returned to the caller when the
      coroutine first suspends.
      */
-    class BasePromise : private TaskFrame, public IntrusiveListItem<BasePromise> {
+    class BasePromise : /*private*/ TaskFrame, public IntrusiveListItem<BasePromise> {
 
         //! A type erased control block for cancellable awaitables that captures
         //! how to cancel the `Awaitable` the coroutine associated with this
@@ -441,7 +441,7 @@ namespace detail {
         template <Awaitable Aw>
         auto HookAwaitSuspend(Aw& aw) -> Handle
         {
-            const bool cancel_requested = (CancellationState() == Cancellation::kRequested);
+            const bool cancel_requested = CancellationState() == Cancellation::kRequested;
             DLOG_F(1, "pr {} suspended {}", fmt::ptr(this),
                 cancel_requested ? "(with pending cancellation) on..." : "");
             ResetControlBlock(aw); // this resets cancelState_

@@ -10,7 +10,7 @@
 #include <tuple>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::graphics;
 
@@ -144,7 +144,7 @@ public:
     }
 
     ResourceBuffer* operator->() const noexcept { return buffer_; }
-    operator bool() const noexcept { return buffer_ != nullptr; }
+    explicit operator bool() const noexcept { return buffer_ != nullptr; }
 
 private:
     ResourceBuffer* buffer_ { nullptr };
@@ -191,7 +191,7 @@ auto GetTestValue() -> std::tuple<BufferType, size_t, const uint32_t*>
 namespace {
 
 template <typename T>
-class ShaderByteCodeTest : public ::testing::Test {
+class ShaderByteCodeTest : public testing::Test {
 public:
     using BufferType = T;
 
@@ -212,7 +212,7 @@ public:
     }
 };
 
-using TestTypes = ::testing::Types<
+using TestTypes = testing::Types<
     std::vector<uint32_t>,
     std::array<uint32_t, 4>,
     BasicBuffer,
@@ -221,21 +221,21 @@ using TestTypes = ::testing::Types<
 TYPED_TEST_SUITE(ShaderByteCodeTest, TestTypes);
 
 // Test instantiation of ShaderByteCode for all supported types
-TYPED_TEST(ShaderByteCodeTest, InstantiationTest)
+NOLINT_TYPED_TEST(ShaderByteCodeTest, InstantiationTest)
 {
     auto [shader_byte_code, size] = this->CreateShaderByteCode();
     EXPECT_TRUE(shader_byte_code.Size() > 0);
 }
 
 // Test basic accessors for Size() and Data()
-TYPED_TEST(ShaderByteCodeTest, AccessorsTest)
+NOLINT_TYPED_TEST(ShaderByteCodeTest, AccessorsTest)
 {
     auto [shader_byte_code, size] = this->CreateShaderByteCode();
     EXPECT_EQ(shader_byte_code.Size(), size);
     EXPECT_NE(shader_byte_code.Data(), nullptr);
 }
 
-TEST(ShaderByteCodeTest, BasicBufferDeleterGetsCalled)
+NOLINT_TEST(ShaderByteCodeTest, BasicBufferDeleterGetsCalled)
 {
     uint32_t data[] = { 1, 2, 3, 4 };
     BasicBuffer buffer { 4, data };
@@ -249,7 +249,7 @@ TEST(ShaderByteCodeTest, BasicBufferDeleterGetsCalled)
     EXPECT_TRUE(deleter_called);
 }
 
-TEST(ShaderByteCodeTest, ManagedBufferReleaseGetsCalled)
+NOLINT_TEST(ShaderByteCodeTest, ManagedBufferReleaseGetsCalled)
 {
     uint32_t data[] = { 1, 2, 3, 4 };
     bool released = false;
@@ -264,7 +264,7 @@ TEST(ShaderByteCodeTest, ManagedBufferReleaseGetsCalled)
 }
 
 // We should handle empty buffers fine
-TEST(ShaderByteCodeTest, NullDataPointer)
+NOLINT_TEST(ShaderByteCodeTest, NullDataPointer)
 {
     BasicBuffer buffer {};
     EXPECT_NO_THROW({
@@ -281,11 +281,11 @@ template <typename T>
 class ShaderByteCodeMoveTest : public ShaderByteCodeTest<T> {
 };
 
-using MoveTestTypes = ::testing::Types<std::vector<uint32_t>, BasicBuffer, ManagedResourceBuffer>;
+using MoveTestTypes = testing::Types<std::vector<uint32_t>, BasicBuffer, ManagedResourceBuffer>;
 
 TYPED_TEST_SUITE(ShaderByteCodeMoveTest, MoveTestTypes, );
 
-TYPED_TEST(ShaderByteCodeMoveTest, OriginalBufferIsMoved)
+NOLINT_TYPED_TEST(ShaderByteCodeMoveTest, OriginalBufferIsMoved)
 {
     auto [original_buffer, original_size, original_data] = this->GetOriginalBuffer();
 
@@ -301,7 +301,7 @@ TYPED_TEST(ShaderByteCodeMoveTest, OriginalBufferIsMoved)
 namespace {
 
 class VectorBufferTest
-    : public ::testing::TestWithParam<std::vector<uint32_t>> {
+    : public testing::TestWithParam<std::vector<uint32_t>> {
 };
 
 INSTANTIATE_TEST_SUITE_P(ShaderByteCodeValueTests, VectorBufferTest,
@@ -309,7 +309,7 @@ INSTANTIATE_TEST_SUITE_P(ShaderByteCodeValueTests, VectorBufferTest,
         std::vector<uint32_t> { 1 },
         std::vector<uint32_t> { 1, 2, 3, 4 }));
 
-TEST_P(VectorBufferTest, SizeTest)
+NOLINT_TEST_P(VectorBufferTest, SizeTest)
 {
     auto buffer = GetParam();
     const size_t original_size = buffer.size();
@@ -318,7 +318,7 @@ TEST_P(VectorBufferTest, SizeTest)
     EXPECT_EQ(shader_byte_code.Size(), original_size * sizeof(uint32_t));
 }
 
-TEST_P(VectorBufferTest, DataTest)
+NOLINT_TEST_P(VectorBufferTest, DataTest)
 {
     auto buffer = GetParam();
     const uint32_t* original_data = buffer.data();
@@ -333,14 +333,14 @@ TEST_P(VectorBufferTest, DataTest)
 namespace {
 
 template <typename T>
-class ShaderByteCodeUnsupportedTest : public ::testing::Test {
+class ShaderByteCodeUnsupportedTest : public testing::Test {
 };
 
-using UnsupportedTypes = ::testing::Types<int, float, std::string>;
+using UnsupportedTypes = testing::Types<int, float, std::string>;
 
 TYPED_TEST_SUITE(ShaderByteCodeUnsupportedTest, UnsupportedTypes);
 
-TYPED_TEST(ShaderByteCodeUnsupportedTest, RejectsUnsupportedTypes)
+NOLINT_TYPED_TEST(ShaderByteCodeUnsupportedTest, RejectsUnsupportedTypes)
 {
     using BufferType = TypeParam;
     EXPECT_FALSE((IsContiguousContainer<BufferType>));

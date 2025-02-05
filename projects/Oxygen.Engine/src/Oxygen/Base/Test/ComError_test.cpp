@@ -9,18 +9,18 @@
 #if defined(OXYGEN_WINDOWS)
 
 #  include "Oxygen/Base/Windows/ComError.h"
+#  include <atlcomcli.h>
 #  include <windows.h>
 
-#  include <atlcomcli.h>
+#  include <Oxygen/Testing/GTest.h>
 #  include <gmock/gmock-matchers.h>
-#  include <gtest/gtest.h>
 
 using oxygen::windows::ComError;
 using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::windows {
 
-class ComErrorTest : public ::testing::Test {
+class ComErrorTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -33,7 +33,7 @@ protected:
     }
 };
 
-TEST_F(ComErrorTest, ComErrorThrowsWithMessage)
+NOLINT_TEST_F(ComErrorTest, ComErrorThrowsWithMessage)
 {
     const std::string msg { "Test COM error" };
     try {
@@ -44,7 +44,7 @@ TEST_F(ComErrorTest, ComErrorThrowsWithMessage)
     }
 }
 
-TEST_F(ComErrorTest, ComErrorThrowsWithoutMessage)
+NOLINT_TEST_F(ComErrorTest, ComErrorThrowsWithoutMessage)
 {
     try {
         ComError::Throw(static_cast<ComErrorEnum>(E_FAIL), "");
@@ -54,7 +54,7 @@ TEST_F(ComErrorTest, ComErrorThrowsWithoutMessage)
     }
 }
 
-TEST_F(ComErrorTest, ThrowOnFailedThrowsComError)
+NOLINT_TEST_F(ComErrorTest, ThrowOnFailedThrowsComError)
 {
     constexpr HRESULT hr = E_FAIL;
     try {
@@ -67,32 +67,38 @@ TEST_F(ComErrorTest, ThrowOnFailedThrowsComError)
     }
 }
 
-TEST_F(ComErrorTest, ThrowOnFailedDoesNotThrowOnSuccess)
+NOLINT_TEST_F(ComErrorTest, ThrowOnFailedDoesNotThrowOnSuccess)
 {
     constexpr HRESULT hr = S_OK;
+    // NOLINTNEXTLINE
     EXPECT_NO_THROW(ThrowOnFailed(hr, "Operation succeeded"));
 }
 
-TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
+NOLINT_TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
 {
     // Initialize COM library
-    CoInitialize(nullptr);
+    HRESULT hr = CoInitialize(nullptr);
+    ASSERT_TRUE(SUCCEEDED(hr));
 
     // Create a custom IErrorInfo
     CComPtr<ICreateErrorInfo> p_create_error_info;
-    HRESULT hr = CreateErrorInfo(&p_create_error_info);
+    hr = CreateErrorInfo(&p_create_error_info);
     ASSERT_TRUE(SUCCEEDED(hr));
 
     CComPtr<IErrorInfo> p_error_info;
-    hr = p_create_error_info->QueryInterface(IID_IErrorInfo, reinterpret_cast<void**>(&p_error_info));
+    hr = p_create_error_info->QueryInterface(
+        IID_IErrorInfo,
+        reinterpret_cast<void**>(&p_error_info)); // NOLINT(*-pro-type-reinterpret-cast)
     ASSERT_TRUE(SUCCEEDED(hr));
 
     // Set error description
     const CComBSTR description(L"Custom COM error description");
-    p_create_error_info->SetDescription(description);
+    hr = p_create_error_info->SetDescription(description);
+    ASSERT_TRUE(SUCCEEDED(hr));
 
     // Set the error info for the current thread
-    SetErrorInfo(0, p_error_info);
+    hr = SetErrorInfo(0, p_error_info);
+    ASSERT_TRUE(SUCCEEDED(hr));
 
     // Simulate a COM error
     hr = E_FAIL;
@@ -110,20 +116,21 @@ TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
 }
 
 template <typename T>
-class ThrowOnFailedStringTypeTest : public ::testing::Test {
+class ThrowOnFailedStringTypeTest : public testing::Test {
 };
 
-using StringTypes = ::testing::Types<
+using StringTypes = testing::Types<
     const char*,
     const char8_t*,
     const wchar_t*>;
 
 TYPED_TEST_SUITE(ThrowOnFailedStringTypeTest, StringTypes);
 
+// NOLINTNEXTLINE
 TYPED_TEST(ThrowOnFailedStringTypeTest, HandlesDifferentStringTypes)
 {
     HRESULT hr = E_FAIL;
-    TypeParam message = reinterpret_cast<TypeParam>("Operation failed");
+    auto message = reinterpret_cast<TypeParam>("Operation failed");
     try {
         ThrowOnFailed(hr, message);
     } catch (const ComError& e) {

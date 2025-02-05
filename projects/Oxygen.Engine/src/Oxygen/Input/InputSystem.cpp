@@ -177,7 +177,7 @@ auto InputSystem::GetActionByName(std::string_view name) const
         actions_, [&name](const std::shared_ptr<Action>& entry) {
             return entry->GetName() == name;
         });
-    return (found != actions_.cend()) ? *found : std::shared_ptr<Action>();
+    return found != actions_.cend() ? *found : std::shared_ptr<Action>();
 }
 
 void InputSystem::AddMappingContext(
@@ -224,7 +224,7 @@ auto InputSystem::GetMappingContextByName(std::string_view name) const
         mapping_contexts_, [&name](const InputMappingContextEntry& entry) {
             return name == entry.mapping_context->GetName();
         });
-    return (found != std::ranges::cend(mapping_contexts_))
+    return found != std::ranges::cend(mapping_contexts_)
         ? found->mapping_context
         : std::shared_ptr<InputMappingContext>();
 }

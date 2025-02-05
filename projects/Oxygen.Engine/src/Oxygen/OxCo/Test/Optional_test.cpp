@@ -6,12 +6,12 @@
 
 #include "Oxygen/OxCo/Detail/Optional.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::co;
+using oxygen::co::Optional;
 
 template <typename T>
-class OptionalTest : public ::testing::Test {
+class OptionalTest : public testing::Test {
 protected:
     T value_ = 42;
     T default_value_ = 0;
@@ -19,19 +19,19 @@ protected:
 };
 
 template <>
-class OptionalTest<int&> : public ::testing::Test {
+class OptionalTest<int&> : public testing::Test {
 protected:
     int value_ = 42;
     int default_value_ = 0;
     int another_value_ = 100;
 };
 
-using TestTypes = ::testing::Types<int, int&>;
+using TestTypes = testing::Types<int, int&>;
 
 class TestTypeNames {
 public:
     template <typename T>
-    static auto GetName(int) -> std::string
+    static auto GetName(int /*unused*/) -> std::string
     {
         if (std::is_same_v<T, int>) {
             return "int";
@@ -45,14 +45,14 @@ public:
 
 TYPED_TEST_SUITE(OptionalTest, TestTypes, TestTypeNames);
 
-TYPED_TEST(OptionalTest, DefaultConstructor)
+NOLINT_TYPED_TEST(OptionalTest, DefaultConstructor)
 {
     Optional<TypeParam> opt;
     EXPECT_FALSE(opt.has_value());
     EXPECT_FALSE(static_cast<bool>(opt));
 }
 
-TYPED_TEST(OptionalTest, ValueConstructor)
+NOLINT_TYPED_TEST(OptionalTest, ValueConstructor)
 {
     Optional<TypeParam> opt(this->value_);
     EXPECT_TRUE(opt.has_value());
@@ -61,14 +61,14 @@ TYPED_TEST(OptionalTest, ValueConstructor)
     EXPECT_EQ(opt.value(), this->value_);
 }
 
-TYPED_TEST(OptionalTest, NulloptConstructor)
+NOLINT_TYPED_TEST(OptionalTest, NulloptConstructor)
 {
     Optional<TypeParam> opt(std::nullopt);
     EXPECT_FALSE(opt.has_value());
     EXPECT_FALSE(static_cast<bool>(opt));
 }
 
-TYPED_TEST(OptionalTest, ValueOr)
+NOLINT_TYPED_TEST(OptionalTest, ValueOr)
 {
     Optional<TypeParam> opt;
     EXPECT_EQ(opt.value_or(this->default_value_), this->default_value_);
@@ -77,7 +77,7 @@ TYPED_TEST(OptionalTest, ValueOr)
     EXPECT_EQ(opt.value_or(this->default_value_), this->value_);
 }
 
-TYPED_TEST(OptionalTest, Reset)
+NOLINT_TYPED_TEST(OptionalTest, Reset)
 {
     Optional<TypeParam> opt(this->value_);
     EXPECT_TRUE(opt.has_value());
@@ -86,7 +86,7 @@ TYPED_TEST(OptionalTest, Reset)
     EXPECT_FALSE(opt.has_value());
 }
 
-TYPED_TEST(OptionalTest, Swap)
+NOLINT_TYPED_TEST(OptionalTest, Swap)
 {
     Optional<TypeParam> opt1(this->value_);
     Optional<TypeParam> opt2(this->another_value_);
@@ -96,7 +96,7 @@ TYPED_TEST(OptionalTest, Swap)
     EXPECT_EQ(*opt2, this->value_);
 }
 
-TYPED_TEST(OptionalTest, DereferenceOperators)
+NOLINT_TYPED_TEST(OptionalTest, DereferenceOperators)
 {
     Optional<TypeParam> opt(this->value_);
     EXPECT_EQ(*opt, this->value_);
@@ -107,7 +107,7 @@ TYPED_TEST(OptionalTest, DereferenceOperators)
     }
 }
 
-TYPED_TEST(OptionalTest, ConstDereferenceOperators)
+NOLINT_TYPED_TEST(OptionalTest, ConstDereferenceOperators)
 {
     const Optional<TypeParam> opt(this->value_);
     EXPECT_EQ(*opt, this->value_);
@@ -118,9 +118,9 @@ TYPED_TEST(OptionalTest, ConstDereferenceOperators)
     }
 }
 
-TYPED_TEST(OptionalTest, ValueThrowsOnNullopt)
+NOLINT_TYPED_TEST(OptionalTest, ValueThrowsOnNullopt)
 {
     Optional<TypeParam> opt;
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access) for testing purposes
-    EXPECT_THROW([[maybe_unused]] auto _ = opt.value(), std::bad_optional_access);
+    NOLINT_EXPECT_THROW([[maybe_unused]] auto _ = opt.value(), std::bad_optional_access);
 }

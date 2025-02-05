@@ -128,7 +128,7 @@ public:
 template <std::derived_from<CoroutineFrame> F>
 [[nodiscard]] auto FrameCast(CoroutineFrame* f) -> F*
 {
-    return (f && ProxyFrame::IsTagged(F::kTag, f))
+    return f && ProxyFrame::IsTagged(F::kTag, f)
         ? static_cast<F*>(f)
         : nullptr;
 }

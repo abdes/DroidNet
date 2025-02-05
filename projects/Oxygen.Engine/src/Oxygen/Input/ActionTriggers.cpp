@@ -37,7 +37,7 @@ auto ActionTriggerPressed::DoUpdateState(const ActionValue& action_value,
     Duration /*delta_time*/) -> bool
 {
     if (!depleted_ && action_value.IsActuated(GetActuationThreshold())) {
-        SetTriggerState(ActionTrigger::State::kIdle);
+        SetTriggerState(State::kIdle);
         depleted_ = true;
         return true;
     }
@@ -54,11 +54,11 @@ auto ActionTriggerReleased::DoUpdateState(const ActionValue& action_value,
 {
     // We only support these button family of input events
     if (IsIdle() && action_value.IsActuated(GetActuationThreshold())) {
-        SetTriggerState(ActionTrigger::State::kOngoing);
+        SetTriggerState(State::kOngoing);
         return false;
     }
     if (IsOngoing() && !action_value.IsActuated(GetActuationThreshold())) {
-        SetTriggerState(ActionTrigger::State::kIdle);
+        SetTriggerState(State::kIdle);
         return true;
     }
     return false;
@@ -79,12 +79,12 @@ auto ActionTriggerDown::DoUpdateState(const ActionValue& action_value,
         if (IsIdle()) {
             triggered_once_ = false;
         }
-        SetTriggerState(ActionTrigger::State::kOngoing);
+        SetTriggerState(State::kOngoing);
         triggered_once_ = true;
         return true;
     }
     if (!action_value.IsActuated(GetActuationThreshold())) {
-        SetTriggerState(ActionTrigger::State::kIdle);
+        SetTriggerState(State::kIdle);
     }
     return false;
 }
@@ -92,7 +92,7 @@ auto ActionTriggerDown::DoUpdateState(const ActionValue& action_value,
 //-- ActionTriggerTimed --------------------------------------------------------
 
 auto ActionTriggerTimed::DoUpdateState(const ActionValue& action_value,
-    Duration delta_time) -> bool
+    const Duration delta_time) -> bool
 {
     if (action_value.IsActuated(GetActuationThreshold())) {
         if (IsIdle() || (IsTriggered() && IsOngoing())) {
@@ -109,7 +109,7 @@ auto ActionTriggerTimed::DoUpdateState(const ActionValue& action_value,
 //-- ActionTriggerHold ---------------------------------------------------------
 
 auto ActionTriggerHold::DoUpdateState(const ActionValue& action_value,
-    Duration delta_time) -> bool
+    const Duration delta_time) -> bool
 {
     if (IsCompleted()) {
         triggered_once_ = false;
@@ -127,7 +127,7 @@ auto ActionTriggerHold::DoUpdateState(const ActionValue& action_value,
 //-- ActionTriggerHoldAndRelease -----------------------------------------------
 
 auto ActionTriggerHoldAndRelease::DoUpdateState(const ActionValue& action_value,
-    Duration delta_time) -> bool
+    const Duration delta_time) -> bool
 {
     ActionTriggerTimed::DoUpdateState(action_value, delta_time);
     if (!action_value.IsActuated(GetActuationThreshold())) {
@@ -141,7 +141,7 @@ auto ActionTriggerHoldAndRelease::DoUpdateState(const ActionValue& action_value,
 //-- ActionTriggerPulse --------------------------------------------------------
 
 auto ActionTriggerPulse::DoUpdateState(const ActionValue& action_value,
-    Duration delta_time) -> bool
+    const Duration delta_time) -> bool
 {
     if (IsIdle() && GetPreviousState() == State::kIdle) {
         trigger_count_ = 0;

@@ -57,7 +57,7 @@ public:
 
     ~LockGuard()
     {
-        if (sem_) {
+        if (sem_ != nullptr) {
             sem_->Release();
         }
     }
@@ -86,7 +86,7 @@ private:
 };
 
 template <class RetVal>
-class Semaphore::Awaitable final : public detail::ParkingLotImpl<Semaphore>::Parked {
+class Semaphore::Awaitable final : public Parked {
 public:
     using Parked::Parked;
     [[nodiscard]] auto await_ready() const noexcept -> bool { return this->Object().Value() > 0; }

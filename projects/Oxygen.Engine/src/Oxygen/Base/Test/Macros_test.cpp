@@ -9,10 +9,9 @@
 #include <string>
 #include <type_traits>
 
-#include "gtest/gtest.h"
+#include <Oxygen/Testing/GTest.h>
 
-// NOLINTNEXTLINE
-TEST(CommonMacros, NonCopyable)
+NOLINT_TEST(CommonMacros, NonCopyable)
 {
     // NOLINTNEXTLINE
     class NonCopyable {
@@ -24,8 +23,7 @@ TEST(CommonMacros, NonCopyable)
     static_assert(!std::is_assignable_v<NonCopyable, NonCopyable>);
 }
 
-// NOLINTNEXTLINE
-TEST(CommonMacros, NonMoveable)
+NOLINT_TEST(CommonMacros, NonMoveable)
 {
     // NOLINTNEXTLINE
     class NonMoveable {
@@ -37,8 +35,7 @@ TEST(CommonMacros, NonMoveable)
     static_assert(!std::is_move_assignable_v<NonMoveable>);
 }
 
-// NOLINTNEXTLINE
-TEST(CommonMacros, DefaultCopyable)
+NOLINT_TEST(CommonMacros, DefaultCopyable)
 {
     // NOLINTNEXTLINE
     class DefaultCopyable {
@@ -50,20 +47,16 @@ TEST(CommonMacros, DefaultCopyable)
     static_assert(std::is_assignable_v<DefaultCopyable, DefaultCopyable>);
 }
 
-// NOLINTNEXTLINE
-TEST(CommonMacros, DefaultMoveable)
+NOLINT_TEST(CommonMacros, DefaultMoveable)
 {
     // NOLINTNEXTLINE
     class DefaultMoveable {
     public:
-        DefaultMoveable()
-            : member_("Hello World!")
-        {
-        }
+        DefaultMoveable() = default;
         OXYGEN_DEFAULT_MOVABLE(DefaultMoveable);
 
     private:
-        std::string member_;
+        std::string member_ { "Hello World!" };
     };
 
     const DefaultMoveable movable;

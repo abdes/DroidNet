@@ -29,7 +29,7 @@ namespace {
 TEST_CASE("Semaphore")
 {
     TestEventLoop el;
-    ::Run(el, [&]() -> Co<> {
+    Run(el, [&]() -> Co<> {
         SECTION("basic operation")
         {
             Semaphore sem(5);

@@ -90,7 +90,7 @@ public:
     }
 
     //! Waits for a transition from `from` to `to`.
-    auto UntilChanged(T from, T to) -> co::Awaitable<std::pair<T, T>> auto
+    auto UntilChanged(T from, T to) -> Awaitable<std::pair<T, T>> auto
     {
         return UntilChanged(
             [from = std::move(from), to = std::move(to)](const T& f, const T& t) {
@@ -137,9 +137,9 @@ protected:
 private:
     virtual void OnChanged(const T& from, const T& to) = 0;
 
-    Value<T>& cond_; // NOLINT(*-avoid-const-or-ref-data-members)
+    Value& cond_; // NOLINT(*-avoid-const-or-ref-data-members)
     detail::Handle handle_;
-    friend Value<T>;
+    friend Value;
 };
 
 template <class T>
@@ -220,7 +220,7 @@ void Value<T>::Set(T value)
 }
 
 template <class T>
-auto Value<T>::operator=(T value) -> Value<T>&
+auto Value<T>::operator=(T value) -> Value&
 {
     Set(std::move(value));
     return *this;

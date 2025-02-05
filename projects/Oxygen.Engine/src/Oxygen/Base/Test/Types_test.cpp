@@ -14,7 +14,7 @@
 #include <string>
 #include <type_traits>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -28,8 +28,7 @@ concept HasToString = requires(const T& type) {
 #define CHECK_HAS_TO_STRING(T) \
     static_assert(HasToString<oxygen::T>, "T must have to_string implementation")
 
-// NOLINTNEXTLINE
-TEST(CommonTypes, HaveToString)
+NOLINT_TEST(CommonTypes, HaveToString)
 {
     CHECK_HAS_TO_STRING(PixelPosition);
     CHECK_HAS_TO_STRING(SubPixelPosition);
@@ -44,8 +43,7 @@ TEST(CommonTypes, HaveToString)
     CHECK_HAS_TO_STRING(Axis2D);
 }
 
-// NOLINTNEXTLINE
-TEST(CommonTypes, ConvertSecondsToDuration)
+NOLINT_TEST(CommonTypes, ConvertSecondsToDuration)
 {
     constexpr float kWholeValue = 2.0F;
     constexpr int64_t kWholeValueDuration = 2'000'000;
@@ -58,9 +56,9 @@ TEST(CommonTypes, ConvertSecondsToDuration)
 
 //===----------------------------------------------------------------------===//
 
-TEST(EndianTest, IsLittleEndian_ChecksSystemEndianness)
+NOLINT_TEST(EndianTest, IsLittleEndian_ChecksSystemEndianness)
 {
-    union {
+    const union {
         uint32_t i;
         unsigned char c[4];
     } u = { 0x01234567 };
@@ -71,34 +69,34 @@ TEST(EndianTest, IsLittleEndian_ChecksSystemEndianness)
 
 //===----------------------------------------------------------------------===//
 
-TEST(ByteSwapTest, ByteSwap_SingleByte_NoChange)
+NOLINT_TEST(ByteSwapTest, ByteSwap_SingleByte_NoChange)
 {
     constexpr uint8_t value = 0x12;
     EXPECT_EQ(oxygen::ByteSwap(value), value);
 }
 
-TEST(ByteSwapTest, ByteSwap_16Bit)
+NOLINT_TEST(ByteSwapTest, ByteSwap_16Bit)
 {
     constexpr uint16_t value = 0x1234;
     constexpr uint16_t expected = 0x3412;
     EXPECT_EQ(oxygen::ByteSwap(value), expected);
 }
 
-TEST(ByteSwapTest, ByteSwap_32Bit)
+NOLINT_TEST(ByteSwapTest, ByteSwap_32Bit)
 {
     constexpr uint32_t value = 0x12345678;
     constexpr uint32_t expected = 0x78563412;
     EXPECT_EQ(oxygen::ByteSwap(value), expected);
 }
 
-TEST(ByteSwapTest, ByteSwap_64Bit)
+NOLINT_TEST(ByteSwapTest, ByteSwap_64Bit)
 {
     constexpr uint64_t value = 0x1234567890ABCDEF;
     constexpr uint64_t expected = 0xEFCDAB9078563412;
     EXPECT_EQ(oxygen::ByteSwap(value), expected);
 }
 
-TEST(ByteSwapTest, ByteSwap_Float)
+NOLINT_TEST(ByteSwapTest, ByteSwap_Float)
 {
     union {
         float f;
@@ -110,7 +108,7 @@ TEST(ByteSwapTest, ByteSwap_Float)
     EXPECT_FLOAT_EQ(u1.f, std::numbers::pi_v<float>);
 }
 
-TEST(ByteSwapTest, ByteSwap_Double)
+NOLINT_TEST(ByteSwapTest, ByteSwap_Double)
 {
     union {
         double d;

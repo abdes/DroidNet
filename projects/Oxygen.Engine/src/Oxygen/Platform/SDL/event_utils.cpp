@@ -11,7 +11,7 @@
 
 namespace oxygen::platform::sdl::detail {
 
-auto SdlEventName(std::uint32_t event_type) -> const char*
+auto SdlEventName(const std::uint32_t event_type) -> const char*
 {
     switch (event_type) {
     case SDL_EVENT_QUIT:

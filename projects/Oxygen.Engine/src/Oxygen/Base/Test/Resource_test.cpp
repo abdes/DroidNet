@@ -6,7 +6,7 @@
 
 #include "Oxygen/Base/Resource.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::Resource;
 using oxygen::ResourceHandle;
@@ -24,15 +24,13 @@ public:
     }
 };
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, DefaultConstructor)
+NOLINT_TEST(ResourceTest, DefaultConstructor)
 {
     const TestResource resource;
     EXPECT_FALSE(resource.IsValid());
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, ParameterizedConstructor)
+NOLINT_TEST(ResourceTest, ParameterizedConstructor)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource(handle);
@@ -40,8 +38,7 @@ TEST(ResourceTest, ParameterizedConstructor)
     EXPECT_EQ(resource.GetId(), handle);
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, CopyConstructor)
+NOLINT_TEST(ResourceTest, CopyConstructor)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource1(handle);
@@ -49,8 +46,7 @@ TEST(ResourceTest, CopyConstructor)
     EXPECT_EQ(resource1.GetId(), resource2.GetId());
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, CopyAssignment)
+NOLINT_TEST(ResourceTest, CopyAssignment)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource1(handle);
@@ -58,8 +54,7 @@ TEST(ResourceTest, CopyAssignment)
     EXPECT_EQ(resource1.GetId(), resource2.GetId());
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, MoveConstructor)
+NOLINT_TEST(ResourceTest, MoveConstructor)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     TestResource resource1(handle);
@@ -68,8 +63,7 @@ TEST(ResourceTest, MoveConstructor)
     EXPECT_FALSE(resource1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, MoveAssignment)
+NOLINT_TEST(ResourceTest, MoveAssignment)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     TestResource resource1(handle);
@@ -78,8 +72,7 @@ TEST(ResourceTest, MoveAssignment)
     EXPECT_FALSE(resource1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTest, Invalidate)
+NOLINT_TEST(ResourceTest, Invalidate)
 {
     const ResourceHandle handle(1U, kTestResourceType);
     TestResource resource(handle);

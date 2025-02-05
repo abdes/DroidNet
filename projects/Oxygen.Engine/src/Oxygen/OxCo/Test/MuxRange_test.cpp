@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/OxCo/Algorithms.h"
+
 #include <chrono>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Run.h"
 #include "Utils/OxCoTestFixture.h"
@@ -27,12 +28,12 @@ class MuxRangeTest : public OxCoTestFixture {
 protected:
     auto MakeTask(const int x) const -> Co<int>
     {
-        co_await el_->Sleep(std::chrono::milliseconds(x));
+        co_await el_->Sleep(milliseconds(x));
         co_return x * 100;
     }
 };
 
-TEST_F(MuxRangeTest, AnyOf)
+NOLINT_TEST_F(MuxRangeTest, AnyOf)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         std::vector<Co<int>> v {};
@@ -49,7 +50,7 @@ TEST_F(MuxRangeTest, AnyOf)
     });
 }
 
-TEST_F(MuxRangeTest, AnyOfImmediateFront)
+NOLINT_TEST_F(MuxRangeTest, AnyOfImmediateFront)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto imm = []() -> Co<int> { co_return 0; };
@@ -60,7 +61,7 @@ TEST_F(MuxRangeTest, AnyOfImmediateFront)
     });
 }
 
-TEST_F(MuxRangeTest, AnyOfImmediateBack)
+NOLINT_TEST_F(MuxRangeTest, AnyOfImmediateBack)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         auto imm = []() -> Co<int> { co_return 0; };
@@ -71,7 +72,7 @@ TEST_F(MuxRangeTest, AnyOfImmediateBack)
     });
 }
 
-TEST_F(MuxRangeTest, AnyOfEmpty)
+NOLINT_TEST_F(MuxRangeTest, AnyOfEmpty)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         std::vector<Co<int>> v {};
@@ -79,7 +80,7 @@ TEST_F(MuxRangeTest, AnyOfEmpty)
     });
 }
 
-TEST_F(MuxRangeTest, AllOfEmpty)
+NOLINT_TEST_F(MuxRangeTest, AllOfEmpty)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         std::vector<Co<int>> v {};
@@ -87,7 +88,7 @@ TEST_F(MuxRangeTest, AllOfEmpty)
     });
 }
 
-TEST_F(MuxRangeTest, AllOf)
+NOLINT_TEST_F(MuxRangeTest, AllOf)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         std::vector<Co<int>> v {};

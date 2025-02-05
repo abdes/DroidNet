@@ -6,7 +6,7 @@
 
 #include "Oxygen/Base/ResourceTable.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
 #include <random>
@@ -61,8 +61,7 @@ struct Item {
 
 namespace base::resources {
 
-// NOLINTNEXTLINE
-TEST(ResourceTableBasicTest, EmptyTable)
+NOLINT_TEST(ResourceTableBasicTest, EmptyTable)
 {
     static constexpr size_t kCapacity { 10 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -73,8 +72,8 @@ TEST(ResourceTableBasicTest, EmptyTable)
     EXPECT_EQ(table.Size(), 0);
     EXPECT_EQ(table.Capacity(), kCapacity);
 }
-// NOLINTNEXTLINE
-TEST(ResourceTableBasicTest, InsertItem)
+
+NOLINT_TEST(ResourceTableBasicTest, InsertItem)
 {
     static constexpr size_t kCapacity { 10 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -114,8 +113,7 @@ TEST(ResourceTableBasicTest, InsertItem)
     }
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTableBasicTest, EmplaceItem)
+NOLINT_TEST(ResourceTableBasicTest, EmplaceItem)
 {
     static constexpr size_t kCapacity { 10 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -163,8 +161,7 @@ TEST(ResourceTableBasicTest, EmplaceItem)
     }
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTableBasicTest, EraseItemCallsItsDestructor)
+NOLINT_TEST(ResourceTableBasicTest, EraseItemCallsItsDestructor)
 {
     static constexpr size_t kCapacity { 10 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -206,39 +203,34 @@ protected:
     ResourceTable<Item> table_;
 };
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_EmptyTable)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_EmptyTable)
 {
     const ResourceHandle handle(0, kItemType);
     ASSERT_TRUE(table_.IsEmpty());
     EXPECT_FALSE(table_.Contains(handle));
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_ValidHandle)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_ValidHandle)
 {
     const auto handle = table_.Emplace("Test Item");
     EXPECT_TRUE(table_.Contains(handle));
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_ValidHandleNoItem)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_ValidHandleNoItem)
 {
     const auto handle = table_.Emplace("Test Item");
     table_.Erase(handle);
     EXPECT_FALSE(table_.Contains(handle));
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_OutOfRangeHandle)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_OutOfRangeHandle)
 {
     auto handle = table_.Emplace("Test Item");
     handle.SetIndex(handle.Index() + 10);
     EXPECT_FALSE(table_.Contains(handle));
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_GenerationMismatch)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_GenerationMismatch)
 {
     const auto handle = table_.Emplace("Test Item");
     EXPECT_TRUE(table_.Contains(handle));
@@ -248,8 +240,8 @@ TEST_F(ResourceTableElementAccessTest, Contains_GenerationMismatch)
     mismatched_handle.NewGeneration();
     EXPECT_FALSE(table_.Contains(mismatched_handle));
 }
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_InvalidHandle)
+
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_InvalidHandle)
 {
     auto handle = table_.Emplace("Test Item");
     EXPECT_TRUE(table_.Contains(handle));
@@ -257,8 +249,7 @@ TEST_F(ResourceTableElementAccessTest, Contains_InvalidHandle)
     EXPECT_FALSE(table_.Contains(handle));
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Contains_HandleHasDifferentType)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Contains_HandleHasDifferentType)
 {
     const auto good_handle = table_.Emplace("Test Item");
     EXPECT_TRUE(table_.Contains(good_handle));
@@ -267,50 +258,46 @@ TEST_F(ResourceTableElementAccessTest, Contains_HandleHasDifferentType)
     bad_handle.SetResourceType(good_handle.ResourceType() + 1);
     EXPECT_FALSE(table_.Contains(bad_handle));
 }
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, ItemAt_ValidHandle)
+
+NOLINT_TEST_F(ResourceTableElementAccessTest, ItemAt_ValidHandle)
 {
     const auto handle = table_.Emplace("Test Item");
     const auto& item = table_.ItemAt(handle);
     EXPECT_EQ(item.value, "Test Item");
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, ItemAt_InvalidHandle)
+NOLINT_TEST_F(ResourceTableElementAccessTest, ItemAt_InvalidHandle)
 {
     ResourceHandle handle(0, kItemType);
     handle.Invalidate();
-    EXPECT_THROW(auto _ = table_.ItemAt(handle), std::invalid_argument);
+    NOLINT_EXPECT_THROW(auto _ = table_.ItemAt(handle), std::invalid_argument);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, ItemAt_HandleForErasedItem)
+NOLINT_TEST_F(ResourceTableElementAccessTest, ItemAt_HandleForErasedItem)
 {
     const auto handle = table_.Emplace("Item to be freed");
     table_.Erase(handle);
-    EXPECT_THROW(auto _ = table_.ItemAt(handle), std::invalid_argument);
+    NOLINT_EXPECT_THROW(auto _ = table_.ItemAt(handle), std::invalid_argument);
 }
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, ItemAt_GenerationMismatch)
+
+NOLINT_TEST_F(ResourceTableElementAccessTest, ItemAt_GenerationMismatch)
 {
     const auto handle = table_.Emplace("Test Item");
-    EXPECT_NO_THROW(auto& item = table_.ItemAt(handle); EXPECT_EQ(item.value, "Test Item"));
+    NOLINT_EXPECT_NO_THROW(auto& item = table_.ItemAt(handle); EXPECT_EQ(item.value, "Test Item"));
 
     // Manually increment the generation of the handle to simulate a mismatch
     ResourceHandle mismatched_handle = handle;
     mismatched_handle.NewGeneration();
-    EXPECT_THROW([[maybe_unused]] auto _ = table_.ItemAt(mismatched_handle), std::invalid_argument);
+    NOLINT_EXPECT_THROW([[maybe_unused]] auto _ = table_.ItemAt(mismatched_handle), std::invalid_argument);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Items_EmptyTable)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Items_EmptyTable)
 {
     const auto items = table_.Items();
     EXPECT_TRUE(items.empty());
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableElementAccessTest, Items_NonEmptyTable)
+NOLINT_TEST_F(ResourceTableElementAccessTest, Items_NonEmptyTable)
 {
     table_.Emplace("Item 1");
     table_.Emplace("Item 2");
@@ -335,8 +322,7 @@ protected:
     ResourceTable<Item> table_;
 };
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableInsert, InsertSingleItem)
+NOLINT_TEST_F(ResourceTableInsert, InsertSingleItem)
 {
     const auto handle = table_.Emplace("Single Item");
     EXPECT_TRUE(handle.IsValid());
@@ -346,8 +332,7 @@ TEST_F(ResourceTableInsert, InsertSingleItem)
     EXPECT_EQ(item.value, "Single Item");
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableInsert, InsertMultipleItems)
+NOLINT_TEST_F(ResourceTableInsert, InsertMultipleItems)
 {
     const auto handle1 = table_.Emplace("Item 1");
     const auto handle2 = table_.Emplace("Item 2");
@@ -361,19 +346,17 @@ TEST_F(ResourceTableInsert, InsertMultipleItems)
     EXPECT_EQ(table_.ItemAt(handle3).value, "Item 3");
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableInsert, InsertWhenTableIsFull)
+NOLINT_TEST_F(ResourceTableInsert, InsertWhenTableIsFull)
 {
     for (size_t i = 0; i < kCapacity; ++i) {
         table_.Emplace("Item " + std::to_string(i + 1));
     }
     EXPECT_EQ(table_.Size(), kCapacity);
-    EXPECT_NO_THROW(table_.Emplace("Overflow Item"));
+    NOLINT_EXPECT_NO_THROW(table_.Emplace("Overflow Item"));
     EXPECT_EQ(table_.Size(), kCapacity + 1);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableInsert, InsertAndDeleteSameItemMultipleTimes)
+NOLINT_TEST_F(ResourceTableInsert, InsertAndDeleteSameItemMultipleTimes)
 {
     for (size_t i = 0; i < kCapacity * 2; ++i) {
         const auto handle = table_.Emplace("Item");
@@ -399,8 +382,7 @@ protected:
     ResourceTable<Item> table_;
 };
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableErase, EraseSingleItem)
+NOLINT_TEST_F(ResourceTableErase, EraseSingleItem)
 {
     const auto handle = table_.Emplace("Single Item");
     EXPECT_TRUE(handle.IsValid());
@@ -409,8 +391,7 @@ TEST_F(ResourceTableErase, EraseSingleItem)
     EXPECT_EQ(table_.Size(), 0);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableErase, EraseMultipleItems)
+NOLINT_TEST_F(ResourceTableErase, EraseMultipleItems)
 {
     const auto handle1 = table_.Emplace("Item 1");
     const auto handle2 = table_.Emplace("Item 2");
@@ -422,15 +403,13 @@ TEST_F(ResourceTableErase, EraseMultipleItems)
     EXPECT_EQ(table_.Size(), 0);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableErase, EraseWhenTableIsEmpty)
+NOLINT_TEST_F(ResourceTableErase, EraseWhenTableIsEmpty)
 {
     const ResourceHandle handle(0, kItemType);
     EXPECT_EQ(table_.Erase(handle), 0);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableErase, EraseSameItemTwice)
+NOLINT_TEST_F(ResourceTableErase, EraseSameItemTwice)
 {
     const auto handle = table_.Emplace("Item");
     EXPECT_TRUE(handle.IsValid());
@@ -440,8 +419,7 @@ TEST_F(ResourceTableErase, EraseSameItemTwice)
     EXPECT_EQ(table_.Erase(handle), 0);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableErase, EraseItemWhenContainsThrows)
+NOLINT_TEST_F(ResourceTableErase, EraseItemWhenContainsThrows)
 {
     const auto handle = table_.Emplace("Item");
     EXPECT_TRUE(handle.IsValid());
@@ -455,8 +433,7 @@ TEST_F(ResourceTableErase, EraseItemWhenContainsThrows)
     EXPECT_EQ(table_.Size(), 1);
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTableTest, SparseArrayWithHoles)
+NOLINT_TEST(ResourceTableTest, SparseArrayWithHoles)
 {
     static constexpr size_t kCapacity { 3 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -480,8 +457,7 @@ TEST(ResourceTableTest, SparseArrayWithHoles)
     EXPECT_EQ(table.Capacity(), 4);
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTableTest, Defragment)
+NOLINT_TEST(ResourceTableTest, Defragment)
 {
     static constexpr size_t kCapacity { 5 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -528,8 +504,7 @@ protected:
     HandleSet handles_;
 };
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableTestPreFilled, EraseItems)
+NOLINT_TEST_F(ResourceTableTestPreFilled, EraseItems)
 {
     table_.EraseItems(handles_);
     EXPECT_TRUE(table_.IsEmpty());
@@ -537,8 +512,7 @@ TEST_F(ResourceTableTestPreFilled, EraseItems)
     EXPECT_EQ(table_.Capacity(), kCapacity);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableTestPreFilled, Reset)
+NOLINT_TEST_F(ResourceTableTestPreFilled, Reset)
 {
     table_.Reset();
     EXPECT_TRUE(table_.IsEmpty());
@@ -548,8 +522,7 @@ TEST_F(ResourceTableTestPreFilled, Reset)
     EXPECT_EQ(handle.Generation(), 0);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ResourceTableTestPreFilled, Clear)
+NOLINT_TEST_F(ResourceTableTestPreFilled, Clear)
 {
     table_.Clear();
     EXPECT_TRUE(table_.IsEmpty());
@@ -559,8 +532,7 @@ TEST_F(ResourceTableTestPreFilled, Clear)
     EXPECT_GT(handle.Generation(), 0);
 }
 
-// NOLINTNEXTLINE
-TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
+NOLINT_TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
 {
     static constexpr size_t kCapacity { 50 };
     static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
@@ -570,7 +542,7 @@ TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
     std::vector<ResourceHandle> handles;
     using IndexType = std::vector<ResourceHandle>::difference_type;
     std::mt19937 rng(std::random_device {}());
-    std::uniform_int_distribution<int> dist(0, 10);
+    std::uniform_int_distribution dist(0, 10);
 
     for (size_t i = 0; i < kOperations; ++i) {
         if (dist(rng) < 5 && !handles.empty()) {
@@ -598,4 +570,4 @@ TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
     }
 }
 
-} // namespace base::resources
+} // namespace

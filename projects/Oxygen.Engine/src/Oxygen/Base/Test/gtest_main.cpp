@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Logging.h"
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
     // Check the program was started just for test case discovery
     bool list_tests = false;

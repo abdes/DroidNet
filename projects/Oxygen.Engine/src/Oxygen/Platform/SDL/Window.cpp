@@ -57,13 +57,13 @@ Window::~Window()
     }
 }
 
-auto Window::Id() const -> oxygen::platform::WindowIdType
+auto Window::Id() const -> WindowIdType
 {
     return sdl_window_ == nullptr ? kInvalidWindowId
                                   : kSdl.GetWindowId(sdl_window_);
 }
 
-auto Window::NativeWindow() const -> oxygen::platform::NativeWindowInfo
+auto Window::NativeWindow() const -> NativeWindowInfo
 {
     return sdl_window_ == nullptr ? NativeWindowInfo {}
                                   : kSdl.GetNativeWindow(sdl_window_);
@@ -123,7 +123,7 @@ void Window::DoResize(const PixelExtent& extent)
     kSdl.SetWindowSize(sdl_window_, extent.width, extent.height);
 }
 
-auto Window::Size() const -> oxygen::PixelExtent
+auto Window::Size() const -> PixelExtent
 {
     PixelExtent extent {};
     kSdl.GetWindowSize(sdl_window_, &extent.width, &extent.height);
@@ -166,7 +166,7 @@ void Window::DoPosition(const PixelPosition& position)
     kSdl.SetWindowPosition(sdl_window_, position.x, position.y);
 }
 
-auto Window::Position() const -> oxygen::PixelPosition
+auto Window::Position() const -> PixelPosition
 {
     PixelPosition position {};
     kSdl.GetWindowPosition(sdl_window_, &position.x, &position.y);
@@ -210,7 +210,7 @@ void Window::ProcessCloseRequest([[maybe_unused]] bool force)
     kSdl.PushEvent(&event);
 }
 
-auto Window::GetFrameBufferSize() const -> oxygen::PixelExtent
+auto Window::GetFrameBufferSize() const -> PixelExtent
 {
     int width { 0 };
     int height { 0 };

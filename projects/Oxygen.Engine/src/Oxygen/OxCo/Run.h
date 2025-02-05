@@ -7,7 +7,6 @@
 #pragma once
 
 #include "Oxygen/Base/NoInline.h"
-#include "Oxygen/Base/ReturnAddress.h"
 #include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/GetAwaitable.h"
 #include "Oxygen/OxCo/Detail/TaskFrame.h"
@@ -33,7 +32,7 @@ namespace detail {
     };
 
     template <class EventLoop>
-    class Runner : private RunnerTracking, private TaskFrame {
+    class Runner : /*private*/ RunnerTracking, /*private*/ TaskFrame {
     public:
         explicit Runner(EventLoop& loop)
             : event_loop_(&loop)
@@ -46,11 +45,15 @@ namespace detail {
             AwaitableAdapter<Awaitable&&> adapter(
                 std::forward<Awaitable>(awaitable));
             using Traits = EventLoopTraits<std::decay_t<EventLoop>>;
+            DCHECK_NOTNULL_F(event_loop_);
             if constexpr (requires { Traits::IsRunning(*event_loop_); }) {
                 DCHECK_F(!Traits::IsRunning(*event_loop_));
             }
 
+            // The executor is created and needs to be valid only for the
+            // duration of Run()
             Executor executor(*event_loop_);
+            // ReSharper disable once CppDFALocalValueEscapesFunction
             executor_ = &executor;
             Executor* prev_exec = std::exchange(CurrentExecutor(), &executor);
             ScopeGuard guard([this, prev_exec]() noexcept {
@@ -73,6 +76,8 @@ namespace detail {
                 adapter.await_set_executor(&executor);
                 adapter.await_suspend(ToHandle()).resume();
                 executor.RunSoon();
+                // ReSharper disable CppDFAConstantConditions
+                // the event_loop_ is reset in the `resume_fn`
                 if (event_loop_) {
                     Traits::Run(*event_loop_);
                 }
@@ -105,6 +110,7 @@ namespace detail {
                     ABORT_F("Event loop stopped before the awaitable passed to "
                             "oxygen::co::Run() completed");
                 }
+                // ReSharper restore CppDFAConstantConditions
             }
 
             return adapter.await_resume();

@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gtest/gtest.h>
-
 #define ASIO_NO_TYPEID
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 #include <asio/write.hpp>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Co.h"
@@ -46,7 +46,7 @@ protected:
 
 class AsioTest : public AsioTestFixture { };
 
-TEST_F(AsioTest, SmokeTest)
+NOLINT_TEST_F(AsioTest, SmokeTest)
 {
     ::Run(*io_, [&]() -> Co<> {
         asio::steady_timer t(*io_);
@@ -57,7 +57,7 @@ TEST_F(AsioTest, SmokeTest)
     });
 }
 
-TEST_F(AsioTest, AnyOf)
+NOLINT_TEST_F(AsioTest, AnyOf)
 {
     ::Run(*io_, [&]() -> Co<> {
         asio::steady_timer t1(*io_), t2(*io_);
@@ -77,7 +77,7 @@ TEST_F(AsioTest, AnyOf)
     });
 }
 
-TEST_F(AsioTest, SleepFor)
+NOLINT_TEST_F(AsioTest, SleepFor)
 {
     ::Run(*io_, [&]() -> Co<> {
         const auto from = Clock::now();
@@ -87,7 +87,7 @@ TEST_F(AsioTest, SleepFor)
     });
 }
 
-TEST_F(AsioTest, SocketSmoke)
+NOLINT_TEST_F(AsioTest, SocketSmoke)
 {
     using tcp = asio::ip::tcp;
     ::Run(*io_, [&]() -> Co<> {

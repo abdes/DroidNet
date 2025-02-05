@@ -25,7 +25,7 @@ namespace {
 struct LocalFreeHelper {
     void operator()(void* to_free) const
     {
-        ::LocalFree(to_free);
+        LocalFree(to_free);
     }
 };
 
@@ -33,7 +33,7 @@ std::string GetErrorMessage(const DWORD error_code) noexcept
 {
     std::unique_ptr<wchar_t[], LocalFreeHelper> msg_buffer {};
     LPWSTR buffer_allocated_mem { nullptr };
-    const DWORD buffer_length = ::FormatMessageW(
+    const DWORD buffer_length = FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
         nullptr,
         error_code,
@@ -42,7 +42,7 @@ std::string GetErrorMessage(const DWORD error_code) noexcept
         0,
         nullptr);
     if (buffer_length == 0) {
-        return fmt::format("__not_available__ (failed to get error message `{}`)", ::GetLastError());
+        return fmt::format("__not_available__ (failed to get error message `{}`)", GetLastError());
     }
     DCHECK_EQ_F(buffer_length, ::wcslen(buffer_allocated_mem));
 

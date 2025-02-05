@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include "Oxygen/OxCo/Detail/MuxBase.h"
 
-using namespace oxygen::co::detail;
+#include <Oxygen/Testing/GTest.h>
+#include <gmock/gmock.h>
+
+using oxygen::co::detail::MuxBase;
+
+// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
+// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -91,13 +94,13 @@ private:
     bool internal_cancel_result_;
 };
 
-class MuxBaseTest : public ::testing::Test {
+class MuxBaseTest : public testing::Test {
 public:
-    void SetUp() override { ::testing::internal::CaptureStderr(); }
+    void SetUp() override { testing::internal::CaptureStderr(); }
 
     void TearDown() override
     {
-        const auto captured_stderr = ::testing::internal::GetCapturedStderr();
+        const auto captured_stderr = testing::internal::GetCapturedStderr();
         std::cout << "Captured stderr:\n"
                   << captured_stderr << '\n';
     }
@@ -106,9 +109,9 @@ public:
 // Scenario 1: Zero Awaitables.
 // Verify that the multiplexer correctly handles the case with no awaitables.
 // The multiplexer should not suspend and should complete immediately.
-TEST_F(MuxBaseTest, ZeroAwaitables)
+NOLINT_TEST_F(MuxBaseTest, ZeroAwaitables)
 {
-    TestMux<> mux(0, 0);
+    TestMux mux(0, 0);
 
     // The multiplexer should not suspend
     EXPECT_FALSE(mux.DoSuspend(std::noop_coroutine()));
@@ -118,18 +121,18 @@ TEST_F(MuxBaseTest, ZeroAwaitables)
 // Ensure that the multiplexer correctly detects when all awaitables have
 // finished. For AllOf semantics, the multiplexer should resume the parent
 // coroutine after all awaitables complete.
-TEST_F(MuxBaseTest, AllAwaitablesCompleteSuccessfully)
+NOLINT_TEST_F(MuxBaseTest, AllAwaitablesCompleteSuccessfully)
 {
-    TestMux<> mux(3, 3);
+    TestMux mux(3, 3);
 
     bool parent_resumed = false;
     // Create a custom coroutine to detect resumption
-    const auto parent_coroutine = [](bool& parent_resumed) -> TestCoroutine {
+    const auto parent_coroutine = [&](bool* resumed) -> TestCoroutine {
         // Initially suspend the coroutine
         co_await std::suspend_always(); // Coroutine body does nothing
-        parent_resumed = true;
+        *resumed = true;
         co_return; // Coroutine completes
-    }(parent_resumed);
+    }(&parent_resumed);
 
     // Replace parent_ with our custom coroutine handle
     mux.parent_ = parent_coroutine.handle_;
@@ -154,17 +157,17 @@ TEST_F(MuxBaseTest, AllAwaitablesCompleteSuccessfully)
 // Scenario 3: Partial Completion with Minimum Ready
 // Purpose: Test behavior when the minimum required awaitables have completed.
 // For AnyOf semantics where MinReady() is less than Size(), the multiplexer should resume the parent coroutine when the condition is met.
-TEST_F(MuxBaseTest, PartialCompletionWithMinReady)
+NOLINT_TEST_F(MuxBaseTest, PartialCompletionWithMinReady)
 {
-    TestMux<> mux(3, 2, true); // Size is 3, MinReady is 2
+    TestMux mux(3, 2, true); // Size is 3, MinReady is 2
 
     // Create a flag to detect resumption
     bool parent_resumed = false;
 
     // Define the parent coroutine
-    const auto parent_coroutine = [](bool& parent_resumed) -> TestCoroutine {
+    const auto parent_coroutine = [](bool& resumed) -> TestCoroutine {
         co_await std::suspend_always();
-        parent_resumed = true;
+        resumed = true;
         co_return;
     }(parent_resumed);
 
@@ -191,9 +194,9 @@ TEST_F(MuxBaseTest, PartialCompletionWithMinReady)
 // Purpose: Ensure exceptions are properly propagated.
 // An awaitable throws an exception, and exception_ captures it. ReRaise()
 // should rethrow it in await_resume().
-TEST_F(MuxBaseTest, AwaitableThrowsException)
+NOLINT_TEST_F(MuxBaseTest, AwaitableThrowsException)
 {
-    TestMux<> mux(2, 2);
+    TestMux mux(2, 2);
 
     // Suspend the mux
     EXPECT_TRUE(mux.DoSuspend(std::noop_coroutine()));
@@ -206,16 +209,15 @@ TEST_F(MuxBaseTest, AwaitableThrowsException)
     mux.Invoke(nullptr);
     EXPECT_EQ(mux.count_, 2);
 
-    // ReRaise the exception
     EXPECT_THROW(mux.ReRaise(), std::runtime_error);
 }
 
 // Scenario 5: Early Cancellation Success
 // Purpose: Verify that early cancellation works as expected.
 // await_early_cancel() is called, and all awaitables are successfully cancelled.
-TEST_F(MuxBaseTest, EarlyCancellationSuccess)
+NOLINT_TEST_F(MuxBaseTest, EarlyCancellationSuccess)
 {
-    TestMux<false, false> mux(5, 1, true);
+    TestMux mux(5, 1, true);
 
     const auto result = mux.await_early_cancel();
 
@@ -227,9 +229,9 @@ TEST_F(MuxBaseTest, EarlyCancellationSuccess)
 // Purpose: Ensure proper handling when early cancellation is not possible. Not
 // all awaitables can be cancelled during await_early_cancel(), and the
 // multiplexer handles it accordingly.
-TEST_F(MuxBaseTest, EarlyCancellationFailure)
+NOLINT_TEST_F(MuxBaseTest, EarlyCancellationFailure)
 {
-    TestMux<false, false> mux(5, 1, false);
+    TestMux mux(5, 1, false);
 
     const auto result = mux.await_early_cancel();
 
@@ -241,9 +243,9 @@ TEST_F(MuxBaseTest, EarlyCancellationFailure)
 // Purpose: Test cancellation logic when some awaitables have already finished.
 // await_cancel() is called after partial completion, and remaining awaitables
 // are attempted to be cancelled.
-TEST_F(MuxBaseTest, CancellationAfterPartialCompletion)
+NOLINT_TEST_F(MuxBaseTest, CancellationAfterPartialCompletion)
 {
-    TestMux<> mux(5, 5, false); // Non-abortable, InternalCancel returns false
+    TestMux mux(5, 5, false); // Non-abortable, InternalCancel returns false
     EXPECT_TRUE(mux.DoSuspend(std::noop_coroutine()));
 
     // Simulate two awaitables completing
@@ -268,7 +270,7 @@ TEST_F(MuxBaseTest, CancellationAfterPartialCompletion)
 // Purpose: Check behavior when IsAbortable() is true. For an abortable
 // multiplexer (like AnyOf), cancellation after the first completion should be
 // synchronous.
-TEST_F(MuxBaseTest, AwaitCancelAbortable)
+NOLINT_TEST_F(MuxBaseTest, AwaitCancelAbortable)
 {
     TestMux<true, true> mux(5, 1, true);
 
@@ -280,9 +282,9 @@ TEST_F(MuxBaseTest, AwaitCancelAbortable)
 // Scenario 8: Abortable vs. Non-Abortable Behaviors (Non-Abortable)
 // Purpose: Check behavior when IsAbortable() is false.
 // For a non-abortable multiplexer, cancellation may not be synchronous.
-TEST_F(MuxBaseTest, AwaitCancelNonAbortable)
+NOLINT_TEST_F(MuxBaseTest, AwaitCancelNonAbortable)
 {
-    TestMux<> mux(5, 1, false);
+    TestMux mux(5, 1, false);
 
     const auto result = mux.await_cancel(std::noop_coroutine());
 
@@ -296,9 +298,9 @@ TEST_F(MuxBaseTest, AwaitCancelNonAbortable)
 // Scenario 9: Exception Handling in Invoke()
 // Purpose: Ensure that exceptions from awaitables are correctly handled.
 // Multiple awaitables throw exceptions; only the first is stored.
-TEST_F(MuxBaseTest, InvokeExceptionHandling)
+NOLINT_TEST_F(MuxBaseTest, InvokeExceptionHandling)
 {
-    TestMux<> mux(3, 3);
+    TestMux mux(3, 3);
     EXPECT_TRUE(mux.DoSuspend(std::noop_coroutine()));
 
     // First awaitable throws an exception
@@ -323,17 +325,17 @@ TEST_F(MuxBaseTest, InvokeExceptionHandling)
 // Scenario 10: Synchronization of count_
 // Purpose: Verify that count_ accurately tracks completion. Simulate concurrent
 // completions and ensure count_ and parent_.resume() are correctly updated.
-TEST_F(MuxBaseTest, CountSynchronization)
+NOLINT_TEST_F(MuxBaseTest, CountSynchronization)
 {
-    TestMux<> mux(3, 3);
+    TestMux mux(3, 3);
 
     // Create a flag to detect resumption
     bool parent_resumed = false;
 
     // Define the parent coroutine
-    const auto parent_coroutine = [](bool& parent_resumed) -> TestCoroutine { // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+    const auto parent_coroutine = [](bool& resumed) -> TestCoroutine { // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
         co_await std::suspend_always();
-        parent_resumed = true;
+        resumed = true;
         co_return;
     }(parent_resumed);
 
@@ -356,8 +358,9 @@ TEST_F(MuxBaseTest, CountSynchronization)
 
 // Scenario 11: Resumption of Parent Coroutine
 // Purpose: Make sure the parent coroutine is resumed at the correct time.
-// Parent coroutine is resumed when all awaitables have completed or when the minimum required awaitables have completed.
-TEST_F(MuxBaseTest, ParentCoroutineResumption)
+// Parent coroutine is resumed when all awaitables have completed or when the
+// minimum required awaitables have completed.
+NOLINT_TEST_F(MuxBaseTest, ParentCoroutineResumption)
 {
     // Covered in previous test cases:
     // - AllAwaitablesCompleteSuccessfully (Scenario 2)
@@ -371,9 +374,9 @@ TEST_F(MuxBaseTest, ParentCoroutineResumption)
 
 // Scenario 13: Testing DoSuspend() Logic (With Awaitables)
 // Purpose: Confirm that the multiplexer suspends when required.
-TEST_F(MuxBaseTest, DoSuspendWithAwaitables)
+NOLINT_TEST_F(MuxBaseTest, DoSuspendWithAwaitables)
 {
-    TestMux<> mux(5, 1);
+    TestMux mux(5, 1);
 
     const auto result = mux.DoSuspend(std::noop_coroutine());
 
@@ -383,9 +386,9 @@ TEST_F(MuxBaseTest, DoSuspendWithAwaitables)
 // Scenario 13: Testing DoSuspend() Logic (No Awaitables)
 // Purpose: Confirm that the multiplexer does not suspend when there are zero
 // awaitables.
-TEST_F(MuxBaseTest, DoSuspendNoAwaitables)
+NOLINT_TEST_F(MuxBaseTest, DoSuspendNoAwaitables)
 {
-    TestMux<> mux(0, 0);
+    TestMux mux(0, 0);
 
     const auto result = mux.DoSuspend(std::noop_coroutine());
 
@@ -395,18 +398,18 @@ TEST_F(MuxBaseTest, DoSuspendNoAwaitables)
 // Scenario 14: Ensure InternalCancel() Correctness (Success)
 // Purpose: Test that InternalCancel() correctly cancels all pending awaitables
 // and returns true.
-TEST_F(MuxBaseTest, InternalCancelSuccess)
+NOLINT_TEST_F(MuxBaseTest, InternalCancelSuccess)
 {
-    TestMux<> mux(3, 3, true); // InternalCancel returns true
+    TestMux mux(3, 3, true); // InternalCancel returns true
     EXPECT_TRUE(mux.InternalCancel());
     EXPECT_EQ(mux.internal_cancel_called_, 1);
 }
 // Scenario 14: Ensure InternalCancel() Correctness (Failure)
 // Purpose: Test that InternalCancel() handles failure correctly and returns
 // false.
-TEST_F(MuxBaseTest, InternalCancelFailure)
+NOLINT_TEST_F(MuxBaseTest, InternalCancelFailure)
 {
-    TestMux<> mux(3, 3, false); // InternalCancel returns false
+    TestMux mux(3, 3, false); // InternalCancel returns false
     EXPECT_FALSE(mux.InternalCancel());
     EXPECT_EQ(mux.internal_cancel_called_, 1);
 }
@@ -415,7 +418,7 @@ TEST_F(MuxBaseTest, InternalCancelFailure)
 // Purpose: Check that skippable multiplexers are handled correctly. If
 // IsSkippable() is true, ensure that early cancellations are synchronous and
 // assert checks pass.
-TEST_F(MuxBaseTest, AwaitEarlyCancelSkippable)
+NOLINT_TEST_F(MuxBaseTest, AwaitEarlyCancelSkippable)
 {
     TestMux<true, false> mux(5, 1, true);
     // Since IsSkippable is true, expect std::true_type{}
@@ -423,3 +426,6 @@ TEST_F(MuxBaseTest, AwaitEarlyCancelSkippable)
 }
 
 } // namespace
+
+// NOLINTEND(*-avoid-capturing-lambda-coroutines)
+// NOLINTEND(*-avoid-reference-coroutine-parameters)

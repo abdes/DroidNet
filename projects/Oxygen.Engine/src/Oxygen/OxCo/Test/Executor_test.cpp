@@ -6,16 +6,18 @@
 
 #include "Oxygen/OxCo/Executor.h"
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/EventLoop.h"
 
-using namespace oxygen::co;
+using oxygen::co::EventLoopID;
+using oxygen::co::Executor;
 
 namespace {
 
-class ExecutorTest : public ::testing::Test {
+class ExecutorTest : public testing::Test {
 protected:
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes)
     struct Loops {
         int main { 1 };
         int other { 2 };
@@ -24,6 +26,7 @@ protected:
     EventLoopID other_loop_id_ { &loops_.other };
     Executor executor_ = Executor(main_loop_id_);
     Executor another_executor_ = Executor(other_loop_id_);
+    // NOLINTEND(*-non-private-member-variables-in-classes)
 
     void SetUp() override
     {
@@ -67,14 +70,14 @@ void OuterFunction(Context* context) noexcept
     context->executor->RunSoon(RunTestFunction, context);
 }
 
-TEST_F(ExecutorTest, RunSoonExecutesTaskImmediately)
+NOLINT_TEST_F(ExecutorTest, RunSoonExecutesTaskImmediately)
 {
     int value = 0;
     executor_.RunSoon(TestFunction, &value);
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, ScheduleDefersTaskExecution)
+NOLINT_TEST_F(ExecutorTest, ScheduleDefersTaskExecution)
 {
     int value = 0;
     executor_.Schedule(TestFunction, &value);
@@ -83,7 +86,7 @@ TEST_F(ExecutorTest, ScheduleDefersTaskExecution)
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, MultipleTasksExecuteInOrder)
+NOLINT_TEST_F(ExecutorTest, MultipleTasksExecuteInOrder)
 {
     int value = 0;
     executor_.Schedule(TestFunction, &value);
@@ -93,7 +96,7 @@ TEST_F(ExecutorTest, MultipleTasksExecuteInOrder)
     EXPECT_EQ(value, 2);
 }
 
-TEST_F(ExecutorTest, CaptureExecutesTasksInCapturedList)
+NOLINT_TEST_F(ExecutorTest, CaptureExecutesTasksInCapturedList)
 {
     int value = 0;
     executor_.Capture([&] {
@@ -103,7 +106,7 @@ TEST_F(ExecutorTest, CaptureExecutesTasksInCapturedList)
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, NestedRunSoonDoesNotCauseInfiniteLoop)
+NOLINT_TEST_F(ExecutorTest, NestedRunSoonDoesNotCauseInfiniteLoop)
 {
     int value = 0;
     Context context = { .value = &value, .executor = &executor_ };
@@ -111,7 +114,7 @@ TEST_F(ExecutorTest, NestedRunSoonDoesNotCauseInfiniteLoop)
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, RunSoonFromAnotherExecutor)
+NOLINT_TEST_F(ExecutorTest, RunSoonFromAnotherExecutor)
 {
     int value = 0;
     Context other_context = { .value = &value, .executor = &another_executor_ };
@@ -127,7 +130,7 @@ TEST_F(ExecutorTest, RunSoonFromAnotherExecutor)
     EXPECT_EQ(value, 2);
 }
 
-TEST_F(ExecutorTest, DrainWhenRunning)
+NOLINT_TEST_F(ExecutorTest, DrainWhenRunning)
 {
     int value = 0;
     executor_.Schedule(TestFunction, &value);
@@ -141,13 +144,13 @@ TEST_F(ExecutorTest, DrainWhenRunning)
         &this_context);
 }
 
-TEST_F(ExecutorTest, DrainWhenEmpty)
+NOLINT_TEST_F(ExecutorTest, DrainWhenEmpty)
 {
     executor_.Drain();
     SUCCEED(); // If no exception is thrown, the test passes
 }
 
-TEST_F(ExecutorTest, NestedRunSoonFromAnotherExecutor)
+NOLINT_TEST_F(ExecutorTest, NestedRunSoonFromAnotherExecutor)
 {
     int value = 0;
     Context this_context = { .value = &value, .executor = &executor_ };
@@ -155,7 +158,7 @@ TEST_F(ExecutorTest, NestedRunSoonFromAnotherExecutor)
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, MultipleExecutorsRunIndependently)
+NOLINT_TEST_F(ExecutorTest, MultipleExecutorsRunIndependently)
 {
     int value1 = 0;
     int value2 = 0;
@@ -170,7 +173,7 @@ TEST_F(ExecutorTest, MultipleExecutorsRunIndependently)
     EXPECT_EQ(value2, 1);
 }
 
-TEST_F(ExecutorTest, RunSoonWhileDraining)
+NOLINT_TEST_F(ExecutorTest, RunSoonWhileDraining)
 {
     int value = 0;
     Context this_context = { .value = &value, .executor = &executor_ };
@@ -184,7 +187,7 @@ TEST_F(ExecutorTest, RunSoonWhileDraining)
     EXPECT_EQ(value, 1);
 }
 
-TEST_F(ExecutorTest, ScheduleWhileDraining)
+NOLINT_TEST_F(ExecutorTest, ScheduleWhileDraining)
 {
     int value = 0;
     const Context this_context = { .value = &value, .executor = &executor_ };

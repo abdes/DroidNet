@@ -22,11 +22,11 @@ namespace oxygen::windows {
 
 class WindowsException : public std::system_error {
 public:
-    static std::exception_ptr FromLastError() noexcept { return FromErrorCode(::GetLastError()); }
+    static std::exception_ptr FromLastError() noexcept { return FromErrorCode(GetLastError()); }
     OXYGEN_BASE_API static std::exception_ptr FromErrorCode(DWORD error_code) noexcept;
 
     static void __declspec(noreturn) ThrowFromErrorCode(const DWORD error_code) { std::rethrow_exception(FromErrorCode(error_code)); }
-    static void __declspec(noreturn) ThrowFromLastError() { ThrowFromErrorCode(::GetLastError()); }
+    static void __declspec(noreturn) ThrowFromLastError() { ThrowFromErrorCode(GetLastError()); }
 
     DWORD GetErrorCode() const noexcept { return code().value(); }
 

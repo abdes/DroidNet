@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Awaitables.h"
@@ -23,7 +23,7 @@ namespace {
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 class BasicCancelTest : public OxCoTestFixture { };
-TEST_F(BasicCancelTest, BasicCancel)
+NOLINT_TEST_F(BasicCancelTest, BasicCancel)
 {
     ::Run(*el_, [this]() -> Co<> {
         bool started = false;
@@ -42,7 +42,7 @@ TEST_F(BasicCancelTest, BasicCancel)
 }
 
 class SelfCancelTest : public OxCoTestFixture { };
-TEST_F(SelfCancelTest, SelfCancel)
+NOLINT_TEST_F(SelfCancelTest, SelfCancel)
 {
     ::Run(*el_, [this]() -> Co<> {
         bool started = false;
@@ -110,7 +110,7 @@ auto NoCancelNextNonTrivial(TestEventLoop& el, bool& resumed) -> Co<>
         }));
 }
 
-TEST_P(NoCancelTest, NextTaskIs)
+NOLINT_TEST_P(NoCancelTest, NextTaskIs)
 {
     ::Run(*el_, [this]() -> Co<> {
         bool resumed = false;
@@ -151,7 +151,7 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 class NonCancelableTaskTest : public OxCoTestFixture { };
-TEST_F(NonCancelableTaskTest, Return)
+NOLINT_TEST_F(NonCancelableTaskTest, Return)
 {
     ::Run(*el_, [this]() -> Co<> {
         auto t1 = [&]() -> Co<> { co_await el_->Sleep(1ms); };
@@ -162,10 +162,10 @@ TEST_F(NonCancelableTaskTest, Return)
 }
 
 class ExceptionNoCancelTest : public OxCoTestFixture { };
-TEST_F(ExceptionNoCancelTest, FromNestedTask)
+NOLINT_TEST_F(ExceptionNoCancelTest, FromNestedTask)
 {
     ::Run(*el_, [this]() -> Co<> {
-        EXPECT_THROW(
+        NOLINT_EXPECT_THROW(
             co_await AnyOf(
                 el_->Sleep(1ms),
                 [&]() -> Co<> {
@@ -178,10 +178,10 @@ TEST_F(ExceptionNoCancelTest, FromNestedTask)
             std::runtime_error);
     });
 }
-TEST_F(ExceptionNoCancelTest, FromMuxAllOf)
+NOLINT_TEST_F(ExceptionNoCancelTest, FromMuxAllOf)
 {
     ::Run(*el_, [this]() -> Co<> {
-        EXPECT_THROW(
+        NOLINT_EXPECT_THROW(
             co_await AnyOf(
                 el_->Sleep(1ms),
                 [&]() -> Co<> {
@@ -196,7 +196,7 @@ TEST_F(ExceptionNoCancelTest, FromMuxAllOf)
 }
 
 class RunOnCancelTest : public OxCoTestFixture { };
-TEST_F(RunOnCancelTest, RunOnCancel)
+NOLINT_TEST_F(RunOnCancelTest, RunOnCancel)
 {
     ::Run(*el_, [this]() -> Co<> {
         co_await AnyOf(

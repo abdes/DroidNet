@@ -35,7 +35,7 @@ add_test(NAME "Oxygen.Base Link Test" COMMAND "Oxygen.Base.LinkTest")
 
 include(GTestHelpers)
 
-# -- GTest custom mnain -------------------------------------------------------
+# -- GTest custom main ---------------------------------------------------------
 
 add_library(gtest_main STATIC "gtest_main.cpp")
 add_library(${META_MODULE_TARGET_ALIAS}::gtest ALIAS gtest_main)
@@ -103,9 +103,17 @@ m_gtest_program(
     "ObjectMetaData_test.cpp"
 )
 
+m_gtest_program(
+        Resource
+        SOURCES
+        "Resource_test.cpp"
+        "ResourceHandle_test.cpp"
+        "ResourceTable_test.cpp"
+)
+
 include(Catch2Helpers)
 
-# -- Catch2 custom mnain -------------------------------------------------------
+# -- Catch2 custom main --------------------------------------------------------
 
 add_library(catch2_main STATIC "catch2_main.cpp")
 add_library(${META_MODULE_TARGET_ALIAS}::catch2 ALIAS catch2_main)

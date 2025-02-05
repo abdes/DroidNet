@@ -147,7 +147,7 @@ void InputActionMapping::CancelInput()
     CompleteEvaluation();
 }
 
-auto InputActionMapping::Update(oxygen::Duration delta_time) -> bool
+auto InputActionMapping::Update(const Duration delta_time) -> bool
 {
     const auto input_consumed = DoUpdate(delta_time);
 
@@ -159,7 +159,7 @@ auto InputActionMapping::Update(oxygen::Duration delta_time) -> bool
     return input_consumed;
 }
 
-auto InputActionMapping::DoUpdate(Duration delta_time) -> bool
+auto InputActionMapping::DoUpdate(const Duration delta_time) -> bool
 {
     // If the mapping has no triggers, it cannot and should not do anything with
     // the input events and state updates.

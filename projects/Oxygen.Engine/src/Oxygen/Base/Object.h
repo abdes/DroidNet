@@ -29,13 +29,13 @@ public:
 
 #define OXYGEN_TYPED(arg_type)                                                                              \
 public:                                                                                                     \
-    static constexpr const char* ClassTypeName() { return #arg_type; }                                      \
-    inline static oxygen::TypeId ClassTypeId()                                                              \
+    static constexpr auto ClassTypeName() { return #arg_type; }                                             \
+    inline static auto ClassTypeId() -> oxygen::TypeId                                                      \
     {                                                                                                       \
         static oxygen::TypeId typeId = oxygen::TypeRegistry::Get().RegisterType(arg_type::ClassTypeName()); \
         return typeId;                                                                                      \
     }                                                                                                       \
-    const char* GetTypeName() const override { return ClassTypeName(); }                                    \
-    inline oxygen::TypeId GetTypeId() const override { return ClassTypeId(); }                              \
+    auto GetTypeName() const -> const char* override { return ClassTypeName(); }                            \
+    inline auto GetTypeId() const -> oxygen::TypeId override { return ClassTypeId(); }                      \
                                                                                                             \
 private:

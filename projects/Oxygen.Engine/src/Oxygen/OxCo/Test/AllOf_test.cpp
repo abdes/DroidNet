@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/OxCo/Awaitables.h"
@@ -26,7 +26,7 @@ class AllOfTest : public OxCoTestFixture { };
 
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
-TEST_F(AllOfTest, Smoke)
+NOLINT_TEST_F(AllOfTest, Smoke)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AllOf(
@@ -39,7 +39,7 @@ TEST_F(AllOfTest, Smoke)
     });
 }
 
-TEST_F(AllOfTest, Empty)
+NOLINT_TEST_F(AllOfTest, Empty)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         [[maybe_unused]] auto r = co_await AllOf();
@@ -47,7 +47,7 @@ TEST_F(AllOfTest, Empty)
     });
 }
 
-TEST_F(AllOfTest, ImmediateFront)
+NOLINT_TEST_F(AllOfTest, ImmediateFront)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AllOf(
@@ -60,7 +60,7 @@ TEST_F(AllOfTest, ImmediateFront)
     });
 }
 
-TEST_F(AllOfTest, ImmediateBack)
+NOLINT_TEST_F(AllOfTest, ImmediateBack)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await AllOf(
@@ -73,7 +73,7 @@ TEST_F(AllOfTest, ImmediateBack)
     });
 }
 
-TEST_F(AllOfTest, RetVal)
+NOLINT_TEST_F(AllOfTest, RetVal)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         auto [a, b] = co_await AllOf(
@@ -84,11 +84,11 @@ TEST_F(AllOfTest, RetVal)
     });
 }
 
-TEST_F(AllOfTest, Exception)
+NOLINT_TEST_F(AllOfTest, Exception)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         bool cancelled = false;
-        EXPECT_THROW(
+        NOLINT_EXPECT_THROW(
             co_await AllOf(
                 [&]() -> Co<> {
                     ScopeGuard guard([&]() noexcept { cancelled = true; });

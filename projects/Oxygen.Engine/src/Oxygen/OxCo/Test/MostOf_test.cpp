@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include "Oxygen/OxCo/Algorithms.h"
+
+#include <Oxygen/Testing/GTest.h>
+#include <gmock/gmock.h>
+
 #include "Oxygen/OxCo/Awaitables.h"
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Run.h"
@@ -27,7 +28,7 @@ class MostOfTest : public OxCoTestFixture { };
 
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
-TEST_F(MostOfTest, Smoke)
+NOLINT_TEST_F(MostOfTest, Smoke)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         co_await MostOf(
@@ -38,7 +39,7 @@ TEST_F(MostOfTest, Smoke)
     });
 }
 
-TEST_F(MostOfTest, Empty)
+NOLINT_TEST_F(MostOfTest, Empty)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         [[maybe_unused]] auto r = co_await MostOf();
@@ -46,7 +47,7 @@ TEST_F(MostOfTest, Empty)
     });
 }
 
-TEST_F(MostOfTest, RetVal)
+NOLINT_TEST_F(MostOfTest, RetVal)
 {
     oxygen::co::Run(*el_, []() -> Co<> {
         auto [a, b] = co_await MostOf(
@@ -57,7 +58,7 @@ TEST_F(MostOfTest, RetVal)
     });
 }
 
-TEST_F(MostOfTest, NonCancellable)
+NOLINT_TEST_F(MostOfTest, NonCancellable)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         bool resumed = false;
@@ -78,7 +79,7 @@ TEST_F(MostOfTest, NonCancellable)
     });
 }
 
-TEST_F(MostOfTest, Exception)
+NOLINT_TEST_F(MostOfTest, Exception)
 {
     oxygen::co::Run(*el_, [this]() -> Co<> {
         bool cancelled = false;

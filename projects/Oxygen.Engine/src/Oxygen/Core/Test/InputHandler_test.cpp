@@ -6,15 +6,14 @@
 
 #include "Oxygen/Core/InputHandler.h"
 
-#include "gtest/gtest.h"
+#include <Oxygen/Testing/GTest.h>
 
 class MyInputHandler final : public oxygen::engine::InputHandler {
 public:
     void ProcessInput(const oxygen::platform::InputEvent& /*event*/) override { }
 };
 
-// NOLINTNEXTLINE
-TEST(InputHandlerInterfaceTest, CompilesAndLinks)
+NOLINT_TEST(InputHandlerInterfaceTest, CompilesAndLinks)
 {
     const MyInputHandler handler {};
     (void)handler;

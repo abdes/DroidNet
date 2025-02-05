@@ -30,14 +30,14 @@ auto Platform::GetRequiredInstanceExtensions() const
 #endif // OXYGEN_VULKAN
 
 auto Platform::MakeWindow(std::string const& title, PixelExtent const& extent)
-    -> std::weak_ptr<platform::Window>
+    -> std::weak_ptr<Window>
 {
     return impl_->MakeWindow(title, extent);
 }
 
 auto Platform::MakeWindow(std::string const& title, PixelExtent const& extent,
-    platform::Window::InitialFlags flags)
-    -> std::weak_ptr<platform::Window>
+    const Window::InitialFlags flags)
+    -> std::weak_ptr<Window>
 {
     return impl_->MakeWindow(title, extent, flags);
 }
@@ -45,7 +45,7 @@ auto Platform::MakeWindow(std::string const& title, PixelExtent const& extent,
 auto Platform::MakeWindow(std::string const& title,
     PixelPosition const& position,
     PixelExtent const& extent)
-    -> std::weak_ptr<platform::Window>
+    -> std::weak_ptr<Window>
 {
     return impl_->MakeWindow(title, position, extent);
 }
@@ -53,25 +53,25 @@ auto Platform::MakeWindow(std::string const& title,
 auto Platform::MakeWindow(std::string const& title,
     PixelPosition const& position,
     PixelExtent const& extent,
-    platform::Window::InitialFlags flags)
-    -> std::weak_ptr<platform::Window>
+    const Window::InitialFlags flags)
+    -> std::weak_ptr<Window>
 {
     return impl_->MakeWindow(title, position, extent, flags);
 }
 
 auto Platform::Displays() const
-    -> std::vector<std::unique_ptr<platform::Display>>
+    -> std::vector<std::unique_ptr<Display>>
 {
     return impl_->Displays();
 }
 
-auto Platform::DisplayFromId(const platform::Display::IdType& display_id) const
-    -> std::unique_ptr<platform::Display>
+auto Platform::DisplayFromId(const Display::IdType& display_id) const
+    -> std::unique_ptr<Display>
 {
     return impl_->DisplayFromId(display_id);
 }
 
-auto Platform::PollEvent() -> std::unique_ptr<platform::InputEvent>
+auto Platform::PollEvent() -> std::unique_ptr<InputEvent>
 {
     return impl_->PollEvent();
 }

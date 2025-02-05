@@ -155,7 +155,7 @@ auto Window::OnClosing() const -> sigslot::signal<>&
     return pimpl_->OnClosing();
 }
 
-auto Window::OnResized() const -> sigslot::signal<oxygen::PixelExtent>&
+auto Window::OnResized() const -> sigslot::signal<PixelExtent>&
 {
     return pimpl_->OnResized();
 }

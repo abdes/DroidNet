@@ -37,7 +37,7 @@ auto ShaderCompiler::CompileFromFile(
         }
 
         // Read file content into string
-        const std::string buffer(std::istreambuf_iterator<char>(file), {});
+        const std::string buffer(std::istreambuf_iterator(file), {});
         file.close();
 
         // Convert std::string to std::u8string for UTF-8

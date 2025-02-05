@@ -83,11 +83,11 @@ public:
         cancelling_ = true;
         if (InFirstStage()) {
             return first_aw_.await_cancel(this->ToHandle());
-        } else if (InSecondStage()) {
-            return second().aw.await_cancel(h);
-        } else {
-            return false; // will carry out cancellation later
         }
+        if (InSecondStage()) {
+            return second().aw.await_cancel(h);
+        }
+        return false; // will carry out cancellation later
     }
 
     auto await_must_resume() const noexcept -> bool
@@ -121,9 +121,8 @@ public:
 
         if (auto ex = std::get_if<std::exception_ptr>(&second_)) {
             std::rethrow_exception(*ex);
-        } else {
-            return second().aw.await_resume();
         }
+        return second().aw.await_resume();
     }
     // ReSharper restore CppMemberFunctionMayBeStatic
 

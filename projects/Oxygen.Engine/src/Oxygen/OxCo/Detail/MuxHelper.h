@@ -45,7 +45,7 @@ protected:
     [[nodiscard]] auto GetState() const noexcept -> State { return mux_.Bits(); }
     [[nodiscard]] auto InState(State state) const noexcept { return GetState() == state; }
 
-    static_assert(static_cast<size_t>(State::kFailed) < (1 << kStateWidth));
+    static_assert(static_cast<size_t>(State::kFailed) < 1 << kStateWidth);
 
 public:
     explicit MuxHelper(Aw&& aw) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
@@ -305,7 +305,7 @@ private:
     void KickOff()
     {
         // Called from Suspend(); state is NotStarted or CancellationPending
-        bool cancel_requested = (InState(State::kCancellationPending));
+        bool cancel_requested = InState(State::kCancellationPending);
         SetState(cancel_requested ? State::kCancelling : State::kRunning);
         if (awaitable_.await_ready()) {
             Invoke();

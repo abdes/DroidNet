@@ -41,7 +41,7 @@ public:
         const auto b = static_cast<uintptr_t>(bits);
         CHECK_F(!(p & kBitsMask));
         CHECK_F(!(b & ~kBitsMask));
-        data_ = (p | b);
+        data_ = p | b;
     }
 
 private:
@@ -77,6 +77,6 @@ private:
  \tparam Align The alignment in bytes of the type `T`.
 */
 template <class T, class BitsT, int Width, int Align = alignof(T)>
-using PointerBits = PointerBitsImpl<T, BitsT, Width, (Align >= (1 << Width))>;
+using PointerBits = PointerBitsImpl<T, BitsT, Width, Align >= 1 << Width>;
 
 } // namespace oxygen::co::detail

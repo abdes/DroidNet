@@ -6,7 +6,7 @@
 
 #include "oxygen/core/system.h"
 
-#include "gtest/gtest.h"
+#include <Oxygen/Testing/GTest.h>
 
 class MySystem final : public oxygen::engine::System {
 public:
@@ -15,8 +15,7 @@ public:
     }
 };
 
-// NOLINTNEXTLINE
-TEST(SystemInterfaceTest, CompilesAndLinks)
+NOLINT_TEST(SystemInterfaceTest, CompilesAndLinks)
 {
     const MySystem system {};
     (void)system;

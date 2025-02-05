@@ -13,7 +13,7 @@
 namespace {
 struct BasicAwaiter {
     static auto await_ready() -> bool { return false; }
-    static void await_suspend(std::coroutine_handle<>) { }
+    static void await_suspend(std::coroutine_handle<> /*h*/) { }
     static void await_resume() { }
 };
 struct ChainAwaiter {
@@ -23,12 +23,12 @@ struct ChainAwaiter {
 };
 struct ResumeAwaiter {
     static auto await_ready() -> bool { return false; }
-    static auto await_suspend(std::coroutine_handle<>) -> bool { return false; }
+    static auto await_suspend(std::coroutine_handle<> /*h*/) -> bool { return false; }
     static void await_resume() { }
 };
 struct ValueAwaiter {
     static auto await_ready() -> bool { return false; }
-    static auto await_suspend(std::coroutine_handle<>) -> bool { return true; }
+    static auto await_suspend(std::coroutine_handle<> /*h*/) -> bool { return true; }
     static auto await_resume() -> int { return 44; }
 };
 
