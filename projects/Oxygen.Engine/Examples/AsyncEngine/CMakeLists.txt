@@ -29,7 +29,11 @@ add_executable(
   ${META_MODULE_TARGET}
   "main.cpp"
   "ts_init.cpp"
+  "Platform.cpp"
+  "PlatformEvent.h"
+  "Platform.h"
   "SimpleModule.h"
+  "SignalAwaitable.h"
   "AsyncEngineRunner.h"
 )
 set_target_properties(
@@ -41,13 +45,7 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    oxygen::platform-sdl
-    oxygen::core
-    oxygen::oxco
-)
+target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen::oxco oxygen::base)
 
 # ==============================================================================
 # Deployment instructions

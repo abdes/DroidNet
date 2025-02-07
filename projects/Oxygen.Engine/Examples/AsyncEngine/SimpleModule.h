@@ -6,26 +6,23 @@
 
 #pragma once
 
-#include <Oxygen/Core/Module.h>
-
-class SimpleModule final : public oxygen::core::Module {
+class SimpleModule {
 public:
-    explicit SimpleModule(oxygen::EngineWeakPtr engine)
-        : Module("SimpleModule", std::move(engine))
+    explicit SimpleModule()
     {
     }
 
-    ~SimpleModule() override = default;
+    ~SimpleModule() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(SimpleModule)
     OXYGEN_MAKE_NON_MOVEABLE(SimpleModule)
 
-    void OnInitialize(const oxygen::Graphics* /*gfx*/) override { }
+    void OnInitialize() { }
 
-    void ProcessInput(const oxygen::platform::InputEvent& /*event*/) override { }
-    void Update(oxygen::Duration /*delta_time*/) override { }
-    void FixedUpdate() override { }
-    void Render(const oxygen::Graphics* /*gfx*/) override { }
+    void ProcessInput(/*const oxygen::platform::InputEvent& event*/) { }
+    void Update(/*oxygen::Duration delta_time*/) { }
+    void FixedUpdate() { }
+    void Render(/*const oxygen::Graphics* gfx*/) { }
 
-    void OnShutdown() noexcept override { }
+    void OnShutdown() noexcept { }
 };

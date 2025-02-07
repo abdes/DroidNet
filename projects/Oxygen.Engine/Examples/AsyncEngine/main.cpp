@@ -8,65 +8,48 @@
 #include <memory>
 
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Core/Engine.h"
-#include "Oxygen/Core/Version.h"
 #include "Oxygen/OxCo/Co.h"
-#include "Oxygen/Platform/SDL/platform.h"
+#include "Oxygen/OxCo/Nursery.h"
+#include "Oxygen/OxCo/Run.h"
 
 #include "AsyncEngineRunner.h"
-#include "Awaitables.h"
-#include "SimpleModule.h"
+#include "Platform.h"
+#include "PlatformEvent.h"
+#include "SignalAwaitable.h"
 
 using namespace std::chrono_literals;
 
-template <typename Callable, typename... Args>
-    requires(std::is_invocable_v<Callable, Args...>)
-class SignalAwaitable {
-    sigslot::signal<Args...>& signal_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
-    sigslot::connection conn_;
-    Callable callable_;
-
-public:
-    SignalAwaitable(sigslot::signal<Args...>& signal, Callable callable)
-        : signal_(signal)
-        , callable_(std::move(callable))
-    {
-    }
-
-    // ReSharper disable CppMemberFunctionMayBeStatic
-    [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
-    void await_suspend(std::coroutine_handle<> h)
-    {
-        conn_ = signal_.connect(
-            [this, h](Args&&... args) {
-                // Invoke the callable method on obj_ with the arguments
-                // received from the signal.
-                std::invoke(callable_, std::forward<Args>(args)...);
-                // Disconnect the signal after the first emission.
-                conn_.disconnect();
-                h.resume();
-            });
-    }
-    void await_resume() { /* no return value*/ }
-    auto await_cancel(std::coroutine_handle<> /*h*/)
-    {
-        conn_.disconnect();
-        return std::true_type {};
-    }
-    // ReSharper restore CppMemberFunctionMayBeStatic
-};
-
 namespace {
 
-auto AsyncMain(std::shared_ptr<oxygen::Engine> engine) -> oxygen::co::Co<int>
-{
-    auto& platform = engine->GetPlatform();
-    co_await SignalAwaitable(
-        platform.OnLastWindowClosed(),
-        [&engine] {
-            engine->Stop();
-        });
+struct MyEvent {
+    int value { 1 };
+};
 
+using oxygen::Platform;
+using oxygen::platform::PlatformEvent;
+
+auto AsyncMain(std::shared_ptr<oxygen::Platform> platform, std::shared_ptr<AsyncEngine> engine) -> Co<int>
+{
+    OXCO_WITH_NURSERY(n)
+    {
+        auto stop = [&]() -> Co<> {
+            // TODO: await termination conditions such as last window closed
+            co_await platform->Async().SleepFor(5s);
+
+            n.Cancel();
+        };
+        n.Start(stop);
+
+        // Active the live objects with our nursery, making it available for the
+        // lifetime of the nursery.
+        co_await n.Start(&Platform::Start, std::ref(*platform));
+        platform->Run();
+        co_await n.Start(&AsyncEngine::Start, std::ref(*engine));
+        engine->Run();
+
+        // Wait for all tasks to complete
+        co_return kJoin;
+    };
     co_return EXIT_SUCCESS;
 }
 
@@ -84,70 +67,32 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
     loguru::g_preamble_date = false;
     loguru::g_preamble_file = true;
     loguru::g_preamble_verbose = false;
-    loguru::g_preamble_time = false;
+    // loguru::g_preamble_time = false;
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = false;
     loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_1;
+    loguru::g_stderr_verbosity = loguru::Verbosity_0;
+    loguru::g_colorlogtostderr = true;
     // Optional, but useful to time-stamp the start of the log.
     // Will also detect verbosity level on command line as -v.
     loguru::init(argc, argv);
 
-    LOG_F(INFO, "{}", oxygen::version::NameVersion());
-
-    // We want to control the destruction order of the important objects in the
-    // system. For example, destroy the core before we destroy the platform.
-    std::shared_ptr<oxygen::Platform> platform {};
-    std::shared_ptr<oxygen::Engine> engine {};
-
+    auto platform = std::make_shared<Platform>();
+    auto engine = std::make_shared<AsyncEngine>(platform);
     try {
-        platform = std::make_shared<oxygen::platform::sdl::Platform>();
-
-        // Create a window.
-        constexpr oxygen::PixelExtent window_size { 1900, 1200 };
-        constexpr oxygen::platform::Window::InitialFlags window_flags {
-            .hidden = false,
-            .always_on_top = false,
-            .full_screen = false,
-            .maximized = false,
-            .minimized = false,
-            .resizable = true,
-            .borderless = false,
-        };
-        const auto my_window {
-            platform->MakeWindow("Oxygen Input System Example", window_size, window_flags)
-        };
-
-        oxygen::Engine::Properties props {
-            .application = {
-                .name = "Input System",
-                .version = 0x0001'0000,
-            },
-            .extensions = {},
-            .max_fixed_update_duration = 10ms,
-            .enable_imgui_layer = false,
-            .main_window_id = my_window.lock()->Id(),
-        };
-
-        engine = std::make_shared<oxygen::Engine>(platform, oxygen::GraphicsPtr {}, props);
-
-        const auto simple_module = std::make_shared<SimpleModule>(engine);
-        engine->AttachModule(simple_module);
-
-        oxygen::co::Run(*engine, AsyncMain(engine));
-
-    } catch (std::exception const& err) {
-        LOG_F(ERROR, "A fatal error occurred: {}", err.what());
+        oxygen::co::Run(*engine, AsyncMain(platform, engine));
+    } catch (const std::exception& e) {
+        LOG_F(ERROR, "Uncaught exception: {}", e.what());
+        status = EXIT_FAILURE;
+    } catch (...) {
+        LOG_F(ERROR, "Uncaught exception of unknown type");
         status = EXIT_FAILURE;
     }
-
     // Explicit destruction order due to dependencies.
     engine.reset();
-    platform.reset();
-
-    loguru::shutdown();
 
     LOG_F(INFO, "Exit with status: {}", status);
+    loguru::shutdown();
     return status;
 }
 

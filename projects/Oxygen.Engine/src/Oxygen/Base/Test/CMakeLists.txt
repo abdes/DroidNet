@@ -8,8 +8,6 @@
 # Dependencies
 # ------------------------------------------------------------------------------
 
-find_package(GTest REQUIRED CONFIG)
-
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -35,47 +33,12 @@ add_test(NAME "Oxygen.Base Link Test" COMMAND "Oxygen.Base.LinkTest")
 
 include(GTestHelpers)
 
-# -- GTest custom main ---------------------------------------------------------
-
-add_library(gtest_main STATIC "gtest_main.cpp")
-add_library(${META_MODULE_TARGET_ALIAS}::gtest ALIAS gtest_main)
-set_target_properties(
-  gtest_main
-  PROPERTIES
-    FOLDER
-      "Testing"
-)
-target_compile_options(gtest_main PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(
-  gtest_main
-  PUBLIC
-    GTest::gtest
-    GTest::gmock
-  PRIVATE
-    oxygen::base
-)
-
-m_gtest_program(
-  TypeSystem
-  SOURCES
-    "ts_init.cpp"
-    "TypeSystem_test.cpp"
-)
-
-# Tell clang and gcc to export symbols even from the executable.
-# Needed so that the type system can find the `InitializeTypeRegistry`
-# function defined in the executable.
-target_link_options(
-  "Oxygen.Base.TypeSystem.Tests"
-  PRIVATE
-    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:-Wl,--export-dynamic>
-)
-
 m_gtest_program(Macros SOURCES "Macros_test.cpp")
 m_gtest_program(Config SOURCES "Platform_test.cpp")
 m_gtest_program(TimeUtils SOURCES "Time_test.cpp")
 m_gtest_program(Types SOURCES "Types_test.cpp")
 m_gtest_program(StringUtils SOURCES "StringUtils_test.cpp")
+m_gtest_program(Finally SOURCES "Finally_test.cpp")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   m_gtest_program(
@@ -93,14 +56,6 @@ m_gtest_program(
     "MemoryStream_test.cpp"
     "Reader_test.cpp"
     "Writer_test.cpp"
-)
-
-m_gtest_program(
-  Composition
-  SOURCES
-    "ts_init.cpp"
-    "Composition_test.cpp"
-    "ObjectMetaData_test.cpp"
 )
 
 m_gtest_program(

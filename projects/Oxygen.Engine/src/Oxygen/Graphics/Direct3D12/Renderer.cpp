@@ -44,7 +44,7 @@
 #include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
 #include "Oxygen/ImGui/ImguiModule.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 #include <Oxygen/Base/Windows/ComError.h> // needed
 
 using Microsoft::WRL::ComPtr;

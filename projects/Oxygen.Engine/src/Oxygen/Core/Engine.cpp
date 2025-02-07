@@ -14,7 +14,7 @@
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/ImGui/ImguiModule.h"
-#include "Oxygen/Platform/Common/Platform.h"
+#include "Oxygen/Platform/Platform.h"
 
 using oxygen::Engine;
 

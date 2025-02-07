@@ -7,6 +7,7 @@
 #pragma once
 
 #include "Oxygen/Base/NoInline.h"
+#include "Oxygen/Base/ReturnAddress.h"
 #include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/GetAwaitable.h"
 #include "Oxygen/OxCo/Detail/TaskFrame.h"

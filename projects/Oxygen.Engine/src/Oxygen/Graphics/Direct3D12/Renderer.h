@@ -8,7 +8,7 @@
 
 #include "Oxygen/Graphics/Common/Renderer.h"
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 #include <Oxygen/Graphics/Common/Forward.h>
 
 namespace oxygen::graphics::d3d12 {

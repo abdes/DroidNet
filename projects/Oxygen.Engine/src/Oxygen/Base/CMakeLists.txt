@@ -53,24 +53,18 @@ target_sources(
     "Detail/loguru.hpp"
     "Detail/signal.hpp"
     "MemoryStream.cpp"
-    "Composition.cpp"
-    "TypeSystem.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
-      "Composition.h"
-      "ComponentMacros.h"
       "Endian.h"
       "FileStream.h"
+      "Finally.h"
       "Logging.h"
       "Macros.h"
       "MemoryStream.h"
-      "Named.h"
       "NoInline.h"
       "NoStd.h"
-      "Object.h"
-      "ObjectMetaData.h"
       "Reader.h"
       "Resource.h"
       "ResourceHandle.h"
@@ -104,8 +98,8 @@ target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
-  PRIVATE
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_STATIC>
+  PUBLIC
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_BASE_STATIC>
 )
 
 target_compile_definitions(

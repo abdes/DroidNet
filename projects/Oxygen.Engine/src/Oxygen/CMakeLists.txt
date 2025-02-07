@@ -8,11 +8,12 @@
 configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
 
 add_subdirectory("Base")
+add_subdirectory("Composition")
 add_subdirectory("OxCo")
 add_subdirectory("Platform")
-add_subdirectory("Core")
-add_subdirectory("Input")
-add_subdirectory("Graphics")
+#add_subdirectory("Core")
+#add_subdirectory("Input")
+#add_subdirectory("Graphics")
 
 if(OXYGEN_BUILD_TESTS)
     add_subdirectory("Testing")

@@ -68,7 +68,7 @@ target_link_libraries(
   PRIVATE
     oxygen::base
     oxygen::oxco
-    oxygen::base::gtest
+    oxygen::testing
 )
 
 target_compile_features(${program_name} PUBLIC cxx_std_20)

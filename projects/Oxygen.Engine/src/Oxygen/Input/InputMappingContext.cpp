@@ -13,9 +13,9 @@
 #include "Oxygen/Input/Action.h"
 #include "Oxygen/Input/InputActionMapping.h"
 #include "Oxygen/Input/InputMappingContext.h"
-#include "Oxygen/Platform/Common/Input.h"
-#include "Oxygen/Platform/Common/InputEvent.h"
-#include <Oxygen/Base/Composition.h>
+#include "Oxygen/Platform/Input.h"
+#include "Oxygen/Platform/InputEvent.h"
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/TimeUtils.h>
 

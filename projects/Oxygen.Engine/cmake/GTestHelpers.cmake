@@ -72,6 +72,6 @@ function(m_gtest_program program_name)
       ${x_SOURCES}
     DEPS
       ${META_MODULE_TARGET}
-      oxygen::base::gtest
+      oxygen::testing
   )
 endfunction()

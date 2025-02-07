@@ -13,7 +13,7 @@
 #include "Oxygen/Core/Types.h"
 #include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/Graphics/Common/api_export.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace oxygen {
 

@@ -6,7 +6,7 @@
 
 #include "Oxygen/Core/Module.h"
 
-#include "Oxygen/Base/ObjectMetaData.h"
+#include "Oxygen/Composition/ObjectMetaData.h"
 #include <Oxygen/Base/Logging.h>
 
 using oxygen::core::Module;

@@ -39,6 +39,7 @@ public:
     }
 
     using Base::Empty;
+    using Base::ParkedCount;
     using Base::UnParkAll;
     using Base::UnParkOne;
 };

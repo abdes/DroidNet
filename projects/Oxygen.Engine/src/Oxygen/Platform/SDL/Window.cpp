@@ -4,92 +4,173 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cassert>
+#include "Oxygen/Platform/Window.h"
 
+#include "Nursery.h"
 #include "Oxygen/Base/Logging.h"
-#include "Oxygen/Platform/SDL/Detail/Wrapper.h"
-#include "Oxygen/Platform/SDL/Window.h"
+#include "Oxygen/Platform/SDL/Wrapper.h"
 
-using oxygen::platform::sdl::Window;
+using oxygen::platform::Window;
 
 namespace {
-constexpr oxygen::platform::sdl::detail::Wrapper kSdl;
+
+auto CheckNotInFullScreenMode(const Window& window,
+    const std::string& operation) -> bool
+{
+    if (window.IsFullScreen()) {
+        DLOG_F(WARNING,
+            "Window [{}] is in full-screen mode and cannot be {}d. Call "
+            "`FullScreen(off)` first.",
+            window.Id(), operation);
+        return false;
+    }
+    return true;
+}
+
+auto CheckNotBorderless(const Window& window, const std::string& operation)
+    -> bool
+{
+    if (window.IsBorderLess()) {
+        DLOG_F(WARNING,
+            "Window [{}] is borderless and cannot be {}d.",
+            window.Id(), operation);
+        return false;
+    }
+    return true;
+}
+
+auto CheckNotMinimized(const Window& window, const std::string& operation)
+    -> bool
+{
+    if (window.IsMinimized()) {
+        DLOG_F(WARNING,
+            "Window [{}] is minimized and cannot be {}d. Call `Restore()` first.",
+            window.Id(), operation);
+        return false;
+    }
+    return true;
+}
+
+auto CheckIsResizable(const Window& window, const std::string& operation)
+    -> bool
+{
+    if (!window.IsResizable()) {
+        DLOG_F(WARNING,
+            "Window [{}] is setup to be not resizable and cannot be {}d.",
+            window.Id(), operation);
+        return false;
+    }
+    return true;
+}
 } // namespace
 
-Window::Window(const std::string& title, const PixelExtent& extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(), SDL_WINDOWPOS_CENTERED,
-          SDL_WINDOWPOS_CENTERED, extent.width,
-          extent.height, {}))
-{
-    LOG_F(INFO, "SDL3 Window[{}] created", Id());
-}
-
-Window::Window(const std::string& title, const PixelPosition& position,
-    const PixelExtent& extent)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(), position.x, position.y,
-          extent.width, extent.height, {}))
-{
-    LOG_F(INFO, "SDL3 Window[{}] created", Id());
-}
-
-Window::Window(const std::string& title, const PixelExtent& extent,
-    const InitialFlags& flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(), SDL_WINDOWPOS_CENTERED,
-          SDL_WINDOWPOS_CENTERED, extent.width,
-          extent.height, flags))
-{
-    LOG_F(INFO, "SDL3 Window[{}] created", Id());
-}
-
-Window::Window(const std::string& title, const PixelPosition& position,
-    const PixelExtent& extent, const InitialFlags& flags)
-    : sdl_window_(kSdl.MakeWindow(title.c_str(), position.x, position.y,
-          extent.width, extent.height, flags))
-{
-    LOG_F(INFO, "SDL3 Window[{}] created", Id());
-}
-
-Window::~Window()
-{
-    if (sdl_window_ != nullptr) {
-        LOG_F(INFO, "SDL3 Window[{}] destroyed", Id());
-        kSdl.DestroyWindow(sdl_window_);
+struct Window::Impl {
+    explicit Impl(SDL_Window* window)
+        : sdl_window(window)
+    {
+        DCHECK_NOTNULL_F(window);
+        id = sdl::GetWindowId(sdl_window);
     }
+    ~Impl()
+    {
+        if (sdl_window != nullptr) {
+            LOG_F(INFO, "SDL3 Window[{}] destroyed", id);
+            sdl::DestroyWindow(sdl_window);
+        }
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(Impl)
+    OXYGEN_MAKE_NON_MOVEABLE(Impl)
+
+    SDL_Window* sdl_window;
+    WindowIdType id { kInvalidWindowId };
+    bool should_close { false };
+    bool forced_close { false };
+};
+
+Window::Window(const Properties& props)
+    : impl_(std::make_unique<Impl>(
+          sdl::MakeWindow(
+              props.title.c_str(),
+              props.position ? props.position->x : SDL_WINDOWPOS_CENTERED,
+              props.position ? props.position->y : SDL_WINDOWPOS_CENTERED,
+              props.extent ? props.extent->width : SDL_WINDOWPOS_CENTERED,
+              props.extent ? props.extent->height : SDL_WINDOWPOS_CENTERED,
+              props.flags)))
+{
+    LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
+
+Window::~Window() = default;
 
 auto Window::Id() const -> WindowIdType
 {
-    return sdl_window_ == nullptr ? kInvalidWindowId
-                                  : kSdl.GetWindowId(sdl_window_);
+    return impl_->id;
 }
 
-auto Window::NativeWindow() const -> NativeWindowInfo
+[[nodiscard]] auto Window::NativeWindow() const -> NativeWindowInfo
 {
-    return sdl_window_ == nullptr ? NativeWindowInfo {}
-                                  : kSdl.GetNativeWindow(sdl_window_);
+    return impl_->sdl_window == nullptr
+        ? NativeWindowInfo {}
+        : sdl::GetNativeWindow(impl_->sdl_window);
 }
 
-void Window::Show() { kSdl.ShowWindow(sdl_window_); }
-
-void Window::Hide() { kSdl.HideWindow(sdl_window_); }
-
-void Window::FullScreen(const bool full_screen)
+void Window::Maximize() const
 {
-    kSdl.SetWindowFullScreen(sdl_window_, full_screen);
+    if (CheckNotInFullScreenMode(*this, "maximize")) {
+        DoMaximize();
+    }
+}
+
+void Window::Restore()
+{
+    if (CheckNotInFullScreenMode(*this, "restore")) {
+        DoRestore();
+    }
+}
+
+void Window::Size(const PixelExtent& extent)
+{
+    if (CheckNotInFullScreenMode(*this, "resize")
+        && CheckNotBorderless(*this, "resize")
+        && CheckIsResizable(*this, "resize")
+        && CheckNotMinimized(*this, "resize")) {
+        DoResize(extent);
+    }
+}
+
+void Window::Position(const PixelPosition& position)
+{
+    if (CheckNotInFullScreenMode(*this, "re-position")
+        && CheckNotMinimized(*this, "resize")) {
+        if (IsMaximized()) {
+            DoRestore();
+        }
+        DoPosition(position);
+    }
+}
+
+void Window::Show() const { sdl::ShowWindow(impl_->sdl_window); }
+
+void Window::Hide() const { sdl::HideWindow(impl_->sdl_window); }
+
+void Window::FullScreen(const bool full_screen) const
+{
+    sdl::SetWindowFullScreen(impl_->sdl_window, full_screen);
 }
 
 auto Window::IsFullScreen() const -> bool
 {
-    const auto flag = kSdl.GetWindowFlags(sdl_window_);
+    const auto flag = sdl::GetWindowFlags(impl_->sdl_window);
     return (flag & SDL_WINDOW_FULLSCREEN) != 0U;
 }
 
-void Window::DoMaximize()
+void Window::DoMaximize() const
 {
-    kSdl.MaximizeWindow(sdl_window_);
+    sdl::MaximizeWindow(impl_->sdl_window);
     if (IsBorderLess()) {
         // Get the display on which the window is located
-        const auto display_id = SDL_GetDisplayForWindow(sdl_window_);
+        const auto display_id = SDL_GetDisplayForWindow(impl_->sdl_window);
 
         // Get display usable bounds
         SDL_Rect usable_area {};
@@ -104,99 +185,135 @@ void Window::DoMaximize()
 
 auto Window::IsMaximized() const -> bool
 {
-    const auto flag = kSdl.GetWindowFlags(sdl_window_);
+    const auto flag = sdl::GetWindowFlags(impl_->sdl_window);
     return (flag & SDL_WINDOW_MAXIMIZED) != 0U;
 }
 
-void Window::Minimize() { kSdl.MinimizeWindow(sdl_window_); }
+void Window::Minimize() const { sdl::MinimizeWindow(impl_->sdl_window); }
 
 auto Window::IsMinimized() const -> bool
 {
-    const auto flag = kSdl.GetWindowFlags(sdl_window_);
+    const auto flag = sdl::GetWindowFlags(impl_->sdl_window);
     return (flag & SDL_WINDOW_MINIMIZED) != 0U;
 }
 
-void Window::DoRestore() { kSdl.RestoreWindow(sdl_window_); }
+void Window::DoRestore() const { sdl::RestoreWindow(impl_->sdl_window); }
 
-void Window::DoResize(const PixelExtent& extent)
+void Window::DoResize(const PixelExtent& extent) const
 {
-    kSdl.SetWindowSize(sdl_window_, extent.width, extent.height);
+    sdl::SetWindowSize(impl_->sdl_window, extent.width, extent.height);
 }
 
 auto Window::Size() const -> PixelExtent
 {
     PixelExtent extent {};
-    kSdl.GetWindowSize(sdl_window_, &extent.width, &extent.height);
+    sdl::GetWindowSize(impl_->sdl_window, &extent.width, &extent.height);
     return extent;
 }
 
-void Window::MinimumSize(const PixelExtent& extent)
+void Window::MinimumSize(const PixelExtent& extent) const
 {
-    kSdl.SetWindowMinimumSize(sdl_window_, extent.width, extent.height);
+    sdl::SetWindowMinimumSize(impl_->sdl_window, extent.width, extent.height);
 }
 
-void Window::MaximumSize(const PixelExtent& extent)
+void Window::MaximumSize(const PixelExtent& extent) const
 {
-    kSdl.SetWindowMaximumSize(sdl_window_, extent.width, extent.height);
+    sdl::SetWindowMaximumSize(impl_->sdl_window, extent.width, extent.height);
 }
 
-void Window::Resizable(const bool resizable)
+void Window::Resizable(const bool resizable) const
 {
     // SDL behavior is inconsistent with OS interactive behavior on most
     // platforms. Therefore, we only allow a window to be resizable if it is not
     // a borderless window.
-    assert(!resizable || !IsBorderLess());
-    kSdl.SetWindowResizable(sdl_window_, resizable);
+    DCHECK_F(!resizable || !IsBorderLess());
+    sdl::SetWindowResizable(impl_->sdl_window, resizable);
 }
 
 auto Window::IsResizable() const -> bool
 {
-    const auto flag = kSdl.GetWindowFlags(sdl_window_);
+    const auto flag = sdl::GetWindowFlags(impl_->sdl_window);
     return (flag & SDL_WINDOW_RESIZABLE) != 0U;
 }
 
 auto Window::IsBorderLess() const -> bool
 {
-    const auto flag = kSdl.GetWindowFlags(sdl_window_);
+    const auto flag = sdl::GetWindowFlags(impl_->sdl_window);
     return (flag & SDL_WINDOW_BORDERLESS) != 0U;
 }
 
-void Window::DoPosition(const PixelPosition& position)
+void Window::DoPosition(const PixelPosition& position) const
 {
-    kSdl.SetWindowPosition(sdl_window_, position.x, position.y);
+    sdl::SetWindowPosition(impl_->sdl_window, position.x, position.y);
+}
+
+void Window::InitiateClose(co::Nursery& n)
+{
+    if (impl_->forced_close) {
+        LOG_F(INFO, "Window [id = {}] requested to force close", Id());
+        DoClose();
+        return;
+    }
+
+    n.Start([this]() -> co::Co<> {
+        // Start the vote to close the window
+        impl_->should_close = true;
+        auto voters_count = close_vote_aw_.ParkedCount();
+        if (voters_count != 0) {
+            close_vote_count_.Set(voters_count);
+            close_vote_aw_.UnParkAll();
+            co_await close_vote_count_.UntilEquals(0);
+        }
+        // If the vote is successful, close the window
+        if (impl_->should_close) {
+            DoClose();
+        }
+    });
+}
+
+void Window::DoClose()
+{
+    LOG_F(INFO, "SDL3 Window[{}] is closing", Id());
+    sdl::DestroyWindow(impl_->sdl_window);
 }
 
 auto Window::Position() const -> PixelPosition
 {
     PixelPosition position {};
-    kSdl.GetWindowPosition(sdl_window_, &position.x, &position.y);
+    sdl::GetWindowPosition(impl_->sdl_window, &position.x, &position.y);
     return position;
 }
 
-void Window::Title(const std::string& title)
+void Window::Title(const std::string& title) const
 {
-    kSdl.SetWindowTitle(sdl_window_, title);
+    sdl::SetWindowTitle(impl_->sdl_window, title);
 }
 
 auto Window::Title() const -> std::string
 {
-    return kSdl.GetWindowTitle(sdl_window_);
+    return sdl::GetWindowTitle(impl_->sdl_window);
 }
 
-void Window::Activate() { kSdl.RaiseWindow(sdl_window_); }
+void Window::Activate() const { sdl::RaiseWindow(impl_->sdl_window); }
 
-void Window::AlwaysOnTop(const bool always_on_top)
+void Window::AlwaysOnTop(const bool always_on_top) const
 {
-    kSdl.SetWindowAlwaysOnTop(sdl_window_, always_on_top);
+    sdl::SetWindowAlwaysOnTop(impl_->sdl_window, always_on_top);
 }
 
-auto Window::CreateRenderer() const -> SDL_Renderer*
+void Window::RequestNotToClose() const
 {
-    return kSdl.CreateRenderer(sdl_window_);
+    DCHECK_F(!impl_->forced_close);
+    impl_->should_close = false;
 }
 
-void Window::ProcessCloseRequest([[maybe_unused]] bool force)
+void Window::RequestClose(const bool force) const
 {
+    if (impl_->should_close) {
+        LOG_F(INFO, "Ongoing request to close the window exists, ignoring new request");
+        return;
+    }
+    LOG_F(INFO, "Window [id = {}] requested to close(force={}) from code", Id(), force);
     SDL_Event event {
         .window {
             .type = SDL_EVENT_WINDOW_CLOSE_REQUESTED,
@@ -207,13 +324,13 @@ void Window::ProcessCloseRequest([[maybe_unused]] bool force)
             .data2 = 0,
         },
     };
-    kSdl.PushEvent(&event);
+    sdl::PushEvent(&event);
 }
 
 auto Window::GetFrameBufferSize() const -> PixelExtent
 {
     int width { 0 };
     int height { 0 };
-    kSdl.GetWindowSizeInPixels(sdl_window_, &width, &height);
+    sdl::GetWindowSizeInPixels(impl_->sdl_window, &width, &height);
     return { width, height };
 }

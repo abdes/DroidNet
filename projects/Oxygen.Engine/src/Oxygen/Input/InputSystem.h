@@ -15,7 +15,7 @@
 #include "Oxygen/Core/System.h"
 #include "Oxygen/Input/api_export.h"
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Platform/Common/Input.h>
+#include <Oxygen/Platform/Input.h>
 
 namespace oxygen::input {
 

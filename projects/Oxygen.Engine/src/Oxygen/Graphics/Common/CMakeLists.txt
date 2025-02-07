@@ -104,7 +104,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
-    oxygen::platform-common
+    oxygen::platform
 )
 
 # ------------------------------------------------------------------------------

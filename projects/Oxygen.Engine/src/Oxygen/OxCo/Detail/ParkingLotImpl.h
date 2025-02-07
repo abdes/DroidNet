@@ -77,6 +77,16 @@ protected:
     //! no-ops.
     [[nodiscard]] auto Empty() const { return parked_.Empty(); }
 
+    //! Returns the number of tasks waiting.
+    /*!
+     This is an O(n) operation, which counts the number of tasks parked in the
+     parking lot.
+     */
+    [[nodiscard]] auto ParkedCount() const
+    {
+        return std::ranges::distance(parked_);
+    }
+
 private:
     // CRTP: Constructors are private and the derived class is a friend.
     OXYGEN_MAKE_NON_COPYABLE(ParkingLotImpl)
