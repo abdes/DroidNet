@@ -204,7 +204,7 @@ namespace detail {
     public:
         ~BasePromise() override
         {
-            LOG_F(INFO, "Promise {} destroyed", fmt::ptr(this));
+            DLOG_F(1, "pr {} destroyed", fmt::ptr(this));
         }
 
         void SetExecutor(Executor* ex) { executor_ = ex; }
@@ -277,7 +277,7 @@ namespace detail {
     protected:
         BasePromise()
         {
-            LOG_F(INFO, "Promise {} created", fmt::ptr(this));
+            DLOG_F(1, "pr {} created", fmt::ptr(this));
         }
 
         OXYGEN_MAKE_NON_COPYABLE(BasePromise)

@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-# add_subdirectory("InputSystem")
-add_subdirectory("AsyncEngine")
+# add_subdirectory("AsyncEngine")
+add_subdirectory("Platform")

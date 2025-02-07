@@ -18,7 +18,7 @@
 #include "Oxygen/Graphics/Common/MixinRendererEvents.h"
 #include "Oxygen/Graphics/Common/Types/EngineResources.h"
 #include "Oxygen/Graphics/Common/Types/RenderGameFunction.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace oxygen {
 

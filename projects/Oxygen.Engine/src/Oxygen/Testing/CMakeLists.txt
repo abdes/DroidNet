@@ -19,37 +19,40 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
-find_package(asio CONFIG REQUIRED)
+find_package(GTest REQUIRED CONFIG)
 
 # ==============================================================================
 # Build instructions
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Main module target
+# Main module target - Alway static
 # ------------------------------------------------------------------------------
 
-add_library(${META_MODULE_TARGET} INTERFACE)
+add_library(${META_MODULE_TARGET} STATIC)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
-
-set(
-  header_files
-  "GTest.h"
-)
-
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  FILES
-    ${header_files}
+set_target_properties(
+  ${META_MODULE_TARGET}
+  PROPERTIES
+    OUTPUT_NAME
+      $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
+    VERSION
+      ${META_VERSION}
+    SOVERSION
+      ${META_VERSION_MAJOR}
+    PROJECT_LABEL
+      ${META_MODULE_NAME}
 )
 
 target_sources(
   ${META_MODULE_TARGET}
+  PRIVATE
+    "gtest_main.cpp"
   INTERFACE
     FILE_SET HEADERS
     TYPE HEADERS
     BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES ${header_files}
+    FILES "GTest.h"
 )
 
 # Set include directories
@@ -64,6 +67,8 @@ target_include_directories(
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
+    FOLDER
+      "Testing"
     OUTPUT_NAME
       "${META_MODULE_NAME}"
 )
@@ -77,19 +82,10 @@ target_compile_options(
 )
 target_link_libraries(
   ${META_MODULE_TARGET}
-  INTERFACE
+  PUBLIC
+    oxygen::base
     GTest::gtest
-)
-
-# Header only libraries don't get a Visual Studio project file generated for
-# them. This is a workaround to make sure the header files are visible in the
-# IDE.
-add_custom_target(_${META_MODULE_NAME} SOURCES ${header_files})
-set_target_properties(
-  _${META_MODULE_NAME}
-  PROPERTIES
-    PROJECT_LABEL
-      ${META_MODULE_NAME}
+    GTest::gmock
 )
 
 # ==============================================================================

@@ -14,7 +14,7 @@
 #include "Oxygen/Base/Resource.h"
 #include "Oxygen/Graphics/Common/Types/EngineResources.h"
 #include "Oxygen/Graphics/Common/api_export.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace sigslot {
 class connection; // Used for window event handling

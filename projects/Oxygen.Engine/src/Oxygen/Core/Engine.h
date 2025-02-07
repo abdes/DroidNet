@@ -19,7 +19,7 @@
 #include "Oxygen/Graphics/Common/Forward.h"
 #include "Oxygen/ImGui/ImGuiRenderInterface.h"
 #include "Oxygen/ImGui/ImguiModule.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace oxygen {
 

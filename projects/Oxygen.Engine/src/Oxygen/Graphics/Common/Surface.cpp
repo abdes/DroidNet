@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Signals.h"
-#include "Oxygen/Platform/Common/Window.h"
+#include "Oxygen/Platform/Window.h"
 
 using namespace oxygen::graphics;
 using namespace oxygen::graphics::resources;

@@ -9,7 +9,7 @@
 #include <Oxygen/Core/Module.h>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 class MainModule final : public oxygen::core::Module {
 public:

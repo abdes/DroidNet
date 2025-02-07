@@ -15,7 +15,7 @@
 #include "Oxygen/Input/InputMappingContext.h"
 #include "Oxygen/Input/InputSystem.h"
 #include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/Common/input.h"
+#include "Oxygen/Platform/input.h"
 
 using oxygen::Engine;
 using oxygen::graphics::Renderer;

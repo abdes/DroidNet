@@ -5,4 +5,3 @@
 # ===-----------------------------------------------------------------------===#
 
 add_subdirectory("Oxygen")
-add_subdirectory("Oxygen/Platform/Sdl")

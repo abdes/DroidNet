@@ -13,7 +13,7 @@
 #include "Oxygen/Graphics/Common/CommandList.h"
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Imgui/ImGuiPlatformBackend.h"
-#include "Oxygen/Platform/Common/Platform.h"
+#include "Oxygen/Platform/Platform.h"
 
 using oxygen::imgui::ImguiModule;
 

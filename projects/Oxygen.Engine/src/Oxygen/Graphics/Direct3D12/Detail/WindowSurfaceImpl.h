@@ -12,7 +12,7 @@
 
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
 #include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
-#include "Oxygen/Platform/Common/Window.h"
+#include "Oxygen/Platform/Window.h"
 
 namespace oxygen::graphics::d3d12::detail {
 

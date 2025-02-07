@@ -11,7 +11,7 @@
 #include "Oxygen/Graphics/Direct3d12/D3DResource.h"
 #include "Oxygen/Graphics/Direct3d12/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/api_export.h"
-#include "Oxygen/Platform/Common/Types.h"
+#include "Oxygen/Platform/Types.h"
 
 namespace oxygen::graphics::d3d12 {
 

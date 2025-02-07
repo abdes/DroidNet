@@ -12,6 +12,7 @@
 #include <asio/executor.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
+#include <asio/high_resolution_timer.hpp>
 
 #include "Oxygen/OxCo/Concepts/Awaitable.h"
 #include "Oxygen/OxCo/Executor.h"
@@ -328,7 +329,7 @@ namespace detail {
         }
 
     private:
-        asio::steady_timer timer_;
+        asio::high_resolution_timer timer_;
     };
 } // namespace detail
 

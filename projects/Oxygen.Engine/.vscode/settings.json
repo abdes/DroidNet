@@ -128,5 +128,5 @@
         }
     },
     "clangd.path": "",
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
 }

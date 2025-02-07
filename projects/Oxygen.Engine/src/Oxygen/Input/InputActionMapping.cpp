@@ -11,12 +11,12 @@
 #include "Oxygen/Input/ActionTriggers.h"
 #include "Oxygen/Input/ActionValue.h"
 #include "Oxygen/Input/InputActionMapping.h"
-#include "Oxygen/Platform/Common/Input.h"
-#include "Oxygen/Platform/Common/InputEvent.h"
-#include <Oxygen/Base/Composition.h>
+#include "Oxygen/Platform/Input.h"
+#include "Oxygen/Platform/InputEvent.h"
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/TimeUtils.h>
-#include <Oxygen/Base/TypeSystem.h>
+#include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Base/Types/Geometry.h>
 
 using oxygen::input::InputActionMapping;
