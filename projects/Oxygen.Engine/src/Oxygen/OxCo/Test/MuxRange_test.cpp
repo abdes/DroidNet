@@ -41,7 +41,7 @@ NOLINT_TEST_F(MuxRangeTest, AnyOf)
         v.push_back(MakeTask(2));
         v.push_back(MakeTask(5));
 
-        const auto ret = co_await AnyOf(v);
+        const auto ret = co_await AnyOf(std::move(v));
         EXPECT_EQ(el_->Now(), 2ms);
         EXPECT_EQ(ret.size(), 3);
         EXPECT_FALSE(ret[0]);

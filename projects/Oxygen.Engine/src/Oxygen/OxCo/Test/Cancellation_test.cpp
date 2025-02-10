@@ -206,4 +206,55 @@ NOLINT_TEST_F(RunOnCancelTest, RunOnCancel)
     });
 }
 
+class DisposableTest : public OxCoTestFixture { };
+NOLINT_TEST_F(DisposableTest, Simple)
+{
+    ::Run(*el_, [this]() -> Co<> {
+        auto [_, done] = co_await AnyOf(el_->Sleep(3ms), [&]() -> Co<> {
+            co_await Disposable(el_->Sleep(5ms, kNonCancellable));
+            EXPECT_EQ("", "Should not reach here");
+        });
+        EXPECT_EQ(el_->Now(), 5ms);
+        EXPECT_FALSE(done);
+    });
+}
+
+NOLINT_TEST_F(DisposableTest, ComplexNonCancellableDisposableStructure)
+{
+    ::Run(*el_, [this]() -> Co<> {
+        int stage = 0;
+        auto check_stage = [&stage](const int expected) {
+            EXPECT_EQ(stage, expected);
+            stage = expected + 1;
+        };
+        auto check_stage_on_exit = [&](int expected) {
+            return ScopeGuard([expected, check_stage]() noexcept { check_stage(expected); });
+        };
+
+        Event evt;
+        auto [_, done] = co_await AnyOf(el_->Sleep(3ms), [&]() -> Co<> {
+            auto g2 = check_stage_on_exit(2);
+            co_await Disposable(
+                AnyOf(NonCancellable(
+                          AnyOf(evt,
+                              [&]() -> Co<> {
+                                  auto g1 = check_stage_on_exit(1);
+                                  co_await el_->Sleep(5ms);
+                                  EXPECT_EQ("", "Should not reach here");
+                              })),
+
+                    UntilCancelledAnd([&]() -> Co<> {
+                        check_stage(0);
+                        evt.Trigger();
+                        co_return;
+                    })));
+            EXPECT_EQ("", "Should not reach here");
+        });
+
+        check_stage(3);
+        EXPECT_FALSE(done);
+        EXPECT_EQ(el_->Now(), 3ms);
+    });
+}
+
 } // namespace

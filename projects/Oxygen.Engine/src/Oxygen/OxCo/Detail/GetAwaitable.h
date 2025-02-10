@@ -8,6 +8,7 @@
 
 #include <type_traits>
 
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/CoTag.h"
 
@@ -83,6 +84,16 @@ public:
     {
     }
 
+    ~AwaitableLambda()
+    {
+        if (task_.IsValid()) {
+            awaitable_.~AwaitableT();
+        }
+    }
+
+    OXYGEN_MAKE_NON_MOVEABLE(AwaitableLambda)
+    OXYGEN_DEFAULT_COPYABLE(AwaitableLambda)
+
     // NB: these forwarders are specialized for `TaskAwaitable`, and would need
     // generalization to support non-Task awaitables
 
@@ -122,15 +133,18 @@ private:
     {
         if (!task_.IsValid()) {
             task_ = callable_();
-            awaitable_ = task_.operator co_await();
+            static_assert(noexcept(AwaitableT(task_.operator co_await())));
+            new (&awaitable_) AwaitableT(task_.operator co_await());
         }
 
         return awaitable_;
     }
 
-    Callable callable_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
+    Callable callable_;
     TaskT task_;
-    AwaitableT awaitable_;
+    union {
+        AwaitableT awaitable_;
+    };
 };
 
 template <class Callable>
@@ -225,10 +239,7 @@ using YieldToRunAwaitable = YieldToRunImpl<Callable, std::invoke_result_t<Callab
 
 // NB: Must return by value.
 template <ValidDirectAwaitable Aw>
-auto StaticAwaitableCheck(Aw&& aw) -> Aw // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
-{
-    return std::forward<Aw>(aw);
-}
+consteval void StaticAwaitableCheck() { }
 
 template <class T>
 auto GetAwaitable(T&& t) -> decltype(auto)
@@ -239,24 +250,22 @@ auto GetAwaitable(T&& t) -> decltype(auto)
         requires() {
             { std::forward<T>(t) } -> DirectAwaitable;
         }) {
-        // Explicit template argument so we can preserve a provided rvalue
-        // reference rather than moving into a new object. The referent was
-        // created in the co_await expression so it will live long enough for us
-        // and we can save a copy. Without the explicit argument, universal
-        // reference rules would infer Aw = T (which is what we want for the
-        // other calls where we're passing a temporary that was created in this
-        // function).
-        return StaticAwaitableCheck<T&&>(std::forward<T>(t));
+        StaticAwaitableCheck<T>();
+        return std::forward<T>(t);
     } else if constexpr (
         requires() {
             { std::forward<T>(t).operator co_await() } -> DirectAwaitable;
         }) {
-        return StaticAwaitableCheck(std::forward<T>(t).operator co_await());
+        using Ret = decltype(std::forward<T>(t).operator co_await());
+        StaticAwaitableCheck<Ret>();
+        return std::forward<T>(t).operator co_await();
     } else if constexpr (
         requires() {
             { operator co_await(std::forward<T>(t)) } -> DirectAwaitable;
         }) {
-        return StaticAwaitableCheck(operator co_await(std::forward<T>(t)));
+        using Ret = decltype(operator co_await(std::forward<T>(t)));
+        StaticAwaitableCheck<Ret>();
+        return operator co_await(std::forward<T>(t));
     } else {
         // if !Awaitable<T>, then the static_assert above fired, and we don't
         // need to fire this one also

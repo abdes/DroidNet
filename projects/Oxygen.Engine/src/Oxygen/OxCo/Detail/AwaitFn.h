@@ -71,6 +71,14 @@ auto AwaitMustResume(const Aw& awaitable) noexcept
     }
 }
 
+template <class Aw>
+void AwaitSetExecutor(Aw& awaitable, Executor* ex) noexcept
+{
+    if constexpr (NeedsExecutor<Aw>) {
+        awaitable.await_set_executor(ex);
+    }
+}
+
 //! @
 
 } // namespace oxygen::co::detail

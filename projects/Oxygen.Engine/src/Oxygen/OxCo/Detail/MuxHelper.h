@@ -54,32 +54,9 @@ public:
     {
     }
 
-    MuxHelper(const MuxHelper&) = delete;
-    MuxHelper(MuxHelper&& rhs) noexcept(std::is_nothrow_move_constructible_v<Aw>)
-        : mux_(rhs.mux_)
-        , awaitable_(std::move(rhs.awaitable_))
-    {
-        DCHECK_F(InState(State::kNotStarted));
-    }
-    auto operator=(const MuxHelper& rhs) noexcept(std::is_nothrow_move_constructible_v<Aw>)
-        -> MuxHelper&
-    {
-        DCHECK_F(InState(State::kNotStarted));
-        if (this != &rhs) {
-            mux_ = rhs.mux_,
-            awaitable_ = rhs.awaitable_;
-        }
-        return *this;
-    }
-    auto operator=(MuxHelper&& rhs) noexcept -> MuxHelper&
-    {
-        DCHECK_F(InState(State::kNotStarted));
-        if (this != &rhs) {
-            std::swap(mux_, rhs.mux_);
-            std::swap(awaitable_, rhs.awaitable_);
-        }
-        return *this;
-    }
+    OXYGEN_MAKE_NON_COPYABLE(MuxHelper)
+    OXYGEN_MAKE_NON_MOVEABLE(MuxHelper)
+
     ~MuxHelper()
     {
         if (InState(State::kSucceeded)) {
@@ -88,7 +65,7 @@ public:
         }
     }
 
-    static auto IsSkippable() { return Skippable<Aw>; }
+    static auto IsSkippable() { return Skippable<AwaitableType<Aw>>; }
 
     void SetExecutor(Executor* ex) noexcept
     {

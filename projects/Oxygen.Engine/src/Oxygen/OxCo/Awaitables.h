@@ -46,6 +46,18 @@ inline Awaitable<void> auto NoOp() // NOLINT(modernize-use-trailing-return-type)
 static constexpr detail::CoAwaitFactory<SuspendForever> kSuspendForever;
 static constexpr detail::CoAwaitFactory<Yield> kYield;
 
+/// A utility function which allows delayed construction of nonmoveable
+/// immediate awaitables.
+///
+/// The returned class is moveable (assuming the arguments are moveable),
+/// and has a one-shot `operator co_await() &&`, which will construct
+/// `T(forward<Args>(args...))` and return it.
+template <DirectAwaitable T, class... Args>
+Awaitable auto MakeAwaitable(Args&&... args)
+{
+    return detail::AwaitableMaker<T, Args...>(std::forward<Args>(args)...);
+}
+
 //! A wrapper around an awaitable suppressing its cancellation.
 /*!
  \code{cpp}
@@ -61,7 +73,7 @@ static constexpr detail::CoAwaitFactory<Yield> kYield;
 template <class Awaitable>
 auto NonCancellable(Awaitable awaitable)
 {
-    return detail::CancellableAdapter<Awaitable>(
+    return MakeAwaitable<detail::NonCancellableAdapter<Awaitable>>(
         std::forward<Awaitable>(awaitable));
 }
 
@@ -76,7 +88,7 @@ auto NonCancellable(Awaitable awaitable)
 template <class Awaitable>
 auto Disposable(Awaitable awaitable)
 {
-    return detail::DisposableAdapter<Awaitable>(
+    return MakeAwaitable<detail::DisposableAdapter<Awaitable>>(
         std::forward<Awaitable>(awaitable));
 }
 

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/ProxyFrame.h"
@@ -36,14 +37,14 @@ class Sequence : /*private*/ ProxyFrame {
 public:
     Sequence(First first, ThenFn then_fn)
         : first_(std::move(first))
-        , first_aw_(GetAwaitable(std::forward<First>(first_)))
+        , first_aw_(std::forward<First>(first_))
         , then_fn_(std::move(then_fn))
     {
     }
 
     ~Sequence() = default;
 
-    OXYGEN_DEFAULT_MOVABLE(Sequence)
+    OXYGEN_MAKE_NON_MOVEABLE(Sequence)
     OXYGEN_MAKE_NON_COPYABLE(Sequence)
 
     // ReSharper disable CppMemberFunctionMayBeStatic
@@ -135,12 +136,12 @@ private:
     struct SecondStage {
         [[no_unique_address]] AwaitableReturnType<First> first_value;
         [[no_unique_address]] Second obj;
-        [[no_unique_address]] AwaitableAdapter<SecondAwaitable> aw;
+        [[no_unique_address]] AwaitableAdapter<Second&&, SecondAwaitable> aw;
 
         explicit SecondStage(Sequence* c)
             : first_value(std::move(c->first_aw_).await_resume())
             , obj(GetSecond(c->then_fn_, first_value))
-            , aw(GetAwaitable<Second&&>(std::forward<Second>(obj)))
+            , aw(std::forward<Second>(obj))
         {
         }
     };
@@ -210,7 +211,7 @@ private:
 private:
     Handle parent_;
     [[no_unique_address]] First first_;
-    [[no_unique_address]] AwaitableAdapter<AwaitableType<First>> first_aw_;
+    [[no_unique_address]] AwaitableAdapter<First> first_aw_;
 
     [[no_unique_address]] ThenFn then_fn_;
     mutable std::variant<Executor*, // running first stage
@@ -238,7 +239,8 @@ public:
     // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) perfect forwarding
     friend auto operator|(First&& first, SequenceBuilder&& builder)
     {
-        return Sequence(std::forward<First>(first), std::move(builder.fn_));
+        return MakeAwaitable<Sequence<First, ThenFn>>(
+            std::forward<First>(first), std::move(builder.fn_));
     }
 
     // Allow right associativity of SequenceBuilder's
