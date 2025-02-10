@@ -35,12 +35,12 @@ public:
     {
         // See comments in `MuxBase::await_cancel()` regarding why we only can
         // propagate `Abortable` if the mux completes when its first awaitable does.
-        return Self::MinReady() == 1 && (Abortable<AwaitableType<Awaitables>> && ...);
+        return Self::MinReady() == 1 && (Abortable<AwaiterType<Awaitables>> && ...);
     }
 
     static constexpr auto IsSkippable() -> bool
     {
-        return (Skippable<AwaitableType<Awaitables>> && ...);
+        return (Skippable<AwaiterType<Awaitables>> && ...);
     }
 
     static constexpr auto Size() noexcept -> size_t
@@ -131,8 +131,8 @@ public:
     }
 
 protected:
-    [[nodiscard]] auto GetAwaitables() -> auto& { return awaitables_; }
-    [[nodiscard]] auto GetAwaitables() const -> const auto& { return awaitables_; }
+    [[nodiscard]] auto GetAwaiters() -> auto& { return awaitables_; }
+    [[nodiscard]] auto GetAwaiters() const -> const auto& { return awaitables_; }
 
     void HandleResumeWithoutSuspend()
     {
@@ -173,7 +173,7 @@ public:
 
 protected:
     // ReSharper disable CppMemberFunctionMayBeStatic
-    [[nodiscard]] auto GetAwaitables() const -> std::tuple<> { return {}; }
+    [[nodiscard]] auto GetAwaiters() const -> std::tuple<> { return {}; }
     void HandleResumeWithoutSuspend() { }
     // ReSharper restore CppMemberFunctionMayBeStatic
 };
@@ -212,7 +212,7 @@ public:
                 return (... & static_cast<int>(awaitables.MustResume()));
             }
         };
-        bool ret = this->HasException() || std::apply(impl, this->GetAwaitables());
+        bool ret = this->HasException() || std::apply(impl, this->GetAwaiters());
 
         // See note in MuxTuple::await_must_resume(). Note there is no way
         // for AllOf to satisfy Abortable in nontrivial cases (only with zero
@@ -232,7 +232,7 @@ public:
         auto impl = [](auto&&... awaitables) {
             return std::make_tuple(std::move(awaitables).Result()...);
         };
-        return std::apply(impl, std::move(this->GetAwaitables()));
+        return std::apply(impl, std::move(this->GetAwaiters()));
     }
 };
 

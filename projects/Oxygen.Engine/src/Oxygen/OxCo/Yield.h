@@ -10,9 +10,9 @@
 
 namespace oxygen::co {
 
-//! An awaitable which immediately reschedules the current task.
+//! An awaiter which immediately reschedules the current task.
 /*!
- The Yield awaitable forces the current coroutine to be rescheduled by
+ The Yield awaiter forces the current coroutine to be rescheduled by
  suspending (`await-ready()` returns `false`) and immediately resuming it
  (`await_suspend()` returns the current coroutine handle).
 

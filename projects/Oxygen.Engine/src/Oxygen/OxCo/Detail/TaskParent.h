@@ -15,13 +15,13 @@ namespace oxygen::co::detail {
 class BasePromise;
 
 //! Encapsulates the result of an async task execution and indicates where
-//! execution should proceed after the execution completes. Serves as the
-//! parent of the task, in the context where "An async task can only run when
-//! it's being awaited by another task".
+//! execution should proceed after the execution completes. Serves as the parent
+//! of the task, in the context where "An async task can only run when it's
+//! being awaited by another task".
 /*!
- In OxCo, `TaskAwaitable` and `Nursery` can serve as the parent of an async
- task, and therefore they derive from this base class. Their states are driven
- by the `Promise` object of the coroutine that they are awaiting.
+ In OxCo, `TaskAwaiter` and `Nursery` can serve as the parent of an async task,
+ and therefore they derive from this base class. Their states are driven by the
+ `Promise` object of the coroutine that they are awaiting.
 
  This base class implements the parts of `TaskParent` that are independent of
  the return type, and serves as a pure interface to the `TaskParent` in places
@@ -53,8 +53,9 @@ protected:
 };
 
 //! Represents the parent of an async task that returns an object of type `T`.
-//! \tparam T The type of the result of the async task.
 /*!
+ \tparam T The type of the result of the async task.
+
  Implements the result storage part of the `BaseTaskParent` interface and serves
  as an explicitly typed parent for an async task that returns `T`.
 */

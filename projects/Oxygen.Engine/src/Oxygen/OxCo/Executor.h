@@ -16,13 +16,6 @@
 
 namespace oxygen::co {
 
-namespace detail {
-
-    template <class Aw>
-    concept RootAwaitable = ImmediateAwaitable<Aw>;
-
-} // namespace detail
-
 //! An executor for resuming coroutines and running other actions that might
 //! need to be deferred for a short time.
 /*!

@@ -10,7 +10,7 @@
 #include "Oxygen/OxCo/Detail/CancellableAdapter.h"
 #include "Oxygen/OxCo/Detail/CoAwaitFactory.h"
 #include "Oxygen/OxCo/Detail/DisposableAdapter.h"
-#include "Oxygen/OxCo/Detail/ReadyAwaitable.h"
+#include "Oxygen/OxCo/Detail/ReadyAwaiter.h"
 #include "Oxygen/OxCo/Detail/Sequence.h"
 #include "Oxygen/OxCo/SuspendForever.h"
 #include "Oxygen/OxCo/Yield.h"
@@ -21,7 +21,7 @@ namespace oxygen::co {
 template <class T>
 Awaitable<T> auto Just(T value) // NOLINT(modernize-use-trailing-return-type)
 {
-    return detail::ReadyAwaitable<T>(std::forward<T>(value));
+    return detail::ReadyAwaiter<T>(std::forward<T>(value));
 }
 
 //! A no-op task. Always await_ready(), and `co_await`ing on it is a no-op
@@ -40,7 +40,7 @@ Awaitable<T> auto Just(T value) // NOLINT(modernize-use-trailing-return-type)
 */
 inline Awaitable<void> auto NoOp() // NOLINT(modernize-use-trailing-return-type)
 {
-    return detail::ReadyAwaitable<void>();
+    return detail::ReadyAwaiter<void>();
 }
 
 static constexpr detail::CoAwaitFactory<SuspendForever> kSuspendForever;
@@ -55,7 +55,7 @@ static constexpr detail::CoAwaitFactory<Yield> kYield;
 template <ImmediateAwaitable T, class... Args>
 Awaitable auto MakeAwaitable(Args&&... args)
 {
-    return detail::AwaitableMaker<T, Args...>(std::forward<Args>(args)...);
+    return detail::AwaiterMaker<T, Args...>(std::forward<Args>(args)...);
 }
 
 //! A wrapper around an awaitable suppressing its cancellation.

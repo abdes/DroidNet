@@ -11,10 +11,10 @@
 #include "Oxygen/Base/NoInline.h"
 #include "Oxygen/Base/ReturnAddress.h"
 #include "Oxygen/OxCo/Detail/AwaitFn.h"
-#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/CoRoutineFrame.h"
-#include "Oxygen/OxCo/Detail/GetAwaitable.h"
+#include "Oxygen/OxCo/Detail/GetAwaiter.h"
 #include "Oxygen/OxCo/Detail/IntrusiveList.h"
+#include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 #include "Oxygen/OxCo/Detail/TaskFrame.h"
 #include "Oxygen/OxCo/Detail/TaskParent.h"
 #include "Oxygen/OxCo/Executor.h"
@@ -43,9 +43,9 @@ namespace detail {
      */
     class BasePromise : /*private*/ TaskFrame, public IntrusiveListItem<BasePromise> {
 
-        //! A type erased control block for cancellable awaitables that captures
-        //! how to cancel the `Awaitable` the coroutine associated with this
-        //! `Promise` is awaiting on.
+        //! A type erased control block for cancellable tasks that captures how
+        //! to cancel the `Awaiter` for the coroutine associated with this
+        //! `Promise`.
         /*!
          The control block consists of two non-null pointers. The first
          (`object_`) refers to the `Awaitable` object in a type-erased way. The
@@ -192,7 +192,7 @@ namespace detail {
         void ExecutionState(const Execution state) noexcept { info_.state.execution = state; }
         void CancellationState(const Cancellation state) noexcept { info_.state.cancellation = state; }
 
-        [[nodiscard]] auto HasAwaitable() const noexcept { return ExecutionState() > Execution::kStub; }
+        [[nodiscard]] auto HasAwaiter() const noexcept { return ExecutionState() > Execution::kStub; }
         [[nodiscard]] auto HasCoroutine() const noexcept { return ExecutionState() != Execution::kStub; }
 
         [[nodiscard]] auto AwCancel(const Handle h) const noexcept -> bool { return info_.ccb.Cancel(h); }
@@ -211,13 +211,13 @@ namespace detail {
 
         //! Requests the cancellation of the running task.
         /*!
-         If the promise's current awaitable (if any) supports cancellation,
-         proxies the request to the awaitable through the cancellation control
+         If the promise's current awaitee (if any) supports cancellation,
+         proxies the request to the awaitee through the cancellation control
          block; otherwise marks the task as pending cancellation, and any
-         further `co_await` on a cancellable awaitable would result in immediate
+         further `co_await` on a cancellable awaiter would result in immediate
          cancellation.
 
-         In either case, if the awaitable is in fact cancelled (as opposed to
+         In either case, if the awaitee is in fact cancelled (as opposed to
          completing its operation despite the cancellation request), the
          awaiting task will also terminate by cancellation, and so on up the
          stack.
@@ -226,7 +226,7 @@ namespace detail {
         {
             DLOG_F(1, "pr {} cancellation requested", fmt::ptr(this));
 
-            if (!HasAwaitable()) {
+            if (!HasAwaiter()) {
                 // Mark pending cancellation; coroutine will be cancelled
                 // at its next suspension point (for running coroutines) or when
                 // executed by executor (for ready coroutines). This is a no-op
@@ -407,7 +407,7 @@ namespace detail {
         //! the next `co_await` suspension.
         void DoResumeAfterCancel()
         {
-            if (HasAwaitable() && AwMustResume()) {
+            if (HasAwaiter() && AwMustResume()) {
                 // This task completed normally, so don't propagate the
                 // cancellation. Attempt it again on the next co_await.
                 CancellationState(Cancellation::kRequested);
@@ -430,39 +430,39 @@ namespace detail {
 
         //! @{
         //! Hooks into suspend points of the coroutine, to get a chance to
-        //! access the `Awaitable` and install the cancellation control logic.
+        //! access the `Awaiter` and install the cancellation control logic.
 
-        //! Hooks onto `Aw::await_suspend()` and keeps track of the awaitable
-        //! so cancellation can be arranged if necessary.
+        //! Hooks onto `Aw::await_suspend()` and keeps track of the awaiter so
+        //! cancellation can be arranged if necessary.
         /*!
-         This function is called when *this* task blocks on an Awaitable.
+         This function is called when *this* task blocks on an awaiter.
         */
-        template <Awaitable Aw>
-        auto HookAwaitSuspend(Aw& aw) -> Handle
+        template <Awaiter Awaiter>
+        auto HookAwaitSuspend(Awaiter& awaiter) -> Handle
         {
             const bool cancel_requested = CancellationState() == Cancellation::kRequested;
             DLOG_F(1, "pr {} suspended {}", fmt::ptr(this),
                 cancel_requested ? "(with pending cancellation) on..." : "");
-            ResetControlBlock(aw); // this resets cancelState_
+            ResetControlBlock(awaiter); // this resets cancelState_
 
             if (cancel_requested) {
-                if (AwaitEarlyCancel(aw)) {
-                    DLOG_F(1, "    ... early-cancelled awaitable (skipped)");
+                if (AwaitEarlyCancel(awaiter)) {
+                    DLOG_F(1, "    ... early-cancelled awaiter (skipped)");
                     PropagateCancel();
                     return std::noop_coroutine();
                 }
                 OnResume<&BasePromise::DoResumeAfterCancel>();
-                if (aw.await_ready()) {
-                    DLOG_F(1, "    ... already-ready awaitable");
+                if (awaiter.await_ready()) {
+                    DLOG_F(1, "    ... already-ready awaiter");
                     return ProxyHandle();
                 }
             } else {
                 OnResume<&BasePromise::DoResume>();
             }
-            aw.await_set_executor(executor_);
+            awaiter.await_set_executor(executor_);
 
             try {
-                return detail::AwaitSuspend(aw, ProxyHandle());
+                return detail::AwaitSuspend(awaiter, ProxyHandle());
             } catch (...) {
                 DLOG_F(1, "pr {}: exception thrown from await_suspend", fmt::ptr(this));
                 ExecutionState(Execution::kRunning);
@@ -476,19 +476,19 @@ namespace detail {
         }
 
         //! A proxy which allows Promise to have control over its own suspension.
-        template <Awaitable Aw>
+        template <Awaitable Awaitable>
         class AwaitProxy {
-            // Use decltype instead of AwaitableType in order to reference
+            // Use decltype instead of AwaiterType in order to reference
             // (rather than moving) an incoming Awaitable&& that is
             // ImmediateAwaitable; even if it's a temporary, it will live for
             // the entire co_await expression including suspension.
-            using AwaitableType = decltype(GetAwaitable(std::declval<Aw>()));
+            using AwaiterType = decltype(GetAwaiter(std::declval<Awaitable>()));
 
         public:
             // The reference will be valid for the entire `co_await` expression.
             // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-            AwaitProxy(BasePromise* promise, Aw&& wrapped) noexcept
-                : awaitable_(std::forward<Aw>(wrapped))
+            AwaitProxy(BasePromise* promise, Awaitable&& awaitable) noexcept
+                : awaiter_(std::forward<Awaitable>(awaitable))
                 , promise_(promise)
             {
             }
@@ -500,24 +500,24 @@ namespace detail {
                     // to execute the more involved logic in HookAwaitSuspend().
                     return false;
                 }
-                return awaitable_.await_ready();
+                return awaiter_.await_ready();
             }
 
             OXYGEN_NOINLINE auto await_suspend(Handle /*unused*/)
             {
                 // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
                 promise_->ProgramCounter(reinterpret_cast<uintptr_t>(OXYGEN_RETURN_ADDRESS()));
-                return promise_->HookAwaitSuspend(awaitable_);
+                return promise_->HookAwaitSuspend(awaiter_);
             }
 
             auto await_resume() -> decltype(auto)
             {
-                return awaitable_.await_resume();
+                return awaiter_.await_resume();
             }
 
         private:
             // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
-            [[no_unique_address]] AwaitableAdapter<Aw, AwaitableType> awaitable_;
+            [[no_unique_address]] SanitizedAwaiter<Awaitable, AwaiterType> awaiter_;
             BasePromise* promise_;
         };
 
@@ -575,15 +575,15 @@ namespace detail {
          set of type-erased functions that can be used to manipulate the
          awaitable during the process of cancellation.
         */
-        template <class Aw>
-        auto await_transform(Aw&& aw) noexcept
+        template <class Awaitable>
+        auto await_transform(Awaitable&& awaitable) noexcept
         {
-            static_assert(!std::is_same_v<std::decay_t<Aw>, FinalSuspendProxy>);
+            static_assert(!std::is_same_v<std::decay_t<Awaitable>, FinalSuspendProxy>);
 
             // Note: intentionally not constraining Aw here to get a nicer
             // compilation error (constraint will be checked in
-            // `GetAwaitable()`).
-            return AwaitProxy<Aw>(this, std::forward<Aw>(aw));
+            // `GetAwaiter()`).
+            return AwaitProxy<Awaitable>(this, std::forward<Awaitable>(awaitable));
         }
 
         friend RethrowCurrentException;

@@ -45,11 +45,11 @@ namespace detail::channel {
             return static_cast<const Channel<T>&>(*this);
         }
 
-        class ReadAwaitable : public Reader::ParkingLotImpl::Parked {
+        class ReadAwaiter : public Reader::ParkingLotImpl::Parked {
         public:
             using Base = typename Reader::ParkingLotImpl::Parked;
 
-            explicit ReadAwaitable(Reader& self)
+            explicit ReadAwaiter(Reader& self)
                 : Base(self)
             {
             }
@@ -87,7 +87,7 @@ namespace detail::channel {
 
         auto Receive() -> Awaitable<std::optional<T>> auto
         {
-            return ReadAwaitable(*this);
+            return ReadAwaiter(*this);
         }
 
         auto TryReceive() -> std::optional<T>
@@ -135,12 +135,12 @@ namespace detail::channel {
         }
 
         template <typename U>
-        class WriteAwaitable : public Writer::ParkingLotImpl::Parked {
+        class WriteAwaiter : public Writer::ParkingLotImpl::Parked {
         public:
             using Base = typename Writer::ParkingLotImpl::Parked;
 
             // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-            WriteAwaitable(Writer& self, U&& data) // Perfect forwarding
+            WriteAwaiter(Writer& self, U&& data) // Perfect forwarding
                 : Base(self)
                 , data_(std::forward<U>(data))
             {
@@ -184,7 +184,7 @@ namespace detail::channel {
         template <typename U>
         auto Send(U&& value) -> Awaitable<bool> auto
         {
-            return WriteAwaitable<U>(*this, std::forward<U>(value));
+            return WriteAwaiter<U>(*this, std::forward<U>(value));
         }
         template <typename U>
         auto TrySend(U&& value) -> bool

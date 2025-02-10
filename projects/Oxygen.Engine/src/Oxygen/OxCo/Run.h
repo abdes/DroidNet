@@ -8,8 +8,8 @@
 
 #include "Oxygen/Base/NoInline.h"
 #include "Oxygen/Base/ReturnAddress.h"
-#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
-#include "Oxygen/OxCo/Detail/GetAwaitable.h"
+#include "Oxygen/OxCo/Detail/GetAwaiter.h"
+#include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 #include "Oxygen/OxCo/Detail/TaskFrame.h"
 #include "Oxygen/OxCo/EventLoop.h"
 #include "Oxygen/OxCo/Executor.h"
@@ -43,7 +43,7 @@ namespace detail {
         template <class Awaitable>
         OXYGEN_NOINLINE auto Run(Awaitable&& awaitable) && -> decltype(auto)
         {
-            AwaitableAdapter<Awaitable&&> adapter(
+            SanitizedAwaiter<Awaitable&&> awaiter(
                 std::forward<Awaitable>(awaitable));
             using Traits = EventLoopTraits<std::decay_t<EventLoop>>;
             DCHECK_NOTNULL_F(event_loop_);
@@ -62,7 +62,7 @@ namespace detail {
                 CurrentExecutor() = prev_exec;
             });
 
-            if (!adapter.await_ready()) {
+            if (!awaiter.await_ready()) {
                 resume_fn = +[](CoroutineFrame* frame) {
                     auto runner = static_cast<Runner*>(frame);
                     runner->executor_->RunSoon(
@@ -74,8 +74,8 @@ namespace detail {
                 };
                 // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
                 ProgramCounter(reinterpret_cast<uintptr_t>(OXYGEN_RETURN_ADDRESS()));
-                adapter.await_set_executor(&executor);
-                adapter.await_suspend(ToHandle()).resume();
+                awaiter.await_set_executor(&executor);
+                awaiter.await_suspend(ToHandle()).resume();
                 executor.RunSoon();
                 // ReSharper disable CppDFAConstantConditions
                 // the event_loop_ is reset in the `resume_fn`
@@ -93,7 +93,7 @@ namespace detail {
                     // Do our best to clean up if there is a custom implementation
                     // of FAIL_FOR_DANGLING_TASKS that throws an exception.
                     ScopeGuard cleanup_guard([&]() noexcept {
-                        if (adapter.await_cancel(ToHandle())) {
+                        if (awaiter.await_cancel(ToHandle())) {
                             // cancelled immediately
                             return;
                         }
@@ -104,7 +104,7 @@ namespace detail {
                         }
                         // failed to cancel -- we already know something is wrong,
                         // avoid follow-on errors that obscure the original issue
-                        adapter.Abandon();
+                        awaiter.Abandon();
                     });
                     // We don't have anything to return below, so if the
                     // above failure allowed execution to proceed, we must:
@@ -114,7 +114,7 @@ namespace detail {
                 // ReSharper restore CppDFAConstantConditions
             }
 
-            return adapter.await_resume();
+            return awaiter.await_resume();
         }
 
     private:
@@ -129,7 +129,7 @@ namespace detail {
     auto Run(EventLoop& loop, Awaitable&& awaitable) -> decltype(auto)
     {
         return detail::Runner(loop)
-            .Run(detail::GetAwaitable(std::forward<Awaitable>(awaitable)));
+            .Run(detail::GetAwaiter(std::forward<Awaitable>(awaitable)));
     }
 
 } // namespace detail

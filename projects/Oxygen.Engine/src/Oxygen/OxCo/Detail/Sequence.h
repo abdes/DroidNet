@@ -8,9 +8,9 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/ProxyFrame.h"
 #include "Oxygen/OxCo/Detail/Result.h"
+#include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 #include "Oxygen/OxCo/Detail/ScopeGuard.h"
 
 namespace oxygen::co::detail {
@@ -37,7 +37,6 @@ class Sequence : /*private*/ ProxyFrame {
 public:
     Sequence(First first, ThenFn then_fn)
         : first_(std::move(first))
-        , first_aw_(std::forward<First>(first_))
         , then_fn_(std::move(then_fn))
     {
     }
@@ -53,27 +52,27 @@ public:
     void await_set_executor(Executor* e) noexcept
     {
         second_ = e;
-        first_aw_.await_set_executor(e);
+        first_.awaiter.await_set_executor(e);
     }
 
     auto await_early_cancel() noexcept
     {
         cancelling_ = true;
-        return first_aw_.await_early_cancel();
+        return first_.awaiter.await_early_cancel();
     }
 
     void await_suspend(const Handle h)
     {
         DLOG_F(1, "   ...sequence {} yielding to...", fmt::ptr(this));
         parent_ = h;
-        if (first_aw_.await_ready()) {
+        if (first_.awaiter.await_ready()) {
             KickOffSecond();
         } else {
             this->resume_fn = +[](CoroutineFrame* frame) {
                 auto* self = static_cast<Sequence*>(frame);
                 self->KickOffSecond();
             };
-            first_aw_.await_suspend(this->ToHandle()).resume();
+            first_.awaiter.await_suspend(this->ToHandle()).resume();
         }
     }
 
@@ -83,10 +82,10 @@ public:
             InFirstStage() ? "first" : "second");
         cancelling_ = true;
         if (InFirstStage()) {
-            return first_aw_.await_cancel(this->ToHandle());
+            return first_.awaiter.await_cancel(this->ToHandle());
         }
         if (InSecondStage()) {
-            return second().aw.await_cancel(h);
+            return second().awaiter.await_cancel(h);
         }
         return false; // will carry out cancellation later
     }
@@ -104,7 +103,7 @@ public:
         // Similarly, if we're in neither the first nor the second stage,
         // the second stage must have completed via early cancellation.
         const bool ret = std::holds_alternative<std::exception_ptr>(second_)
-            || (InSecondStage() && second().aw.await_must_resume());
+            || (InSecondStage() && second().awaiter.await_must_resume());
         if (!ret && InSecondStage()) {
             // Destroy the second stage, which will release any resources
             // it might have held
@@ -123,25 +122,36 @@ public:
         if (auto ex = std::get_if<std::exception_ptr>(&second_)) {
             std::rethrow_exception(*ex);
         }
-        return second().aw.await_resume();
+        return second().awaiter.await_resume();
     }
     // ReSharper restore CppMemberFunctionMayBeStatic
 
 private:
+    struct FirstStage {
+        [[no_unique_address]] First awaitable;
+        [[no_unique_address]] SanitizedAwaiter<First> awaiter;
+
+        explicit FirstStage(First&& aw)
+            : awaitable(std::forward<First>(aw))
+            , awaiter(std::forward<First>(awaitable))
+        {
+        }
+    };
+
     // Explicitly provide a template argument, so immediate awaitables
     // would resolve to Second&& instead of Second.
-    // For the same reason, don't use AwaitableType<> here.
-    using SecondAwaitable = decltype(GetAwaitable<Second&&>(std::declval<Second>()));
+    // For the same reason, don't use AwaiterType<> here.
+    using SecondAwaiter = decltype(GetAwaiter<Second&&>(std::declval<Second>()));
 
     struct SecondStage {
         [[no_unique_address]] AwaitableReturnType<First> first_value;
-        [[no_unique_address]] Second obj;
-        [[no_unique_address]] AwaitableAdapter<Second&&, SecondAwaitable> aw;
+        [[no_unique_address]] Second awaitable;
+        [[no_unique_address]] SanitizedAwaiter<Second&&, SecondAwaiter> awaiter;
 
         explicit SecondStage(Sequence* c)
-            : first_value(std::move(c->first_aw_).await_resume())
-            , obj(GetSecond(c->then_fn_, first_value))
-            , aw(std::forward<Second>(obj))
+            : first_value(std::move(c->first_.awaiter).await_resume())
+            , awaitable(GetSecond(c->then_fn_, first_value))
+            , awaiter(std::forward<Second>(awaitable))
         {
         }
     };
@@ -165,7 +175,7 @@ private:
 
     void KickOffSecond() noexcept
     {
-        if (cancelling_ && !first_aw_.await_must_resume()) {
+        if (cancelling_ && !first_.awaiter.await_must_resume()) {
             DLOG_F(1, "sequence {} (cancelling) first stage completed, "
                       "confirming cancellation",
                 fmt::ptr(this));
@@ -192,7 +202,7 @@ private:
         }
 
         if (cancelling_) {
-            if (second().aw.await_early_cancel()) {
+            if (second().awaiter.await_early_cancel()) {
                 second_.template emplace<std::monostate>();
 
                 parent_.resume();
@@ -200,18 +210,17 @@ private:
             }
         }
 
-        if (second().aw.await_ready()) {
+        if (second().awaiter.await_ready()) {
             parent_.resume();
         } else {
-            second().aw.await_set_executor(ex);
-            second().aw.await_suspend(parent_).resume();
+            second().awaiter.await_set_executor(ex);
+            second().awaiter.await_suspend(parent_).resume();
         }
     }
 
 private:
     Handle parent_;
-    [[no_unique_address]] First first_;
-    [[no_unique_address]] AwaitableAdapter<First> first_aw_;
+    [[no_unique_address]] FirstStage first_;
 
     [[no_unique_address]] ThenFn then_fn_;
     mutable std::variant<Executor*, // running first stage

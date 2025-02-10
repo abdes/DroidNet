@@ -26,7 +26,7 @@ namespace oxygen::co {
  up any tasks that were waiting on it. Waiting for an event that already
  happened is a no-op and does not result in suspension.
 
- The `Event` itself is an `Awaitable`, which makes it easy for a class to expose
+ The `Event` itself is an `Awaiter`, which makes it easy for a class to expose
  something that can be used both to check if the event happened and to await for
  it to happen if not:
 
@@ -64,7 +64,7 @@ public:
     //! Returns true if the event has happened yet.
     [[nodiscard]] auto Triggered() const noexcept { return triggered_; }
 
-    class Awaitable final : public Parked {
+    class Awaiter final : public Parked {
     public:
         using Parked::Parked;
         // ReSharper disable CppMemberFunctionMayBeStatic
@@ -79,7 +79,7 @@ public:
     //! and is immediately ready if that has already happened.
     auto operator co_await()
     {
-        return Awaitable(*this);
+        return Awaiter(*this);
     }
 
 private:
@@ -87,6 +87,6 @@ private:
 };
 
 static_assert(Awaitable<Event>);
-static_assert(Awaitable<Event::Awaitable>);
+static_assert(Awaiter<Event::Awaiter>);
 
 } // namespace oxygen::co

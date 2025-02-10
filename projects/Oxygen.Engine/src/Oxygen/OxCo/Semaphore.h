@@ -22,7 +22,7 @@ namespace oxygen::co {
 class Semaphore : public detail::ParkingLotImpl<Semaphore> {
 public:
     template <class RetVal>
-    class Awaitable;
+    class Awaiter;
     class LockGuard;
 
     explicit Semaphore(const size_t initial = 1)
@@ -80,13 +80,13 @@ private:
         : sem_(&sem)
     {
     }
-    friend class Awaitable<LockGuard>;
+    friend class Awaiter<LockGuard>;
 
     Semaphore* sem_ = nullptr;
 };
 
 template <class RetVal>
-class Semaphore::Awaitable final : public Parked {
+class Semaphore::Awaiter final : public Parked {
 public:
     using Parked::Parked;
     [[nodiscard]] auto await_ready() const noexcept -> bool { return this->Object().Value() > 0; }
@@ -104,12 +104,12 @@ public:
 
 inline auto Semaphore::Acquire() -> co::Awaitable<void> auto
 {
-    return Awaitable<void>(*this);
+    return Awaiter<void>(*this);
 }
 
 inline auto Semaphore::Lock() -> co::Awaitable<LockGuard> auto
 {
-    return Awaitable<LockGuard>(*this);
+    return Awaiter<LockGuard>(*this);
 }
 
 inline void Semaphore::Release()

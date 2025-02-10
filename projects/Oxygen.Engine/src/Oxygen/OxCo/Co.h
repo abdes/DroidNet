@@ -13,7 +13,7 @@
 
 #include "Oxygen/OxCo/Detail/CoTag.h"
 #include "Oxygen/OxCo/Detail/Promise.h"
-#include "Oxygen/OxCo/Detail/TaskAwaitable.h"
+#include "Oxygen/OxCo/Detail/TaskAwaiter.h"
 
 namespace oxygen::co {
 
@@ -51,10 +51,10 @@ namespace oxygen::co {
  == In `oxygen::co` ==
 
  The `Co<>` marker type is the return type of any _async function_. It is also
- `Awaitable`, which when `co_await`ed, returns `TaskAwaitable`. `TaskAwaitable`
+ `Awaitable`, which when `co_await`ed, returns `TaskAwaiter`. `TaskAwaiter`
  is the `Awaiter` and the `Awaitable` for the coroutine.
 
- The `TaskAwaitable` also serves as a task parent for continuation after a
+ The `TaskAwaiter` also serves as a task parent for continuation after a
  coroutine completes. It receives the coroutine result (value, exception, or
  cancellation) and can indicate where execution should proceed after the task
  completes.
@@ -102,7 +102,7 @@ public:
     //! coroutine.
     auto operator co_await() noexcept
     {
-        return detail::TaskAwaitable<T>(promise_.get());
+        return detail::TaskAwaiter<T>(promise_.get());
     }
 
 private:

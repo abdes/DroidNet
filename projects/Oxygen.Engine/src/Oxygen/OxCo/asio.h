@@ -61,16 +61,16 @@ static constexpr detail::asio_awaitable_t<asio::executor, false>
 namespace detail {
 
     template <bool ThrowOnError, class Init, class Args, class... Ret>
-    class AsioAwaitableFactory;
+    class AsioAwaitable;
     template <bool ThrowOnError, class... Ret>
-    class TypeErasedAsioAwaitableFactory;
+    class TypeErasedAsioAwaitable;
 
     template <class... Ret>
-    class AsioAwaitableBase {
+    class AsioAwaiterBase {
     protected:
         using Err = asio::error_code;
         struct DoneCB {
-            AsioAwaitableBase* aw_;
+            AsioAwaiterBase* aw_;
 
             void operator()(Err err, Ret... ret) const
             {
@@ -99,29 +99,29 @@ namespace detail {
         asio::cancellation_signal cancelSig_;
 
         template <bool, class, class, class...>
-        friend class AsioAwaitableFactory;
+        friend class AsioAwaitable;
         template <bool, class...>
-        friend class TypeErasedAsioAwaitableFactory;
+        friend class TypeErasedAsioAwaitable;
     };
 
     template <class InitFn, bool ThrowOnError, class... Ret>
-    class AsioAwaitable : private AsioAwaitableBase<Ret...> {
+    class AsioAwaiter : private AsioAwaiterBase<Ret...> {
         using Err = asio::error_code;
 
     public:
-        explicit AsioAwaitable(InitFn&& initFn)
+        explicit AsioAwaiter(InitFn&& initFn)
             : initFn_(std::forward<InitFn>(initFn))
         {
         }
 
-        AsioAwaitable(AsioAwaitable&&) = delete;
+        AsioAwaiter(AsioAwaiter&&) = delete;
 
         bool await_ready() const noexcept { return false; }
 
         void await_suspend(Handle h)
         {
             this->parent_ = h;
-            this->doneCB_ = typename AsioAwaitableBase<Ret...>::DoneCB { this };
+            this->doneCB_ = typename AsioAwaiterBase<Ret...>::DoneCB { this };
             this->initFn_(this->doneCB_);
         }
 
@@ -165,8 +165,8 @@ namespace detail {
     };
 
     template <bool ThrowOnError, class Init, class Args, class... Ret>
-    class AsioAwaitableFactory {
-        using DoneCB = typename AsioAwaitableBase<Ret...>::DoneCB;
+    class AsioAwaitable {
+        using DoneCB = typename AsioAwaiterBase<Ret...>::DoneCB;
 
         struct InitFn {
             Init init_;
@@ -192,34 +192,34 @@ namespace detail {
 
     public:
         template <class... Ts>
-        explicit AsioAwaitableFactory(Init&& init, Ts&&... args)
+        explicit AsioAwaitable(Init&& init, Ts&&... args)
             : initFn_(std::forward<Init>(init), std::forward<Ts>(args)...)
         {
         }
 
-        ImmediateAwaitable auto operator co_await() &&
+        Awaiter auto operator co_await() &&
         {
-            return AsioAwaitable<InitFn, ThrowOnError, Ret...>(
+            return AsioAwaiter<InitFn, ThrowOnError, Ret...>(
                 std::forward<InitFn>(initFn_));
         }
 
     private:
         InitFn initFn_;
 
-        friend TypeErasedAsioAwaitableFactory<ThrowOnError, Ret...>;
+        friend TypeErasedAsioAwaitable<ThrowOnError, Ret...>;
     };
 
-    /// AsioAwaitableFactory is parametrized by its initiation object (as it needs
+    /// AsioAwaitable is parametrized by its initiation object (as it needs
     /// to store it). `asio::async_result<>` does not have initiation among
     /// its type parameter list, yet needs to export something under dependent
     /// name `return_type`, which is used for asio-related functions still
     /// having an explicit return type (like Boost.Beast).
     ///
     /// To accommodate that, we have this class, which stores a type-erased
-    /// initiation object, and is constructible from `AsioAwaitableFactory`.
+    /// initiation object, and is constructible from `AsioAwaitable`.
     template <bool ThrowOnError, class... Ret>
-    class TypeErasedAsioAwaitableFactory {
-        using DoneCB = typename AsioAwaitableBase<Ret...>::DoneCB;
+    class TypeErasedAsioAwaitable {
+        using DoneCB = typename AsioAwaiterBase<Ret...>::DoneCB;
 
         struct InitFnBase {
             virtual ~InitFnBase() = default;
@@ -251,15 +251,15 @@ namespace detail {
 
     public:
         template <class Init, class Args>
-        explicit(false) TypeErasedAsioAwaitableFactory(
-            AsioAwaitableFactory<ThrowOnError, Init, Args, Ret...>&& rhs)
+        explicit(false) TypeErasedAsioAwaitable(
+            AsioAwaitable<ThrowOnError, Init, Args, Ret...>&& rhs)
             : initFn_(std::move(rhs.initFn_))
         {
         }
 
-        ImmediateAwaitable auto operator co_await() &&
+        Awaiter auto operator co_await() &&
         {
-            return AsioAwaitable<InitFn, ThrowOnError, Ret...>(std::move(initFn_));
+            return AsioAwaiter<InitFn, ThrowOnError, Ret...>(std::move(initFn_));
         }
 
     private:
@@ -292,10 +292,10 @@ template <class Executor, bool ThrowOnError, class X, class... Ret>
 class async_result<::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
     X(asio::error_code, Ret...)> {
 public:
-    using return_type = ::oxygen::co::detail::TypeErasedAsioAwaitableFactory<ThrowOnError,
+    using return_type = ::oxygen::co::detail::TypeErasedAsioAwaitable<ThrowOnError,
         Ret...>;
 
-    /// Use `AsioAwaitableFactory` here, so asio::async_*() functions which
+    /// Use `AsioAwaitable` here, so asio::async_*() functions which
     /// don't use `return_type` and instead have `auto` for their return types
     /// will do without type erase.
     template <class Init, class... Args>
@@ -304,7 +304,7 @@ public:
         ::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
         Args... args)
     {
-        return ::oxygen::co::detail::AsioAwaitableFactory<
+        return ::oxygen::co::detail::AsioAwaitable<
             ThrowOnError, Init, std::tuple<Args...>, Ret...>(
             std::forward<Init>(init), std::move(args)...);
     }
@@ -324,9 +324,9 @@ namespace detail {
             timer_.expires_from_now(delay);
         }
 
-        auto operator co_await() -> ImmediateAwaitable auto
+        auto operator co_await() -> Awaiter auto
         {
-            return GetAwaitable(timer_.async_wait(asio_awaitable));
+            return GetAwaiter(timer_.async_wait(asio_awaitable));
         }
 
     private:

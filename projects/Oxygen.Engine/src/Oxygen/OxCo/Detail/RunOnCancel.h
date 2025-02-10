@@ -8,7 +8,7 @@
 
 #include "Oxygen/Base/Unreachable.h"
 #include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
+#include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 
 #include <utility>
 
@@ -18,18 +18,18 @@ class Executor;
 
 namespace detail {
     /// A utility class kicking off an awaitable upon cancellation.
-    template <class T>
+    template <class Awaitable>
     class RunOnCancel {
     public:
-        explicit RunOnCancel(T&& awaitable) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
-            : adapter_(std::forward<T>(awaitable))
+        explicit RunOnCancel(Awaitable&& awaitable) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+            : awaiter_(std::forward<Awaitable>(awaitable))
         {
         }
 
         // ReSharper disable CppMemberFunctionMayBeStatic
         void await_set_executor(Executor* ex) noexcept
         {
-            adapter_.await_set_executor(ex);
+            awaiter_.await_set_executor(ex);
         }
 
         [[nodiscard]] auto await_ready() const noexcept { return false; }
@@ -53,23 +53,23 @@ namespace detail {
             // it as "resume the handle ourselves, then return false" in
             // order to make sure await_must_resume() gets called to check
             // for exceptions.
-            if (adapter_.await_ready()) {
+            if (awaiter_.await_ready()) {
                 h.resume();
             } else {
-                adapter_.await_suspend(h).resume();
+                awaiter_.await_suspend(h).resume();
             }
             return false;
         }
         auto await_must_resume() const noexcept
         {
-            adapter_.await_resume(); // terminate() on any pending exception
+            awaiter_.await_resume(); // terminate() on any pending exception
             return std::false_type {};
         }
         // ReSharper restore CppMemberFunctionMayBeStatic
 
     protected:
         // NOLINTNEXTLINE(*-non-private-member-variables-in-classes)
-        [[no_unique_address]] mutable AwaitableAdapter<T> adapter_;
+        [[no_unique_address]] mutable SanitizedAwaiter<Awaitable> awaiter_;
         // NOLINTNEXTLINE(*-non-private-member-variables-in-classes)
         bool cancel_pending_ = false;
     };

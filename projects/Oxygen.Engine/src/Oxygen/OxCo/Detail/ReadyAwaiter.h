@@ -16,11 +16,11 @@ namespace oxygen::co::detail {
 /// A non-cancellable awaitable which is immediately ready, producing a
 /// value of type T. It can also be implicitly converted to a `Co<T>`.
 template <class T>
-class ReadyAwaitable {
+class ReadyAwaiter {
 public:
     // No move, we want a reference to the value.
     // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-    explicit ReadyAwaitable(T&& value)
+    explicit ReadyAwaiter(T&& value)
         : value_(std::forward<T>(value))
     {
     }
@@ -45,7 +45,7 @@ private:
 };
 
 template <>
-class ReadyAwaitable<void> {
+class ReadyAwaiter<void> {
 public:
     [[nodiscard]] auto await_early_cancel() const noexcept { return false; }
     [[nodiscard]] auto await_ready() const noexcept { return true; }

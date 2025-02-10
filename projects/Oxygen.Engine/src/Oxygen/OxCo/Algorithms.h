@@ -69,7 +69,7 @@ auto AnyOf(Ts&&... awaitables) -> Awaitable auto
 {
     static_assert(
         sizeof...(Ts) == 0
-            || (detail::Cancellable<detail::AwaitableType<Ts>> || ...),
+            || (detail::Cancellable<detail::AwaiterType<Ts>> || ...),
         "AnyOf() makes no sense if all awaitables are non-cancellable");
 
     return MakeAwaitable<detail::AnyOfMux<Ts...>>(std::forward<Ts>(awaitables)...);

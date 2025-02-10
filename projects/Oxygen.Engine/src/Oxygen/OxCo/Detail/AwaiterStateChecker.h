@@ -10,24 +10,24 @@
 
 // ReSharper disable CppMemberFunctionMayBeStatic
 
-#if !defined(OXCO_AWAITABLE_STATE_DEBUG)
+#if !defined(OXCO_AWAITER_STATE_DEBUG)
 namespace oxygen::co::detail {
 
-//! A runtime validator for the awaitable state machine.
+//! A runtime validator for the awaiter state machine.
 /*!
  This version should compile to nothing and be empty. The version in the other
- branch, when `OXCO_AWAITABLE_STATE_DEBUG` is defined, has the actual checking
+ branch, when `OXCO_AWAITER_STATE_DEBUG` is defined, has the actual checking
  logic.
 
  These are all noexcept so that any exceptions thrown immediately crash the
  program.
  */
-struct AwaitableStateChecker {
-    // Mark the end of using this checker to process a particular awaitable.
-    // Not necessary if it only handles one awaitable during its lifetime.
+struct AwaiterStateChecker {
+    // Mark the end of using this checker to process a particular awaiter.
+    // Not necessary if it only handles one awaiter during its lifetime.
     void Reset() noexcept { }
 
-    // Like reset(), but don't check that the awaitable is in a valid state
+    // Like reset(), but don't check that the awaiter is in a valid state
     // to abandon.
     void ForceReset() { }
 
@@ -66,7 +66,7 @@ struct AwaitableStateChecker {
 };
 } // namespace oxygen::co::detail
 
-#else // defined(OXCO_AWAITABLE_STATE_DEBUG)
+#else // defined(OXCO_AWAITER_STATE_DEBUG)
 #  include "Oxygen/Base/Logging.h"
 #  include "Oxygen/Base/Macros.h"
 #  include "Oxygen/Base/Unreachable.h"
@@ -74,10 +74,10 @@ struct AwaitableStateChecker {
 
 namespace oxygen::co::detail {
 
-struct AwaitableStateChecker : ProxyFrame {
+struct AwaiterStateChecker : ProxyFrame {
     // See doc/02_adapting.md for much more detail on this state machine.
     enum class State : uint8_t {
-        kInitial, // We haven't done anything with the awaitable yet
+        kInitial, // We haven't done anything with the awaiter yet
         kNotReady, // We called await_ready() and it returned false
         kInitialCxlPend, // Initial + await_early_cancel() returned false
         kCancelPending, // NotReady + await_early_cancel() returned false
@@ -94,10 +94,10 @@ struct AwaitableStateChecker : ProxyFrame {
     bool has_executor = false;
     mutable State state = State::kInitial;
 
-    AwaitableStateChecker()
+    AwaiterStateChecker()
     {
         this->resume_fn = +[](CoroutineFrame* frame) {
-            const auto* self = static_cast<AwaitableStateChecker*>(frame); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+            const auto* self = static_cast<AwaiterStateChecker*>(frame); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
             switch (self->state) {
             case State::kRunning:
                 self->state = State::kReady;
@@ -120,10 +120,10 @@ struct AwaitableStateChecker : ProxyFrame {
             self->real_handle.resume();
         };
     }
-    ~AwaitableStateChecker() { Reset(); }
+    ~AwaiterStateChecker() { Reset(); }
 
-    OXYGEN_DEFAULT_COPYABLE(AwaitableStateChecker)
-    OXYGEN_DEFAULT_MOVABLE(AwaitableStateChecker)
+    OXYGEN_DEFAULT_COPYABLE(AwaiterStateChecker)
+    OXYGEN_DEFAULT_MOVABLE(AwaiterStateChecker)
 
     void Reset() noexcept
     {
@@ -262,4 +262,4 @@ struct AwaitableStateChecker : ProxyFrame {
 };
 } // namespace oxygen::co::detail
 
-#endif // defined(OXCO_AWAITABLE_STATE_DEBUG)
+#endif // defined(OXCO_AWAITER_STATE_DEBUG)

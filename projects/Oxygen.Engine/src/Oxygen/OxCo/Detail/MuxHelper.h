@@ -8,11 +8,11 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Unreachable.h"
-#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/Optional.h"
 #include "Oxygen/OxCo/Detail/PointerBits.h"
 #include "Oxygen/OxCo/Detail/ProxyFrame.h"
 #include "Oxygen/OxCo/Detail/Result.h"
+#include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 
 #include <optional>
 
@@ -65,7 +65,7 @@ public:
         }
     }
 
-    static auto IsSkippable() { return Skippable<AwaitableType<Aw>>; }
+    static auto IsSkippable() { return Skippable<AwaiterType<Aw>>; }
 
     void SetExecutor(Executor* ex) noexcept
     {
@@ -344,7 +344,7 @@ private:
     // defined yet, so use `coroutine_handle` for alignment.
     PointerBits<MuxT, State, kStateWidth, alignof(Handle)> mux_ {};
 
-    AwaitableAdapter<Aw> awaitable_ {};
+    SanitizedAwaiter<Aw> awaitable_ {};
     // NOLINTNEXTLINE(*-avoid-c-arrays)
     alignas(StorageType) char storage_[sizeof(StorageType)] {};
 };
