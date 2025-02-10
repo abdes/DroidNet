@@ -11,7 +11,7 @@
 
 namespace oxygen::co {
 
-//! A wait queue, entered when its `Awaitable` is awaited with `co_await`.
+//! A wait queue, entered when its `Awaiter` is awaited with `co_await`.
 /*!
  To enter `co_await parking_lot.Park();`. Once parked, the coroutine is suspended
  until explicitly resumed by calling `UnParkOne()` or `UnParkAll()`.
@@ -19,7 +19,7 @@ namespace oxygen::co {
 class ParkingLot : public detail::ParkingLotImpl<ParkingLot> {
 public:
     using Base = ParkingLotImpl;
-    class Awaitable final : public Parked {
+    class Awaiter final : public Parked {
     public:
         using Parked::Parked;
         // ReSharper disable CppMemberFunctionMayBeStatic
@@ -30,11 +30,11 @@ public:
         // ReSharper restore CppMemberFunctionMayBeStatic
     };
 
-    //! Returns an `Awaitable` which, when `co_await`'ed, suspends the caller
+    //! Returns an `Awaiter` which, when `co_await`'ed, suspends the caller
     //! until any of `UnPark()` or `UnParkAll()` methods are called.
     [[nodiscard]] auto Park()
     {
-        return Awaitable(*this);
+        return Awaiter(*this);
     }
 
     using Base::Empty;
@@ -43,6 +43,6 @@ public:
     using Base::UnParkOne;
 };
 
-static_assert(Awaitable<ParkingLot::Awaitable>);
+static_assert(Awaiter<ParkingLot::Awaiter>);
 
 } // namespace oxygen::co

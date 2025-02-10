@@ -10,35 +10,35 @@
 
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/AwaitFn.h"
-#include "Oxygen/OxCo/Detail/GetAwaitable.h"
+#include "Oxygen/OxCo/Detail/GetAwaiter.h"
 
 namespace oxygen::co::detail {
 
 // A common part of NonCancellableAdapter and DisposableAdapter.
-// Note: all three are meant to be used together with AwaitableMaker,
+// Note: all three are meant to be used together with AwaiterMaker,
 // so they don't store the object they have been passed.
 template <class T>
 class CancellableAdapterBase {
 protected:
-    using Aw = AwaitableType<T>;
-    Aw awaitable_;
+    using Awaiter = AwaiterType<T>;
+    Awaiter awaiter_;
 
 public:
     explicit CancellableAdapterBase(T&& object)
-        : awaitable_(GetAwaitable(std::forward<T>(object)))
+        : awaiter_(GetAwaiter(std::forward<T>(object)))
     {
     }
 
     void await_set_executor(Executor* ex) noexcept
     {
-        AwaitSetExecutor(awaitable_, ex);
+        AwaitSetExecutor(awaiter_, ex);
     }
 
-    bool await_ready() const noexcept { return awaitable_.await_ready(); }
-    auto await_suspend(Handle h) { return awaitable_.await_suspend(h); }
+    bool await_ready() const noexcept { return awaiter_.await_ready(); }
+    auto await_suspend(Handle h) { return awaiter_.await_suspend(h); }
     decltype(auto) await_resume()
     {
-        return std::forward<Aw>(awaitable_).await_resume();
+        return std::forward<Awaiter>(awaiter_).await_resume();
     }
 };
 

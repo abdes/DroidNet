@@ -49,11 +49,11 @@ public:
     // Abortable if the mux completes when its first awaitable does
     static constexpr auto IsAbortable() -> bool
     {
-        return Self::kDoneOnFirstReady && Abortable<AwaitableType<Awaitable>>;
+        return Self::kDoneOnFirstReady && Abortable<AwaiterType<Awaitable>>;
     }
     static constexpr auto IsSkippable() -> bool
     {
-        return Skippable<AwaitableType<Awaitable>>;
+        return Skippable<AwaiterType<Awaitable>>;
     }
 
     [[nodiscard]] auto Size() const { return count_; }
@@ -194,7 +194,7 @@ private:
 template <class Range>
 class AnyOfRange : public MuxRange<AnyOfRange<Range>, Range> {
     using Item = decltype(*std::declval<Range>().begin());
-    static_assert(Cancellable<AwaitableType<Item>>,
+    static_assert(Cancellable<AwaiterType<Item>>,
         "anyOf() makes no sense for non-cancellable awaitables");
 
 public:

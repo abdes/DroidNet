@@ -11,23 +11,23 @@
 namespace oxygen::co::detail {
 
 //! @{
-//! Wrappers around await_*() awaitable functions
+//! Wrappers around await_*() awaiter functions
 
 //! A sanitized version of `await_suspend()` which always returns a Handle.
-template <class Aw, class Promise>
-auto AwaitSuspend(Aw&& awaitable, CoroutineHandle<Promise> h) -> Handle
+template <class Awaiter, class Promise>
+auto AwaitSuspend(Awaiter&& awaiter, CoroutineHandle<Promise> h) -> Handle
 {
-    // Note: Aw is unconstrained here, as an awaitable requiring being
+    // Note: Awaiter is unconstrained here, as an awaiter requiring being
     // rvalue-qualified is still passed by lvalue (we're not consuming
     // them until `await_resume()`).
-    using RetType = decltype(std::forward<Aw>(awaitable).await_suspend(h));
+    using RetType = decltype(std::forward<Awaiter>(awaiter).await_suspend(h));
     if constexpr (std::is_same_v<RetType, void>) {
-        std::forward<Aw>(awaitable).await_suspend(h);
+        std::forward<Awaiter>(awaiter).await_suspend(h);
         return std::noop_coroutine();
     } else if constexpr (std::is_convertible_v<RetType, Handle>) {
-        return std::forward<Aw>(awaitable).await_suspend(h);
+        return std::forward<Awaiter>(awaiter).await_suspend(h);
     } else {
-        if (std::forward<Aw>(awaitable).await_suspend(h)) {
+        if (std::forward<Awaiter>(awaiter).await_suspend(h)) {
             return std::noop_coroutine();
         }
         return h;
@@ -35,47 +35,47 @@ auto AwaitSuspend(Aw&& awaitable, CoroutineHandle<Promise> h) -> Handle
 }
 
 //! A sanitized version of `await_early_cancel()` which defaults to `true`.
-template <class Aw>
-auto AwaitEarlyCancel(Aw& awaitable) noexcept
+template <class Awaiter>
+auto AwaitEarlyCancel(Awaiter& awaiter) noexcept
 {
-    if constexpr (CustomizesEarlyCancel<Aw>) {
-        return awaitable.await_early_cancel();
+    if constexpr (CustomizesEarlyCancel<Awaiter>) {
+        return awaiter.await_early_cancel();
     } else {
         return std::true_type {};
     }
 }
 
 //! A sanitized version of `await_cancel()` which defaults to `false`.
-template <class Aw>
-auto AwaitCancel(Aw& awaitable, Handle h) noexcept
+template <class Awaiter>
+auto AwaitCancel(Awaiter& awaiter, Handle h) noexcept
 {
-    if constexpr (Cancellable<Aw>) {
-        return awaitable.await_cancel(h);
+    if constexpr (Cancellable<Awaiter>) {
+        return awaiter.await_cancel(h);
     } else {
         return std::false_type {};
     }
 }
 
 //! A sanitized version of `await_must_resume()` which defaults to `true` if the
-//! awaitable is not cancellable.
-template <class Aw>
-auto AwaitMustResume(const Aw& awaitable) noexcept
+//! awaiter is not cancellable.
+template <class Awaiter>
+auto AwaitMustResume(const Awaiter& awaiter) noexcept
 {
-    if constexpr (CustomizesMustResume<Aw>) {
-        return awaitable.await_must_resume();
-    } else if constexpr (CancelAlwaysSucceeds<Aw>) {
+    if constexpr (CustomizesMustResume<Awaiter>) {
+        return awaiter.await_must_resume();
+    } else if constexpr (CancelAlwaysSucceeds<Awaiter>) {
         return std::false_type {};
     } else {
-        static_assert(!Cancellable<Aw>);
+        static_assert(!Cancellable<Awaiter>);
         return std::true_type {};
     }
 }
 
-template <class Aw>
-void AwaitSetExecutor(Aw& awaitable, Executor* ex) noexcept
+template <class Awaiter>
+void AwaitSetExecutor(Awaiter& awaiter, Executor* ex) noexcept
 {
-    if constexpr (NeedsExecutor<Aw>) {
-        awaitable.await_set_executor(ex);
+    if constexpr (NeedsExecutor<Awaiter>) {
+        awaiter.await_set_executor(ex);
     }
 }
 

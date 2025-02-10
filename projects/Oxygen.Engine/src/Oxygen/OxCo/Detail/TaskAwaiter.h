@@ -14,33 +14,34 @@ namespace oxygen::co::detail {
 
 //! Serves as the _awaitable_ and _awaiter_ for an async task. Returned by
 //! `Co<T>::operator co_await()`.
-//! \tparam T The type of the result produced by the task.
 /*!
+ \tparam T The type of the result produced by the task.
+
  This class is the ultimate entry point to manipulate the suspension,
  resumption, cancellation and result of an async task, and can also serve as the
  parent of another async task.
 */
 template <class T>
-class TaskAwaitable final : public TaskParent<T> {
+class TaskAwaiter final : public TaskParent<T> {
 public:
-    //! Creates an instance of `TaskAwaitable` that is not associated with any
+    //! Creates an instance of `TaskAwaiter` that is not associated with any
     //! promise.
-    TaskAwaitable() = default;
+    TaskAwaiter() = default;
 
-    explicit TaskAwaitable(Promise<T>* promise) noexcept
+    explicit TaskAwaiter(Promise<T>* promise) noexcept
         : promise_(promise)
     {
     }
 
-    OXYGEN_MAKE_NON_COPYABLE(TaskAwaitable)
-    OXYGEN_DEFAULT_MOVABLE(TaskAwaitable)
+    OXYGEN_MAKE_NON_COPYABLE(TaskAwaiter)
+    OXYGEN_DEFAULT_MOVABLE(TaskAwaiter)
 
     //! Destructor.
     /*!
-     \note Deletion only allowed through a pointer to `TaskAwaitable`. All base
+     \note Deletion only allowed through a pointer to `TaskAwaiter`. All base
            classes have a protected or private (with friend) destructor.
     */
-    ~TaskAwaitable() = default;
+    ~TaskAwaiter() = default;
 
     //! Suspends the calling coroutine, starts the promise and arranges for
     //! proper continuation, after it completes or gets cancelled.
@@ -60,8 +61,8 @@ public:
     //! Retrieves the result of the async operation or re-throws an exception
     //! if the task failed or was cancelled.
     /*!
-     This method is called when the awaitable resumes execution after the task
-     has completed. Calling `Value()` on the result will either return a valid
+     This method is called when the awaiter resumes execution after the task has
+     completed. Calling `Value()` on the result will either return a valid
      result of type `T` or throw an exception if the task failed to execute
      properly or was cancelled.
     */
@@ -70,13 +71,13 @@ public:
         return std::move(this->result_).Value();
     }
 
-    //! Checks if the awaitable is ready with a result now, hence allowing to
+    //! Checks if the awaiter is ready with a result now, hence allowing to
     //! completely bypass the costly suspension and resumption of the async
     //! coroutine.
     [[nodiscard]] auto await_ready() const noexcept
     {
         // NOLINTNEXTLINE(*-pro-type-const-cast)
-        return promise_->CheckImmediateResult(const_cast<TaskAwaitable*>(this));
+        return promise_->CheckImmediateResult(const_cast<TaskAwaiter*>(this));
     }
 
     //! Sets the executor for the associated promise.
@@ -93,14 +94,14 @@ public:
         promise_->SetExecutor(ex);
     }
 
-    //! Requests cancellation of the operation represented by this awaitable
+    //! Requests cancellation of the operation represented by this awaiter
     //! before `await_suspend()` has been called. This may be called either
     //! before or after `await_ready()`, and regardless of the value returned by
     //! `await_ready()`.
     /*!
         \return By default, we allow a cancellation point before any execution
-        of the awaitable. We always returns `false` to indicate that from the
-        awaitable point of view, we requested the cancellation, but it is
+        of the awaiter. We always returns `false` to indicate that from the
+        awaiter point of view, we requested the cancellation, but it is
         important to start the operation and let it decide how to handle the
         cancellation request.
 
@@ -113,7 +114,7 @@ public:
     }
 
     //!  Requests cancellation of an in-progress operation represented by this
-    //!  awaitable.
+    //!  awaiter.
     /*!
      We always return `false` (a boolean value) to indicate that cancellation is
      in progress and its completion will be signaled by resuming the provided
@@ -158,7 +159,7 @@ private:
     // we manage the state of async tasks, and is not intended to be used
     // directly from client code. Hence, we are intentionally making the
     // implementation of that interface private, communicating that we do not
-    // want you to use the interface directly on `TaskAwaitable` objects.
+    // want you to use the interface directly on `TaskAwaiter` objects.
 
     //! Called when the task completes with an exception. Stores the exception
     //! in the internal `Result<T>` object.
@@ -180,7 +181,7 @@ private:
      \returns A coroutine handle to chain execute to (or std::noop_coroutine()).
 
      Resets the promise pointer to `nullptr` to indicate that no further
-     operation is expected on this awaitable.
+     operation is expected on this awaiter.
     */
     auto Continuation(BasePromise* /*unused*/) noexcept -> Handle override
     {

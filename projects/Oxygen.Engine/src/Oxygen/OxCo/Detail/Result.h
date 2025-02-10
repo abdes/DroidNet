@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Detail/GetAwaitable.h"
+#include "Oxygen/OxCo/Detail/GetAwaiter.h"
 #include "Oxygen/OxCo/TaskCancelledException.h"
 
 #include <exception>
@@ -99,7 +99,7 @@ template <class T>
 using ReturnType = std::conditional_t<std::is_same_v<T, void>, Void, T>;
 
 template <class Aw>
-using AwaitableReturnType = ReturnType<decltype(std::declval<AwaitableType<Aw>>().await_resume())>;
+using AwaitableReturnType = ReturnType<decltype(std::declval<AwaiterType<Aw>>().await_resume())>;
 
 //! A type that can hold the result of an asynchronous operation
 /*!

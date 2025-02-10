@@ -112,9 +112,9 @@ class TaskStarted;
 */
 class Nursery : /*private*/ detail::TaskParent<void> {
     template <class Ret>
-    class StartAwaitableBase;
+    class StartAwaiterBase;
     template <class Ret, class Callable, class... Args>
-    class StartAwaitable;
+    class StartAwaiter;
     template <class Ret>
     friend class TaskStarted;
     friend auto OpenNursery(Nursery*&, TaskStarted<>) -> Co<>;
@@ -193,9 +193,9 @@ public:
 
 protected:
     template <class NurseryT>
-    class Awaitable;
+    class JoinAwaiter;
     template <class Derived>
-    class ParentAwaitable;
+    class ParentAwaiter;
 
     Nursery() = default;
     Nursery(Nursery&&) = default;
@@ -230,7 +230,7 @@ protected:
     void Adopt(detail::BasePromise* promise);
 
     template <class Ret>
-    static auto MakeTaskStarted(StartAwaitableBase<Ret>* parent) -> TaskStarted<Ret>
+    static auto MakeTaskStarted(StartAwaiterBase<Ret>* parent) -> TaskStarted<Ret>
     {
         return TaskStarted<Ret>(parent);
     }
@@ -312,7 +312,7 @@ template <class Ret>
 class TaskStarted {
     using ResultType = Ret;
 
-    explicit TaskStarted(Nursery::StartAwaitableBase<Ret>* parent)
+    explicit TaskStarted(Nursery::StartAwaiterBase<Ret>* parent)
         : parent_(parent)
     {
     }
@@ -347,7 +347,7 @@ public:
     explicit(false) TaskStarted(detail::TaskStartedTag); // not defined
 
 protected:
-    Nursery::StartAwaitableBase<Ret>* parent_ = nullptr;
+    Nursery::StartAwaiterBase<Ret>* parent_ = nullptr;
 };
 
 //! Usable for implementing live objects, if the only things needed
@@ -371,24 +371,24 @@ protected:
 auto OpenNursery(Nursery*& ptr, TaskStarted<> started = {}) -> Co<>;
 
 template <class Ret>
-class Nursery::StartAwaitableBase : protected TaskParent {
+class Nursery::StartAwaiterBase : protected TaskParent {
     friend TaskStarted<Ret>;
 
 public:
-    explicit StartAwaitableBase(Nursery* nursery)
+    explicit StartAwaiterBase(Nursery* nursery)
         : nursery_(nursery)
     {
     }
 
-    StartAwaitableBase(StartAwaitableBase&& rhs) noexcept
+    StartAwaiterBase(StartAwaiterBase&& rhs) noexcept
         : nursery_(std::exchange(rhs.nursery_, nullptr))
     {
         DCHECK_F(handle_ == NoOpHandle() && !promise_);
     }
 
-    auto operator=(StartAwaitableBase&&) -> StartAwaitableBase& = delete;
+    auto operator=(StartAwaiterBase&&) -> StartAwaiterBase& = delete;
 
-    OXYGEN_MAKE_NON_COPYABLE(StartAwaitableBase)
+    OXYGEN_MAKE_NON_COPYABLE(StartAwaiterBase)
 
 private:
     void StoreSuccess() override
@@ -432,13 +432,13 @@ private:
             // TaskStarted<> was invoked before promise construction,
             // so there's nothing to hand off to the nursery yet.
             //
-            // StartAwaitable::await_suspend() will take care of submitting
+            // StartAwaiter::await_suspend() will take care of submitting
             // the promise properly when it becomes available.
         }
     }
 
 protected:
-    ~StartAwaitableBase() = default;
+    ~StartAwaiterBase() = default;
 
     Nursery* nursery_;
     // Yes shadows the member in TaskParent<void>, but that's fine. The deign of
@@ -451,18 +451,18 @@ protected:
 };
 
 template <class Ret, class Callable, class... Args>
-class Nursery::StartAwaitable final : public StartAwaitableBase<Ret> {
+class Nursery::StartAwaiter final : public StartAwaiterBase<Ret> {
     friend Nursery;
 
 public:
-    StartAwaitable(StartAwaitable&&) = default;
-    auto operator=(StartAwaitable&&) -> StartAwaitable& = delete;
-    OXYGEN_MAKE_NON_COPYABLE(StartAwaitable)
+    StartAwaiter(StartAwaiter&&) = default;
+    auto operator=(StartAwaiter&&) -> StartAwaiter& = delete;
+    OXYGEN_MAKE_NON_COPYABLE(StartAwaiter)
 
     //! @{
-    //! Awaitable implementation.
-
+    //! Awaiter interface implementation.
     // ReSharper disable CppMemberFunctionMayBeStatic
+
     auto await_early_cancel() noexcept -> bool { return false; }
     [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
 
@@ -511,14 +511,14 @@ public:
     // ReSharper restore CppMemberFunctionMayBeStatic
     //! @}
 
-    ~StartAwaitable()
+    ~StartAwaiter()
     {
         if (this->nursery_) {
             std::apply(
                 [this](auto&&... args) {
                     this->nursery_->Start(
                         std::move(callable_), std::move(args)...,
-                        MakeTaskStarted(static_cast<StartAwaitableBase<Ret>*>(nullptr)));
+                        MakeTaskStarted(static_cast<StartAwaiterBase<Ret>*>(nullptr)));
                 },
                 std::move(args_));
         }
@@ -526,8 +526,8 @@ public:
 
 private:
     // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved) - perfect forwarding
-    StartAwaitable(Nursery* nursery, Callable&& callable, Args&&... args)
-        : StartAwaitableBase<Ret>(nursery)
+    StartAwaiter(Nursery* nursery, Callable&& callable, Args&&... args)
+        : StartAwaiterBase<Ret>(nursery)
         , callable_(std::forward<Callable>(callable))
         , args_(std::forward<Args>(args)...)
     {
@@ -675,10 +675,10 @@ auto Nursery::Start(Callable callable, Args... args) -> co::Awaitable auto
         using Sig = detail::CallableSignature<Callable>;
         using TaskStartedArg = typename Sig::template Arg<Sig::Arity - 1>;
         using ResultType = typename TaskStartedArg::ResultType;
-        return StartAwaitable<ResultType, Callable, Args...>(
+        return StartAwaiter<ResultType, Callable, Args...>(
             this, std::move(callable), std::move(args)...);
     } else {
-        return StartAwaitable<Ret, Callable, Args...>(this, std::move(callable),
+        return StartAwaiter<Ret, Callable, Args...>(this, std::move(callable),
             std::move(args)...);
     }
 }
@@ -771,7 +771,7 @@ inline auto Nursery::Continuation(detail::BasePromise* promise) noexcept -> deta
 }
 
 template <class Derived>
-class Nursery::ParentAwaitable {
+class Nursery::ParentAwaiter {
 
     [[nodiscard]] auto Self() -> Derived& { return static_cast<Derived&>(*this); }
     [[nodiscard]] auto Self() const -> const Derived& { return static_cast<const Derived&>(*this); }
@@ -801,30 +801,30 @@ public:
 
 private:
     // CRTP: Constructor is private, and Derived is a friend
-    ParentAwaitable() = default;
+    ParentAwaiter() = default;
     friend Derived;
 };
 
 template <class NurseryT>
-class Nursery::Awaitable
-    : public ParentAwaitable<Awaitable<NurseryT>> {
-    friend ParentAwaitable<Awaitable>;
+class Nursery::JoinAwaiter
+    : public ParentAwaiter<JoinAwaiter<NurseryT>> {
+    friend ParentAwaiter<JoinAwaiter>;
     friend NurseryT;
 
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     NurseryT& nursery_;
 
-    explicit Awaitable(NurseryT& nursery)
+    explicit JoinAwaiter(NurseryT& nursery)
         : nursery_(nursery)
     {
     }
 
 public:
-    ~Awaitable()
+    ~JoinAwaiter()
         requires(std::derived_from<NurseryT, Nursery>)
     = default;
-    OXYGEN_DEFAULT_MOVABLE(Awaitable)
-    OXYGEN_DEFAULT_COPYABLE(Awaitable)
+    OXYGEN_DEFAULT_MOVABLE(JoinAwaiter)
+    OXYGEN_DEFAULT_COPYABLE(JoinAwaiter)
 
     [[nodiscard]] auto await_ready() const noexcept { return nursery_.executor_ == nullptr; }
 
@@ -843,7 +843,7 @@ public:
 
 template <class Callable>
 class Nursery::Scope final : public detail::NurseryScopeBase,
-                             public ParentAwaitable<Scope<Callable>>,
+                             public ParentAwaiter<Scope<Callable>>,
                              /*private*/ TaskParent<detail::NurseryBodyRetVal> {
     class Impl final : public Nursery {
     public:
@@ -890,7 +890,7 @@ private:
         return nursery_.Continuation(promise);
     }
 
-    friend ParentAwaitable<Scope>; // so it can access nursery_
+    friend ParentAwaiter<Scope>; // so it can access nursery_
     [[no_unique_address]] Callable callable_;
     Impl nursery_;
 };
@@ -906,7 +906,7 @@ struct Nursery::Factory {
 namespace detail {
     class BackReferencedNursery final : public Nursery {
         friend auto co::OpenNursery(Nursery*&, TaskStarted<>) -> Co<>;
-        friend Awaitable<BackReferencedNursery>;
+        friend JoinAwaiter<BackReferencedNursery>;
 
         BackReferencedNursery(Executor* executor, Nursery*& backref)
             : backref_(backref)
@@ -923,7 +923,7 @@ namespace detail {
             return Nursery::Continuation(p);
         }
 
-        auto Join() -> co::Awaitable<void> auto { return Awaitable(*this); }
+        auto Join() -> co::Awaitable<void> auto { return JoinAwaiter(*this); }
 
         // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
         Nursery*& backref_;

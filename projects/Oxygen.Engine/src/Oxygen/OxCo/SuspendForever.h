@@ -13,7 +13,7 @@
 
 namespace oxygen::co {
 
-//! An awaitable similar to `std::suspend_always`, but with cancellation
+//! An awaiter similar to `std::suspend_always`, but with cancellation
 //! support.
 class SuspendForever {
 public:

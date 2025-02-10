@@ -55,6 +55,20 @@ protected:
         Handle handle_;
     };
 
+    OXYGEN_MAKE_NON_COPYABLE(ParkingLotImpl)
+    OXYGEN_DEFAULT_MOVABLE(ParkingLotImpl)
+
+    //! Return a pointer to the awaiter whose task `UnParkOne()` would wake, or
+    //! `nullptr` if there are no waiters currently. You can use its `UnPark()`
+    //! method to wake it and remove it from the list of waiters.
+    Parked* Peek()
+    {
+        if (!parked_.empty()) {
+            return &parked_.front();
+        }
+        return nullptr;
+    }
+
     //! Wake the oldest waiter, removing it from the list of waiters.
     void UnParkOne()
     {
@@ -89,8 +103,6 @@ protected:
 
 private:
     // CRTP: Constructors are private and the derived class is a friend.
-    OXYGEN_MAKE_NON_COPYABLE(ParkingLotImpl)
-    OXYGEN_DEFAULT_MOVABLE(ParkingLotImpl)
     ParkingLotImpl() = default;
     friend Self;
 
