@@ -197,7 +197,7 @@ namespace detail {
         {
         }
 
-        DirectAwaitable auto operator co_await() &&
+        ImmediateAwaitable auto operator co_await() &&
         {
             return AsioAwaitable<InitFn, ThrowOnError, Ret...>(
                 std::forward<InitFn>(initFn_));
@@ -257,7 +257,7 @@ namespace detail {
         {
         }
 
-        DirectAwaitable auto operator co_await() &&
+        ImmediateAwaitable auto operator co_await() &&
         {
             return AsioAwaitable<InitFn, ThrowOnError, Ret...>(std::move(initFn_));
         }
@@ -324,7 +324,7 @@ namespace detail {
             timer_.expires_from_now(delay);
         }
 
-        auto operator co_await() -> DirectAwaitable auto
+        auto operator co_await() -> ImmediateAwaitable auto
         {
             return GetAwaitable(timer_.async_wait(asio_awaitable));
         }
