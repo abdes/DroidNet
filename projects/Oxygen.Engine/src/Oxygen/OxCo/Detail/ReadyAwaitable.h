@@ -25,11 +25,11 @@ public:
     {
     }
 
-    [[nodiscard]] static auto await_early_cancel() noexcept { return false; }
-    [[nodiscard]] static auto await_ready() noexcept { return true; }
-    [[nodiscard]] static auto await_suspend(Handle /*unused*/) { return false; }
-    [[nodiscard]] static auto await_cancel(Handle /*unused*/) { return false; }
-    [[nodiscard]] static auto await_must_resume() noexcept { return true; }
+    [[nodiscard]] auto await_early_cancel() const noexcept { return false; }
+    [[nodiscard]] auto await_ready() const noexcept { return true; }
+    [[nodiscard]] auto await_suspend(Handle /*unused*/) { return false; }
+    [[nodiscard]] auto await_cancel(Handle /*unused*/) noexcept { return false; }
+    [[nodiscard]] auto await_must_resume() const noexcept { return true; }
     [[nodiscard]] auto await_resume() && -> T { return std::forward<T>(value_); }
 
     // ReSharper disable once CppNonExplicitConversionOperator
@@ -47,12 +47,12 @@ private:
 template <>
 class ReadyAwaitable<void> {
 public:
-    [[nodiscard]] static auto await_early_cancel() noexcept { return false; }
-    [[nodiscard]] static auto await_ready() noexcept { return true; }
-    [[nodiscard]] static auto await_suspend(Handle /*unused*/) { return false; }
-    [[nodiscard]] static auto await_cancel(Handle /*unused*/) { return false; }
-    [[nodiscard]] static auto await_must_resume() noexcept { return true; }
-    [[nodiscard]] static auto await_resume() { }
+    [[nodiscard]] auto await_early_cancel() const noexcept { return false; }
+    [[nodiscard]] auto await_ready() const noexcept { return true; }
+    [[nodiscard]] auto await_suspend(Handle /*unused*/) { return false; }
+    [[nodiscard]] auto await_cancel(Handle /*unused*/) noexcept { return false; }
+    [[nodiscard]] auto await_must_resume() const noexcept { return true; }
+    [[nodiscard]] auto await_resume() const noexcept { }
 
     // ReSharper disable once CppNonExplicitConversionOperator
     // NOLINTNEXTLINE(*-explicit-constructor, *-explicit-conversions)
