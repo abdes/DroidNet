@@ -75,9 +75,20 @@ public:
 
     ~Executor()
     {
-        // If this triggers, a reference to this executor was submitted to
-        // another executor, and we're likely to get a use-after-free soon.
-        DCHECK_F(!scheduled_);
+        if (scheduled_) {
+            // We had a call pending from another executor. Based on the
+            // invariant that we can't be destroyed with our own callbacks
+            // scheduled, we must not need that call anymore; the most likely
+            // way to hit this is by destroying an UnsafeNursery inside an async
+            // task, which deals with the pending callbacks using
+            // Executor::drain().
+            scheduled_->buffer_.ForEach([&](Task& task) {
+                if (task.second == this) {
+                    task.first = +[](void*) noexcept {};
+                    task.second = nullptr;
+                }
+            });
+        }
 
         DCHECK_F(buffer_.Empty());
 
@@ -151,16 +162,17 @@ public:
     */
     void RunSoon() noexcept // NOLINT(*-no-recursion)
     {
-        if (running_ != nullptr) {
-            // do nothing
-        } else if (Current() != nullptr && !scheduled_ && Current()->event_loop_id_ == event_loop_id_) {
-            scheduled_ = true;
-            Current()->RunSoon<Executor>(
-                +[](Executor* executor) noexcept {
-                    executor->RunOnce();
-                },
-                this);
+        if (running_ != nullptr || scheduled_ != nullptr) {
+            // Do nothing; our callbacks are already slated to run soon
+        } else if (Current() != nullptr &&
+                   Current()->event_loop_id_ == event_loop_id_) {
+            // Schedule the current executor to run our callbacks
+            scheduled_ = Current();
+            scheduled_->RunSoon(
+                    +[](Executor* ex) noexcept { ex->RunOnce(); }, this);
         } else {
+            // No current executor, or it's for a different event loop:
+            // run our callbacks immediately
             RunOnce();
         }
     }
@@ -190,7 +202,7 @@ public:
 private:
     void RunOnce() noexcept
     {
-        scheduled_ = false;
+        scheduled_ = nullptr;
         if (running_ == nullptr) {
 #if !defined(NDEBUG)
             LOG_SCOPE_F(1, "Executor running");
@@ -245,9 +257,9 @@ private:
 
     bool* running_ { nullptr };
 
-    //! Stores `true` if `RunOnce()` has been scheduled for execution in near
-    //! future.
-    bool scheduled_ { false };
+    //! Stores the pointer to an outer executor on which we've scheduled our
+    //! runOnce() to run soon, or nullptr if not scheduled.
+    Executor* scheduled_ = nullptr;
 };
 
 namespace detail {
