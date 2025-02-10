@@ -75,7 +75,7 @@ public:
 
     ~Executor()
     {
-        if (scheduled_) {
+        if (scheduled_ != nullptr) {
             // We had a call pending from another executor. Based on the
             // invariant that we can't be destroyed with our own callbacks
             // scheduled, we must not need that call anymore; the most likely
@@ -267,7 +267,11 @@ namespace detail {
         Executor* executor_ = nullptr;
 
     public:
+        //! @{
+        //! Implementation of the awaiter interface.
         // ReSharper disable CppMemberFunctionMayBeStatic
+        // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+
         void await_set_executor(Executor* executor) noexcept
         {
             executor_ = executor;
@@ -275,7 +279,10 @@ namespace detail {
         [[nodiscard]] auto await_ready() const noexcept -> bool { return executor_ != nullptr; }
         auto await_suspend(const Handle h) -> Handle { return h; }
         [[nodiscard]] auto await_resume() const -> Executor* { return executor_; }
-        // ReSharper restore CppMemberFunctionMayBeStatic
+
+        // ReSharper disable CppMemberFunctionMayBeStatic
+        // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+        //! @}
     };
 } // namespace detail
 

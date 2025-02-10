@@ -14,6 +14,7 @@
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Executor.h"
 
@@ -59,6 +60,7 @@ static constexpr detail::asio_awaitable_t<asio::executor, false>
 // Implementation
 
 namespace detail {
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes)
 
     template <bool ThrowOnError, class Init, class Args, class... Ret>
     class AsioAwaitable;
@@ -78,24 +80,23 @@ namespace detail {
             }
 
             using cancellation_slot_type = asio::cancellation_slot;
-            cancellation_slot_type get_cancellation_slot() const
+            [[nodiscard]] auto get_cancellation_slot() const -> cancellation_slot_type
             {
                 return aw_->cancelSig_.slot();
             }
         };
 
-        void done(Err ec, Ret... ret)
+        void done(const Err ec, Ret... ret)
         {
             ec_ = ec;
             ret_.emplace(std::forward<Ret>(ret)...);
             std::exchange(parent_, std::noop_coroutine())();
         }
 
-    protected:
         Err ec_;
         std::optional<std::tuple<Ret...>> ret_;
         Handle parent_;
-        DoneCB doneCB_;
+        DoneCB doneCB_ {};
         asio::cancellation_signal cancelSig_;
 
         template <bool, class, class, class...>
@@ -105,18 +106,27 @@ namespace detail {
     };
 
     template <class InitFn, bool ThrowOnError, class... Ret>
-    class AsioAwaiter : private AsioAwaiterBase<Ret...> {
+    class AsioAwaiter : /*private*/ AsioAwaiterBase<Ret...> {
         using Err = asio::error_code;
 
     public:
+        // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) - perfect forwarding
         explicit AsioAwaiter(InitFn&& initFn)
             : initFn_(std::forward<InitFn>(initFn))
         {
         }
 
-        AsioAwaiter(AsioAwaiter&&) = delete;
+        ~AsioAwaiter() = default;
 
-        bool await_ready() const noexcept { return false; }
+        OXYGEN_MAKE_NON_MOVEABLE(AsioAwaiter)
+        OXYGEN_MAKE_NON_COPYABLE(AsioAwaiter)
+
+        //! @{
+        //! Implementation of the awaiter interface.
+        // ReSharper disable CppMemberFunctionMayBeStatic
+        // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+
+        auto await_ready() const noexcept { return false; }
 
         void await_suspend(Handle h)
         {
@@ -149,16 +159,20 @@ namespace detail {
             }
         }
 
-        bool await_cancel(Handle) noexcept
+        auto await_cancel(Handle /*h*/) noexcept -> bool
         {
             this->cancelSig_.emit(asio::cancellation_type::all);
             return false;
         }
 
-        bool await_must_resume() const noexcept
+        auto await_must_resume() const noexcept -> bool
         {
             return this->ec_ != asio::error::operation_aborted;
         }
+
+        // ReSharper disable CppMemberFunctionMayBeStatic
+        // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+        //! @}
 
     private:
         [[no_unique_address]] InitFn initFn_;
@@ -173,6 +187,7 @@ namespace detail {
             [[no_unique_address]] Args args_;
 
             template <class... Ts>
+            // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) - perfect forwarding
             explicit InitFn(Init&& init, Ts&&... ts)
                 : init_(std::forward<Init>(init))
                 , args_(std::forward<Ts>(ts)...)
@@ -192,12 +207,13 @@ namespace detail {
 
     public:
         template <class... Ts>
+        // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) - perfect forwarding
         explicit AsioAwaitable(Init&& init, Ts&&... args)
             : initFn_(std::forward<Init>(init), std::forward<Ts>(args)...)
         {
         }
 
-        Awaiter auto operator co_await() &&
+        auto operator co_await() && -> Awaiter auto
         {
             return AsioAwaiter<InitFn, ThrowOnError, Ret...>(
                 std::forward<InitFn>(initFn_));
@@ -222,12 +238,15 @@ namespace detail {
         using DoneCB = typename AsioAwaiterBase<Ret...>::DoneCB;
 
         struct InitFnBase {
+            InitFnBase() = default;
             virtual ~InitFnBase() = default;
+            OXYGEN_DEFAULT_COPYABLE(InitFnBase)
+            OXYGEN_DEFAULT_MOVABLE(InitFnBase)
             virtual void operator()(DoneCB&) = 0;
         };
 
         template <class Impl>
-        struct InitFnImpl : InitFnBase {
+        struct InitFnImpl final : InitFnBase {
             explicit InitFnImpl(Impl&& impl)
                 : impl_(std::move(impl))
             {
@@ -241,7 +260,7 @@ namespace detail {
         struct InitFn {
             std::unique_ptr<InitFnBase> impl_;
             template <class Impl>
-            explicit InitFn(Impl&& impl)
+            explicit InitFn(Impl&& impl) // NOLINT(*-forwarding-reference-overload)
                 : impl_(std::make_unique<InitFnImpl<Impl>>(
                       std::forward<Impl>(impl)))
             {
@@ -252,12 +271,13 @@ namespace detail {
     public:
         template <class Init, class Args>
         explicit(false) TypeErasedAsioAwaitable(
+            // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) - moving content
             AsioAwaitable<ThrowOnError, Init, Args, Ret...>&& rhs)
             : initFn_(std::move(rhs.initFn_))
         {
         }
 
-        Awaiter auto operator co_await() &&
+        auto operator co_await() && -> Awaiter auto
         {
             return AsioAwaiter<InitFn, ThrowOnError, Ret...>(std::move(initFn_));
         }
@@ -266,11 +286,12 @@ namespace detail {
         InitFn initFn_;
     };
 
+    // NOLINTEND(*-non-private-member-variables-in-classes)
 } // namespace detail
 
 template <>
 struct EventLoopTraits<asio::io_context> {
-    static EventLoopID EventLoopId(asio::io_context& io)
+    static auto EventLoopId(asio::io_context& io) -> EventLoopID
     {
         return EventLoopID(&io);
     }
@@ -284,12 +305,10 @@ struct EventLoopTraits<asio::io_context> {
     static void Stop(asio::io_context& io) { io.stop(); }
 };
 
-} // namespace corral
-
-namespace asio {
+} // namespace oxygen::co
 
 template <class Executor, bool ThrowOnError, class X, class... Ret>
-class async_result<::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
+class asio::async_result<::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
     X(asio::error_code, Ret...)> {
 public:
     using return_type = ::oxygen::co::detail::TypeErasedAsioAwaitable<ThrowOnError,
@@ -301,16 +320,14 @@ public:
     template <class Init, class... Args>
     static auto initiate(
         Init&& init,
-        ::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError>,
+        ::oxygen::co::detail::asio_awaitable_t<Executor, ThrowOnError> /*unused*/,
         Args... args)
     {
         return ::oxygen::co::detail::AsioAwaitable<
             ThrowOnError, Init, std::tuple<Args...>, Ret...>(
             std::forward<Init>(init), std::move(args)...);
     }
-};
-
-} // namespace boost::asio
+}; // namespace asio
 
 namespace oxygen::co {
 namespace detail {

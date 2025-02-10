@@ -46,14 +46,15 @@ inline Awaitable<void> auto NoOp() // NOLINT(modernize-use-trailing-return-type)
 static constexpr detail::CoAwaitFactory<SuspendForever> kSuspendForever;
 static constexpr detail::CoAwaitFactory<Yield> kYield;
 
-/// A utility function which allows delayed construction of nonmoveable
-/// immediate awaitables.
-///
-/// The returned class is moveable (assuming the arguments are moveable),
-/// and has a one-shot `operator co_await() &&`, which will construct
-/// `T(forward<Args>(args...))` and return it.
+//! A utility function which allows delayed construction of non-moveable
+//! immediate awaitables.
+/*!
+ The returned class is moveable (assuming the arguments are moveable),
+ and has a one-shot `operator co_await() &&`, which will construct
+ `T(forward<Args>(args...))` and return it.
+*/
 template <ImmediateAwaitable T, class... Args>
-Awaitable auto MakeAwaitable(Args&&... args)
+auto MakeAwaitable(Args&&... args) -> Awaitable auto
 {
     return detail::AwaiterMaker<T, Args...>(std::forward<Args>(args)...);
 }
@@ -114,7 +115,7 @@ auto Disposable(Awaitable awaitable)
         return sem_.lock() | co::Then([]{
           ReallyDoSmth();
           return co::NoOp();
-        }
+        });
       }
     };
  \endcode

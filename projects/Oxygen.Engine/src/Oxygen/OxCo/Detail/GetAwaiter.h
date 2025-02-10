@@ -79,6 +79,7 @@ class AwaitableLambda {
     using AwaiterT = AwaiterType<TaskT>;
 
 public:
+    // ReSharper disable once CppPossiblyUninitializedMember - lazy init when appropriate
     explicit AwaitableLambda(Callable&& c) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
         : callable_(std::forward<Callable>(c))
     {

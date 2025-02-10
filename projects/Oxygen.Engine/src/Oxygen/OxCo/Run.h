@@ -7,7 +7,8 @@
 #pragma once
 
 #include "Oxygen/Base/NoInline.h"
-#include "Oxygen/Base/ReturnAddress.h"
+// ReSharper disable once CppUnusedIncludeDirective
+#include "Oxygen/Base/ReturnAddress.h" // used
 #include "Oxygen/OxCo/Detail/GetAwaiter.h"
 #include "Oxygen/OxCo/Detail/SanitizedAwaiter.h"
 #include "Oxygen/OxCo/Detail/TaskFrame.h"
