@@ -37,9 +37,9 @@ inline auto NoOpHandle()
 
 namespace oxygen::co {
 
+// Utility helpers for concepts below.
 namespace detail {
 
-    // Utility helpers for concepts below.
     template <class From, class... To>
     concept ConvertibleToAny = (std::convertible_to<From, To> || ...);
 
@@ -53,7 +53,7 @@ namespace detail {
     template <class T, class Ret>
     constexpr bool kThisIsAwaitableTrustMe = false;
 
-} // namespace oxygen::co::detail
+} // namespace detail
 
 //! Defined the requirements of an Awaiter type as expected by the C++20
 //! coroutine specification.
@@ -62,7 +62,9 @@ namespace detail {
  to control the suspension and resumption of the coroutine. It's obtained from
  the `Awaitable` by calling the operator `co_await` on it.
 
- The awaiter provides specific methods:
+ At a minimum, the awaiter provides the 3 specific methods below, and can be
+ optionally extended with other methods to support cancellation, and other
+ mechanisms.
 
    - `await_ready()->bool`: Determines whether the coroutine should be
      suspended.
@@ -81,88 +83,249 @@ namespace detail {
      its result is the result of the whole `co_await expr` expression.
 */
 template <typename T, class Ret = detail::Unspecified>
-concept Awaiter = requires(T t, const T ct, std::coroutine_handle<> h) {
-    { ct.await_ready() } -> std::same_as<bool>;
-    { t.await_suspend(h) } -> detail::ConvertibleToAny<void, bool, detail::Handle>;
-    { std::forward<T>(t).await_resume() };
-} && (std::is_same_v<Ret, detail::Unspecified> || requires(T t) {
-    { std::forward<T>(t).await_resume() } -> std::convertible_to<Ret>;
-});
+concept Awaiter = requires(T& t, const T& ct, detail::Handle h) {
+    // Must have a method to check if immediate execution is possible, and which
+    // is invocable on `const` objects
+    requires requires {
+        { ct.await_ready() } -> std::same_as<bool>;
+    };
 
-//! Concept to define Promise type requirements with return type Ret.
-template <typename P, typename Ret>
-concept PromiseType = requires(P promise) {
-    { promise.get_return_object() };
-    { promise.initial_suspend() } -> Awaiter;
-    { promise.final_suspend() } -> Awaiter;
-    { promise.unhandled_exception() } -> std::same_as<void>;
-} && ((std::same_as<Ret, void> && requires(P promise) {
-    { promise.return_void() } -> std::same_as<void>;
-}) || (!std::same_as<Ret, void> && requires(P promise) {
-    { promise.return_value(std::declval<Ret>()) } -> std::same_as<void>;
-}));
+    // Must provide suspension behavior
+    requires requires {
+        { t.await_suspend(h) };
+        requires detail::ConvertibleToAny<
+            decltype(t.await_suspend(h)),
+            void, // Return to caller
+            bool, // True: return to caller, False: resume current
+            detail::Handle // Resume specified coroutine
+            >;
+    };
 
-//! Defined the requirements of an Awaitable type obtained directly from the
-//! `expr` in `co_await expr` when `expr` is produced by an initial suspend
-//! point, a final suspend point, or a yield expression.
-template <typename T, class Ret = detail::Unspecified>
-concept DirectAwaitable = Awaiter<T, Ret>;
+    // Must provide a way to obtain the result
+    requires requires {
+        { std::forward<T>(t).await_resume() };
+    };
 
-template <typename T, class Ret = detail::Unspecified>
-concept MemberCoAwaitAwaitable = requires(T t) {
-    { std::forward<T>(t).operator co_await() } -> DirectAwaitable<Ret>;
+    // If return type is specified, must be convertible to it
+    requires std::is_same_v<Ret, detail::Unspecified>
+        || std::convertible_to<decltype(std::forward<T>(t).await_resume()), Ret>;
 };
 
+//! Defines the requirements of a Promise type as specified by the C++20
+//! coroutine specification.
+/*!
+ A Promise type represents the link between the coroutine and its caller. It
+ defines how the coroutine behaves at key points in its lifetime and how it
+ communicates results back to its caller.
+
+ The Promise type must provide these core methods to control coroutine behavior:
+
+   - `get_return_object()`: Called at coroutine creation to produce the value
+     returned to the caller. This return object typically holds the coroutine
+     handle and becomes the return value of the coroutine function when first
+     called.
+
+   - `initial_suspend()`: Called when the coroutine first starts, before
+     executing any user code. Returns an Awaiter that determines if the
+     coroutine should suspend immediately after creation (true) or continue
+     executing (false).
+
+   - `final_suspend() noexcept`: Called when the coroutine completes, either
+     normally or due to an exception. Returns an Awaiter that determines if/how
+     the coroutine should suspend before destruction. Must be noexcept.
+
+   - `unhandled_exception()`: Called if an exception escapes the coroutine body.
+     Responsible for storing or handling the active exception.
+
+ Additionally, based on the coroutine's return type, exactly one of:
+
+   - For void-returning coroutines: `return_void()`: Called when `co_return;` is
+     executed without a value.
+
+   - For value-returning coroutines: `return_value(T)`: Called when `co_return
+     value;` is executed. The argument type must be convertible to the
+     coroutine's return type.
+*/
+template <typename P, typename Ret>
+concept PromiseType = requires(P promise) {
+    // Core promise requirements - these control coroutine lifetime
+    requires requires {
+        // Must provide a return object constructor
+        { promise.get_return_object() };
+
+        // Must provide suspension points with specific semantics:
+        // Controls initial execution.
+        { promise.initial_suspend() } -> Awaiter;
+        // Controls destruction, and is required by the standard to be noexcept
+        { promise.final_suspend() } noexcept -> Awaiter;
+
+        // Must handle exceptions that escape the coroutine body
+        { promise.unhandled_exception() } -> std::same_as<void>;
+    };
+
+    // Return value handling - exactly one of these must be valid based on Ret
+    requires(
+        // Case 1: Void-returning coroutines must handle empty co_return
+        (std::same_as<Ret, void> && requires {
+            { promise.return_void() } -> std::same_as<void>;
+        }) ||
+        // Case 2: Value-returning coroutines must handle co_return value
+        (!std::same_as<Ret, void> && requires {
+            { promise.return_value(std::declval<Ret>()) } -> std::same_as<void>;
+        }));
+};
+
+//! Defines the requirements for an expression that can be immediately co_awaited
+//! without any intermediate transformations.
+/*!
+ An ImmediateAwaitable represents an expression that directly satisfies the awaiter
+ requirements without requiring any transformation. These are typically:
+ - Objects that themselves implement the Awaiter interface
+ - Return values from initial_suspend() and final_suspend()
+ - Return values from yield_value expressions
+
+ This represents the most basic form of awaitable expression in the C++20
+ coroutine model, where the expression itself already satisfies the awaiter
+ protocol without needing operator co_await().
+*/
 template <typename T, class Ret = detail::Unspecified>
-concept GlobalCoAwaitAwaitable = requires(T t) {
+concept ImmediateAwaitable = Awaiter<T, Ret>;
+
+//! Defines the requirements for a type that provides a member co_await operator.
+/*!
+ A type satisfies `MemberCoAwaitAwaitable` if it provides a member operator
+ `co_await()` that returns an Awaiter. This is one of the three standard ways in
+ C++20 to make a type awaitable.
+
+ When the `co_await` operator is applied to an expression of this type, the
+ compiler will:
+   1. Call the member operator `co_await()`
+   2. Use the returned Awaiter to control the coroutine's suspension
+
+ __Example__
+ \code{cpp}
+ struct MyAwaitable {
+     auto operator co_await() {
+         return some_awaiter; // Must satisfy Awaiter<T>
+     }
+ };
+ \endcode
+
+ \note According to [expr.await], if both member and non-member co_await
+       operators are present, the member operator takes precedence.
+ */
+template <typename T, class Ret = detail::Unspecified>
+concept MemberCoAwaitAwaitable = requires(T t) {
+    { std::forward<T>(t).operator co_await() } -> Awaiter<Ret>;
+};
+
+//! Defines the requirements for a type that works with a non-member co_await operator.
+/*!
+ A type satisfies `NonMemberCoAwaitAwaitable` if there exists a non-member operator
+ `co_await()` that can be called with this type and returns an `Awaiter`. This is
+ one of the three standard ways in C++20 to make a type awaitable.
+
+ When the `co_await` operator is applied to an expression of this type, and no
+ member operator `co_await()` exists, the compiler will:
+
+   1. Look for a non-member operator `co_await()` in the associated namespaces
+   2. Call the found operator
+   3. Use the returned `Awaiter` to control the coroutine's suspension
+
+ __Example__
+ \code{cpp}
+    struct MyAwaitable {};
+
+    auto operator co_await(MyAwaitable) {
+        return some_awaiter; // Must satisfy Awaiter<T>
+    }
+ \endcode
+
+ \note According to [expr.await], a non-member operator `co_await()` is only
+       considered if no suitable member operator exists.
+*/
+template <typename T, class Ret = detail::Unspecified>
+concept NonMemberCoAwaitAwaitable = requires(T t) {
     { operator co_await(std::forward<T>(t)) } -> Awaiter<Ret>;
 };
 
-//! Defined the requirements of the general Awaitable type, including through
-//! the member function `await_transform` of the coroutine `Promise` type.
+//! Defines the requirements for an expression that can be used with co_await.
 /*!
- If the current coroutine `Promise` type has a member function `await_transform`,
- then the `awaitable` is obtained by calling `promise.await_transform(expr)`. This
- allows the coroutine to customize how expressions are transformed into
- `awaitable`.
+ According to [expr.await], an expression is awaitable if it satisfies any of
+ these conditions:
+
+    1. The expression is of a type that implements the Awaiter interface
+        directly (ImmediateAwaitable)
+    2. The expression is of a type with a member operator co_await()
+        (MemberCoAwaitAwaitable)
+    3. The expression is of a type for which a non-member operator co_await()
+        exists (NonMemberCoAwaitAwaitable)
+    4. The expression appears within a coroutine whose Promise type defines an
+        await_transform() member that accepts the expression
+
+ When a co_await expression is evaluated, the compiler follows this precedence:
+
+    1. If the coroutine's Promise type has an await_transform() member, it is
+       called to transform the expression
+    2. Otherwise, if the expression is already an Awaiter, it is used directly
+    3. Otherwise, if the expression has a member co_await operator, it is called
+    4. Otherwise, if a non-member co_await operator is found, it is called
+
+ The resulting Awaiter controls how the coroutine is suspended and resumed.
 */
 template <typename T, class Ret = detail::Unspecified>
 concept Awaitable
-    = DirectAwaitable<T>
+    = ImmediateAwaitable<T>
     || MemberCoAwaitAwaitable<T>
-    || GlobalCoAwaitAwaitable<T>
+    || NonMemberCoAwaitAwaitable<T>
     || detail::kThisIsAwaitableTrustMe<T, Ret>;
 
+//! Defines a range whose elements are all awaitable expressions.
+/*!
+ An AwaitableRange represents a sequence of awaitable expressions. This concept
+ is particularly useful for coroutine combinators that need to work with
+ collections of awaitables, such as `AllOf()` or `AnyOf()` operations.
+
+ Requirements:
+    1. Must satisfy the requirements of a range
+    2. The element type must satisfy the Awaitable concept
+    3. All elements must be awaitable with the same return type
+
+ __Example__
+ \code{cpp}
+    std::vector<Task<int>> tasks;  // A range of awaitables
+    auto results = co_await when_all(tasks);  // Await all tasks in the range
+ \endcode
+
+ \note This is not part of the C++20 coroutine specification but is a useful
+       extension for working with collections of awaitables.
+ */
 template <class R, class Ret = detail::Unspecified>
 concept AwaitableRange = requires(R r) {
+    // Must be a valid range with comparable iterators, and an `end` sentinel
     { r.begin() == r.end() } -> std::convertible_to<bool>;
+    // Elements must be awaitable with the specified return type
     { *r.begin() } -> Awaitable<Ret>;
 };
 
-//! @{
-//! Extensions to the Awaitable concept.
-
 class Executor;
 
-//! An awaitable that conforms to NeedsExecutor<T> defines an
-//! `await_set_executor(Executor*)` method, which will be called before
-//! `await_suspend()` when the awaitable is awaited.
-/*!
- It can be used to obtain a pointer to the current executor, which is useful to
- control scheduling for the awaitable itself or to propagate it to others
- that might need it.
- */
-template <class T>
-concept NeedsExecutor = requires(T t, Executor* ex) {
-    { t.await_set_executor(ex) } noexcept -> std::same_as<void>;
-};
-
-//! @}
-
 namespace detail {
+    //! @{
+    //! Extensions to the `Awaiter` / `Awaitable` concepts.
 
-    template <class From, class... To>
-    concept same_as_any = (std::same_as<From, To> || ...);
+    //! An awaiter that conforms to `NeedsExecutor<T>` defines an
+    //! `await_set_executor(Executor*)` method, which will be called before
+    //! `await_suspend()` when the awaitable is awaited.
+    /*!
+     It can be used to obtain a pointer to the current executor, which is useful to
+     control scheduling for the awaiter itself or to propagate it to others that
+     might need it.
+     */
+    template <class T>
+    concept NeedsExecutor = requires(T t, Executor* ex) {
+        { t.await_set_executor(ex) } noexcept -> std::same_as<void>;
+    };
 
     // Extensions for async operation cancellation.
     //
@@ -222,7 +385,7 @@ namespace detail {
         //   details on how this ambiguity is resolved.
         //
         // Mnemonic: a boolean return value from `await_cancel()` answers the
-        // question "are we cancelled yet?".  Note that there's a sense in which
+        // question "are we cancelled yet?". Note that there's a sense in which
         // the return value meaning is opposite that of `await_suspend()`: if
         // `await_suspend()` returns false then its argument handle will be
         // resumed immediately, while for `await_cancel()` this happens if you
@@ -239,7 +402,7 @@ namespace detail {
         // indicates that it is safe to propagate a pending cancellation
         // _before_ suspending the awaitable. Awaitables with this property are
         // called `Abortable`.
-        { t.await_cancel(h) } noexcept -> same_as_any<bool, std::true_type>;
+        { t.await_cancel(h) } noexcept -> SameAsAny<bool, std::true_type>;
     };
 
     // An awaitable that conforms to CustomizesEarlyCancel<T> defines an
@@ -277,7 +440,7 @@ namespace detail {
         // Another way to think about this is that there is a cancellation point
         // before every awaitable by default, but the awaitable can disable it
         // if desired.
-        { t.await_early_cancel() } noexcept -> same_as_any<bool, std::true_type>;
+        { t.await_early_cancel() } noexcept -> SameAsAny<bool, std::true_type>;
     };
 
     // An awaitable that conforms to CustomizesMustResume<T> defines an
@@ -328,7 +491,7 @@ namespace detail {
         // unwind itself after receiving a cancellation request -- but the
         // awaitable will ultimately be able to propagate the cancellation
         // instead of producing a result that its parent needs to handle.
-        { ct.await_must_resume() } noexcept -> same_as_any<bool, std::false_type>;
+        { ct.await_must_resume() } noexcept -> SameAsAny<bool, std::false_type>;
     };
 
     template <class T>
@@ -373,25 +536,9 @@ namespace detail {
         { ct.await_must_resume() } noexcept -> std::same_as<std::false_type>;
     };
 
-    //
-    // Non-cancellation-related extensions to the awaitable protocol. All of
-    // these are independent and optional.
-    //
-
-    // An awaitable that conforms to NeedsExecutor<T> defines an
-    // await_set_executor(Executor*) method, which will be called before
-    // await_suspend() when the awaitable is awaited. It can be used to obtain a
-    // pointer to the current executor, which is useful to control scheduling
-    // for the awaitable itself or to propagate it to other awaitables that
-    // might need it.
-    template <class T>
-    concept NeedsExecutor = requires(T t, Executor* ex) {
-        { t.await_set_executor(ex) } noexcept -> std::same_as<void>;
-    };
-
     // Required relationships between the above:
     template <class T>
-    concept ValidDirectAwaitable = DirectAwaitable<T> &&
+    concept ValidAwaiter = Awaiter<T> &&
 
         // If await_cancel() is defined (Cancellable),
         // then either it must always return true (Abortable),
@@ -432,6 +579,8 @@ namespace detail {
         && (CustomizesEarlyCancel<T> || !requires { &T::await_early_cancel; })
         && (CustomizesMustResume<T> || !requires { &T::await_must_resume; })
         && (NeedsExecutor<T> || !requires { &T::await_set_executor; });
-} // namespace detail
 
+    //! @}
+
+} // namespace detail
 } // namespace oxygen::co

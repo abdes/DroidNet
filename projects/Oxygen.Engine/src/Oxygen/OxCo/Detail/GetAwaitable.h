@@ -45,7 +45,7 @@ static_assert(std::is_same_v<RemoveRvalueReferenceT<int&&>, int>);
  co_await`.
 
  The return type of this function is as follows:
- - If T&& is `DirectAwaitable`, then `T&&`. (Like std::forward: you get a lvalue
+ - If T&& is `ImmediateAwaitable`, then `T&&`. (Like std::forward: you get a lvalue
    or rvalue reference depending on the value category of `t`, and no additional
    object is created.)
  - If `T&&` defines `operator co_await()` returning value type `A` or rvalue
@@ -238,7 +238,7 @@ template <class Callable>
 using YieldToRunAwaitable = YieldToRunImpl<Callable, std::invoke_result_t<Callable>>;
 
 // NB: Must return by value.
-template <ValidDirectAwaitable Aw>
+template <ValidAwaiter Aw>
 consteval void StaticAwaitableCheck() { }
 
 template <class T>
@@ -248,20 +248,20 @@ auto GetAwaitable(T&& t) -> decltype(auto)
 
     if constexpr (
         requires() {
-            { std::forward<T>(t) } -> DirectAwaitable;
+            { std::forward<T>(t) } -> ImmediateAwaitable;
         }) {
         StaticAwaitableCheck<T>();
         return std::forward<T>(t);
     } else if constexpr (
         requires() {
-            { std::forward<T>(t).operator co_await() } -> DirectAwaitable;
+            { std::forward<T>(t).operator co_await() } -> ImmediateAwaitable;
         }) {
         using Ret = decltype(std::forward<T>(t).operator co_await());
         StaticAwaitableCheck<Ret>();
         return std::forward<T>(t).operator co_await();
     } else if constexpr (
         requires() {
-            { operator co_await(std::forward<T>(t)) } -> DirectAwaitable;
+            { operator co_await(std::forward<T>(t)) } -> ImmediateAwaitable;
         }) {
         using Ret = decltype(operator co_await(std::forward<T>(t)));
         StaticAwaitableCheck<Ret>();
@@ -271,7 +271,7 @@ auto GetAwaitable(T&& t) -> decltype(auto)
         // need to fire this one also
         static_assert(!Awaitable<T>,
             "co_await argument satisfies Awaitable concept but "
-            "we couldn't extract a `DirectAwaitable` from it");
+            "we couldn't extract a `ImmediateAwaitable` from it");
         return std::suspend_never {};
     }
 }

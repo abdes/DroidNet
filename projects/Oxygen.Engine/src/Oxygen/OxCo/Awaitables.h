@@ -52,7 +52,7 @@ static constexpr detail::CoAwaitFactory<Yield> kYield;
 /// The returned class is moveable (assuming the arguments are moveable),
 /// and has a one-shot `operator co_await() &&`, which will construct
 /// `T(forward<Args>(args...))` and return it.
-template <DirectAwaitable T, class... Args>
+template <ImmediateAwaitable T, class... Args>
 Awaitable auto MakeAwaitable(Args&&... args)
 {
     return detail::AwaitableMaker<T, Args...>(std::forward<Args>(args)...);

@@ -19,7 +19,7 @@ namespace oxygen::co {
 namespace detail {
 
     template <class Aw>
-    concept RootAwaitable = DirectAwaitable<Aw>;
+    concept RootAwaitable = ImmediateAwaitable<Aw>;
 
 } // namespace detail
 

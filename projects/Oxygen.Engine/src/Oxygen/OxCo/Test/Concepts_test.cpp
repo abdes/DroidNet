@@ -33,7 +33,7 @@ struct ValueAwaiter {
 static_assert(oxygen::co::Awaiter<BasicAwaiter>);
 static_assert(oxygen::co::Awaiter<ChainAwaiter>);
 static_assert(oxygen::co::Awaiter<ResumeAwaiter>);
-static_assert(oxygen::co::DirectAwaitable<ValueAwaiter, int>);
+static_assert(oxygen::co::ImmediateAwaitable<ValueAwaiter, int>);
 
 struct BasicPromise {
     static auto get_return_object() -> std::coroutine_handle<>
@@ -46,7 +46,7 @@ struct BasicPromise {
         return {};
     }
 
-    static auto final_suspend() -> std::suspend_always
+    static auto final_suspend() noexcept -> std::suspend_always
     {
         return {};
     }
@@ -55,7 +55,7 @@ struct BasicPromise {
     static void unhandled_exception() { }
 };
 
-static_assert(oxygen::co::DirectAwaitable<std::suspend_always>);
+static_assert(oxygen::co::ImmediateAwaitable<std::suspend_always>);
 static_assert(oxygen::co::PromiseType<BasicPromise, void>);
 
 struct ValuePromise {
@@ -69,7 +69,7 @@ struct ValuePromise {
         return {};
     }
 
-    static auto final_suspend() -> std::suspend_always
+    static auto final_suspend() noexcept -> std::suspend_always
     {
         return {};
     }
