@@ -16,7 +16,7 @@ NOLINT_TEST(CommonMacros, NonCopyable)
     // NOLINTNEXTLINE
     class NonCopyable {
     public:
-        OXYGEN_MAKE_NON_COPYABLE(NonCopyable);
+        OXYGEN_MAKE_NON_COPYABLE(NonCopyable)
     };
 
     static_assert(!std::is_copy_constructible_v<NonCopyable>);
@@ -28,7 +28,7 @@ NOLINT_TEST(CommonMacros, NonMoveable)
     // NOLINTNEXTLINE
     class NonMoveable {
     public:
-        OXYGEN_MAKE_NON_MOVEABLE(NonMoveable);
+        OXYGEN_MAKE_NON_MOVEABLE(NonMoveable)
     };
 
     static_assert(!std::is_move_constructible_v<NonMoveable>);
@@ -40,7 +40,7 @@ NOLINT_TEST(CommonMacros, DefaultCopyable)
     // NOLINTNEXTLINE
     class DefaultCopyable {
     public:
-        OXYGEN_DEFAULT_COPYABLE(DefaultCopyable);
+        OXYGEN_DEFAULT_COPYABLE(DefaultCopyable)
     };
 
     static_assert(std::is_copy_constructible_v<DefaultCopyable>);
@@ -53,7 +53,7 @@ NOLINT_TEST(CommonMacros, DefaultMoveable)
     class DefaultMoveable {
     public:
         DefaultMoveable() = default;
-        OXYGEN_DEFAULT_MOVABLE(DefaultMoveable);
+        OXYGEN_DEFAULT_MOVABLE(DefaultMoveable)
 
     private:
         std::string member_ { "Hello World!" };
