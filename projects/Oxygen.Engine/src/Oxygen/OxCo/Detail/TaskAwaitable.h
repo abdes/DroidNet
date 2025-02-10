@@ -7,6 +7,7 @@
 #pragma once
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Detail/Promise.h"
 
 namespace oxygen::co::detail {
@@ -26,12 +27,12 @@ public:
     //! promise.
     TaskAwaitable() = default;
 
-    explicit TaskAwaitable(Promise<T>* promise)
+    explicit TaskAwaitable(Promise<T>* promise) noexcept
         : promise_(promise)
     {
     }
 
-    OXYGEN_DEFAULT_COPYABLE(TaskAwaitable)
+    OXYGEN_MAKE_NON_COPYABLE(TaskAwaitable)
     OXYGEN_DEFAULT_MOVABLE(TaskAwaitable)
 
     //! Destructor.
