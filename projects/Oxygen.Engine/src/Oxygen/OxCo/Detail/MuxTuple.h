@@ -27,7 +27,7 @@ public:
      its corresponding awaitable.
      */
     explicit MuxTuple(Awaitables&&... awaitables)
-        : awaitables_(MuxHelper<Self, Awaitables>(std::forward<Awaitables>(awaitables))...)
+        : awaitables_(std::forward<Awaitables>(awaitables)...)
     {
     }
 
@@ -35,12 +35,12 @@ public:
     {
         // See comments in `MuxBase::await_cancel()` regarding why we only can
         // propagate `Abortable` if the mux completes when its first awaitable does.
-        return Self::MinReady() == 1 && (Abortable<Awaitables> && ...);
+        return Self::MinReady() == 1 && (Abortable<AwaitableType<Awaitables>> && ...);
     }
 
     static constexpr auto IsSkippable() -> bool
     {
-        return (Skippable<Awaitables> && ...);
+        return (Skippable<AwaitableType<Awaitables>> && ...);
     }
 
     static constexpr auto Size() noexcept -> size_t

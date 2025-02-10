@@ -11,7 +11,7 @@
 #include "Oxygen/Base/NoInline.h"
 #include "Oxygen/Base/ReturnAddress.h"
 #include "Oxygen/OxCo/Detail/AwaitFn.h"
-#include "Oxygen/OxCo/Detail/AwaitableStateChecker.h"
+#include "Oxygen/OxCo/Detail/AwaitableAdapter.h"
 #include "Oxygen/OxCo/Detail/CoRoutineFrame.h"
 #include "Oxygen/OxCo/Detail/GetAwaitable.h"
 #include "Oxygen/OxCo/Detail/IntrusiveList.h"
@@ -237,8 +237,7 @@ namespace detail {
                 // its resume point, and forward cancellation request to the
                 // `Awaitable`.
                 OnResume<&BasePromise::DoResumeAfterCancel>();
-                if (const Handle h = checker_.AboutToCancel(ProxyHandle());
-                    checker_.CancelReturned(AwCancel(h))) {
+                if (AwCancel(ProxyHandle())) {
                     PropagateCancel();
                 }
             }
@@ -408,7 +407,7 @@ namespace detail {
         //! the next `co_await` suspension.
         void DoResumeAfterCancel()
         {
-            if (HasAwaitable() && checker_.MustResumeReturned(AwMustResume())) {
+            if (HasAwaitable() && AwMustResume()) {
                 // This task completed normally, so don't propagate the
                 // cancellation. Attempt it again on the next co_await.
                 CancellationState(Cancellation::kRequested);
@@ -447,29 +446,25 @@ namespace detail {
             ResetControlBlock(aw); // this resets cancelState_
 
             if (cancel_requested) {
-                if (checker_.EarlyCancelReturned(AwaitEarlyCancel(aw))) {
+                if (AwaitEarlyCancel(aw)) {
                     DLOG_F(1, "    ... early-cancelled awaitable (skipped)");
                     PropagateCancel();
                     return std::noop_coroutine();
                 }
                 OnResume<&BasePromise::DoResumeAfterCancel>();
-                if (checker_.ReadyReturned(aw.await_ready())) {
+                if (aw.await_ready()) {
                     DLOG_F(1, "    ... already-ready awaitable");
                     return ProxyHandle();
                 }
             } else {
                 OnResume<&BasePromise::DoResume>();
             }
-            checker_.AboutToSetExecutor();
-            if constexpr (NeedsExecutor<Aw>) {
-                aw.await_set_executor(executor_);
-            }
+            aw.await_set_executor(executor_);
 
             try {
-                return detail::AwaitSuspend(aw, checker_.AboutToSuspend(ProxyHandle()));
+                return detail::AwaitSuspend(aw, ProxyHandle());
             } catch (...) {
                 DLOG_F(1, "pr {}: exception thrown from await_suspend", fmt::ptr(this));
-                checker_.SuspendThrew();
                 ExecutionState(Execution::kRunning);
                 if (cancel_requested) {
                     // ReSharper disable once CppDFAUnreachableCode
@@ -483,6 +478,12 @@ namespace detail {
         //! A proxy which allows Promise to have control over its own suspension.
         template <Awaitable Aw>
         class AwaitProxy {
+            // Use decltype instead of AwaitableType in order to reference
+            // (rather than moving) an incoming Awaitable&& that is
+            // ImmediateAwaitable; even if it's a temporary, it will live for
+            // the entire co_await expression including suspension.
+            using AwaitableType = decltype(GetAwaitable(std::declval<Aw>()));
+
         public:
             // The reference will be valid for the entire `co_await` expression.
             // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
@@ -494,14 +495,14 @@ namespace detail {
 
             [[nodiscard]] auto await_ready() const noexcept
             {
-                promise_->checker_.Reset();
                 if (promise_->CancellationState() == Cancellation::kRequested) {
                     // If the awaiting task has pending cancellation, we want
                     // to execute the more involved logic in HookAwaitSuspend().
                     return false;
                 }
-                return promise_->checker_.ReadyReturned(awaitable_.await_ready());
+                return awaitable_.await_ready();
             }
+
             OXYGEN_NOINLINE auto await_suspend(Handle /*unused*/)
             {
                 // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
@@ -511,13 +512,12 @@ namespace detail {
 
             auto await_resume() -> decltype(auto)
             {
-                promise_->checker_.AboutToResume();
-                return std::forward<Aw>(awaitable_).await_resume();
+                return awaitable_.await_resume();
             }
 
         private:
             // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
-            [[no_unique_address]] Aw awaitable_;
+            [[no_unique_address]] AwaitableAdapter<Aw, AwaitableType> awaitable_;
             BasePromise* promise_;
         };
 
@@ -546,7 +546,6 @@ namespace detail {
 
         Executor* executor_ = nullptr;
         BaseTaskParent* parent_ = nullptr;
-        [[no_unique_address]] AwaitableStateChecker checker_;
 
     public:
         OXYGEN_NOINLINE auto initial_suspend() noexcept
@@ -583,13 +582,8 @@ namespace detail {
 
             // Note: intentionally not constraining Aw here to get a nicer
             // compilation error (constraint will be checked in
-            // `GetAwaitable()`). Use `decltype` instead of `Awaitable` in order
-            // to reference (rather than moving) an incoming `Aw&&` that is
-            // `DirectAwaitable`; even if it's a temporary, it will live for
-            // the entire `co_await` expression including suspension.
-
-            using Ret = decltype(GetAwaitable(std::forward<Aw>(aw)));
-            return AwaitProxy<Ret>(this, GetAwaitable(std::forward<Aw>(aw)));
+            // `GetAwaitable()`).
+            return AwaitProxy<Aw>(this, std::forward<Aw>(aw));
         }
 
         friend RethrowCurrentException;

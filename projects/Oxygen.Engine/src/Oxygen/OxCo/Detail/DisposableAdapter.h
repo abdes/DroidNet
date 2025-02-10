@@ -14,21 +14,17 @@ namespace oxygen::co::detail {
 //! dispose of upon cancellation. May be used on third party awaitables which
 //! don't know about the async cancellation mechanism.
 template <class T>
-class DisposableAdapter : public CancellableAdapter<T> {
+class DisposableAdapter : public CancellableAdapterBase<T> {
 public:
-    // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-    explicit DisposableAdapter(T&& object)
-        : CancellableAdapter<T>(std::forward<T>(object))
-    {
-    }
+    using CancellableAdapterBase<T>::CancellableAdapterBase;
 
-    auto await_early_cancel() noexcept
+    bool await_early_cancel() noexcept
     {
-        return awaitEarlyCancel(this->awaitable_);
+        return AwaitEarlyCancel(this->awaitable_);
     }
-    auto await_cancel(Handle h) noexcept
+    bool await_cancel(Handle h) noexcept
     {
-        return awaitCancel(this->awaitable_, h);
+        return AwaitCancel(this->awaitable_, h);
     }
     // ReSharper disable once CppMemberFunctionMayBeStatic
     auto await_must_resume() const noexcept { return std::false_type {}; }

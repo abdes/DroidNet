@@ -140,7 +140,7 @@ namespace detail {
 template <class EventLoop, class Awaitable>
 OXYGEN_NOINLINE auto Run(EventLoop& event_loop, Awaitable&& awaitable) -> decltype(auto)
 {
-    return detail::Runner(event_loop).Run(detail::GetAwaitable(std::forward<Awaitable>(awaitable)));
+    return detail::Runner(event_loop).Run(std::forward<Awaitable>(awaitable));
 }
 
 /// Returns a pointer to the executor associated with the current `co::Run()`.

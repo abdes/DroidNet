@@ -115,7 +115,7 @@ concept MemberCoAwaitAwaitable = requires(T t) {
 
 template <typename T, class Ret = detail::Unspecified>
 concept GlobalCoAwaitAwaitable = requires(T t) {
-    { operator co_await(std::forward<T>(t)) } -> DirectAwaitable<Ret>;
+    { operator co_await(std::forward<T>(t)) } -> Awaiter<Ret>;
 };
 
 //! Defined the requirements of the general Awaitable type, including through

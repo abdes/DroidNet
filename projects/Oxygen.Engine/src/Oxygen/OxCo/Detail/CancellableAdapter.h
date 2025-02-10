@@ -9,42 +9,47 @@
 #include <utility>
 
 #include "Oxygen/OxCo/Coroutine.h"
+#include "Oxygen/OxCo/Detail/AwaitFn.h"
 #include "Oxygen/OxCo/Detail/GetAwaitable.h"
 
 namespace oxygen::co::detail {
 
-//! A common part for `NonCancellable()` and `Disposable()`.
+// A common part of NonCancellableAdapter and DisposableAdapter.
+// Note: all three are meant to be used together with AwaitableMaker,
+// so they don't store the object they have been passed.
 template <class T>
-class CancellableAdapter {
+class CancellableAdapterBase {
+protected:
+    using Aw = AwaitableType<T>;
+    Aw awaitable_;
+
 public:
-    // ReSharper disable CppMemberFunctionMayBeStatic
-    explicit CancellableAdapter(T&& object) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
-        : object_(std::forward<T>(object))
-        , awaitable_(GetAwaitable(std::forward<T>(object_)))
+    explicit CancellableAdapterBase(T&& object)
+        : awaitable_(GetAwaitable(std::forward<T>(object)))
     {
     }
 
     void await_set_executor(Executor* ex) noexcept
     {
-        if constexpr (NeedsExecutor<AwaitableType<T>>) {
-            awaitable_.await_set_executor(ex);
-        }
+        AwaitSetExecutor(awaitable_, ex);
     }
 
-    [[nodiscard]] auto await_ready() const noexcept { return awaitable_.await_ready(); }
-    [[nodiscard]] auto await_early_cancel() noexcept { return false; }
-    [[nodiscard]] auto await_suspend(Handle h) { return awaitable_.await_suspend(h); }
-    [[nodiscard]] auto await_must_resume() const noexcept { return true; }
-    auto await_resume() & -> decltype(auto) { return awaitable_.await_resume(); }
-    auto await_resume() && -> decltype(auto)
+    bool await_ready() const noexcept { return awaitable_.await_ready(); }
+    auto await_suspend(Handle h) { return awaitable_.await_suspend(h); }
+    decltype(auto) await_resume()
     {
-        return std::move(awaitable_).await_resume();
+        return std::forward<Aw>(awaitable_).await_resume();
     }
-    // ReSharper restore CppMemberFunctionMayBeStatic
+};
 
-protected:
-    T object_; // NOLINT(*-non-private-member-variables-in-classes)
-    AwaitableType<T> awaitable_; // NOLINT(*-non-private-member-variables-in-classes)
+/// A wrapper around an awaitable that inhibits cancellation.
+template <class T>
+class NonCancellableAdapter : public CancellableAdapterBase<T> {
+public:
+    using CancellableAdapterBase<T>::CancellableAdapterBase;
+
+    bool await_early_cancel() noexcept { return false; }
+    bool await_must_resume() const noexcept { return true; }
 };
 
 } // namespace oxygen::co::detail

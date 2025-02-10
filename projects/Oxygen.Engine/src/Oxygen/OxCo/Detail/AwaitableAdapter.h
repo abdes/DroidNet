@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <tuple>
+#include <utility>
+
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/AwaitFn.h"
 #include "Oxygen/OxCo/Detail/AwaitableStateChecker.h"
@@ -28,19 +31,14 @@ namespace oxygen::co::detail {
 
 \see GetAwaitable()
 */
-template <class Aw>
+template <class T, class Aw = AwaitableType<T>>
 class AwaitableAdapter {
-    static_assert(DirectAwaitable<Aw>,
-        "AwaitableAdapter must be initialized with a `DirectAwaitable` (i.e. "
-        "one which implements the `await_...` methods); pass your object "
-        "through `GetAwaitable()`.");
-
     using Ret = decltype(std::declval<Aw>().await_resume());
 
 public:
     // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
-    explicit AwaitableAdapter(Aw&& awaitable)
-        : awaitable_(StaticAwaitableCheck<Aw&&>(std::forward<Aw>(awaitable)))
+    explicit AwaitableAdapter(T&& object)
+        : awaitable_(GetAwaitable<T>(std::forward<T>(object)))
     {
     }
 
@@ -107,6 +105,23 @@ public:
 private:
     [[no_unique_address]] AwaitableStateChecker checker_;
     Aw awaitable_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
+};
+
+template <class T, class... Args>
+class AwaitableMaker {
+public:
+    explicit AwaitableMaker(Args&&... args)
+        : args_(std::forward<Args>(args)...)
+    {
+    }
+
+    auto operator co_await() && -> T
+    {
+        return std::make_from_tuple<T>(std::move(args_));
+    }
+
+private:
+    std::tuple<Args...> args_;
 };
 
 } // namespace oxygen::co::detail

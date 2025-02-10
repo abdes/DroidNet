@@ -18,18 +18,18 @@ class Executor;
 
 namespace detail {
     /// A utility class kicking off an awaitable upon cancellation.
-    template <class Aw>
+    template <class T>
     class RunOnCancel {
     public:
-        explicit RunOnCancel(Aw&& awaitable) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
-            : awaitable_(std::forward<Aw>(awaitable))
+        explicit RunOnCancel(T&& awaitable) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+            : adapter_(std::forward<T>(awaitable))
         {
         }
 
         // ReSharper disable CppMemberFunctionMayBeStatic
         void await_set_executor(Executor* ex) noexcept
         {
-            awaitable_.await_set_executor(ex);
+            adapter_.await_set_executor(ex);
         }
 
         [[nodiscard]] auto await_ready() const noexcept { return false; }
@@ -53,23 +53,23 @@ namespace detail {
             // it as "resume the handle ourselves, then return false" in
             // order to make sure await_must_resume() gets called to check
             // for exceptions.
-            if (awaitable_.await_ready()) {
+            if (adapter_.await_ready()) {
                 h.resume();
             } else {
-                awaitable_.await_suspend(h).resume();
+                adapter_.await_suspend(h).resume();
             }
             return false;
         }
         auto await_must_resume() const noexcept
         {
-            awaitable_.await_resume(); // terminate() on any pending exception
+            adapter_.await_resume(); // terminate() on any pending exception
             return std::false_type {};
         }
         // ReSharper restore CppMemberFunctionMayBeStatic
 
     protected:
         // NOLINTNEXTLINE(*-non-private-member-variables-in-classes)
-        [[no_unique_address]] mutable AwaitableAdapter<Aw> awaitable_;
+        [[no_unique_address]] mutable AwaitableAdapter<T> adapter_;
         // NOLINTNEXTLINE(*-non-private-member-variables-in-classes)
         bool cancel_pending_ = false;
     };

@@ -136,7 +136,7 @@ private:
     }
 
     [[no_unique_address]] Object object_;
-    detail::AwaitableAdapter<AwaitableObj> awaitable_;
+    detail::AwaitableAdapter<Object&> awaitable_;
     detail::IntrusiveList<Awaitable> parents_;
     std::variant<std::monostate, std::monostate, typename Storage::Type,
         std::exception_ptr, std::monostate, std::monostate>
@@ -155,7 +155,7 @@ template <class Object>
 template <class... Args>
 Shared<Object>::State::State(Args&&... args)
     : object_(std::forward<Args>(args)...)
-    , awaitable_(detail::GetAwaitable(object_))
+    , awaitable_(object_)
 {
     this->resume_fn = &State::Trampoline;
 }

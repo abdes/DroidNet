@@ -121,6 +121,8 @@ class ProxyFrame : public ProxyFrameImpl<frame_tags::kHaveSpareBitsInPointers> {
 public:
     static constexpr uintptr_t kTag = frame_tags::kProxy;
     ProxyFrame() { TagWith(kTag); }
+
+    ProxyFrame(const ProxyFrame&) = delete;
 };
 
 // Attempts a conversion from `CoroutineFrame` to `F`. Returns `nullptr` if `f`
