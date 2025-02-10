@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
+#include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/CancellableAdapter.h"
 #include "Oxygen/OxCo/Detail/CoAwaitFactory.h"
 #include "Oxygen/OxCo/Detail/DisposableAdapter.h"

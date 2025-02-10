@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Concepts/Cancellation.h"
 #include "Oxygen/OxCo/Coroutine.h"
 
 namespace oxygen::co::detail {

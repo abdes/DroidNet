@@ -8,8 +8,6 @@
 
 #include <type_traits>
 
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
-#include "Oxygen/OxCo/Concepts/Cancellation.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/CoTag.h"
 

@@ -6,18 +6,18 @@
 
 #pragma once
 
-#include "Detail/CallableSignature.h"
-#include "Detail/IntrusiveList.h"
-#include "Oxygen/OxCo/Awaitables.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
-#include "Oxygen/OxCo/Detail/Result.h"
-#include "Oxygen/OxCo/Detail/TaskParent.h"
-
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
+
+#include "Oxygen/OxCo/Awaitables.h"
+#include "Oxygen/OxCo/Co.h"
+#include "Oxygen/OxCo/Coroutine.h"
+#include "Oxygen/OxCo/Detail/CallableSignature.h"
+#include "Oxygen/OxCo/Detail/IntrusiveList.h"
+#include "Oxygen/OxCo/Detail/Result.h"
+#include "Oxygen/OxCo/Detail/TaskParent.h"
 
 namespace oxygen::co {
 

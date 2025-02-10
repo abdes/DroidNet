@@ -8,7 +8,7 @@
 
 #include <utility>
 
-#include "Oxygen/OxCo/Concepts/Cancellation.h"
+#include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/GetAwaitable.h"
 
 namespace oxygen::co::detail {
