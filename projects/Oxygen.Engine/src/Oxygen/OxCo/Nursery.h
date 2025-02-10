@@ -19,6 +19,9 @@
 #include "Oxygen/OxCo/Detail/Result.h"
 #include "Oxygen/OxCo/Detail/TaskParent.h"
 
+// Simplify the code, keep derived classes only in this file.
+// NOLINTBEGIN(*-non-private-member-variables-in-classes)
+
 namespace oxygen::co {
 
 namespace detail {
@@ -30,16 +33,16 @@ namespace detail {
     //! A tag type, used to indicate that a nursery should terminate by joining
     //! its tasks.
     struct JoinTag {
-        explicit constexpr JoinTag(TagCtor) { }
+        explicit constexpr JoinTag(TagCtor /*tag*/) { }
     };
 
     //! A tag type, used to indicate that a nursery should terminate by
     //! requesting cancellation of its uncompleted tasks.
     struct CancelTag {
-        explicit constexpr CancelTag(TagCtor) { }
+        explicit constexpr CancelTag(TagCtor /*tag*/) { }
     };
 
-    //! The return type of a nursery body.
+    //! The type of value returned from a nursery body.
     /*!
      If the body of the nursery terminates (rather than looping forever), it
      must return either `oxygen::co::kJoin` or `oxygen::co::kCancel`.
@@ -101,7 +104,7 @@ class TaskStarted;
  nursery will still wait for them to finish.
 
  Tasks do not need to be spawned from directly within the nursery block; you can
- pass the nursery reference to another function, store a pointer, etc, and use
+ pass the nursery reference to another function, store a pointer, etc., and use
  the nursery's `start()` method to start new tasks from any context that has
  access to the reference. Once all tasks in the nursery have exited, execution
  will proceed in the nursery's parent task, meaning the nursery will be
@@ -117,7 +120,7 @@ class Nursery : /*private*/ detail::TaskParent<void> {
     class StartAwaiter;
     template <class Ret>
     friend class TaskStarted;
-    friend auto OpenNursery(Nursery*&, TaskStarted<>) -> Co<>;
+    friend auto OpenNursery(Nursery*& /*n*/, TaskStarted<> /*started*/) -> Co<>;
 
 public:
     struct Factory;
@@ -441,8 +444,8 @@ protected:
     ~StartAwaiterBase() = default;
 
     Nursery* nursery_;
-    // Yes shadows the member in TaskParent<void>, but that's fine. The deign of
-    // this class is not very clean, the TaskParent<void> and Promise<void>
+    // Yes shadows the member in TaskParent<void>, but that's fine. The design
+    // of this class is not very clean, the TaskParent<void> and Promise<void>
     // while having a Result<Ret>...
     detail::Result<Ret> result_; // NOLINT(clang-diagnostic-shadow-field)
     detail::Handle handle_ = NoOpHandle();
@@ -495,7 +498,7 @@ public:
 
     auto await_resume() && -> Ret { return std::move(this->result_).Value(); }
 
-    auto await_cancel(detail::Handle) noexcept -> bool
+    auto await_cancel(detail::Handle /*h*/) noexcept -> bool
     {
         if (this->promise_) {
             this->promise_->Cancel();
@@ -685,7 +688,7 @@ auto Nursery::Start(Callable callable, Args... args) -> co::Awaitable auto
 
 inline void Nursery::DoCancel()
 {
-    if (!executor_ || tasks_.Empty()) {
+    if ((executor_ == nullptr) || tasks_.Empty()) {
         return;
     }
 
@@ -783,7 +786,7 @@ public:
         return false;
     }
 
-    auto await_cancel(detail::Handle) noexcept
+    auto await_cancel(detail::Handle /*h*/) noexcept
     {
         Self().nursery_.Cancel();
         return false;
@@ -905,7 +908,7 @@ struct Nursery::Factory {
 
 namespace detail {
     class BackReferencedNursery final : public Nursery {
-        friend auto co::OpenNursery(Nursery*&, TaskStarted<>) -> Co<>;
+        friend auto co::OpenNursery(Nursery*& /*n*/, TaskStarted<> /*started*/) -> Co<>;
         friend JoinAwaiter<BackReferencedNursery>;
 
         BackReferencedNursery(Executor* executor, Nursery*& backref)
@@ -930,6 +933,10 @@ namespace detail {
     };
 } // namespace detail
 
+// No issue here with passing a reference to the nursery pointer that will
+// receive the nursery. This is used for live objects, which pass the address of
+// their nursery field (lifetime is same as object).
+//NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 inline auto OpenNursery(Nursery*& ptr, TaskStarted<> started /*= {}*/) -> Co<>
 {
     Executor* ex = co_await GetExecutor();
@@ -940,3 +947,5 @@ inline auto OpenNursery(Nursery*& ptr, TaskStarted<> started /*= {}*/) -> Co<>
 }
 
 } // namespace oxygen::co
+
+// NOLINTEND(*-non-private-member-variables-in-classes)

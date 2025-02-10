@@ -15,7 +15,7 @@
 
 // The Channel class is designed in two parts, the Reader and the Writer parts,
 // and while they can be used together via the Channel interface, they can also
-// be provided as separate parts to only expose one side of the channel. Hence
+// be provided as separate parts to only expose one side of the channel. Hence,
 // the warnings about the hidden function.
 
 namespace oxygen::co {
@@ -216,7 +216,8 @@ namespace detail::channel {
 
 } // namespace detail::channel
 
-//! A ordered communication channel for sending objects of type T between tasks.
+//! An ordered communication channel for sending objects of type T between
+//! tasks.
 /*!
  Each Channel has an internal buffer to store the objects that have been sent
  but not yet received. This buffer may be allowed to grow without bound (the
@@ -383,7 +384,7 @@ public:
         return GetWriter().TrySend(std::forward<U>(value));
     }
 
-protected:
+private:
     friend Reader;
     friend Writer;
 

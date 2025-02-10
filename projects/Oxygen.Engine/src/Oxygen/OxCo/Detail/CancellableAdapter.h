@@ -48,8 +48,17 @@ class NonCancellableAdapter : public CancellableAdapterBase<T> {
 public:
     using CancellableAdapterBase<T>::CancellableAdapterBase;
 
+    //! @{
+    //! Implementation of the awaiter interface.
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+
     bool await_early_cancel() noexcept { return false; }
     bool await_must_resume() const noexcept { return true; }
+
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    //! @}
 };
 
 } // namespace oxygen::co::detail

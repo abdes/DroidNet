@@ -25,12 +25,21 @@ public:
     {
     }
 
-    [[nodiscard]] auto await_early_cancel() const noexcept { return false; }
-    [[nodiscard]] auto await_ready() const noexcept { return true; }
-    [[nodiscard]] auto await_suspend(Handle /*unused*/) { return false; }
-    [[nodiscard]] auto await_cancel(Handle /*unused*/) noexcept { return false; }
-    [[nodiscard]] auto await_must_resume() const noexcept { return true; }
-    [[nodiscard]] auto await_resume() && -> T { return std::forward<T>(value_); }
+    //! @{
+    //! Implementation of the awaiter interface.
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+
+    auto await_early_cancel() const noexcept { return false; }
+    auto await_ready() const noexcept { return true; }
+    auto await_suspend(Handle /*unused*/) { return false; }
+    auto await_cancel(Handle /*unused*/) noexcept { return false; }
+    auto await_must_resume() const noexcept { return true; }
+    auto await_resume() && -> T { return std::forward<T>(value_); }
+
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    //! @}
 
     // ReSharper disable once CppNonExplicitConversionOperator
     template <std::constructible_from<T> U>
@@ -47,12 +56,21 @@ private:
 template <>
 class ReadyAwaiter<void> {
 public:
-    [[nodiscard]] auto await_early_cancel() const noexcept { return false; }
-    [[nodiscard]] auto await_ready() const noexcept { return true; }
-    [[nodiscard]] auto await_suspend(Handle /*unused*/) { return false; }
-    [[nodiscard]] auto await_cancel(Handle /*unused*/) noexcept { return false; }
-    [[nodiscard]] auto await_must_resume() const noexcept { return true; }
-    [[nodiscard]] auto await_resume() const noexcept { }
+    //! @{
+    //! Implementation of the awaiter interface.
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+
+    auto await_early_cancel() const noexcept { return false; }
+    auto await_ready() const noexcept { return true; }
+    auto await_suspend(Handle /*unused*/) { return false; }
+    auto await_cancel(Handle /*unused*/) noexcept { return false; }
+    auto await_must_resume() const noexcept { return true; }
+    auto await_resume() const noexcept { }
+
+    // ReSharper disable CppMemberFunctionMayBeStatic
+    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    //! @}
 
     // ReSharper disable once CppNonExplicitConversionOperator
     // NOLINTNEXTLINE(*-explicit-constructor, *-explicit-conversions)
