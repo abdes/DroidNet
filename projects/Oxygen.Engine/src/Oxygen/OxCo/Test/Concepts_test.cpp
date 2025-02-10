@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
-#include "Oxygen/OxCo/Concepts/Awaiter.h"
-#include "Oxygen/OxCo/Concepts/Promise.h"
+#include "Oxygen/OxCo/Coroutine.h"
 
 // ReSharper disable CppClangTidyClangDiagnosticUnneededMemberFunction
 
@@ -36,30 +34,6 @@ static_assert(oxygen::co::Awaiter<BasicAwaiter>);
 static_assert(oxygen::co::Awaiter<ChainAwaiter>);
 static_assert(oxygen::co::Awaiter<ResumeAwaiter>);
 static_assert(oxygen::co::DirectAwaitable<ValueAwaiter, int>);
-
-struct ValueAwaitable {
-    auto operator co_await() const -> ValueAwaiter
-    {
-        return {};
-    }
-};
-
-struct ResumeAwaitable {
-    auto operator co_await() const -> ResumeAwaiter
-    {
-        return {};
-    }
-};
-static_assert(oxygen::co::MemberCoAwaitAwaitable<ValueAwaitable>);
-static_assert(!oxygen::co::MemberCoAwaitAwaitableVoid<ValueAwaitable>);
-static_assert(oxygen::co::MemberCoAwaitAwaitableVoid<ResumeAwaitable>);
-
-static_assert(
-    std::is_same_v<oxygen::co::AwaitableTraits<ValueAwaitable>::AwaiterType,
-        ValueAwaiter>);
-static_assert(
-    std::is_same_v<oxygen::co::AwaitableTraits<ValueAwaitable>::AwaiterReturnType,
-        int>);
 
 struct BasicPromise {
     static auto get_return_object() -> std::coroutine_handle<>

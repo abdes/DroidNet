@@ -10,11 +10,11 @@
 
 #include <asio/cancellation_signal.hpp>
 #include <asio/executor.hpp>
+#include <asio/high_resolution_timer.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <asio/high_resolution_timer.hpp>
 
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
+#include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Executor.h"
 
 namespace oxygen::co {

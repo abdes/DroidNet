@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/AwaitFn.h"
 #include "Oxygen/OxCo/Detail/AwaitableStateChecker.h"

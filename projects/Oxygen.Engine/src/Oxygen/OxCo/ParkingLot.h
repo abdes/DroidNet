@@ -6,9 +6,8 @@
 
 #pragma once
 
-#include "Detail/ParkingLotImpl.h"
-#include "Oxygen/OxCo/Concepts/Awaitable.h"
 #include "Oxygen/OxCo/Coroutine.h"
+#include "Oxygen/OxCo/Detail/ParkingLotImpl.h"
 
 namespace oxygen::co {
 
