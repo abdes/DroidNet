@@ -156,13 +156,14 @@ auto operator co_await(Callable&& c)
 
 // The AwaitableLambda `operator co_await()` is not found via ADL and was not
 // declared before `concept Awaitable`, so we need to specialize
-// `ThisIsAwaitableTrustMe` in order to make callables returning Task<T> satisfy
-// `Awaitable`. Note that compiler-generated `co_await` logic outside `namespace
-// co::detail` would similarly not find it, but since our
-// `BasePromise::await_transform()` uses `co::detail::GetAwaitable()`, tasks can
-// await lambdas. We specifically _don't_ want to enable this for foreign tasks,
-// because they won't know to call `await_set_executor`, which prevents
-// AwaitableLambda from working.
+// `ThisIsAwaitableTrustMe` in order to make callables returning Co<T> satisfy
+// `Awaitable`.
+//
+// Note that compiler-generated `co_await` logic outside `namespace co::detail`
+// would similarly not find it, but since our `BasePromise::await_transform()`
+// uses `co::detail::GetAwaitable()`, tasks can await lambdas. We specifically
+// _don't_ want to enable this for foreign tasks, because they won't know to
+// call `await_set_executor`, which prevents AwaitableLambda from working.
 template <class Callable, class Ret>
     requires(std::derived_from<std::invoke_result_t<Callable>, CoTag>
                 && (std::same_as<Ret, Unspecified>
@@ -171,9 +172,8 @@ template <class Callable, class Ret>
                         Ret>))
 constexpr bool kThisIsAwaitableTrustMe<Callable, Ret> = true;
 
-/// A utility awaitable to perform a function with the current task
-/// temporarily suspended.
-/// Can be used to add a suspension point.
+//! A utility awaitable to perform a function with the current task temporarily
+//! suspended. Can be used to add a suspension point.
 template <class Callable, class ReturnType>
 class [[nodiscard]] YieldToRunImpl : /*private*/ Callable {
 public:
@@ -237,7 +237,6 @@ public:
 template <class Callable>
 using YieldToRunAwaitable = YieldToRunImpl<Callable, std::invoke_result_t<Callable>>;
 
-// NB: Must return by value.
 template <ValidAwaiter Aw>
 consteval void StaticAwaitableCheck() { }
 
@@ -246,20 +245,24 @@ auto GetAwaitable(T&& t) -> decltype(auto)
 {
     static_assert(oxygen::co::Awaitable<T>, "tried to co_await on not an awaitable");
 
-    if constexpr (
-        requires() {
-            { std::forward<T>(t) } -> ImmediateAwaitable;
-        }) {
+    if constexpr (ImmediateAwaitable<T>) {
         StaticAwaitableCheck<T>();
         return std::forward<T>(t);
-    } else if constexpr (
-        requires() {
-            { std::forward<T>(t).operator co_await() } -> ImmediateAwaitable;
-        }) {
+    } else if constexpr (MemberCoAwaitAwaitable<T>) {
         using Ret = decltype(std::forward<T>(t).operator co_await());
         StaticAwaitableCheck<Ret>();
         return std::forward<T>(t).operator co_await();
     } else if constexpr (
+        // The direct `requires()` expression here rather than using the
+        // pre-defined concept `NonMemberCoAwaitAwaitable` serves two purposes:
+        // 1. It properly handles forwarding references through
+        //    std::forward<T>(t)
+        // 2. It performs ADL (Argument Dependent Lookup) for the operator
+        //    `co_await`
+        //
+        // This concept definition would need to be evaluated at the point where
+        // it's defined, while the current implementation in GetAwaitable allows
+        // for operators that are defined later.
         requires() {
             { operator co_await(std::forward<T>(t)) } -> ImmediateAwaitable;
         }) {
