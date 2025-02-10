@@ -100,7 +100,7 @@ public:
     //! `Co<T>`. Calling it returns an `Awaitable`, which also acts as the
     //! `Awaiter` for controlling the suspension and resumption of the
     //! coroutine.
-    auto operator co_await()
+    auto operator co_await() noexcept
     {
         return detail::TaskAwaitable<T>(promise_.get());
     }
