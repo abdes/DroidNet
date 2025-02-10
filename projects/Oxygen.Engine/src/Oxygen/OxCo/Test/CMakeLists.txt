@@ -48,32 +48,17 @@ m_catch2_program(Nursery SOURCES Nursery_test.cpp)
 
 # -- Additional Functional Test ------------------------------------------------
 
-set(program_name "OxCo_FuncTests")
-add_executable(
-  ${program_name}
-  Basic_test.cpp
-  Cancellation_test.cpp
-  ThrowingAwaitable_test.cpp
+m_gtest_program(
+  Functional
+  SOURCES
+    Basic_test.cpp
+    Cancellation_test.cpp
+    ThrowingAwaitable_test.cpp
 )
-add_test(NAME ${program_name} COMMAND OxCo_FuncTests)
-set_target_properties(
-  ${program_name}
-  PROPERTIES
-    FOLDER
-      "Testing"
-)
-target_compile_definitions(${program_name} PRIVATE OXCO_AWAITABLE_STATE_DEBUG)
-target_link_libraries(
-  ${program_name}
-  PRIVATE
-    oxygen::base
-    oxygen::oxco
-    oxygen::testing
-)
+set(func_tests_target "${META_MODULE_NAME}.Functional.Tests")
+target_compile_definitions(${func_tests_target} PRIVATE OXCO_AWAITABLE_STATE_DEBUG)
 
-target_compile_features(${program_name} PUBLIC cxx_std_20)
-target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 if(OXYGEN_WITH_COVERAGE)
-  target_compile_options(${program_name} PRIVATE "--coverage")
-  target_link_options(${program_name} PRIVATE "--coverage")
+  target_compile_options(${func_tests_target} PRIVATE "--coverage")
+  target_link_options(${func_tests_target} PRIVATE "--coverage")
 endif()

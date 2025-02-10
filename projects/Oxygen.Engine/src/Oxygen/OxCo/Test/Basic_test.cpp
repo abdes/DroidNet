@@ -16,8 +16,6 @@ using namespace oxygen::co::testing;
 
 namespace {
 
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-
 class OxCoBasicTest : public OxCoTestFixture { };
 
 NOLINT_TEST_F(OxCoBasicTest, SmokeTest)
@@ -153,6 +151,44 @@ NOLINT_TEST_F(OxCoBasicTest, NoOp)
         auto mk_noop = []() -> Co<> { return NoOp(); };
         co_await NoOp();
         co_await mk_noop();
+    });
+}
+// ReSharper disable CppMemberFunctionMayBeStatic
+// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
+// NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard, *-special-member-functions)
+
+struct NonMoveableAwaiter {
+    NonMoveableAwaiter() = default;
+    OXYGEN_MAKE_NON_MOVEABLE(NonMoveableAwaiter)
+
+    auto await_ready() const noexcept -> bool { return true; }
+    auto await_suspend(detail::Handle) -> bool { return false; }
+    auto await_resume() -> int { return 42; }
+};
+
+struct NonMoveableAwaitable {
+    NonMoveableAwaitable() = default;
+    OXYGEN_MAKE_NON_MOVEABLE(NonMoveableAwaitable)
+
+    auto operator co_await() const -> NonMoveableAwaiter { return {}; }
+};
+
+// NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard, *-special-member-functions)
+// ReSharper enable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
+// ReSharper enable CppMemberFunctionMayBeStatic
+
+NOLINT_TEST_F(OxCoBasicTest, NonMoveable)
+{
+    // Silence clang-tidy warnings about un-needed default constructors
+    [[maybe_unused]] NonMoveableAwaiter _1;
+    [[maybe_unused]] NonMoveableAwaitable _2;
+
+    ::Run(*el_, []() -> Co<> {
+        int v = co_await NonMoveableAwaiter {};
+        EXPECT_EQ(v, 42);
+
+        v = co_await NonMoveableAwaitable {};
+        EXPECT_EQ(v, 42);
     });
 }
 

@@ -7,6 +7,7 @@
 #include "Oxygen/OxCo/Algorithms.h"
 
 #include <chrono>
+#include <ranges>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -101,6 +102,43 @@ NOLINT_TEST_F(MuxRangeTest, AllOf)
         EXPECT_EQ(ret[0], 300);
         EXPECT_EQ(ret[1], 200);
         EXPECT_EQ(ret[2], 500);
+    });
+}
+
+NOLINT_TEST_F(MuxRangeTest, MoveableRange_rvalue_ret)
+{
+    oxygen::co::Run(*el_, [this]() -> Co<> {
+        std::vector<Co<int>> v {};
+        v.push_back(MakeTask(3));
+        v.push_back(MakeTask(2));
+        v.push_back(MakeTask(5));
+
+        co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int>&& {
+            return std::move(x);
+        }));
+    });
+}
+
+NOLINT_TEST_F(MuxRangeTest, MoveableRange_value_ret)
+{
+    oxygen::co::Run(*el_, [this]() -> Co<> {
+        std::vector<Co<int>> v {};
+        v.push_back(MakeTask(3));
+        v.push_back(MakeTask(2));
+        v.push_back(MakeTask(5));
+
+        co_await AllOf(v | std::views::transform([&](Co<int>& x) -> Co<int> {
+            return std::move(x);
+        }));
+    });
+}
+
+NOLINT_TEST_F(MuxRangeTest, RValueRange)
+{
+    oxygen::co::Run(*el_, [this]() -> Co<> {
+        // Construct awaitables on the fly
+        std::vector values { 3, 2, 5 };
+        co_await AllOf(values | std::views::transform([&](const int x) { return MakeTask(x); }));
     });
 }
 
