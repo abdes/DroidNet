@@ -67,16 +67,46 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
 
         n.Start([window_weak]() -> oxygen::co::Co<> {
             bool not_destroyed { true };
-            while (not_destroyed) {
-                if (!window_weak.expired()) {
-                    if (const auto [from, to] = co_await window_weak.lock()->Events().UntilChanged();
-                        to == WindowEvent::kDestroyed) {
-                        LOG_F(INFO, "My window is destroyed");
-                        not_destroyed = false;
-                    } else {
-                        if (to == WindowEvent::kExposed) {
-                            LOG_F(INFO, "My window is exposed");
+            while (not_destroyed && !window_weak.expired()) {
+                auto window = window_weak.lock();
+                if (const auto [from, to] = co_await window->Events().UntilChanged();
+                    to == WindowEvent::kDestroyed) {
+                    LOG_F(INFO, "My window is destroyed");
+                    not_destroyed = false;
+                } else {
+                    if (to == WindowEvent::kExposed) {
+                        LOG_F(INFO, "My window is exposed");
+                    }
+                }
+            }
+        });
+
+        n.Start([window_weak, platform]() -> oxygen::co::Co<> {
+            while (!window_weak.expired()) {
+                auto window = window_weak.lock();
+                co_await window->CloseRequested();
+                DLOG_F(WARNING, "Press 'y' to close the window, you have 3 seconds...");
+                // Wait for the user to press 'y'
+                // 3 seconds to elapse
+                auto [double_close, _] = co_await oxygen::co::AnyOf(
+                    [&platform]() -> oxygen::co::Co<bool> {
+                        while (true) {
+                            auto& event = co_await platform->Events().NextEvent();
+                            auto _ = co_await platform->Events().Lock();
+                            auto sdl_event = event.NativeEventAs<SDL_Event>();
+                            if (sdl_event->type == SDL_EVENT_KEY_DOWN) {
+                                if (sdl_event->key.key == SDLK_Y) {
+                                    co_return true;
+                                }
+                            }
                         }
+                    },
+                    platform->Async().SleepFor(std::chrono::seconds(3)));
+                if (!window_weak.expired()) {
+                    if (!double_close) {
+                        window_weak.lock()->VoteNotToClose();
+                    } else {
+                        window_weak.lock()->VoteToClose();
                     }
                 }
             }

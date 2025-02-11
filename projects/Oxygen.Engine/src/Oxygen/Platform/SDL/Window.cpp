@@ -78,7 +78,7 @@ public:
         return events_;
     }
 
-    [[nodiscard]] auto CloseRequested() -> co::Awaitable<> auto
+    [[nodiscard]] auto CloseRequested() -> co::ParkingLot::Awaiter
     {
         return close_vote_aw_.Park();
     }
@@ -90,6 +90,7 @@ public:
     void DispatchEvent(const window::Event event) const override { events_.Set(event); }
     void InitiateClose(co::Nursery& n) override;
     void DoClose() const;
+    void RecordVote() const { close_vote_count_.Set(close_vote_count_.Get() - 1); }
 
 protected:
     void UpdateDependencies(const Composition& composition) override
@@ -99,6 +100,7 @@ protected:
 
 private:
     Data* data_ { nullptr };
+    bool vote_in_progress_ { false };
     mutable co::Value<size_t> close_vote_count_ { 0 };
     co::ParkingLot close_vote_aw_;
 
@@ -127,6 +129,11 @@ void Window::ManagerInterfaceImpl::DoPosition(const window::PositionT& position)
 
 void Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n)
 {
+    if (vote_in_progress_) {
+        LOG_F(INFO, "Window [id = {}] close vote already in progress", data_->id_);
+        return;
+    }
+    vote_in_progress_ = true;
     if (data_->forced_close_) {
         LOG_F(INFO, "Window [id = {}] requested to force close", data_->id_);
         DoClose();
@@ -141,6 +148,8 @@ void Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n)
             close_vote_count_.Set(voters_count);
             close_vote_aw_.UnParkAll();
             co_await close_vote_count_.UntilEquals(0);
+            vote_in_progress_ = false;
+            DLOG_F(INFO, "Window [id = {}] vote complete -> {}", data_->id_, data_->should_close_);
         }
         // If the vote is successful, close the window
         if (data_->should_close_) {
@@ -365,8 +374,14 @@ void Window::RequestClose(const bool force) const
     sdl::PushEvent(&event);
 }
 
-void Window::RequestNotToClose() const
+void Window::VoteToClose() const
 {
+    GetComponent<ManagerInterfaceImpl>().RecordVote();
+}
+
+void Window::VoteNotToClose() const
+{
+    GetComponent<ManagerInterfaceImpl>().RecordVote();
     auto& data = GetComponent<Data>();
     DCHECK_F(!data.forced_close_, "window is being force closed, but RequestNotToClose() was called");
     if (data.forced_close_ || !data.should_close_) {
@@ -381,7 +396,7 @@ auto Window::Events() const -> co::Value<window::Event>&
     return GetComponent<ManagerInterfaceImpl>().Events();
 }
 
-auto Window::CloseRequested() const -> co::Awaitable auto
+auto Window::CloseRequested() const -> co::ParkingLot::Awaiter
 {
     return GetComponent<ManagerInterfaceImpl>().CloseRequested();
 }
