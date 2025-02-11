@@ -4,64 +4,67 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Platform/Detail/Window_ManagerInterface.h"
 #include "Oxygen/Platform/Platform.h"
 #include "Oxygen/Platform/SDL/Wrapper.h"
+#include "Oxygen/Platform/Window.h"
 
 using oxygen::platform::WindowManager;
+using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
 
-auto MapWindowEvent(const Uint32 event_type) -> oxygen::platform::Window::Event
+auto MapWindowEvent(const Uint32 event_type) -> WindowEvent
 {
     switch (event_type) {
     case SDL_EVENT_WINDOW_SHOWN:
-        return oxygen::platform::Window::Event::kShown;
+        return WindowEvent::kShown;
     case SDL_EVENT_WINDOW_HIDDEN:
-        return oxygen::platform::Window::Event::kHidden;
+        return WindowEvent::kHidden;
     case SDL_EVENT_WINDOW_EXPOSED:
-        return oxygen::platform::Window::Event::kExposed;
+        return WindowEvent::kExposed;
     case SDL_EVENT_WINDOW_MOVED:
-        return oxygen::platform::Window::Event::kMoved;
+        return WindowEvent::kMoved;
     case SDL_EVENT_WINDOW_RESIZED:
-        return oxygen::platform::Window::Event::kResized;
+        return WindowEvent::kResized;
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-        return oxygen::platform::Window::Event::kPixelSizeChanged;
+        return WindowEvent::kPixelSizeChanged;
     case SDL_EVENT_WINDOW_METAL_VIEW_RESIZED:
-        return oxygen::platform::Window::Event::kMetalViewResized;
+        return WindowEvent::kMetalViewResized;
     case SDL_EVENT_WINDOW_MINIMIZED:
-        return oxygen::platform::Window::Event::kMinimized;
+        return WindowEvent::kMinimized;
     case SDL_EVENT_WINDOW_MAXIMIZED:
-        return oxygen::platform::Window::Event::kMaximized;
+        return WindowEvent::kMaximized;
     case SDL_EVENT_WINDOW_RESTORED:
-        return oxygen::platform::Window::Event::kRestored;
+        return WindowEvent::kRestored;
     case SDL_EVENT_WINDOW_MOUSE_ENTER:
-        return oxygen::platform::Window::Event::kMouseEnter;
+        return WindowEvent::kMouseEnter;
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-        return oxygen::platform::Window::Event::kMouseLeave;
+        return WindowEvent::kMouseLeave;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
-        return oxygen::platform::Window::Event::kFocusGained;
+        return WindowEvent::kFocusGained;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
-        return oxygen::platform::Window::Event::kFocusLost;
+        return WindowEvent::kFocusLost;
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        return oxygen::platform::Window::Event::kCloseRequested;
+        return WindowEvent::kCloseRequested;
     case SDL_EVENT_WINDOW_ICCPROF_CHANGED:
-        return oxygen::platform::Window::Event::kIccProfChanged;
+        return WindowEvent::kIccProfChanged;
     case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-        return oxygen::platform::Window::Event::kDisplayChanged;
+        return WindowEvent::kDisplayChanged;
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-        return oxygen::platform::Window::Event::kDisplayScaleChanged;
+        return WindowEvent::kDisplayScaleChanged;
     case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
-        return oxygen::platform::Window::Event::kSafeAreaChanged;
+        return WindowEvent::kSafeAreaChanged;
     case SDL_EVENT_WINDOW_OCCLUDED:
-        return oxygen::platform::Window::Event::kOccluded;
+        return WindowEvent::kOccluded;
     case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
-        return oxygen::platform::Window::Event::kEnterFullscreen;
+        return WindowEvent::kEnterFullscreen;
     case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
-        return oxygen::platform::Window::Event::kLeaveFullscreen;
+        return WindowEvent::kLeaveFullscreen;
     case SDL_EVENT_WINDOW_DESTROYED:
-        return oxygen::platform::Window::Event::kDestroyed;
+        return WindowEvent::kDestroyed;
     case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
-        return oxygen::platform::Window::Event::kHdrStateChanged;
+        return WindowEvent::kHdrStateChanged;
     default:
         throw std::runtime_error("event type not supported");
     }
@@ -69,7 +72,7 @@ auto MapWindowEvent(const Uint32 event_type) -> oxygen::platform::Window::Event
 
 } // namespace
 
-auto WindowManager::MakeWindow(const Window::Properties& props) -> std::weak_ptr<Window>
+auto WindowManager::MakeWindow(const window::Properties& props) -> std::weak_ptr<Window>
 {
     auto window = std::make_shared<Window>(props);
     windows_.push_back(window);
@@ -100,12 +103,13 @@ auto WindowManager::ProcessPlatformEvents() -> co::Co<>
                     last_window_closed_.Trigger();
                 }
             } else {
-                auto& window = WindowFromId(sdl_event.window.windowID);
                 try {
+                    auto& window = WindowFromId(sdl_event.window.windowID);
+                    auto& window_mgt = window.GetManagerInterface();
                     if (sdl_event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
-                        window.InitiateClose(async_->Nursery());
+                        window_mgt.InitiateClose(async_->Nursery());
                     }
-                    window.DispatchEvent(MapWindowEvent(sdl_event.type));
+                    window_mgt.DispatchEvent(MapWindowEvent(sdl_event.type));
                 } catch (const std::exception& ex) {
                     // SDL_EVENT_WINDOW_HIT_TEST event is ignored
                     if (sdl_event.type != SDL_EVENT_WINDOW_HIT_TEST) {

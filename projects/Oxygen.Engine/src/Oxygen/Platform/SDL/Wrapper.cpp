@@ -22,7 +22,9 @@ auto CheckMutuallyExclusiveFlags(std::convertible_to<bool> auto... flags)
     return ((0 + ... + flags) <= 1);
 }
 
-void TranslateFlagsToProperties(const SDL_PropertiesID props, const Window::InitialFlags& flags)
+void TranslateFlagsToProperties(
+    const SDL_PropertiesID props,
+    const oxygen::platform::window::InitialFlags& flags)
 {
     // Check for mutually exclusive flags
     DCHECK_F(CheckMutuallyExclusiveFlags(flags.full_screen, flags.maximized, flags.minimized), "some flags are mutually exclusive");
@@ -58,9 +60,9 @@ void oxygen::platform::sdl::SdlCheck(const bool status)
 
 auto oxygen::platform::sdl::MakeWindow(
     const char* title,
-    const int64_t pos_x, const int64_t pos_y,
-    const int64_t width, const int64_t height,
-    const Window::InitialFlags& flags)
+    const uint32_t pos_x, const uint32_t pos_y,
+    const uint32_t width, const uint32_t height,
+    const window::InitialFlags& flags)
     -> SDL_Window*
 {
     const SDL_PropertiesID props = SDL_CreateProperties();

@@ -50,6 +50,7 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "Detail/Window_ManagerInterface.h"
     "SDL/Wrapper.h"
     "SDL/Wrapper.cpp"
     "SDL/Window.cpp"
@@ -102,7 +103,7 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-#  add_subdirectory("Test")
+  add_subdirectory("Test")
 endif()
 
 # ==============================================================================

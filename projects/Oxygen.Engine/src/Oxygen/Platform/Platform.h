@@ -228,7 +228,7 @@ namespace platform {
         OXYGEN_COMPONENT(WindowManager)
         OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
     public:
-        OXYGEN_PLATFORM_API auto MakeWindow(const Window::Properties& props) -> std::weak_ptr<Window>;
+        OXYGEN_PLATFORM_API auto MakeWindow(const window::Properties& props) -> std::weak_ptr<Window>;
 
         [[nodiscard]] auto LastWindowClosed() -> co::Event& { return last_window_closed_; }
 

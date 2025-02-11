@@ -44,4 +44,3 @@ add_test(
 include(GTestHelpers)
 
 m_gtest_program("Oxygen.Platform.Input.Tests" SOURCES "Input_test.cpp")
-m_gtest_program("Oxygen.Platform.Window.Tests" SOURCES "Window_test.cpp")

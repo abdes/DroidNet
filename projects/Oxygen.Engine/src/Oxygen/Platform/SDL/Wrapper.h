@@ -36,11 +36,11 @@ inline void SetHint(const char* name, const char* value)
 // -- Window management ------------------------------------------------------
 
 auto MakeWindow(const char* title,
-    int64_t pos_x,
-    int64_t pos_y,
-    int64_t width,
-    int64_t height,
-    const Window::InitialFlags& flags) -> SDL_Window*;
+    uint32_t pos_x,
+    uint32_t pos_y,
+    uint32_t width,
+    uint32_t height,
+    const window::InitialFlags& flags) -> SDL_Window*;
 
 inline void DestroyWindow(SDL_Window* window) noexcept
 {
@@ -52,9 +52,9 @@ inline auto GetWindowId(SDL_Window* window) -> WindowIdType
     return SDL_GetWindowID(window);
 }
 
-inline auto GetNativeWindow(SDL_Window* window) -> NativeWindowInfo
+inline auto GetNativeWindow(SDL_Window* window) -> window::NativeHandles
 {
-    NativeWindowInfo native_window {};
+    window::NativeHandles native_window {};
 
 #if defined(SDL_PLATFORM_WIN32)
     void* native_window_handle = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
@@ -98,7 +98,7 @@ inline auto GetWindowFlags(SDL_Window* window) -> uint64_t
     return SDL_GetWindowFlags(window);
 }
 
-inline void SetWindowFullScreen(SDL_Window* window, bool full_screen)
+inline void SetWindowFullScreen(SDL_Window* window, const bool full_screen)
 {
     SdlCheck(SDL_SetWindowFullscreen(window, full_screen));
 }
@@ -133,27 +133,27 @@ inline void RestoreWindow(SDL_Window* window)
     SdlCheck(SDL_RestoreWindow(window));
 }
 
-inline void SetWindowSize(SDL_Window* window, int width, int height)
+inline void SetWindowSize(SDL_Window* window, const uint32_t width, const uint32_t height)
 {
     SdlCheck(SDL_SetWindowSize(window, width, height));
 }
 
-inline void GetWindowSize(SDL_Window* window, int* width, int* height)
+inline void GetWindowSize(SDL_Window* window, uint32_t* width, uint32_t* height)
 {
-    SdlCheck(SDL_GetWindowSize(window, width, height));
+    SdlCheck(SDL_GetWindowSize(window, reinterpret_cast<int*>(width), reinterpret_cast<int*>(height)));
 }
 
-inline void GetWindowSizeInPixels(SDL_Window* window, int* width, int* height)
+inline void GetWindowSizeInPixels(SDL_Window* window, uint32_t* width, uint32_t* height)
 {
-    SdlCheck(SDL_GetWindowSizeInPixels(window, width, height));
+    SdlCheck(SDL_GetWindowSizeInPixels(window, reinterpret_cast<int*>(width), reinterpret_cast<int*>(height)));
 }
 
-inline void SetWindowMinimumSize(SDL_Window* window, int width, int height)
+inline void SetWindowMinimumSize(SDL_Window* window, const uint32_t width, const uint32_t height)
 {
     SdlCheck(SDL_SetWindowMinimumSize(window, width, height));
 }
 
-inline void SetWindowMaximumSize(SDL_Window* window, int width, int height)
+inline void SetWindowMaximumSize(SDL_Window* window, const uint32_t width, const uint32_t height)
 {
     SdlCheck(SDL_SetWindowMaximumSize(window, width, height));
 }
@@ -163,14 +163,14 @@ inline void SetWindowResizable(SDL_Window* window, bool resizable)
     SdlCheck(SDL_SetWindowResizable(window, resizable));
 }
 
-inline void SetWindowPosition(SDL_Window* window, int pos_x, int pos_y)
+inline void SetWindowPosition(SDL_Window* window, const uint32_t pos_x, const uint32_t pos_y)
 {
     SdlCheck(SDL_SetWindowPosition(window, pos_x, pos_y));
 }
 
-inline void GetWindowPosition(SDL_Window* window, int* pos_x, int* pos_y)
+inline void GetWindowPosition(SDL_Window* window, uint32_t* pos_x, uint32_t* pos_y)
 {
-    SdlCheck(SDL_GetWindowPosition(window, pos_x, pos_y));
+    SdlCheck(SDL_GetWindowPosition(window, reinterpret_cast<int*>(pos_x), reinterpret_cast<int*>(pos_y)));
 }
 
 inline void SetWindowTitle(SDL_Window* window, const std::string& title)

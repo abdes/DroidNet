@@ -24,6 +24,8 @@ namespace {
 using oxygen::Platform;
 using oxygen::platform::Display;
 using oxygen::platform::Window;
+using WindowProps = oxygen::platform::window::Properties;
+using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
 
@@ -47,7 +49,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
         co_await n.Start(&Platform::Start, std::ref(*platform));
         platform->Run();
 
-        Window::Properties props("Oxygen Window Playground");
+        WindowProps props("Oxygen Window Playground");
         props.extent = { .width = 800, .height = 600 };
         props.flags = {
             .hidden = false,
@@ -68,11 +70,11 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
             while (not_destroyed) {
                 if (!window_weak.expired()) {
                     if (const auto [from, to] = co_await window_weak.lock()->Events().UntilChanged();
-                        to == Window::Event::kDestroyed) {
+                        to == WindowEvent::kDestroyed) {
                         LOG_F(INFO, "My window is destroyed");
                         not_destroyed = false;
                     } else {
-                        if (to == Window::Event::kExposed) {
+                        if (to == WindowEvent::kExposed) {
                             LOG_F(INFO, "My window is exposed");
                         }
                     }
