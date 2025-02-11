@@ -11,6 +11,7 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Types/Geometry.h"
 #include "Oxygen/Composition/Composition.h"
+#include "Oxygen/OxCo/ParkingLot.h"
 #include "Oxygen/OxCo/Value.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Platform/api_export.h"
@@ -134,10 +135,11 @@ public:
 
     // Application initiated close
     OXYGEN_PLATFORM_API void RequestClose(bool force = false) const;
-    OXYGEN_PLATFORM_API void RequestNotToClose() const;
+    OXYGEN_PLATFORM_API void VoteNotToClose() const;
+    OXYGEN_PLATFORM_API void VoteToClose() const;
 
     OXYGEN_PLATFORM_API auto Events() const -> co::Value<window::Event>&;
-    OXYGEN_PLATFORM_API auto CloseRequested() const -> co::Awaitable<> auto;
+    OXYGEN_PLATFORM_API auto CloseRequested() const -> co::ParkingLot::Awaiter;
 
     //! Get a reference to this window management interface. For internal use
     //! only, hence, its symbol should not be exported.

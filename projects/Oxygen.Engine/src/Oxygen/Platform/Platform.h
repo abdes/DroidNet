@@ -108,7 +108,7 @@ namespace platform {
         }
 
     private:
-        void MaybeBootstrap();
+        OXYGEN_PLATFORM_API void MaybeBootstrap();
 
         //! Waits for platform events, and when available, translates them into
         //! specific event types and awakes any tasks waiting for them.
