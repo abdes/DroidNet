@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Base/Finally.h"
 #include "Oxygen/Platform/Detail/Window_ManagerInterface.h"
 #include "Oxygen/Platform/Platform.h"
 #include "Oxygen/Platform/SDL/Wrapper.h"
@@ -82,7 +83,8 @@ auto WindowManager::MakeWindow(const window::Properties& props) -> std::weak_ptr
 auto WindowManager::ProcessPlatformEvents() -> co::Co<>
 {
     while (true) {
-        auto& event = co_await event_pump_->WaitForNextEvent();
+        auto& event = co_await event_pump_->NextEvent();
+        auto _ = co_await event_pump_->Lock();
         if (event.IsHandled()) {
             continue;
         }

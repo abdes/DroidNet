@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <utility>
+
 namespace oxygen {
 
 //! FinalAction ensures something gets run at the end of a scope.
