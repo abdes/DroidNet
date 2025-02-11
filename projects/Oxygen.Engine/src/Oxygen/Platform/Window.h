@@ -6,31 +6,30 @@
 
 #pragma once
 
-#include "Co.h"
-#include "ParkingLot.h"
-
 #include <string>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Signals.h"
 #include "Oxygen/Base/Types/Geometry.h"
+#include "Oxygen/Composition/Composition.h"
 #include "Oxygen/OxCo/Value.h"
 #include "Oxygen/Platform/Types.h"
 #include "Oxygen/Platform/api_export.h"
 
 namespace oxygen::platform {
 
-struct NativeWindowInfo {
-    void* window_handle { nullptr };
+namespace window {
 
-    // This will contain the HINSTANCE for MS Windows, the display for Wayland;
-    // otherwise nullptr.
-    void* extra_handle { nullptr };
-};
+    struct NativeHandles {
+        //! Opaque window handle, platform dependent.
+        void* window_handle { nullptr };
 
-class Window {
-public:
-    friend class WindowManager;
+        //! This will contain the `HINSTANCE` for MS Windows, the display for
+        //! Wayland; otherwise `nullptr`.
+        void* extra_handle { nullptr };
+    };
+
+    using ExtentT = Extent<uint32_t>;
+    using PositionT = Point<uint32_t>;
 
     enum class Event : uint32_t { // NOLINT(performance-enum-size) - consistent with implementation
         kUnknown = 0,
@@ -59,6 +58,7 @@ public:
         kDestroyed, //!< The window is about to be destroyed and should not be used after this event
         kHdrStateChanged //!< Window HDR properties have changed
     };
+
     struct InitialFlags {
         // Visibility
         bool hidden : 1;
@@ -74,8 +74,10 @@ public:
 
     struct Properties {
         std::string title;
-        std::optional<Extent<int64_t>> extent {};
-        std::optional<Point<int64_t>> position {};
+        std::optional<ExtentT> extent;
+        std::optional<ExtentT> min_extent;
+        std::optional<ExtentT> max_extent;
+        std::optional<PositionT> position;
         InitialFlags flags {};
 
         // Constructor that requires the title
@@ -84,80 +86,62 @@ public:
         {
         }
     };
+    class ManagerInterface;
 
-    OXYGEN_PLATFORM_API explicit Window(const Properties& props);
+} // namespace window
 
-    OXYGEN_PLATFORM_API ~Window();
+class Window : public Composition {
+    class Data; //!< Component, holds the window data.
+    class ManagerInterfaceImpl; //!< Component, window management functionality.
+
+public:
+    OXYGEN_PLATFORM_API explicit Window(const window::Properties& props);
+
+    OXYGEN_PLATFORM_API ~Window() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Window)
     OXYGEN_MAKE_NON_MOVEABLE(Window)
 
     [[nodiscard]] OXYGEN_PLATFORM_API auto Id() const -> WindowIdType;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto NativeWindow() const -> NativeWindowInfo;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsValid() const -> bool { return Id() != kInvalidWindowId; }
-
-    // Visibility
-    OXYGEN_PLATFORM_API auto Show() const -> void;
-    OXYGEN_PLATFORM_API auto Hide() const -> void;
-
-    // Size
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsFullScreen() const -> bool;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsMaximized() const -> bool;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsMinimized() const -> bool;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsResizable() const -> bool;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto IsBorderLess() const -> bool;
-
-    [[nodiscard]] OXYGEN_PLATFORM_API auto Size() const -> PixelExtent;
-    [[nodiscard]] OXYGEN_PLATFORM_API auto GetFrameBufferSize() const -> PixelExtent;
-
-    OXYGEN_PLATFORM_API void FullScreen(bool full_screen) const;
-    OXYGEN_PLATFORM_API void Minimize() const;
-    OXYGEN_PLATFORM_API void Maximize() const;
-    OXYGEN_PLATFORM_API void Restore();
-    OXYGEN_PLATFORM_API void MinimumSize(PixelExtent const& extent) const;
-    OXYGEN_PLATFORM_API void MaximumSize(PixelExtent const& extent) const;
-    OXYGEN_PLATFORM_API void Resizable(bool resizable) const;
-    OXYGEN_PLATFORM_API void Size(PixelExtent const& extent);
-
-    // Position
-    [[nodiscard]] OXYGEN_PLATFORM_API auto Position() const -> PixelPosition;
-    OXYGEN_PLATFORM_API auto Position(PixelPosition const& position) -> void;
-
-    // Decorations
-    OXYGEN_PLATFORM_API void Title(std::string const& title) const;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Native() const -> window::NativeHandles;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Valid() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Size() const -> window::ExtentT;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto FrameBufferSize() const -> window::ExtentT;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto FullScreen() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Maximized() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Minimized() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Resizable() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto BorderLess() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto Position() const -> window::PositionT;
     [[nodiscard]] OXYGEN_PLATFORM_API auto Title() const -> std::string;
 
-    // Input Focus
+    OXYGEN_PLATFORM_API auto Show() const -> void;
+    OXYGEN_PLATFORM_API auto Hide() const -> void;
+    OXYGEN_PLATFORM_API void EnterFullScreen() const;
+    OXYGEN_PLATFORM_API void ExitFullScreen() const;
+    OXYGEN_PLATFORM_API void Minimize() const;
+    OXYGEN_PLATFORM_API void Maximize() const;
+    OXYGEN_PLATFORM_API void Restore() const;
+    OXYGEN_PLATFORM_API void SetMinimumSize(const window::ExtentT& extent) const;
+    OXYGEN_PLATFORM_API void SetMaximumSize(const window::ExtentT& extent) const;
+    OXYGEN_PLATFORM_API void EnableResizing() const;
+    OXYGEN_PLATFORM_API void DisableResizing() const;
+    OXYGEN_PLATFORM_API void Resize(const window::ExtentT& extent) const;
+    OXYGEN_PLATFORM_API auto MoveTo(const window::PositionT& position) const -> void;
+    OXYGEN_PLATFORM_API void SetTitle(const std::string& title) const;
     OXYGEN_PLATFORM_API void Activate() const;
-    OXYGEN_PLATFORM_API void AlwaysOnTop(bool always_on_top) const;
+    OXYGEN_PLATFORM_API void KeepAlwaysOnTop(bool always_on_top = true) const;
 
     // Application initiated close
     OXYGEN_PLATFORM_API void RequestClose(bool force = false) const;
     OXYGEN_PLATFORM_API void RequestNotToClose() const;
 
-    auto Events() const -> co::Value<Event>&
-    {
-        return events_;
-    }
+    OXYGEN_PLATFORM_API auto Events() const -> co::Value<window::Event>&;
+    OXYGEN_PLATFORM_API auto CloseRequested() const -> co::Awaitable<> auto;
 
-    auto CloseRequested() -> co::Awaitable<> auto { return close_vote_aw_.Park(); }
-
-private:
-    auto DoRestore() const -> void;
-    auto DoMaximize() const -> void;
-    auto DoResize(PixelExtent const& extent) const -> void;
-    auto DoPosition(PixelPosition const& position) const -> void;
-
-    void InitiateClose(co::Nursery& n);
-    auto DoClose() -> void;
-    mutable co::Value<size_t> close_vote_count_ { 0 };
-    co::ParkingLot close_vote_aw_;
-
-    mutable co::Value<Event> events_ { Event::kUnknown };
-    void DispatchEvent(const Event event) const { events_.Set(event); }
-
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    //! Get a reference to this window management interface. For internal use
+    //! only, hence, its symbol should not be exported.
+    auto GetManagerInterface() const -> window::ManagerInterface&;
 };
 
 } // namespace oxygen::platform
