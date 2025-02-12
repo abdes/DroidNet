@@ -105,7 +105,7 @@ public:
     [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
     CommandRecorderPtr GetCommandRecorder() { return command_recorder_; }
-    ShaderCompilerPtr GetShaderCompiler() const { return std::dynamic_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
+    ShaderCompilerPtr GetShaderCompiler() const { return std::static_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
     std::shared_ptr<IShaderByteCode> GetEngineShader(std::string_view unique_id);
 
 private:
@@ -234,7 +234,7 @@ void RendererImpl::EndFrame(CommandLists& command_lists, const resources::Surfac
 auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
 {
     DCHECK_NOTNULL_F(window.lock());
-    DCHECK_F(window.lock()->IsValid());
+    DCHECK_F(window.lock()->Valid());
 
     const auto surface_id = surfaces.Emplace(std::move(window), command_queue_->GetCommandQueue());
     if (!surface_id.IsValid()) {
@@ -307,7 +307,7 @@ auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride
 
 void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
 {
-    if (IsInitialized())
+    if (this->IsInitialized())
         OnShutdown();
 
     graphics::Renderer::OnInitialize(std::move(platform), props);
@@ -316,7 +316,7 @@ void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& prop
         pimpl_->Init(GetInitProperties());
     } catch (const std::runtime_error&) {
         // Request a shutdown to cleanup resources
-        IsInitialized(true);
+        this->IsInitialized(true);
         throw;
     }
 }
@@ -377,7 +377,7 @@ auto Renderer::UavHeap() const -> detail::DescriptorHeap&
 auto Renderer::CreateWindowSurface(platform::WindowPtr window) const -> SurfacePtr
 {
     DCHECK_NOTNULL_F(window.lock());
-    DCHECK_F(window.lock()->IsValid());
+    DCHECK_F(window.lock()->Valid());
 
     const auto [surface_id, surface_impl] { pimpl_->CreateWindowSurfaceImpl(window) };
     if (!surface_impl) {

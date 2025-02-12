@@ -45,7 +45,6 @@ void MemoryBlock::Init(const MemoryBlockDesc& desc)
         .Alignment = desc.alignment,
     };
 
-    const auto& renderer = GetRenderer();
     D3D12MA::Allocation* allocation_raw_ptr = nullptr; // Local variable to store the raw pointer
     ThrowOnFailed(GetAllocator().AllocateMemory(
         &alloc_desc,

@@ -6,3 +6,4 @@
 
 add_subdirectory("Loader")
 add_subdirectory("Common")
+add_subdirectory("Direct3D12")

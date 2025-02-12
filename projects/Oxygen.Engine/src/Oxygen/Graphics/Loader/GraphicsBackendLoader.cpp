@@ -10,7 +10,7 @@
 
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Graphics/Common/Graphics.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
+// #include "Oxygen/Graphics/Common/Renderer.h"
 
 using namespace oxygen::graphics;
 

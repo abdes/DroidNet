@@ -165,22 +165,28 @@ auto Engine::Run() -> void
     }
     while (continue_running && !is_stop_requested_.load()) {
         // Poll for platform events
-        auto event = GetPlatform().PollEvent();
+        // TODO: FIXME upgrade Engine to async
+        // auto event = GetPlatform().PollEvent();
 
         // Process Input Events with ImGui
+#if 0
         if (event && imgui_module_) {
             imgui_module_->ProcessInput(*event);
         }
+#endif
         // Run the modules
         std::ranges::for_each(
-            modules_, [this, &continue_running, &event](auto& module) {
+            // modules_, [this, &continue_running, &event](auto& module) {
+            modules_, [this, &continue_running](auto& module) {
                 auto& the_module = module.module;
                 DCHECK_NOTNULL_F(the_module);
 
+#if 0
                 // Inputs
                 if (event) {
                     the_module->ProcessInput(*event);
                 }
+#endif
 
                 // Note that we may be running renderer-less, which means the renderer
                 // is null, which is fine.

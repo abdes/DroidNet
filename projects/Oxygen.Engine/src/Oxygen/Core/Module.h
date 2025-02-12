@@ -9,8 +9,8 @@
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Core/Types.h"
 #include "Oxygen/Core/api_export.h"
-#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Composition/Composition.h>
 
 namespace oxygen {
 
@@ -31,7 +31,7 @@ namespace core {
         OXYGEN_MAKE_NON_COPYABLE(Module)
         OXYGEN_MAKE_NON_MOVEABLE(Module)
 
-        [[nodiscard]] auto Name() const -> std::string_view;
+        [[nodiscard]] OXYGEN_CORE_API auto Name() const -> std::string_view;
 
         virtual auto ProcessInput(const platform::InputEvent& event) -> void = 0;
         virtual auto Update(Duration delta_time) -> void = 0;

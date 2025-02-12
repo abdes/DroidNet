@@ -8,8 +8,8 @@
 
 #include "Oxygen/ImGui/ImGuiPlatformBackend.h"
 
+#include "Oxygen/ImGui/api_export.h"
 #include "Oxygen/Platform/Types.h"
-#include "Oxygen/Platform/SDL/api_export.h"
 
 namespace oxygen::imgui::sdl3 {
 
@@ -26,12 +26,12 @@ public:
     {
     }
 
-    OXYGEN_SDL3_API ~ImGuiSdl3Backend() override = default;
+    OXYGEN_IMGUI_API ~ImGuiSdl3Backend() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend);
     OXYGEN_MAKE_NON_MOVEABLE(ImGuiSdl3Backend);
 
-    OXYGEN_SDL3_API void NewFrame() override;
+    OXYGEN_IMGUI_API void NewFrame() override;
 
 protected:
     void OnInitialize(ImGuiContext* imgui_context) override;

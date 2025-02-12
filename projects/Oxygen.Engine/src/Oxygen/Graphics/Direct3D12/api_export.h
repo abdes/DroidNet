@@ -6,20 +6,22 @@
 
 #pragma once
 
-#ifdef OXYGEN_D3D12_STATIC_DEFINE
-#  define OXYGEN_D3D12_API
-#  define OXYGEN_D3D12_NO_EXPORT
-#else
-#  ifndef OXYGEN_D3D12_API
+#if defined(_WIN32) || defined(_WIN64)
+#  ifdef OXYGEN_D3D12_STATIC
+#    define OXYGEN_D3D12_API
+#  else
 #    ifdef OXYGEN_D3D12_EXPORTS
-/* We are building this library */
 #      define OXYGEN_D3D12_API __declspec(dllexport)
 #    else
-/* We are using this library */
 #      define OXYGEN_D3D12_API __declspec(dllimport)
 #    endif
 #  endif
-#  ifndef OXYGEN_D3D12_NO_EXPORT
-#    define OXYGEN_D3D12_NO_EXPORT
+#elif defined(__APPLE__) || defined(__linux__)
+#  ifdef OXYGEN_D3D12_EXPORTS
+#    define OXYGEN_D3D12_API __attribute__((visibility("default")))
+#  else
+#    define OXYGEN_D3D12_API
 #  endif
+#else
+#  define OXYGEN_D3D12_API
 #endif

@@ -19,15 +19,15 @@ class ImguiModule;
 
 class ImGuiRenderInterface {
 public:
-    OXYGEN_GFX_API ImGuiRenderInterface() = default;
-    OXYGEN_GFX_API ~ImGuiRenderInterface() = default;
-    OXYGEN_GFX_API ImGuiContext* GetContext() const;
+    OXYGEN_IMGUI_API ImGuiRenderInterface() = default;
+    OXYGEN_IMGUI_API ~ImGuiRenderInterface() = default;
+    OXYGEN_IMGUI_API ImGuiContext* GetContext() const;
 
     OXYGEN_DEFAULT_COPYABLE(ImGuiRenderInterface);
     OXYGEN_DEFAULT_MOVABLE(ImGuiRenderInterface);
 
-    OXYGEN_GFX_API auto Render(const Graphics* gfx) const -> graphics::CommandListPtr;
-    OXYGEN_GFX_API void NewFrame(const Graphics* gfx) const;
+    OXYGEN_IMGUI_API auto Render(const Graphics* gfx) const -> graphics::CommandListPtr;
+    OXYGEN_IMGUI_API void NewFrame(const Graphics* gfx) const;
 
 private:
     friend class ImguiModule;

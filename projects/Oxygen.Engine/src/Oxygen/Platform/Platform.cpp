@@ -28,6 +28,11 @@ void Platform::Compose()
     AddComponent<InputEvents>();
 }
 
+auto Platform::GetInputSlotForKey(const platform::Key key) -> platform::InputSlot
+{
+    return platform::InputSlots::GetInputSlotForKey(key);
+}
+
 #if 0
 #  include "Oxygen/Platform/Input.h"
 

@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/SDL/ImGui/ImGuiSdl3Backend.h"
+#include "Oxygen/ImGui/SDL/ImGuiSdl3Backend.h"
 
 #include <SDL3/SDL.h>
 
-#include "Oxygen/Platform/SDL/ImGui/imgui_impl_sdl3.h"
-#include "Oxygen/Platform/SDL/Platform.h"
+#include "Oxygen/ImGui/SDL/imgui_impl_sdl3.h"
+#include "Oxygen/Platform/Platform.h"
 
 using oxygen::imgui::sdl3::ImGuiSdl3Backend;
 
@@ -30,14 +30,17 @@ void ImGuiSdl3Backend::OnInitialize(ImGuiContext* imgui_context)
 
     // Adjust the scaling to take into account the current DPI
     const float window_scale = SDL_GetWindowDisplayScale(window);
-    DLOG_F(INFO, "[{}] Using DPI scale: {}", ObjectName(), window_scale);
+    DLOG_F(INFO, "[{}] Using DPI scale: {}", this->ObjectName(), window_scale);
     auto& io = ImGui::GetIO();
     io.FontGlobalScale = window_scale;
     ImGui::GetStyle().ScaleAllSizes(window_scale);
 
     // Register to process SDL events
-    const auto sdl3_platform = std::static_pointer_cast<const platform::sdl::Platform>(platform_);
+    const auto sdl3_platform = std::static_pointer_cast<const Platform>(platform_);
     DCHECK_NOTNULL_F(sdl3_platform);
+
+    // TODO: FIXME - imgui connect to platform events
+#if 0
     sdl3_platform->OnPlatformEvent().connect(
         [this](const SDL_Event& event, bool& capture_mouse, bool& capture_keyboard) {
             // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
@@ -60,6 +63,7 @@ void ImGuiSdl3Backend::OnInitialize(ImGuiContext* imgui_context)
                 capture_keyboard = ImGui::GetIO().WantCaptureKeyboard;
             }
         });
+#endif
 }
 
 void ImGuiSdl3Backend::OnShutdown()

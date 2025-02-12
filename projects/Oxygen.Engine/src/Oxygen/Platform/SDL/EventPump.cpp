@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/OxCo/Algorithms.h"
 #include "Oxygen/Platform/Platform.h"
 #include "Oxygen/Platform/SDL/Wrapper.h"
 
