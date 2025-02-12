@@ -21,6 +21,19 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 
+# Define the path to the DXC compiler
+set(dxc_arch "")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
+    set(dxc_arch "x64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
+    set(dxc_arch "x86")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
+    set(dxc_arch "arm64")
+else()
+    message(FATAL_ERROR "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+set(dxc_lib_path "${CMAKE_SOURCE_DIR}/packages/DXC/lib/${dxc_arch}")
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -106,14 +119,7 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_D3D12_STATIC>
 )
 
-target_link_options(
-  ${META_MODULE_TARGET}
-  PUBLIC
-    -ld3d12
-    -ldxgi
-    -ldxguid
-    -ldxcompiler
-)
+target_link_directories(${META_MODULE_TARGET} PRIVATE ${dxc_lib_path})
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
@@ -132,22 +138,9 @@ target_link_libraries(
 # Shader compilation
 # ------------------------------------------------------------------------------
 
-# Define the path to the DXC compiler
-set(DXC_ARCH "")
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-    set(DXC_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-    set(DXC_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-    set(DXC_ARCH "x86")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-    set(DXC_ARCH "arm64")
-else()
-    message(FATAL_ERROR "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}")
-endif()
-set(DXC_BIN_PATH "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${DXC_ARCH}")
-set(DXC_EXE "${DXC_BIN_PATH}/dxc.exe")
-message(STATUS "Using DXC Compiler: ${DXC_EXE}")
+set(dxc_bin_path "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${dxc_arch}")
+set(dxc_exe "${dxc_bin_path}/dxc.exe")
+message(STATUS "Using DXC Compiler: ${dxc_exe}")
 
 # Function to add custom shader compilation commands
 function(add_shader_compilation target shader_file)
@@ -158,18 +151,18 @@ function(add_shader_compilation target shader_file)
     add_custom_command(
         OUTPUT "${shader_dir}/${shader_name}_vs.cso"
         COMMAND ${CMAKE_COMMAND} -E echo "Compiling vertex shader: ${shader_file}"
-        COMMAND ${DXC_EXE} -T vs_6_8 -E VS -Fo "${shader_dir}/${shader_name}_vs.cso" "${shader_file}"
+        COMMAND ${dxc_exe} -T vs_6_8 -E VS -Fo "${shader_dir}/${shader_name}_vs.cso" "${shader_file}"
         DEPENDS ${shader_file}
-        COMMENT "Using DXC Compiler ${DXC_EXE} for vertex shader"
+        COMMENT "Using DXC Compiler ${dxc_exe} for vertex shader"
     )
 
     # Pixel shader compilation command
     add_custom_command(
         OUTPUT "${shader_dir}/${shader_name}_ps.cso"
         COMMAND ${CMAKE_COMMAND} -E echo "Compiling pixel shader: ${shader_file}"
-        COMMAND ${DXC_EXE} -T ps_6_8 -E PS -Fo "${shader_dir}/${shader_name}_ps.cso" "${shader_file}"
+        COMMAND ${dxc_exe} -T ps_6_8 -E PS -Fo "${shader_dir}/${shader_name}_ps.cso" "${shader_file}"
         DEPENDS ${shader_file}
-        COMMENT "Using DXC Compiler ${DXC_EXE} for pixel shader"
+        COMMENT "Using DXC Compiler ${dxc_exe} for pixel shader"
     )
 
     # Add the compiled shaders as dependencies to the target
