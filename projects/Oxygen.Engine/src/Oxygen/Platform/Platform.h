@@ -6,19 +6,17 @@
 
 #pragma once
 
-#include "Algorithms.h"
-#include "Semaphore.h"
-#include "deque"
 #include <array>
+#include <deque>
 #include <memory>
 #include <vector>
 
 #include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Signals.h"
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Event.h"
 #include "Oxygen/OxCo/Nursery.h"
 #include "Oxygen/OxCo/ParkingLot.h"
+#include "Oxygen/OxCo/Semaphore.h"
 #include "Oxygen/OxCo/Shared.h"
 #include "Oxygen/OxCo/asio.h"
 #include "Oxygen/Platform/Display.h"
@@ -305,6 +303,8 @@ public:
     auto Events() const -> platform::EventPump& { return GetComponent<platform::EventPump>(); }
     auto Input() const -> platform::InputEvents& { return GetComponent<platform::InputEvents>(); }
     auto Windows() const -> platform::WindowManager& { return GetComponent<platform::WindowManager>(); }
+
+    static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
 
 private:
     void Compose();

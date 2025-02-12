@@ -6,7 +6,7 @@
 
 #include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
 
-#include <imgui_impl_dx12.h>
+#include "Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h"
 
 #include "Oxygen/Graphics/Direct3D12/Constants.h"
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
@@ -25,7 +25,7 @@ void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
 
-    const auto d3d12_render = dynamic_cast<const Renderer*>(gfx->GetRenderer());
+    const auto d3d12_render = static_cast<const Renderer*>(gfx->GetRenderer());
 
     font_srv_handle_ = d3d12_render->SrvHeap().Allocate();
     ImGui::SetCurrentContext(GetImGuiContext());
@@ -53,7 +53,7 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawD
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
 
-    const auto d3d12_render = dynamic_cast<const Renderer*>(gfx->GetRenderer());
+    const auto d3d12_render = static_cast<const Renderer*>(gfx->GetRenderer());
     DCHECK_NOTNULL_F(d3d12_render);
     auto& current_render_target = d3d12_render->GetCurrentRenderTarget();
 

@@ -34,25 +34,25 @@ public:
     {
     }
 
-    OXYGEN_GFX_API ~ImguiModule() override;
+    OXYGEN_IMGUI_API ~ImguiModule() override;
 
     OXYGEN_MAKE_NON_COPYABLE(ImguiModule);
     OXYGEN_MAKE_NON_MOVEABLE(ImguiModule);
 
-    OXYGEN_GFX_API auto ProcessInput(const platform::InputEvent& event) -> void override;
-    OXYGEN_GFX_API auto Update(Duration delta_time) -> void override;
-    OXYGEN_GFX_API auto FixedUpdate() -> void override;
+    OXYGEN_IMGUI_API auto ProcessInput(const platform::InputEvent& event) -> void override;
+    OXYGEN_IMGUI_API auto Update(Duration delta_time) -> void override;
+    OXYGEN_IMGUI_API auto FixedUpdate() -> void override;
 
-    OXYGEN_GFX_API virtual auto GetRenderInterface() -> ImGuiRenderInterface;
+    OXYGEN_IMGUI_API virtual auto GetRenderInterface() -> ImGuiRenderInterface;
 
 protected:
-    OXYGEN_GFX_API void OnInitialize(const Graphics* gfx) override;
-    OXYGEN_GFX_API void OnShutdown() noexcept override;
+    OXYGEN_IMGUI_API void OnInitialize(const Graphics* gfx) override;
+    OXYGEN_IMGUI_API void OnShutdown() noexcept override;
 
-    OXYGEN_GFX_API virtual void ImGuiBackendInit(const Graphics* gfx) = 0;
-    OXYGEN_GFX_API virtual void ImGuiBackendShutdown() = 0;
-    OXYGEN_GFX_API virtual void ImGuiBackendNewFrame() = 0;
-    OXYGEN_GFX_API virtual auto ImGuiBackendRenderRawData(const Graphics* gfx, ImDrawData* draw_data)
+    OXYGEN_IMGUI_API virtual void ImGuiBackendInit(const Graphics* gfx) = 0;
+    OXYGEN_IMGUI_API virtual void ImGuiBackendShutdown() = 0;
+    OXYGEN_IMGUI_API virtual void ImGuiBackendNewFrame() = 0;
+    OXYGEN_IMGUI_API virtual auto ImGuiBackendRenderRawData(const Graphics* gfx, ImDrawData* draw_data)
         -> graphics::CommandListPtr
         = 0;
 

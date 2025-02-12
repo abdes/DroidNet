@@ -7,6 +7,7 @@
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/NoStd.h"
 #include "Oxygen/Base/Windows/ComError.h"
 #include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"

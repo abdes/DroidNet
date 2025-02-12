@@ -14,6 +14,7 @@
 #include "Oxygen/Graphics/Common/Graphics.h"
 #include "Oxygen/Imgui/ImGuiPlatformBackend.h"
 #include "Oxygen/Platform/Platform.h"
+#include "SDL/ImGuiSdl3Backend.h"
 
 using oxygen::imgui::ImguiModule;
 
@@ -27,7 +28,9 @@ void ImguiModule::OnInitialize(const Graphics* gfx)
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
 
-    imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
+    // TODO: FIXME Implement this
+    // imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
+    imgui_platform_ = std::make_shared<sdl3::ImGuiSdl3Backend>(nullptr, platform::kInvalidWindowId);
     if (!imgui_platform_) {
         LOG_F(ERROR, "Failed to create ImGui platform backend.");
         return;

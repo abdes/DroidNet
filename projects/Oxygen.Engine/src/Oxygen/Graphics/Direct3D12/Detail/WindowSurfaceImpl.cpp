@@ -38,7 +38,7 @@ DXGI_FORMAT ToNonSrgb(const DXGI_FORMAT format)
 void WindowSurfaceImpl::Resize()
 {
     DCHECK_NOTNULL_F(swap_chain_);
-    const auto [width, height] = window_.lock()->GetFrameBufferSize();
+    const auto [width, height] = window_.lock()->FrameBufferSize();
     try {
         for (auto& [resource, rtv] : render_targets_) {
             ObjectRelease(resource);
@@ -91,7 +91,7 @@ void WindowSurfaceImpl::CreateSwapChain(const DXGI_FORMAT format)
     };
 
     IDXGISwapChain1* swap_chain { nullptr };
-    const auto window_handle = static_cast<HWND>(window->NativeWindow().window_handle);
+    const auto window_handle = static_cast<HWND>(window->Native().window_handle);
     try {
         ThrowOnFailed(
             GetFactory()->CreateSwapChainForHwnd(
@@ -141,7 +141,7 @@ void WindowSurfaceImpl::Finalize()
 
     DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {};
     ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
-    const auto [width, height] = window_.lock()->GetFrameBufferSize();
+    const auto [width, height] = window_.lock()->FrameBufferSize();
     DCHECK_EQ_F(width, swap_chain_desc.Width);
     DCHECK_EQ_F(height, swap_chain_desc.Height);
 

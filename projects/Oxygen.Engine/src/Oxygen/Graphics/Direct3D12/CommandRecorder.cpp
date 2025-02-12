@@ -161,7 +161,7 @@ void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buf
 
     std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
     for (uint32_t i = 0; i < num; ++i) {
-        auto buffer = std::dynamic_pointer_cast<Buffer>(vertex_buffers[i]);
+        auto buffer = std::static_pointer_cast<Buffer>(vertex_buffers[i]);
         vertex_buffer_views[i].BufferLocation = buffer->GetResource()->GetGPUVirtualAddress();
         vertex_buffer_views[i].SizeInBytes = buffer->GetSize();
         vertex_buffer_views[i].StrideInBytes = strides[i];

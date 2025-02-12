@@ -54,16 +54,16 @@ void DebugLayer::OnShutdown() noexcept
     ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, false));
 #endif
 
-    OutputDebugString(L"===-- LIVE OBJECTS REPORT -----------------------------------------------===\n");
+    OutputDebugString("===-- LIVE OBJECTS REPORT -----------------------------------------------===\n");
     try {
         ThrowOnFailed(dxgi_debug_->ReportLiveObjects(
             DXGI_DEBUG_ALL,
             static_cast<DXGI_DEBUG_RLO_FLAGS>(
                 DXGI_DEBUG_RLO_SUMMARY | DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL)));
-        OutputDebugString(L"===----------------------------------------------------------------------===\n");
+        OutputDebugString("===----------------------------------------------------------------------===\n");
     } catch (const windows::ComError& e) {
         OutputDebugStringA(e.what());
-        OutputDebugString(L"===-- FAILED ------------------------------------------------------------===\n");
+        OutputDebugString("===-- FAILED ------------------------------------------------------------===\n");
     }
 
     ObjectRelease(d3d12_debug_);

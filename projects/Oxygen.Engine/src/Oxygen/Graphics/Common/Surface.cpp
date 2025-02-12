@@ -16,14 +16,14 @@ using namespace oxygen::graphics::resources;
 auto WindowSurface::Width() const -> uint32_t
 {
     if (const auto window = window_.lock())
-        return window->GetFrameBufferSize().width;
+        return window->FrameBufferSize().width;
     throw std::runtime_error("Window is no longer valid");
 }
 
 auto WindowSurface::Height() const -> uint32_t
 {
     if (const auto window = window_.lock())
-        return window->GetFrameBufferSize().height;
+        return window->FrameBufferSize().height;
     throw std::runtime_error("Window is no longer valid");
 }
 
@@ -34,7 +34,7 @@ void WindowSurface::InitializeSurface()
         throw std::runtime_error("Window is no longer valid");
 
     LOG_F(INFO, "Initializing Window Surface `{}` [{}]", window->Title(), GetId().ToString());
-
+#if 0 // TODO - Implement
     on_resize_ = std::make_unique<sigslot::connection>(window->OnResized().connect(
         [this](const auto& size) {
             LOG_F(1, "Window Surface OnResized() [{}] ", GetId().ToString());
@@ -66,6 +66,7 @@ void WindowSurface::InitializeSurface()
 
             this->self().Release();
         }));
+#endif
 }
 
 void WindowSurface::ReleaseSurface() noexcept
