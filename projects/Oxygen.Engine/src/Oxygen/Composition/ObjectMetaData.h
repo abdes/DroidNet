@@ -25,7 +25,7 @@ public:
     OXYGEN_DEFAULT_COPYABLE(ObjectMetaData)
     OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
 
-    [[nodiscard]] std::string_view GetName() const noexcept { return name_; }
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view { return name_; }
     void SetName(const std::string_view name) noexcept { name_ = name; }
 
     [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
