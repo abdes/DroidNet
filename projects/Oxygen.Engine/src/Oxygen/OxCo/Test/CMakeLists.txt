@@ -62,3 +62,7 @@ if(OXYGEN_WITH_COVERAGE)
   target_compile_options(${func_tests_target} PRIVATE "--coverage")
   target_link_options(${func_tests_target} PRIVATE "--coverage")
 endif()
+
+# -- Benchmarks ----------------------------------------------------------------
+
+m_catch2_program(SynchronizedEventSource SOURCES EventStream_bench.cpp)
