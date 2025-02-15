@@ -138,8 +138,29 @@ public:
     OXYGEN_PLATFORM_API void VoteNotToClose() const;
     OXYGEN_PLATFORM_API void VoteToClose() const;
 
-    OXYGEN_PLATFORM_API auto Events() const -> co::Value<window::Event>&;
+    //! Returns an awaitable that when `co_await`ed, suspends the caller until a
+    //! close request for the window is made.
+    /*!
+     This event when the window is requested to be closed, either by the user or
+     programmatically. In both cases, the request is not immediately granted. A
+     vote is taken from all awaken tasks, and the window is closed only if all
+     parties agree.
+
+     \see RequestClose(), VoteNotToClose(), VoteToClose()
+    */
     OXYGEN_PLATFORM_API auto CloseRequested() const -> co::ParkingLot::Awaiter;
+
+    //! Returns an awaitable `Value` that contains the last window event to
+    //! occur. When `co_await`ed, it suspends the caller until the next event
+    //! occurs and its value meets the awaited condition.
+    /*!
+     Window events do not convey any data other than the event type. Use the
+     Window API to query the window properties and state when the event occurs.
+
+     \see `oxygen::co::Value` for all the possible condition.
+    */
+    [[nodiscard]]
+    OXYGEN_PLATFORM_API auto Events() const -> co::Value<window::Event>&;
 
     //! Get a reference to this window management interface. For internal use
     //! only, hence, its symbol should not be exported.
