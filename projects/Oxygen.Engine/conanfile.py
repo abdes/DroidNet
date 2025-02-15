@@ -75,6 +75,7 @@ class OxygenConan(ConanFile):
         self.requires("glm/1.0.1")
 
         self.test_requires("gtest/master")
+        self.test_requires("benchmark/1.9.1")
         self.test_requires("catch2/3.8.0")
 
     def configure(self):

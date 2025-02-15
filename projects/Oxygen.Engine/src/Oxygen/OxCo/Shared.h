@@ -65,6 +65,7 @@ public:
     auto operator->() const -> Awaitable* { return Get(); }
 
     [[nodiscard]] auto Closed() const noexcept -> bool;
+    [[nodiscard]] auto Done() const noexcept -> bool;
 
     auto operator co_await() -> co::Awaiter auto;
 
@@ -119,6 +120,10 @@ public:
     [[nodiscard]] auto Closed() const noexcept -> bool
     {
         return result_.index() >= Cancelling;
+    }
+    [[nodiscard]] auto Done() const noexcept -> bool
+    {
+        return result_.index() <= Value;
     }
     [[nodiscard]] auto Ready() const noexcept -> bool;
     auto EarlyCancel(Awaiter* ptr) noexcept;
@@ -450,6 +455,11 @@ template <class Awaitable>
 auto Shared<Awaitable>::Closed() const noexcept -> bool
 {
     return state_ ? state_->Closed() : true;
+}
+template <class Awaitable>
+auto Shared<Awaitable>::Done() const noexcept -> bool
+{
+    return state_ ? state_->Done() : true;
 }
 
 template <class Awaitable>

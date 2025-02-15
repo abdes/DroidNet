@@ -23,8 +23,7 @@ namespace oxygen::co::detail {
    - its await_resume() always returns something which can be stored in a local
      variable or stuffed into std::variant or std::tuple;
    - provides possibly-dummy versions of all optional await_*() methods:
-     await_set_executor, await_early_cancel, await_cancel, await_must_resume,
-     await_introspect
+     await_set_executor, await_early_cancel, await_cancel, await_must_resume,...
 
  Many of the 'standardized' implementations for individual await_foo() methods
  are available as `detail::AwaitFoo()` also.
