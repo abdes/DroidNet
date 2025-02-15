@@ -22,7 +22,7 @@ namespace oxygen::input {
 class Action;
 class InputMappingContext;
 
-class InputSystem : public engine::System, engine::InputHandler {
+class InputSystem : public engine::System {
 public:
     struct InputMappingContextEntry {
         int32_t priority;
@@ -30,8 +30,8 @@ public:
         std::shared_ptr<InputMappingContext> mapping_context;
     };
 
-    OXYGEN_INPUT_API explicit InputSystem(Platform& platform);
-    OXYGEN_INPUT_API ~InputSystem() override;
+    OXYGEN_INPUT_API explicit InputSystem(PlatformPtr platform);
+    OXYGEN_INPUT_API ~InputSystem() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(InputSystem)
     OXYGEN_MAKE_NON_MOVEABLE(InputSystem)
@@ -39,7 +39,7 @@ public:
     OXYGEN_INPUT_API void AddAction(const std::shared_ptr<Action>& action);
     OXYGEN_INPUT_API void RemoveAction(const std::shared_ptr<Action>& action);
     OXYGEN_INPUT_API void ClearAllActions();
-    OXYGEN_INPUT_API [[nodiscard]] auto GetActionByName(std::string_view name) const
+    [[nodiscard]] OXYGEN_INPUT_API auto GetActionByName(std::string_view name) const
         -> std::shared_ptr<Action>;
 
     OXYGEN_INPUT_API void AddMappingContext(
@@ -47,25 +47,24 @@ public:
     OXYGEN_INPUT_API void RemoveMappingContext(
         const std::shared_ptr<InputMappingContext>& context);
     OXYGEN_INPUT_API void ClearAllMappingContexts();
-    OXYGEN_INPUT_API [[nodiscard]] auto GetMappingContextByName(std::string_view name) const
+    [[nodiscard]] OXYGEN_INPUT_API auto GetMappingContextByName(std::string_view name) const
         -> std::shared_ptr<InputMappingContext>;
     OXYGEN_INPUT_API void ActivateMappingContext(
         const std::shared_ptr<InputMappingContext>& context);
     OXYGEN_INPUT_API void DeactivateMappingContext(
         const std::shared_ptr<InputMappingContext>& context);
 
-    OXYGEN_INPUT_API void ProcessInput(const platform::InputEvent& event) override;
     OXYGEN_INPUT_API void Update(
         const engine::SystemUpdateContext& update_context) override;
 
 private:
-    Platform& platform_;
-    std::vector<std::shared_ptr<Action>> actions_;
+    void ProcessInputEvent(const platform::InputEvent& event);
+    void HandleInput(const platform::InputSlot& slot, const platform::InputEvent& event);
 
+    std::vector<std::shared_ptr<Action>> actions_;
     std::list<InputMappingContextEntry> mapping_contexts_;
 
-    void HandleInput(const platform::InputSlot& slot,
-        const platform::InputEvent& event);
+    PlatformPtr platform_;
 };
 
 } // namespace oxygen::input

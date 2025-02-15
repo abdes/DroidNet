@@ -342,6 +342,9 @@ private:
 template <typename T>
 class BroadcastChannel {
 public:
+    using Writer = detail::channel::BroadcastingWriter<T>;
+    using Reader = detail::channel::MultiplexedReader<T>;
+
     //! Default constructor for an unbounded channel.
     BroadcastChannel() = default;
 

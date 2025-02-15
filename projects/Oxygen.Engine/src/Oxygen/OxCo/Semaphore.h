@@ -75,6 +75,14 @@ public:
         return *this;
     }
 
+    void Release()
+    {
+        if (sem_ != nullptr) {
+            sem_->Release();
+            sem_ = nullptr;
+        }
+    }
+
 private:
     explicit LockGuard(Semaphore& sem)
         : sem_(&sem)
