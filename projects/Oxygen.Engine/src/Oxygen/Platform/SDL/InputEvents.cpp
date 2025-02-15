@@ -165,7 +165,7 @@ auto MapKeyCode(const SDL_Keycode code)
 }
 
 auto TranslateKeyboardEvent(SDL_Event const& event)
-    -> std::optional<InputEvent>
+    -> std::unique_ptr<InputEvent>
 {
     LOG_SCOPE_F(0, "Keyboard event");
     DLOG_F(0, "type      = {}",
@@ -193,14 +193,12 @@ auto TranslateKeyboardEvent(SDL_Event const& event)
     const KeyInfo key_info(key_code, event.key.repeat);
     const ButtonState button_state = event.key.down ? ButtonState::kPressed : ButtonState::kReleased;
 
-    auto key_event = std::make_optional<KeyEvent>(
+    return std::make_unique<KeyEvent>(
         std::chrono::duration_cast<oxygen::TimePoint>(
             std::chrono::nanoseconds(event.key.timestamp)),
         event.key.windowID,
         key_info,
         button_state);
-
-    return key_event;
 }
 
 auto MapMouseButton(auto button)
@@ -242,7 +240,7 @@ auto TranslateMouseButtonEvent(const SDL_Event& event)
 
     const ButtonState button_state = event.button.down ? ButtonState::kPressed : ButtonState::kReleased;
 
-    auto button_event = std::make_unique<MouseButtonEvent>(
+    return std::make_unique<MouseButtonEvent>(
         std::chrono::duration_cast<oxygen::TimePoint>(
             std::chrono::nanoseconds(event.button.timestamp)),
         event.key.windowID,
@@ -252,7 +250,6 @@ auto TranslateMouseButtonEvent(const SDL_Event& event)
         },
         button,
         button_state);
-    return button_event;
 }
 
 auto TranslateMouseMotionEvent(const SDL_Event& event)
@@ -286,7 +283,7 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
 
     const auto direction = event.wheel.direction == SDL_MOUSEWHEEL_NORMAL ? 1.0F : -1.0F;
 
-    auto wheel_event = std::make_unique<MouseWheelEvent>(
+    return std::make_unique<MouseWheelEvent>(
         std::chrono::duration_cast<oxygen::TimePoint>(
             std::chrono::nanoseconds(event.wheel.timestamp)),
         event.key.windowID,
@@ -298,41 +295,45 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
             .dx = direction * event.wheel.x,
             .dy = direction * event.wheel.y,
         });
-    return wheel_event;
 }
 } // namespace
 
-auto InputEvents::ProcessPlatformEvents() -> co::Co<>
+auto InputEvents::ProcessPlatformEvents() const -> co::Co<>
 {
     while (true) {
         auto& event = co_await event_pump_->NextEvent();
-        auto _ = co_await event_pump_->Lock();
+        auto lock = co_await event_pump_->Lock();
         if (event.IsHandled()) {
             continue;
         }
+
+        std::unique_ptr<InputEvent> input_event;
         if (auto& sdl_event = *event.NativeEventAs<SDL_Event>();
             sdl_event.type == SDL_EVENT_MOUSE_MOTION) {
-            if (auto mm_event = TranslateMouseMotionEvent(sdl_event)) {
-                events_.push_back(std::move(*mm_event));
-                event.SetHandled();
-            }
+            input_event = TranslateMouseMotionEvent(sdl_event);
         } else if (sdl_event.type == SDL_EVENT_KEY_UP
             || sdl_event.type == SDL_EVENT_KEY_DOWN) {
-            if (auto key_event = TranslateKeyboardEvent(sdl_event)) {
-                events_.push_back(std::move(*key_event));
-                event.SetHandled();
-            }
+            input_event = TranslateKeyboardEvent(sdl_event);
         } else if (sdl_event.type == SDL_EVENT_MOUSE_BUTTON_UP
             || sdl_event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            if (auto mb_event = TranslateMouseButtonEvent(sdl_event)) {
-                events_.push_back(std::move(*mb_event));
-                event.SetHandled();
-            }
+            input_event = TranslateMouseButtonEvent(sdl_event);
         } else if (sdl_event.type == SDL_EVENT_MOUSE_WHEEL) {
-            if (auto mw_event = TranslateMouseWheelEvent(sdl_event)) {
-                events_.push_back(std::move(*mw_event));
-                event.SetHandled();
+            input_event = TranslateMouseWheelEvent(sdl_event);
+        }
+        if (input_event) {
+            // Try to send synchronously if possible
+            if (!channel_.Closed() && !channel_.Full()) {
+                const auto success = channel_writer_.TrySend(std::move(*input_event));
+                DCHECK_F(success);
+            } else {
+                // We can unlock the event pump here as we are already full
+                // and we will most likely not be able to process the next
+                // event anyway. This will allow other components to process
+                // their events.
+                lock.Release();
+                co_await channel_writer_.Send(std::move(*input_event));
             }
+            event.SetHandled();
         }
     }
 }

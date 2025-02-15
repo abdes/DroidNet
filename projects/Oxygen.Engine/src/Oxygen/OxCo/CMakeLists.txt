@@ -130,6 +130,7 @@ target_compile_definitions(
   INTERFACE
     $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=0x0A00>
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
 )
 target_link_libraries(
   ${META_MODULE_TARGET}

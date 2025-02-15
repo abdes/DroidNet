@@ -43,12 +43,20 @@ namespace {
 }
 } // namespace
 
-InputSystem::InputSystem(Platform& platform)
-    : platform_(platform)
+InputSystem::InputSystem(PlatformPtr platform)
+    : platform_(std::move(platform))
 {
+    platform_->Async().Nursery().Start(
+        [this]() -> co::Co<> {
+            auto input = platform_->Input().ForRead();
+            while (true) {
+                auto event = co_await input.Receive();
+                ProcessInputEvent(*event);
+            }
+        });
 }
 
-void InputSystem::ProcessInput(const InputEvent& event)
+void InputSystem::ProcessInputEvent(const InputEvent& event)
 {
     using platform::KeyEvent;
     using platform::MouseButtonEvent;
@@ -59,46 +67,55 @@ void InputSystem::ProcessInput(const InputEvent& event)
     using platform::input::MouseMotionComponent;
     using platform::input::MouseWheelComponent;
 
+    // Keyboard events
     if (const auto event_type = event.GetTypeId();
         event_type == KeyEvent::ClassTypeId()) {
         DCHECK_F(event.HasComponent<platform::input::KeyComponent>());
         const auto key_code = event.GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode();
         const auto& slot = Platform::GetInputSlotForKey(key_code);
         HandleInput(slot, event);
-    } else if (event_type == MouseButtonEvent::ClassTypeId()) {
+    }
+    // Mouse button events
+    else if (event_type == MouseButtonEvent::ClassTypeId()) {
         DCHECK_F(event.HasComponent<platform::input::MouseButtonComponent>());
         const auto button = event.GetComponent<MouseButtonComponent>().GetButton();
         const InputSlot* slot { nullptr };
+
+        using enum platform::MouseButton;
         switch (button) {
-        case platform::MouseButton::kLeft:
+        case kLeft:
             slot = &InputSlots::LeftMouseButton;
             break;
-        case platform::MouseButton::kRight:
+        case kRight:
             slot = &InputSlots::RightMouseButton;
             break;
-        case platform::MouseButton::kMiddle:
+        case kMiddle:
             slot = &InputSlots::MiddleMouseButton;
             break;
-        case platform::MouseButton::kExtButton1:
+        case kExtButton1:
             slot = &InputSlots::ThumbMouseButton1;
             break;
-        case platform::MouseButton::kExtButton2:
+        case kExtButton2:
             slot = &InputSlots::ThumbMouseButton2;
             break;
-        case platform::MouseButton::kNone:
+        case kNone:
             slot = &InputSlots::None;
         }
         assert(slot != nullptr);
         if (slot != nullptr && *slot != InputSlots::None) {
             HandleInput(*slot, event);
         }
-    } else if (event_type == MouseMotionEvent::ClassTypeId()) {
+    }
+    // Mouse motion events
+    else if (event_type == MouseMotionEvent::ClassTypeId()) {
         DCHECK_F(event.HasComponent<platform::input::MouseMotionComponent>());
         if (const auto [dx, dy] = event.GetComponent<MouseMotionComponent>().GetMotion();
             std::abs(dx) > 0 || std::abs(dy) > 0) {
             HandleInput(InputSlots::MouseXY, event);
         }
-    } else if (event_type == MouseWheelEvent::ClassTypeId()) {
+    }
+    // Mouse wheel events
+    else if (event_type == MouseWheelEvent::ClassTypeId()) {
         DCHECK_F(event.HasComponent<platform::input::MouseWheelComponent>());
         const auto [dx, dy] = event.GetComponent<MouseWheelComponent>().GetScrollAmount();
         if (abs(dx) > 0 && abs(dy) > 0) {
@@ -148,8 +165,6 @@ void InputSystem::Update(const SystemUpdateContext& update_context)
     }
 }
 
-InputSystem::~InputSystem() = default;
-
 void InputSystem::AddAction(const std::shared_ptr<Action>& action)
 {
     if (std::ranges::find(actions_, action) != std::ranges::cend(actions_)) {
@@ -185,9 +200,7 @@ void InputSystem::AddMappingContext(
     const int32_t priority)
 {
     if (GetMappingContextByName(context->GetName())) {
-        DLOG_F(1,
-            "Input mapping context with [{}] already exists",
-            context->GetName());
+        DLOG_F(1, "Input mapping context with [{}] already exists", context->GetName());
         return;
     }
     InputMappingContextEntry new_entry {
@@ -236,8 +249,7 @@ void InputSystem::ActivateMappingContext(
 
     const auto found = FindInputMappingContextEntry(mapping_contexts_, *context);
     if (found == std::ranges::cend(mapping_contexts_)) {
-        DLOG_F(WARNING,
-            "Input mapping context with [] has not been previously added",
+        DLOG_F(WARNING, "Input mapping context with [] has not been previously added",
             context->GetName());
         return;
     }
@@ -251,8 +263,7 @@ void InputSystem::DeactivateMappingContext(
     assert(context);
     const auto found = FindInputMappingContextEntry(mapping_contexts_, *context);
     if (found == std::ranges::cend(mapping_contexts_)) {
-        DLOG_F(WARNING,
-            "Input mapping context with [] has not been previously added",
+        DLOG_F(WARNING, "Input mapping context with [] has not been previously added",
             context->GetName());
         return;
     }
