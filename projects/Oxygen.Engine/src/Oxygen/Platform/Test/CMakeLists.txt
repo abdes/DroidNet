@@ -28,16 +28,8 @@ target_compile_options(
   PRIVATE
     ${OXYGEN_COMMON_CXX_FLAGS}
 )
-target_link_libraries(
-  "Oxygen.Platform.LinkTest"
-  PRIVATE
-    oxygen::platform
-)
-add_test(
-  NAME "Oxygen.Platform Link Test"
-  COMMAND
-    "Oxygen.Platform.LinkTest"
-)
+target_link_libraries("Oxygen.Platform.LinkTest" PRIVATE oxygen::platform)
+add_test(NAME "Oxygen.Platform Link Test" COMMAND "Oxygen.Platform.LinkTest")
 
 # -- GTest Test Programs -------------------------------------------------------
 

@@ -24,13 +24,16 @@ find_package(glm CONFIG REQUIRED)
 # Define the path to the DXC compiler
 set(dxc_arch "")
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-    set(dxc_arch "x64")
+  set(dxc_arch "x64")
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-    set(dxc_arch "x86")
+  set(dxc_arch "x86")
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-    set(dxc_arch "arm64")
+  set(dxc_arch "arm64")
 else()
-    message(FATAL_ERROR "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+  message(
+    FATAL_ERROR
+    "Unsupported processor architecture: ${CMAKE_SYSTEM_PROCESSOR}"
+  )
 endif()
 set(dxc_lib_path "${CMAKE_SOURCE_DIR}/packages/DXC/lib/${dxc_arch}")
 
@@ -144,37 +147,54 @@ message(STATUS "Using DXC Compiler: ${dxc_exe}")
 
 # Function to add custom shader compilation commands
 function(add_shader_compilation target shader_file)
-    get_filename_component(shader_dir ${shader_file} DIRECTORY)
-    get_filename_component(shader_name ${shader_file} NAME_WE)
+  get_filename_component(shader_dir ${shader_file} DIRECTORY)
+  get_filename_component(shader_name ${shader_file} NAME_WE)
 
-    # Vertex shader compilation command
-    add_custom_command(
-        OUTPUT "${shader_dir}/${shader_name}_vs.cso"
-        COMMAND ${CMAKE_COMMAND} -E echo "Compiling vertex shader: ${shader_file}"
-        COMMAND ${dxc_exe} -T vs_6_8 -E VS -Fo "${shader_dir}/${shader_name}_vs.cso" "${shader_file}"
-        DEPENDS ${shader_file}
-        COMMENT "Using DXC Compiler ${dxc_exe} for vertex shader"
-    )
+  # Vertex shader compilation command
+  add_custom_command(
+    OUTPUT
+      "${shader_dir}/${shader_name}_vs.cso"
+    COMMAND
+      ${CMAKE_COMMAND} -E echo "Compiling vertex shader: ${shader_file}"
+    COMMAND
+      ${dxc_exe} -T vs_6_8 -E VS -Fo "${shader_dir}/${shader_name}_vs.cso"
+      "${shader_file}"
+    DEPENDS
+      ${shader_file}
+    COMMENT "Using DXC Compiler ${dxc_exe} for vertex shader"
+  )
 
-    # Pixel shader compilation command
-    add_custom_command(
-        OUTPUT "${shader_dir}/${shader_name}_ps.cso"
-        COMMAND ${CMAKE_COMMAND} -E echo "Compiling pixel shader: ${shader_file}"
-        COMMAND ${dxc_exe} -T ps_6_8 -E PS -Fo "${shader_dir}/${shader_name}_ps.cso" "${shader_file}"
-        DEPENDS ${shader_file}
-        COMMENT "Using DXC Compiler ${dxc_exe} for pixel shader"
-    )
+  # Pixel shader compilation command
+  add_custom_command(
+    OUTPUT
+      "${shader_dir}/${shader_name}_ps.cso"
+    COMMAND
+      ${CMAKE_COMMAND} -E echo "Compiling pixel shader: ${shader_file}"
+    COMMAND
+      ${dxc_exe} -T ps_6_8 -E PS -Fo "${shader_dir}/${shader_name}_ps.cso"
+      "${shader_file}"
+    DEPENDS
+      ${shader_file}
+    COMMENT "Using DXC Compiler ${dxc_exe} for pixel shader"
+  )
 
-    # Add the compiled shaders as dependencies to the target
-    add_custom_target(${target}_shaders ALL
-        DEPENDS "${shader_dir}/${shader_name}_vs.cso" "${shader_dir}/${shader_name}_ps.cso"
-    )
+  # Add the compiled shaders as dependencies to the target
+  add_custom_target(
+    ${target}_shaders
+    ALL
+    DEPENDS
+      "${shader_dir}/${shader_name}_vs.cso"
+      "${shader_dir}/${shader_name}_ps.cso"
+  )
 endfunction()
 
 # Find all HLSL files and add shader compilation commands
-file(GLOB_RECURSE HLSL_FILES "${CMAKE_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/*.hlsl")
+file(
+  GLOB_RECURSE HLSL_FILES
+  "${CMAKE_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/*.hlsl"
+)
 foreach(HLSL_FILE ${HLSL_FILES})
-    add_shader_compilation(${META_MODULE_TARGET} ${HLSL_FILE})
+  add_shader_compilation(${META_MODULE_TARGET} ${HLSL_FILE})
 endforeach()
 
 # ------------------------------------------------------------------------------

@@ -110,12 +110,13 @@ if(NOT BUILD_SHARED_LIBS)
       "$<BUILD_INTERFACE:${OXYGEN_SOURCE_DIR}>"
   )
   target_compile_features(${ts_init_target} PUBLIC cxx_std_20)
-  target_compile_options(
+  target_compile_options(${ts_init_target} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
+  target_link_libraries(
     ${ts_init_target}
-    PUBLIC
-      ${OXYGEN_COMMON_CXX_FLAGS}
+    PRIVATE
+      oxygen::base
+      oxygen::composition
   )
-  target_link_libraries(${ts_init_target} PRIVATE oxygen::base oxygen::composition)
 endif()
 
 # ------------------------------------------------------------------------------

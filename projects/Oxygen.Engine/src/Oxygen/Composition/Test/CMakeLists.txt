@@ -28,8 +28,17 @@ target_compile_options(
   PRIVATE
     ${OXYGEN_COMMON_CXX_FLAGS}
 )
-target_link_libraries("Oxygen.Composition.LinkTest" PRIVATE oxygen::base oxygen::composition)
-add_test(NAME "Oxygen.Composition Link Test" COMMAND "Oxygen.Composition.LinkTest")
+target_link_libraries(
+  "Oxygen.Composition.LinkTest"
+  PRIVATE
+    oxygen::base
+    oxygen::composition
+)
+add_test(
+  NAME "Oxygen.Composition Link Test"
+  COMMAND
+    "Oxygen.Composition.LinkTest"
+)
 
 # -- GTest Test Programs -------------------------------------------------------
 
