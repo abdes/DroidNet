@@ -30,7 +30,6 @@
 #define OXYGEN_COMPONENT(arg_type)    \
 protected:                            \
     friend class oxygen::Composition; \
-    arg_type() = default;             \
                                       \
     OXYGEN_TYPED(arg_type)
 
