@@ -63,7 +63,7 @@ target_sources(
       "ImGuiModule.h"
       "ImGuiPlatformBackend.h"
       "ImGuiRenderInterface.h"
- )
+)
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

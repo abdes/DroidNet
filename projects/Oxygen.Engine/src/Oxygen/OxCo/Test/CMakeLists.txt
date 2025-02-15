@@ -58,7 +58,11 @@ m_gtest_program(
     ThrowingAwaitable_test.cpp
 )
 set(func_tests_target "${META_MODULE_NAME}.Functional.Tests")
-target_compile_definitions(${func_tests_target} PRIVATE OXCO_AWAITABLE_STATE_DEBUG)
+target_compile_definitions(
+  ${func_tests_target}
+  PRIVATE
+    OXCO_AWAITABLE_STATE_DEBUG
+)
 
 if(OXYGEN_WITH_COVERAGE)
   target_compile_options(${func_tests_target} PRIVATE "--coverage")

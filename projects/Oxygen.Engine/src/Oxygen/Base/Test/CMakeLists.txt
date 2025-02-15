@@ -59,11 +59,11 @@ m_gtest_program(
 )
 
 m_gtest_program(
-        Resource
-        SOURCES
-        "Resource_test.cpp"
-        "ResourceHandle_test.cpp"
-        "ResourceTable_test.cpp"
+  Resource
+  SOURCES
+    "Resource_test.cpp"
+    "ResourceHandle_test.cpp"
+    "ResourceTable_test.cpp"
 )
 
 include(Catch2Helpers)

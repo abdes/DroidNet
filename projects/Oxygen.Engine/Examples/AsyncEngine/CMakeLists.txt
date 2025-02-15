@@ -45,7 +45,12 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen::oxco oxygen::base)
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    oxygen::oxco
+    oxygen::base
+)
 
 # ==============================================================================
 # Deployment instructions

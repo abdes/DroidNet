@@ -17,5 +17,5 @@ add_subdirectory("Graphics")
 add_subdirectory("ImGui")
 
 if(OXYGEN_BUILD_TESTS)
-    add_subdirectory("Testing")
+  add_subdirectory("Testing")
 endif()
