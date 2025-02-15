@@ -13,11 +13,11 @@
 #include "Oxygen/Input/InputActionMapping.h"
 #include "Oxygen/Platform/Input.h"
 #include "Oxygen/Platform/InputEvent.h"
-#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/TimeUtils.h>
-#include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/TypeSystem.h>
 
 using oxygen::input::InputActionMapping;
 using oxygen::platform::InputSlots;

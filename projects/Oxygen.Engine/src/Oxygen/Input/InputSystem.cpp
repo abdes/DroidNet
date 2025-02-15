@@ -20,8 +20,8 @@
 #include "Oxygen/Platform/Input.h"
 #include "Oxygen/Platform/InputEvent.h"
 #include "Oxygen/Platform/Platform.h"
-#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/System.h>
 
 using oxygen::engine::SystemUpdateContext;

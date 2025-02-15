@@ -84,7 +84,7 @@ public:
             // Executor::drain().
             scheduled_->buffer_.ForEach([&](Task& task) {
                 if (task.second == this) {
-                    task.first = +[](void*) noexcept {};
+                    task.first = +[](void*) noexcept { };
                     task.second = nullptr;
                 }
             });
@@ -164,12 +164,11 @@ public:
     {
         if (running_ != nullptr || scheduled_ != nullptr) {
             // Do nothing; our callbacks are already slated to run soon
-        } else if (Current() != nullptr &&
-                   Current()->event_loop_id_ == event_loop_id_) {
+        } else if (Current() != nullptr && Current()->event_loop_id_ == event_loop_id_) {
             // Schedule the current executor to run our callbacks
             scheduled_ = Current();
             scheduled_->RunSoon(
-                    +[](Executor* ex) noexcept { ex->RunOnce(); }, this);
+                +[](Executor* ex) noexcept { ex->RunOnce(); }, this);
         } else {
             // No current executor, or it's for a different event loop:
             // run our callbacks immediately

@@ -17,13 +17,13 @@
 #include "Oxygen/Base/Finally.h"
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Platform/InputEvent.h"
-#include "Oxygen/Platform/Types.h"
-#include "Oxygen/Platform/Window.h"
 #include "Oxygen/Platform/SDL/Detail/Platform_impl.h"
 #include "Oxygen/Platform/SDL/Detail/Wrapper.h"
 #include "Oxygen/Platform/SDL/Display.h"
 #include "Oxygen/Platform/SDL/Platform.h"
 #include "Oxygen/Platform/SDL/Window.h"
+#include "Oxygen/Platform/Types.h"
+#include "Oxygen/Platform/Window.h"
 
 using oxygen::Duration;
 using oxygen::SubPixelMotion;

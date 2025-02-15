@@ -119,7 +119,9 @@ public:
         ++size_;
     }
 
-    template <std::invocable<T&> Fn> void ForEach(Fn&& fn) {
+    template <std::invocable<T&> Fn>
+    void ForEach(Fn&& fn)
+    {
         for (T& elem : FirstRange()) {
             std::forward<Fn>(fn)(elem);
         }
