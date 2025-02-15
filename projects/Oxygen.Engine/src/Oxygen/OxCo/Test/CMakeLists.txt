@@ -36,6 +36,8 @@ m_gtest_program(
 m_gtest_program(ChannelTest SOURCES Channel_test.cpp)
 m_gtest_program(AsioTest SOURCES Asio_test.cpp)
 m_gtest_program(SharedTest SOURCES Shared_test.cpp)
+m_gtest_program(BroadcastChannel SOURCES BroadcastChannel_test.cpp)
+m_gtest_program(RepeatableSharedTest SOURCES RepeatableShared_test.cpp)
 
 # -- Catch2 Test Programs ------------------------------------------------------
 
@@ -65,4 +67,4 @@ endif()
 
 # -- Benchmarks ----------------------------------------------------------------
 
-m_catch2_program(SynchronizedEventSource SOURCES EventStream_bench.cpp)
+# m_catch2_program(EventStreamBench SOURCES EventStream_bench.cpp)

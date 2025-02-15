@@ -37,6 +37,7 @@ set(
   "asio.h"
   "Algorithms.h"
   "Awaitables.h"
+  "BroadcastChannel.h"
   "Channel.h"
   "Co.h"
   "Coroutine.h"
@@ -48,7 +49,10 @@ set(
   "Run.h"
   "Shared.h"
   "SuspendForever.h"
+  "RepeatableShared.h"
+  "Semaphore.h"
   "TaskCancelledException.h"
+  "Value.h"
   "Yield.h"
   "Detail/SanitizedAwaiter.h"
   "Detail/AwaiterStateChecker.h"
@@ -80,8 +84,6 @@ set(
   "Detail/TaskFrame.h"
   "Detail/TaskParent.h"
   "Detail/Sequence.h"
-  "Semaphore.h"
-  "Value.h"
 )
 
 source_group(
@@ -153,6 +155,7 @@ set_target_properties(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+  add_subdirectory("Benchmarks")
 endif()
 
 # ==============================================================================

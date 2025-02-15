@@ -9,6 +9,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include "Oxygen/OxCo/Algorithms.h"
+#include "Oxygen/OxCo/Awaitables.h"
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Run.h"
 #include "Utils/OxCoTestFixture.h"
@@ -17,6 +18,7 @@
 using namespace std::chrono_literals;
 using oxygen::co::Co;
 using oxygen::co::Shared;
+using oxygen::co::detail::ReadyAwaiter;
 using oxygen::co::testing::OxCoTestFixture;
 
 namespace {
@@ -61,6 +63,28 @@ NOLINT_TEST_F(SharedTest, Smoke)
         EXPECT_EQ(x, 42);
         EXPECT_EQ(y, 42);
         EXPECT_EQ(el_->Now(), 5ms);
+    });
+}
+
+struct MyAwaitable {
+    int value;
+    MyAwaitable(int v)
+        : value(v)
+    {
+    }
+
+    ReadyAwaiter<int> operator co_await() noexcept
+    {
+        return ReadyAwaiter<int>(std::forward<int>(value));
+    }
+};
+
+NOLINT_TEST_F(SharedTest, InPlaceConstructor)
+{
+    oxygen::co::Run(*el_, [&]() -> Co<> {
+        Shared<MyAwaitable> shared(std::in_place, 123);
+        int result = co_await shared;
+        EXPECT_EQ(result, 123);
     });
 }
 

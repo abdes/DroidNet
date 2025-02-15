@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "Oxygen/Base/Logging.h"
+#include "Oxygen/Base/Macros.h"
 #include "Oxygen/OxCo/Coroutine.h"
 #include "Oxygen/OxCo/Detail/ParkingLotImpl.h"
 #include "Oxygen/OxCo/Detail/Queue.h"
