@@ -16,8 +16,7 @@
 #include "Oxygen/OxCo/Event.h"
 #include "Oxygen/OxCo/Nursery.h"
 #include "Oxygen/OxCo/ParkingLot.h"
-#include "Oxygen/OxCo/Semaphore.h"
-#include "Oxygen/OxCo/Shared.h"
+#include "Oxygen/OxCo/RepeatableShared.h"
 #include "Oxygen/OxCo/asio.h"
 #include "Oxygen/Platform/Display.h"
 #include "Oxygen/Platform/InputEvent.h"
@@ -32,7 +31,7 @@ class Platform;
 
 namespace platform {
 
-    class AsyncOps : public Component {
+    class AsyncOps final : public Component {
         OXYGEN_COMPONENT(AsyncOps)
     public:
         //! A utility function, returning an awaitable suspending the caller for a
@@ -65,10 +64,11 @@ namespace platform {
         co::Nursery* nursery_ {};
     };
 
-    class EventPump : public Component {
+    class EventPump final : public Component {
         OXYGEN_COMPONENT(EventPump)
-        OXYGEN_COMPONENT_REQUIRES(AsyncOps)
     public:
+        EventPump();
+
         //! Called as part of the main loop to check for pending platform
         //! events, and if any are found, to remove and asynchronously process
         //! __only__ the next one.
@@ -84,78 +84,46 @@ namespace platform {
 
         //! Suspends the caller until a platform event is available.
         /*!
-         Uses a double-buffering technique to ensure that the event is not
-         missed by all tasks waiting for it, and will allow the tasks that
-         complete first to wait for the next event.
+         When an event is ready, all suspended tasks are resumed and will have a
+         chance to receive it. The next event will not be pumped as long as any
+         of the tasks is still processing the current one. That is indicated by
+         the task acquiring the lock on the event source via `Lock()` right
+         after being resumed, and releasing it when it is done processing the
+         event.
+
+         This locking rule ensures that all tasks awaiting the event will have a
+         chance to process it before the next one is started, and that tasks are
+         scheduled in sequence, each one after the one before it fully
+         completes. This is useful for event filtering, event augmentation, and
+         for orchestrated processing of events.
+
+         Additionally, all tasks share the same copy of the event. Therefore, an
+         earlier task may mark the event as handled to instruct later tasks to
+         skip it.
         */
         auto NextEvent()
         {
-            MaybeBootstrap();
-            return NextSlot().Awaitable();
-        }
-        auto Lock()
-        {
-            return CurrentSlot().Lock();
+            return event_source_.Next();
         }
 
-    protected:
-        void UpdateDependencies(const Composition& composition) override
+        //! Acquires exclusive access to the event source, preventing other
+        //! tasks from starting and pausing the event pump.
+        /*!
+         \return An awaitable semaphore lock guard (acquires the semaphore on
+         construction, and releases it on destruction).
+
+         \note It is important that the guard is assigned to a variable,
+               otherwise it will be returned as a temporary and the lock will be
+               released immediately.
+        */
+        auto Lock()
         {
-            async_ = &composition.GetComponent<AsyncOps>();
-            DCHECK_NOTNULL_F(async_);
+            return event_source_.Lock();
         }
 
     private:
-        OXYGEN_PLATFORM_API void MaybeBootstrap();
-
-        //! Waits for platform events, and when available, translates them into
-        //! specific event types and awakes any tasks waiting for them.
-        /*!
-         This is the asynchronous part of the platform event processing. It is
-         constantly waiting for platform events, and when one is available, it
-         translates it into a specific event type and awakes any tasks waiting
-         for it.
-
-         This method is resumed by the `PollOne()` when at least one event is
-         ready.
-        */
-        auto PumpEvent() -> co::Co<PlatformEvent>;
-
-        struct Slot {
-            using AsyncEventPumper = std::function<co::Co<PlatformEvent>()>;
-
-            co::Semaphore ready { 1 };
-            co::Shared<AsyncEventPumper> event_awaitable;
-
-            void Initialize(EventPump* pump)
-            {
-                event_awaitable.~Shared();
-                new (&event_awaitable) co::Shared<AsyncEventPumper>(std::in_place,
-                    [pump]() -> co::Co<PlatformEvent> {
-                        co_return co_await pump->PumpEvent();
-                    });
-            }
-
-            auto Lock() -> co::Semaphore::Awaiter<co::Semaphore::LockGuard>
-            {
-                return ready.Lock();
-            }
-
-            auto Awaitable() -> co::Shared<AsyncEventPumper>&
-            {
-                return event_awaitable;
-            }
-        };
-
-        auto CurrentSlot() -> Slot& { return event_slots_[current_slot_index_]; }
-        auto NextSlot() -> Slot& { return event_slots_[current_slot_index_ ^ 1]; }
-
-        std::array<Slot, 2> event_slots_ {};
-        uint8_t current_slot_index_ { 0 };
-
-        co::ParkingLot poll_ {};
-
-        AsyncOps* async_;
+        co::RepeatableShared<PlatformEvent> event_source_;
+        co::ParkingLot poll_;
     };
 
     //! Exposes the input events generated by the platform to a __single__
@@ -165,7 +133,7 @@ namespace platform {
      by a single task. The task, which must call `NextEvent()`, will be
      suspended unless or until an input event is available from the event queue.
     */
-    class InputEvents : public Component {
+    class InputEvents final : public Component {
         OXYGEN_COMPONENT(InputEvents)
         OXYGEN_COMPONENT_REQUIRES(EventPump)
     public:
@@ -179,7 +147,7 @@ namespace platform {
             }
             [[nodiscard]] auto await_ready() const noexcept
             {
-                auto ready = !object_.events_.empty();
+                const auto ready = !object_.events_.empty();
                 DLOG_F(INFO, "Input ready: {}, {}", ready, object_.events_.size());
                 return ready;
             }

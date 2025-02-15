@@ -305,7 +305,6 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
 auto InputEvents::ProcessPlatformEvents() -> co::Co<>
 {
     while (true) {
-        // auto _ = Finally([this]{event_pump_->DoneWaiting();});
         auto& event = co_await event_pump_->NextEvent();
         auto _ = co_await event_pump_->Lock();
         if (event.IsHandled()) {
