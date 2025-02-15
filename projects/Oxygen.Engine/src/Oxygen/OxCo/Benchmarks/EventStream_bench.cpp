@@ -159,7 +159,7 @@ void BM_SharedEventSource(benchmark::State& state)
                     nursery.Start([&, is_counter = i == 0]() -> Co<> {
                         co_await kYield;
                         while (!done) {
-                            auto &event = co_await sh_pump.NextEvent();
+                            auto& event = co_await sh_pump.NextEvent();
                             auto lock = co_await sh_pump.Lock();
                             if (is_counter) {
                                 ++events_processed;

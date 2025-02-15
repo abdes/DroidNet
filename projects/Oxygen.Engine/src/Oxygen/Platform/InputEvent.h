@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/Composition/Composition.h"
 #include "Oxygen/Base/TimeUtils.h"
 #include "Oxygen/Base/Types/Geometry.h"
+#include "Oxygen/Composition/Composition.h"
 #include "Oxygen/Platform/Input.h"
 #include "Oxygen/Platform/Types.h"
 
