@@ -38,7 +38,7 @@ public:
     OXYGEN_D3D12_API [[nodiscard]] auto SrvHeap() const -> detail::DescriptorHeap&;
     OXYGEN_D3D12_API [[nodiscard]] auto UavHeap() const -> detail::DescriptorHeap&;
 
-    OXYGEN_D3D12_API [[nodiscard]] auto CreateWindowSurface(platform::WindowPtr window) const -> SurfacePtr override;
+    OXYGEN_D3D12_API [[nodiscard]] auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
 
     // OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
     //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;

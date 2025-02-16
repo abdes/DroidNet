@@ -8,6 +8,7 @@
 
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Composition/Composition.h"
+#include "Oxygen/Composition/ComponentMacros.h"
 
 namespace oxygen {
 

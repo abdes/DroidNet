@@ -77,16 +77,16 @@ target_sources(
     "Renderer.cpp"
     "ShaderCompiler.cpp"
     "Texture.cpp"
-    "WindowSurface.cpp"
     "Detail/DescriptorHeap.cpp"
     "Detail/DescriptorHeap.h"
     "Detail/dx12_utils.cpp"
     "Detail/dx12_utils.h"
-    "Detail/WindowSurfaceImpl.cpp"
-    "Detail/WindowSurfaceImpl.h"
-    "ImGui/ImGuiModule.cpp"
-    "ImGui/imgui_impl_dx12.h"
+    "Detail/SwapChain.cpp"
+    "Detail/SwapChain.h"
+    "Detail/WindowSurface.h"
     "ImGui/imgui_impl_dx12.cpp"
+    "ImGui/imgui_impl_dx12.h"
+    "ImGui/ImGuiModule.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -109,7 +109,6 @@ target_sources(
       "RenderTarget.h"
       "ShaderCompiler.h"
       "Texture.h"
-      "WindowSurface.h"
       "ImGui/ImGuiModule.h"
 )
 

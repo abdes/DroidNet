@@ -70,7 +70,7 @@ auto GetMainDevice() -> DeviceType*
 auto GetRenderer() -> Renderer&
 {
     CHECK_NOTNULL_F(GetBackendInternal());
-    const auto renderer = dynamic_cast<Renderer*>(GetBackendInternal()->GetRenderer());
+    const auto renderer = static_cast<Renderer*>(GetBackendInternal()->GetRenderer());
     CHECK_NOTNULL_F(renderer);
     return *renderer;
 }

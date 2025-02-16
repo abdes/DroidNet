@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Oxygen/Composition/Composition.h"
+#include "Oxygen/Composition/ComponentMacros.h"
 #include "Oxygen/Composition/Object.h"
 
 namespace {

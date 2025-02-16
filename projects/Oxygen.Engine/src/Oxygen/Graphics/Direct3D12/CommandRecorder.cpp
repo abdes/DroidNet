@@ -21,7 +21,7 @@
 #include "Oxygen/Graphics/Direct3d12/Buffer.h"
 #include "Oxygen/Graphics/Direct3d12/CommandList.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
+#include "Oxygen/Graphics/Direct3d12/Detail/WindowSurface.h"
 #include "Oxygen/Graphics/Direct3d12/Graphics.h"
 
 using namespace oxygen::graphics::d3d12;
@@ -215,7 +215,7 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
 {
     DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
-    current_render_target_ = dynamic_cast<const RenderTarget*>(render_target);
+    current_render_target_ = static_cast<const RenderTarget*>(render_target);
     CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
 
     // Indicate that the back buffer will be used as a render target.

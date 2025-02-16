@@ -32,7 +32,6 @@ namespace graphics {
     class PerFrameResourceManager;
     class RenderTarget;
     class ShaderCompiler;
-    class Surface;
     class SynchronizationCounter;
     class WindowSurface;
 
@@ -43,7 +42,6 @@ namespace graphics {
     using RendererPtr = std::weak_ptr<Renderer>;
     using RenderTargetNoDeletePtr = const RenderTarget*;
     using ShaderCompilerPtr = std::shared_ptr<ShaderCompiler>;
-    using SurfacePtr = std::shared_ptr<Surface>;
     using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
 
     using CommandLists = std::vector<CommandListPtr>;

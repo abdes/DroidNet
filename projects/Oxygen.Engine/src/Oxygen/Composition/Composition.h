@@ -245,5 +245,3 @@ public:
 };
 
 } // namespace oxygen
-
-#include "./ComponentMacros.h"
