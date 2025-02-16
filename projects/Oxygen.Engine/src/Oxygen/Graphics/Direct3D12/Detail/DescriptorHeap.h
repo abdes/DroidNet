@@ -73,7 +73,7 @@ public:
     ~DescriptorHeap() override { Release(); }
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
-    OXYGEN_MAKE_NON_MOVEABLE(DescriptorHeap);
+    OXYGEN_MAKE_NON_MOVABLE(DescriptorHeap);
 
     void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
     void Release();

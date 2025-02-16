@@ -92,7 +92,7 @@ public:
         }
     }
 
-    OXYGEN_MAKE_NON_MOVEABLE(AwaitableLambda)
+    OXYGEN_MAKE_NON_MOVABLE(AwaitableLambda)
     OXYGEN_DEFAULT_COPYABLE(AwaitableLambda)
 
     // NB: these forwarders are specialized for `TaskAwaiter`, and would need

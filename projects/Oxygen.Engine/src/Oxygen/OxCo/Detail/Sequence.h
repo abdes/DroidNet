@@ -43,7 +43,7 @@ public:
 
     ~Sequence() = default;
 
-    OXYGEN_MAKE_NON_MOVEABLE(Sequence)
+    OXYGEN_MAKE_NON_MOVABLE(Sequence)
     OXYGEN_MAKE_NON_COPYABLE(Sequence)
 
     // ReSharper disable CppMemberFunctionMayBeStatic

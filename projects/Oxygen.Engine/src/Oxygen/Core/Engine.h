@@ -51,7 +51,7 @@ public:
     OXYGEN_CORE_API ~Engine() noexcept;
 
     OXYGEN_MAKE_NON_COPYABLE(Engine)
-    OXYGEN_MAKE_NON_MOVEABLE(Engine)
+    OXYGEN_MAKE_NON_MOVABLE(Engine)
 
     OXYGEN_CORE_API [[nodiscard]] auto GetPlatform() const -> Platform&;
 

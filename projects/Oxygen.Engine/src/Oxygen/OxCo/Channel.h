@@ -84,7 +84,7 @@ namespace detail::channel {
 
     public:
         OXYGEN_MAKE_NON_COPYABLE(Reader)
-        OXYGEN_MAKE_NON_MOVEABLE(Reader)
+        OXYGEN_MAKE_NON_MOVABLE(Reader)
 
         auto Receive() -> Awaitable<std::optional<T>> auto
         {
@@ -180,7 +180,7 @@ namespace detail::channel {
 
     public:
         OXYGEN_MAKE_NON_COPYABLE(Writer)
-        OXYGEN_MAKE_NON_MOVEABLE(Writer)
+        OXYGEN_MAKE_NON_MOVABLE(Writer)
 
         template <typename U>
         auto Send(U&& value) -> Awaitable<bool> auto
@@ -283,7 +283,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(Channel)
-    OXYGEN_MAKE_NON_MOVEABLE(Channel)
+    OXYGEN_MAKE_NON_MOVABLE(Channel)
 
     //! Returns the number of objects immediately available to read from this
     //! channel, i.e., the number of times in a row that you can call

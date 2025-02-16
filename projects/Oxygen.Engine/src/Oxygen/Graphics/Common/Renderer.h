@@ -75,7 +75,7 @@ namespace graphics {
         OXYGEN_GFX_API ~Renderer() override = default;
 
         OXYGEN_MAKE_NON_COPYABLE(Renderer); //< Non-copyable.
-        OXYGEN_MAKE_NON_MOVEABLE(Renderer); //< Non-moveable.
+        OXYGEN_MAKE_NON_MOVABLE(Renderer); //< Non-moveable.
 
         /**
          * Gets the index of the current frame being rendered.

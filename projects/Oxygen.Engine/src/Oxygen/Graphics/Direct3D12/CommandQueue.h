@@ -23,7 +23,7 @@ public:
     ~CommandQueue() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
-    OXYGEN_MAKE_NON_MOVEABLE(CommandQueue);
+    OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
 
     void Submit(const CommandListPtr& command_list) override;
     void Submit(const CommandLists& command_list);

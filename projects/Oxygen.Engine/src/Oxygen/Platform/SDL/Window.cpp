@@ -61,7 +61,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(Data)
-    OXYGEN_MAKE_NON_MOVEABLE(Data)
+    OXYGEN_MAKE_NON_MOVABLE(Data)
 
     SDL_Window* sdl_window_ { nullptr };
     WindowIdType id_ { kInvalidWindowId };

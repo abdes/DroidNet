@@ -27,7 +27,7 @@ public:
     OXYGEN_D3D12_API ~Renderer() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Renderer);
-    OXYGEN_MAKE_NON_MOVEABLE(Renderer);
+    OXYGEN_MAKE_NON_MOVABLE(Renderer);
 
     auto GetCommandRecorder() const -> CommandRecorderPtr override;
     auto GetShaderCompiler() const -> ShaderCompilerPtr override;

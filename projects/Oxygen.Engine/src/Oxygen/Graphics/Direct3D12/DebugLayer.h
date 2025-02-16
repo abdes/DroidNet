@@ -38,7 +38,7 @@ public:
     ~DebugLayer() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
-    OXYGEN_MAKE_NON_MOVEABLE(DebugLayer);
+    OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
 private:
     void OnInitialize(bool enable = true, bool enable_validation = false);

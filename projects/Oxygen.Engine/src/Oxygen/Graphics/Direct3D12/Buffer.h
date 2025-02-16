@@ -59,7 +59,7 @@ public:
     ~Buffer() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Buffer);
-    OXYGEN_MAKE_NON_MOVEABLE(Buffer);
+    OXYGEN_MAKE_NON_MOVABLE(Buffer);
 
     [[nodiscard]] auto GetResource() const -> ID3D12Resource* override { return resource_; }
 

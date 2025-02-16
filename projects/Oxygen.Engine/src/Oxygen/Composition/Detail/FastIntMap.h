@@ -38,7 +38,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(FastIntMap)
-    OXYGEN_MAKE_NON_MOVEABLE(FastIntMap)
+    OXYGEN_MAKE_NON_MOVABLE(FastIntMap)
 
     //! Inserts or updates a key-value pair
     //! \param key The key to insert or update

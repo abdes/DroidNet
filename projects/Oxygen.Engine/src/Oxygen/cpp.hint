@@ -18,7 +18,7 @@
 #define LOGURU_ANONYMOUS_NAMESPACE_BEGIN namespace {
 #define LOGURU_ANONYMOUS_NAMESPACE_BEGIN
 #define OXYGEN_MAKE_NON_COPYABLE(Type) Type(const Type &) = delete; auto operator=(const Type &)->Type & = delete;
-#define OXYGEN_MAKE_NON_MOVEABLE(Type) Type(Type &&) = delete; auto operator=(Type &&)->Type & = delete;
+#define OXYGEN_MAKE_NON_MOVABLE(Type) Type(Type &&) = delete; auto operator=(Type &&)->Type & = delete;
 #define CHECK_F(test, __VA_ARGS__) CHECK_WITH_INFO_F(test, #test,##__VA_ARGS__)
 #define OXYGEN_GFX_API
 #define OXYGEN_GFX_API __declspec(dllexport)

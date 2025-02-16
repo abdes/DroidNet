@@ -27,7 +27,7 @@ public:
     ~ImGuiPlatformBackend() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ImGuiPlatformBackend);
-    OXYGEN_MAKE_NON_MOVEABLE(ImGuiPlatformBackend);
+    OXYGEN_MAKE_NON_MOVABLE(ImGuiPlatformBackend);
 
     virtual void NewFrame() = 0;
 

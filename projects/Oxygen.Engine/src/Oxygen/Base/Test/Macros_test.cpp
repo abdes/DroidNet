@@ -28,7 +28,7 @@ NOLINT_TEST(CommonMacros, NonMoveable)
     // NOLINTNEXTLINE
     class NonMoveable {
     public:
-        OXYGEN_MAKE_NON_MOVEABLE(NonMoveable)
+        OXYGEN_MAKE_NON_MOVABLE(NonMoveable)
     };
 
     static_assert(!std::is_move_constructible_v<NonMoveable>);

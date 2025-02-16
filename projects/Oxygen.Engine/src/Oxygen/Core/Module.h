@@ -29,7 +29,7 @@ namespace core {
         OXYGEN_CORE_API ~Module() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Module)
-        OXYGEN_MAKE_NON_MOVEABLE(Module)
+        OXYGEN_MAKE_NON_MOVABLE(Module)
 
         [[nodiscard]] OXYGEN_CORE_API auto Name() const -> std::string_view;
 

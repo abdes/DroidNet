@@ -46,7 +46,7 @@ public:
     ~CommandQueue() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
-    OXYGEN_MAKE_NON_MOVEABLE(CommandQueue);
+    OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
 
     virtual void Submit(const CommandListPtr& command_list) = 0;
     virtual void Flush() { Wait(fence_->GetCurrentValue()); }

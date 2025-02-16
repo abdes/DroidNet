@@ -57,7 +57,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(TestEventLoop)
-    OXYGEN_MAKE_NON_MOVEABLE(TestEventLoop)
+    OXYGEN_MAKE_NON_MOVABLE(TestEventLoop)
 
     void Stop() { running_ = false; }
     [[nodiscard]] auto IsRunning() const { return running_; }

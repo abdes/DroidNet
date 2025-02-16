@@ -26,7 +26,7 @@ public:
     OXYGEN_D3D12_API ~Fence() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Fence);
-    OXYGEN_MAKE_NON_MOVEABLE(Fence);
+    OXYGEN_MAKE_NON_MOVABLE(Fence);
 
     OXYGEN_D3D12_API void Signal(uint64_t value) const override;
     OXYGEN_D3D12_API [[nodiscard]] uint64_t Signal() const override;

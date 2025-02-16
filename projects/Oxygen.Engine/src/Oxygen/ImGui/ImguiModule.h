@@ -37,7 +37,7 @@ public:
     OXYGEN_IMGUI_API ~ImguiModule() override;
 
     OXYGEN_MAKE_NON_COPYABLE(ImguiModule);
-    OXYGEN_MAKE_NON_MOVEABLE(ImguiModule);
+    OXYGEN_MAKE_NON_MOVABLE(ImguiModule);
 
     OXYGEN_IMGUI_API auto ProcessInput(const platform::InputEvent& event) -> void override;
     OXYGEN_IMGUI_API auto Update(Duration delta_time) -> void override;

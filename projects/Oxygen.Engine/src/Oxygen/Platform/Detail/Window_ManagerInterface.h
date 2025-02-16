@@ -21,7 +21,7 @@ namespace platform::window {
         ManagerInterface() = default;
         virtual ~ManagerInterface() = default;
         OXYGEN_MAKE_NON_COPYABLE(ManagerInterface)
-        OXYGEN_MAKE_NON_MOVEABLE(ManagerInterface)
+        OXYGEN_MAKE_NON_MOVABLE(ManagerInterface)
 
         virtual void DoRestore() const = 0;
         virtual void DoMaximize() const = 0;

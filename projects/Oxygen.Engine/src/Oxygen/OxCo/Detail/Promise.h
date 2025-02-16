@@ -280,7 +280,7 @@ namespace detail {
         }
 
         OXYGEN_MAKE_NON_COPYABLE(BasePromise)
-        OXYGEN_MAKE_NON_MOVEABLE(BasePromise)
+        OXYGEN_MAKE_NON_MOVABLE(BasePromise)
 
         /// Replaces the parent of an already started task.
         void ReParent(BaseTaskParent* parent, const Handle caller)

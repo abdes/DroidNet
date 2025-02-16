@@ -102,7 +102,7 @@ public:
     virtual ~ResourceTable() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ResourceTable);
-    OXYGEN_MAKE_NON_MOVEABLE(ResourceTable);
+    OXYGEN_MAKE_NON_MOVABLE(ResourceTable);
 
     [[nodiscard]] auto GetItemType() const -> ResourceHandle::ResourceTypeT
     {

@@ -25,7 +25,7 @@ public:
     ~PerFrameResourceManager() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(PerFrameResourceManager);
-    OXYGEN_MAKE_NON_MOVEABLE(PerFrameResourceManager);
+    OXYGEN_MAKE_NON_MOVABLE(PerFrameResourceManager);
 
     //! Registers a resource managed through a `std::shared_ptr` for deferred
     //! release.

@@ -118,7 +118,7 @@ namespace detail {
 
         ~AsioAwaiter() = default;
 
-        OXYGEN_MAKE_NON_MOVEABLE(AsioAwaiter)
+        OXYGEN_MAKE_NON_MOVABLE(AsioAwaiter)
         OXYGEN_MAKE_NON_COPYABLE(AsioAwaiter)
 
         //! @{

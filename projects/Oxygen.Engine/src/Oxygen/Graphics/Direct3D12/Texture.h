@@ -43,7 +43,7 @@ public:
     ~Texture() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Texture);
-    OXYGEN_MAKE_NON_MOVEABLE(Texture);
+    OXYGEN_MAKE_NON_MOVABLE(Texture);
 
     [[nodiscard]] auto GetSrv() const -> const detail::DescriptorHandle& { return srv_; }
     [[nodiscard]] auto GetResource() const -> ID3D12Resource* override { return resource_; }
@@ -89,7 +89,7 @@ public:
     ~RenderTexture() { Release(); }
 
     OXYGEN_MAKE_NON_COPYABLE(RenderTexture);
-    OXYGEN_MAKE_NON_MOVEABLE(RenderTexture);
+    OXYGEN_MAKE_NON_MOVABLE(RenderTexture);
 
     void Initialize(const TextureInitInfo& info);
     void Release();
@@ -115,7 +115,7 @@ public:
     ~DepthBuffer() { Release(); }
 
     OXYGEN_MAKE_NON_COPYABLE(DepthBuffer);
-    OXYGEN_MAKE_NON_MOVEABLE(DepthBuffer);
+    OXYGEN_MAKE_NON_MOVABLE(DepthBuffer);
 
     void Initialize(TextureInitInfo info);
     void Release();
