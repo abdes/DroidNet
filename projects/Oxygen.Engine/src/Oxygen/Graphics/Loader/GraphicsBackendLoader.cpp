@@ -79,17 +79,34 @@ auto GetBackendModuleDllName(const BackendType backend) -> std::string
         throw std::runtime_error(
             std::string("backend not yet implemented: ") + nostd::to_string(backend));
     }
-    return "Oxygen.Graphics." + engine_name + ".dll";
+    return "Oxygen.Graphics." + engine_name +
+#if !defined(NDEBUG)
+        "-d" +
+#endif
+        ".dll";
+}
+
+auto GetExecutableDirectory() -> std::string
+{
+    char buffer[MAX_PATH];
+    if (const DWORD size = GetModuleFileNameA(nullptr, buffer, MAX_PATH); size == 0) {
+        throw std::runtime_error("Failed to get executable path");
+    }
+    const std::string path(buffer);
+    const size_t pos = path.find_last_of("\\/");
+    return (pos == std::string::npos) ? "" : path.substr(0, pos + 1);
 }
 
 auto LoadGraphicsBackendModule(const BackendType backend_type)
     -> std::tuple<HMODULE, GraphicsModuleApi*>
 {
+    // We expect the backend module to be in the same directory as the executable.
     const auto module_name = GetBackendModuleDllName(backend_type);
-    backend_module = LoadLibraryA(module_name.c_str());
+    const auto full_path = GetExecutableDirectory() + module_name;
+    backend_module = LoadLibraryA(full_path.c_str());
     if (!backend_module) {
         const std::string error_str { GetLastErrorAsString() };
-        LOG_F(ERROR, "Could not load module `{}`", module_name);
+        LOG_F(ERROR, "Could not load module `{}`", full_path);
         LOG_F(ERROR, "-> {}", error_str);
         throw std::runtime_error(error_str);
     }
