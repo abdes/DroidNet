@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Finally.h"
-
 #include <SDL3/SDL.h>
 
 #include "Oxygen/Platform/Platform.h"
@@ -322,7 +320,7 @@ auto InputEvents::ProcessPlatformEvents() const -> co::Co<>
         }
         if (input_event) {
             // Try to send synchronously if possible
-            if (!channel_.Closed() && !channel_.Full()) {
+            if (!channel_.Full()) {
                 const auto success = channel_writer_.TrySend(std::move(*input_event));
                 DCHECK_F(success);
             } else {
