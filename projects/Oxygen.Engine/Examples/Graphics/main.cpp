@@ -52,7 +52,6 @@ auto AsyncMain(const PlatformPtr& platform) -> oxygen::co::Co<int>
         // Activate the live objects with our nursery, making it available for the
         // lifetime of the nursery.
         co_await n.Start(&Platform::Start, std::ref(*platform));
-        platform->Run();
 
         // 2- The graphics backend module
         const oxygen::GraphicsBackendProperties backend_props {
@@ -104,7 +103,8 @@ auto AsyncMain(const PlatformPtr& platform) -> oxygen::co::Co<int>
             n.Cancel();
         });
 
-        // Wait for all tasks to complete
+        // Run and wait for all tasks to complete
+        platform->Run();
         co_return oxygen::co::kJoin;
     };
     co_return EXIT_SUCCESS;
