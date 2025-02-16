@@ -13,8 +13,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Mixin.h>
 #include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Graphics/Direct3d12/Forward.h>
-#include <Oxygen/Graphics/Direct3d12/api_export.h>
+#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12::detail {
 
@@ -78,7 +78,7 @@ public:
     void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
     void Release();
 
-    OXYGEN_D3D12_API [[nodiscard]] auto Allocate() -> DescriptorHandle;
+    [[nodiscard]] OXYGEN_D3D12_API auto Allocate() -> DescriptorHandle;
     OXYGEN_D3D12_API void Free(DescriptorHandle& handle);
 
     [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }

@@ -109,15 +109,7 @@
     ],
     "C_Cpp.default.cppStandard": "c++20",
     "C_Cpp.default.cStandard": "c17",
-    "C_Cpp.intelliSenseEngine": "disabled",
-    "externalFormatters.languages": {
-        "cmake": {
-            "command": "F:\\projects\\venv\\Scripts\\gersemi.exe",
-            "arguments": [
-                "-i"
-            ]
-        }
-    },
+    "C_Cpp.intelliSenseEngine": "default",
     "[cmake]": {
         "editor.defaultFormatter": "lxl66566.anyformatter-vscode"
     },
@@ -127,6 +119,5 @@
             "file": true,
         }
     },
-    "clangd.path": "",
     "editor.formatOnSave": false,
 }

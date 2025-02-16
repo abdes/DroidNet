@@ -30,11 +30,11 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_MAKE_NON_MOVABLE(Graphics);
 
-    OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> FactoryType*;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> DeviceType*;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator* { return allocator_; }
+    [[nodiscard]] OXYGEN_D3D12_API auto GetFactory() const -> FactoryType*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetMainDevice() const -> DeviceType*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetAllocator() const -> D3D12MA::Allocator* { return allocator_; }
 
-    OXYGEN_D3D12_API [[nodiscard]] auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
 protected:
     void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) override;
@@ -58,12 +58,12 @@ namespace detail {
       initialized or has been destroyed.
     */
     //! @{
-    OXYGEN_D3D12_API [[nodiscard]] auto Graphics() -> Graphics&;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() -> FactoryType*;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() -> DeviceType*;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetRenderer() -> Renderer&;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&;
-    OXYGEN_D3D12_API [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
+    [[nodiscard]] OXYGEN_D3D12_API auto Graphics() -> Graphics&;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetFactory() -> FactoryType*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetMainDevice() -> DeviceType*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetRenderer() -> Renderer&;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetAllocator() -> D3D12MA::Allocator&;
     //! Get the backend memory allocator
     // TODO: Add the allocator
     //! @}

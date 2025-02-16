@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3d12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 
 #include "Detail/dx12_utils.h"
 
@@ -18,11 +18,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
-#include <Oxygen/Graphics/Direct3d12/Buffer.h>
-#include <Oxygen/Graphics/Direct3d12/CommandList.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/WindowSurface.h>
-#include <Oxygen/Graphics/Direct3d12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
+#include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;

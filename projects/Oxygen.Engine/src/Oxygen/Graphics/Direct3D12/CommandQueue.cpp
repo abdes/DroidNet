@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3d12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Direct3d12/CommandList.h>
-#include <Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h>
-#include <Oxygen/Graphics/Direct3d12/Fence.h>
+#include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Fence.h>
 
 namespace {
 

@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3d12/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
 
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
-#include <Oxygen/Graphics/Direct3d12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Forward.h>
 
 using namespace oxygen::graphics::d3d12;
 using oxygen::windows::ThrowOnFailed;

@@ -8,7 +8,7 @@
 
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
-#include <Oxygen/Graphics/Direct3d12/api_export.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen::graphics::d3d12 {
@@ -33,12 +33,12 @@ public:
     auto GetShaderCompiler() const -> ShaderCompilerPtr override;
     auto GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode> override;
 
-    OXYGEN_D3D12_API [[nodiscard]] auto RtvHeap() const -> detail::DescriptorHeap&;
-    OXYGEN_D3D12_API [[nodiscard]] auto DsvHeap() const -> detail::DescriptorHeap&;
-    OXYGEN_D3D12_API [[nodiscard]] auto SrvHeap() const -> detail::DescriptorHeap&;
-    OXYGEN_D3D12_API [[nodiscard]] auto UavHeap() const -> detail::DescriptorHeap&;
+    [[nodiscard]] OXYGEN_D3D12_API auto RtvHeap() const -> detail::DescriptorHeap&;
+    [[nodiscard]] OXYGEN_D3D12_API auto DsvHeap() const -> detail::DescriptorHeap&;
+    [[nodiscard]] OXYGEN_D3D12_API auto SrvHeap() const -> detail::DescriptorHeap&;
+    [[nodiscard]] OXYGEN_D3D12_API auto UavHeap() const -> detail::DescriptorHeap&;
 
-    OXYGEN_D3D12_API [[nodiscard]] auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
 
     // OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
     //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;

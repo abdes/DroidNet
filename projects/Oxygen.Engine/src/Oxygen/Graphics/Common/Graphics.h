@@ -84,10 +84,10 @@ public:
       Once created, the instance stays alive for as long as the graphics backend
       is not shutdown. It can always be obtained by calling `GetRenderer()`.
     */
-    OXYGEN_GFX_API [[nodiscard]] auto GetRenderer() const noexcept -> const graphics::Renderer*;
-    OXYGEN_GFX_API [[nodiscard]] auto GetRenderer() noexcept -> graphics::Renderer*;
+    [[nodiscard]] OXYGEN_GFX_API auto GetRenderer() const noexcept -> const graphics::Renderer*;
+    [[nodiscard]] OXYGEN_GFX_API auto GetRenderer() noexcept -> graphics::Renderer*;
 
-    OXYGEN_GFX_API [[nodiscard]] auto GetPerFrameResourceManager() const noexcept
+    [[nodiscard]] OXYGEN_GFX_API auto GetPerFrameResourceManager() const noexcept
         -> const graphics::PerFrameResourceManager&;
 
     [[nodiscard]]
