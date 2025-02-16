@@ -202,12 +202,12 @@ protected:
 private:
     OXYGEN_COMP_API static void ValidateDependencies(TypeId comp_id, std::span<const TypeId> dependencies);
     OXYGEN_COMP_API void EnsureDependencies(std::span<const TypeId> dependencies) const;
-    OXYGEN_COMP_API [[nodiscard]] auto ExpectExistingComponent(TypeId id) const -> bool;
-    OXYGEN_COMP_API [[nodiscard]] auto IsComponentRequired(TypeId id) const -> bool;
-    OXYGEN_COMP_API [[nodiscard]] auto HasComponentImpl(TypeId id) const -> bool;
-    OXYGEN_COMP_API [[nodiscard]] auto AddComponentImpl(std::unique_ptr<Component> component) const -> Component&;
-    OXYGEN_COMP_API [[nodiscard]] auto ReplaceComponentImpl(TypeId old_id, std::unique_ptr<Component> new_component) const -> Component&;
-    OXYGEN_COMP_API [[nodiscard]] auto GetComponentImpl(TypeId id) const -> Component&;
+    [[nodiscard]] OXYGEN_COMP_API auto ExpectExistingComponent(TypeId id) const -> bool;
+    [[nodiscard]] OXYGEN_COMP_API auto IsComponentRequired(TypeId id) const -> bool;
+    [[nodiscard]] OXYGEN_COMP_API auto HasComponentImpl(TypeId id) const -> bool;
+    [[nodiscard]] OXYGEN_COMP_API auto AddComponentImpl(std::unique_ptr<Component> component) const -> Component&;
+    [[nodiscard]] OXYGEN_COMP_API auto ReplaceComponentImpl(TypeId old_id, std::unique_ptr<Component> new_component) const -> Component&;
+    [[nodiscard]] OXYGEN_COMP_API auto GetComponentImpl(TypeId id) const -> Component&;
     OXYGEN_COMP_API void RemoveComponentImpl(TypeId id, bool update_indices = true) const;
     OXYGEN_COMP_API void DeepCopyComponentsFrom(const Composition& other);
 

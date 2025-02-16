@@ -13,24 +13,25 @@
 #include <wrl/client.h>
 
 #include <Oxygen/Graphics/Common/GraphicsModule.h>
+#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-#include <Oxygen/Graphics/Direct3d12/DebugLayer.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h>
-#include <Oxygen/Graphics/Direct3d12/Forward.h>
-#include <Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h>
+
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
 
 namespace {
 
-std::shared_ptr<oxygen::graphics::d3d12::Graphics>& GetBackendInternal()
+auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
     static auto graphics = std::make_shared<oxygen::graphics::d3d12::Graphics>();
     return graphics;
 }
 
-void* CreateBackend()
+auto CreateBackend() -> void*
 {
     return GetBackendInternal().get();
 }
@@ -92,7 +93,7 @@ auto GetAllocator() -> D3D12MA::Allocator&
 //===----------------------------------------------------------------------===//
 // Public implementation of the graphics backend API.
 
-extern "C" __declspec(dllexport) void* GetGraphicsModuleApi()
+extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 {
     static oxygen::graphics::GraphicsModuleApi render_module;
     render_module.CreateBackend = CreateBackend;
@@ -135,13 +136,13 @@ struct AdapterDesc {
 
 std::vector<AdapterDesc> adapters;
 
-bool CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter)
+auto CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter) -> bool
 {
     ComPtr<IDXGIOutput> output;
     return SUCCEEDED(adapter->EnumOutputs(0, &output));
 }
 
-AdapterDesc CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter)
+auto CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter) -> AdapterDesc
 {
     std::string description {};
     oxygen::string_utils::WideToUtf8(desc.Description, description);
@@ -155,13 +156,13 @@ AdapterDesc CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGI
     return adapter_info;
 }
 
-std::string FormatMemorySize(const size_t memory_size)
+auto FormatMemorySize(const size_t memory_size) -> std::string
 {
     std::ostringstream oss;
-    if (memory_size >= (1ull << 30)) {
-        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ull << 30)) << " GB";
+    if (memory_size >= (1ULL << 30)) {
+        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ULL << 30)) << " GB";
     } else {
-        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ull << 20)) << " MB";
+        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ULL << 20)) << " MB";
     }
     return oss.str();
 }

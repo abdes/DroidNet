@@ -12,7 +12,7 @@
 #include <dxcapi.h>
 #include <wrl/client.h>
 
-#include <Oxygen/Graphics/Direct3d12/api_export.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 

@@ -19,8 +19,8 @@
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h> // Needed
-#include <Oxygen/Graphics/Direct3d12/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h> // Needed
+#include <Oxygen/Graphics/Direct3D12/WindowSurface.h>
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/Types.h>

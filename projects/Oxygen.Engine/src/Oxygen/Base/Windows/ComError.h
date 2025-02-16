@@ -51,7 +51,7 @@ public:
             ? std::system_category().default_error_condition(HRESULT_CODE(hr))
             : std::error_condition { hr, ComCategory() };
     }
-    OXYGEN_BASE_API [[nodiscard]] auto message(int hr) const -> std::string override;
+    [[nodiscard]] OXYGEN_BASE_API auto message(int hr) const -> std::string override;
 };
 
 // Any form of a string, UTF-8 string or wide string
@@ -83,7 +83,7 @@ public:
 
     HRESULT GetHR() const noexcept { return code().value(); }
 
-    OXYGEN_BASE_API [[nodiscard]] auto what() const noexcept -> const char* override;
+    [[nodiscard]] OXYGEN_BASE_API auto what() const noexcept -> const char* override;
 
 private:
     mutable std::optional<std::string> message_;

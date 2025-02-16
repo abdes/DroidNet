@@ -7,7 +7,7 @@
 #pragma once
 
 #include <Oxygen/Graphics/Common/RenderTarget.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
 
 namespace oxygen::graphics::d3d12 {
 

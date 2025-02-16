@@ -10,7 +10,7 @@
 #include "DescriptorHeap.h"
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
-#include <Oxygen/Graphics/Direct3d12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 namespace {
 
@@ -63,7 +63,7 @@ void SwapChain::CreateSwapChain(CommandQueueType* command_queue, const DXGI_FORM
         .Format = ToNonSrgb(format_),
         .Stereo = FALSE,
         .SampleDesc = { 1, 0 }, // Always like this for D3D12
-        // TODO: For now, we will use the back buffer as a render target, maybe later render to buffer and copy
+        // TODO(abdes): For now, we will use the back buffer as a render target, maybe later render to buffer and copy
         .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER,
         .BufferCount = kFrameBufferCount,
         .Scaling = DXGI_SCALING_STRETCH,

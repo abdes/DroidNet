@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3d12/MemoryBlock.h>
+#include <Oxygen/Graphics/Direct3D12/MemoryBlock.h>
 
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/logging.h>
-#include <Oxygen/Graphics/Direct3d12/D3D12MemAlloc.h>
-#include <Oxygen/Graphics/Direct3d12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::graphics::d3d12::MemoryBlock;
 using oxygen::graphics::d3d12::detail::GetAllocator;

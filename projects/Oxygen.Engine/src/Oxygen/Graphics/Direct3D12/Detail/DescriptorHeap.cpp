@@ -8,8 +8,8 @@
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 
 using namespace oxygen::windows;
 using namespace oxygen::graphics::d3d12::detail;
