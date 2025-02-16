@@ -207,14 +207,12 @@ namespace detail::channel {
             // copies and to allow readers to eventually communicate together
             // via the shared event value.
             auto shared_value = std::make_shared<T>(std::forward<U>(value));
-            bool success = false;
             for (auto& reader : channel_.readers_) {
                 reader.buffer_.PushBack(shared_value);
                 reader.UnParkOne();
-                success = true;
             }
 
-            return success;
+            return true;
         }
 
         void Close() { channel_.Close(); }
