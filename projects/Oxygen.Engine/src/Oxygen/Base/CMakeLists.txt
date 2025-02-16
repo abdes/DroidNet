@@ -50,7 +50,6 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Detail/loguru.cpp"
-    "Detail/loguru.hpp"
     "Detail/signal.hpp"
     "MemoryStream.cpp"
   PUBLIC
