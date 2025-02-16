@@ -20,3 +20,11 @@
 #define OXYGEN_MAKE_NON_COPYABLE(Type) Type(const Type &) = delete; auto operator=(const Type &)->Type & = delete;
 #define OXYGEN_MAKE_NON_MOVEABLE(Type) Type(Type &&) = delete; auto operator=(Type &&)->Type & = delete;
 #define CHECK_F(test, __VA_ARGS__) CHECK_WITH_INFO_F(test, #test,##__VA_ARGS__)
+#define OXYGEN_GFX_API
+#define OXYGEN_GFX_API __declspec(dllexport)
+#define OXYGEN_GFX_API __declspec(dllimport)
+#define OXYGEN_GFX_API __attribute__((visibility("default")))
+#define OXYGEN_DEFAULT_COPYABLE(Type) Type(const Type&) = default; auto operator=(const Type&)->Type& = default;
+#define OXYGEN_DEFAULT_MOVABLE(Type) Type(Type&&) = default; auto operator=(Type&&)->Type& = default;
+#define OXYGEN_COMPONENT(arg_type) protected: friend class oxygen::Composition; OXYGEN_TYPED(arg_type)
+#define OXYGEN_COMPONENT_REQUIRES(__VA_ARGS__) OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__)

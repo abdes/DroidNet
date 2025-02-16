@@ -6,72 +6,40 @@
 
 #include "Oxygen/Graphics/Common/Surface.h"
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Signals.h"
+#include "Oxygen/Graphics/Common/Types/EngineResources.h"
 #include "Oxygen/Platform/Window.h"
 
-using namespace oxygen::graphics;
-using namespace oxygen::graphics::resources;
+using oxygen::graphics::detail::WindowSurface;
+using oxygen::graphics::resources::kSurface;
 
-auto WindowSurface::Width() const -> uint32_t
+auto WindowSurface::WindowComponent::Width() const -> uint32_t
 {
-    if (const auto window = window_.lock())
+    if (const auto window = window_.lock()) {
         return window->FrameBufferSize().width;
+    }
     throw std::runtime_error("Window is no longer valid");
 }
 
-auto WindowSurface::Height() const -> uint32_t
+auto WindowSurface::WindowComponent::Height() const -> uint32_t
 {
-    if (const auto window = window_.lock())
+    if (const auto window = window_.lock()) {
         return window->FrameBufferSize().height;
+    }
     throw std::runtime_error("Window is no longer valid");
 }
 
-void WindowSurface::InitializeSurface()
+auto WindowSurface::WindowComponent::FrameBufferSize() const -> platform::window::ExtentT
 {
-    const auto window = window_.lock();
-    if (!window)
-        throw std::runtime_error("Window is no longer valid");
-
-    LOG_F(INFO, "Initializing Window Surface `{}` [{}]", window->Title(), GetId().ToString());
-#if 0 // TODO - Implement
-    on_resize_ = std::make_unique<sigslot::connection>(window->OnResized().connect(
-        [this](const auto& size) {
-            LOG_F(1, "Window Surface OnResized() [{}] ", GetId().ToString());
-            Resize(size.width, size.height);
-        }));
-    on_minimized_ = std::make_unique<sigslot::connection>(window->OnMinimized().connect(
-        [this] {
-            LOG_F(1, "Window Surface OnMinimized() [{}]", GetId().ToString());
-            // TODO: Window minimized
-        }));
-    on_restored_ = std::make_unique<sigslot::connection>(window->OnRestored().connect(
-        [this] {
-            LOG_F(1, "Window Surface OnRestored() [{}]", GetId().ToString());
-            // TODO: Window restored
-        }));
-    on_close_ = std::make_unique<sigslot::connection>(window->OnClosing().connect(
-        [this] {
-            LOG_F(INFO, "Window Surface OnClosing() [{}]", GetId().ToString());
-
-            // Disconnect signals
-            DCHECK_NOTNULL_F(on_close_);
-            on_close_->disconnect();
-            DCHECK_NOTNULL_F(on_minimized_);
-            on_minimized_->disconnect();
-            DCHECK_NOTNULL_F(on_resize_);
-            on_resize_->disconnect();
-            DCHECK_NOTNULL_F(on_restored_);
-            on_restored_->disconnect();
-
-            this->self().Release();
-        }));
-#endif
+    if (const auto window = window_.lock()) {
+        return window_.lock()->FrameBufferSize();
+    }
+    throw std::runtime_error("Window is no longer valid");
 }
 
-void WindowSurface::ReleaseSurface() noexcept
+auto WindowSurface::WindowComponent::Native() const -> platform::window::NativeHandles
 {
-    DCHECK_F(IsValid());
-
-    LOG_F(INFO, "Releasing Window Surface [{}]", GetId().ToString());
+    if (const auto window = window_.lock()) {
+        return window->Native();
+    }
+    throw std::runtime_error("Window is no longer valid");
 }

@@ -23,6 +23,7 @@
 #include "Oxygen/Base/Logging.h"
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/ResourceTable.h"
+#include "Oxygen/Base/Windows/ComError.h" // needed
 #include "Oxygen/Core/Types.h"
 #include "Oxygen/Graphics/Common/ObjectRelease.h"
 #include "Oxygen/Graphics/Common/RenderTarget.h"
@@ -37,15 +38,14 @@
 #include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
 #include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
 #include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/WindowSurfaceImpl.h"
+#include "Oxygen/Graphics/Direct3d12/Detail/WindowSurface.h"
 #include "Oxygen/Graphics/Direct3d12/Forward.h"
 #include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
+#include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
 #include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
-#include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
 #include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
 #include "Oxygen/ImGui/ImguiModule.h"
 #include "Oxygen/Platform/Types.h"
-#include <Oxygen/Base/Windows/ComError.h> // needed
 
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::ShaderType;
@@ -56,7 +56,7 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace {
 using oxygen::graphics::resources::kSurface;
-oxygen::ResourceTable<oxygen::graphics::d3d12::detail::WindowSurfaceImpl> surfaces(kSurface, 256);
+oxygen::ResourceTable<oxygen::graphics::d3d12::detail::WindowSurface> surfaces(kSurface, 256);
 } // namespace
 
 namespace {
@@ -96,8 +96,7 @@ public:
     auto BeginFrame(const resources::SurfaceId& surface_id) const
         -> const graphics::RenderTarget&;
     void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const;
-    auto CreateWindowSurfaceImpl(platform::WindowPtr window) const
-        -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>;
+    auto CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId;
 
     [[nodiscard]] auto RtvHeap() const -> DescriptorHeap& { return rtv_heap_; }
     [[nodiscard]] auto DsvHeap() const -> DescriptorHeap& { return dsv_heap_; }
@@ -205,7 +204,7 @@ auto RendererImpl::BeginFrame(const resources::SurfaceId& surface_id) const
         command_queue_->Flush();
         surface.Resize();
     }
-    return surface;
+    return static_cast<RenderTarget&>(surface);
 }
 
 void RendererImpl::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
@@ -231,7 +230,7 @@ void RendererImpl::EndFrame(CommandLists& command_lists, const resources::Surfac
     current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
 }
 
-auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> std::pair<resources::SurfaceId, std::shared_ptr<WindowSurfaceImpl>>
+auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId
 {
     DCHECK_NOTNULL_F(window.lock());
     DCHECK_F(window.lock()->Valid());
@@ -241,13 +240,7 @@ auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> 
         return {};
     }
     LOG_F(INFO, "Window Surface created: {}", surface_id.ToString());
-
-    // Use a custom deleter to call Erase when the shared_ptr<WindowSurfaceImpl> is destroyed
-    auto deleter = [surface_id](WindowSurfaceImpl* ptr) {
-        surfaces.Erase(surface_id);
-    };
-    auto& surface_impl = surfaces.ItemAt(surface_id);
-    return { surface_id, { &surface_impl, deleter } };
+    return surface_id;
 }
 
 std::shared_ptr<IShaderByteCode> RendererImpl::GetEngineShader(std::string_view unique_id)
@@ -330,7 +323,7 @@ void Renderer::OnShutdown()
 auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
     -> const graphics::RenderTarget&
 {
-    current_render_target_ = &pimpl_->BeginFrame(surface_id);
+    current_render_target_ = static_cast<const RenderTarget*>(&pimpl_->BeginFrame(surface_id));
     return *current_render_target_;
 }
 
@@ -374,14 +367,10 @@ auto Renderer::UavHeap() const -> detail::DescriptorHeap&
     return pimpl_->UavHeap();
 }
 
-auto Renderer::CreateWindowSurface(platform::WindowPtr window) const -> SurfacePtr
+auto Renderer::CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId
 {
     DCHECK_NOTNULL_F(window.lock());
     DCHECK_F(window.lock()->Valid());
 
-    const auto [surface_id, surface_impl] { pimpl_->CreateWindowSurfaceImpl(window) };
-    if (!surface_impl) {
-        return {};
-    }
-    return SurfacePtr(new WindowSurface(surface_id, std::move(window), surface_impl));
+    return pimpl_->CreateWindowSurfaceImpl(window);
 }

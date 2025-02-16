@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "Oxygen/Base/Macros.h"
 #include "Oxygen/Base/Mixin.h"
 #include "Oxygen/Base/MixinInitialize.h"
@@ -54,8 +56,8 @@ class Graphics
           MixinInitialize // last to consume remaining args
           > {
 public:
-    //! Constructor to forward the arguments to the mixins in the chain. Requires
-    //! at least a name argument.
+    //! Constructor to forward the arguments to the mix-ins in the chain.
+    //! Requires at least a name argument.
     template <typename... Args>
     constexpr explicit Graphics(const char* name, Args&&... args)
         : Mixin(name, std::forward<Args>(args)...)

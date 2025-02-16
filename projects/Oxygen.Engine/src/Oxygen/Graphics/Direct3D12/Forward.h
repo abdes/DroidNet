@@ -40,12 +40,12 @@ using FencePtr = std::unique_ptr<Fence>;
 // These are only for internal use.
 namespace detail {
     class IDeferredReleaseController;
-    class WindowSurfaceImpl;
+    class WindowSurface;
     struct DescriptorHandle;
     class DescriptorHeap;
     class PerFrameResourceManager;
 
-    using WindowSurfaceImplPtr = std::shared_ptr<WindowSurfaceImpl>;
+    using WindowSurfaceImplPtr = std::shared_ptr<WindowSurface>;
     using DescriptorHandlePtr = std::shared_ptr<DescriptorHandle>;
 } // namespace oxygen::graphics::d3d12::detail
 

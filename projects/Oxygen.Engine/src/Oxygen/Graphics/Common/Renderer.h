@@ -106,14 +106,8 @@ namespace graphics {
          * @{
          */
 
-        [[nodiscard]]
-        virtual auto CreateWindowSurface(platform::WindowPtr weak) const
-            -> SurfacePtr
-            = 0;
-        [[nodiscard]]
-        virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const
-            -> BufferPtr
-            = 0;
+        [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const -> resources::SurfaceId = 0;
+        [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
 
         /**@}*/
 
