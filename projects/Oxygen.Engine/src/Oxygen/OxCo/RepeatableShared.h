@@ -8,7 +8,7 @@
 
 #include <functional>
 #include <memory>
-#include <variant>
+#include <tuple>
 
 #include "Oxygen/OxCo/Co.h"
 #include "Oxygen/OxCo/Semaphore.h"
@@ -124,7 +124,7 @@ public:
     // Constructor for callable with no arguments
     template <typename F>
         requires(std::invocable<F> && ValidProducer<F, ValueT>)
-    RepeatableShared(F&& func)
+    explicit RepeatableShared(F&& func)
         : wrapper_([this, f = std::forward<F>(func)]() -> Co<ValueT> {
             auto guard = co_await CurrentSlot().Lock();
             if constexpr (VoidProducer<F>) {
@@ -151,7 +151,7 @@ public:
     // Constructor for callable with arguments
     template <typename F, typename... Args>
         requires(std::invocable<F, Args...> && ValidProducer<F, ValueT, Args...>)
-    RepeatableShared(F&& func, Args&&... args)
+    explicit RepeatableShared(F&& func, Args&&... args)
         : wrapper_([this, f = std::forward<F>(func), args_tuple = std::make_tuple(std::forward<Args>(args)...)]() -> Co<ValueT> {
             auto guard = co_await CurrentSlot().Lock();
             if constexpr (VoidProducer<F, Args...>) {
@@ -177,9 +177,9 @@ public:
 
     ~RepeatableShared()
     {
-        LOG_IF_F(WARNING, event_slots_ && !event_slots_->slot1.GetAwaitable().Done(),
+        LOG_IF_F(WARNING, event_slots_ && event_slots_->slot1 && !event_slots_->slot1.GetAwaitable().Done(),
             "RepeatableShared destroyed while not done");
-        LOG_IF_F(WARNING, event_slots_ && !event_slots_->slot2.GetAwaitable().Done(),
+        LOG_IF_F(WARNING, event_slots_ && event_slots_->slot2 && !event_slots_->slot2.GetAwaitable().Done(),
             "RepeatableShared destroyed while not done");
     }
 
@@ -192,9 +192,9 @@ public:
        - All copies share synchronization through the same semaphore.
     */
     RepeatableShared(const RepeatableShared& other)
-        : bootstrapped_(other.bootstrapped_)
+        : wrapper_(other.wrapper_)
         , current_slot_index_(other.current_slot_index_)
-        , wrapper_(other.wrapper_)
+        , bootstrapped_(other.bootstrapped_)
     {
         if (bootstrapped_) {
             event_slots_ = other.event_slots_;
@@ -212,9 +212,9 @@ public:
      not awaiting a result or pending a cancellation.
     */
     RepeatableShared(RepeatableShared&& other) noexcept
-        : bootstrapped_(other.bootstrapped_)
+        : wrapper_(std::move(other.wrapper_))
         , current_slot_index_(other.current_slot_index_)
-        , wrapper_(std::move(other.wrapper_))
+        , bootstrapped_(other.bootstrapped_)
     {
         if (bootstrapped_) {
             event_slots_ = std::move(other.event_slots_);
@@ -302,7 +302,6 @@ public:
     auto Lock() { return CurrentSlot().Lock(); }
 
 private:
-private:
     // Add these new types and helper methods before the public section
     using WrappedValueProduce = std::function<Co<ValueT>()>;
 
@@ -311,29 +310,11 @@ private:
      Called after a value has been produced and all awaiters have processed
      it. Switches to the other slot and initializes it for the next
      iteration.
-
-     \param parent Pointer to the owning RepeatableShared instance.
     */
     void CompleteIteration()
     {
         current_slot_index_ ^= 1;
         NextSlot().Initialize(this);
-    }
-
-    template <typename ProducerT>
-    auto MakeWrapper(const ProducerT& obj) -> WrappedValueProduce
-    {
-        return [this, obj]() -> Co<ValueT> {
-            auto guard = co_await CurrentSlot().Lock();
-            ValueT result;
-            if constexpr (std::is_same_v<std::decay_t<ProducerT>, ValueProducer>) {
-                result = obj();
-            } else {
-                result = co_await obj();
-            }
-            CompleteIteration();
-            co_return result;
-        };
     }
 
     void MaybeBootstrap()
@@ -355,9 +336,9 @@ private:
         union {
             Shared<WrappedValueProduce> shared_awaitable;
         };
-        bool initialized_ { false }; // Explicit initialization tracking
 
         // Default constructor - does not initialize shared_awaitable
+        // ReSharper disable once CppPossiblyUninitializedMember
         Slot() noexcept
             : ready(1)
         {
@@ -366,10 +347,13 @@ private:
         // Destructor - explicitly destroy shared_awaitable if initialized
         ~Slot()
         {
-            if (initialized_) {
+            if (initialized) {
                 shared_awaitable.~Shared();
             }
         }
+
+        OXYGEN_MAKE_NON_COPYABLE(Slot)
+        OXYGEN_MAKE_NON_MOVEABLE(Slot)
 
         //! Prepares this slot for the next iteration of the repeatable
         //! operation
@@ -401,14 +385,14 @@ private:
         */
         void Initialize(RepeatableShared* parent)
         {
-            if (initialized_) {
+            if (initialized) {
                 shared_awaitable.~Shared();
             }
             new (&shared_awaitable) Shared<WrappedValueProduce>(
                 [parent]() -> co::Co<ValueT> {
                     co_return co_await parent->wrapper_;
                 });
-            initialized_ = true;
+            initialized = true;
         }
 
         auto Lock() -> Semaphore::Awaiter<Semaphore::LockGuard>
@@ -416,11 +400,16 @@ private:
             return ready.Lock();
         }
 
+        explicit operator bool() const { return initialized; }
+
         auto GetAwaitable() const -> const Shared<WrappedValueProduce>&
         {
-            DCHECK_F(initialized_, "Slot not initialized");
+            DCHECK_F(initialized, "Slot not initialized");
             return shared_awaitable;
         }
+
+    private:
+        bool initialized { false }; // Explicit initialization tracking
     };
 
     struct Slots {
