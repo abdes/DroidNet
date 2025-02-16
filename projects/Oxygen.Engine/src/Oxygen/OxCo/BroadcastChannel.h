@@ -117,7 +117,7 @@ namespace detail::channel {
         }
 
         OXYGEN_MAKE_NON_COPYABLE(MultiplexedReader)
-        OXYGEN_MAKE_NON_MOVEABLE(MultiplexedReader)
+        OXYGEN_MAKE_NON_MOVABLE(MultiplexedReader)
 
         // ReSharper disable once CppHidingFunction
         [[nodiscard]] auto Empty() const noexcept { return buffer_.Empty(); }
@@ -140,7 +140,7 @@ namespace detail::channel {
 
     public:
         OXYGEN_MAKE_NON_COPYABLE(BroadcastingWriter)
-        OXYGEN_MAKE_NON_MOVEABLE(BroadcastingWriter)
+        OXYGEN_MAKE_NON_MOVABLE(BroadcastingWriter)
 
         template <typename U>
         class WriteAwaiter : public BroadcastingWriter::ParkingLotImpl::Parked {

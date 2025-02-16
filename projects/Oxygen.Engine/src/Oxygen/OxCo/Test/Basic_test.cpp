@@ -159,7 +159,7 @@ NOLINT_TEST_F(OxCoBasicTest, NoOp)
 
 struct NonMoveableAwaiter {
     NonMoveableAwaiter() = default;
-    OXYGEN_MAKE_NON_MOVEABLE(NonMoveableAwaiter)
+    OXYGEN_MAKE_NON_MOVABLE(NonMoveableAwaiter)
 
     auto await_ready() const noexcept -> bool { return true; }
     auto await_suspend(detail::Handle) -> bool { return false; }
@@ -168,7 +168,7 @@ struct NonMoveableAwaiter {
 
 struct NonMoveableAwaitable {
     NonMoveableAwaitable() = default;
-    OXYGEN_MAKE_NON_MOVEABLE(NonMoveableAwaitable)
+    OXYGEN_MAKE_NON_MOVABLE(NonMoveableAwaitable)
 
     auto operator co_await() const -> NonMoveableAwaiter { return {}; }
 };

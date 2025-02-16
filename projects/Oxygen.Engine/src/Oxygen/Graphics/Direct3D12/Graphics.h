@@ -28,7 +28,7 @@ public:
     ~Graphics() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
-    OXYGEN_MAKE_NON_MOVEABLE(Graphics);
+    OXYGEN_MAKE_NON_MOVABLE(Graphics);
 
     OXYGEN_D3D12_API [[nodiscard]] auto GetFactory() const -> FactoryType*;
     OXYGEN_D3D12_API [[nodiscard]] auto GetMainDevice() const -> DeviceType*;

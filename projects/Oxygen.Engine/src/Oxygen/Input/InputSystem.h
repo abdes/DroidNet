@@ -34,7 +34,7 @@ public:
     OXYGEN_INPUT_API ~InputSystem() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(InputSystem)
-    OXYGEN_MAKE_NON_MOVEABLE(InputSystem)
+    OXYGEN_MAKE_NON_MOVABLE(InputSystem)
 
     OXYGEN_INPUT_API void AddAction(const std::shared_ptr<Action>& action);
     OXYGEN_INPUT_API void RemoveAction(const std::shared_ptr<Action>& action);

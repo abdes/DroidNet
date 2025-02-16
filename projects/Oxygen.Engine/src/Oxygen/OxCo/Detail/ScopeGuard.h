@@ -27,7 +27,7 @@ public:
     }
     ~ScopeGuard() noexcept { fn_(); }
     OXYGEN_MAKE_NON_COPYABLE(ScopeGuard)
-    OXYGEN_MAKE_NON_MOVEABLE(ScopeGuard)
+    OXYGEN_MAKE_NON_MOVABLE(ScopeGuard)
 
 private:
     [[no_unique_address]] Fn fn_;

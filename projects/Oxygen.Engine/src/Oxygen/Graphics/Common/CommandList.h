@@ -35,7 +35,7 @@ public:
     OXYGEN_GFX_API ~CommandList() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
-    OXYGEN_MAKE_NON_MOVEABLE(CommandList);
+    OXYGEN_MAKE_NON_MOVABLE(CommandList);
 
     [[nodiscard]] virtual auto GetQueueType() const -> CommandListType { return type_; }
 

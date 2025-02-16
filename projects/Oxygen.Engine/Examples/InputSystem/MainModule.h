@@ -27,7 +27,7 @@ public:
     ~MainModule() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(MainModule);
-    OXYGEN_MAKE_NON_MOVEABLE(MainModule);
+    OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
     void OnInitialize(const oxygen::Graphics* gfx) override;
 

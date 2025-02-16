@@ -55,7 +55,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(MuxHelper)
-    OXYGEN_MAKE_NON_MOVEABLE(MuxHelper)
+    OXYGEN_MAKE_NON_MOVABLE(MuxHelper)
 
     ~MuxHelper()
     {

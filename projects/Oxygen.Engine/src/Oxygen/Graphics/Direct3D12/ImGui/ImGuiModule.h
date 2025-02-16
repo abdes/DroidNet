@@ -27,7 +27,7 @@ public:
     ~ImGuiModule() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ImGuiModule);
-    OXYGEN_MAKE_NON_MOVEABLE(ImGuiModule);
+    OXYGEN_MAKE_NON_MOVABLE(ImGuiModule);
 
 protected:
     void ImGuiBackendInit(const oxygen::Graphics* gfx) override;

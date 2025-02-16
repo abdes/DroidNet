@@ -101,7 +101,7 @@ public:
     }
 
     OXYGEN_MAKE_NON_COPYABLE(Executor)
-    OXYGEN_MAKE_NON_MOVEABLE(Executor)
+    OXYGEN_MAKE_NON_MOVABLE(Executor)
 
     //! Schedules `fn(arg)` to be called on the next executor loop, then runs
     //! the executor loop unless already running.

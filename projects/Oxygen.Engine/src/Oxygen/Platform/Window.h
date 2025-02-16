@@ -101,7 +101,7 @@ public:
     OXYGEN_PLATFORM_API ~Window() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Window)
-    OXYGEN_MAKE_NON_MOVEABLE(Window)
+    OXYGEN_MAKE_NON_MOVABLE(Window)
 
     [[nodiscard]] OXYGEN_PLATFORM_API auto Id() const -> WindowIdType;
     [[nodiscard]] OXYGEN_PLATFORM_API auto Native() const -> window::NativeHandles;

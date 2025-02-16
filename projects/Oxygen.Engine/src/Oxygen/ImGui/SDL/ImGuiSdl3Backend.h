@@ -29,7 +29,7 @@ public:
     OXYGEN_IMGUI_API ~ImGuiSdl3Backend() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend);
-    OXYGEN_MAKE_NON_MOVEABLE(ImGuiSdl3Backend);
+    OXYGEN_MAKE_NON_MOVABLE(ImGuiSdl3Backend);
 
     OXYGEN_IMGUI_API void NewFrame() override;
 

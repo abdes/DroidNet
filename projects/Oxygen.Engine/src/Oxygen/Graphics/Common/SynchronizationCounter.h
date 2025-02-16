@@ -55,7 +55,7 @@ public:
     ~SynchronizationCounter() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(SynchronizationCounter);
-    OXYGEN_MAKE_NON_MOVEABLE(SynchronizationCounter);
+    OXYGEN_MAKE_NON_MOVABLE(SynchronizationCounter);
 
     //! Set the counter to the specified value on the CPU side.
     /*!

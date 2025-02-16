@@ -353,7 +353,7 @@ private:
         }
 
         OXYGEN_MAKE_NON_COPYABLE(Slot)
-        OXYGEN_MAKE_NON_MOVEABLE(Slot)
+        OXYGEN_MAKE_NON_MOVABLE(Slot)
 
         //! Prepares this slot for the next iteration of the repeatable
         //! operation

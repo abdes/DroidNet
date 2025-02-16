@@ -26,7 +26,7 @@ public:
     ~CommandRecorder() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
-    OXYGEN_MAKE_NON_MOVEABLE(CommandRecorder);
+    OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
     void Begin() override;
     auto End() -> CommandListPtr override;

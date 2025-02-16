@@ -86,7 +86,7 @@ public:
     ~RendererImpl() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(RendererImpl);
-    OXYGEN_MAKE_NON_MOVEABLE(RendererImpl);
+    OXYGEN_MAKE_NON_MOVABLE(RendererImpl);
 
     auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 

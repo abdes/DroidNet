@@ -30,7 +30,7 @@ public:
     virtual ~IMemoryBlock() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(IMemoryBlock);
-    OXYGEN_MAKE_NON_MOVEABLE(IMemoryBlock);
+    OXYGEN_MAKE_NON_MOVABLE(IMemoryBlock);
 };
 
 } // namespace oxygen::graphics

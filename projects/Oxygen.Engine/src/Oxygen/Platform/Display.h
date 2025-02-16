@@ -33,7 +33,7 @@ public:
     OXYGEN_PLATFORM_API virtual ~Display();
 
     OXYGEN_MAKE_NON_COPYABLE(Display);
-    OXYGEN_MAKE_NON_MOVEABLE(Display);
+    OXYGEN_MAKE_NON_MOVABLE(Display);
 
     [[nodiscard]] auto Id() const { return display_id_; }
 

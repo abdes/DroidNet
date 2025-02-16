@@ -22,7 +22,7 @@ public:
     ~MemoryBlock() override;
 
     OXYGEN_MAKE_NON_COPYABLE(MemoryBlock);
-    OXYGEN_MAKE_NON_MOVEABLE(MemoryBlock);
+    OXYGEN_MAKE_NON_MOVABLE(MemoryBlock);
 
     void Init(const MemoryBlockDesc& desc);
 

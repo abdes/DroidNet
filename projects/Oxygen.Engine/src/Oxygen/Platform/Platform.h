@@ -190,7 +190,7 @@ public:
     OXYGEN_PLATFORM_API ~Platform() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Platform)
-    OXYGEN_MAKE_NON_MOVEABLE(Platform)
+    OXYGEN_MAKE_NON_MOVABLE(Platform)
 
     auto Start(co::TaskStarted<> started = {}) const -> co::Co<>
     {
@@ -222,7 +222,7 @@ public:
     virtual ~PlatformBase() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(PlatformBase)
-    OXYGEN_MAKE_NON_MOVEABLE(PlatformBase)
+    OXYGEN_MAKE_NON_MOVABLE(PlatformBase)
 
     // ---------------------------------------------------------------------------
 
