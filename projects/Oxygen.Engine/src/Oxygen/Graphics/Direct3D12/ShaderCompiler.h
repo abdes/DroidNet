@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/ShaderCompiler.h"
+#include <Oxygen/Graphics/Common/ShaderCompiler.h>
 
 #include <d3d12shader.h>
 #include <dxcapi.h>
 #include <wrl/client.h>
 
-#include "Oxygen/Graphics/Direct3d12/api_export.h"
+#include <Oxygen/Graphics/Direct3d12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 

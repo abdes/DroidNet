@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/ImGui/SDL/ImGuiSdl3Backend.h"
+#include <Oxygen/ImGui/SDL/ImGuiSdl3Backend.h>
 
 #include <SDL3/SDL.h>
 
-#include "Oxygen/ImGui/SDL/imgui_impl_sdl3.h"
-#include "Oxygen/Platform/Platform.h"
+#include <Oxygen/ImGui/SDL/imgui_impl_sdl3.h>
+#include <Oxygen/Platform/Platform.h>
 
 using oxygen::imgui::sdl3::ImGuiSdl3Backend;
 

@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include "Oxygen/Base/Logging.h"
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::co::detail {
 

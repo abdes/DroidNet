@@ -8,7 +8,7 @@
 
 #include <concepts>
 
-#include "Oxygen/Base/Result.h"
+#include <Oxygen/Base/Result.h>
 
 namespace oxygen::serio {
 

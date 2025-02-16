@@ -6,7 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/Composition/ObjectMetaData.h"
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 namespace {
 

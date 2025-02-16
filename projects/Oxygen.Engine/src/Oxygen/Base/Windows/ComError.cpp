@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
 #  include <memory>
 
 #  include <fmt/format.h>
 
-#  include "Oxygen/Base/Logging.h"
-#  include "Oxygen/Base/StringUtils.h"
-#  include "Oxygen/Base/Windows/ComError.h"
+#  include <Oxygen/Base/Logging.h>
+#  include <Oxygen/Base/StringUtils.h>
+#  include <Oxygen/Base/Windows/ComError.h>
 
 using oxygen::string_utils::WideToUtf8;
 

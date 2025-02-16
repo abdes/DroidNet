@@ -10,10 +10,10 @@
 #include <exception>
 #include <memory>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/OxCo/Run.h"
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/Window.h>
 
 // Force link the DLL containing the InitializeTypeRegistry function.
 extern "C" auto InitializeTypeRegistry() -> oxygen::TypeRegistry*;

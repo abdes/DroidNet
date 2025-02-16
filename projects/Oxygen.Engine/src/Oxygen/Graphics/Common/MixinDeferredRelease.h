@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Signals.h"
-#include "Oxygen/Graphics/Common/PerFrameResourceManager.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Signals.h>
+#include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 
 namespace oxygen::graphics {
 

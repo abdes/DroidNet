@@ -11,12 +11,12 @@
 #include <memory>
 #include <vector>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/TimeUtils.h"
-#include "Oxygen/Input/Action.h"
-#include "Oxygen/Input/ActionState.h"
-#include "Oxygen/Input/ActionValue.h"
-#include "Oxygen/Input/api_export.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/TimeUtils.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionState.h>
+#include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/api_export.h>
 
 namespace oxygen::input {
 

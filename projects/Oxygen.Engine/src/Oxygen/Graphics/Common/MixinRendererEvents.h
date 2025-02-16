@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/Signals.h"
+#include <Oxygen/Base/Signals.h>
 
 namespace oxygen::graphics {
 

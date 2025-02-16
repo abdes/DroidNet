@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Input.h"
+#include <Oxygen/Platform/Input.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "Oxygen/Platform/Types.h"
+#include <Oxygen/Platform/Types.h>
 
 using oxygen::platform::InputSlots;
 

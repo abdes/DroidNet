@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Input/ActionTriggers.h"
+#include <Oxygen/Input/ActionTriggers.h>
 
 #include <cassert>
 
-#include "Oxygen/Input/Action.h"
-#include "Oxygen/Input/ActionValue.h"
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionValue.h>
 
 using oxygen::input::ActionTrigger;
 using oxygen::input::ActionTriggerChain;

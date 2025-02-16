@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/DeferredObjectRelease.h"
-#include "Oxygen/Graphics/Direct3D12/Graphics.h"
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 namespace oxygen::graphics::d3d12::detail {
 

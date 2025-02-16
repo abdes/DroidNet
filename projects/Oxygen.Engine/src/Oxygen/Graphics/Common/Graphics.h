@@ -7,15 +7,15 @@
 
 #include <optional>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Core/Types.h"
-#include "Oxygen/Graphics/Common/Forward.h"
-#include "Oxygen/Graphics/Common/api_export.h"
-#include "Oxygen/Platform/Types.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Core/Types.h>
+#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 

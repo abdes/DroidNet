@@ -8,14 +8,14 @@
 
 #include <random>
 
-#include "Oxygen/Core/Engine.h"
-#include "Oxygen/Input/Action.h"
-#include "Oxygen/Input/ActionTriggers.h"
-#include "Oxygen/Input/InputActionMapping.h"
-#include "Oxygen/Input/InputMappingContext.h"
-#include "Oxygen/Input/InputSystem.h"
-#include "Oxygen/Input/Types.h"
-#include "Oxygen/Platform/input.h"
+#include <Oxygen/Core/Engine.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Input/Types.h>
+#include <Oxygen/Platform/input.h>
 
 using oxygen::Engine;
 using oxygen::graphics::Renderer;

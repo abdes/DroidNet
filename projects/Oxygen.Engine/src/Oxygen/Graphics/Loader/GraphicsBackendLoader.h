@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/GraphicsModule.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
-#include "Oxygen/Graphics/Loader/api_export.h"
+#include <Oxygen/Graphics/Common/GraphicsModule.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Loader/api_export.h>
 
 namespace oxygen::graphics {
 

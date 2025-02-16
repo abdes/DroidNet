@@ -10,15 +10,15 @@
 #include <span>
 #include <string>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Graphics/Common/Forward.h"
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Common/api_export.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 

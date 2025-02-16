@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Composition/Composition.h"
-#include "Oxygen/Composition/Named.h"
-#include "Oxygen/Composition/ObjectMetaData.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 namespace {
 

@@ -10,8 +10,8 @@
 #include <stdexcept>
 #include <vector>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/ResourceHandle.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ResourceHandle.h>
 
 namespace oxygen {
 

@@ -8,8 +8,8 @@
 
 #include <cstdint>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Composition/api_export.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 

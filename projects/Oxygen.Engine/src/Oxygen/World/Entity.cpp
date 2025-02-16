@@ -6,9 +6,9 @@
 
 #include "entity.h"
 
-#include "Oxygen/Base/ResourceTable.h"
-#include "Oxygen/Base/logging.h"
 #include "transform.h"
+#include <Oxygen/Base/ResourceTable.h>
+#include <Oxygen/Base/logging.h>
 #include <shared_mutex>
 
 namespace {

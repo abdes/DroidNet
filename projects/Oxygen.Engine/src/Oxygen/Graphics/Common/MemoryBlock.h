@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include "Oxygen/Base/Macros.h"
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::graphics {
 //! Description of a GPU memory block.

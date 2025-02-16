@@ -13,7 +13,7 @@
  managed by the engine and treated as resources with a handle.
  */
 
-#include "Oxygen/Base/ResourceHandle.h"
+#include <Oxygen/Base/ResourceHandle.h>
 
 namespace oxygen::graphics::resources {
 

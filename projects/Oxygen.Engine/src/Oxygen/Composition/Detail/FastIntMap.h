@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::composition::detail {
 

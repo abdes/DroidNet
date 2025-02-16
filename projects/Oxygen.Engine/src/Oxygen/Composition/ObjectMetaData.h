@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Composition/ComponentMacros.h"
-#include "Oxygen/Composition/Composition.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/Composition.h>
 
 namespace oxygen {
 

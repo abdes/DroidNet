@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Executor.h"
+#include <Oxygen/OxCo/Executor.h>
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/EventLoop.h"
+#include <Oxygen/OxCo/EventLoop.h>
 
 using oxygen::co::EventLoopID;
 using oxygen::co::Executor;

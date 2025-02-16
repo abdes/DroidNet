@@ -8,8 +8,8 @@
 
 #include <string>
 
-#include "Oxygen/Graphics/Common/Types/ShaderType.h"
-#include "Oxygen/Graphics/Common/api_export.h"
+#include <Oxygen/Graphics/Common/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 struct CompiledShaderInfo;

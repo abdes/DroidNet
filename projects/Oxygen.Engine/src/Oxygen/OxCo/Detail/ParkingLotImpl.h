@@ -7,8 +7,8 @@
 #pragma once
 
 #include "IntrusiveList.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/OxCo/Coroutine.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Coroutine.h>
 
 namespace oxygen::co::detail {
 

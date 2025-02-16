@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/ResourceTable.h"
+#include <Oxygen/Base/ResourceTable.h>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -13,8 +13,8 @@
 #include <string>
 #include <type_traits>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/ResourceHandle.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ResourceHandle.h>
 
 using oxygen::HandleSet;
 using oxygen::ResourceHandle;

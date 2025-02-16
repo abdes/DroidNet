@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Imgui/ImguiModule.h"
+#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
+#include <Oxygen/Imgui/ImguiModule.h>
 
 namespace oxygen::graphics::d3d12 {
 

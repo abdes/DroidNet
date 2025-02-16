@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Base/MixinShutdown.h>
 
 struct ImGuiContext;
 

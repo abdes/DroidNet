@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Detail/Result.h"
+#include <Oxygen/OxCo/Detail/Result.h>
 
 #include <exception>
 #include <string>

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Detail/MuxBase.h"
+#include <Oxygen/OxCo/Detail/MuxBase.h>
 
 #include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>

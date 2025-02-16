@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Detail/ProxyFrame.h"
+#include <Oxygen/OxCo/Detail/ProxyFrame.h>
 
 namespace oxygen::co::detail {
 

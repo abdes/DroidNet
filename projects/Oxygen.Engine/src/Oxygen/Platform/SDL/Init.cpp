@@ -6,8 +6,8 @@
 
 #include <SDL3/SDL.h>
 
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Platform/SDL/Wrapper.h"
+#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
 
 using oxygen::Platform;
 

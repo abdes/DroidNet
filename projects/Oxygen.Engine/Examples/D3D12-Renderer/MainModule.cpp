@@ -11,19 +11,19 @@
 #include <glm/glm.hpp>
 #include <imgui.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Core/Engine.h"
-#include "Oxygen/Graphics/Common/Buffer.h" // Must include for the auto deletion of Buffer shared_ptr
-#include "Oxygen/Graphics/Common/CommandList.h" // needed for CommandListPtr
-#include "Oxygen/Graphics/Common/CommandRecorder.h"
-#include "Oxygen/Graphics/Common/RenderTarget.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
-#include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h" // Needed
-#include "Oxygen/Graphics/Direct3d12/WindowSurface.h"
-#include "Oxygen/ImGui/ImGuiRenderInterface.h"
-#include "Oxygen/Input/ActionTriggers.h"
-#include "Oxygen/Input/Types.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Engine.h>
+#include <Oxygen/Graphics/Common/Buffer.h> // Must include for the auto deletion of Buffer shared_ptr
+#include <Oxygen/Graphics/Common/CommandList.h> // needed for CommandListPtr
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/RenderTarget.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3d12/DeferredObjectRelease.h> // Needed
+#include <Oxygen/Graphics/Direct3d12/WindowSurface.h>
+#include <Oxygen/ImGui/ImGuiRenderInterface.h>
+#include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/Types.h>
 
 using oxygen::Engine;
 using oxygen::graphics::CommandListPtr;

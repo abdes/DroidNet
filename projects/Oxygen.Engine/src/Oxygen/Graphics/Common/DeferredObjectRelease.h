@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/PerFrameResourceManager.h"
+#include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 
 namespace oxygen::graphics {
 

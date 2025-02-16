@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Loader/GraphicsBackendLoader.h"
+#include <Oxygen/Graphics/Loader/GraphicsBackendLoader.h>
 
 #include <windows.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Graphics/Common/Graphics.h"
-// #include "Oxygen/Graphics/Common/Renderer.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+// #include <Oxygen/Graphics/Common/Renderer.h>
 
 using namespace oxygen::graphics;
 

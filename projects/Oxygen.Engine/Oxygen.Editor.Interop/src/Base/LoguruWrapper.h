@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/logging.h"
+#include <Oxygen/Base/logging.h>
 #include <vcclr.h>
 
 using System::IntPtr;

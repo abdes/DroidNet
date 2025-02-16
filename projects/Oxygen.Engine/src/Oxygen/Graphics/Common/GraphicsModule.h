@@ -9,8 +9,8 @@
 #include <cstdint>
 
 // ReSharper disable once CppUnusedIncludeDirective (unreachable code)
-#include "Oxygen/Base/Compilers.h"
-#include "Oxygen/Base/NoStd.h"
+#include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/NoStd.h>
 
 namespace oxygen::graphics {
 

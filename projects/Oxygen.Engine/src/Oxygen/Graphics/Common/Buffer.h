@@ -8,9 +8,9 @@
 
 #include <type_traits>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinNamed.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinNamed.h>
 
 namespace oxygen::graphics {
 

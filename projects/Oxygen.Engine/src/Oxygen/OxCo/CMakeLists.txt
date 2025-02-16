@@ -106,7 +106,7 @@ target_sources(
 target_include_directories(
   ${META_MODULE_TARGET}
   INTERFACE
-    # Includes will have the following format: #include "Oxygen/OxCo/Logging.h"
+    # Includes will have the following format: #include <Oxygen/OxCo/Logging.h>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
     $<INSTALL_INTERFACE:include>
 )

@@ -8,8 +8,8 @@
 
 #include <string>
 
-#include "Oxygen/Base/NoStd.h"
-#include "Oxygen/Base/Types/Geometry.h"
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Types/Geometry.h>
 
 namespace oxygen {
 

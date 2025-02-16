@@ -6,10 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/Awaitables.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/OxCoTestFixture.h"
+#include <Oxygen/OxCo/Awaitables.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
 
 using namespace oxygen::co;
 using namespace oxygen::co::testing;

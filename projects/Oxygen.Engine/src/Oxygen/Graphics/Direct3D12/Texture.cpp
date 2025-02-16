@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3d12/Texture.h"
+#include <Oxygen/Graphics/Direct3d12/Texture.h>
 
-#include "Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Graphics/Direct3d12/Renderer.h"
+#include <Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3d12/Renderer.h>
 
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Composition/TypeSystem.h"
+#include <Oxygen/Composition/TypeSystem.h>
 
 #include <ranges>
 #include <thread>

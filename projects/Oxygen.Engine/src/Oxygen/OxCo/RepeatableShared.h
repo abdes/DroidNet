@@ -10,9 +10,9 @@
 #include <memory>
 #include <tuple>
 
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Semaphore.h"
-#include "Oxygen/OxCo/Shared.h"
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/OxCo/Shared.h>
 
 namespace oxygen::co {
 

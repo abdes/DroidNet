@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3d12/Renderer.h"
+#include <Oxygen/Graphics/Direct3d12/Renderer.h>
 
 #include <cstdint>
 #include <cstring>
@@ -20,32 +20,32 @@
 
 #include <wrl/client.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/ResourceTable.h"
-#include "Oxygen/Base/Windows/ComError.h" // needed
-#include "Oxygen/Core/Types.h"
-#include "Oxygen/Graphics/Common/ObjectRelease.h"
-#include "Oxygen/Graphics/Common/RenderTarget.h"
-#include "Oxygen/Graphics/Common/Renderer.h"
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/ShaderCompiler.h"
-#include "Oxygen/Graphics/Common/ShaderManager.h"
-#include "Oxygen/Graphics/Common/Shaders.h"
-#include "Oxygen/Graphics/Direct3D12/Buffer.h"
-#include "Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h"
-#include "Oxygen/Graphics/Direct3d12/CommandQueue.h"
-#include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
-#include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/WindowSurface.h"
-#include "Oxygen/Graphics/Direct3d12/Forward.h"
-#include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
-#include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
-#include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
-#include "Oxygen/ImGui/ImGuiPlatformBackend.h" // needed
-#include "Oxygen/ImGui/ImguiModule.h"
-#include "Oxygen/Platform/Types.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ResourceTable.h>
+#include <Oxygen/Base/Windows/ComError.h> // needed
+#include <Oxygen/Core/Types.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/RenderTarget.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/ShaderCompiler.h>
+#include <Oxygen/Graphics/Common/ShaderManager.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
+#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3d12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3d12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3d12/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3d12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3d12/Forward.h>
+#include <Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h>
+#include <Oxygen/Graphics/Direct3d12/RenderTarget.h>
+#include <Oxygen/Graphics/Direct3d12/ShaderCompiler.h>
+#include <Oxygen/ImGui/ImGuiPlatformBackend.h> // needed
+#include <Oxygen/ImGui/ImguiModule.h>
+#include <Oxygen/Platform/Types.h>
 
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::ShaderType;

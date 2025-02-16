@@ -11,10 +11,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Run.h"
-#include "Oxygen/OxCo/asio.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/asio.h>
 
 using namespace oxygen::co;
 

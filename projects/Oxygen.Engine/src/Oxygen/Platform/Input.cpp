@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Input.h"
+#include <Oxygen/Platform/Input.h>
 
 #include <cassert>
 #include <memory>
 #include <ranges>
 #include <utility>
 
-#include "Oxygen/Base/Logging.h"
+#include <Oxygen/Base/Logging.h>
 
 //------------------------------------------------------------------------------
 // InputSlotDetails

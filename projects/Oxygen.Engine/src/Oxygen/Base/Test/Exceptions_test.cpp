@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
 #  include <windows.h>
 
-#  include "Oxygen/Base/Compilers.h"
-#  include "Oxygen/Base/Windows/Exceptions.h"
+#  include <Oxygen/Base/Compilers.h>
+#  include <Oxygen/Base/Windows/Exceptions.h>
 
 #  include <Oxygen/Testing/GTest.h>
 #  include <gmock/gmock-matchers.h>

@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Finally.h"
-#include "Oxygen/Platform/Detail/Window_ManagerInterface.h"
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Platform/SDL/Wrapper.h"
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Base/Finally.h>
+#include <Oxygen/Platform/Detail/Window_ManagerInterface.h>
+#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
+#include <Oxygen/Platform/Window.h>
 
 using oxygen::platform::WindowManager;
 using WindowEvent = oxygen::platform::window::Event;

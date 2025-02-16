@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Platform.h"
+#include <Oxygen/Platform/Platform.h>
 
 using oxygen::Platform;
 using oxygen::platform::AsyncOps;
@@ -34,7 +34,7 @@ auto Platform::GetInputSlotForKey(const platform::Key key) -> platform::InputSlo
 }
 
 #if 0
-#  include "Oxygen/Platform/Input.h"
+#  include <Oxygen/Platform/Input.h>
 
 using oxygen::PlatformBase;
 using oxygen::platform::InputSlots;
