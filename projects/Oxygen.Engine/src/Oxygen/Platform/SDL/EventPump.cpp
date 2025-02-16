@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Platform/Platform.h"
-#include "Oxygen/Platform/SDL/Wrapper.h"
+#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
 
 using oxygen::platform::EventPump;
 using namespace std::chrono_literals;

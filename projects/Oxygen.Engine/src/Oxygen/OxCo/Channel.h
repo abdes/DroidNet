@@ -8,11 +8,11 @@
 
 #include <optional>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/ParkingLotImpl.h"
-#include "Oxygen/OxCo/Detail/Queue.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/ParkingLotImpl.h>
+#include <Oxygen/OxCo/Detail/Queue.h>
 
 // The Channel class is designed in two parts, the Reader and the Writer parts,
 // and while they can be used together via the Channel interface, they can also

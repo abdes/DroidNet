@@ -8,15 +8,15 @@
 
 #include <d3d12.h>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinDisposable.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Graphics/Common//Buffer.h"
-#include "Oxygen/Graphics/Direct3d12/D3D12MemAlloc.h"
-#include "Oxygen/Graphics/Direct3d12/D3DResource.h"
-#include "Oxygen/Graphics/Direct3d12/Graphics.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinDisposable.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Direct3d12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3d12/D3DResource.h>
+#include <Oxygen/Graphics/Direct3d12/Graphics.h>
 
 namespace oxygen::graphics::d3d12 {
 

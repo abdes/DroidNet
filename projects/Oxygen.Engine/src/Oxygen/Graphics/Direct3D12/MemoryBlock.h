@@ -8,7 +8,7 @@
 
 #include <wrl/client.h>
 
-#include "Oxygen/Graphics/Common/MemoryBlock.h"
+#include <Oxygen/Graphics/Common/MemoryBlock.h>
 
 namespace D3D12MA {
 class Allocation;

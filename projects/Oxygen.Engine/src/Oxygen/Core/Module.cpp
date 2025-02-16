@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Core/Module.h"
+#include <Oxygen/Core/Module.h>
 
-#include "Oxygen/Composition/ObjectMetaData.h"
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 using oxygen::core::Module;
 

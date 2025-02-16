@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Semaphore.h"
+#include <Oxygen/OxCo/Semaphore.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Nursery.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::Co;

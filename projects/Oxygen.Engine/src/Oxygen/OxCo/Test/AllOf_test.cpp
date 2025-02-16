@@ -8,12 +8,12 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Awaitables.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Awaitables.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::co::detail;

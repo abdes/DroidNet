@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3d12/Fence.h"
+#include <Oxygen/Graphics/Direct3d12/Fence.h>
 
 #include <stdexcept>
 
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Graphics/Direct3d12/Graphics.h"
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Direct3d12/Graphics.h>
 
 using oxygen::windows::ThrowOnFailed;
 

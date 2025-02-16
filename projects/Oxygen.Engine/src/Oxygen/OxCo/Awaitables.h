@@ -6,14 +6,14 @@
 
 #pragma once
 
-#include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/CancellableAdapter.h"
-#include "Oxygen/OxCo/Detail/CoAwaitFactory.h"
-#include "Oxygen/OxCo/Detail/DisposableAdapter.h"
-#include "Oxygen/OxCo/Detail/ReadyAwaiter.h"
-#include "Oxygen/OxCo/Detail/Sequence.h"
-#include "Oxygen/OxCo/SuspendForever.h"
-#include "Oxygen/OxCo/Yield.h"
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/CancellableAdapter.h>
+#include <Oxygen/OxCo/Detail/CoAwaitFactory.h>
+#include <Oxygen/OxCo/Detail/DisposableAdapter.h>
+#include <Oxygen/OxCo/Detail/ReadyAwaiter.h>
+#include <Oxygen/OxCo/Detail/Sequence.h>
+#include <Oxygen/OxCo/SuspendForever.h>
+#include <Oxygen/OxCo/Yield.h>
 
 namespace oxygen::co {
 

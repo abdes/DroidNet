@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
+#include <Oxygen/Base/Macros.h>
 
 #include <memory>
 #include <span>

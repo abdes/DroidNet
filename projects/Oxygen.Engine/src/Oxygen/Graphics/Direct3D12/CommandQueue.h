@@ -8,7 +8,7 @@
 
 #include <d3d12.h>
 
-#include "Oxygen/Graphics/Common/CommandQueue.h"
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 
 namespace oxygen::graphics::d3d12 {
 

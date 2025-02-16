@@ -8,11 +8,11 @@
 
 #include <chrono>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinDisposable.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinDisposable.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
 
 namespace oxygen::graphics {
 

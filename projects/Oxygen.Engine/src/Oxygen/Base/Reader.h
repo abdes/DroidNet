@@ -10,9 +10,9 @@
 #include <string>
 #include <vector>
 
-#include "Oxygen/Base/Endian.h"
-#include "Oxygen/Base/Result.h"
-#include "Oxygen/Base/Stream.h"
+#include <Oxygen/Base/Endian.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Stream.h>
 
 namespace oxygen::serio {
 

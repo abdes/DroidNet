@@ -8,13 +8,13 @@
 
 #include <fmt/format.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinDisposable.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Graphics/Common/Types/CommandListType.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinDisposable.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Graphics/Common/Types/CommandListType.h>
 
 namespace oxygen::graphics {
 

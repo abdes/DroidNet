@@ -9,11 +9,11 @@
 #include <d3d12.h>
 #include <dxgidebug.h>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Base/MixinShutdown.h>
 
 namespace oxygen::graphics::d3d12 {
 

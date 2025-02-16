@@ -11,9 +11,9 @@
 #  error "This header-only library requires C++20. Please use a C++20 compliant compiler."
 #endif
 
-#include "Oxygen/OxCo/Detail/CoTag.h"
-#include "Oxygen/OxCo/Detail/Promise.h"
-#include "Oxygen/OxCo/Detail/TaskAwaiter.h"
+#include <Oxygen/OxCo/Detail/CoTag.h>
+#include <Oxygen/OxCo/Detail/Promise.h>
+#include <Oxygen/OxCo/Detail/TaskAwaiter.h>
 
 namespace oxygen::co {
 

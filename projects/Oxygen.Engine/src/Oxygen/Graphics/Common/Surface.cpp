@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Common/Surface.h"
+#include <Oxygen/Graphics/Common/Surface.h>
 
-#include "Oxygen/Graphics/Common/Types/EngineResources.h"
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Graphics/Common/Types/EngineResources.h>
+#include <Oxygen/Platform/Window.h>
 
 using oxygen::graphics::detail::WindowSurface;
 using oxygen::graphics::resources::kSurface;

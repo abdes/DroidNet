@@ -10,9 +10,9 @@
 
 #include <gmock/gmock.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/OxCo/Coroutine.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Coroutine.h>
 
 using oxygen::co::detail::Handle;
 

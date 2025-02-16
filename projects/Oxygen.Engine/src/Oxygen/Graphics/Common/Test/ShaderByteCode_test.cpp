@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 
 #include <array>
 #include <tuple>

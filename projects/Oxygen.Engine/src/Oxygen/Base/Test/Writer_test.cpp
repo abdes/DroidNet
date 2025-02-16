@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Writer.h"
+#include <Oxygen/Base/Writer.h>
 
 #include <span>
 

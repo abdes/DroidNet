@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Core/Version.h"
+#include <Oxygen/Core/Version.h>
 
-#include "Oxygen/version-info.h"
+#include <Oxygen/version-info.h>
 
 auto oxygen::version::Major() -> std::uint8_t
 {

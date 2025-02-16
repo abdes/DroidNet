@@ -11,9 +11,9 @@
 
 #include <d3d12.h>
 
-#include "Oxygen/Base/StringUtils.h"
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Base/logging.h"
+#include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Base/logging.h>
 
 namespace oxygen::graphics::d3d12 {
 

@@ -7,10 +7,10 @@
 #pragma once
 
 #include "./api_export.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Core/Module.h"
-#include "Oxygen/Graphics/Common/Forward.h"
-#include "Oxygen/Platform/Types.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Module.h>
+#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Platform/Types.h>
 
 struct ImGuiContext;
 struct ImDrawData;

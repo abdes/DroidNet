@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string>
 
-#include "Oxygen/Platform/api_export.h"
+#include <Oxygen/Platform/api_export.h>
 
 namespace oxygen::platform {
 

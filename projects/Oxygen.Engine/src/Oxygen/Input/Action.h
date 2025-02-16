@@ -10,10 +10,10 @@
 #include <string>
 #include <vector>
 
-#include "Oxygen/Input/ActionState.h"
-#include "Oxygen/Input/ActionValue.h"
-#include "Oxygen/Input/api_export.h"
 #include <Oxygen/Base/Detail/signal.hpp>
+#include <Oxygen/Input/ActionState.h>
+#include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/api_export.h>
 
 namespace oxygen::input {
 

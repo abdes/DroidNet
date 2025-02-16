@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-#include "Oxygen/Platform/Input.h"
+#include <Oxygen/Platform/Input.h>
 
 using oxygen::platform::InputSlots;
 

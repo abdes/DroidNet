@@ -8,12 +8,12 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Run.h>
 
 using oxygen::co::AnyOf;
 using oxygen::co::Co;

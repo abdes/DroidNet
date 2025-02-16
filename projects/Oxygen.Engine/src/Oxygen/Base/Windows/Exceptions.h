@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
 #  include <exception>
@@ -16,7 +16,7 @@
 
 #  include <windows.h>
 
-#  include "Oxygen/Base/api_export.h"
+#  include <Oxygen/Base/api_export.h>
 
 namespace oxygen::windows {
 

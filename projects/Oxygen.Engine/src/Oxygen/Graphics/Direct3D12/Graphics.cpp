@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3D12/Graphics.h"
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 #include <iomanip>
 #include <sstream>
@@ -12,12 +12,12 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
-#include "Oxygen/Graphics/Common/GraphicsModule.h"
-#include "Oxygen/Graphics/Direct3D12/Renderer.h"
-#include "Oxygen/Graphics/Direct3d12/DebugLayer.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h"
-#include "Oxygen/Graphics/Direct3d12/Forward.h"
-#include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
+#include <Oxygen/Graphics/Common/GraphicsModule.h>
+#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3d12/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3d12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3d12/Forward.h>
+#include <Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.

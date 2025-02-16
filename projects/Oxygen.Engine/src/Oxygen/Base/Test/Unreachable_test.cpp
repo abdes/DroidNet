@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Unreachable.h"
+#include <Oxygen/Base/Unreachable.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "Oxygen/Base/Compilers.h"
+#include <Oxygen/Base/Compilers.h>
 
 namespace {
 

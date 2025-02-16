@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Graphics/Common/CommandRecorder.h"
-#include "Oxygen/Graphics/Direct3d12/CommandList.h"
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3d12/CommandList.h>
 
 #include <wrl/client.h>
 

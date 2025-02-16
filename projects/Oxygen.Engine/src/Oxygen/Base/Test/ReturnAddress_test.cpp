@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/ReturnAddress.h"
+#include <Oxygen/Base/ReturnAddress.h>
 #include <catch2/catch_test_macros.hpp>
 
 namespace {

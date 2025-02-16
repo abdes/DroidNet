@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Input/InputSystem.h"
+#include <Oxygen/Input/InputSystem.h>
 
 #include <algorithm>
 #include <cassert>
@@ -15,14 +15,14 @@
 #include <ranges>
 #include <vector>
 
-#include "Oxygen/Input/Action.h"
-#include "Oxygen/Input/InputMappingContext.h"
-#include "Oxygen/Platform/Input.h"
-#include "Oxygen/Platform/InputEvent.h"
-#include "Oxygen/Platform/Platform.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/System.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/InputEvent.h>
+#include <Oxygen/Platform/Platform.h>
 
 using oxygen::engine::SystemUpdateContext;
 using oxygen::input::InputMappingContext;

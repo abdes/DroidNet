@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include "Oxygen/Base/Logging.h"
+#include <Oxygen/Base/Logging.h>
 
 auto main(int argc, char** argv) -> int
 {

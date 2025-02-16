@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/ResourceHandle.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ResourceHandle.h>
 
 namespace oxygen {
 

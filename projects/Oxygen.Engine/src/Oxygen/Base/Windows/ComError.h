@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
 #  include <optional>
@@ -16,8 +16,8 @@
 
 #  include <comdef.h>
 
-#  include "Oxygen/Base/StringUtils.h"
-#  include "Oxygen/Base/api_export.h"
+#  include <Oxygen/Base/StringUtils.h>
+#  include <Oxygen/Base/api_export.h>
 
 namespace oxygen {
 enum class ComErrorEnum;

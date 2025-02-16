@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Value.h"
+#include <Oxygen/OxCo/Value.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::AllOf;

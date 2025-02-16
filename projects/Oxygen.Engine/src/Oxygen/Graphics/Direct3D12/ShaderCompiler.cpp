@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3d12/ShaderCompiler.h"
+#include <Oxygen/Graphics/Direct3d12/ShaderCompiler.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Windows/ComError.h"
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 
 using namespace oxygen::graphics::d3d12;
 using Microsoft::WRL::ComPtr;

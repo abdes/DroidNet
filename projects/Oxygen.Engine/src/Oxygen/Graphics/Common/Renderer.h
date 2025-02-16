@@ -7,18 +7,18 @@
 #pragma once
 
 #include "./api_export.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Mixin.h"
-#include "Oxygen/Base/MixinInitialize.h"
-#include "Oxygen/Base/MixinNamed.h"
-#include "Oxygen/Base/MixinShutdown.h"
-#include "Oxygen/Core/Types.h"
-#include "Oxygen/Graphics/Common/Forward.h"
-#include "Oxygen/Graphics/Common/MixinDeferredRelease.h"
-#include "Oxygen/Graphics/Common/MixinRendererEvents.h"
-#include "Oxygen/Graphics/Common/Types/EngineResources.h"
-#include "Oxygen/Graphics/Common/Types/RenderGameFunction.h"
-#include "Oxygen/Platform/Types.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Mixin.h>
+#include <Oxygen/Base/MixinInitialize.h>
+#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Core/Types.h>
+#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/MixinDeferredRelease.h>
+#include <Oxygen/Graphics/Common/MixinRendererEvents.h>
+#include <Oxygen/Graphics/Common/Types/EngineResources.h>
+#include <Oxygen/Graphics/Common/Types/RenderGameFunction.h>
+#include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 

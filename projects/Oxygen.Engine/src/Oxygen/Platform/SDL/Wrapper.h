@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Platform/Window.h>
 #include <SDL3/SDL.h>
 
 namespace oxygen::platform::sdl {

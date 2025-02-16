@@ -4,17 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/BroadcastChannel.h"
+#include <Oxygen/OxCo/BroadcastChannel.h>
 
 #include <array>
 
 #include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock-matchers.h>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Nursery.h"
-#include "Oxygen/OxCo/Run.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
 
 #include "Utils/OxCoTestFixture.h"
 

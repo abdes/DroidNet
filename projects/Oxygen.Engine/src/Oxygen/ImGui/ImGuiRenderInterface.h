@@ -7,8 +7,8 @@
 #pragma once
 
 #include "./api_export.h"
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Graphics/Common/Forward.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/Forward.h>
 
 struct ImGuiContext;
 struct ImDrawData;

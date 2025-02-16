@@ -7,10 +7,10 @@
 #include <chrono>
 #include <memory>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Core/Engine.h"
-#include "Oxygen/Core/Version.h"
-#include "Oxygen/Platform/SDL/Platform.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Engine.h>
+#include <Oxygen/Core/Version.h>
+#include <Oxygen/Platform/SDL/Platform.h>
 
 #include "MainModule.h"
 

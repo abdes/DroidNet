@@ -11,8 +11,8 @@
 
 #include <gmock/gmock.h>
 
-#include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/MuxBase.h"
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/MuxBase.h>
 
 namespace oxygen::co::testing {
 

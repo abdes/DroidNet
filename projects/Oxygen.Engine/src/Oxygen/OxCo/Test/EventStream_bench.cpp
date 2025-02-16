@@ -12,17 +12,17 @@
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/BroadcastChannel.h"
-#include "Oxygen/OxCo/Channel.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Event.h"
-#include "Oxygen/OxCo/Nursery.h"
-#include "Oxygen/OxCo/ParkingLot.h"
-#include "Oxygen/OxCo/Run.h"
-#include "Oxygen/OxCo/Semaphore.h"
-#include "Oxygen/OxCo/Shared.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
+#include <Oxygen/OxCo/Channel.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ParkingLot.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/OxCo/Shared.h>
 
 #include <iostream>
 

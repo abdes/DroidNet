@@ -8,9 +8,9 @@
 
 #include <SDL3/SDL.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Platform/SDL/Wrapper.h"
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
+#include <Oxygen/Platform/Window.h>
 
 using oxygen::platform::Window;
 

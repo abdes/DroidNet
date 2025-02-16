@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3D12/Buffer.h"
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
 
 #include "DeferredObjectRelease.h"
 

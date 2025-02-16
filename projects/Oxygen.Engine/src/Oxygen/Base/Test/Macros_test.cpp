@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Macros.h"
+#include <Oxygen/Base/Macros.h>
 
 #include <string>
 #include <type_traits>

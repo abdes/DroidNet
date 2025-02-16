@@ -11,8 +11,8 @@
 #include <span>
 #include <stdexcept>
 
-#include "Oxygen/Composition/Object.h"
-#include "Oxygen/Composition/api_export.h"
+#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 

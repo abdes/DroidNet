@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Base/Result.h"
-#include "Oxygen/Base/Stream.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Stream.h>
 
 #include <filesystem>
 #include <fstream>

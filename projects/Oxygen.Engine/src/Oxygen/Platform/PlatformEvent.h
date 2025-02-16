@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "Oxygen/Composition/Object.h"
+#include <Oxygen/Composition/Object.h>
 
 namespace oxygen::platform {
 template <typename T>

@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h"
+#include <Oxygen/Graphics/Direct3d12/ImGui/ImGuiModule.h>
 
-#include "Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h"
+#include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 
-#include "Oxygen/Graphics/Direct3D12/Constants.h"
-#include "Oxygen/Graphics/Direct3d12/CommandRecorder.h"
-#include "Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h"
-#include "Oxygen/Graphics/Direct3d12/Graphics.h"
-#include "Oxygen/Graphics/Direct3d12/RenderTarget.h"
-#include "Oxygen/Graphics/Direct3d12/Renderer.h"
+#include <Oxygen/Graphics/Direct3D12/Constants.h>
+#include <Oxygen/Graphics/Direct3d12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3d12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3d12/Graphics.h>
+#include <Oxygen/Graphics/Direct3d12/RenderTarget.h>
+#include <Oxygen/Graphics/Direct3d12/Renderer.h>
 
 using oxygen::graphics::d3d12::ImGuiModule;
 using oxygen::graphics::d3d12::detail::GetMainDevice;

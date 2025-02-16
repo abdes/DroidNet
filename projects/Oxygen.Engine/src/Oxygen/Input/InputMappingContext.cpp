@@ -10,14 +10,14 @@
 #include <type_traits>
 #include <vector>
 
-#include "Oxygen/Input/Action.h"
-#include "Oxygen/Input/InputActionMapping.h"
-#include "Oxygen/Input/InputMappingContext.h"
-#include "Oxygen/Platform/Input.h"
-#include "Oxygen/Platform/InputEvent.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/InputEvent.h>
 
 using oxygen::input::InputMappingContext;
 using oxygen::platform::InputEvent;

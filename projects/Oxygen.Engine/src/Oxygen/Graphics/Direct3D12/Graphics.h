@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Graphics/Common/Graphics.h"
-#include "Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h"
-#include "Oxygen/Graphics/Direct3D12/Forward.h"
-#include "Oxygen/Graphics/Direct3D12/Renderer.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Renderer.h>
 
 #include <wrl/client.h>
 

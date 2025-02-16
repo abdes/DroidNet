@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 
 #if defined(OXYGEN_WINDOWS)
 // clang-format off
@@ -18,8 +18,8 @@
 #include <iostream>
 #include <shared_mutex>
 
-#include "Oxygen/Composition/Detail/FastIntMap.h"
-#include "Oxygen/Composition/TypeSystem.h"
+#include <Oxygen/Composition/Detail/FastIntMap.h>
+#include <Oxygen/Composition/TypeSystem.h>
 
 namespace {
 auto GetTypeNameHash(const char* const name)

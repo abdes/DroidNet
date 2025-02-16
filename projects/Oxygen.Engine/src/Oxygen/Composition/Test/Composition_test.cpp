@@ -11,9 +11,9 @@
 #include <thread>
 #include <vector>
 
-#include "Oxygen/Composition/ComponentMacros.h"
-#include "Oxygen/Composition/Composition.h"
-#include "Oxygen/Composition/Object.h"
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Object.h>
 
 namespace {
 

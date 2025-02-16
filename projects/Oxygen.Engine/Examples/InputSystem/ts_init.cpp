@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/TypeSystem.h"
+#include <Oxygen/Base/TypeSystem.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 #  define EXPORT_SYMBOL __declspec(dllexport)

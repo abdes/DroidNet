@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Common/ShaderManager.h"
+#include <Oxygen/Graphics/Common/ShaderManager.h>
 
 #include <chrono>
 #include <filesystem>
@@ -12,13 +12,13 @@
 #include <span>
 #include <string>
 
-#include "Oxygen/Base/FileStream.h"
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Base/Reader.h"
-#include "Oxygen/Base/Writer.h"
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/ShaderCompiler.h"
-#include "Oxygen/Graphics/Common/Shaders.h"
+#include <Oxygen/Base/FileStream.h>
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Reader.h>
+#include <Oxygen/Base/Writer.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/ShaderCompiler.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 
 using oxygen::graphics::CompiledShaderInfo;
 using oxygen::graphics::ShaderManager;

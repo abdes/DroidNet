@@ -8,9 +8,9 @@
 
 #include <type_traits>
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/OxCo/Coroutine.h"
-#include "Oxygen/OxCo/Detail/CoTag.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/CoTag.h>
 
 // ReSharper disable CppMemberFunctionMayBeStatic
 

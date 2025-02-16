@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 
 #if defined(OXYGEN_WINDOWS)
-#  include "Oxygen/Base/Windows/Exceptions.h"
+#  include <Oxygen/Base/Windows/Exceptions.h>
 #  include <windows.h>
 #else
 #  include <cstdlib>

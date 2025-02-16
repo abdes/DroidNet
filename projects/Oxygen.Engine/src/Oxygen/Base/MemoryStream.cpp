@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <span>
 
-#include "Oxygen/Base/MemoryStream.h"
+#include <Oxygen/Base/MemoryStream.h>
 
 namespace oxygen::serio {
 

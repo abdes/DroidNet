@@ -8,7 +8,7 @@
 
 #include <functional>
 
-#include "Oxygen/Graphics/Common/Forward.h"
+#include <Oxygen/Graphics/Common/Forward.h>
 
 namespace oxygen::graphics {
 

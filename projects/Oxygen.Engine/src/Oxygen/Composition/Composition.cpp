@@ -9,9 +9,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Composition/Composition.h"
-#include "Oxygen/Composition/ObjectMetaData.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 using oxygen::Component;
 using oxygen::Composition;

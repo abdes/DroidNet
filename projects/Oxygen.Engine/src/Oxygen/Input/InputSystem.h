@@ -11,10 +11,10 @@
 #include <memory>
 #include <vector>
 
-#include "Oxygen/Core/InputHandler.h"
-#include "Oxygen/Core/System.h"
-#include "Oxygen/Input/api_export.h"
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/InputHandler.h>
+#include <Oxygen/Core/System.h>
+#include <Oxygen/Input/api_export.h>
 #include <Oxygen/Platform/Input.h>
 
 namespace oxygen::input {

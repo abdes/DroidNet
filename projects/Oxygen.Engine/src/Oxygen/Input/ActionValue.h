@@ -8,8 +8,8 @@
 
 #include <variant>
 
-#include "Oxygen/Base/Types/Geometry.h"
-#include "Oxygen/Base/Types/Overload.h"
+#include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Base/Types/Overload.h>
 
 namespace oxygen::input {
 

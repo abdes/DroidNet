@@ -4,18 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Nursery.h"
+#include <Oxygen/OxCo/Nursery.h>
 
 #include <chrono>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
-#include "Oxygen/OxCo/Algorithms.h"
-#include "Oxygen/OxCo/Co.h"
-#include "Oxygen/OxCo/Event.h"
-#include "Oxygen/OxCo/Run.h"
 #include "Utils/TestEventLoop.h"
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Run.h>
 
 using std::chrono::milliseconds;
 using namespace std::chrono_literals;

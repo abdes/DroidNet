@@ -11,9 +11,9 @@
 #include <span>
 #include <vector>
 
-#include "Oxygen/Base/Result.h"
-#include "Oxygen/Base/Stream.h"
-#include "Oxygen/Base/api_export.h"
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Stream.h>
+#include <Oxygen/Base/api_export.h>
 
 namespace oxygen::serio {
 

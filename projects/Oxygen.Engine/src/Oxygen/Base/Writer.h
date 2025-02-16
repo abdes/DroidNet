@@ -10,8 +10,8 @@
 #include <span>
 #include <string_view>
 
-#include "Oxygen/Base/Endian.h"
-#include "Oxygen/Base/Stream.h"
+#include <Oxygen/Base/Endian.h>
+#include <Oxygen/Base/Stream.h>
 
 namespace oxygen::serio {
 

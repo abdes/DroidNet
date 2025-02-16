@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/Logging.h"
+#include <Oxygen/Base/Logging.h>
 
 #include <catch2/catch_session.hpp>
 

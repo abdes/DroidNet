@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/OxCo/Coroutine.h"
+#include <Oxygen/OxCo/Coroutine.h>
 
 // ReSharper disable CppClangTidyClangDiagnosticUnneededMemberFunction
 

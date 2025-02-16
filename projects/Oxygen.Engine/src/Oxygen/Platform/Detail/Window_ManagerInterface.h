@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Oxygen/Base/Macros.h"
-#include "Oxygen/Platform/Window.h"
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Platform/Window.h>
 
 namespace oxygen {
 namespace co {

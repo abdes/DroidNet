@@ -6,9 +6,9 @@
 
 #include <fmt/format.h>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Platform/Display.h"
-#include "Oxygen/Platform/SDL/Wrapper.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Platform/Display.h>
+#include <Oxygen/Platform/SDL/Wrapper.h>
 
 using oxygen::platform::Display;
 

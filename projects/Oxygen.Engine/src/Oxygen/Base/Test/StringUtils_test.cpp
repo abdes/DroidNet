@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/StringUtils.h"
+#include <Oxygen/Base/StringUtils.h>
 
 #include <array>
 #include <variant>
@@ -12,7 +12,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock-matchers.h>
 
-#include "Oxygen/Base/Platforms.h"
+#include <Oxygen/Base/Platforms.h>
 
 #if defined(OXYGEN_WINDOWS)
 using oxygen::windows::WindowsException;

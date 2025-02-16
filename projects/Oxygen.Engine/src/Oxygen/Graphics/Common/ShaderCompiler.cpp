@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Graphics/Common/ShaderCompiler.h"
+#include <Oxygen/Graphics/Common/ShaderCompiler.h>
 
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
 
-#include "Oxygen/Base/Logging.h"
-#include "Oxygen/Graphics/Common/ShaderByteCode.h"
-#include "Oxygen/Graphics/Common/Shaders.h"
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 
 using namespace oxygen::graphics;
 using namespace std::filesystem;

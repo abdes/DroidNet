@@ -6,7 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Oxygen/Base/Finally.h"
+#include <Oxygen/Base/Finally.h>
 
 using oxygen::Finally;
 
