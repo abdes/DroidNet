@@ -14,7 +14,7 @@
 // use this inside a class declaration to make it non-moveable
 // NOLINTBEGIN
 #define OXYGEN_MAKE_NON_MOVABLE(Type) \
-    Type(Type&&) = delete;             \
+    Type(Type&&) = delete;            \
     auto operator=(Type&&)->Type& = delete;
 // NOLINTEND
 
