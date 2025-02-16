@@ -254,12 +254,16 @@ auto DiscoverAdapters(
 
         // Check if the adapter supports the minimum required feature level
         ComPtr<DeviceType> device;
-        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)))) {
+        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device)))) {
             adapter_info.meets_feature_level = true;
             adapter_info.max_feature_level = GetMaxFeatureLevel(device);
             if (selector(adapter_info)) {
-                selected_adapter = adapter;
-                selected_adapter_index = adapters.size();
+                // Select the adapter with the most dedicated memory
+                if (!selected_adapter
+                    || adapter_info.dedicated_memory > adapters.at(selected_adapter_index).dedicated_memory) {
+                    selected_adapter = adapter;
+                    selected_adapter_index = adapters.size();
+                }
             } else {
                 device.Reset();
             }
