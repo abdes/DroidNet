@@ -31,12 +31,12 @@ namespace {
 {
     constexpr uint64_t fnv_offset_basis = 0xcbf29ce484222325ULL;
 
-    const auto* const bytes = static_cast<const uint8_t*>(data);
+    const auto bytes = std::span(static_cast<const uint8_t*>(data), size);
     uint64_t hash = fnv_offset_basis;
 
-    for (size_t i = 0; i < size; ++i) {
+    for (const auto byte : bytes) {
         constexpr uint64_t fnv_prime = 0x100000001b3ULL;
-        hash ^= bytes[i];
+        hash ^= byte;
         hash *= fnv_prime;
     }
 
@@ -123,7 +123,7 @@ auto GetArchivePath(const ShaderManagerConfig& config) -> std::filesystem::path
 
 } // namespace
 
-auto ShaderManager::OnInitialize() -> void
+auto ShaderManager::Initialize() -> void
 {
     DCHECK_NOTNULL_F(config_.compiler, "Shader compiler not set.");
     DCHECK_F(!config_.shaders.empty(), "No shaders specified.");
@@ -138,10 +138,6 @@ auto ShaderManager::OnInitialize() -> void
     }
 
     UpdateOutdatedShaders();
-}
-
-void ShaderManager::OnShutdown()
-{
 }
 
 auto ShaderManager::AddCompiledShader(CompiledShader shader) -> bool
@@ -191,8 +187,6 @@ auto ShaderManager::GetOutdatedShaders() const -> std::vector<ShaderProfile>
 {
     std::vector<ShaderProfile> outdated;
     for (const auto& profile : shader_profiles_) {
-
-        const auto shader_full_path = std::filesystem::path(profile.path).filename().string();
         if (IsShaderOutdated(profile)) {
             outdated.push_back(profile);
         }

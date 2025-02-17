@@ -149,12 +149,11 @@ void RendererImpl::Init(const RendererProperties& props)
     ShaderManagerConfig shader_manager_config {
         .renderer_name = "D3D12 Renderer",
         .archive_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\bin\Oxygen)",
-        .source_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\Oxygen\Graphics\Direct3D12\Shaders)",
+        .source_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\src\Oxygen\Graphics\Direct3D12\Shaders)",
         .shaders = std::span(kEngineShaders, std::size(kEngineShaders)),
         .compiler = shader_compiler_,
     };
     engine_shaders_ = std::make_unique<ShaderManager>(std::move(shader_manager_config));
-    engine_shaders_->Initialize();
 }
 
 void RendererImpl::ShutdownRenderer()
@@ -164,7 +163,6 @@ void RendererImpl::ShutdownRenderer()
     // Cleanup engine shaders
     shader_compiler_->IsInitialized(false);
     ObjectRelease(shader_compiler_);
-    engine_shaders_->Shutdown();
     engine_shaders_.reset();
 
     // Flush any pending commands and release any deferred resources for all
