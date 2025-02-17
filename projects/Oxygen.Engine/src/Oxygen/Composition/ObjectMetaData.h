@@ -16,8 +16,7 @@ class ObjectMetaData final : public Component {
     OXYGEN_COMPONENT(ObjectMetaData)
 public:
     explicit ObjectMetaData(const std::string_view name)
-        : Component()
-        , name_(name)
+        : name_(name)
     {
     }
 
@@ -27,7 +26,7 @@ public:
     OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view { return name_; }
-    void SetName(const std::string_view name) noexcept { name_ = name; }
+    void SetName(const std::string_view name) { name_ = name; }
 
     [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override

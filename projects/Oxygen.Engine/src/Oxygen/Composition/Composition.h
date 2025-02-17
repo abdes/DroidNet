@@ -29,9 +29,9 @@ public:
     // All components should implement proper copy and move semantics to handle
     // copying and moving as appropriate.
     OXYGEN_COMP_API Component(const Component&) = default;
-    OXYGEN_COMP_API Component& operator=(const Component&) = default;
+    OXYGEN_COMP_API auto operator=(const Component&) -> Component& = default;
     OXYGEN_COMP_API Component(Component&&) = default;
-    OXYGEN_COMP_API Component& operator=(Component&&) = default;
+    OXYGEN_COMP_API auto operator=(Component&&) -> Component& = default;
 
     [[nodiscard]] virtual auto IsCloneable() const noexcept -> bool { return false; }
 
@@ -76,16 +76,16 @@ public:
     OXYGEN_COMP_API ~Composition() noexcept override;
 
     //! Copy constructor, make a shallow copy of the composition.
-    OXYGEN_COMP_API Composition(const Composition&);
+    OXYGEN_COMP_API Composition(const Composition& other);
 
     //! Copy assignment operator, make a shallow copy of the composition.
-    OXYGEN_COMP_API Composition& operator=(const Composition&);
+    OXYGEN_COMP_API auto operator=(const Composition& rhs) -> Composition&;
 
     //! Moves the composition to the new object and leaves the original in an empty state.
     OXYGEN_COMP_API Composition(Composition&& other) noexcept;
 
     //! Moves the composition to the new object and leaves the original in an empty state.
-    OXYGEN_COMP_API Composition& operator=(Composition&& other) noexcept;
+    OXYGEN_COMP_API auto operator=(Composition&& rhs) noexcept -> Composition&;
 
     template <typename T>
     [[nodiscard]] auto HasComponent() const -> bool
@@ -114,8 +114,8 @@ public:
         auto operator->() const -> pointer;
         auto operator++() -> Iterator&;
         auto operator++(int) -> Iterator;
-        auto operator==(const Iterator&) const -> bool;
-        auto operator!=(const Iterator&) const -> bool;
+        auto operator==(const Iterator& rhs) const -> bool;
+        auto operator!=(const Iterator& rhs) const -> bool;
 
     private:
         friend class Composition;
@@ -144,7 +144,7 @@ protected:
     OXYGEN_COMP_API Composition();
 
     template <IsComponent T, typename... Args>
-    T& AddComponent(Args&&... args)
+    auto AddComponent(Args&&... args) -> T&
     {
         std::lock_guard lock(mutex_);
 
@@ -171,15 +171,17 @@ protected:
         std::lock_guard lock(mutex_);
 
         auto id = T::ClassTypeId();
-        if (!ExpectExistingComponent(id))
+        if (!ExpectExistingComponent(id)) {
             return;
-        if (IsComponentRequired(id))
+        }
+        if (IsComponentRequired(id)) {
             throw ComponentError("Cannot remove component; other components depend on it");
+        }
         RemoveComponentImpl(id);
     }
 
     template <typename OldT, typename NewT = OldT, typename... Args>
-    NewT& ReplaceComponent(Args&&... args)
+    auto ReplaceComponent(Args&&... args) -> NewT&
     {
         {
             std::lock_guard lock(mutex_);
@@ -211,7 +213,7 @@ private:
     OXYGEN_COMP_API void RemoveComponentImpl(TypeId id, bool update_indices = true) const;
     OXYGEN_COMP_API void DeepCopyComponentsFrom(const Composition& other);
 
-    mutable std::mutex mutex_ {};
+    mutable std::mutex mutex_;
 };
 static_assert(std::forward_iterator<Composition::Iterator<Component>>);
 static_assert(std::ranges::common_range<Composition>);

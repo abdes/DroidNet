@@ -10,6 +10,8 @@
 // clang-format off
 #  include <windows.h>
 #  include <psapi.h>
+#  include <array>
+#  include <span>
 // clang-format on
 #elif defined(OXYGEN_APPLE) || defined(OXYGEN_LINUX)
 #  include <dlfcn.h>
@@ -81,22 +83,31 @@ auto TypeRegistry::Get() -> TypeRegistry&
 {
     static TypeRegistry* instance { nullptr };
     static std::mutex instance_mutex;
+    // Maximum number of modules to enumerate
+    constexpr size_t kMaxModules = 1024;
 
     std::lock_guard lock(instance_mutex);
 
-    if (!instance) {
+    if (instance == nullptr) {
 #if defined(OXYGEN_WINDOWS)
-        HMODULE h_mods[1024];
-        DWORD cb_needed;
-        if (EnumProcessModules(GetCurrentProcess(), h_mods, sizeof(h_mods), &cb_needed)) {
-            for (unsigned int i = 0; i < (cb_needed / sizeof(HMODULE)); i++) {
+        std::array<HMODULE, kMaxModules> modules {};
+        DWORD bytes_needed { 0 };
+
+        if (EnumProcessModules(GetCurrentProcess(),
+                modules.data(), // Pass pointer to array data
+                static_cast<DWORD>(modules.size() * sizeof(HMODULE)),
+                &bytes_needed)) {
+            const size_t module_count = bytes_needed / sizeof(HMODULE);
+            std::span module_span { modules.begin(), module_count };
+
+            for (const auto& module : module_span) {
                 union {
                     FARPROC proc;
                     TypeRegistry* (*init)();
-                } func_cast;
+                } func_cast {};
 
-                func_cast.proc = GetProcAddress(h_mods[i], "InitializeTypeRegistry");
-                if (func_cast.init) {
+                func_cast.proc = GetProcAddress(module, "InitializeTypeRegistry");
+                if (func_cast.init != nullptr) {
                     instance = func_cast.init();
                     break;
                 }
@@ -123,7 +134,7 @@ auto TypeRegistry::Get() -> TypeRegistry&
 #endif
     }
 
-    if (!instance) {
+    if (instance == nullptr) {
         // Cannot use logging here or any fancy stuff that uses variables with
         // static storage duration, because main has not been called yet.
         std::cout
@@ -139,20 +150,23 @@ auto TypeRegistry::Get() -> TypeRegistry&
                "|  > need. Ensure it you call its `InitializeTypeRegistry` to force the linker to\n"
                "|  > keep it.\n"
                " --------------------------------------------------------------------------------\n";
+        // NOLINTBEGIN(cppcoreguidelines-owning-memory)
         instance = new TypeRegistry();
+        std::atexit([]() { delete instance; });
+        // NOLINTEND(cppcoreguidelines-owning-memory)
     }
     return *instance;
 }
 
 auto TypeRegistry::RegisterType(const char* name) const -> TypeId
 {
-    if (!name || strnlen(name, 1) == 0) {
+    if ((name == nullptr) || strnlen(name, 1) == 0) {
         throw std::invalid_argument("cannot use `null` or empty type name to register a type");
     }
     const auto name_hash = GetTypeNameHash(name);
 
     std::unique_lock lock(impl_->mutex_);
-    if (TypeId out_id; impl_->type_map_.Get(name_hash, out_id)) {
+    if (TypeId out_id { 0 }; impl_->type_map_.Get(name_hash, out_id)) {
         return out_id;
     }
     const auto id = impl_->next_type_id_++;
@@ -164,7 +178,7 @@ auto TypeRegistry::GetTypeId(const char* name) const -> TypeId
 {
     const auto name_hash = GetTypeNameHash(name);
     std::shared_lock lock(impl_->mutex_);
-    TypeId out_id;
+    TypeId out_id { 0 };
     if (!impl_->type_map_.Get(name_hash, out_id)) {
         throw std::invalid_argument(std::string("no type with name=`{") + name + "}` is registered");
     }

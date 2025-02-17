@@ -21,6 +21,7 @@ namespace {
 
 auto GetComErrorMessage(const HRESULT hr, IErrorInfo* help) -> std::string
 {
+    // NOLINTNEXTLINE(*-avoid-c-arrays)
     using ComStringPtr = std::unique_ptr<OLECHAR[], decltype(SysFreeString)*>;
     auto get_description = [](IErrorInfo* info) -> ComStringPtr {
         BSTR description = nullptr;

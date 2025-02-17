@@ -252,7 +252,7 @@ static void print_preamble_header(char* out_buff, size_t out_buff_size);
 // ------------------------------------------------------------------------------
 // Colors
 
-bool terminal_has_color()
+auto terminal_has_color() -> bool
 {
     return s_terminal_has_color;
 }
@@ -265,63 +265,63 @@ bool terminal_has_color()
 #    define VTSEQ(ID) ("\x1b[" #ID "m")
 #  endif
 
-const char* terminal_black()
+auto terminal_black() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(30) : "";
 }
-const char* terminal_red()
+auto terminal_red() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(31) : "";
 }
-const char* terminal_green()
+auto terminal_green() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(32) : "";
 }
-const char* terminal_yellow()
+auto terminal_yellow() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(33) : "";
 }
-const char* terminal_blue()
+auto terminal_blue() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(34) : "";
 }
-const char* terminal_purple()
+auto terminal_purple() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(35) : "";
 }
-const char* terminal_cyan()
+auto terminal_cyan() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(36) : "";
 }
-const char* terminal_light_gray()
+auto terminal_light_gray() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(37) : "";
 }
-const char* terminal_white()
+auto terminal_white() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(37) : "";
 }
-const char* terminal_light_red()
+auto terminal_light_red() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(91) : "";
 }
-const char* terminal_dim()
+auto terminal_dim() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(2) : "";
 }
 
 // Formating
-const char* terminal_bold()
+auto terminal_bold() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(1) : "";
 }
-const char* terminal_underline()
+auto terminal_underline() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(4) : "";
 }
 
 // You should end each line with this!
-const char* terminal_reset()
+auto terminal_reset() -> const char*
 {
     return s_terminal_has_color ? VTSEQ(0) : "";
 }
@@ -334,7 +334,7 @@ inline FILE* to_file(void* user_data)
     return reinterpret_cast<FileAbs*>(user_data)->fp;
 }
 #  else
-inline FILE* to_file(void* user_data)
+inline auto to_file(void* user_data) -> FILE*
 {
     return reinterpret_cast<FILE*>(user_data);
 }
@@ -492,7 +492,7 @@ Text::~Text()
 }
 
 #  if LOGURU_USE_FMTLIB
-Text vtextprintf(const char* format, fmt::format_args args)
+auto vtextprintf(const char* format, fmt::format_args args) -> Text
 {
     return Text(STRDUP(fmt::vformat(format, args).c_str()));
 }
@@ -525,12 +525,12 @@ Text textprintf(const char* format, ...)
 #  endif
 
 // Overloaded for variadic template matching.
-Text textprintf()
+auto textprintf() -> Text
 {
     return Text(static_cast<char*>(calloc(1, 1)));
 }
 
-static const char* indentation(unsigned depth)
+static auto indentation(unsigned depth) -> const char*
 {
     static const char buff[] = ".   .   .   .   .   .   .   .   .   .   "
                                ".   .   .   .   .   .   .   .   .   .   "
@@ -605,7 +605,7 @@ static void parse_args(int& argc, char* argv[], const char* verbosity_flag)
     argv[argc] = nullptr;
 }
 
-static long long now_ns()
+static auto now_ns() -> long long
 {
     return duration_cast<nanoseconds>(
         high_resolution_clock::now().time_since_epoch())
@@ -613,7 +613,7 @@ static long long now_ns()
 }
 
 // Returns the part of the path after the last / or \ (if any).
-const char* filename(const char* path)
+auto filename(const char* path) -> const char*
 {
     for (auto ptr = path; *ptr; ++ptr) {
         if (*ptr == '/' || *ptr == '\\') {
@@ -685,7 +685,7 @@ static void escape(std::string& out, const std::string& str)
     }
 }
 
-Text errno_as_text()
+auto errno_as_text() -> Text
 {
     char buff[256];
 #  if defined(__GLIBC__) && defined(_GNU_SOURCE)
@@ -816,22 +816,22 @@ void write_date_time(char* buff, unsigned long long buff_size)
         ms_since_epoch % 1000);
 }
 
-const char* argv0_filename()
+auto argv0_filename() -> const char*
 {
     return s_argv0_filename.c_str();
 }
 
-const char* arguments()
+auto arguments() -> const char*
 {
     return s_arguments.c_str();
 }
 
-const char* current_dir()
+auto current_dir() -> const char*
 {
     return s_current_dir;
 }
 
-const char* home_dir()
+auto home_dir() -> const char*
 {
 #  ifdef __MINGW32__
     auto home = getenv("USERPROFILE");
@@ -888,7 +888,7 @@ void suggest_log_path(const char* prefix,
 #  endif
 }
 
-bool create_directories(const char* file_path_const)
+auto create_directories(const char* file_path_const) -> bool
 {
     CHECK_F(file_path_const && *file_path_const);
     char* file_path = STRDUP(file_path_const);
@@ -919,7 +919,7 @@ bool create_directories(const char* file_path_const)
     free(file_path);
     return true;
 }
-bool add_file(const char* path_in, FileMode mode, Verbosity verbosity)
+auto add_file(const char* path_in, FileMode mode, Verbosity verbosity) -> bool
 {
     char path[PATH_MAX];
     if (path_in[0] == '~') {
@@ -996,11 +996,11 @@ bool add_file(const char* path_in, FileMode mode, Verbosity verbosity)
 
         Search for LOGURU_SYSLOG to find and fix.
 */
-bool add_syslog(const char* app_name, Verbosity verbosity)
+auto add_syslog(const char* app_name, Verbosity verbosity) -> bool
 {
     return add_syslog(app_name, verbosity, LOG_USER);
 }
-bool add_syslog(const char* app_name, Verbosity verbosity, int facility)
+auto add_syslog(const char* app_name, Verbosity verbosity, int facility) -> bool
 {
 #  if LOGURU_SYSLOG
     if (app_name == nullptr) {
@@ -1080,7 +1080,7 @@ void add_callback(const char* id,
 
 // Returns a custom verbosity name if one is available, or nullptr.
 // See also set_verbosity_to_name_callback.
-const char* get_verbosity_name(Verbosity verbosity)
+auto get_verbosity_name(Verbosity verbosity) -> const char*
 {
     auto name = s_verbosity_to_name_callback
         ? (*s_verbosity_to_name_callback)(verbosity)
@@ -1104,7 +1104,7 @@ const char* get_verbosity_name(Verbosity verbosity)
 
 // Returns Verbosity_INVALID if the name is not found.
 // See also set_name_to_verbosity_callback.
-Verbosity get_verbosity_from_name(const char* name)
+auto get_verbosity_from_name(const char* name) -> Verbosity
 {
     auto verbosity = s_name_to_verbosity_callback
         ? (*s_name_to_verbosity_callback)(name)
@@ -1128,7 +1128,7 @@ Verbosity get_verbosity_from_name(const char* name)
     return verbosity;
 }
 
-bool remove_callback(const char* id)
+auto remove_callback(const char* id) -> bool
 {
     std::lock_guard lock(s_mutex);
     auto it = std::find_if(begin(s_callbacks),
@@ -1160,7 +1160,7 @@ void remove_all_callbacks()
 }
 
 // Returns the maximum of g_stderr_verbosity and all file/custom outputs.
-Verbosity current_verbosity_cutoff()
+auto current_verbosity_cutoff() -> Verbosity
 {
     return g_stderr_verbosity > s_max_out_verbosity ? g_stderr_verbosity
                                                     : s_max_out_verbosity;
@@ -1181,7 +1181,7 @@ void make_pthread_key_name()
 
 #  if LOGURU_WINTHREADS
 // Where we store the custom thread name set by `set_thread_name`
-char* thread_name_buffer()
+auto thread_name_buffer() -> char*
 {
     __declspec(thread) static char thread_name[LOGURU_THREADNAME_WIDTH + 1] = { 0 };
     return &thread_name[0];
@@ -1400,12 +1400,12 @@ std::string stacktrace_as_stdstring(int skip)
 }
 
 #  else // LOGURU_STACKTRACES
-Text demangle(const char* name)
+auto demangle(const char* name) -> Text
 {
     return Text(STRDUP(name));
 }
 
-std::string stacktrace_as_stdstring(int)
+auto stacktrace_as_stdstring(int) -> std::string
 {
     // No stacktraces available on this platform"
     return "";
@@ -1413,7 +1413,7 @@ std::string stacktrace_as_stdstring(int)
 
 #  endif // LOGURU_STACKTRACES
 
-Text stacktrace(int skip)
+auto stacktrace(int skip) -> Text
 {
     auto str = stacktrace_as_stdstring(skip + 1);
     return Text(STRDUP(str.c_str()));
@@ -1920,7 +1920,7 @@ void log_and_abort(int stack_trace_skip,
 
 #  if LOGURU_USE_FMTLIB
 template <typename... Args>
-std::string vstrprintf(const char* format, const Args&... args)
+auto vstrprintf(const char* format, const Args&... args) -> std::string
 {
     auto text = textprintf(format, args...);
     std::string result = text.c_str();
@@ -1928,7 +1928,7 @@ std::string vstrprintf(const char* format, const Args&... args)
 }
 
 template <typename... Args>
-std::string strprintf(const char* format, const Args&... args)
+auto strprintf(const char* format, const Args&... args) -> std::string
 {
     return vstrprintf(format, args...);
 }
@@ -1996,7 +1996,7 @@ using ECPtr = EcEntryBase*;
 #    endif
 static LOGURU_THREAD_LOCAL ECPtr thread_ec_ptr = nullptr;
 
-ECPtr& get_thread_ec_head_ref()
+auto get_thread_ec_head_ref() -> ECPtr&
 {
     return thread_ec_ptr;
 }
@@ -2028,17 +2028,17 @@ ECPtr& get_thread_ec_head_ref()
 
 // ----------------------------------------------------------------------------
 
-EcHandle get_thread_ec_handle()
+auto get_thread_ec_handle() -> EcHandle
 {
     return get_thread_ec_head_ref();
 }
 
-Text get_error_context()
+auto get_error_context() -> Text
 {
     return get_error_context_for(get_thread_ec_head_ref());
 }
 
-Text get_error_context_for(const EcEntryBase* ec_head)
+auto get_error_context_for(const EcEntryBase* ec_head) -> Text
 {
     std::vector<const EcEntryBase*> stack;
     while (ec_head) {
@@ -2091,7 +2091,7 @@ EcEntryBase::~EcEntryBase()
 
 // ------------------------------------------------------------------------
 
-Text ec_to_text(const char* value)
+auto ec_to_text(const char* value) -> Text
 {
     // Add quotes around the string to make it obvious where it begin and ends.
     // This is great for detecting erroneous leading or trailing spaces in e.g. an
@@ -2100,7 +2100,7 @@ Text ec_to_text(const char* value)
     return Text { STRDUP(str.c_str()) };
 }
 
-Text ec_to_text(char c)
+auto ec_to_text(char c) -> Text
 {
     // Add quotes around the character to make it obvious where it begin and ends.
     std::string str = "'";
@@ -2169,7 +2169,7 @@ DEFINE_EC(long double)
 
 #  undef DEFINE_EC
 
-Text ec_to_text(EcHandle ec_handle)
+auto ec_to_text(EcHandle ec_handle) -> Text
 {
     Text parent_ec = get_error_context_for(ec_handle);
     size_t buffer_size = strlen(parent_ec.c_str()) + 2;

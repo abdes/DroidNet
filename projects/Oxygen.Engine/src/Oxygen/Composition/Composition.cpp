@@ -234,15 +234,15 @@ auto Composition::Iterator<ValueType>::operator++(int) -> Iterator
 }
 
 template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator==(const Iterator& other) const -> bool
+auto Composition::Iterator<ValueType>::operator==(const Iterator& rhs) const -> bool
 {
-    return pos_ == other.pos_;
+    return pos_ == rhs.pos_;
 }
 
 template <typename ValueType>
-auto Composition::Iterator<ValueType>::operator!=(const Iterator& other) const -> bool
+auto Composition::Iterator<ValueType>::operator!=(const Iterator& rhs) const -> bool
 {
-    return !(*this == other);
+    return !(*this == rhs);
 }
 
 // Force instantiation of required template specializations

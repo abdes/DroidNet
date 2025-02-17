@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <bit>
 #include <functional> // for std::reference_wrapper
 #include <span>
 #include <string_view>
@@ -31,7 +33,10 @@ public:
             static_assert(std::has_unique_object_representations_v<T>,
                 "Type may have platform-dependent representation");
         }
-        static_assert(!std::is_floating_point_v<T> || (sizeof(float) == 4 && sizeof(double) == 8),
+        static_assert(!std::is_floating_point_v<T>
+                || (sizeof(float) == 4
+                    // NOLINTNEXTLINE(*-magic-numbers)
+                    && sizeof(double) == 8),
             "Platform must use IEEE-754 floating point representation");
 
         if constexpr (sizeof(T) > 1) {
@@ -51,7 +56,7 @@ public:
         CHECK_RESULT(align_to(alignof(limits::SequenceSizeType)));
 
         // Write length (with endianness handling)
-        uint32_t length = static_cast<limits::SequenceSizeType>(str.length());
+        auto length = static_cast<limits::SequenceSizeType>(str.length());
         if (!IsLittleEndian()) {
             length = ByteSwap(length);
         }
@@ -76,13 +81,14 @@ public:
         CHECK_RESULT(align_to(alignof(limits::SequenceSizeType)));
 
         // Write array length
-        uint32_t length = static_cast<limits::SequenceSizeType>(array.size());
+        auto length = static_cast<limits::SequenceSizeType>(array.size());
         if (!IsLittleEndian()) {
             length = ByteSwap(length);
         }
 
-        if (const auto result = write_raw(length); !result)
+        if (const auto result = write_raw(length); !result) {
             return result;
+        }
 
         // Align for array elements if needed
         if constexpr (sizeof(T) > 1) {
@@ -111,16 +117,28 @@ public:
 private:
     [[nodiscard]] auto align_to(size_t alignment) noexcept -> Result<void>
     {
-        const auto current_pos = stream_.get().position();
-        if (!current_pos)
-            return current_pos.error();
+        try {
+            static constexpr size_t kMaxAlignment = 256;
 
-        const size_t padding = (alignment - (current_pos.value() % alignment)) % alignment;
-        if (padding > 0) {
-            static constexpr char zeros[32] = {};
-            return stream_.get().write(zeros, padding);
+            // Verify alignment is power of 2 and within limits
+            if (!std::has_single_bit(alignment) || alignment > kMaxAlignment) {
+                return std::make_error_code(std::errc::invalid_argument);
+            }
+
+            const auto current_pos = stream_.get().position();
+            if (!current_pos) {
+                return current_pos.error();
+            }
+
+            const size_t padding = (alignment - (current_pos.value() % alignment)) % alignment;
+            if (padding > 0) {
+                std::array<char, kMaxAlignment> zeros { 0 };
+                return stream_.get().write(zeros.data(), padding);
+            }
+            return {};
+        } catch (const std::exception& /*ex*/) {
+            return std::make_error_code(std::errc::io_error);
         }
-        return {};
     }
 
     template <typename T>
@@ -131,7 +149,9 @@ private:
         if (!IsLittleEndian() && sizeof(T) > 1) {
             temp = ByteSwap(temp);
         }
-        return stream_.get().write(reinterpret_cast<const char*>(&temp), sizeof(T));
+        return stream_.get().write(
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            reinterpret_cast<const char*>(&temp), sizeof(T));
     }
 
     std::reference_wrapper<S> stream_;
