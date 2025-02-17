@@ -10,6 +10,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Platform/Types.h>
+#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 
 class MainModule final : public oxygen::core::Module {
 public:
@@ -47,7 +49,7 @@ private:
 
     oxygen::PlatformPtr platform_ {};
 
-    oxygen::graphics::SurfacePtr surface_ {};
+    oxygen::graphics::Surface surface_ {};
     // TODO: hack for ImGui - redesign surfaces
     oxygen::platform::WindowPtr my_window_ {};
 };

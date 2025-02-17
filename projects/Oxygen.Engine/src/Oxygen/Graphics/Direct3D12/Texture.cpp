@@ -19,22 +19,24 @@ void Texture::InitializeTexture(const TextureInitInfo& init_info)
 {
     DCHECK_EQ_F(resource_, nullptr);
 
-    const auto device = GetMainDevice();
+    auto* const device = GetMainDevice();
     DCHECK_NOTNULL_F(device);
 
     const D3D12_CLEAR_VALUE* const clear_value {
-        (init_info.desc && (init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET || init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+        ((init_info.desc != nullptr)
+            && (((init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) != 0)
+                || ((init_info.desc->Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0)))
             ? init_info.clear_value
             : nullptr
     };
 
-    if (init_info.resource) {
+    if (init_info.resource != nullptr) {
         DCHECK_EQ_F(nullptr, init_info.heap);
         resource_ = init_info.resource;
     } else {
         CHECK_NOTNULL_F(init_info.desc);
 
-        if (init_info.heap) {
+        if (init_info.heap != nullptr) {
             ID3D12Resource* resource { nullptr };
             ThrowOnFailed(device->CreatePlacedResource(
                 init_info.heap,
@@ -71,14 +73,14 @@ void RenderTexture::Initialize(const TextureInitInfo& info)
 {
     texture_.Initialize(info);
 
-    const auto resource = texture_.GetResource();
+    auto* const resource = texture_.GetResource();
 
     DCHECK_NOTNULL_F(info.desc);
     const auto mip_levels = info.desc->MipLevels;
     DCHECK_LE_F(mip_levels, Texture::max_mips);
     mip_count_ = mip_levels;
 
-    const auto device = GetMainDevice();
+    auto* const device = GetMainDevice();
     DCHECK_NOTNULL_F(device);
 
     D3D12_RENDER_TARGET_VIEW_DESC rtv_desc {
@@ -125,7 +127,7 @@ void DepthBuffer::Initialize(TextureInitInfo info)
     srv_desc.Texture2D.MipLevels = 1;
     srv_desc.Texture2D.MostDetailedMip = 0;
     srv_desc.Texture2D.PlaneSlice = 0;
-    srv_desc.Texture2D.ResourceMinLODClamp = 0.0f;
+    srv_desc.Texture2D.ResourceMinLODClamp = 0.0F;
 
     DCHECK_F(!info.srv_dec && !info.resource);
     info.srv_dec = &srv_desc;

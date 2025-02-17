@@ -24,10 +24,10 @@ struct ShaderProfile {
     std::string entry_point { "main" }; //< Entry point function name.
 };
 
-OXYGEN_GFX_API [[nodiscard]]
+[[nodiscard]] OXYGEN_GFX_API
 auto MakeShaderIdentifier(ShaderType shader_type, const std::string& relative_path) -> std::string;
 
-OXYGEN_GFX_API [[nodiscard]]
+[[nodiscard]] OXYGEN_GFX_API
 auto MakeShaderIdentifier(const ShaderProfile& shader) -> std::string;
 
 } // namespace oxygen::graphics

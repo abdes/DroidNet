@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h> // Needed
-#include <Oxygen/Graphics/Direct3D12/WindowSurface.h>
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/Types.h>
@@ -46,11 +45,10 @@ void MainModule::OnInitialize(const oxygen::Graphics* gfx)
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_F(!my_window_.expired());
 
-    const auto renderer = gfx->GetRenderer();
+    const auto* const renderer = gfx->GetRenderer();
     DCHECK_NOTNULL_F(renderer);
     surface_ = renderer->CreateWindowSurface(my_window_);
-    DCHECK_F(surface_->IsValid());
-    surface_->Initialize();
+    DCHECK_F(surface_.IsValid());
 }
 
 void MainModule::ProcessInput(const oxygen::platform::InputEvent& event)
@@ -68,7 +66,7 @@ void MainModule::FixedUpdate()
 void MainModule::Render(const oxygen::Graphics* gfx)
 {
     DCHECK_NOTNULL_F(gfx);
-    const auto renderer = gfx->GetRenderer();
+    const auto* const renderer = gfx->GetRenderer();
     DCHECK_NOTNULL_F(renderer);
 
     // Create a random number core.
@@ -76,7 +74,7 @@ void MainModule::Render(const oxygen::Graphics* gfx)
     static std::mt19937 gen(rd());
     static std::uniform_int_distribution<> distribution(4, 8);
 
-    DCHECK_F(surface_->IsValid());
+    DCHECK_F(surface_.IsValid());
     //// Get the command list from the renderer
     // auto command_list = renderer->GetCommandList();
 
@@ -93,7 +91,7 @@ void MainModule::Render(const oxygen::Graphics* gfx)
     //// Execute the command list
     // renderer->ExecuteCommandList(command_list);
 
-    renderer->Render(surface_->GetId(),
+    renderer->Render(surface_,
         [this, &gfx](const RenderTarget& render_target) {
             return RenderGame(gfx, render_target);
         });
@@ -102,7 +100,6 @@ void MainModule::Render(const oxygen::Graphics* gfx)
 
 void MainModule::OnShutdown() noexcept
 {
-    surface_.reset();
     platform_.reset();
 }
 
@@ -111,7 +108,7 @@ auto MainModule::RenderGame(
     -> CommandLists
 {
     DCHECK_NOTNULL_F(gfx);
-    const auto renderer = gfx->GetRenderer();
+    const auto* const renderer = gfx->GetRenderer();
     DCHECK_NOTNULL_F(renderer);
 
     // Pipeline state and Root Signature
@@ -144,8 +141,8 @@ auto MainModule::RenderGame(
     // Set pipeline state
     command_recorder->SetPipelineState(vertex_shader, pixel_shader);
 
-    constexpr glm::vec4 clear_color = { 0.4f, 0.4f, .8f, 1.0f }; // Violet color
-    command_recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0f, 0);
+    constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8f, 1.0F }; // Violet color
+    command_recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0F, 0);
 
     // Create vertex buffer
     struct Vertex {
@@ -153,9 +150,9 @@ auto MainModule::RenderGame(
         float color[3];
     };
     Vertex vertices[] = {
-        { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-        { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-        { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
+        { { 0.0F, 0.5F, 0.0F }, { 1.0F, 0.0F, 0.0F } },
+        { { 0.5F, -0.5F, 0.0F }, { 0.0F, 1.0F, 0.0F } },
+        { { -0.5F, -0.5F, 0.0F }, { 0.0F, 0.0F, 1.0F } }
     };
     auto vertex_buffer = renderer->CreateVertexBuffer(vertices, sizeof(vertices), sizeof(Vertex));
 

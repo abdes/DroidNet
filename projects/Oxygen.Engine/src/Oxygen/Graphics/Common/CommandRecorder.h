@@ -77,14 +77,14 @@ private:
     {
         if (this->self().ShouldRelease()) {
             const auto msg = fmt::format("{} OnInitialize() called twice without calling Release()", this->self().ObjectName());
-            LOG_F(ERROR, "{}", msg);
+            LOG_F(ERROR, "{}", msg.c_str());
             throw std::runtime_error(msg);
         }
         try {
             InitializeCommandRecorder();
             this->self().ShouldRelease(true);
         } catch (const std::exception& e) {
-            LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
+            LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName().c_str(), e.what());
             ReleaseCommandRecorder();
             throw;
         }

@@ -53,7 +53,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Engine)
     OXYGEN_MAKE_NON_MOVABLE(Engine)
 
-    OXYGEN_CORE_API [[nodiscard]] auto GetPlatform() const -> Platform&;
+    [[nodiscard]] OXYGEN_CORE_API auto GetPlatform() const -> Platform&;
 
     //! Attaches the given Module to the engine, to be updated, rendered, etc.
     //! \param module module to be attached.
@@ -65,11 +65,11 @@ public:
     constexpr auto IsRunning() const -> bool { return is_running_; }
     OXYGEN_CORE_API void Stop();
 
-    OXYGEN_CORE_API [[nodiscard]] static auto Name() -> const std::string&;
-    OXYGEN_CORE_API [[nodiscard]] static auto Version() -> uint32_t;
+    [[nodiscard]] OXYGEN_CORE_API static auto Name() -> const std::string&;
+    [[nodiscard]] OXYGEN_CORE_API static auto Version() -> uint32_t;
 
     [[nodiscard]] auto HasImGui() const -> bool { return imgui_module_ != nullptr; }
-    OXYGEN_CORE_API [[nodiscard]] auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
+    [[nodiscard]] OXYGEN_CORE_API auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
 
 private:
     //! Detach the given Module from the engine.

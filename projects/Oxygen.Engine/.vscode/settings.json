@@ -120,4 +120,5 @@
         }
     },
     "editor.formatOnSave": false,
+    "C_Cpp.codeAnalysis.clangTidy.enabled": true,
 }
