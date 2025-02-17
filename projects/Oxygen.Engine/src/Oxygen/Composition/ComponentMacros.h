@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <Oxygen/Composition/Object.h>
+
 //! Adds the necessary declarations for a class as a typed component.
 /*!
  \param arg_type The class name.

@@ -110,12 +110,12 @@ public:
 
         Iterator() = default;
 
-        reference operator*() const;
-        pointer operator->() const;
-        Iterator& operator++();
-        Iterator operator++(int);
-        bool operator==(const Iterator&) const;
-        bool operator!=(const Iterator&) const;
+        auto operator*() const -> reference;
+        auto operator->() const -> pointer;
+        auto operator++() -> Iterator&;
+        auto operator++(int) -> Iterator;
+        auto operator==(const Iterator&) const -> bool;
+        auto operator!=(const Iterator&) const -> bool;
 
     private:
         friend class Composition;

@@ -87,32 +87,32 @@ public:
 
     // Core archive operations
     //! Loads shader bytecode and metadata from the archive file
-    [[nodiscard]] OXYGEN_GFX_API  void Load();
+    [[nodiscard]] OXYGEN_GFX_API void Load();
     //! Persists shader bytecode and metadata to the archive file
-    [[nodiscard]] OXYGEN_GFX_API  void Save() const;
+    [[nodiscard]] OXYGEN_GFX_API void Save() const;
     //! Removes all shaders from the archive
     OXYGEN_GFX_API void Clear() noexcept;
 
     // Shader management
     //! Adds pre-compiled shader bytecode to the archive
-    [[nodiscard]] OXYGEN_GFX_API  bool AddCompiledShader(CompiledShader shader);
+    [[nodiscard]] OXYGEN_GFX_API bool AddCompiledShader(CompiledShader shader);
     //! Retrieves compiled shader bytecode by name
-    [[nodiscard]] OXYGEN_GFX_API  std::shared_ptr<IShaderByteCode> GetShaderBytecode(
+    [[nodiscard]] OXYGEN_GFX_API std::shared_ptr<IShaderByteCode> GetShaderBytecode(
         std::string_view unique_id) const;
 
     // State queries
     //! Checks if a shader exists in the archive
-    [[nodiscard]] OXYGEN_GFX_API  bool HasShader(std::string_view unique_id) const noexcept;
+    [[nodiscard]] OXYGEN_GFX_API bool HasShader(std::string_view unique_id) const noexcept;
     //! Returns profiles of all shaders that need recompilation
-    [[nodiscard]] OXYGEN_GFX_API  std::vector<ShaderProfile> GetOutdatedShaders() const;
+    [[nodiscard]] OXYGEN_GFX_API std::vector<ShaderProfile> GetOutdatedShaders() const;
     //! Returns the total number of shaders in the archive
-    [[nodiscard]] OXYGEN_GFX_API  size_t GetShaderCount() const noexcept;
+    [[nodiscard]] OXYGEN_GFX_API size_t GetShaderCount() const noexcept;
 
     // Update operations
     //! Compiles all shaders whose source files have changed
-    [[nodiscard]] OXYGEN_GFX_API  void UpdateOutdatedShaders();
+    [[nodiscard]] OXYGEN_GFX_API void UpdateOutdatedShaders();
     //! Forces recompilation of all shaders in the archive
-    [[nodiscard]] OXYGEN_GFX_API  bool RecompileAll();
+    [[nodiscard]] OXYGEN_GFX_API bool RecompileAll();
 
     [[nodiscard]] auto GetName() const noexcept
     {

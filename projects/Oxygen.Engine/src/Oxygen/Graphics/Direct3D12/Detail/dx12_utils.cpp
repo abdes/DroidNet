@@ -12,7 +12,6 @@
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
-
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::windows::ThrowOnFailed;

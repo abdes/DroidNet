@@ -4,21 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
-
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 
-using namespace oxygen::graphics::d3d12;
+using oxygen::graphics::d3d12::DebugLayer;
 using oxygen::windows::ThrowOnFailed;
 
-void DebugLayer::OnInitialize(const bool enable, const bool enable_validation)
+DebugLayer::DebugLayer(const bool enable_validation)
 {
-    if (!enable) {
-        return;
-    }
-
     // Enable the Direct3D12 debug layer
     if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug_)))) {
         d3d12_debug_->EnableDebugLayer();
@@ -36,9 +32,9 @@ void DebugLayer::OnInitialize(const bool enable, const bool enable_validation)
         // Setup debugger breakpoints on errors and warnings
 #ifdef _DEBUG
         if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
-            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true));
-            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, true));
-            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, true));
+            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, 1));
+            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 1));
+            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, 1));
         }
 #endif
     } else {
@@ -46,12 +42,12 @@ void DebugLayer::OnInitialize(const bool enable, const bool enable_validation)
     }
 }
 
-void DebugLayer::OnShutdown() noexcept
+DebugLayer::~DebugLayer() noexcept
 {
 #ifdef _DEBUG
-    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, false));
-    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, false));
-    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, false));
+    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, 0));
+    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 0));
+    ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, 0));
 #endif
 
     OutputDebugString("===-- LIVE OBJECTS REPORT -----------------------------------------------===\n");

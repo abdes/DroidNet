@@ -50,7 +50,7 @@ void CommandRecorder::Begin()
     ResetState();
 }
 
-oxygen::graphics::CommandListPtr CommandRecorder::End()
+auto CommandRecorder::End() -> oxygen::graphics::CommandListPtr
 {
     if (!current_command_list_) {
         throw std::runtime_error("No CommandList is being recorded");
@@ -112,7 +112,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
     DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
-    if (flags & kClearFlagsColor) {
+    if ((flags & kClearFlagsColor) != 0u) {
         // TODO: temporarily accept only 1 target
         DCHECK_EQ_F(num_targets, 1u, "Only 1 render target is supported");
 

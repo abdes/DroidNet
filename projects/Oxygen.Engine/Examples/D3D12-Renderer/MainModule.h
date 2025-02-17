@@ -9,9 +9,9 @@
 #include <Oxygen/Core/Module.h>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Platform/Types.h>
 
 class MainModule final : public oxygen::core::Module {
 public:
