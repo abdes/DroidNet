@@ -78,123 +78,147 @@ FileStream<StreamType>::FileStream(const std::filesystem::path& path, const std:
 template <BackingStream StreamType>
 auto FileStream<StreamType>::write(const char* data, const size_t size) const noexcept -> Result<void>
 {
-    if (data == nullptr && size > 0) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
-    if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
-    stream_->write(data, static_cast<std::streamsize>(size));
-    if (stream_->fail()) {
-        stream_->clear();
+    try {
+        if (data == nullptr && size > 0) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
+        if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
+        stream_->write(data, static_cast<std::streamsize>(size));
+        if (stream_->fail()) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
+        return {};
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-    return {};
 }
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::read(char* data, const size_t size) const noexcept -> Result<void>
 {
-    if (data == nullptr && size > 0) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
-    if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
-    stream_->read(data, static_cast<std::streamsize>(size));
-    if (stream_->fail() && !stream_->eof()) {
-        stream_->clear();
+    try {
+        if (data == nullptr && size > 0) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
+        if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
+        stream_->read(data, static_cast<std::streamsize>(size));
+        if (stream_->fail() && !stream_->eof()) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
+        if (stream_->eof()) {
+            stream_->clear();
+            return std::make_error_code(std::errc::no_buffer_space);
+        }
+        return {};
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-    if (stream_->eof()) {
-        stream_->clear();
-        return std::make_error_code(std::errc::no_buffer_space);
-    }
-    return {};
 }
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::flush() const noexcept -> Result<void>
 {
-    stream_->flush();
-    if (stream_->fail()) {
-        stream_->clear();
+    try {
+        stream_->flush();
+        if (stream_->fail()) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
+        return {};
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-    return {};
 }
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::position() const noexcept -> Result<size_t>
 {
-    const auto pos = stream_->tellg();
-    if (pos < 0) {
-        stream_->clear();
+    try {
+        const auto pos = stream_->tellg();
+        if (pos < 0) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
+        return static_cast<size_t>(pos);
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-    return static_cast<size_t>(pos);
 }
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::seek(const size_t pos) const noexcept -> Result<void>
 {
-    if (pos > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
+    try {
+        if (pos > static_cast<size_t>(std::numeric_limits<std::streamoff>::max())) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
 
-    const auto size_result = this->size();
-    if (!size_result) {
-        return size_result.error();
-    }
-    if (pos > size_result.value()) {
-        return std::make_error_code(std::errc::invalid_argument);
-    }
+        const auto size_result = this->size();
+        if (!size_result) {
+            return size_result.error();
+        }
+        if (pos > size_result.value()) {
+            return std::make_error_code(std::errc::invalid_argument);
+        }
 
-    stream_->seekg(static_cast<std::streamoff>(pos), std::ios::beg);
-    if (stream_->fail()) {
-        stream_->clear();
+        stream_->seekg(static_cast<std::streamoff>(pos), std::ios::beg);
+        if (stream_->fail()) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
+
+        return {};
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-
-    return {};
 }
 
 template <BackingStream StreamType>
 auto FileStream<StreamType>::size() const noexcept -> Result<size_t>
 {
-    const auto current = stream_->tellg();
-    if (current < 0) {
-        stream_->clear();
-        return std::make_error_code(std::errc::io_error);
-    }
+    try {
+        const auto current = stream_->tellg();
+        if (current < 0) {
+            stream_->clear();
+            return std::make_error_code(std::errc::io_error);
+        }
 
-    stream_->seekg(0, std::ios::end);
-    if (stream_->fail()) {
-        stream_->clear();
+        stream_->seekg(0, std::ios::end);
+        if (stream_->fail()) {
+            stream_->clear();
+            stream_->seekg(current, std::ios::beg);
+            if (stream_->fail()) {
+                stream_->clear();
+            }
+            return std::make_error_code(std::errc::io_error);
+        }
+
+        const auto size = stream_->tellg();
+        if (size < 0) {
+            stream_->clear();
+            stream_->seekg(current, std::ios::beg);
+            if (stream_->fail()) {
+                stream_->clear();
+            }
+            return std::make_error_code(std::errc::value_too_large);
+        }
+
         stream_->seekg(current, std::ios::beg);
         if (stream_->fail()) {
             stream_->clear();
+            return std::make_error_code(std::errc::io_error);
         }
+
+        return static_cast<size_t>(size);
+    } catch (const std::exception& /*ex*/) {
         return std::make_error_code(std::errc::io_error);
     }
-
-    const auto size = stream_->tellg();
-    if (size < 0) {
-        stream_->clear();
-        stream_->seekg(current, std::ios::beg);
-        if (stream_->fail()) {
-            stream_->clear();
-        }
-        return std::make_error_code(std::errc::value_too_large);
-    }
-
-    stream_->seekg(current, std::ios::beg);
-    if (stream_->fail()) {
-        stream_->clear();
-        return std::make_error_code(std::errc::io_error);
-    }
-
-    return static_cast<size_t>(size);
 }
 
 // Explicit template instantiation

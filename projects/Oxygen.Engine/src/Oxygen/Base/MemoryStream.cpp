@@ -39,7 +39,11 @@ auto MemoryStream::write(const char* data, const size_t size) noexcept -> Result
     auto buffer = get_buffer();
     if (pos_ + size > buffer.size()) {
         if (external_buffer_.empty()) {
-            internal_buffer_.resize(pos_ + size);
+            try {
+                internal_buffer_.resize(pos_ + size);
+            } catch (const std::bad_alloc&) {
+                return std::make_error_code(std::errc::not_enough_memory);
+            }
             buffer = std::span(internal_buffer_);
         } else {
             return std::make_error_code(std::errc::no_buffer_space);
@@ -79,6 +83,7 @@ auto MemoryStream::read(char* data, const size_t size) noexcept -> Result<void>
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto MemoryStream::flush() const noexcept -> Result<void>
 {
     return {};

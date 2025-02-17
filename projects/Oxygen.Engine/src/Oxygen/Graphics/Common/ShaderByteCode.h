@@ -21,11 +21,11 @@ public:
 
     // Default copy constructor and copy assignment operator
     IShaderByteCode(const IShaderByteCode&) = default;
-    IShaderByteCode& operator=(const IShaderByteCode&) = default;
+    auto operator=(const IShaderByteCode&) -> IShaderByteCode& = default;
 
     // Default move constructor and move assignment operator
     IShaderByteCode(IShaderByteCode&&) noexcept = default;
-    IShaderByteCode& operator=(IShaderByteCode&&) noexcept = default;
+    auto operator=(IShaderByteCode&&) noexcept -> IShaderByteCode& = default;
 
     [[nodiscard]] virtual auto Size() const noexcept -> size_t = 0;
     [[nodiscard]] virtual auto Data() const noexcept -> const uint32_t* = 0;
@@ -116,7 +116,7 @@ public:
 
     // Disable copy constructor and copy assignment operator
     ShaderByteCode(const ShaderByteCode&) = delete;
-    ShaderByteCode& operator=(const ShaderByteCode&) = delete;
+    auto operator=(const ShaderByteCode&) -> ShaderByteCode& = delete;
 
     // Enable move constructor and move assignment operator
     ShaderByteCode(ShaderByteCode&& other) noexcept

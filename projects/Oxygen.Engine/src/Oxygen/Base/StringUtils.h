@@ -39,6 +39,7 @@ void Utf8ToWide(const InputType& in, std::wstring& out)
         out.clear();
         return;
     }
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     const std::string_view sv_in(reinterpret_cast<const char*>(in.data()), in.size());
 
 #if defined(OXYGEN_WINDOWS)
@@ -89,17 +90,19 @@ void Utf8ToWide(const InputType& in, std::wstring& out)
 // Overloads for different input types
 inline void Utf8ToWide(const char* in, std::wstring& out)
 {
-    return Utf8ToWide(std::string_view(in), out);
+    Utf8ToWide(std::string_view(in), out);
 }
 
 inline void Utf8ToWide(const char8_t* in, std::wstring& out)
 {
-    return Utf8ToWide(std::string_view(reinterpret_cast<const char*>(in)), out);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    Utf8ToWide(std::string_view(reinterpret_cast<const char*>(in)), out);
 }
 
 inline void Utf8ToWide(const uint8_t* in, std::wstring& out)
 {
-    return Utf8ToWide(std::string_view(reinterpret_cast<const char*>(in)), out);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    Utf8ToWide(std::string_view(reinterpret_cast<const char*>(in)), out);
 }
 
 inline void WideToUtf8(std::wstring_view in, std::wstring& out)
@@ -135,6 +138,7 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
         WC_ERR_INVALID_CHARS,
         in.data(),
         static_cast<int>(in.size()),
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         reinterpret_cast<char*>(out.data()),
         size_needed,
         nullptr,
@@ -170,32 +174,34 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
 // Overloads for different input types
 inline void WideToUtf8(const std::wstring& in, std::string& out)
 {
-    return WideToUtf8(std::wstring_view(in), out);
+    WideToUtf8(std::wstring_view(in), out);
 }
 
 inline void WideToUtf8(const wchar_t* in, std::string& out)
 {
-    return WideToUtf8(std::wstring_view(in), out);
+    WideToUtf8(std::wstring_view(in), out);
 }
 
 inline void WideToUtf8(const char16_t* in, std::string& out)
 {
-    return WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
 }
 
 inline void WideToUtf8(const std::wstring& in, std::u8string& out)
 {
-    return WideToUtf8(std::wstring_view(in), out);
+    WideToUtf8(std::wstring_view(in), out);
 }
 
 inline void WideToUtf8(const wchar_t* in, std::u8string& out)
 {
-    return WideToUtf8(std::wstring_view(in), out);
+    WideToUtf8(std::wstring_view(in), out);
 }
 
 inline void WideToUtf8(const char16_t* in, std::u8string& out)
 {
-    return WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
 }
 
 inline void WideToUtf8(std::string_view in, std::u8string& out)

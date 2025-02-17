@@ -1,8 +1,17 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Macros.h>
 
 namespace oxygen::composition::detail {
+
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, cppcoreguidelines-owning-memory)
 
 //! High-performance hash map optimized for uint64_t key-value pairs
 //!
@@ -19,15 +28,16 @@ class FastIntMap {
 
     Entry* entries_; //!< Dynamic array of hash table entries
     size_t capacity_; //!< Current table capacity (always power of 2)
-    static constexpr float kLoadThreshold = 0.7f; //!< Load factor threshold for growth
+    static constexpr float kLoadThreshold = 0.7F; //!< Load factor threshold for growth
     size_t size_ { 0 }; //!< Number of occupied slots
 
 public:
     //! Creates a new hash map with specified initial capacity
     //! \param initial_capacity Desired initial capacity (rounded up to power of 2)
     explicit FastIntMap(const size_t initial_capacity = 64)
+        : capacity_(RoundUpPow2(initial_capacity))
     {
-        capacity_ = RoundUpPow2(initial_capacity);
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
         entries_ = new Entry[capacity_](); // Zero-initialize
     }
 
@@ -92,8 +102,9 @@ public:
             probe_count++;
             index = (index + probe_count) & mask;
 
-            if (probe_count >= capacity_)
+            if (probe_count >= capacity_) {
                 return false;
+            }
         }
         return false;
     }
@@ -104,6 +115,7 @@ private:
     //! \return Next power of 2 >= v
     static auto RoundUpPow2(size_t v) -> size_t
     {
+        // NOLINTBEGIN(*-magic-numbers)
         v--;
         v |= v >> 1;
         v |= v >> 2;
@@ -112,6 +124,7 @@ private:
         v |= v >> 16;
         v |= v >> 32;
         return v + 1;
+        // NOLINTEND(*-magic-numbers)
     }
 
     //! Doubles the capacity of the hash table
@@ -119,6 +132,10 @@ private:
     {
         const Entry* old_entries = entries_;
         const size_t old_capacity = capacity_;
+
+        auto cleanup = oxygen::Finally([&] {
+            delete[] old_entries;
+        });
 
         capacity_ *= 2;
         entries_ = new Entry[capacity_]();
@@ -129,9 +146,8 @@ private:
                 Insert(old_entries[i].key, old_entries[i].value);
             }
         }
-
-        delete[] old_entries;
     }
 };
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, cppcoreguidelines-owning-memory)
 
 } // namespace oxygen::composition::detail

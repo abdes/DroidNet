@@ -19,7 +19,7 @@ namespace {
 
 void LogCompilationErrors(IDxcBlobEncoding* error_blob)
 {
-    if (error_blob) {
+    if (error_blob != nullptr) {
         // Get the pointer to the error message and its size
         const auto error_message = static_cast<const char*>(error_blob->GetBufferPointer());
         const size_t error_message_size = error_blob->GetBufferSize();
@@ -136,7 +136,7 @@ auto ShaderCompiler::CompileFromSource(
     if (FAILED(hr)) {
         ComPtr<IDxcBlobEncoding> error_blob;
         hr = result->GetErrorBuffer(&error_blob);
-        if (error_blob) {
+        if (error_blob != nullptr) {
             LOG_F(ERROR, "Failed to compile shader from source");
             LogCompilationErrors(error_blob.Get());
         }
@@ -147,7 +147,7 @@ auto ShaderCompiler::CompileFromSource(
     ComPtr<IDxcBlob> output;
     ThrowOnFailed(result->GetResult(&output));
 
-    if (!output) {
+    if (output == nullptr) {
         LOG_F(ERROR, "GetResult returned null blob");
         return {};
     }
@@ -158,7 +158,7 @@ auto ShaderCompiler::CompileFromSource(
 
         // Check if we have any warnings
         ComPtr<IDxcBlobEncoding> warning_blob;
-        if (SUCCEEDED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), nullptr)) && warning_blob) {
+        if (SUCCEEDED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), nullptr)) && (warning_blob != nullptr)) {
             LogCompilationErrors(warning_blob.Get());
         }
         return {};

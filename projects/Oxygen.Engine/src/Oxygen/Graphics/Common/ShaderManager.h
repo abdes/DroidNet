@@ -6,31 +6,33 @@
 
 #pragma once
 
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Base/MixinShutdown.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
 struct CompiledShaderInfo {
-    ShaderType shader_type;
+    ShaderType shader_type { ShaderType::kVertex };
     std::string shader_unique_id;
     std::string source_file_path;
-    uint64_t source_hash;
-    size_t compiled_bloc_size;
+    uint64_t source_hash { 0 };
+    size_t compiled_bloc_size { 0 };
     std::chrono::system_clock::time_point compile_time;
 
     // Default constructor

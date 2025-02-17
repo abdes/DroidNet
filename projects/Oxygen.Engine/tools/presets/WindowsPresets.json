@@ -7,7 +7,16 @@
     {
       "name": "windows",
       "inherits": "base",
-      "installDir": "${sourceDir}/out/install"
+      "installDir": "${sourceDir}/out/install",
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [
+            "Windows"
+          ],
+          "enableMicrosoftCodeAnalysis": true,
+          "enableClangTidyCodeAnalysis": true
+        }
+      }
     }
   ],
   "buildPresets": [
@@ -25,7 +34,9 @@
   "testPresets": [
     {
       "name": "test-windows",
-      "inherits": ["test-base"],
+      "inherits": [
+        "test-base"
+      ],
       "configurePreset": "windows",
       "condition": {
         "type": "equals",

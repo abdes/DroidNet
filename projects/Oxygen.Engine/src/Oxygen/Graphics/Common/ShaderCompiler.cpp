@@ -6,17 +6,20 @@
 
 #include <Oxygen/Graphics/Common/ShaderCompiler.h>
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iosfwd>
 #include <memory>
 #include <string>
+#include <system_error>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 
-using namespace oxygen::graphics;
-using namespace std::filesystem;
+using oxygen::graphics::ShaderCompiler;
+using std::filesystem::path;
 
 auto ShaderCompiler::CompileFromFile(
     const path& shader_full_path,

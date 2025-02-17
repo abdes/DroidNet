@@ -15,16 +15,18 @@
 namespace oxygen {
 
 //! Compile-time endianness detection
-inline bool IsLittleEndian()
+inline auto IsLittleEndian() noexcept -> bool
 {
     constexpr uint32_t value = 0x01234567;
-    return *reinterpret_cast<const uint8_t*>(&value) == 0x67;
+    constexpr uint8_t kCheckValue = 0x67;
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    return *reinterpret_cast<const uint8_t*>(&value) == kCheckValue;
 }
 
 #if defined(OXYGEN_MSVC_VERSION)
-inline uint16_t ByteSwap16(const uint16_t value) { return _byteswap_ushort(value); }
-inline uint32_t ByteSwap32(const uint32_t value) { return _byteswap_ulong(value); }
-inline uint64_t ByteSwap64(const uint64_t value) { return _byteswap_uint64(value); }
+inline auto ByteSwap16(const uint16_t value) -> uint16_t { return _byteswap_ushort(value); }
+inline auto ByteSwap32(const uint32_t value) -> uint32_t { return _byteswap_ulong(value); }
+inline auto ByteSwap64(const uint64_t value) -> uint64_t { return _byteswap_uint64(value); }
 #elif defined(OXYGEN_APPLE)
 #  include <libkern/OSByteOrder.h>
 inline uint16_t ByteSwap16(const uint16_t value) { return OSSwapInt16(value); }
@@ -61,18 +63,19 @@ inline uint64_t ByteSwap64(const uint64_t value)
 #endif
 
 template <typename T>
-constexpr T ByteSwap(T value) noexcept
+constexpr auto ByteSwap(T value) noexcept -> T
 {
     static_assert(std::is_trivially_copyable_v<T>);
-    if constexpr (sizeof(T) == 1)
+    if constexpr (sizeof(T) == 1) {
         return value;
-    if constexpr (sizeof(T) == 2) {
+    }
+    if constexpr (sizeof(T) == sizeof(uint16_t)) {
         return static_cast<T>(ByteSwap16(static_cast<uint16_t>(value)));
     }
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == sizeof(uint32_t)) {
         return static_cast<T>(ByteSwap32(static_cast<uint32_t>(value)));
     }
-    if constexpr (sizeof(T) == 8) {
+    if constexpr (sizeof(T) == sizeof(uint64_t)) {
         return static_cast<T>(ByteSwap64(static_cast<uint64_t>(value)));
     }
     OXYGEN_UNREACHABLE_RETURN(value);

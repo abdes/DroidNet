@@ -14,6 +14,7 @@
 
 #  include <fmt/format.h>
 
+#  include <Oxygen/Base/Finally.h>
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/StringUtils.h>
 
@@ -29,28 +30,37 @@ struct LocalFreeHelper {
     }
 };
 
-std::string GetErrorMessage(const DWORD error_code) noexcept
+auto GetErrorMessage(const DWORD error_code) -> std::string
 {
-    std::unique_ptr<wchar_t[], LocalFreeHelper> msg_buffer {};
-    LPWSTR buffer_allocated_mem { nullptr };
-    const DWORD buffer_length = FormatMessageW(
-        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
-        nullptr,
-        error_code,
-        0,
-        reinterpret_cast<LPWSTR>(&buffer_allocated_mem), // null-terminated string
-        0,
-        nullptr);
-    if (buffer_length == 0) {
-        return fmt::format("__not_available__ (failed to get error message `{}`)", GetLastError());
-    }
-    DCHECK_EQ_F(buffer_length, ::wcslen(buffer_allocated_mem));
-
-    msg_buffer.reset(buffer_allocated_mem);
-    std::string message {};
     try {
-        WideToUtf8(msg_buffer.get(), message);
+        LPWSTR buffer { nullptr };
+
+        const DWORD buffer_length = FormatMessageW(
+            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+            nullptr,
+            error_code,
+            0,
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            reinterpret_cast<LPWSTR>(&buffer),
+            0,
+            nullptr);
+
+        if (buffer_length == 0) {
+            return fmt::format("__not_available__ (failed to get error message `{}`)",
+                GetLastError());
+        }
+
+        // Ensure buffer is freed when we exit this scope
+        auto cleanup = oxygen::Finally([buffer]() {
+            if (buffer) {
+                LocalFree(buffer);
+            }
+        });
+
+        std::string message {};
+        WideToUtf8(buffer, message);
         return message;
+
     } catch (const std::exception& e) {
         return fmt::format("__not_available__ ({})", e.what());
     }
@@ -58,12 +68,12 @@ std::string GetErrorMessage(const DWORD error_code) noexcept
 
 } // namespace
 
-std::exception_ptr WindowsException::FromErrorCode(const DWORD error_code) noexcept
+auto WindowsException::FromErrorCode(const DWORD error_code) noexcept -> std::exception_ptr
 {
     return std::make_exception_ptr(WindowsException(error_code));
 }
 
-const char* WindowsException::what() const noexcept
+auto WindowsException::what() const noexcept -> const char*
 {
     if (!message_.has_value()) {
         message_ = fmt::format("{} : {}", code().value(), GetErrorMessage(code().value()));

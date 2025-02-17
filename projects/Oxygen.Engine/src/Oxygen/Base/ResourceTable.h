@@ -284,18 +284,23 @@ template <typename T>
 auto ResourceTable<T>::GetInnerIndex(const ResourceHandle& handle) const
     -> uint32_t
 {
-    if (!handle.IsValid())
+    if (!handle.IsValid()) {
         throw std::invalid_argument("invalid handle");
-    if (handle.Index() >= detail::NewIndex(sparse_table_))
+    }
+    if (handle.Index() >= detail::NewIndex(sparse_table_)) {
         throw std::out_of_range("bad handle, index out of range");
-    if (handle.ResourceType() != item_type_)
+    }
+    if (handle.ResourceType() != item_type_) {
         throw std::invalid_argument("item type mismatch, using wrong table?");
+    }
 
     const ResourceHandle inner_handle = sparse_table_[handle.Index()];
-    if (inner_handle.IsFree())
+    if (inner_handle.IsFree()) {
         throw std::invalid_argument("bad handle, item already erased");
-    if (handle.Generation() != inner_handle.Generation())
+    }
+    if (handle.Generation() != inner_handle.Generation()) {
         throw std::invalid_argument("external handle is stale (obsolete generation)");
+    }
 
     assert(inner_handle.Index() < detail::NewIndex(items_) && "corrupted table, inner index is out of range");
 

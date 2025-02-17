@@ -77,43 +77,43 @@ template <typename T>
 class Result {
 public:
     //! Constructor that initializes the Result with a value.
-    constexpr Result(T value) noexcept(std::is_nothrow_move_constructible_v<T>)
+    explicit(false) constexpr Result(T value) noexcept(std::is_nothrow_move_constructible_v<T>)
         : value_(std::move(value))
     {
     }
 
     //! Constructor that initializes the Result with an error code.
-    Result(std::error_code error) noexcept
+    explicit(false) Result(std::error_code error) noexcept
         : value_(error)
     {
     }
 
     //! Checks if the Result contains a value.
-    [[nodiscard]] constexpr bool has_value() const noexcept
+    [[nodiscard]] constexpr auto has_value() const noexcept -> bool
     {
         return std::holds_alternative<T>(value_);
     }
 
     //! Retrieves the value from the Result as a constant reference.
-    [[nodiscard]] constexpr const T& value() const& noexcept
+    [[nodiscard]] constexpr auto value() const& -> const T&
     {
         return std::get<T>(value_);
     }
 
     //! Retrieves the value from the Result as an rvalue reference.
-    constexpr T&& value() && noexcept
+    constexpr auto value() && -> T&&
     {
         return std::get<T>(std::move(value_));
     }
 
     //! Moves the value from the Result.
-    constexpr T move_value() noexcept
+    constexpr auto move_value() noexcept -> T
     {
         return std::get<T>(std::move(value_));
     }
 
     //! Retrieves the error code from the Result.
-    [[nodiscard]] constexpr const std::error_code& error() const noexcept
+    [[nodiscard]] constexpr auto error() const -> const std::error_code&
     {
         return std::get<std::error_code>(value_);
     }
@@ -130,7 +130,7 @@ public:
       \param default_value The value to return if the Result contains an error.
     */
     template <typename U>
-    constexpr T value_or(U&& default_value) const& noexcept
+    constexpr auto value_or(U&& default_value) const& noexcept -> T
     {
         return has_value()
             ? value()
@@ -138,7 +138,7 @@ public:
     }
 
     template <typename U>
-    constexpr T value_or(U&& default_value) && noexcept
+    constexpr auto value_or(U&& default_value) && noexcept -> T
     {
         return has_value()
             ? std::move(value())
@@ -148,17 +148,17 @@ public:
 
     //! @{
     //! Retrieves a reference to the contained value if the Result holds a value.
-    constexpr const T& operator*() const& noexcept
+    constexpr auto operator*() const& noexcept -> const T&
     {
         return value();
     }
 
-    constexpr T& operator*() & noexcept
+    constexpr auto operator*() & -> T&
     {
         return std::get<T>(value_);
     }
 
-    constexpr T&& operator*() && noexcept
+    constexpr auto operator*() && noexcept -> T&&
     {
         return std::move(value());
     }
@@ -183,19 +183,19 @@ public:
     }
 
     //! Constructor that initializes the Result with an error code.
-    Result(std::error_code error) noexcept
+    explicit(false) Result(std::error_code error) noexcept
         : value_(error)
     {
     }
 
     //! Checks if the Result indicates success.
-    [[nodiscard]] constexpr bool has_value() const noexcept
+    [[nodiscard]] constexpr auto has_value() const noexcept -> bool
     {
         return std::holds_alternative<std::monostate>(value_);
     }
 
     //! Retrieves the error code from the Result.
-    [[nodiscard]] constexpr const std::error_code& error() const noexcept
+    [[nodiscard]] constexpr auto error() const -> const std::error_code&
     {
         return std::get<std::error_code>(value_);
     }

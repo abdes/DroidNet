@@ -81,7 +81,7 @@ public:
         throw ComError(error_code, utf8_message);
     }
 
-    HRESULT GetHR() const noexcept { return code().value(); }
+    auto GetHR() const noexcept -> HRESULT { return code().value(); }
 
     [[nodiscard]] OXYGEN_BASE_API auto what() const noexcept -> const char* override;
 
@@ -106,7 +106,8 @@ namespace detail {
     {
         std::string utf8_message {};
         if constexpr (Nullable<T>) {
-            return HandleComErrorImpl(hr, utf8_message);
+            HandleComErrorImpl(hr, utf8_message);
+            return;
         } else {
             try {
                 string_utils::WideToUtf8(message, utf8_message);
@@ -135,6 +136,6 @@ inline void ThrowOnFailed(const HRESULT hr)
     }
 }
 
-} // namespace oxygen
+} // namespace oxygen::windows
 
 #endif // OXYGEN_WINDOWS
