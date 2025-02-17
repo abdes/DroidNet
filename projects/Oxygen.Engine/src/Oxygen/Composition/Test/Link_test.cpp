@@ -46,8 +46,15 @@ auto main(int argc, char** argv) -> int
     loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
     loguru::init(argc, argv);
 
-    const Example example;
-    LOG_F(INFO, "Hello from: {}", example.GetName());
+    auto status = EXIT_SUCCESS;
+    try {
+        const Example example;
+        LOG_F(INFO, "Hello from: {}", example.GetName());
+    } catch (const std::exception& e) {
+        LOG_F(ERROR, "Exception caught: {}", e.what());
+        status = EXIT_FAILURE;
+    }
 
     loguru::shutdown();
+    return status;
 }

@@ -8,8 +8,8 @@
 
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 
-#include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>

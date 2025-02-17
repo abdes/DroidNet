@@ -33,9 +33,9 @@
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
-#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
@@ -103,9 +103,9 @@ public:
     [[nodiscard]] auto SrvHeap() const -> DescriptorHeap& { return srv_heap_; }
     [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
-    CommandRecorderPtr GetCommandRecorder() { return command_recorder_; }
-    ShaderCompilerPtr GetShaderCompiler() const { return std::static_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
-    std::shared_ptr<IShaderByteCode> GetEngineShader(std::string_view unique_id);
+    auto GetCommandRecorder() -> CommandRecorderPtr { return command_recorder_; }
+    auto GetShaderCompiler() const -> ShaderCompilerPtr { return std::static_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
+    auto GetEngineShader(std::string_view unique_id) -> std::shared_ptr<IShaderByteCode>;
 
 private:
     std::shared_ptr<ShaderCompiler> shader_compiler_ {};
@@ -122,10 +122,6 @@ private:
     mutable DescriptorHeap dsv_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descriptor Heap" };
     mutable DescriptorHeap srv_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descriptor Heap" };
     mutable DescriptorHeap uav_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descriptor Heap" };
-
-#if defined(_DEBUG)
-    DebugLayer debug_layer_ {};
-#endif
 };
 
 void RendererImpl::Init(const RendererProperties& props)
@@ -241,7 +237,7 @@ auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> 
     return surface_id;
 }
 
-std::shared_ptr<IShaderByteCode> RendererImpl::GetEngineShader(std::string_view unique_id)
+auto RendererImpl::GetEngineShader(std::string_view unique_id) -> std::shared_ptr<IShaderByteCode>
 {
     return engine_shaders_->GetShaderBytecode(unique_id);
 }

@@ -15,9 +15,9 @@
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
+#include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Platform/Types.h>
 

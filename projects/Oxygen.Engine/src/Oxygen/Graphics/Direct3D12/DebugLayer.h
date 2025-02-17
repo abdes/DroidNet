@@ -10,32 +10,19 @@
 #include <dxgidebug.h>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/Composition.h>
 
 namespace oxygen::graphics::d3d12 {
 
 //! Enable several debug layer features, including live object reporting, leak
 //! tracking, and GPU-based validation.
-class DebugLayer final
-    : public Mixin<DebugLayer, Curry<MixinNamed, const char*>::mixin, MixinInitialize, MixinShutdown> {
+class DebugLayer final : public Component {
+    OXYGEN_COMPONENT(DebugLayer)
+
 public:
-    //! Constructor to forward the arguments to the mixins in the chain.
-    template <typename... Args>
-    constexpr explicit DebugLayer(Args&&... args)
-        : Mixin(std::forward<Args>(args)...)
-    {
-    }
-
-    //! Set the object name.
-    DebugLayer()
-        : Mixin("Debug Layer")
-    {
-    }
-
-    ~DebugLayer() override = default;
+    DebugLayer(bool enable_validation);
+    ~DebugLayer() noexcept override;
 
     OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
     OXYGEN_MAKE_NON_MOVABLE(DebugLayer);

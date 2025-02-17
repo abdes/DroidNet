@@ -6,10 +6,12 @@
 
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
+#include <array>
 #include <iomanip>
 #include <sstream>
 
 #include <dxgi1_6.h>
+#include <fmt/format.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Graphics/Common/GraphicsModule.h>
@@ -18,7 +20,6 @@
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -71,7 +72,7 @@ auto GetMainDevice() -> DeviceType*
 auto GetRenderer() -> Renderer&
 {
     CHECK_NOTNULL_F(GetBackendInternal());
-    const auto renderer = static_cast<Renderer*>(GetBackendInternal()->GetRenderer());
+    auto* const renderer = static_cast<Renderer*>(GetBackendInternal()->GetRenderer());
     CHECK_NOTNULL_F(renderer);
     return *renderer;
 }
@@ -113,9 +114,12 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace {
 #if defined(_DEBUG)
-auto GetDebugLayerInternal() -> oxygen::graphics::d3d12::DebugLayer&
+using oxygen::graphics::d3d12::DebugLayer;
+
+auto GetDebugLayerInternal() -> std::unique_ptr<DebugLayer>&
 {
-    static oxygen::graphics::d3d12::DebugLayer debug_layer {};
+    static std::unique_ptr<DebugLayer> debug_layer {};
+
     return debug_layer;
 }
 #endif
@@ -134,7 +138,11 @@ struct AdapterDesc {
     D3D_FEATURE_LEVEL max_feature_level { D3D_FEATURE_LEVEL_11_0 };
 };
 
-std::vector<AdapterDesc> adapters;
+auto GetAdaptersInternal() -> std::vector<AdapterDesc>&
+{
+    static std::vector<AdapterDesc> adapters {};
+    return adapters;
+}
 
 auto CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter) -> bool
 {
@@ -145,7 +153,16 @@ auto CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter) -> bool
 auto CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter) -> AdapterDesc
 {
     std::string description {};
-    oxygen::string_utils::WideToUtf8(desc.Description, description);
+
+    // Get array size from DXGI_ADAPTER_DESC1 structure at compile time
+    constexpr size_t kDescriptionLength = std::extent_v<decltype(DXGI_ADAPTER_DESC1::Description)>;
+    // Verify string is null-terminated within the array bounds
+    DCHECK_NOTNULL_F(std::char_traits<wchar_t>::find(&desc.Description[0], kDescriptionLength, L'\0'),
+        "Adapter description is not null-terminated");
+
+    std::span<const wchar_t> desc_span(desc.Description);
+    oxygen::string_utils::WideToUtf8(desc_span.data(), description);
+
     AdapterDesc adapter_info {
         .name = description,
         .vendor_id = desc.VendorId,
@@ -158,13 +175,15 @@ auto CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter
 
 auto FormatMemorySize(const size_t memory_size) -> std::string
 {
-    std::ostringstream oss;
-    if (memory_size >= (1ULL << 30)) {
-        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ULL << 30)) << " GB";
-    } else {
-        oss << std::fixed << std::setprecision(2) << (static_cast<double>(memory_size) / (1ULL << 20)) << " MB";
+    constexpr size_t kBitsPerGigabyte = 30;
+    constexpr size_t kBitsPerMegabyte = 20;
+
+    if (memory_size >= (1ULL << kBitsPerGigabyte)) {
+        return fmt::format("{:.2f} GB",
+            static_cast<double>(memory_size) / (1ULL << kBitsPerGigabyte));
     }
-    return oss.str();
+    return fmt::format("{:.2f} MB",
+        static_cast<double>(memory_size) / (1ULL << kBitsPerMegabyte));
 }
 
 auto FeatureLevelToString(const D3D_FEATURE_LEVEL feature_level) -> std::string
@@ -188,7 +207,7 @@ auto FeatureLevelToString(const D3D_FEATURE_LEVEL feature_level) -> std::string
 void LogAdapters()
 {
     std::ranges::for_each(
-        adapters,
+        GetAdaptersInternal(),
         [](const AdapterDesc& a) {
             LOG_F(INFO, "[{}] {} {} ({}-{})", "+", a.name, FormatMemorySize(a.dedicated_memory), a.vendor_id, a.device_id);
             LOG_F(INFO, "  Meets Feature Level: {}", a.meets_feature_level);
@@ -196,10 +215,9 @@ void LogAdapters()
             LOG_F(INFO, "  Max Feature Level: {}", FeatureLevelToString(a.max_feature_level));
         });
 }
-
 auto GetMaxFeatureLevel(const ComPtr<DeviceType>& device) -> D3D_FEATURE_LEVEL
 {
-    static constexpr D3D_FEATURE_LEVEL feature_levels[] = {
+    static constexpr std::array feature_levels {
         D3D_FEATURE_LEVEL_12_2,
         D3D_FEATURE_LEVEL_12_1,
         D3D_FEATURE_LEVEL_12_0,
@@ -208,8 +226,8 @@ auto GetMaxFeatureLevel(const ComPtr<DeviceType>& device) -> D3D_FEATURE_LEVEL
     };
 
     D3D12_FEATURE_DATA_FEATURE_LEVELS feature_level_info = {};
-    feature_level_info.NumFeatureLevels = _countof(feature_levels);
-    feature_level_info.pFeatureLevelsRequested = feature_levels;
+    feature_level_info.NumFeatureLevels = static_cast<UINT>(feature_levels.size());
+    feature_level_info.pFeatureLevelsRequested = feature_levels.data();
 
     if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &feature_level_info, sizeof(feature_level_info)))) {
         return feature_level_info.MaxSupportedFeatureLevel;
@@ -235,6 +253,9 @@ auto DiscoverAdapters(
 {
     LOG_SCOPE_FUNCTION(INFO);
 
+    auto& adapters = GetAdaptersInternal();
+    adapters.clear(); // Clear any previous entries
+
     ComPtr<IDXGIAdapter1> selected_adapter;
     size_t selected_adapter_index = std::numeric_limits<size_t>::max();
     ComPtr<IDXGIAdapter1> adapter;
@@ -246,7 +267,7 @@ auto DiscoverAdapters(
         DXGI_ADAPTER_DESC1 desc;
         ThrowOnFailed(adapter->GetDesc1(&desc));
 
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
+        if ((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0U) {
             // Don't select the Basic Render Driver adapter.
             continue;
         }
@@ -260,7 +281,7 @@ auto DiscoverAdapters(
             adapter_info.max_feature_level = GetMaxFeatureLevel(device);
             if (selector(adapter_info)) {
                 // Select the adapter with the most dedicated memory
-                if (!selected_adapter
+                if ((selected_adapter == nullptr)
                     || adapter_info.dedicated_memory > adapters.at(selected_adapter_index).dedicated_memory) {
                     selected_adapter = adapter;
                     selected_adapter_index = adapters.size();
@@ -312,12 +333,14 @@ void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBac
         [](const AdapterDesc& adapter) {
             return adapter.meets_feature_level && adapter.has_connected_display;
         });
-    const auto& best_adapter_desc = adapters[best_adapter_index];
+    const auto& best_adapter_desc = GetAdaptersInternal()[best_adapter_index];
     LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
 
 #if defined(_DEBUG)
-    // Initialize the Debug Layer and GPU-based validation
-    GetDebugLayerInternal().Initialize(props.enable_debug, props.enable_validation);
+    if (props.enable_debug) {
+        // Initialize the Debug Layer and GPU-based validation
+        GetDebugLayerInternal() = std::make_unique<DebugLayer>(props.enable_validation);
+    }
 #endif
 
     // Create the device with the maximum feature level of the selected adapter
@@ -351,7 +374,7 @@ void Graphics::ShutdownGraphicsBackend()
     LOG_F(INFO, "D3D12 Main Device reset");
 
 #if defined(_DEBUG)
-    GetDebugLayerInternal().Shutdown();
+    GetDebugLayerInternal().reset();
 #endif
 }
 

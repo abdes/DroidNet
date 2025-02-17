@@ -56,7 +56,7 @@ void Buffer::Initialize(const BufferInitInfo& init_info)
 
 void Buffer::Release() noexcept
 {
-    if (allocation_) {
+    if (allocation_ != nullptr) {
         allocation_->Release();
         allocation_ = nullptr;
     }
@@ -65,7 +65,7 @@ void Buffer::Release() noexcept
     should_release_ = false;
 }
 
-void* Buffer::Map()
+auto Buffer::Map() -> void*
 {
     void* mappedData;
     D3D12_RANGE readRange = { 0, 0 };

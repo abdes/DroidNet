@@ -96,9 +96,9 @@ void CommandList::ReleaseCommandList() noexcept
 {
     auto& renderer = GetRenderer();
     // TODO: refactor into a macro
-    if (command_allocator_)
+    if (command_allocator_ != nullptr)
         DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());
-    if (command_list_)
+    if (command_list_ != nullptr)
         DeferredObjectRelease(command_list_, renderer.GetPerFrameResourceManager());
 }
 

@@ -19,8 +19,8 @@ using oxygen::TypeId;
 using ComponentsCollection = std::vector<std::unique_ptr<Component>>;
 
 struct Composition::ComponentManager {
-    ComponentsCollection components_ {};
-    std::unordered_map<TypeId, size_t> component_index_ {};
+    ComponentsCollection components_;
+    std::unordered_map<TypeId, size_t> component_index_;
 };
 
 Composition::~Composition() noexcept
@@ -234,13 +234,13 @@ auto Composition::Iterator<ValueType>::operator++(int) -> Iterator
 }
 
 template <typename ValueType>
-bool Composition::Iterator<ValueType>::operator==(const Iterator& other) const
+auto Composition::Iterator<ValueType>::operator==(const Iterator& other) const -> bool
 {
     return pos_ == other.pos_;
 }
 
 template <typename ValueType>
-bool Composition::Iterator<ValueType>::operator!=(const Iterator& other) const
+auto Composition::Iterator<ValueType>::operator!=(const Iterator& other) const -> bool
 {
     return !(*this == other);
 }
