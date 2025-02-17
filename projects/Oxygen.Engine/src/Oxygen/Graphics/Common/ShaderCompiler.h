@@ -70,7 +70,7 @@ public:
      \return A unique pointer to the shader byte code; `nullptr` if the shader
              could not be compiled.
     */
-    OXYGEN_GFX_API [[nodiscard]] virtual auto CompileFromFile(
+   [[nodiscard]] OXYGEN_GFX_API virtual auto CompileFromFile(
         const std::filesystem::path& shader_full_path,
         const ShaderProfile& shader_profile) const -> std::unique_ptr<IShaderByteCode>;
 
