@@ -23,4 +23,6 @@ Checks: >
 CheckOptions:
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: true
+
+HeaderFilterRegex: '.*(?<!signal\.hpp)$'
 ...

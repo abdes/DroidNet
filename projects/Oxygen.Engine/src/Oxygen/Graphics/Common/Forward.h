@@ -32,6 +32,7 @@ namespace graphics {
     class PerFrameResourceManager;
     class RenderTarget;
     class ShaderCompiler;
+    class Surface;
     class SynchronizationCounter;
     class WindowSurface;
 

@@ -469,7 +469,7 @@ auto Shared<Awaitable>::Get() const -> Awaitable*
 }
 
 template <class Awaitable> //
-auto Shared<Awaitable>::operator co_await() -> co::Awaitable auto
+auto Shared<Awaitable>::operator co_await() -> co::Awaiter auto
 {
     return Awaiter(state_);
 }

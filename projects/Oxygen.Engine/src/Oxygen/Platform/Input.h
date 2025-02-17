@@ -201,11 +201,9 @@ public:
 
     friend class InputSlots;
 
-    OXYGEN_PLATFORM_API
-    [[nodiscard]] auto GetDisplayString() const -> std::string_view;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto GetDisplayString() const -> std::string_view;
 
-    OXYGEN_PLATFORM_API
-    [[nodiscard]] auto GetInputCategoryName() const -> std::string_view;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto GetInputCategoryName() const -> std::string_view;
 
     friend auto operator==(const InputSlot& lhs, const InputSlot& rhs) -> bool
     {
