@@ -15,7 +15,6 @@
 #include <wrl/client.h>
 
 #include <Oxygen/Graphics/Common/GraphicsModule.h>
-#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
@@ -111,19 +110,6 @@ using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::NameObject;
 using oxygen::windows::ThrowOnFailed;
-
-namespace {
-#if defined(_DEBUG)
-using oxygen::graphics::d3d12::DebugLayer;
-
-auto GetDebugLayerInternal() -> std::unique_ptr<DebugLayer>&
-{
-    static std::unique_ptr<DebugLayer> debug_layer {};
-
-    return debug_layer;
-}
-#endif
-} // namespace
 
 // Anonymous namespace for adapter discovery helper functions
 namespace {
@@ -336,13 +322,6 @@ void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBac
     const auto& best_adapter_desc = GetAdaptersInternal()[best_adapter_index];
     LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
 
-#if defined(_DEBUG)
-    if (props.enable_debug) {
-        // Initialize the Debug Layer and GPU-based validation
-        GetDebugLayerInternal() = std::make_unique<DebugLayer>(props.enable_validation);
-    }
-#endif
-
     // Create the device with the maximum feature level of the selected adapter
     ThrowOnFailed(
         D3D12CreateDevice(
@@ -372,10 +351,6 @@ void Graphics::ShutdownGraphicsBackend()
 
     CHECK_EQ_F(main_device_.Reset(), 0U);
     LOG_F(INFO, "D3D12 Main Device reset");
-
-#if defined(_DEBUG)
-    GetDebugLayerInternal().reset();
-#endif
 }
 
 auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
