@@ -70,7 +70,6 @@ target_sources(
     "CommandQueue.cpp"
     "CommandRecorder.cpp"
     "D3D12MemAlloc.cpp"
-    "DebugLayer.cpp"
     "Fence.cpp"
     "Graphics.cpp"
     "MemoryBlock.cpp"
@@ -83,7 +82,11 @@ target_sources(
     "Detail/dx12_utils.h"
     "Detail/SwapChain.cpp"
     "Detail/SwapChain.h"
+    "Detail/Types.h"
     "Detail/WindowSurface.h"
+    "Devices/DebugLayer.cpp"
+    "Devices/DebugLayer.h"
+    "Devices/DeviceManager.cpp"
     "ImGui/imgui_impl_dx12.cpp"
     "ImGui/imgui_impl_dx12.h"
     "ImGui/ImGuiModule.cpp"
@@ -99,7 +102,6 @@ target_sources(
       "Constants.h"
       "D3D12MemAlloc.h"
       "D3DResource.h"
-      "DebugLayer.h"
       "DeferredObjectRelease.h"
       "Fence.h"
       "Forward.h"
@@ -110,7 +112,9 @@ target_sources(
       "ShaderCompiler.h"
       "Texture.h"
       "ImGui/ImGuiModule.h"
-)
+
+      "Devices/DeviceManager.h"
+      )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

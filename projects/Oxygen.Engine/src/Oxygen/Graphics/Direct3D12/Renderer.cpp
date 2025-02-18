@@ -36,7 +36,6 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
-#include <Oxygen/Graphics/Direct3D12/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
