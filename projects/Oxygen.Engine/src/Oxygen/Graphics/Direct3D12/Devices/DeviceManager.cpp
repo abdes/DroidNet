@@ -24,7 +24,7 @@
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Base/Windows/ComError.h>
-#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
