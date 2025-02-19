@@ -16,6 +16,7 @@
 
 #  include <comdef.h>
 
+#  include <Oxygen/Base/StringTypes.h>
 #  include <Oxygen/Base/StringUtils.h>
 #  include <Oxygen/Base/api_export.h>
 
@@ -54,10 +55,6 @@ public:
     [[nodiscard]] OXYGEN_BASE_API auto message(int hr) const -> std::string override;
 };
 
-// Any form of a string, UTF-8 string or wide string
-template <typename T>
-concept StringType = std::convertible_to<T, std::string_view> || std::convertible_to<T, std::u8string_view> || std::convertible_to<T, std::wstring_view>;
-
 // ComError class derived from std::system_error
 class ComError final : public std::system_error {
 public:
@@ -71,22 +68,21 @@ public:
     {
     }
 
-    ComError(ComErrorEnum error_code, const std::string& msg)
-        : std::system_error(static_cast<int>(error_code), ComCategory(), msg)
+    ComError(ComErrorEnum error_code, std::string msg)
+        : std::system_error(static_cast<int>(error_code), ComCategory(), std::move(msg))
     {
     }
 
-    static void __declspec(noreturn) Throw(const ComErrorEnum error_code, const std::string& utf8_message)
+    static void __declspec(noreturn) Throw(const ComErrorEnum error_code, std::string utf8_message)
     {
-        throw ComError(error_code, utf8_message);
+        throw ComError(error_code, std::move(utf8_message));
     }
 
     auto GetHR() const noexcept -> HRESULT { return code().value(); }
 
-    [[nodiscard]] OXYGEN_BASE_API auto what() const noexcept -> const char* override;
-
-private:
-    mutable std::optional<std::string> message_;
+    //
+    // private:
+    //    mutable std::optional<std::string> message_;
 };
 
 namespace detail {
@@ -101,7 +97,7 @@ namespace detail {
     };
 
     // Function to handle COM errors
-    template <StringType T>
+    template <oxygen::string_utils::StringType T>
     void HandleComError(const HRESULT hr, T message = nullptr)
     {
         std::string utf8_message {};
@@ -121,7 +117,7 @@ namespace detail {
 } // namespace detail
 
 // Inline function to call a function and check the HRESULT
-template <StringType T>
+template <oxygen::string_utils::StringType T>
 void ThrowOnFailed(const HRESULT hr, T message)
 {
     if (FAILED(hr)) {

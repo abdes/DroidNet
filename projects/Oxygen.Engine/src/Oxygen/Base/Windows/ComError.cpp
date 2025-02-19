@@ -7,12 +7,22 @@
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
+#  include <exception>
 #  include <memory>
+#  include <span>
+#  include <string>
+#  include <system_error>
+#  include <type_traits>
+
+#  include <WTypesbase.h>
+#  include <Windows.h>
+#  include <comdef.h>
+#  include <oaidl.h>
+#  include <oleauto.h>
 
 #  include <fmt/format.h>
 
 #  include <Oxygen/Base/Logging.h>
-#  include <Oxygen/Base/StringUtils.h>
 #  include <Oxygen/Base/Windows/ComError.h>
 
 using oxygen::string_utils::WideToUtf8;
@@ -28,36 +38,29 @@ auto GetComErrorMessage(const HRESULT hr, IErrorInfo* help) -> std::string
         if (info) {
             // Try to get the description of the error. If it fails, we cannot do
             // anything about it.
-            [[maybe_unused]]
-            auto _
-                = info->GetDescription(&description);
+            [[maybe_unused]] auto _ = info->GetDescription(&description);
         }
         return { description, &SysFreeString };
     };
 
-    ComStringPtr&& description = get_description(help);
-    if (const unsigned int length = description ? SysStringLen(description.get()) : 0) {
-        const unsigned int n = length;
-        const OLECHAR ch0 = std::exchange(description[0], L'\0');
-        for (;;) {
-            if (description[n - 1] == L'\r' || description[n - 1] == L'\n' || description[n - 1] == L'.') {
-                continue;
-            }
-            break;
-        }
-        description[0] = ch0;
-        if (n < length) {
-            description[n] = L'\0';
+    ComStringPtr description = get_description(help);
+    if (description != nullptr) {
+        unsigned int length = SysStringLen(description.get());
+        std::span<OLECHAR> description_span(description.get(), length);
+
+        // Trim trailing whitespace and periods
+        while (!description_span.empty() && (description_span.back() == L'\r' || description_span.back() == L'\n' || description_span.back() == L'.')) {
+            description_span = description_span.first(description_span.size() - 1);
         }
 
-        std::string utf_8description;
+        std::string utf8_description;
         try {
-            WideToUtf8(description.get(), utf_8description);
+            WideToUtf8(std::wstring(description_span.data(), description_span.size()), utf8_description);
         } catch (const std::exception& e) {
             LOG_F(WARNING, "Failed to convert wide string to UTF-8: {}", e.what());
-            utf_8description.append("__not_available__ (").append(e.what()).append(")");
+            utf8_description.append("__not_available__ (").append(e.what()).append(")");
         }
-        return utf_8description;
+        return utf8_description;
     }
 
     std::string utf8_error_message;
@@ -90,11 +93,6 @@ auto oxygen::windows::ComErrorCategory::message(const int hr) const -> std::stri
     return utf8_message;
 }
 
-auto oxygen::windows::ComError::what() const noexcept -> const char*
-{
-    return (!message_) ? std::system_error::what() : message_->c_str();
-}
-
 void oxygen::windows::detail::HandleComErrorImpl(HRESULT hr, const std::string& utf8_message)
 {
     if (!utf8_message.empty()) {
@@ -109,13 +107,13 @@ void oxygen::windows::detail::HandleComErrorImpl(HRESULT hr, const std::string& 
         if (const auto err_info_hr = GetErrorInfo(0, &p_error_info); err_info_hr == S_OK) {
             // Retrieve error information
             error_message.assign(GetComErrorMessage(hr, p_error_info));
-            LOG_F(ERROR, "COM Error: 0x{:x} - {}", hr, error_message);
+            DLOG_F(1, "COM Error: 0x{:08X} - {}", static_cast<unsigned long>(hr), error_message);
             p_error_info->Release();
         } else {
-            error_message.assign(fmt::format("COM Error: 0x{:x} - (no description)", hr));
-            LOG_F(ERROR, "COM Error: 0x{:x} - (no description)", hr);
+            error_message.assign(fmt::format("COM Error: 0x{:08X}", static_cast<unsigned long>(hr)));
+            DLOG_F(1, "{}", error_message);
         }
-        ComError::Throw(static_cast<ComErrorEnum>(hr), error_message);
+        ComError::Throw(static_cast<ComErrorEnum>(hr), std::move(error_message));
     }
 }
 
