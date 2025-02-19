@@ -65,7 +65,7 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Buffer.cpp"
+    "Resources/Buffer.cpp"
     "CommandList.cpp"
     "CommandQueue.cpp"
     "CommandRecorder.cpp"
@@ -75,9 +75,9 @@ target_sources(
     "MemoryBlock.cpp"
     "Renderer.cpp"
     "ShaderCompiler.cpp"
-    "Texture.cpp"
-    "Detail/DescriptorHeap.cpp"
-    "Detail/DescriptorHeap.h"
+    "Resources/Texture.cpp"
+    "Resources/DescriptorHeap.cpp"
+    "Resources/DescriptorHeap.h"
     "Detail/dx12_utils.cpp"
     "Detail/dx12_utils.h"
     "Detail/SwapChain.cpp"
@@ -95,14 +95,14 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "Buffer.h"
+      "Resources/Buffer.h"
       "CommandList.h"
       "CommandQueue.h"
       "CommandRecorder.h"
       "Constants.h"
       "Allocator/D3D12MemAlloc.h"
-      "D3DResource.h"
-      "DeferredObjectRelease.h"
+      "Resources/D3DResource.h"
+      "Resources/DeferredObjectRelease.h"
       "Fence.h"
       "Forward.h"
       "Graphics.h"
@@ -110,7 +110,7 @@ target_sources(
       "Renderer.h"
       "RenderTarget.h"
       "ShaderCompiler.h"
-      "Texture.h"
+      "Resources/Texture.h"
       "ImGui/ImGuiModule.h"
       "Devices/DeviceManager.h"
       )

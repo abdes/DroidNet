@@ -35,6 +35,44 @@ Hardware interface and capability management.
     - D3D12: CheckFeatureSupport for capabilities
     - Vulkan: Physical device feature queries and extensions
 
+#### 🔍 Debugger
+Development and profiling tools.
+- **Core Responsibilities**:
+  - **Performance Analysis**
+    - D3D12: PIX integration
+    - Vulkan: Validation layers
+
+  - **Resource Tracking**
+    - Memory allocation tracking
+    - Resource lifetime monitoring
+
+  - **Validation**
+    - D3D12: Debug layer
+    - Vulkan: Validation layers
+
+  - **Profiling**
+    - GPU timestamp queries
+    - Pipeline statistics
+
+#### 💾 Allocator
+GPU memory management system.
+- **Core Responsibilities**:
+  - **Memory Allocation**
+    - D3D12: Heap allocation and suballocation
+    - Vulkan: Memory type selection and allocation
+
+  - **Resource Placement**
+    - D3D12: Custom heap selection and residency
+    - Vulkan: Memory binding and device-local allocation
+
+  - **Defragmentation**
+    - D3D12: Resource migration and compaction
+    - Vulkan: Memory defragmentation and compaction
+
+  - **Pool Management**
+    - D3D12: Resource heap pooling
+    - Vulkan: Memory pool management
+
 #### 📦 Resources
 Resource creation and state tracking.
 - **Core Responsibilities**:
@@ -73,25 +111,6 @@ Pipeline state and binding management.
     - D3D12: Pipeline library support
     - Vulkan: Pipeline derivatives and specialization constants
 
-#### 💾 Allocator
-GPU memory management system.
-- **Core Responsibilities**:
-  - **Memory Allocation**
-    - D3D12: Heap allocation and suballocation
-    - Vulkan: Memory type selection and allocation
-
-  - **Resource Placement**
-    - D3D12: Custom heap selection and residency
-    - Vulkan: Memory binding and device-local allocation
-
-  - **Defragmentation**
-    - D3D12: Resource migration and compaction
-    - Vulkan: Memory defragmentation and compaction
-
-  - **Pool Management**
-    - D3D12: Resource heap pooling
-    - Vulkan: Memory pool management
-
 #### 🔄 Coordinator
 Command generation and synchronization.
 - **Core Responsibilities**:
@@ -129,25 +148,6 @@ Command submission and execution.
   - **Synchronization**
     - D3D12: Fence-based sync
     - Vulkan: Semaphore/fence coordination
-
-#### 🔍 Debugger
-Development and profiling tools.
-- **Core Responsibilities**:
-  - **Performance Analysis**
-    - D3D12: PIX integration
-    - Vulkan: Validation layers
-
-  - **Resource Tracking**
-    - Memory allocation tracking
-    - Resource lifetime monitoring
-
-  - **Validation**
-    - D3D12: Debug layer
-    - Vulkan: Validation layers
-
-  - **Profiling**
-    - GPU timestamp queries
-    - Pipeline statistics
 
 #### 🎬 Renderer [Refined]
 Display and presentation system.
