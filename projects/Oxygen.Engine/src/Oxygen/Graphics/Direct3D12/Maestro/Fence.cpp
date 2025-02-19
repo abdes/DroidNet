@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Fence.h>
+#include <Oxygen/Graphics/Direct3D12/Maestro/Fence.h>
 
 #include <stdexcept>
 
@@ -13,7 +13,7 @@
 
 using oxygen::windows::ThrowOnFailed;
 
-using namespace oxygen::graphics::d3d12;
+using oxygen::graphics::d3d12::Fence;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
@@ -28,7 +28,7 @@ void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
     fence_ = raw_fence;
 
     fence_event_ = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!fence_event_) {
+    if (fence_event_ == nullptr) {
         DLOG_F(ERROR, "Failed to create fence event");
         ReleaseSynchronizationObject();
         windows::WindowsException::ThrowFromLastError();
@@ -37,8 +37,8 @@ void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 
 void Fence::ReleaseSynchronizationObject() noexcept
 {
-    if (fence_event_) {
-        if (!CloseHandle(fence_event_)) {
+    if (fence_event_ != nullptr) {
+        if (CloseHandle(fence_event_) == 0) {
             DLOG_F(WARNING, "Failed to close fence event handle");
         }
         fence_event_ = nullptr;

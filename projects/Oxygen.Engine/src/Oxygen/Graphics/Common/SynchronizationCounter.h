@@ -7,55 +7,58 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinDisposable.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 namespace oxygen::graphics {
 
 //! A synchronization counter, for a timeline oriented CPU-GPU command queue.
 /*!
-  The command queue is viewed as a sequence of commands that happen over time
-  (a timeline), and the counter is a way to synchronize the CPU and GPU on
-  this timeline.
+  The command queue is viewed as a sequence of commands that happen over time (a
+  timeline), and the counter is a way to synchronize the CPU and GPU on this
+  timeline.
 
-  To change the counter's value on the CPU side the `Signal()` methods are
-  used, and onb the GPU side, the `QueueSignalCommand()` method.
+  To change the counter's value on the CPU side the `Signal()` methods are used,
+  and onb the GPU side, the `QueueSignalCommand()` method.
 
-  To wait for the counter to reach a specific value, the `Wait()` method is
-  used on the CPU side, and the `QueueWaitCommand()` method on the GPU side.
+  To wait for the counter to reach a specific value, the `Wait()` method is used
+  on the CPU side, and the `QueueWaitCommand()` method on the GPU side.
 
   In a typical usage example, the `Signal()` method is called to increment the
   counter value on the CPU side by `1`, immediately followed by a call to
-  `QueueSignalCommand()` with the returned value to queue a Signal command,
-  and then finally wait for the work to be completed.
+  `QueueSignalCommand()` with the returned value to queue a Signal command, and
+  then finally wait for the work to be completed.
 
-  A more advanced usage could would involve holding the GPU until the counter
-  reaches a certain value on the GPU side, then signaling work completion. The
-  interface leaves the flexibility of how to structure the work submission and
-  execution to the user.
+  A more advanced usage could involve holding the GPU until the counter reaches
+  a certain value on the GPU side, then signaling work completion. The interface
+  leaves the flexibility of how to structure the work submission and execution
+  to the user.
 */
-class SynchronizationCounter
-    : public Mixin<SynchronizationCounter,
-          Curry<MixinNamed, const char*>::mixin,
-          MixinDisposable,
-          MixinInitialize // last to consume remaining args
-          > {
+class SynchronizationCounter : public Composition, public Named {
 public:
-    //! Constructor to forward the arguments to the mixins in the chain.
-    template <typename... Args>
-    constexpr explicit SynchronizationCounter(Args&&... args)
-        : Mixin(std::forward<Args>(args)...)
+    explicit SynchronizationCounter(std::string_view name)
     {
+        AddComponent<ObjectMetaData>(name);
     }
 
     ~SynchronizationCounter() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(SynchronizationCounter);
     OXYGEN_MAKE_NON_MOVABLE(SynchronizationCounter);
+
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
+
+    void SetName(std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
 
     //! Set the counter to the specified value on the CPU side.
     /*!
@@ -101,37 +104,6 @@ public:
     //! Get the current value of the counter.
     //! \return  The last value signaled by the CPU.
     [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
-
-protected:
-    virtual void InitializeSynchronizationObject(uint64_t initial_value) = 0;
-    virtual void ReleaseSynchronizationObject() noexcept = 0;
-
-private:
-    void OnInitialize(const uint64_t initial_value)
-    {
-        if (this->self().ShouldRelease()) {
-            const auto msg = fmt::format("{} OnInitialize() called twice without calling Release()", this->self().ObjectName());
-            LOG_F(ERROR, "{}", msg);
-            throw std::runtime_error(msg);
-        }
-        try {
-            InitializeSynchronizationObject(initial_value);
-            this->self().ShouldRelease(true);
-        } catch (const std::exception& e) {
-            LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
-            throw;
-        }
-    }
-    template <typename Base, typename... CtorArgs>
-    friend class MixinInitialize; //< Allow access to OnInitialize.
-
-    void OnRelease() noexcept
-    {
-        ReleaseSynchronizationObject();
-        this->self().IsInitialized(false);
-    }
-    template <typename Base>
-    friend class MixinDisposable; //< Allow access to OnRelease.
 };
 
 } // namespace oxygen::graphics

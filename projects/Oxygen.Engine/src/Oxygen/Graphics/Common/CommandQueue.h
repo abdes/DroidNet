@@ -96,7 +96,6 @@ private:
             InitializeCommandQueue();
             fence_ = CreateSynchronizationCounter();
             CHECK_NOTNULL_F(fence_);
-            fence_->Initialize(0);
         } catch (const std::exception& e) {
             LOG_F(ERROR, "Failed to initialize {}: {}", this->self().ObjectName(), e.what());
             ObjectRelease(fence_);

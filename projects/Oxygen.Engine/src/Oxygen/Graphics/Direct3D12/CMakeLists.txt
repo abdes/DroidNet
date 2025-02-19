@@ -70,7 +70,7 @@ target_sources(
     "CommandQueue.cpp"
     "CommandRecorder.cpp"
     "Allocator/D3D12MemAlloc.cpp"
-    "Fence.cpp"
+    "Maestro/Fence.cpp"
     "Graphics.cpp"
     "MemoryBlock.cpp"
     "Renderer.cpp"
@@ -103,7 +103,7 @@ target_sources(
       "Allocator/D3D12MemAlloc.h"
       "Resources/D3DResource.h"
       "Resources/DeferredObjectRelease.h"
-      "Fence.h"
+      "Maestro/Fence.h"
       "Forward.h"
       "Graphics.h"
       "MemoryBlock.h"
@@ -113,7 +113,7 @@ target_sources(
       "Resources/Texture.h"
       "ImGui/ImGuiModule.h"
       "Devices/DeviceManager.h"
-      )
+)
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

@@ -21,15 +21,19 @@ public:
         : SynchronizationCounter("Fence")
         , command_queue_ { command_queue }
     {
+        InitializeSynchronizationObject(0);
     }
 
-    OXYGEN_D3D12_API ~Fence() override = default;
+    OXYGEN_D3D12_API ~Fence() override
+    {
+        ReleaseSynchronizationObject();
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(Fence);
     OXYGEN_MAKE_NON_MOVABLE(Fence);
 
     OXYGEN_D3D12_API void Signal(uint64_t value) const override;
-    OXYGEN_D3D12_API [[nodiscard]] uint64_t Signal() const override;
+    OXYGEN_D3D12_API [[nodiscard]] auto Signal() const -> uint64_t override;
     OXYGEN_D3D12_API void Wait(uint64_t value, std::chrono::milliseconds timeout) const override;
     OXYGEN_D3D12_API void Wait(uint64_t value) const override;
     OXYGEN_D3D12_API void QueueWaitCommand(uint64_t value) const override;
@@ -38,11 +42,10 @@ public:
     OXYGEN_D3D12_API [[nodiscard]] auto GetCompletedValue() const -> uint64_t override;
     [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return current_value_; }
 
-protected:
-    OXYGEN_D3D12_API void InitializeSynchronizationObject(uint64_t initial_value) override;
-    OXYGEN_D3D12_API void ReleaseSynchronizationObject() noexcept override;
-
 private:
+    void InitializeSynchronizationObject(uint64_t initial_value);
+    void ReleaseSynchronizationObject() noexcept;
+
     mutable uint64_t current_value_ { 0 };
 
     ID3DFenceV* fence_ { nullptr };

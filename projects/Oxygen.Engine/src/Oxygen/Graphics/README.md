@@ -73,6 +73,64 @@ GPU memory management system.
     - D3D12: Resource heap pooling
     - Vulkan: Memory pool management
 
+### 🔄 Maestro
+Below is a revised version of the Coordinator module section, refined to avoid
+overlap with other modules, limit its scope to coordination and synchronization
+for D3D12 and Vulkan, and provide only the services needed by higher-level
+engine components:
+
+#### Core Responsibilities
+
+- **Work Synchronization:**
+    - **Fence Management**
+      In Direct3D 12, create an **ID3D12Fence** for each command queue, then
+      signal or wait on specific fence values to coordinate when tasks begin or
+      end. The Coordinator tracks these fence values to ensure that each
+      subsystem’s work completes in the correct order and avoids unintended
+      overlaps.
+
+    - **Timeline Semaphores**
+      While D3D12 doesn’t provide native timeline semaphores (as Vulkan does),
+      the Coordinator can mimic timeline behavior by incrementing fence values
+      each submission and waiting on specific thresholds. This keeps multi-queue
+      workloads in sync without explicitly tying into resource operations.
+
+- **Execution Timeline Coordination:**
+    - **Global Timeline**
+      Maintain a global counter to represent the last completed segment of work.
+      Each time the Coordinator processes submitted tasks, it updates the fence
+      value and checks if any tasks depend on previous completions.
+    - **Dependency Graph**
+      If a subsystem needs other work to finish first, the Coordinator inserts
+      waits on the relevant fence value. This ensures the correct sequence of
+      steps—for instance, finishing a compute pass before a rendering pass that
+      consumes its results.
+
+- **Periodic Events Management:**
+    - **RenderFrameBegin**
+      The Coordinator triggers this event at the start of each frame, notifying
+      subsystems that it’s safe to queue up draw commands, refresh dynamic data,
+      or perform any pre-render setup.
+    - **RenderFrameEnd**
+      Once all rendering for the frame is submitted, the Coordinator signals the
+      *end* event. Higher-level logic may use this signal to handle post-frame
+      operations, like capturing frame stats or triggering GPU-side analytics.
+
+- **Frame Buffering and Vsync Management:**
+    - **Buffer Count Configuration**
+      For double or triple buffering, the Coordinator instructs the swap chain
+      (via `DXGI_SWAP_CHAIN_DESC1::BufferCount`) but doesn’t allocate or manage
+      the buffers itself—that remains with the Renderer module.
+    - **In-Flight Frames**
+      The Coordinator tracks fence values associated with each buffer to ensure
+      that the GPU has finished work on a given buffer before reusing it. This
+      prevents overwriting a buffer that’s still in use on the GPU.
+    - **Vsync Coordination**
+      Vsync is handled by specifying the correct swap chain parameters (e.g.,
+      sync interval for `Present`). The Coordinator ensures the present call
+      respects the selected intervals and that fences are signaled so the engine
+      smoothly proceeds to the next frame without tearing.
+
 #### 📦 Resources
 Resource creation and state tracking.
 - **Core Responsibilities**:
@@ -111,25 +169,6 @@ Pipeline state and binding management.
     - D3D12: Pipeline library support
     - Vulkan: Pipeline derivatives and specialization constants
 
-#### 🔄 Coordinator
-Command generation and synchronization.
-- **Core Responsibilities**:
-  - **Command Generation**
-    - D3D12: Multi-threaded command list recording
-    - Vulkan: Secondary command buffer generation
-
-  - **Work Synchronization**
-    - D3D12: Fence synchronization and timeline semaphores
-    - Vulkan: Semaphore and barrier coordination
-
-  - **Task Distribution**
-    - Thread pool management for command recording
-    - Work stealing queue implementation
-
-  - **Dependency Management**
-    - Resource access tracking
-    - Execution timeline coordination
-
 #### ⚡ Commander
 Command submission and execution.
 - **Core Responsibilities**:
@@ -139,17 +178,14 @@ Command submission and execution.
 
   - **Command Recording**
     - D3D12: Command list bundles
+    - D3D12: Multi-threaded command list recording
     - Vulkan: Secondary command buffers
 
   - **Queue Submission**
     - D3D12: Command list execution
     - Vulkan: Command buffer submission
 
-  - **Synchronization**
-    - D3D12: Fence-based sync
-    - Vulkan: Semaphore/fence coordination
-
-#### 🎬 Renderer [Refined]
+#### 🎬 Renderer
 Display and presentation system.
 - **Core Responsibilities**:
   - **Display Management**
