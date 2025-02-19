@@ -6,6 +6,7 @@
 
 #include <exception>
 #include <span>
+#include <string>
 
 #include <combaseapi.h>
 #include <d3d12.h>
@@ -13,14 +14,14 @@
 #include <dxgi1_3.h>
 #include <dxgidebug.h>
 #include <fmt/format.h>
-#include <minwindef.h>
-#include <winerror.h>
+#include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 
 using oxygen::graphics::d3d12::DebugLayer;
@@ -34,21 +35,18 @@ DebugLayer::DebugLayer(const bool enable_validation) noexcept
 
 DebugLayer::~DebugLayer() noexcept
 {
-#ifdef _DEBUG
-    if (dxgi_info_queue_ != nullptr) {
-        ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, 0));
-        ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 0));
-        ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, 0));
-    }
-#endif
+    LOG_SCOPE_FUNCTION(INFO);
 
-    PrintLiveObjectsReport();
+    if (::IsDebuggerPresent()) {
+        LOG_F(1, "report live objects (DebugOutput)");
+        PrintLiveObjectsReport();
+    }
 
     ObjectRelease(d3d12_debug_);
     ObjectRelease(dxgi_info_queue_);
     ObjectRelease(dxgi_debug_);
     ObjectRelease(dred_settings_);
-    ObjectRelease(dred_);
+    LOG_F(1, "release debug objects");
 }
 
 void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
@@ -68,11 +66,10 @@ void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
         dxgi_debug_->EnableLeakTrackingForThread();
 
         // Setup debugger breakpoints on errors and warnings
-#ifdef _DEBUG
-        if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
+#if !defined(NDEBUG)
+        if (::IsDebuggerPresent() && SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
             ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, 1));
             ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 1));
-            ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_WARNING, 1));
         }
 #endif
     } else {
@@ -316,9 +313,10 @@ void PrintPageFaultInfo(const D3D12_DRED_PAGE_FAULT_OUTPUT& page_fault) noexcept
 }
 } // anonymous namespace
 
-void DebugLayer::PrintDredReport() noexcept
+void DebugLayer::PrintDredReport(dx::IDevice* device) noexcept
 {
-    if (dred_ == nullptr) {
+    Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
+    if (!SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&dred)))) {
         return;
     }
 
@@ -327,7 +325,7 @@ void DebugLayer::PrintDredReport() noexcept
     D3D12_DRED_PAGE_FAULT_OUTPUT page_fault {};
     bool has_data = false;
 
-    if (SUCCEEDED(dred_->GetAutoBreadcrumbsOutput1(&breadcrumbs)) && breadcrumbs.pHeadAutoBreadcrumbNode != nullptr) {
+    if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&breadcrumbs)) && breadcrumbs.pHeadAutoBreadcrumbNode != nullptr) {
         LOG_SCOPE_F(INFO, "Command History");
 
         for (const auto* node = breadcrumbs.pHeadAutoBreadcrumbNode; node != nullptr; node = node->pNext) {
@@ -336,7 +334,7 @@ void DebugLayer::PrintDredReport() noexcept
         has_data = true;
     }
 
-    if (SUCCEEDED(dred_->GetPageFaultAllocationOutput(&page_fault))) {
+    if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&page_fault))) {
         PrintPageFaultInfo(page_fault);
         has_data = true;
     }

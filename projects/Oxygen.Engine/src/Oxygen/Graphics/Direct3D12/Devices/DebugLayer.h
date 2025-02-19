@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -27,7 +28,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
     OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
-    void PrintDredReport() noexcept;
+    void PrintDredReport(dx::IDevice* device) noexcept;
 
 private:
     void InitializeDebugLayer(bool enable_validation) noexcept;
@@ -38,7 +39,6 @@ private:
     IDXGIDebug1* dxgi_debug_ {};
     IDXGIInfoQueue* dxgi_info_queue_ {};
     ID3D12DeviceRemovedExtendedDataSettings* dred_settings_ {};
-    ID3D12DeviceRemovedExtendedData1* dred_ {};
 };
 
 } // namespace oxygen::graphics::d3d12

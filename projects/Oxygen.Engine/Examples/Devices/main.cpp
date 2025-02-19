@@ -6,6 +6,8 @@
 
 #include <cstdlib>
 
+#include <crtdbg.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 
@@ -50,10 +52,25 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
             .minFeatureLevel = D3D_FEATURE_LEVEL_12_0,
         };
         DeviceManager device_manager(props);
-        device_manager.SelectBestAdapter();
-        device_manager.SelectAdapter(device_manager.Adapters().back().UniqueId());
-        device_manager.SelectBestAdapter();
-        device_manager.SelectBestAdapter();
+
+        // Select adapter and add device removal handler
+        device_manager.SelectBestAdapter([]() {
+            LOG_F(INFO, "Device removal detected!");
+        });
+
+        // Get the device
+        auto* device = device_manager.Device();
+
+        // Trigger a device removal
+        device->GetDeviceRemovedReason(); // First call to check current state
+
+        // Force device removal through debug layer
+        device->RemoveDevice(); // This will trigger device removal
+
+        // Try to use the device again - this should trigger the removal handler
+        device_manager.SelectBestAdapter([]() {
+            LOG_F(INFO, "Device removal handler called");
+        });
     }
 
     LOG_F(INFO, "Exit with status: {}", status);
