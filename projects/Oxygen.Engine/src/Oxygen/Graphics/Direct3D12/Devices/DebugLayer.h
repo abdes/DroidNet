@@ -28,7 +28,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
     OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
-    void PrintDredReport(dx::IDevice* device) noexcept;
+    static void PrintDredReport(dx::IDevice* device) noexcept;
 
 private:
     void InitializeDebugLayer(bool enable_validation) noexcept;

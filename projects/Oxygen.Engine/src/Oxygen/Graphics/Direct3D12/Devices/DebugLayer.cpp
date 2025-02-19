@@ -37,7 +37,7 @@ DebugLayer::~DebugLayer() noexcept
 {
     LOG_SCOPE_FUNCTION(INFO);
 
-    if (::IsDebuggerPresent()) {
+    if (::IsDebuggerPresent() != 0) {
         LOG_F(1, "report live objects (DebugOutput)");
         PrintLiveObjectsReport();
     }
@@ -67,7 +67,7 @@ void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
 
         // Setup debugger breakpoints on errors and warnings
 #if !defined(NDEBUG)
-        if (::IsDebuggerPresent() && SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
+        if ((::IsDebuggerPresent() != 0) && SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
             ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, 1));
             ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 1));
         }
