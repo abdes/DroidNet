@@ -176,7 +176,7 @@ public:
         // Find the context matching the criteria
         auto it = std::ranges::find_if(contexts_,
             [&](const Context& context) {
-                return criteria(context.info);
+                return std::forward<Pred>(criteria)(context.info);
             });
 
         if (it == contexts_.end()) {
@@ -240,6 +240,9 @@ private:
         }
 
         OXYGEN_D3D12_API ~Context() noexcept;
+
+        OXYGEN_MAKE_NON_COPYABLE(Context)
+        OXYGEN_DEFAULT_MOVABLE(Context)
 
         [[nodiscard]] OXYGEN_D3D12_API auto IsHealthy() const -> bool;
     };
