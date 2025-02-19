@@ -24,7 +24,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>

@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/logging.h>
-#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::graphics::d3d12::MemoryBlock;

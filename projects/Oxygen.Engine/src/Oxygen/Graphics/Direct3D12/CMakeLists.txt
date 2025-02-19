@@ -69,7 +69,7 @@ target_sources(
     "CommandList.cpp"
     "CommandQueue.cpp"
     "CommandRecorder.cpp"
-    "D3D12MemAlloc.cpp"
+    "Allocator/D3D12MemAlloc.cpp"
     "Fence.cpp"
     "Graphics.cpp"
     "MemoryBlock.cpp"
@@ -100,7 +100,7 @@ target_sources(
       "CommandQueue.h"
       "CommandRecorder.h"
       "Constants.h"
-      "D3D12MemAlloc.h"
+      "Allocator/D3D12MemAlloc.h"
       "D3DResource.h"
       "DeferredObjectRelease.h"
       "Fence.h"
@@ -112,7 +112,6 @@ target_sources(
       "ShaderCompiler.h"
       "Texture.h"
       "ImGui/ImGuiModule.h"
-
       "Devices/DeviceManager.h"
       )
 

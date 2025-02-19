@@ -10,7 +10,9 @@
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 
-#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
+namespace D3D12MA {
+class Allocator;
+} // namespace D3D12MA
 
 namespace oxygen::graphics::d3d12 {
 
