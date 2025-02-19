@@ -10,7 +10,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
-#include <Oxygen/Graphics/Direct3D12/Fence.h>
+#include <Oxygen/Graphics/Direct3D12/Maestro/Fence.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DeferredObjectRelease.h>
 
 namespace {
