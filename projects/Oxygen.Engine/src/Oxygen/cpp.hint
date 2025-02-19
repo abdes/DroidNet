@@ -28,3 +28,7 @@
 #define OXYGEN_DEFAULT_MOVABLE(Type) Type(Type&&) = default; auto operator=(Type&&)->Type& = default;
 #define OXYGEN_COMPONENT(arg_type) protected: friend class oxygen::Composition; OXYGEN_TYPED(arg_type)
 #define OXYGEN_COMPONENT_REQUIRES(__VA_ARGS__) OXYGEN_COMPONENT_REQUIRES_WARN_(__VA_ARGS__)
+#define OXYGEN_BASE_API
+#define OXYGEN_BASE_API __declspec(dllexport)
+#define OXYGEN_BASE_API __declspec(dllimport)
+#define OXYGEN_BASE_API __attribute__((visibility("default")))

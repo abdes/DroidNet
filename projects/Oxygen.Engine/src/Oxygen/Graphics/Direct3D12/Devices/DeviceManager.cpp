@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <span>
@@ -20,11 +21,11 @@
 
 #include <fmt/format.h>
 
-#include "DeviceManager.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Unreachable.h>
-#include <Oxygen/Base/Windows/ComError.h> // needed for ThrowOnFailed
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Direct3D12/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
@@ -234,27 +235,6 @@ auto DeviceManager::GetAdapterScore(AdapterInfo& adapter) const -> int
     return score;
 }
 
-auto DeviceManager::SelectAdapter(const Context& adapter) -> bool
-{
-    LOG_SCOPE_FUNCTION(INFO);
-
-    if (&adapter != current_context_) {
-        // Find the context that matches the provided adapter
-        auto it = std::ranges::find_if(contexts_, [&](const Context& context) {
-            return &context == &adapter;
-        });
-        CHECK_F(it != contexts_.end());
-        auto* new_context = &(*it);
-        LOG_F(INFO, "requested: {} ({}healthy)", new_context->info.Name(), new_context->IsHealthy() ? "" : "not ");
-        if (new_context->IsHealthy() || InitializeContext(*new_context)) {
-            current_context_ = new_context;
-            return true;
-        }
-        return false;
-    }
-    return current_context_->IsHealthy() && CheckForDeviceLoss();
-}
-
 auto DeviceManager::InitializeContext(Context& context) const -> bool
 {
     LOG_SCOPE_F(INFO, "Setup Context");
@@ -293,7 +273,7 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
         return true;
     } catch (std::exception& ex) {
         LOG_F(ERROR, "Context initialization failed: {}", ex.what());
-        // Roolback the context
+        // Rollback the context
         context.device.Reset();
         context.allocator.Reset();
         context.commandQueues_.clear();
@@ -301,18 +281,9 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     }
 }
 
-auto DeviceManager::SelectBestAdapter() -> bool
+DeviceManager::Context::~Context() noexcept
 {
-    // Find the best adapter
-    auto it = std::ranges::find_if(contexts_, [](const Context& context) {
-        return context.info.IsBest();
-    });
-
-    if (it != contexts_.end()) {
-        return SelectAdapter(*it);
-    }
-    LOG_F(ERROR, "No suitable adapter found.");
-    return false;
+    LOG_F(INFO, "Context for: {} ({}active)", info.Name(), IsHealthy() ? "" : "not ");
 }
 
 auto DeviceManager::Context::IsHealthy() const -> bool
@@ -328,42 +299,33 @@ auto DeviceManager::Context::IsHealthy() const -> bool
     return true;
 }
 
-auto DeviceManager::CheckForDeviceLoss() -> bool
+auto DeviceManager::CheckForDeviceLoss(const Context& context) -> bool
 {
-    DCHECK_F(current_context_->IsHealthy(), "context is not healthy");
+    DCHECK_F(context.IsHealthy(), "context is not healthy");
 
-    // Check for device removal
-    HRESULT removedReason = current_context_->device->GetDeviceRemovedReason();
-    if (SUCCEEDED(removedReason)) {
+    try {
+        // Check for device removal
+        ThrowOnFailed(context.device->GetDeviceRemovedReason());
+        return false;
+    } catch (const oxygen::windows::ComError& ex) {
+        LOG_F(ERROR, "Device removed: {}", ex.what());
+        if (debug_layer_) {
+            debug_layer_->PrintDredReport(context.device.Get());
+        }
         return true;
     }
-
-    LOG_F(ERROR, "Device removed (reason: 0x{:08X})", static_cast<uint32_t>(removedReason));
-    if (debug_layer_) {
-        debug_layer_->PrintDredReport();
-    }
-    return RecoverFromDeviceLoss();
 }
 
-auto DeviceManager::RecoverFromDeviceLoss() -> bool
+auto DeviceManager::RecoverFromDeviceLoss(Context& context) -> bool
 {
     LOG_SCOPE_FUNCTION(INFO);
 
-    // TODO(abdes) Implement device loss notification A good compromise we are
-    // making is to only check for removal when the a context is selected. An
-    // application can pretty much do that at every frame or more frequently if
-    // needed. We can modify the SelectAdapter methods to accept an optional
-    // callable indicating that the application wants to react to device
-    // removal.
-
-    // NotifyDeviceLost(current_context_->info.luid);
-
     // Reset the context
-    current_context_->device.Reset();
-    current_context_->allocator.Reset();
-    current_context_->commandQueues_.clear();
+    context.device.Reset();
+    context.allocator.Reset();
+    context.commandQueues_.clear();
 
-    return InitializeContext(*current_context_);
+    return InitializeContext(context);
 }
 
 DeviceManager::DeviceManager(DeviceManagerDesc desc)
@@ -410,20 +372,4 @@ auto DeviceManager::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const -> dx::I
         return it->Get();
     }
     throw std::runtime_error("Command queue not found.");
-}
-
-auto DeviceManager::Device() const -> dx::IDevice*
-{
-    if (current_context_ == nullptr) {
-        throw std::runtime_error("No adapter selected.");
-    }
-    return current_context_->device.Get();
-}
-
-auto DeviceManager::Allocator() const -> D3D12MA::Allocator*
-{
-    if (current_context_ == nullptr) {
-        throw std::runtime_error("No adapter selected.");
-    }
-    return current_context_->allocator.Get();
 }
