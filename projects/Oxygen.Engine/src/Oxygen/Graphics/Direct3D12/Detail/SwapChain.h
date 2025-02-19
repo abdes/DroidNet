@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include "DescriptorHeap.h"
-
 #include <cstdint>
 
 #include <d3d12.h>
@@ -21,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 namespace oxygen::graphics::d3d12::detail {
 

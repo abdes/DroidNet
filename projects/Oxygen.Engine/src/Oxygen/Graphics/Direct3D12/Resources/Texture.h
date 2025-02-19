@@ -13,8 +13,8 @@
 #include <Oxygen/Base/Mixin.h>
 #include <Oxygen/Base/MixinDisposable.h>
 #include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Graphics/Direct3D12/D3DResource.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/D3DResource.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 namespace oxygen::graphics::d3d12 {
 

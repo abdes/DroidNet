@@ -15,8 +15,7 @@
 #include <Oxygen/Base/MixinNamed.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
-#include <Oxygen/Graphics/Direct3D12/D3DResource.h>
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/D3DResource.h>
 
 namespace oxygen::graphics::d3d12 {
 
