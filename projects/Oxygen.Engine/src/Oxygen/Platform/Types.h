@@ -33,4 +33,4 @@ namespace platform {
 
 } // namespace platform
 
-} // namespace oxygen::platform
+} // namespace oxygen
