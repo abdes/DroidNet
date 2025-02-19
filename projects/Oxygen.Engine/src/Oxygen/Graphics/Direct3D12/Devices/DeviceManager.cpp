@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
 #include <exception>
 #include <memory>
 #include <span>
@@ -283,7 +282,12 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
 
 DeviceManager::Context::~Context() noexcept
 {
-    LOG_F(INFO, "Context for: {} ({}active)", info.Name(), IsHealthy() ? "" : "not ");
+    // The destructor may be called when the vector is constructing a new
+    // Context in place. In that case, the placeholder object in the vector was
+    // not initialized.
+    if (adapter != nullptr) {
+        LOG_F(INFO, "Releasing context for: {} ({}active)", info.Name(), IsHealthy() ? "" : "not ");
+    }
 }
 
 auto DeviceManager::Context::IsHealthy() const -> bool
@@ -310,7 +314,7 @@ auto DeviceManager::CheckForDeviceLoss(const Context& context) -> bool
     } catch (const oxygen::windows::ComError& ex) {
         LOG_F(ERROR, "Device removed: {}", ex.what());
         if (debug_layer_) {
-            debug_layer_->PrintDredReport(context.device.Get());
+            DebugLayer::PrintDredReport(context.device.Get());
         }
         return true;
     }
