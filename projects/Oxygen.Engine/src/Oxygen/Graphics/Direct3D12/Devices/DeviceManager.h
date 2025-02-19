@@ -244,7 +244,7 @@ private:
         OXYGEN_MAKE_NON_COPYABLE(Context)
         OXYGEN_DEFAULT_MOVABLE(Context)
 
-        [[nodiscard]] OXYGEN_D3D12_API auto IsHealthy() const -> bool;
+        [[nodiscard]] OXYGEN_D3D12_API auto IsActive() const -> bool;
     };
 
     void InitializeFactory();
@@ -259,14 +259,14 @@ private:
         LOG_F(INFO, "requested: {}", new_context.info.Name());
 
         // If the context we want to select is not active, initialize it
-        auto context_is_active = new_context.IsHealthy();
+        auto context_is_active = new_context.IsActive();
         LOG_IF_F(INFO, !context_is_active, "(not active)");
         if (!context_is_active) {
             if (!InitializeContext(new_context)) {
                 return false;
             }
         }
-        DCHECK_F(new_context.IsHealthy());
+        DCHECK_F(new_context.IsActive());
 
         // If we had a device loss, attempt to recover before you select the
         // context
@@ -279,7 +279,7 @@ private:
                 return false;
             }
         }
-        DCHECK_F(new_context.IsHealthy());
+        DCHECK_F(new_context.IsActive());
 
         current_context_ = &new_context;
         return true;
