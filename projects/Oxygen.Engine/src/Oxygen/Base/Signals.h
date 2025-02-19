@@ -6,4 +6,4 @@
 
 #pragma once
 
-#include "Detail/signal.hpp"
+#include <Oxygen/Base/Detail/signal.hpp>

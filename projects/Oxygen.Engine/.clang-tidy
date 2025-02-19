@@ -3,27 +3,21 @@ UseColor: true
 
 Checks: >
     bugprone-*,
-    clang-analyzer-*,
     cppcoreguidelines-*,
     google-*,
-    hicpp-*,
     modernize-*,
     performance-*,
     portability-*,
     readability-*,
-    -cppcoreguidelines-pro-type-static-cast-downcast,
-    -cppcoreguidelines-macro-usage,
-    -google-runtime-references
-    -hicpp-exception-baseclass,
-    -hicpp-signed-bitwise,
-    -readability-function-cognitive-complexity,
-    -used-but-marked-unused,
-    -*-pro-type-union-access,
     -readability-identifier-length,
+    -readability-convert-member-functions-to-static
+    -readability-function-cognitive-complexity
+    -readability-container-size-empty
 
 CheckOptions:
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: true
 
-HeaderFilterRegex: '.*(?<!signal\.hpp)$'
+HeaderFilterRegex: '^<Oxygen/.*>$'
+ExcludeHeaderFilterRegex: '<Oxygen/Base/Detail/signal\.hpp>$'
 ...
