@@ -286,11 +286,11 @@ DeviceManager::Context::~Context() noexcept
     // Context in place. In that case, the placeholder object in the vector was
     // not initialized.
     if (adapter != nullptr) {
-        LOG_F(INFO, "Releasing context for: {} ({}active)", info.Name(), IsHealthy() ? "" : "not ");
+        LOG_F(INFO, "Releasing context for: {} ({}active)", info.Name(), IsActive() ? "" : "not ");
     }
 }
 
-auto DeviceManager::Context::IsHealthy() const -> bool
+auto DeviceManager::Context::IsActive() const -> bool
 {
     DCHECK_F(adapter != nullptr, "context is bad");
     if (device == nullptr) {
@@ -305,7 +305,7 @@ auto DeviceManager::Context::IsHealthy() const -> bool
 
 auto DeviceManager::CheckForDeviceLoss(const Context& context) -> bool
 {
-    DCHECK_F(context.IsHealthy(), "context is not healthy");
+    DCHECK_F(context.IsActive(), "context is not healthy");
 
     try {
         // Check for device removal
