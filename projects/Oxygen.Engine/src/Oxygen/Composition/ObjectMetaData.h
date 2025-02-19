@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 
@@ -26,7 +27,17 @@ public:
     OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view { return name_; }
-    void SetName(const std::string_view name) { name_ = name; }
+    void SetName(const std::string_view name) noexcept
+    {
+        try {
+            name_ = name;
+        } catch (...) {
+            // Setting the name should not throw, unless not enough memory to
+            // allocate the new name. In such case, we can do nothing about it
+            // except aborting.
+            Unreachable();
+        }
+    }
 
     [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
