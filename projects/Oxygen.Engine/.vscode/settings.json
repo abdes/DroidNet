@@ -97,8 +97,14 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "numbers": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "*.ipp": "cpp",
+        "valarray": "cpp"
     },
+    "editor.rulers": [
+        80,
+        120
+    ],
     "Lua.diagnostics.globals": [
         "link_lib_suffix",
         "workspace_root"
@@ -122,4 +128,7 @@
     },
     "editor.formatOnSave": false,
     "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+    "C_Cpp.codeAnalysis.clangTidy.args": [
+        "--config-file=${workspaceFolder}/.clang-tidy"
+    ],
 }
