@@ -8,10 +8,10 @@
 #include <optional>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -23,45 +23,11 @@ namespace imgui {
     class ImguiModule;
 } // namespace imgui
 
-struct GraphicsBackendProperties {
-    //! Device selection guidance.
-    /*!
-      The graphics backend will try to select the most suitable GPU based on its
-      capabilities, but the selection can be influenced by the following
-      properties. Note that the properties are hints and if they cannot be
-      satisfied, the renderer will fall back to the default behavior.
-
-      \note The preferred_card_name and preferred_card_device_id are mutually
-      exclusive, and the name must point to a valid null terminated string with
-      an indefinite lifetime.
-    */
-    //! @{
-    std::string preferred_card_name {};
-    int32_t preferred_card_device_id { -1 };
-    //! @}
-
-    bool enable_debug { false }; //< Enable the backend debug layer.
-    bool enable_validation { false }; //< Enable GPU validation.
-
-    //! Optional renderer configuration properties. When not set, it indicates the
-    //! the engine is running renderer-less and the graphics backend will never
-    //! create a renderer instance.
-    std::optional<graphics::RendererProperties> renderer_props;
-};
-
-class Graphics
-    : public Mixin<Graphics,
-          Curry<MixinNamed, const char*>::mixin,
-          MixinShutdown,
-          MixinInitialize // last to consume remaining args
-          > {
+class Graphics : public Composition, public Named {
 public:
-    //! Constructor to forward the arguments to the mix-ins in the chain.
-    //! Requires at least a name argument.
-    template <typename... Args>
-    constexpr explicit Graphics(const char* name, Args&&... args)
-        : Mixin(name, std::forward<Args>(args)...)
+    explicit Graphics(const char* name)
     {
+        AddComponent<ObjectMetaData>(name);
     }
 
     ~Graphics() override = default;
@@ -69,7 +35,16 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_DEFAULT_MOVABLE(Graphics);
 
-    [[nodiscard]] constexpr bool IsWithoutRenderer() const { return is_renderer_less_; }
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
+    void SetName(std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
+
+    [[nodiscard]] bool IsWithoutRenderer() const { return is_renderer_less_; }
 
     //! Get the renderer instance for this graphics backend.
     /*!
@@ -96,22 +71,22 @@ public:
         = 0;
 
 protected:
-    //! Initialize the graphics backend module.
-    virtual void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) = 0;
-    //! Shutdown the graphics backend module.
-    virtual void ShutdownGraphicsBackend() = 0;
+    //     //! Initialize the graphics backend module.
+    //     virtual void InitializeGraphicsBackend(const SerializedBackendConfig& props) = 0;
+    //     //! Shutdown the graphics backend module.
+    //     virtual void ShutdownGraphicsBackend() = 0;
 
     //! Create a renderer for this graphics backend.
     virtual auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> = 0;
 
 private:
-    OXYGEN_GFX_API virtual void OnInitialize(PlatformPtr platform, const GraphicsBackendProperties& props);
-    template <typename Base, typename... CtorArgs>
-    friend class MixinInitialize; //< Allow access to OnInitialize.
+    // OXYGEN_GFX_API virtual void OnInitialize(const SerializedBackendConfig& props);
+    // template <typename Base, typename... CtorArgs>
+    // friend class MixinInitialize; //< Allow access to OnInitialize.
 
-    OXYGEN_GFX_API virtual void OnShutdown();
-    template <typename Base>
-    friend class MixinShutdown; //< Allow access to OnShutdown.
+    // OXYGEN_GFX_API virtual void OnShutdown();
+    // template <typename Base>
+    // friend class MixinShutdown; //< Allow access to OnShutdown.
 
     PlatformPtr platform_ {}; //< The platform abstraction layer.
 

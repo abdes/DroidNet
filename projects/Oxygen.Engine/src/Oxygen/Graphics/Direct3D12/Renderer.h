@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -50,7 +51,7 @@ public:
     [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
 
 protected:
-    void OnInitialize(PlatformPtr platform, const RendererProperties& props) override;
+    void OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*/) override;
     void OnShutdown() override;
 
     auto BeginFrame(const resources::SurfaceId& surface_id) -> const graphics::RenderTarget& override;

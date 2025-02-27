@@ -35,7 +35,7 @@ public:
     {
     }
 
-    virtual ~MixinRendererEvents() = default;
+    ~MixinRendererEvents() override = default;
 
     OXYGEN_DEFAULT_COPYABLE(MixinRendererEvents);
     OXYGEN_DEFAULT_MOVABLE(MixinRendererEvents);

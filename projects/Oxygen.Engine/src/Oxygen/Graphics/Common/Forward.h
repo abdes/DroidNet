@@ -19,9 +19,6 @@ using GraphicsPtr = std::weak_ptr<Graphics>;
 
 namespace graphics {
 
-    struct RendererProperties {
-        // TODO: add configuration properties for the renderer
-    };
     class Renderer;
 
     class Buffer;

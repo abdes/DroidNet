@@ -12,6 +12,8 @@
 
 #pragma once
 
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+
 // ----------------------------------------------------------------------------
 // Compiler detection
 // ----------------------------------------------------------------------------
@@ -683,3 +685,5 @@
  * }
  * ```
  */
+
+// NOLINTEND(cppcoreguidelines-macro-usage)

@@ -90,7 +90,7 @@ public:
 
     auto CurrentFrameIndex() const -> size_t { return current_frame_index_; }
 
-    void Init(const RendererProperties& props);
+    void Init(const GraphicsConfig& props);
     void ShutdownRenderer();
 
     auto BeginFrame(const resources::SurfaceId& surface_id) const
@@ -124,7 +124,7 @@ private:
     mutable DescriptorHeap uav_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descriptor Heap" };
 };
 
-void RendererImpl::Init(const RendererProperties& props)
+void RendererImpl::Init(const GraphicsConfig& props)
 {
     // Initialize the command recorder
     command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
@@ -292,12 +292,12 @@ auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride
     return buffer;
 }
 
-void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
+void Renderer::OnInitialize(/*PlatformPtr platform, const RendererProperties& props*/)
 {
     if (this->IsInitialized())
         OnShutdown();
 
-    graphics::Renderer::OnInitialize(std::move(platform), props);
+    graphics::Renderer::OnInitialize();
     pimpl_ = std::make_shared<detail::RendererImpl>();
     try {
         pimpl_->Init(GetInitProperties());

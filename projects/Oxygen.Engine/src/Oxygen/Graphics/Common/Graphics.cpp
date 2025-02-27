@@ -18,7 +18,6 @@ using oxygen::Graphics;
 
 auto Graphics::GetRenderer() const noexcept -> const graphics::Renderer*
 {
-    CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
     CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
     return renderer_.get();
@@ -26,7 +25,6 @@ auto Graphics::GetRenderer() const noexcept -> const graphics::Renderer*
 
 auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
 {
-    CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
     CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
     return renderer_.get();
@@ -34,33 +32,31 @@ auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
 
 auto Graphics::GetPerFrameResourceManager() const noexcept -> const graphics::PerFrameResourceManager&
 {
-    CHECK_F(this->IsInitialized(), "graphics backend has not been initialized before being used");
     CHECK_F(is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
     return renderer_->GetPerFrameResourceManager();
 }
 
-void Graphics::OnInitialize(PlatformPtr platform, const GraphicsBackendProperties& props)
-{
-    platform_ = std::move(platform);
+// void Graphics::OnInitialize(const SerializedBackendConfig& props)
+// {
+//     InitializeGraphicsBackend(props);
 
-    InitializeGraphicsBackend(platform_, props);
+//     // Create and initialize the renderer instance if we are not running renderer-less.
+//     // TODO(abdes): This is a temporary solution until we have a proper way to handle
+//     // if (!props.headless) {
+//     //     is_renderer_less_ = false;
+//     //     renderer_ = CreateRenderer();
+//     //     if (renderer_) {
+//     //         renderer_->Initialize(platform_, props);
+//     //     }
+//     // }
+// }
 
-    // Create and initialize the renderer instance if we are not running renderer-less.
-    if (props.renderer_props) {
-        is_renderer_less_ = false;
-        renderer_ = CreateRenderer();
-        if (renderer_) {
-            renderer_->Initialize(platform_, *props.renderer_props);
-        }
-    }
-}
-
-void Graphics::OnShutdown()
-{
-    if (renderer_) {
-        renderer_->Shutdown();
-        renderer_.reset();
-    }
-    ShutdownGraphicsBackend();
-}
+// void Graphics::OnShutdown()
+// {
+//     if (renderer_) {
+//         renderer_->Shutdown();
+//         renderer_.reset();
+//     }
+//     ShutdownGraphicsBackend();
+// }

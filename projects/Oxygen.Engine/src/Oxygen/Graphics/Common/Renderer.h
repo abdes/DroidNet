@@ -12,6 +12,7 @@
 #include <Oxygen/Base/MixinInitialize.h>
 #include <Oxygen/Base/MixinNamed.h>
 #include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/MixinDeferredRelease.h>
@@ -112,7 +113,7 @@ namespace graphics {
         /**@}*/
 
     protected:
-        OXYGEN_GFX_API virtual void OnInitialize(PlatformPtr platform, const RendererProperties& props);
+        OXYGEN_GFX_API virtual void OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*/);
         template <typename Base, typename... CtorArgs>
         friend class MixinInitialize; //< Allow access to OnInitialize.
 
@@ -124,10 +125,10 @@ namespace graphics {
         virtual void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const = 0;
 
         [[nodiscard]] auto GetPlatform() const -> PlatformPtr { return platform_; }
-        [[nodiscard]] auto GetInitProperties() const -> const RendererProperties& { return props_; }
+        [[nodiscard]] auto GetInitProperties() const -> const GraphicsConfig& { return props_; }
 
     private:
-        RendererProperties props_;
+        GraphicsConfig props_;
         PlatformPtr platform_;
 
         mutable uint32_t current_frame_index_ { 0 };

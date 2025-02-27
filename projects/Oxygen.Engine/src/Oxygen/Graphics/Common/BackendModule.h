@@ -11,6 +11,7 @@
 // ReSharper disable once CppUnusedIncludeDirective (unreachable code)
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 
 namespace oxygen::graphics {
 
@@ -26,13 +27,10 @@ constexpr auto kGetGraphicsModuleApi = "GetGraphicsModuleApi";
 extern "C" {
 
 //! Entry point to get the renderer module API.
-typedef void* (*GetGraphicsModuleApiFunc)();
+using GetGraphicsModuleApiFunc = void* (*)();
 
-typedef void* (*CreateBackendFunc)();
-typedef void (*DestroyBackendFunc)();
-//
-// typedef bool (*InitializeFunc)();
-// typedef void (*ShutdownFunc)();
+using CreateBackendFunc = void* (*)(const oxygen::SerializedBackendConfig& config);
+using DestroyBackendFunc = void (*)();
 
 //! Interface for the renderer module.
 struct GraphicsModuleApi {
