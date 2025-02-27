@@ -9,8 +9,8 @@
 # ------------------------------------------------------------------------------
 
 asap_module_declare(
-  MODULE_NAME "Oxygen.Graphics.Loader"
-  DESCRIPTION "Oxygen graphics backend loader"
+  MODULE_NAME "Oxygen.Loader"
+  DESCRIPTION "Oxygen dynamic module loader"
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -27,19 +27,16 @@ asap_push_module("${META_MODULE_NAME}")
 # Main module target
 # ------------------------------------------------------------------------------
 
-add_library(${META_MODULE_TARGET})
+# The loader is always built as a static library, even if the rest of the Oxygen
+# modules are built as shared libraries. It is linked only to the main
+# executable and its API can only be called from the main executable module.
+add_library(${META_MODULE_TARGET} STATIC)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
-    DEFINE_SYMBOL
-      "OXYGEN_LOADER_EXPORTS"
     OUTPUT_NAME
-      $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
-    VERSION
-      ${META_VERSION}
-    SOVERSION
-      ${META_VERSION_MAJOR}
+      ${META_MODULE_NAME}-static
     PROJECT_LABEL
       ${META_MODULE_NAME}
 )
@@ -47,24 +44,23 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    $<$<BOOL:${WIN32}>:Detail/PlatformServices_win.cpp>
     "GraphicsBackendLoader.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "api_export.h" "GraphicsBackendLoader.h"
+    FILES
+      "GraphicsBackendLoader.h"
+      "Detail/PlatformServices.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
-target_compile_definitions(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_LOADER_STATIC>
-)
 
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::config
     oxygen::graphics-common
 )
 
@@ -72,9 +68,9 @@ target_link_libraries(
 # Tests
 # ------------------------------------------------------------------------------
 
-#if(OXYGEN_BUILD_TESTS)
-#  add_subdirectory("Test")
-#endif()
+if(OXYGEN_BUILD_TESTS)
+ add_subdirectory("Test")
+endif()
 
 # ==============================================================================
 # Deployment instructions

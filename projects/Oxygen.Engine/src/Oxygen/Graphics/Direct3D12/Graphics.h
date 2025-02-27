@@ -20,12 +20,9 @@ class Graphics final : public oxygen::Graphics {
     using Base = oxygen::Graphics;
 
 public:
-    Graphics()
-        : Base("D3D12 Backend")
-    {
-    }
+    Graphics(const SerializedBackendConfig& config);
 
-    ~Graphics() override = default;
+    ~Graphics() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_MAKE_NON_MOVABLE(Graphics);
@@ -37,8 +34,8 @@ public:
     [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
 protected:
-    void InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props) override;
-    void ShutdownGraphicsBackend() override;
+    // void InitializeGraphicsBackend(const SerializedBackendConfig& props) override;
+    // void ShutdownGraphicsBackend() override;
     auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> override;
 
 private:

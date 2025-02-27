@@ -10,10 +10,10 @@
 
 using oxygen::graphics::Renderer;
 
-void Renderer::OnInitialize(PlatformPtr platform, const RendererProperties& props)
+void Renderer::OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*/)
 {
-    platform_ = std::move(platform);
-    props_ = props;
+    // platform_ = std::move(platform);
+    // props_ = props;
     this->EmitRendererInitialized();
 }
 

@@ -20,6 +20,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # Define the path to the DXC compiler
 set(dxc_arch "")
@@ -133,6 +134,7 @@ target_link_libraries(
     oxygen::graphics-common
     oxygen::imgui
     glm::glm
+    nlohmann_json::nlohmann_json
     d3d12
     dxgi
     dxguid

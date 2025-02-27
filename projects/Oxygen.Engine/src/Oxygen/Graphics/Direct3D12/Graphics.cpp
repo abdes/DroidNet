@@ -12,9 +12,11 @@
 
 #include <dxgi1_6.h>
 #include <fmt/format.h>
+#include <nlohmann/json.hpp>
 #include <wrl/client.h>
 
-#include <Oxygen/Graphics/Common/GraphicsModule.h>
+#include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
@@ -27,13 +29,17 @@ namespace {
 
 auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
-    static auto graphics = std::make_shared<oxygen::graphics::d3d12::Graphics>();
+    static std::shared_ptr<oxygen::graphics::d3d12::Graphics> graphics;
     return graphics;
 }
 
-auto CreateBackend() -> void*
+auto CreateBackend(const oxygen::SerializedBackendConfig& config) -> void*
 {
-    return GetBackendInternal().get();
+    auto& backend = GetBackendInternal();
+    if (!backend) {
+        backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(config);
+    }
+    return backend.get();
 }
 
 void DestroyBackend()
@@ -308,11 +314,20 @@ auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType wi
     return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }
 
-void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBackendProperties& props)
+Graphics::Graphics(const SerializedBackendConfig& props)
+    : Base("D3D12 Backend")
 {
     LOG_SCOPE_FUNCTION(INFO);
+
+    // Parse JSON configuration
+    nlohmann::json jsonConfig = nlohmann::json::parse(props.json_data, props.json_data + props.size);
+
+    // Extract common configuration
+    std::string appName = jsonConfig["applicationName"].get<std::string>();
+    bool debugEnabled = jsonConfig["enableDebug"].get<bool>();
+
     // Setup the DXGI factory
-    InitializeFactory(factory_, props.enable_debug);
+    InitializeFactory(factory_, debugEnabled);
 
     // Discover adapters and select the most suitable one
     const auto [best_adapter, best_adapter_index] = DiscoverAdapters(factory_,
@@ -338,7 +353,7 @@ void Graphics::InitializeGraphicsBackend(PlatformPtr platform, const GraphicsBac
     LOG_F(INFO, "D3D12MA Memory Allocator initialized");
 }
 
-void Graphics::ShutdownGraphicsBackend()
+Graphics::~Graphics()
 {
     LOG_SCOPE_FUNCTION(INFO);
 
