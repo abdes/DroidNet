@@ -24,9 +24,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
-#include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 auto operator==(const LUID& lhs, const LUID& rhs) -> bool
@@ -39,8 +37,13 @@ auto operator!=(const LUID& lhs, const LUID& rhs) -> bool
     return !(lhs == rhs);
 }
 
+namespace D3D12MA {
+class Allocator; // NOLINT
+} // namespace D3D12MA
+
 namespace oxygen::graphics::d3d12 {
 
+class DebugLayer;
 class DeviceManager;
 
 class AdapterInfo {
@@ -119,9 +122,7 @@ struct DeviceManagerDesc {
     D3D_FEATURE_LEVEL minFeatureLevel;
 };
 
-class DeviceManager final
-    : public std::enable_shared_from_this<DeviceManager>,
-      public Component {
+class DeviceManager final : public Component {
     OXYGEN_COMPONENT(DeviceManager)
 
 public:
@@ -233,13 +234,8 @@ private:
 
         std::vector<Microsoft::WRL::ComPtr<dx::ICommandQueue>> commandQueues_;
 
-        Context(AdapterInfo info, Microsoft::WRL::ComPtr<dxgi::IAdapter> adapter)
-            : info(std::move(info))
-            , adapter(std::move(adapter))
-        {
-        }
-
-        OXYGEN_D3D12_API ~Context() noexcept;
+        Context(AdapterInfo info, Microsoft::WRL::ComPtr<dxgi::IAdapter> adapter);
+        ~Context() noexcept;
 
         OXYGEN_MAKE_NON_COPYABLE(Context)
         OXYGEN_DEFAULT_MOVABLE(Context)

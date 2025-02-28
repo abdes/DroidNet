@@ -20,6 +20,7 @@
 
 #include <fmt/format.h>
 
+#include "DeviceManager.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Unreachable.h>
@@ -28,6 +29,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
+
 
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::AdapterInfo;
@@ -278,6 +280,12 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
         context.commandQueues_.clear();
         return false;
     }
+}
+
+DeviceManager::Context::Context(AdapterInfo info, Microsoft::WRL::ComPtr<dxgi::IAdapter> adapter)
+    : info(std::move(info))
+    , adapter(std::move(adapter))
+{
 }
 
 DeviceManager::Context::~Context() noexcept

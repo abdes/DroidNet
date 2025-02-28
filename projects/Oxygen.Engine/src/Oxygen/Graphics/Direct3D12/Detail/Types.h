@@ -10,10 +10,6 @@
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 
-namespace D3D12MA {
-class Allocator;
-} // namespace D3D12MA
-
 namespace oxygen::graphics::d3d12 {
 
 //! Type aliases for Direct3d12 interfaces with versions used in the module.
@@ -22,7 +18,6 @@ namespace oxygen::graphics::d3d12 {
 namespace dx {
     using IFactory = IDXGIFactory7;
     using IDevice = ID3D12Device9;
-    using Allocator = D3D12MA::Allocator;
     using IGraphicsCommandList = ID3D12GraphicsCommandList7;
     using ICommandQueue = ID3D12CommandQueue;
     using IDescriptorHeap = ID3D12DescriptorHeap;
