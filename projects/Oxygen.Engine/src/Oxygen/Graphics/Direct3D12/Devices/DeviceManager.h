@@ -27,12 +27,12 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
-auto operator==(const LUID& lhs, const LUID& rhs) -> bool
+inline auto operator==(const LUID& lhs, const LUID& rhs) -> bool
 {
     return (lhs.LowPart == rhs.LowPart) && (lhs.HighPart == rhs.HighPart);
 }
 
-auto operator!=(const LUID& lhs, const LUID& rhs) -> bool
+inline auto operator!=(const LUID& lhs, const LUID& rhs) -> bool
 {
     return !(lhs == rhs);
 }
