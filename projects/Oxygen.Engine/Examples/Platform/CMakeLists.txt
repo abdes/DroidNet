@@ -30,7 +30,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 # -- Input System Example ------------------------------------------------------
 
-add_executable(${META_MODULE_TARGET} "main.cpp")
+add_executable(${META_MODULE_TARGET} "main_impl.cpp" "../main.cpp")
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
