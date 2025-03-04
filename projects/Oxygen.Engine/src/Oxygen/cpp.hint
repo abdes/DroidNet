@@ -32,3 +32,7 @@
 #define OXYGEN_BASE_API __declspec(dllexport)
 #define OXYGEN_BASE_API __declspec(dllimport)
 #define OXYGEN_BASE_API __attribute__((visibility("default")))
+#define OXYGEN_PLATFORM_API
+#define OXYGEN_PLATFORM_API __declspec(dllexport)
+#define OXYGEN_PLATFORM_API __declspec(dllimport)
+#define OXYGEN_PLATFORM_API __attribute__((visibility("default")))
