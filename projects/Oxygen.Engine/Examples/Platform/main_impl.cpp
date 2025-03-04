@@ -4,16 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Algorithms.h"
-
 #include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string_view>
+
+#include <SDL3/SDL_events.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+
 
 // Force link the DLL containing the InitializeTypeRegistry function.
 extern "C" auto InitializeTypeRegistry() -> oxygen::TypeRegistry*;
@@ -28,7 +31,6 @@ using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
-
 bool is_running { false };
 void EventLoopRun(const Platform& platform)
 {
@@ -37,7 +39,17 @@ void EventLoopRun(const Platform& platform)
         platform.Events().PollOne();
     }
 }
+} // namespace
 
+template <>
+struct oxygen::co::EventLoopTraits<Platform> {
+    static void Run(const Platform& platform) { EventLoopRun(platform); }
+    static void Stop(Platform& /*platform*/) { is_running = false; }
+    static auto IsRunning(const Platform& /*platform*/) -> bool { return is_running; }
+    static auto EventLoopId(const Platform& platform) -> EventLoopID { return EventLoopID(&platform); }
+};
+
+namespace {
 auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int>
 {
     OXCO_WITH_NURSERY(n)
@@ -126,54 +138,19 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
 
 } // namespace
 
-template <>
-struct oxygen::co::EventLoopTraits<Platform> {
-    static void Run(const Platform& platform) { EventLoopRun(platform); }
-    static void Stop(Platform& /*platform*/) { is_running = false; }
-    static auto IsRunning(const Platform& /*platform*/) -> bool { return is_running; }
-    static auto EventLoopId(const Platform& platform) -> EventLoopID { return EventLoopID(&platform); }
-};
-
-auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
+extern "C" void MainImpl(std::span<const char*> /*args*/)
 {
-
-    auto status { EXIT_SUCCESS };
-
-#if defined(_MSC_VER)
-    // Enable memory leak detection in debug mode
-    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-#endif
-
-    loguru::g_preamble_date = false;
-    loguru::g_preamble_file = true;
-    loguru::g_preamble_verbose = false;
-    loguru::g_preamble_time = false;
-    loguru::g_preamble_uptime = false;
-    loguru::g_preamble_thread = false;
-    loguru::g_preamble_header = false;
-    loguru::g_stderr_verbosity = loguru::Verbosity_0;
-    loguru::g_colorlogtostderr = true;
-    // Optional, but useful to time-stamp the start of the log.
-    // Will also detect verbosity level on command line as -v.
-    loguru::init(argc, argv);
-
     auto platform = std::make_shared<Platform>();
     try {
         oxygen::co::Run(*platform, AsyncMain(platform));
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Uncaught exception: {}", e.what());
-        status = EXIT_FAILURE;
     } catch (...) {
         LOG_F(ERROR, "Uncaught exception of unknown type");
-        status = EXIT_FAILURE;
     }
 
     // Explicit destruction order due to dependencies.
     platform.reset();
-
-    LOG_F(INFO, "Exit with status: {}", status);
-    loguru::shutdown();
-    return status;
 }
 
 #if 0
