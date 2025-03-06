@@ -34,6 +34,7 @@ add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
 set(
   header_files
+  "PlatformConfig.h"
   "EngineConfig.h"
   "GraphicsConfig.h"
 )

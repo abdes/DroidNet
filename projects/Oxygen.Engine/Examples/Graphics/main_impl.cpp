@@ -4,66 +4,95 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdlib>
+#include <memory>
 #include <span>
+#include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/EventLoop.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Platform/Platform.h>
 
 using oxygen::GraphicsConfig;
+using oxygen::Platform;
+using oxygen::PlatformConfig;
 using oxygen::graphics::BackendType;
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
 
 namespace {
-void LoadBackend(const GraphicsConfig& config)
+bool is_running { false };
+void EventLoopRun(const Platform& platform)
 {
-    // Get the singleton instance of the GraphicsBackendLoader
-    auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
-    // Load the backend using the singleton
-    auto backend = loader.LoadBackend(BackendType::kDirect3D12, config);
-    if (!backend.expired()) {
-        LOG_F(INFO, "Successfully loaded the graphics backend");
-    } else {
-        LOG_F(ERROR, "Failed to load the graphics backend");
+    while (is_running) {
+        platform.Async().PollOne();
     }
 }
+} // namespace
+
+template <>
+struct oxygen::co::EventLoopTraits<Platform> {
+    static void Run(const Platform& platform) { EventLoopRun(platform); }
+    static void Stop(Platform& /*platform*/) { is_running = false; }
+    static auto IsRunning(const Platform& /*platform*/) -> bool { return is_running; }
+    static auto EventLoopId(const Platform& platform) -> EventLoopID { return EventLoopID(&platform); }
+};
+
+namespace {
+
+auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int>
+{
+    OXCO_WITH_NURSERY(n)
+    {
+        is_running = true;
+
+        // Activate the live objects with our nursery, making it available for the
+        // lifetime of the nursery.
+        co_await n.Start(&Platform::StartAsync, std::ref(*platform));
+        platform->Run();
+
+        // Add a termination signal handler
+        n.Start([&]() -> oxygen::co::Co<> {
+            co_await platform->Async().OnTerminate();
+            LOG_F(INFO, "terminating...");
+            n.Cancel();
+        });
+
+        // Wait for all tasks to complete
+        co_return oxygen::co::kJoin;
+    };
+    co_return EXIT_SUCCESS;
 }
+
+} // namespace
 
 extern "C" void MainImpl(std::span<const char*> /*args*/)
 {
-    GraphicsConfig config {
+    // Create the platform
+    auto platform = std::make_shared<Platform>(PlatformConfig { .headless = true });
+
+    // Load the graphics backend
+    GraphicsConfig gfx_config {
         .enable_debug = true,
         .enable_validation = false,
         .headless = true,
         .extra = {},
     };
-
-    // Get the singleton instance of the GraphicsBackendLoader
     auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
-    // Load the backend using the singleton
-    auto backend = loader.LoadBackend(BackendType::kDirect3D12, config);
-    DCHECK_F(!backend.expired());
+    auto gfx = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
+    DCHECK_F(!gfx.expired());
 
-    // DeviceManager device_manager(props);
+    oxygen::co::Run(*platform, AsyncMain(platform));
 
-    //// Select adapter and add device removal handler
-    // device_manager.SelectBestAdapter([]() {
-    //     LOG_F(INFO, "Device removal detected!");
-    // });
-
-    //// Get the device
-    // auto* device = device_manager.Device();
-
-    //// Trigger a device removal
-    // device->GetDeviceRemovedReason(); // First call to check current state
-
-    //// Force device removal through debug layer
-    // device->RemoveDevice(); // This will trigger device removal
-
-    //// Try to use the device again - this should trigger the removal handler
-    // device_manager.SelectBestAdapter([]() {
-    //     LOG_F(INFO, "Device removal handler called");
-    // });
+    // Explicit destruction order due to dependencies.
+    platform.reset();
+    gfx.reset();
 }

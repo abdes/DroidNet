@@ -12,3 +12,9 @@ dred
 dxgi
 pimpl
 imgui
+awaitable
+Awaiter
+awaitee
+bugprone
+decltype
+cppcoreguidelines
