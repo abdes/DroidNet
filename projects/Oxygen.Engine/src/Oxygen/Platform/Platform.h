@@ -11,7 +11,10 @@
 #include <memory>
 #include <vector>
 
+#include <asio/signal_set.hpp>
+
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -34,6 +37,8 @@ namespace platform {
     class AsyncOps final : public Component {
         OXYGEN_COMPONENT(AsyncOps)
     public:
+        AsyncOps();
+
         //! A utility function, returning an awaitable suspending the caller for a
         //! specified duration. Suitable for use with `AnyOf()` etc.
         auto SleepFor(std::chrono::microseconds delay)
@@ -46,10 +51,7 @@ namespace platform {
             return io_.poll();
         }
 
-        auto Start(co::TaskStarted<> started = {}) -> co::Co<>
-        {
-            return OpenNursery(nursery_, std::move(started));
-        }
+        [[nodiscard]] OXYGEN_PLATFORM_API auto StartAsync(co::TaskStarted<> started = {}) -> co::Co<>;
 
         [[nodiscard]] auto Nursery() const -> co::Nursery&
         {
@@ -59,9 +61,15 @@ namespace platform {
 
         [[nodiscard]] auto IsRunning() const { return nursery_ != nullptr; }
 
+        [[nodiscard]] auto OnTerminate() -> co::Event& { return terminate_; }
+
     private:
+        void HandleSignal(const std::error_code& error, int signal_number);
+
         asio::io_context io_;
-        co::Nursery* nursery_ {};
+        asio::signal_set signals_;
+        co::Event terminate_;
+        co::Nursery* nursery_ { nullptr };
     };
 
     class EventPump final : public Component {
@@ -184,15 +192,15 @@ namespace platform {
 
 class Platform final : public Composition {
 public:
-    OXYGEN_PLATFORM_API Platform();
+    OXYGEN_PLATFORM_API Platform(const PlatformConfig& config);
     OXYGEN_PLATFORM_API ~Platform() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Platform)
     OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-    auto Start(co::TaskStarted<> started = {}) const -> co::Co<>
+    auto StartAsync(co::TaskStarted<> started = {}) const -> co::Co<>
     {
-        return GetComponent<platform::AsyncOps>().Start(std::move(started));
+        return GetComponent<platform::AsyncOps>().StartAsync(std::move(started));
     }
 
     OXYGEN_PLATFORM_API void Run();
@@ -206,7 +214,7 @@ public:
     static OXYGEN_PLATFORM_API auto GetInputSlotForKey(platform::Key key) -> platform::InputSlot;
 
 private:
-    void Compose();
+    void Compose(const PlatformConfig& config);
 };
 
 #if 0

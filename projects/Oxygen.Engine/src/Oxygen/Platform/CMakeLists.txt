@@ -65,6 +65,7 @@ target_sources(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "AsyncOps.cpp"
     "Input.cpp"
     "Platform.cpp"
   PUBLIC

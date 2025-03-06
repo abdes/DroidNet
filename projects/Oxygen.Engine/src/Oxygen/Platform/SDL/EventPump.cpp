@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <type_traits>
+
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 
@@ -17,7 +19,7 @@ EventPump::EventPump()
         auto* sdl_event = event.NativeEventAs<SDL_Event>();
         const auto got_one = sdl::PollEvent(sdl_event);
         DCHECK_F(got_one); // There should always be an event
-        co_return event;
+        co_return std::move(event);
     })
 {
     DLOG_F(1, "Platform event pump created");

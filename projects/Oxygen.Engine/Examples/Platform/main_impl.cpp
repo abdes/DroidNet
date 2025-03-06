@@ -5,27 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdlib>
-#include <exception>
 #include <memory>
-#include <string_view>
+#include <type_traits>
 
 #include <SDL3/SDL_events.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
-
-// Force link the DLL containing the InitializeTypeRegistry function.
-extern "C" auto InitializeTypeRegistry() -> oxygen::TypeRegistry*;
-namespace {
-[[maybe_unused]] auto* ts_registry_unused = InitializeTypeRegistry();
-} // namespace
-
 using oxygen::Platform;
-using oxygen::platform::Display;
+using oxygen::PlatformConfig;
 using oxygen::platform::Window;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
@@ -58,7 +51,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
 
         // Activate the live objects with our nursery, making it available for the
         // lifetime of the nursery.
-        co_await n.Start(&Platform::Start, std::ref(*platform));
+        co_await n.Start(&Platform::StartAsync, std::ref(*platform));
         platform->Run();
 
         WindowProps props("Oxygen Window Playground");
@@ -140,14 +133,9 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
 
 extern "C" void MainImpl(std::span<const char*> /*args*/)
 {
-    auto platform = std::make_shared<Platform>();
-    try {
-        oxygen::co::Run(*platform, AsyncMain(platform));
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "Uncaught exception: {}", e.what());
-    } catch (...) {
-        LOG_F(ERROR, "Uncaught exception of unknown type");
-    }
+    auto platform = std::make_shared<Platform>(PlatformConfig { .headless = false });
+
+    oxygen::co::Run(*platform, AsyncMain(platform));
 
     // Explicit destruction order due to dependencies.
     platform.reset();

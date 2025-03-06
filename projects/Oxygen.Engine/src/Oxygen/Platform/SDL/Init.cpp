@@ -11,14 +11,18 @@
 
 using oxygen::Platform;
 
-Platform::Platform()
+Platform::Platform(const PlatformConfig& config)
 {
-    Compose();
+    LOG_SCOPE_F(INFO, "Platform (SDL3) Init");
+
+    if (config.headless) {
+        LOG_F(INFO, "Platform is headless");
+    }
+
+    Compose(config);
 
     platform::sdl::Init(SDL_INIT_VIDEO);
     platform::sdl::SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
-
-    LOG_F(INFO, "Platform/SDL3 initialized");
 }
 
 Platform::~Platform()

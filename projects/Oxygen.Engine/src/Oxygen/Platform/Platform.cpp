@@ -16,16 +16,22 @@ void Platform::Run()
 {
     auto& n = GetComponent<AsyncOps>().Nursery();
 
-    n.Start(&WindowManager::ProcessPlatformEvents, &GetComponent<WindowManager>());
-    n.Start(&InputEvents::ProcessPlatformEvents, &GetComponent<InputEvents>());
+    if (HasComponent<EventPump>()) {
+        n.Start(&WindowManager::ProcessPlatformEvents, &GetComponent<WindowManager>());
+    }
+    if (HasComponent<InputEvents>()) {
+        n.Start(&InputEvents::ProcessPlatformEvents, &GetComponent<InputEvents>());
+    }
 }
 
-void Platform::Compose()
+void Platform::Compose(const PlatformConfig& config)
 {
     AddComponent<AsyncOps>();
-    AddComponent<EventPump>();
-    AddComponent<WindowManager>();
-    AddComponent<InputEvents>();
+    if (!config.headless) {
+        AddComponent<EventPump>();
+        AddComponent<WindowManager>();
+        AddComponent<InputEvents>();
+    }
 }
 
 auto Platform::GetInputSlotForKey(const platform::Key key) -> platform::InputSlot
