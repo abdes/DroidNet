@@ -7,3 +7,4 @@
 # add_subdirectory("AsyncEngine")
 add_subdirectory("Platform")
 add_subdirectory("Devices")
+add_subdirectory("Graphics")

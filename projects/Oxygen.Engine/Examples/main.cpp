@@ -9,7 +9,6 @@
 #include <span>
 #include <string_view>
 
-
 #if defined(_WIN32)
 #  include <Windows.h>
 #else
@@ -95,13 +94,6 @@ auto main(int argc, char** argv) noexcept -> int
             // Cannot do anything if ex.what() throws
             report_error(kUnknownUnhandledException);
         }
-    }
-
-    try {
-        loguru::shutdown();
-    } catch (...) {
-        // Ignore
-        (void)0;
     }
 
     return exit_code;

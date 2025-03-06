@@ -133,36 +133,34 @@ public:
         }
 
         try {
-            // We expect the backend module to be in the same directory as the executable.
-            const auto module_name = GetBackendModuleDllName(backend);
-            const auto full_path = platform_services->GetExecutableDirectory() + module_name;
+            if (backend_module == nullptr) {
+                // We expect the backend module to be in the same directory as the executable.
+                const auto module_name = GetBackendModuleDllName(backend);
+                const auto full_path = platform_services->GetExecutableDirectory() + module_name;
 
-            // Load the module directly
-            backend_module = platform_services->LoadModule(full_path);
+                // Load the module directly
+                backend_module = platform_services->LoadModule(full_path);
+                LOG_F(INFO, "Graphics backend for `{}` loaded from module `{}`",
+                    nostd::to_string(backend), module_name);
+            }
 
             // Use the type-safe function address retrieval
             auto get_api = platform_services->GetFunctionAddress<GetGraphicsModuleApiFunc>(
                 backend_module, kGetGraphicsModuleApi);
-
             auto* const backend_api = static_cast<GraphicsModuleApi*>(get_api());
-
-            LOG_F(INFO, "Graphics backend for `{}` loaded from module `{}`",
-                nostd::to_string(backend), module_name);
 
             // Create the backend instance
             CreateBackendInstance(backend_api, backend, config);
-
             return backend_instance;
         } catch (const std::exception& ex) {
             LOG_F(ERROR, "Failed to load graphics backend: {}", ex.what());
-
-            if (backend_module != nullptr) {
-                platform_services->CloseModule(backend_module);
-                backend_module = nullptr;
-            }
-
             backend_instance.reset();
-            return {};
+            // NB: Do not close the module here as it may still be required
+            // until the exception handling frames are complete. The module, if
+            // opened, will be reused for subsequent calls to `LoadBackend` or
+            // will be unloaded if a call to `UnloadBackend` is made, or when
+            // the loader is destroyed.
+            throw;
         }
     }
 
