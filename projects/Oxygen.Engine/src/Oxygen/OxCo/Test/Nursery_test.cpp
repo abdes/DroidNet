@@ -439,11 +439,11 @@ TEST_CASE("Nursery `Start` with `TaskStarted`")
         {
             OXCO_WITH_NURSERY(n)
             {
-                const int ret = co_await n.Start([](
-                                                     TaskStarted<int> started) -> Co<> {
-                    co_await kYield; // make this a coroutine
-                    started(42);
-                });
+                const int ret = co_await n.Start(
+                    [](TaskStarted<int> started) -> Co<> {
+                        co_await kYield; // make this a coroutine
+                        started(42);
+                    });
                 CHECK(ret == 42);
                 co_return kJoin;
             };
@@ -510,7 +510,7 @@ TEST_CASE("Nursery `Start` with `TaskStarted`")
                     // the other task, which will be rejected.
                     el.Sleep(2ms));
                 // Task completes normally after 5ms
-                CHECK(done);
+                CHECK(!done);
                 CHECK(el.Now() == 5ms);
                 co_return kJoin;
             };
@@ -565,6 +565,51 @@ TEST_CASE("Nursery `Start` with `TaskStarted`")
                 co_return kJoin;
             };
             CHECK(el.Now() == 0ms);
+        }
+
+        SECTION("cancel-before-handoff")
+        {
+            // If TaskStarted<> is invoked in a cancelled context, handing
+            // off a coroutine pending cancellation to a cancelled nursery,
+            // this should not result in double cancellation.
+            co_await AnyOf(el.Sleep(1ms), [&]() -> Co<> {
+                OXCO_WITH_NURSERY(n)
+                {
+                    co_await n.Start([&](TaskStarted<> started) -> Co<> {
+                        co_await el.Sleep(5ms, kNonCancellable);
+                        started();
+
+                        co_await el.Sleep(1ms, kNonCancellable);
+
+                        // The cancellation should happen, though
+                        co_await kYield;
+                        CHECK(!"should never reach here");
+                    });
+
+                    // The task in the middle of its cancellation should not
+                    // be reparented, and the above `n.Start()` should not
+                    // complete early.
+                    CHECK(!"should never reach here");
+
+                    co_return kJoin;
+                };
+            });
+        }
+
+        SECTION("cancel-before-handoff-2")
+        {
+            // Cancelling `n.Start()` before handoff and *then* cancelling
+            // the nursery should not result in double cancellation either.
+            OXCO_WITH_NURSERY(n)
+            {
+                co_await AnyOf(el.Sleep(1ms),
+                    n.Start([&](TaskStarted<> started) -> Co<> {
+                        co_await el.Sleep(2ms, kNonCancellable);
+                        started();
+                        co_await el.Sleep(2ms, kNonCancellable);
+                    }));
+                co_return kCancel;
+            };
         }
     });
 }
