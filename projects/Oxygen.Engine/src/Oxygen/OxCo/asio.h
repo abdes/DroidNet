@@ -331,7 +331,7 @@ public:
 
 namespace oxygen::co {
 namespace detail {
-    /// A helper class for `corral::sleepFor()`.
+    //! A helper class for `co::SleepFor()`.
     class Timer {
     public:
         template <class R, class P>
