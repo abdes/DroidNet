@@ -16,6 +16,7 @@
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/CallableSignature.h>
 #include <Oxygen/OxCo/Detail/IntrusiveList.h>
+#include <Oxygen/OxCo/Detail/PointerBits.h>
 #include <Oxygen/OxCo/Detail/Result.h>
 #include <Oxygen/OxCo/Detail/TaskParent.h>
 
@@ -377,6 +378,8 @@ template <class Ret>
 class Nursery::StartAwaiterBase : protected TaskParent {
     friend TaskStarted<Ret>;
 
+    enum Flags { kCancelling = 1 };
+
 public:
     explicit StartAwaiterBase(Nursery* nursery)
         : nursery_(nursery)
@@ -393,10 +396,14 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(StartAwaiterBase)
 
+protected:
+    bool IsCancelling() const { return executor_.Bits() & kCancelling; }
+    void SetCancelling() { executor_.SetBits(kCancelling); }
+
 private:
     void StoreSuccess() override
     {
-        ABORT_F("Nursery task completed without signalling readiness");
+        CHECK_F(IsCancelling(), "Nursery task completed without signalling readiness");
     }
 
     //! Called when the task completes with an exception. Stores the exception
@@ -424,6 +431,10 @@ private:
 
     void HandOff()
     {
+        if (IsCancelling()) {
+            return;
+        }
+
         if (detail::Promise<void>* p = promise_.release()) {
             p->SetExecutor(nursery_->GetExecutor());
             p->ReParent(nursery_, nursery_->parent_);
@@ -450,7 +461,7 @@ protected:
     detail::Result<Ret> result_; // NOLINT(clang-diagnostic-shadow-field)
     detail::Handle handle_ = NoOpHandle();
     detail::PromisePtr<void> promise_;
-    Executor* executor_ = nullptr;
+    detail::PointerBits<Executor, Flags, 1> executor_;
 };
 
 template <class Ret, class Callable, class... Args>
@@ -466,10 +477,18 @@ public:
     //! Awaiter interface implementation.
     // ReSharper disable CppMemberFunctionMayBeStatic
 
-    auto await_early_cancel() noexcept -> bool { return false; }
+    auto await_early_cancel() noexcept -> bool
+    {
+        this->SetCancelling();
+        return false;
+    }
+
     [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
 
-    void await_set_executor(Executor* ex) noexcept { this->executor_ = ex; }
+    void await_set_executor(Executor* ex) noexcept
+    {
+        this->executor_.SetPtr(ex);
+    }
 
     auto await_suspend(detail::Handle h) -> detail::Handle
     {
@@ -491,7 +510,10 @@ public:
         }
         ++this->nursery_->pending_task_count_;
         this->handle_ = h;
-        promise->SetExecutor(this->executor_);
+        promise->SetExecutor(this->executor_.Ptr());
+        if (this->IsCancelling()) {
+            promise->Cancel();
+        }
         this->promise_ = std::move(promise);
         return this->promise_->Start(this, h);
     }
@@ -501,15 +523,13 @@ public:
     auto await_cancel(detail::Handle /*h*/) noexcept -> bool
     {
         if (this->promise_) {
+            this->SetCancelling();
             this->promise_->Cancel();
         }
         return false;
     }
 
-    [[nodiscard]] auto await_must_resume() const noexcept
-    {
-        return !this->result_.WasCancelled();
-    }
+    [[nodiscard]] auto await_must_resume() const noexcept { return std::false_type {}; }
 
     // ReSharper restore CppMemberFunctionMayBeStatic
     //! @}

@@ -77,6 +77,13 @@ private:
  \tparam Align The alignment in bytes of the type `T`.
 */
 template <class T, class BitsT, int Width, int Align = alignof(T)>
-using PointerBits = PointerBitsImpl<T, BitsT, Width, Align >= 1 << Width>;
+class PointerBits : public PointerBitsImpl<T, BitsT, Width, (Align >= (1 << Width))> {
+public:
+    using PointerBits::PointerBitsImpl::PointerBitsImpl;
+
+    void SetPtr(T* ptr) { this->Set(ptr, this->Bits()); }
+
+    void SetBits(BitsT bits) { this->Set(this->Ptr(), bits); }
+};
 
 } // namespace oxygen::co::detail
