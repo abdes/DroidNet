@@ -30,7 +30,6 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 
-
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::AdapterInfo;
 using oxygen::graphics::d3d12::DeviceManager;
@@ -357,6 +356,7 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
     DiscoverAdapters();
 
     if (props_.auto_select_adapter) {
+        LOG_F(INFO, "Auto-selecting best adapter");
         SelectBestAdapter();
     }
 }

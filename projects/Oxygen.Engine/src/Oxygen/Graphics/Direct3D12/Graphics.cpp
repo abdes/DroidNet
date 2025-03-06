@@ -4,21 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <memory>
 
-#include <array>
-#include <iomanip>
-#include <sstream>
-
-#include <dxgi1_6.h>
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <wrl/client.h>
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 
@@ -44,6 +39,7 @@ auto CreateBackend(const oxygen::SerializedBackendConfig& config) -> void*
 
 void DestroyBackend()
 {
+    LOG_SCOPE_F(INFO, "DestroyBackend");
     auto& renderer = GetBackendInternal();
     renderer.reset();
 }
@@ -110,208 +106,29 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 //===----------------------------------------------------------------------===//
 // The Graphics class methods
 
-using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::DeviceType;
 using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::Graphics;
-using oxygen::graphics::d3d12::NameObject;
-using oxygen::windows::ThrowOnFailed;
-
-// Anonymous namespace for adapter discovery helper functions
-namespace {
-
-struct AdapterDesc {
-    std::string name;
-    uint32_t vendor_id;
-    uint32_t device_id;
-    size_t dedicated_memory;
-    bool meets_feature_level { false };
-    bool has_connected_display { false };
-    D3D_FEATURE_LEVEL max_feature_level { D3D_FEATURE_LEVEL_11_0 };
-};
-
-auto GetAdaptersInternal() -> std::vector<AdapterDesc>&
-{
-    static std::vector<AdapterDesc> adapters {};
-    return adapters;
-}
-
-auto CheckConnectedDisplay(const ComPtr<IDXGIAdapter1>& adapter) -> bool
-{
-    ComPtr<IDXGIOutput> output;
-    return SUCCEEDED(adapter->EnumOutputs(0, &output));
-}
-
-auto CreateAdapterDesc(const DXGI_ADAPTER_DESC1& desc, const ComPtr<IDXGIAdapter1>& adapter) -> AdapterDesc
-{
-    std::string description {};
-
-    // Get array size from DXGI_ADAPTER_DESC1 structure at compile time
-    constexpr size_t kDescriptionLength = std::extent_v<decltype(DXGI_ADAPTER_DESC1::Description)>;
-    // Verify string is null-terminated within the array bounds
-    DCHECK_NOTNULL_F(std::char_traits<wchar_t>::find(&desc.Description[0], kDescriptionLength, L'\0'),
-        "Adapter description is not null-terminated");
-
-    std::span<const wchar_t> desc_span(desc.Description);
-    oxygen::string_utils::WideToUtf8(desc_span.data(), description);
-
-    AdapterDesc adapter_info {
-        .name = description,
-        .vendor_id = desc.VendorId,
-        .device_id = desc.DeviceId,
-        .dedicated_memory = desc.DedicatedVideoMemory,
-        .has_connected_display = CheckConnectedDisplay(adapter),
-    };
-    return adapter_info;
-}
-
-auto FormatMemorySize(const size_t memory_size) -> std::string
-{
-    constexpr size_t kBitsPerGigabyte = 30;
-    constexpr size_t kBitsPerMegabyte = 20;
-
-    if (memory_size >= (1ULL << kBitsPerGigabyte)) {
-        return fmt::format("{:.2f} GB",
-            static_cast<double>(memory_size) / (1ULL << kBitsPerGigabyte));
-    }
-    return fmt::format("{:.2f} MB",
-        static_cast<double>(memory_size) / (1ULL << kBitsPerMegabyte));
-}
-
-auto FeatureLevelToString(const D3D_FEATURE_LEVEL feature_level) -> std::string
-{
-    switch (feature_level) { // NOLINT(clang-diagnostic-switch-enum)
-    case D3D_FEATURE_LEVEL_12_2:
-        return "12_2";
-    case D3D_FEATURE_LEVEL_12_1:
-        return "12_1";
-    case D3D_FEATURE_LEVEL_12_0:
-        return "12_0";
-    case D3D_FEATURE_LEVEL_11_1:
-        return "11_1";
-    case D3D_FEATURE_LEVEL_11_0:
-        return "11_0";
-    default:
-        OXYGEN_UNREACHABLE_RETURN("_UNEXPECTED_");
-    }
-}
-
-void LogAdapters()
-{
-    std::ranges::for_each(
-        GetAdaptersInternal(),
-        [](const AdapterDesc& a) {
-            LOG_F(INFO, "[{}] {} {} ({}-{})", "+", a.name, FormatMemorySize(a.dedicated_memory), a.vendor_id, a.device_id);
-            LOG_F(INFO, "  Meets Feature Level: {}", a.meets_feature_level);
-            LOG_F(INFO, "  Has Connected Display: {}", a.has_connected_display);
-            LOG_F(INFO, "  Max Feature Level: {}", FeatureLevelToString(a.max_feature_level));
-        });
-}
-auto GetMaxFeatureLevel(const ComPtr<DeviceType>& device) -> D3D_FEATURE_LEVEL
-{
-    static constexpr std::array feature_levels {
-        D3D_FEATURE_LEVEL_12_2,
-        D3D_FEATURE_LEVEL_12_1,
-        D3D_FEATURE_LEVEL_12_0,
-        D3D_FEATURE_LEVEL_11_1,
-        D3D_FEATURE_LEVEL_11_0,
-    };
-
-    D3D12_FEATURE_DATA_FEATURE_LEVELS feature_level_info = {};
-    feature_level_info.NumFeatureLevels = static_cast<UINT>(feature_levels.size());
-    feature_level_info.pFeatureLevelsRequested = feature_levels.data();
-
-    if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &feature_level_info, sizeof(feature_level_info)))) {
-        return feature_level_info.MaxSupportedFeatureLevel;
-    }
-
-    return D3D_FEATURE_LEVEL_11_0;
-}
-
-void InitializeFactory(ComPtr<FactoryType>& factory, const bool enable_debug)
-{
-    ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
-    UINT dxgi_factory_flags { 0 };
-    if (enable_debug) {
-        dxgi_factory_flags = DXGI_CREATE_FACTORY_DEBUG;
-    }
-    ThrowOnFailed(CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&factory)));
-}
-
-auto DiscoverAdapters(
-    const ComPtr<FactoryType>& factory,
-    const std::function<bool(const AdapterDesc&)>& selector)
-    -> std::tuple<ComPtr<IDXGIAdapter1>, size_t>
-{
-    LOG_SCOPE_FUNCTION(INFO);
-
-    auto& adapters = GetAdaptersInternal();
-    adapters.clear(); // Clear any previous entries
-
-    ComPtr<IDXGIAdapter1> selected_adapter;
-    size_t selected_adapter_index = std::numeric_limits<size_t>::max();
-    ComPtr<IDXGIAdapter1> adapter;
-
-    // Enumerate high-performance adapters only
-    for (UINT adapter_index = 0;
-        DXGI_ERROR_NOT_FOUND != factory->EnumAdapterByGpuPreference(adapter_index, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter));
-        adapter_index++) {
-        DXGI_ADAPTER_DESC1 desc;
-        ThrowOnFailed(adapter->GetDesc1(&desc));
-
-        if ((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0U) {
-            // Don't select the Basic Render Driver adapter.
-            continue;
-        }
-
-        AdapterDesc adapter_info = CreateAdapterDesc(desc, adapter);
-
-        // Check if the adapter supports the minimum required feature level
-        ComPtr<DeviceType> device;
-        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&device)))) {
-            adapter_info.meets_feature_level = true;
-            adapter_info.max_feature_level = GetMaxFeatureLevel(device);
-            if (selector(adapter_info)) {
-                // Select the adapter with the most dedicated memory
-                if ((selected_adapter == nullptr)
-                    || adapter_info.dedicated_memory > adapters.at(selected_adapter_index).dedicated_memory) {
-                    selected_adapter = adapter;
-                    selected_adapter_index = adapters.size();
-                }
-            } else {
-                device.Reset();
-            }
-        }
-
-        adapters.push_back(adapter_info);
-    }
-
-    LogAdapters();
-
-    if (selected_adapter_index == std::numeric_limits<size_t>::max()) {
-        throw std::runtime_error("No suitable adapter found.");
-    }
-
-    return std::make_tuple(selected_adapter, selected_adapter_index);
-}
-
-} // namespace
 
 auto Graphics::GetFactory() const -> FactoryType*
 {
-    CHECK_NOTNULL_F(factory_, "graphics backend not properly initialized");
-    return factory_.Get();
+    auto* factory = GetComponent<DeviceManager>().Factory();
+    CHECK_NOTNULL_F(factory, "graphics backend not properly initialized");
+    return factory;
 }
 
 auto Graphics::GetMainDevice() const -> DeviceType*
 {
-    CHECK_NOTNULL_F(main_device_, "graphics backend not properly initialized");
-    return main_device_.Get();
+    auto* device = GetComponent<DeviceManager>().Device();
+    CHECK_NOTNULL_F(device, "graphics backend not properly initialized");
+    return device;
 }
 
-auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
+auto oxygen::graphics::d3d12::Graphics::GetAllocator() const -> D3D12MA::Allocator*
 {
-    return std::make_unique<ImGuiModule>(std::move(engine), window_id);
+    auto* allocator = GetComponent<DeviceManager>().Allocator();
+    CHECK_NOTNULL_F(allocator, "graphics backend not properly initialized");
+    return allocator;
 }
 
 Graphics::Graphics(const SerializedBackendConfig& props)
@@ -322,53 +139,20 @@ Graphics::Graphics(const SerializedBackendConfig& props)
     // Parse JSON configuration
     nlohmann::json jsonConfig = nlohmann::json::parse(props.json_data, props.json_data + props.size);
 
-    // Extract common configuration
-    std::string appName = jsonConfig["applicationName"].get<std::string>();
-    bool debugEnabled = jsonConfig["enableDebug"].get<bool>();
+    DeviceManagerDesc desc {};
+    if (auto& enable_debug = jsonConfig["enable_debug"]) {
+        desc.enable_debug = enable_debug.get<bool>();
+    }
 
-    // Setup the DXGI factory
-    InitializeFactory(factory_, debugEnabled);
-
-    // Discover adapters and select the most suitable one
-    const auto [best_adapter, best_adapter_index] = DiscoverAdapters(factory_,
-        [](const AdapterDesc& adapter) {
-            return adapter.meets_feature_level && adapter.has_connected_display;
-        });
-    const auto& best_adapter_desc = GetAdaptersInternal()[best_adapter_index];
-    LOG_F(INFO, "Selected adapter: {}", best_adapter_desc.name);
-
-    // Create the device with the maximum feature level of the selected adapter
-    ThrowOnFailed(
-        D3D12CreateDevice(
-            best_adapter.Get(),
-            best_adapter_desc.max_feature_level,
-            IID_PPV_ARGS(&main_device_)));
-    NameObject(main_device_.Get(), L"MAIN DEVICE");
-
-    D3D12MA::ALLOCATOR_DESC allocator_desc = {};
-    allocator_desc.Flags = D3D12MA::ALLOCATOR_FLAG_NONE;
-    allocator_desc.pDevice = main_device_.Get();
-    allocator_desc.pAdapter = best_adapter.Get();
-    ThrowOnFailed(CreateAllocator(&allocator_desc, &allocator_));
-    LOG_F(INFO, "D3D12MA Memory Allocator initialized");
-}
-
-Graphics::~Graphics()
-{
-    LOG_SCOPE_FUNCTION(INFO);
-
-    ObjectRelease(allocator_);
-    allocator_ = nullptr;
-    LOG_F(INFO, "D3D12MA Memory Allocator released");
-
-    factory_.Reset();
-    LOG_F(INFO, "D3D12 DXGI Factory reset");
-
-    CHECK_EQ_F(main_device_.Reset(), 0U);
-    LOG_F(INFO, "D3D12 Main Device reset");
+    AddComponent<DeviceManager>(desc);
 }
 
 auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
 {
     return std::make_unique<Renderer>();
+}
+
+auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
+{
+    return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }

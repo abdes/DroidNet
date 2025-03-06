@@ -10,10 +10,10 @@
 
 set(
   description
-  "Sample program using oxygen::graphics device manager."
+  "Sample program using oxygen::graphics for some rendering activities."
 )
 asap_module_declare(
-  MODULE_NAME "Oxygen.Graphics.DeviceManager.Example"
+  MODULE_NAME "Oxygen.Graphics.Rendering.Example"
   DESCRIPTION description
   WITHOUT_VERSION_H
 )
@@ -46,6 +46,7 @@ target_link_libraries(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
     oxygen::oxco
     oxygen::platform
+    oxygen::loader
     oxygen::graphics-direct3d12
 )
 

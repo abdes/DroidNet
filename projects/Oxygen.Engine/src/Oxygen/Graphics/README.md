@@ -73,11 +73,7 @@ GPU memory management system.
     - D3D12: Resource heap pooling
     - Vulkan: Memory pool management
 
-### 🔄 Maestro
-Below is a revised version of the Coordinator module section, refined to avoid
-overlap with other modules, limit its scope to coordination and synchronization
-for D3D12 and Vulkan, and provide only the services needed by higher-level
-engine components:
+### 🔄 Maestro (The Coordinator)
 
 #### Core Responsibilities
 
@@ -200,16 +196,6 @@ Display and presentation system.
       - Display mode capabilities querying
       - Multi-display support
 
-  - **Frame Synchronization** [Retained]
-    - D3D12:
-      - Per-frame fence synchronization
-      - Swapchain backbuffer synchronization
-      - Frame resource availability tracking
-    - Vulkan:
-      - Swapchain image acquisition sync
-      - Present semaphore management
-      - Frame resource barriers
-
   - **Swapchain Management**
     - D3D12:
       - IDXGISwapChain4 creation and configuration
@@ -221,6 +207,13 @@ Display and presentation system.
       - Image acquisition and presentation
       - Present modes configuration
       - Present queue management
+
+  - **Frame Presentation**
+    - Swapchain presentation coordination
+    - Present parameter configuration
+    - Tearing support and VSync settings
+    - Frame buffer management
+    - Frame resource cycling
 
   - **Frame Resource Management** [Retained]
     - Per-frame command allocation tracking
@@ -385,6 +378,33 @@ Animation processing system.
     - Blend tree computation
     - Instance animation updates
 
+Component Interactions and Data Flow
+Frame Execution Flow
+Graphics Context initiates the frame
+Maestro signals frame begin event
+Renderer acquires the next swapchain image
+Various Subsystems record commands:
+SceneOrganizer updates scene data
+MaterialManager updates material parameters
+LightMaster updates light data
+Animation updates skeletal data
+PipelineArchitect provides pipeline states
+Commander submits command buffers
+Maestro synchronizes between queue submissions
+Renderer presents the completed frame
+Maestro signals frame end event
+Resource Creation Flow
+Graphics Context receives resource creation request
+Resources creates the resource descriptor
+Allocator provides memory for the resource
+Resources finalizes resource creation
+Resources creates necessary views
+Shader Pipeline Flow
+ShaderCompiler compiles shader code
+ShaderLibrary stores compiled shaders
+PipelineArchitect uses shader bytecode for pipeline creation
+Resources creates descriptor views based on shader reflection data
+
 ## Implementation Guidelines
 
 ### Memory Management
@@ -431,3 +451,62 @@ Animation processing system.
 - Variable rate shading
 - Mesh shader pipeline
 - Advanced upscaling techniques
+
+## Component Interactions and Data Flow
+
+### Frame Execution Flow (Asynchronous Coroutines)
+
+The rendering pipeline operates as a network of interconnected asynchronous
+tasks, with natural suspension points where operations await GPU completion:
+
+1. **Frame Initialization**
+   - **Graphics Context** spawns the frame execution coroutine
+   - This coroutine establishes frame-level state and dispatches parallel tasks
+
+2. **Event Signaling**
+   - **Maestro** asynchronously broadcasts the frame begin event
+   - Subsystems subscribe to this event and activate their respective coroutines
+
+3. **Resource Acquisition**
+   - **Renderer's** swapchain image acquisition suspends until a buffer is available
+   - Upon resumption, it signals downstream coroutines that surface resources are ready
+
+4. **Parallel Command Recording**
+   - Multiple subsystem coroutines execute concurrently:
+     - **SceneOrganizer** generates scene data asynchronously, yielding when dependencies arise
+     - **MaterialManager** updates parameter buffers in parallel with other systems
+     - **LightMaster** asynchronously processes light updates and shadow information
+     - **Animation** transforms skeletal data without blocking other subsystems
+
+5. **Pipeline Resolution**
+   - **PipelineArchitect** awaits shader and state requests, resuming when dependencies resolve
+   - Caches responses to avoid redundant pipeline creation
+
+6. **Submission Coordination**
+   - **Commander** awaits completion of all recording coroutines
+   - Batches commands and submits them without blocking the main thread
+
+7. **Synchronization**
+   - **Maestro** places synchronization points between queue submissions
+   - Yields execution until critical GPU operations complete
+
+8. **Presentation**
+   - **Renderer** presentation coroutine suspends until the optimal present moment
+   - Resumes when timing conditions align with VSync requirements
+
+9. **Completion Signaling**
+   - **Maestro** signals frame end after presentation completes
+   - New frame coroutines can begin while previous frame finalization continues in parallel
+
+### Resource Creation Flow
+1. **Graphics Context** receives resource creation request
+2. **Resources** creates the resource descriptor
+3. **Allocator** provides memory for the resource
+4. **Resources** finalizes resource creation
+5. **Resources** creates necessary views
+
+### Shader Pipeline Flow
+1. **ShaderCompiler** compiles shader code
+2. **ShaderLibrary** stores compiled shaders
+3. **PipelineArchitect** uses shader bytecode for pipeline creation
+4. **Resources** creates descriptor views based on shader reflection data
