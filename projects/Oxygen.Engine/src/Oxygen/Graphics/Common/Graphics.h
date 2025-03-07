@@ -11,7 +11,6 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -19,11 +18,15 @@
 
 namespace oxygen {
 
+namespace graphics {
+    class IShaderByteCode;
+} // namespace graphics
+
 namespace imgui {
     class ImguiModule;
 } // namespace imgui
 
-class Graphics : public Composition, public Named {
+class Graphics : public Composition {
 public:
     explicit Graphics(const char* name)
     {
@@ -35,16 +38,16 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_DEFAULT_MOVABLE(Graphics);
 
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view
     {
         return GetComponent<ObjectMetaData>().GetName();
     }
-    void SetName(std::string_view name) noexcept override
-    {
-        GetComponent<ObjectMetaData>().SetName(name);
-    }
 
     [[nodiscard]] bool IsWithoutRenderer() const { return is_renderer_less_; }
+
+    [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(std::string_view unique_id) const
+        -> std::shared_ptr<graphics::IShaderByteCode>
+        = 0;
 
     //! Get the renderer instance for this graphics backend.
     /*!

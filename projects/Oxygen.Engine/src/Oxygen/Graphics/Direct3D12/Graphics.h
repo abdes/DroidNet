@@ -19,7 +19,7 @@ class Graphics final : public oxygen::Graphics {
     using Base = oxygen::Graphics;
 
 public:
-    Graphics(const SerializedBackendConfig& config);
+    explicit Graphics(const SerializedBackendConfig& config);
 
     ~Graphics() override = default;
 
@@ -29,6 +29,9 @@ public:
     [[nodiscard]] OXYGEN_D3D12_API auto GetFactory() const -> FactoryType*;
     [[nodiscard]] OXYGEN_D3D12_API auto GetMainDevice() const -> DeviceType*;
     [[nodiscard]] OXYGEN_D3D12_API auto GetAllocator() const -> D3D12MA::Allocator*;
+
+    [[nodiscard]] auto GetShader(std::string_view unique_id) const
+        -> std::shared_ptr<graphics::IShaderByteCode> override;
 
     [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
@@ -58,6 +61,6 @@ namespace detail {
     //! Get the backend memory allocator
     // TODO: Add the allocator
     //! @}
-} // namespace oxygen::graphics::d3d12::detail
+}  // namespace detail
 
 } // namespace oxygen::graphics::d3d12

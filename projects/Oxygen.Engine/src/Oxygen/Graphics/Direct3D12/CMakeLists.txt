@@ -37,6 +37,7 @@ else()
   )
 endif()
 set(dxc_lib_path "${CMAKE_SOURCE_DIR}/packages/DXC/lib/${dxc_arch}")
+set(dxc_inc_path "${CMAKE_SOURCE_DIR}/packages/DXC/inc")
 
 # ==============================================================================
 # Build instructions
@@ -75,7 +76,6 @@ target_sources(
     "Graphics.cpp"
     "MemoryBlock.cpp"
     "Renderer.cpp"
-    "ShaderCompiler.cpp"
     "Resources/Texture.cpp"
     "Resources/DescriptorHeap.cpp"
     "Resources/DescriptorHeap.h"
@@ -91,6 +91,10 @@ target_sources(
     "ImGui/imgui_impl_dx12.cpp"
     "ImGui/imgui_impl_dx12.h"
     "ImGui/ImGuiModule.cpp"
+    "Shaders/EngineShaders.h"
+    "Shaders/EngineShaders.cpp"
+    "Shaders/ShaderCompiler.h"
+    "Shaders/ShaderCompiler.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -110,7 +114,6 @@ target_sources(
       "MemoryBlock.h"
       "Renderer.h"
       "RenderTarget.h"
-      "ShaderCompiler.h"
       "Resources/Texture.h"
       "ImGui/ImGuiModule.h"
       "Devices/DeviceManager.h"
@@ -125,6 +128,7 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_D3D12_STATIC>
 )
 
+target_include_directories(${META_MODULE_TARGET} PRIVATE "${dxc_inc_path}")
 target_link_directories(${META_MODULE_TARGET} PRIVATE ${dxc_lib_path})
 target_link_libraries(
   ${META_MODULE_TARGET}
@@ -135,10 +139,10 @@ target_link_libraries(
     oxygen::imgui
     glm::glm
     nlohmann_json::nlohmann_json
+    dxcompiler
     d3d12
     dxgi
     dxguid
-    dxcompiler
 )
 
 # ------------------------------------------------------------------------------

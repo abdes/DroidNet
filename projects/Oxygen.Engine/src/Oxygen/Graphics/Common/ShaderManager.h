@@ -61,24 +61,24 @@ struct CompiledShader {
     std::shared_ptr<IShaderByteCode> bytecode;
 };
 
-struct ShaderManagerConfig {
-    std::string renderer_name { "Default" };
-    std::string archive_file_name { "shaders.bin" };
-
-    std::optional<std::string> archive_dir {};
-    std::optional<std::string> source_dir {};
-
-    std::span<const ShaderProfile> shaders {};
-
-    ShaderCompilerPtr compiler {};
-};
-
 class ShaderManager : public Composition {
 public:
-    OXYGEN_GFX_API explicit ShaderManager(ShaderManagerConfig config)
+    struct Config {
+        std::string backend_name { "Default" };
+        std::string archive_file_name { "shaders.bin" };
+
+        std::optional<std::string> archive_dir;
+        std::optional<std::string> source_dir;
+
+        std::span<const ShaderInfo> shaders;
+
+        std::shared_ptr<ShaderCompiler> compiler;
+    };
+
+    OXYGEN_GFX_API explicit ShaderManager(Config config)
         : config_(std::move(config))
     {
-        AddComponent<ObjectMetaData>(std::string("ShaderManager for ") + config_.renderer_name);
+        AddComponent<ObjectMetaData>(std::string("ShaderManager for ") + config_.backend_name);
         Initialize();
     }
 
@@ -89,32 +89,32 @@ public:
 
     // Core archive operations
     //! Loads shader bytecode and metadata from the archive file
-    [[nodiscard]] OXYGEN_GFX_API void Load();
+    OXYGEN_GFX_API void Load();
     //! Persists shader bytecode and metadata to the archive file
-    [[nodiscard]] OXYGEN_GFX_API void Save() const;
+    OXYGEN_GFX_API void Save() const;
     //! Removes all shaders from the archive
     OXYGEN_GFX_API void Clear() noexcept;
 
     // Shader management
     //! Adds pre-compiled shader bytecode to the archive
-    [[nodiscard]] OXYGEN_GFX_API bool AddCompiledShader(CompiledShader shader);
+    [[nodiscard]] OXYGEN_GFX_API auto AddCompiledShader(CompiledShader shader) -> bool;
     //! Retrieves compiled shader bytecode by name
-    [[nodiscard]] OXYGEN_GFX_API std::shared_ptr<IShaderByteCode> GetShaderBytecode(
-        std::string_view unique_id) const;
+    [[nodiscard]] OXYGEN_GFX_API auto GetShaderBytecode(std::string_view unique_id) const
+        -> std::shared_ptr<IShaderByteCode>;
 
     // State queries
     //! Checks if a shader exists in the archive
-    [[nodiscard]] OXYGEN_GFX_API bool HasShader(std::string_view unique_id) const noexcept;
+    [[nodiscard]] OXYGEN_GFX_API auto HasShader(std::string_view unique_id) const noexcept -> bool;
     //! Returns profiles of all shaders that need recompilation
-    [[nodiscard]] OXYGEN_GFX_API std::vector<ShaderProfile> GetOutdatedShaders() const;
+    [[nodiscard]] OXYGEN_GFX_API auto GetOutdatedShaders() const -> std::vector<ShaderInfo>;
     //! Returns the total number of shaders in the archive
-    [[nodiscard]] OXYGEN_GFX_API size_t GetShaderCount() const noexcept;
+    [[nodiscard]] OXYGEN_GFX_API auto GetShaderCount() const noexcept -> size_t;
 
     // Update operations
     //! Compiles all shaders whose source files have changed
-    [[nodiscard]] OXYGEN_GFX_API void UpdateOutdatedShaders();
+    OXYGEN_GFX_API void UpdateOutdatedShaders();
     //! Forces recompilation of all shaders in the archive
-    [[nodiscard]] OXYGEN_GFX_API bool RecompileAll();
+    [[nodiscard]] OXYGEN_GFX_API auto RecompileAll() -> bool;
 
     [[nodiscard]] auto GetName() const noexcept
     {
@@ -127,15 +127,15 @@ private:
     OXYGEN_GFX_API void Initialize();
 
     //! Checks if a shader source file has been modified since last compilation
-    [[nodiscard]] bool IsShaderOutdated(const ShaderProfile& shader) const;
+    [[nodiscard]] auto IsShaderOutdated(const ShaderInfo& shader) const -> bool;
 
     //! Compiles shader from profile and adds it to the archive
-    [[nodiscard]] bool CompileAndAddShader(const ShaderProfile& profile);
+    [[nodiscard]] auto CompileAndAddShader(const ShaderInfo& profile) -> bool;
 
-    ShaderManagerConfig config_ {};
+    Config config_ {};
     std::unordered_map<std::string, CompiledShader> shader_cache_;
-    std::vector<ShaderProfile> shader_profiles_;
-    std::filesystem::path archive_path_ {};
+    std::vector<ShaderInfo> shader_infos_;
+    std::filesystem::path archive_path_;
 };
 
 } // namespace oxygen::graphics

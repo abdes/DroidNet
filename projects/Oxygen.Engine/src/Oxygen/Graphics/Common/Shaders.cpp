@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Shaders.h>
-
 #include <filesystem>
 #include <string>
+
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
 auto oxygen::graphics::MakeShaderIdentifier(
     const ShaderType shader_type,
@@ -51,9 +52,4 @@ auto oxygen::graphics::MakeShaderIdentifier(
     const std::string normalized_path = path.generic_string();
 
     return prefix + "@" + normalized_path;
-}
-
-auto oxygen::graphics::MakeShaderIdentifier(const ShaderProfile& shader) -> std::string
-{
-    return MakeShaderIdentifier(shader.type, shader.path);
 }

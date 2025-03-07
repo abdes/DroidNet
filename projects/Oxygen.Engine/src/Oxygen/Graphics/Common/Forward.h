@@ -36,10 +36,8 @@ namespace graphics {
     using BufferPtr = std::shared_ptr<Buffer>;
     using CommandListPtr = std::unique_ptr<CommandList>;
     using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
-    using IShaderByteCodePtr = std::shared_ptr<IShaderByteCode>;
     using RendererPtr = std::weak_ptr<Renderer>;
     using RenderTargetNoDeletePtr = const RenderTarget*;
-    using ShaderCompilerPtr = std::shared_ptr<ShaderCompiler>;
     using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
 
     using CommandLists = std::vector<CommandListPtr>;

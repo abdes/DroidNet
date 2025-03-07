@@ -41,7 +41,6 @@ template <typename T>
 concept ManagedBuffer = std::movable<T> && requires(T t) {
     { t->GetBufferPointer() } -> std::convertible_to<void*>;
     { t->GetBufferSize() } -> std::convertible_to<size_t>;
-    { t->Release() };
     { static_cast<bool>(t) } -> std::convertible_to<bool>;
 };
 
@@ -132,12 +131,7 @@ public:
     }
 
     //! Destructor, releases the buffer data.
-    ~ShaderByteCode() noexcept override
-    {
-        if (buffer_) {
-            buffer_->Release();
-        }
-    }
+    ~ShaderByteCode() noexcept override = default;
 
 private:
     T buffer_;

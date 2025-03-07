@@ -24,13 +24,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Base/Windows/ComError.h> // needed
-#include <Oxygen/Core/Types.h>
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
-#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderCompiler.h>
-#include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
@@ -38,13 +34,10 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3D12/ShaderCompiler.h>
 #include <Oxygen/ImGui/ImGuiPlatformBackend.h> // needed
-#include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Platform/Types.h>
 
 using Microsoft::WRL::ComPtr;
@@ -57,16 +50,6 @@ using oxygen::windows::ThrowOnFailed;
 namespace {
 using oxygen::graphics::resources::kSurface;
 oxygen::ResourceTable<oxygen::graphics::d3d12::detail::WindowSurface> surfaces(kSurface, 256);
-} // namespace
-
-namespace {
-// Specification of engine shaders. Each entry is a ShaderProfile
-// corresponding to one of the shaders we want to automatically compile,
-// package and load.
-const oxygen::graphics::ShaderProfile kEngineShaders[] = {
-    { .type = ShaderType::kPixel, .path = "FullScreenTriangle.hlsl", .entry_point = "PS" },
-    { .type = ShaderType::kVertex, .path = "FullScreenTriangle.hlsl", .entry_point = "VS" },
-};
 } // namespace
 
 // Implementation details of the Renderer class
@@ -104,13 +87,8 @@ public:
     [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
     auto GetCommandRecorder() -> CommandRecorderPtr { return command_recorder_; }
-    auto GetShaderCompiler() const -> ShaderCompilerPtr { return std::static_pointer_cast<graphics::ShaderCompiler>(shader_compiler_); }
-    auto GetEngineShader(std::string_view unique_id) -> std::shared_ptr<IShaderByteCode>;
 
 private:
-    std::shared_ptr<ShaderCompiler> shader_compiler_ {};
-    std::unique_ptr<ShaderManager> engine_shaders_ {};
-
     std::unique_ptr<CommandQueue> command_queue_ {};
     std::shared_ptr<CommandRecorder> command_recorder_ {};
     mutable size_t current_frame_index_ { 0 };
@@ -137,29 +115,11 @@ void RendererImpl::Init(const GraphicsConfig& props)
     dsv_heap_.Initialize(512, false, GetMainDevice());
     srv_heap_.Initialize(4096, true, GetMainDevice());
     uav_heap_.Initialize(512, false, GetMainDevice());
-
-    // Load engine shaders
-    shader_compiler_ = std::make_shared<ShaderCompiler>(ShaderCompilerConfig {});
-    shader_compiler_->Initialize();
-    // TODO: Make this better by not hard-coding the path
-    ShaderManagerConfig shader_manager_config {
-        .renderer_name = "D3D12 Renderer",
-        .archive_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\bin\Oxygen)",
-        .source_dir = R"(F:\projects\DroidNet\projects\Oxygen.Engine\src\Oxygen\Graphics\Direct3D12\Shaders)",
-        .shaders = std::span(kEngineShaders, std::size(kEngineShaders)),
-        .compiler = shader_compiler_,
-    };
-    engine_shaders_ = std::make_unique<ShaderManager>(std::move(shader_manager_config));
 }
 
 void RendererImpl::ShutdownRenderer()
 {
     LOG_SCOPE_FUNCTION(INFO);
-
-    // Cleanup engine shaders
-    shader_compiler_->IsInitialized(false);
-    ObjectRelease(shader_compiler_);
-    engine_shaders_.reset();
 
     // Flush any pending commands and release any deferred resources for all
     // our frame indices
@@ -235,11 +195,6 @@ auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> 
     }
     LOG_F(INFO, "Window Surface created: {}", surface_id.ToString());
     return surface_id;
-}
-
-auto RendererImpl::GetEngineShader(std::string_view unique_id) -> std::shared_ptr<IShaderByteCode>
-{
-    return engine_shaders_->GetShaderBytecode(unique_id);
 }
 
 } // namespace oxygen::graphics::d3d12::detail
@@ -329,16 +284,6 @@ void Renderer::EndFrame(CommandLists& command_lists, const resources::SurfaceId&
 auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr
 {
     return pimpl_->GetCommandRecorder();
-}
-
-auto Renderer::GetShaderCompiler() const -> ShaderCompilerPtr
-{
-    return pimpl_->GetShaderCompiler();
-}
-
-auto Renderer::GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>
-{
-    return pimpl_->GetEngineShader(unique_id);
 }
 
 auto Renderer::RtvHeap() const -> detail::DescriptorHeap&

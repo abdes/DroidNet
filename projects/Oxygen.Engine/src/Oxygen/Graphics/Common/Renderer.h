@@ -99,8 +99,9 @@ namespace graphics {
             const RenderGameFunction& render_game) const;
 
         virtual auto GetCommandRecorder() const -> CommandRecorderPtr = 0;
-        virtual auto GetShaderCompiler() const -> ShaderCompilerPtr = 0;
-        virtual auto GetEngineShader(std::string_view unique_id) const -> IShaderByteCodePtr = 0;
+
+        // virtual auto GetShaderCompiler() const -> ShaderCompilerPtr = 0;
+        // virtual auto GetEngineShader(std::string_view unique_id) const -> IShaderByteCodePtr = 0;
 
         /**
          * Device resources creation functions

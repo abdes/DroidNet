@@ -234,7 +234,9 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
     current_command_list_->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
 }
 
-void CommandRecorder::SetPipelineState(const IShaderByteCodePtr& vertex_shader, const IShaderByteCodePtr& pixel_shader)
+void CommandRecorder::SetPipelineState(
+    const std::shared_ptr<IShaderByteCode>& vertex_shader,
+    const std::shared_ptr<IShaderByteCode>& pixel_shader)
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
     pso_desc.pRootSignature = root_signature_.Get();

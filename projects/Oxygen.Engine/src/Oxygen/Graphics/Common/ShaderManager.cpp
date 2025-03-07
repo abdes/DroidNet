@@ -22,7 +22,6 @@
 
 using oxygen::graphics::CompiledShaderInfo;
 using oxygen::graphics::ShaderManager;
-using oxygen::graphics::ShaderManagerConfig;
 
 namespace {
 
@@ -92,7 +91,7 @@ struct ArchiveHeader {
 
 namespace {
 
-auto GetArchivePath(const ShaderManagerConfig& config) -> std::filesystem::path
+auto GetArchivePath(const ShaderManager::Config& config) -> std::filesystem::path
 {
     std::filesystem::path archive_path {};
     if (!config.archive_dir) {
@@ -129,7 +128,7 @@ auto ShaderManager::Initialize() -> void
     DCHECK_F(!config_.shaders.empty(), "No shaders specified.");
     DCHECK_F(config_.source_dir.has_value(), "No shader source directory specified");
 
-    shader_profiles_.assign(config_.shaders.begin(), config_.shaders.end());
+    shader_infos_.assign(config_.shaders.begin(), config_.shaders.end());
 
     archive_path_ = GetArchivePath(config_);
 
@@ -166,7 +165,7 @@ auto ShaderManager::GetShaderBytecode(std::string_view unique_id) const
     return it->second.bytecode;
 }
 
-auto ShaderManager::IsShaderOutdated(const ShaderProfile& shader) const -> bool
+auto ShaderManager::IsShaderOutdated(const ShaderInfo& shader) const -> bool
 {
     const auto& shader_id = MakeShaderIdentifier(shader);
     const auto it = shader_cache_.find(shader_id);
@@ -183,10 +182,10 @@ auto ShaderManager::IsShaderOutdated(const ShaderProfile& shader) const -> bool
     return IsSourceFileNewer(info);
 }
 
-auto ShaderManager::GetOutdatedShaders() const -> std::vector<ShaderProfile>
+auto ShaderManager::GetOutdatedShaders() const -> std::vector<ShaderInfo>
 {
-    std::vector<ShaderProfile> outdated;
-    for (const auto& profile : shader_profiles_) {
+    std::vector<ShaderInfo> outdated;
+    for (const auto& profile : shader_infos_) {
         if (IsShaderOutdated(profile)) {
             outdated.push_back(profile);
         }
@@ -198,7 +197,7 @@ void ShaderManager::UpdateOutdatedShaders()
 {
     auto outdated = GetOutdatedShaders();
     if (outdated.empty()) {
-        LOG_F(INFO, "All {} shaders are up-to-date.", shader_profiles_.size());
+        LOG_F(INFO, "All {} shaders are up-to-date.", shader_infos_.size());
         return;
     }
 
@@ -220,7 +219,7 @@ auto ShaderManager::RecompileAll() -> bool
 {
     shader_cache_.clear();
     return std::ranges::all_of(
-        shader_profiles_,
+        shader_infos_,
         [this](const auto& profile) {
             return CompileAndAddShader(profile);
         });
@@ -351,15 +350,15 @@ void ShaderManager::Load()
 void ShaderManager::Clear() noexcept
 {
     shader_cache_.clear();
-    shader_profiles_.clear();
+    shader_infos_.clear();
 }
 
-auto ShaderManager::CompileAndAddShader(const ShaderProfile& profile) -> bool
+auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
 {
     DCHECK_F(config_.source_dir.has_value(), "No shader source directory specified");
 
     std::filesystem::path source_path(config_.source_dir.value());
-    source_path /= profile.path;
+    source_path /= profile.relative_path;
     auto bytecode = config_.compiler->CompileFromFile(source_path, profile);
     if (!bytecode) {
         return false;
