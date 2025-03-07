@@ -11,11 +11,13 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -131,13 +133,18 @@ auto oxygen::graphics::d3d12::Graphics::GetAllocator() const -> D3D12MA::Allocat
     return allocator;
 }
 
-Graphics::Graphics(const SerializedBackendConfig& props)
+auto Graphics::GetShader(const std::string_view unique_id) const -> std::shared_ptr<graphics::IShaderByteCode>
+{
+    return GetComponent<EngineShaders>().GetShader(unique_id);
+}
+
+Graphics::Graphics(const SerializedBackendConfig& config)
     : Base("D3D12 Backend")
 {
     LOG_SCOPE_FUNCTION(INFO);
 
     // Parse JSON configuration
-    nlohmann::json jsonConfig = nlohmann::json::parse(props.json_data, props.json_data + props.size);
+    nlohmann::json jsonConfig = nlohmann::json::parse(config.json_data, config.json_data + config.size);
 
     DeviceManagerDesc desc {};
     if (auto& enable_debug = jsonConfig["enable_debug"]) {
@@ -145,6 +152,7 @@ Graphics::Graphics(const SerializedBackendConfig& props)
     }
 
     AddComponent<DeviceManager>(desc);
+    AddComponent<EngineShaders>();
 }
 
 auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>

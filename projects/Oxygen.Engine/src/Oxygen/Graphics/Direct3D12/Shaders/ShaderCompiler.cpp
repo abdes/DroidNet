@@ -4,24 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/ShaderCompiler.h>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+#include <string>
+
+#include <d3dcommon.h>
+#include <dxcapi.h>
+#include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/ShaderCompiler.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Types/ShaderType.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.h>
+#include <type_traits>
 
-using namespace oxygen::graphics::d3d12;
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::ShaderType;
+using oxygen::graphics::d3d12::ShaderCompiler;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
-void LogCompilationErrors(IDxcBlobEncoding* error_blob)
+void LogCompilationErrors(IDxcBlob* error_blob)
 {
     if (error_blob != nullptr) {
         // Get the pointer to the error message and its size
-        const auto error_message = static_cast<const char*>(error_blob->GetBufferPointer());
+        const auto* const error_message = static_cast<const char*>(error_blob->GetBufferPointer());
         const size_t error_message_size = error_blob->GetBufferSize();
 
         // Convert the error message to a string
@@ -32,7 +45,7 @@ void LogCompilationErrors(IDxcBlobEncoding* error_blob)
     }
 }
 
-constexpr auto GetProfileForShaderTupe(const ShaderType type) -> const wchar_t*
+constexpr auto GetProfileForShaderType(const ShaderType type) -> const wchar_t*
 {
     switch (type) // NOLINT(clang-diagnostic-switch-enum)
     {
@@ -59,27 +72,28 @@ constexpr auto GetProfileForShaderTupe(const ShaderType type) -> const wchar_t*
 }
 } // namespace
 
-void ShaderCompiler::OnInitialize()
+ShaderCompiler::ShaderCompiler(Config config)
+    : Base(std::forward<Config>(config))
 {
-    graphics::ShaderCompiler::OnInitialize();
-
     ThrowOnFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils_)));
     ThrowOnFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler_)));
     ThrowOnFailed(utils_->CreateDefaultIncludeHandler(include_processor_.GetAddressOf()));
 }
 
+ShaderCompiler::~ShaderCompiler() = default;
+
 auto ShaderCompiler::CompileFromSource(
     const std::u8string& shader_source,
-    const ShaderProfile& shader_profile) const -> std::unique_ptr<IShaderByteCode>
+    const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>
 {
-    DCHECK_LT_F(shader_source.size(), std::numeric_limits<uint32_t>::max());
+    DCHECK_F(shader_source.size() < std::numeric_limits<uint32_t>::max());
 
     if (shader_source.empty()) {
         LOG_F(WARNING, "Attempt to compile a shader from source,");
         return {};
     }
 
-    const auto* profile_name = GetProfileForShaderTupe(shader_profile.type);
+    const auto* profile_name = GetProfileForShaderType(shader_info.type);
 
     ComPtr<IDxcBlobEncoding> src_blob;
     ThrowOnFailed(utils_->CreateBlob(
@@ -98,7 +112,7 @@ auto ShaderCompiler::CompileFromSource(
 #endif
 
     std::wstring entry_point {};
-    string_utils::Utf8ToWide(shader_profile.entry_point, entry_point);
+    string_utils::Utf8ToWide(shader_info.entry_point, entry_point);
     arguments.emplace_back(L"-E");
     arguments.emplace_back(entry_point.c_str());
 
@@ -113,7 +127,7 @@ auto ShaderCompiler::CompileFromSource(
     //   arguments.push_back(define_str.c_str());
     // }
 
-    DxcBuffer source_buffer;
+    DxcBuffer source_buffer {};
     source_buffer.Ptr = src_blob->GetBufferPointer();
     source_buffer.Size = src_blob->GetBufferSize();
     source_buffer.Encoding = DXC_CP_UTF8;
@@ -142,7 +156,7 @@ auto ShaderCompiler::CompileFromSource(
         }
         return {};
     }
-    LOG_F(INFO, "Shader at `{}` compiled successfully", shader_profile.path);
+    LOG_F(INFO, "Shader at `{}` compiled successfully", shader_info.relative_path);
 
     ComPtr<IDxcBlob> output;
     ThrowOnFailed(result->GetResult(&output));
@@ -157,8 +171,10 @@ auto ShaderCompiler::CompileFromSource(
         LOG_F(ERROR, "Shader compilation succeeded but produced empty bytecode");
 
         // Check if we have any warnings
-        ComPtr<IDxcBlobEncoding> warning_blob;
-        if (SUCCEEDED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), nullptr)) && (warning_blob != nullptr)) {
+        ComPtr<IDxcBlobWide> output_name_blob;
+        ComPtr<IDxcBlob> warning_blob;
+        hr = result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), &output_name_blob);
+        if (SUCCEEDED(hr) && (warning_blob != nullptr)) {
             LogCompilationErrors(warning_blob.Get());
         }
         return {};

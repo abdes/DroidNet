@@ -31,8 +31,6 @@ public:
     OXYGEN_MAKE_NON_MOVABLE(Renderer);
 
     auto GetCommandRecorder() const -> CommandRecorderPtr override;
-    auto GetShaderCompiler() const -> ShaderCompilerPtr override;
-    auto GetEngineShader(std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode> override;
 
     [[nodiscard]] OXYGEN_D3D12_API auto RtvHeap() const -> detail::DescriptorHeap&;
     [[nodiscard]] OXYGEN_D3D12_API auto DsvHeap() const -> detail::DescriptorHeap&;

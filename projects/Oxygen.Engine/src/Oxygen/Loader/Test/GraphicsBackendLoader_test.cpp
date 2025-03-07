@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
@@ -44,6 +45,7 @@ public:
     // NOLINTBEGIN(modernize-use-trailing-return-type)
     MOCK_METHOD(std::unique_ptr<oxygen::graphics::Renderer>, CreateRenderer, (), (override));
     MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
     // NOLINTEND(modernize-use-trailing-return-type)
 
     // Getter for the JSON data
