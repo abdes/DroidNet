@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 
 #include <Oxygen/Graphics/Common/CommandList.h> // Needed to forward the command list ptr
 
@@ -14,12 +15,12 @@ void Renderer::OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*
 {
     // platform_ = std::move(platform);
     // props_ = props;
-    this->EmitRendererInitialized();
+    // this->EmitRendererInitialized();
 }
 
 void Renderer::OnShutdown()
 {
-    this->EmitRendererShutdown();
+    // this->EmitRendererShutdown();
     platform_.reset();
 }
 
@@ -34,11 +35,11 @@ void Renderer::Render(
     auto* self = const_cast<Renderer*>(this);
 
     const auto& render_target = self->BeginFrame(surface_id);
-    this->EmitBeginFrameRender(current_frame_index_);
+    // this->EmitBeginFrameRender(current_frame_index_);
 
     render_game(render_target);
 
     self->EndFrame(surface_id);
-    this->EmitEndFrameRender(current_frame_index_);
+    // this->EmitEndFrameRender(current_frame_index_);
     current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
 }

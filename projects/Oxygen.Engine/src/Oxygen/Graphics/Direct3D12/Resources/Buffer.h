@@ -9,10 +9,6 @@
 #include <d3d12.h>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinDisposable.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/D3DResource.h>

@@ -16,7 +16,7 @@ void DeferredObjectRelease(T*& resource) noexcept
     requires HasReleaseMethod<T>
 {
     if (resource) {
-        graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
+      // TODO:   graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
     }
 }
 
@@ -27,7 +27,7 @@ void DeferredObjectRelease(std::shared_ptr<T>& resource) noexcept
     requires HasReleaseMethod<T>
 {
     if (resource) {
-        graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
+      // TODO:  graphics::d3d12::detail::GetPerFrameResourceManager().RegisterDeferredRelease(resource);
     }
 }
 

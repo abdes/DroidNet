@@ -8,18 +8,14 @@
 
 #include "./api_export.h"
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Base/MixinShutdown.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
-#include <Oxygen/Graphics/Common/MixinDeferredRelease.h>
-#include <Oxygen/Graphics/Common/MixinRendererEvents.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Graphics/Common/Types/RenderGameFunction.h>
-#include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 
@@ -51,26 +47,17 @@ namespace graphics {
      * most cases, only one is needed, and that one can be obtained at any time
      * using the GetRenderer() function from the loader.
      */
-    class Renderer
-        : public Mixin<Renderer,
-              Curry<MixinNamed, const char*>::mixin,
-              MixinShutdown,
-              MixinRendererEvents,
-              MixinDeferredRelease,
-              MixinInitialize // Last one to consume remaining arguments.
-              > {
+    class Renderer : public Composition {
     public:
-        //! Constructor to forward the arguments to the mixins in the chain.
-        template <typename... Args>
-        constexpr explicit Renderer(Args&&... args)
-            : Mixin(std::forward<Args>(args)...)
+        explicit Renderer()
+            : Renderer("Renderer")
         {
         }
 
         //! Default constructor, sets the object name.
-        Renderer()
-            : Mixin("Renderer")
+        Renderer(std::string_view name)
         {
+            AddComponent<ObjectMetaData>(name);
         }
 
         OXYGEN_GFX_API ~Renderer() override = default;

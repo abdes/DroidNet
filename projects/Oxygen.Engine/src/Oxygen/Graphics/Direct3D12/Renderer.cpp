@@ -259,16 +259,12 @@ auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride
 
 void Renderer::OnInitialize(/*PlatformPtr platform, const RendererProperties& props*/)
 {
-    if (this->IsInitialized())
-        OnShutdown();
-
     graphics::Renderer::OnInitialize();
     pimpl_ = std::make_shared<detail::RendererImpl>();
     try {
         pimpl_->Init(GetInitProperties());
     } catch (const std::runtime_error&) {
         // Request a shutdown to cleanup resources
-        this->IsInitialized(true);
         throw;
     }
 }

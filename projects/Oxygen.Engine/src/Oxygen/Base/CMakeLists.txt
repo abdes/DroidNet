@@ -65,7 +65,6 @@ target_sources(
       "Finally.h"
       "Logging.h"
       "Macros.h"
-      "MemoryStream.cpp"
       "MemoryStream.h"
       "NoInline.h"
       "NoStd.h"
