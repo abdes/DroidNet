@@ -4,13 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
+#include <memory>
 
-#include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
-
+#include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
@@ -59,10 +60,10 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawD
 
     // TODO: Refactor to remove CommandRecorder and use CommandList directly
 
-    auto command_list = std::make_unique<CommandList>();
-    CHECK_NOTNULL_F(command_list);
+    std::unique_ptr<CommandList> command_list {};
     try {
-        command_list->Initialize(CommandListType::kGraphics);
+        command_list = std::make_unique<CommandList>(CommandListType::kGraphics, "ImGui Command List");
+        CHECK_NOTNULL_F(command_list);
         CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
         command_list->OnBeginRecording();
     } catch (const std::exception& e) {

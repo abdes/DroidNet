@@ -9,8 +9,9 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 namespace oxygen::graphics {
 
@@ -22,12 +23,18 @@ struct BufferView {
     uint32_t numElements = UINT32_MAX;
 };
 
-class Buffer : public Mixin<Buffer, Curry<MixinNamed, const char*>::mixin> {
+class Buffer : public Composition, public Named {
 public:
     Buffer()
-        : Mixin("Buffer")
+        : Buffer("Buffer")
     {
     }
+
+    explicit Buffer(std::string_view name)
+    {
+        AddComponent<ObjectMetaData>(name);
+    }
+
     ~Buffer() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(Buffer);
@@ -37,7 +44,16 @@ public:
     virtual void* Map() = 0;
     virtual void Unmap() = 0;
 
-    virtual void Release() noexcept = 0;
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
+
+    void SetName(std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
+
 };
 
 } // namespace oxygen::graphics

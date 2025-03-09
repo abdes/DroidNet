@@ -36,9 +36,9 @@ void Renderer::Render(
     const auto& render_target = self->BeginFrame(surface_id);
     this->EmitBeginFrameRender(current_frame_index_);
 
-    auto command_lists = render_game(render_target);
+    render_game(render_target);
 
-    self->EndFrame(command_lists, surface_id);
+    self->EndFrame(surface_id);
     this->EmitEndFrameRender(current_frame_index_);
     current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
 }

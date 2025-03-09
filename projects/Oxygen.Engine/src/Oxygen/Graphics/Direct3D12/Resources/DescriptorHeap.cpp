@@ -26,61 +26,67 @@ inline void DescriptorHandle::Free()
     allocator->Free(*this);
 }
 
-void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, DeviceType* device)
+DescriptorHeap::DescriptorHeap(const InitInfo& init_info)
+    : type_(init_info.type)
 {
-    Release();
+    AddComponent<ObjectMetaData>(init_info.name);
 
     std::lock_guard lock { mutex_ };
     should_release_ = true;
 
-    DCHECK_NOTNULL_F(device);
-    DCHECK_NE_F(0, capacity);
-    DCHECK_F(!(is_shader_visible && capacity > D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2));
-    DCHECK_F(!(is_shader_visible && type_ == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER && capacity > D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE));
+    DCHECK_NOTNULL_F(init_info.device);
+    DCHECK_NE_F(0, init_info.capacity);
 
+    auto is_shader_visible = init_info.is_shader_visible;
+    DCHECK_F(!(is_shader_visible && init_info.capacity > D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2));
+    DCHECK_F(!(is_shader_visible && type_ == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER && init_info.capacity > D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE));
     if (type_ == D3D12_DESCRIPTOR_HEAP_TYPE_DSV || type_ == D3D12_DESCRIPTOR_HEAP_TYPE_RTV) {
         is_shader_visible = false;
     }
 
     const D3D12_DESCRIPTOR_HEAP_DESC desc {
         .Type = type_,
-        .NumDescriptors = static_cast<UINT>(capacity),
+        .NumDescriptors = static_cast<UINT>(init_info.capacity),
         .Flags = is_shader_visible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
         .NodeMask = 0,
     };
 
     try {
-        ThrowOnFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
-        NameObject(heap_, ObjectName());
+        ThrowOnFailed(init_info.device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
+        NameObject(heap_, GetName());
 
-        free_handles_ = std::make_unique<size_t[]>(capacity);
-        capacity_ = capacity;
+        free_handles_ = std::make_unique<size_t[]>(init_info.capacity);
+        capacity_ = init_info.capacity;
         size_ = 0;
-        for (size_t i = 0; i < capacity; ++i) {
+        for (size_t i = 0; i < capacity_; ++i) {
             free_handles_[i] = i;
         }
-        descriptor_size_ = device->GetDescriptorHandleIncrementSize(type_);
+        descriptor_size_ = init_info.device->GetDescriptorHandleIncrementSize(type_);
         cpu_start_ = heap_->GetCPUDescriptorHandleForHeapStart();
-        if (is_shader_visible)
+        if (is_shader_visible) {
             gpu_start_ = heap_->GetGPUDescriptorHandleForHeapStart();
+        }
 
-        LOG_F(INFO, "{} initialized (capacity={})", ObjectName(), capacity_);
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "{} initialization failed: {}", ObjectName(), e.what());
+        LOG_F(INFO, "{} initialized (capacity={})", GetName(), capacity_);
+    } catch (const std::exception& ex) {
+        LOG_F(ERROR, "{} initialization failed: {}", GetName(), ex.what());
         Release();
         throw;
     }
 }
 
-void DescriptorHeap::Release()
+DescriptorHeap::~DescriptorHeap() noexcept
+{
+    Release();
+}
+
+void DescriptorHeap::Release() noexcept
 {
     std::lock_guard lock { mutex_ };
     if (!should_release_)
         return;
 
     ObjectRelease(heap_);
-
-    DLOG_F(INFO, "{} released (size={})", ObjectName(), size_);
 
     free_handles_.reset();
     capacity_ = 0;
@@ -95,7 +101,7 @@ auto DescriptorHeap::Allocate() -> DescriptorHandle
     std::lock_guard lock { mutex_ };
 
     DCHECK_NOTNULL_F(heap_);
-    CHECK_LT_F(size_, capacity_, fmt::format("{} is full", ObjectName()).c_str());
+    CHECK_LT_F(size_, capacity_, fmt::format("{} is full", GetName()).c_str());
 
     DescriptorHandle handle(this);
     const size_t index = free_handles_[size_];

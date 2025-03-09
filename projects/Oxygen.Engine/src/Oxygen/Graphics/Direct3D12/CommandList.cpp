@@ -47,7 +47,18 @@ using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
-void CommandList::InitializeCommandList(CommandListType type)
+void CommandList::ReleaseCommandList() noexcept
+{
+    auto& renderer = GetRenderer();
+    // TODO: refactor into a macro
+    if (command_allocator_ != nullptr)
+        DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());
+    if (command_list_ != nullptr)
+        DeferredObjectRelease(command_list_, renderer.GetPerFrameResourceManager());
+}
+
+CommandList::CommandList(CommandListType type, std::string_view name)
+    : Base(type, name)
 {
     // TODO: consider if we want to reuse command list objects
 
@@ -72,7 +83,7 @@ void CommandList::InitializeCommandList(CommandListType type)
     DCHECK_NOTNULL_F(device);
 
     try {
-        windows::ThrowOnFailed(
+        ThrowOnFailed(
             device->CreateCommandAllocator(d3d12_type, IID_PPV_ARGS(&command_allocator_)),
             fmt::format("could not create {} Command Allocator", nostd::to_string(type)));
         NameObject(command_allocator_, GetNameForType(d3d12_type) + "Command Allocator");
@@ -90,16 +101,19 @@ void CommandList::InitializeCommandList(CommandListType type)
     }
 
     state_ = State::kFree;
+
+    NameObject(command_list_, name);
 }
 
-void CommandList::ReleaseCommandList() noexcept
+CommandList::~CommandList()
 {
-    auto& renderer = GetRenderer();
-    // TODO: refactor into a macro
-    if (command_allocator_ != nullptr)
-        DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());
-    if (command_list_ != nullptr)
-        DeferredObjectRelease(command_list_, renderer.GetPerFrameResourceManager());
+    ReleaseCommandList();
+}
+
+void CommandList::SetName(std::string_view name) noexcept
+{
+    Base::SetName(name);
+    NameObject(command_list_, name);
 }
 
 void CommandList::OnBeginRecording()

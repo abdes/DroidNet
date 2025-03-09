@@ -19,11 +19,8 @@ class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
-    explicit CommandRecorder(const CommandListType type)
-        : Base(type)
-    {
-    }
-    ~CommandRecorder() override = default;
+    explicit CommandRecorder(const CommandListType type);
+    ~CommandRecorder() override;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);

@@ -53,7 +53,7 @@ protected:
     void OnShutdown() override;
 
     auto BeginFrame(const resources::SurfaceId& surface_id) -> const graphics::RenderTarget& override;
-    void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const override;
+    void EndFrame(const resources::SurfaceId& surface_id) const override;
 
 private:
     std::shared_ptr<detail::RendererImpl> pimpl_ {};
