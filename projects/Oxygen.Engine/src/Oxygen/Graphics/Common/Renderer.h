@@ -123,7 +123,7 @@ namespace graphics {
         friend class MixinShutdown; //< Allow access to OnShutdown.
 
         virtual auto BeginFrame(const resources::SurfaceId& surface_id) -> const RenderTarget& = 0;
-        virtual void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const = 0;
+        virtual void EndFrame(const resources::SurfaceId& surface_id) const = 0;
 
         [[nodiscard]] auto GetPlatform() const -> PlatformPtr { return platform_; }
         [[nodiscard]] auto GetInitProperties() const -> const GraphicsConfig& { return props_; }

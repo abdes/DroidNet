@@ -50,11 +50,10 @@ struct BufferInitInfo {
 };
 
 class Buffer : public graphics::Buffer, public D3DResource {
+    using Base = graphics::Buffer;
+
 public:
-    Buffer()
-        : D3DResource()
-    {
-    }
+    explicit Buffer(const BufferInitInfo& init_info);
     ~Buffer() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Buffer);
@@ -64,21 +63,16 @@ public:
 
     [[nodiscard]] auto GetSize() const -> size_t { return size_; }
 
-    void Initialize(const BufferInitInfo& init_info);
-    void Release() noexcept override;
-
     void Bind() override { };
     void* Map() override;
     void Unmap() override;
 
-private:
-    template <typename Base>
-    friend class MixinDisposable; //< Allow access to OnRelease.
+    void SetName(std::string_view name) noexcept override;
 
+private:
     D3D12MA::Allocation* allocation_ { nullptr };
     ID3D12Resource* resource_ { nullptr };
     size_t size_ { 0 };
-    bool should_release_ { false };
 };
 
 } // namespace oxygen::graphics::d3d12

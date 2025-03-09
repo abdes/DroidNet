@@ -167,9 +167,9 @@ auto MainModule::RenderGame(
     // command_recorder->Draw();
 
     //...
-    CommandLists command_lists {};
     auto my_command_list = command_recorder->End();
-    command_lists.emplace_back(std::move(my_command_list));
+    command_recorder->Submit(*my_command_list);
+
     // Initialize the ImGui layer
     if (!GetEngine().HasImGui()) {
         return command_lists;
@@ -180,7 +180,5 @@ auto MainModule::RenderGame(
     imgui.NewFrame(gfx);
     ImGui::ShowDemoWindow();
     auto imgui_command_list = imgui.Render(gfx);
-    command_lists.emplace_back(std::move(imgui_command_list));
-
-    return command_lists;
+    command_recorder->Submit(*imgui_command_list);
 }

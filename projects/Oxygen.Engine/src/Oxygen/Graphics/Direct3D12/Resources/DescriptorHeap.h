@@ -11,8 +11,9 @@
 #include <d3d12.h>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinNamed.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -60,23 +61,22 @@ private:
     DescriptorHeap* allocator { nullptr };
 };
 
-class DescriptorHeap
-    : public Mixin<DescriptorHeap, Curry<MixinNamed, const char*>::mixin> {
+class DescriptorHeap : public Composition {
 public:
-    //! Forwarding constructor
-    template <typename... Args>
-    constexpr explicit DescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type, Args&&... args)
-        : Mixin(std::forward<Args>(args)...)
-        , type_ { type }
-    {
-    }
-    ~DescriptorHeap() override { Release(); }
+    struct InitInfo {
+        D3D12_DESCRIPTOR_HEAP_TYPE type { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
+        size_t capacity { 512 };
+        bool is_shader_visible { false };
+        DeviceType* device { nullptr };
+        std::string_view name { "Descriptor Heap" };
+    };
+
+    explicit DescriptorHeap(const InitInfo& init_info);
+
+    ~DescriptorHeap() noexcept override;
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
     OXYGEN_MAKE_NON_MOVABLE(DescriptorHeap);
-
-    void Initialize(size_t capacity, bool is_shader_visible, DeviceType* device);
-    void Release();
 
     [[nodiscard]] OXYGEN_D3D12_API auto Allocate() -> DescriptorHandle;
     OXYGEN_D3D12_API void Free(DescriptorHandle& handle);
@@ -92,7 +92,11 @@ public:
 
     [[nodiscard]] auto IsShaderVisible() const -> bool { return gpu_start_.ptr != 0; }
 
+    [[nodiscard]] auto GetName() const { return GetComponent<ObjectMetaData>().GetName(); }
+
 private:
+    void Release() noexcept;
+
     std::mutex mutex_ {};
     bool should_release_ { false };
 

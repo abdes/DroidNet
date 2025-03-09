@@ -28,13 +28,14 @@ public:
         kExecuting = 3, //<! Command list is being executed.
     };
 
-    //! Minimal constructor, sets the object name.
-    explicit CommandList()
-        : Base("Command List")
+    explicit CommandList(CommandListType type)
+        : CommandList(type, "Command List")
     {
     }
 
-    ~CommandList() override = default;
+    CommandList(CommandListType type, std::string_view name);
+
+    ~CommandList() noexcept override;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_DEFAULT_MOVABLE(CommandList);
@@ -42,11 +43,11 @@ public:
     [[nodiscard]] auto GetCommandList() const { return command_list_; }
     [[nodiscard]] auto GetState() const { return state_; }
 
-protected:
-    void InitializeCommandList(CommandListType type) override;
-    void ReleaseCommandList() noexcept override;
+    void SetName(std::string_view name) noexcept override;
 
 private:
+    void ReleaseCommandList() noexcept;
+
     friend class CommandRecorder;
     friend class CommandQueue;
     friend class ImGuiModule;

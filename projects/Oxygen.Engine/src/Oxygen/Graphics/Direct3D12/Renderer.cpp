@@ -78,7 +78,7 @@ public:
 
     auto BeginFrame(const resources::SurfaceId& surface_id) const
         -> const graphics::RenderTarget&;
-    void EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const;
+    void EndFrame(const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId;
 
     [[nodiscard]] auto RtvHeap() const -> DescriptorHeap& { return rtv_heap_; }
@@ -96,25 +96,51 @@ private:
 
     // DeferredReleaseControllerPtr GetWeakPtr() { return shared_from_this(); }
 
-    mutable DescriptorHeap rtv_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, "RTV Descriptor Heap" };
-    mutable DescriptorHeap dsv_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV Descriptor Heap" };
-    mutable DescriptorHeap srv_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV Descriptor Heap" };
-    mutable DescriptorHeap uav_heap_ { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV Descriptor Heap" };
+    mutable DescriptorHeap rtv_heap_ {
+        DescriptorHeap::InitInfo {
+            .type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+            .capacity = 512,
+            .is_shader_visible = false,
+            .device = GetMainDevice(),
+            .name = "RTV Descriptor Heap",
+        }
+    };
+    mutable DescriptorHeap dsv_heap_ {
+        DescriptorHeap::InitInfo {
+            .type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
+            .capacity = 512,
+            .is_shader_visible = false,
+            .device = GetMainDevice(),
+            .name = "DSV Descriptor Heap",
+        }
+    };
+    mutable DescriptorHeap srv_heap_ {
+        DescriptorHeap::InitInfo {
+            .type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            .capacity = 4096,
+            .is_shader_visible = true,
+            .device = GetMainDevice(),
+            .name = "SRV Descriptor Heap",
+        }
+    };
+    mutable DescriptorHeap uav_heap_ {
+        DescriptorHeap::InitInfo {
+            .type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            .capacity = 512,
+            .is_shader_visible = false,
+            .device = GetMainDevice(),
+            .name = "RTV Descriptor Heap",
+        }
+    };
 };
 
 void RendererImpl::Init(const GraphicsConfig& props)
 {
     // Initialize the command recorder
     command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
-    command_queue_->Initialize();
     command_recorder_.reset(new CommandRecorder(CommandListType::kGraphics));
-    command_recorder_->Initialize();
 
     // Initialize heaps
-    rtv_heap_.Initialize(512, false, GetMainDevice());
-    dsv_heap_.Initialize(512, false, GetMainDevice());
-    srv_heap_.Initialize(4096, true, GetMainDevice());
-    uav_heap_.Initialize(512, false, GetMainDevice());
 }
 
 void RendererImpl::ShutdownRenderer()
@@ -125,14 +151,7 @@ void RendererImpl::ShutdownRenderer()
     // our frame indices
     command_queue_->Flush();
 
-    srv_heap_.Release();
-    uav_heap_.Release();
-    dsv_heap_.Release();
-    rtv_heap_.Release();
-
-    command_queue_->Release();
     command_queue_.reset();
-    command_recorder_->Release();
     command_recorder_.reset();
 
     // TODO: SafeRelease for objects that need to be released after a full flush
@@ -161,18 +180,10 @@ auto RendererImpl::BeginFrame(const resources::SurfaceId& surface_id) const
     return static_cast<RenderTarget&>(surface);
 }
 
-void RendererImpl::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
+void RendererImpl::EndFrame(const resources::SurfaceId& surface_id) const
 {
     try {
         const auto& surface = surfaces.ItemAt(surface_id);
-
-        command_queue_->Submit(command_lists);
-        for (auto& command_list : command_lists) {
-            command_list->Release();
-            command_list.reset();
-        }
-        command_lists.clear();
-
         // Presenting
         surface.Present();
     } catch (const std::exception& e) {
@@ -236,8 +247,7 @@ auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride
         .size_in_bytes = size
     };
 
-    auto buffer = std::make_shared<Buffer>();
-    buffer->Initialize(initInfo);
+    auto buffer = std::make_shared<Buffer>(initInfo);
 
     // Copy the vertex data to the buffer
     void* mappedData = buffer->Map();
@@ -276,9 +286,9 @@ auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
     return *current_render_target_;
 }
 
-void Renderer::EndFrame(CommandLists& command_lists, const resources::SurfaceId& surface_id) const
+void Renderer::EndFrame(const resources::SurfaceId& surface_id) const
 {
-    pimpl_->EndFrame(command_lists, surface_id);
+    pimpl_->EndFrame(surface_id);
 }
 
 auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr

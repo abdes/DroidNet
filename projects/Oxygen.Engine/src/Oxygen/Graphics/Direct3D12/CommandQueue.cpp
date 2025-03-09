@@ -4,14 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <exception>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+
+#include <combaseapi.h>
+#include <d3d12.h>
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/Types/CommandListType.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Maestro/Fence.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DeferredObjectRelease.h>
+#include <memory>
 
 namespace {
 
@@ -46,7 +58,8 @@ using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
-void CommandQueue::InitializeCommandQueue()
+CommandQueue::CommandQueue(CommandListType type, std::string_view name)
+    : Base(type, name)
 {
     const auto device = GetMainDevice();
     DCHECK_NOTNULL_F(device);
@@ -64,7 +77,9 @@ void CommandQueue::InitializeCommandQueue()
         d3d12_type = D3D12_COMMAND_LIST_TYPE_COPY;
         break;
     default:
-        throw std::runtime_error(fmt::format("Unsupported CommandListType: {}", nostd::to_string(GetQueueType())));
+        throw std::runtime_error(
+            fmt::format("Unsupported CommandListType: {}",
+                nostd::to_string(GetQueueType())));
     }
 
     const D3D12_COMMAND_QUEUE_DESC queue_desc = {
@@ -78,38 +93,38 @@ void CommandQueue::InitializeCommandQueue()
         device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),
         fmt::format("could not create {} Command Queue", nostd::to_string(GetQueueType())));
     NameObject(command_queue_, GetNameForType(d3d12_type));
+
+    try {
+        fence_ = std::make_unique<Fence>(command_queue_);
+    } catch (const std::exception& ex) {
+        LOG_F(ERROR, "Failed to create Fence: {}", ex.what());
+        ReleaseCommandQueue();
+        throw;
+    }
 }
 
-void CommandQueue::Submit(const CommandListPtr& command_list)
+CommandQueue::~CommandQueue() noexcept
 {
-    const auto d3d12_command_list = static_cast<CommandList*>(command_list.get());
+    ReleaseCommandQueue();
+}
+
+void CommandQueue::SetName(std::string_view name) noexcept
+{
+    Base::SetName(name);
+    NameObject(command_queue_, name);
+}
+
+void CommandQueue::Submit(graphics::CommandList& command_list)
+{
+    auto* d3d12_command_list = static_cast<CommandList*>(&command_list);
     d3d12_command_list->OnSubmitted();
+    // TODO: replace with std::array
     ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
     d3d12_command_list->OnExecuted();
 }
 
-void CommandQueue::Submit(const CommandLists& command_list)
-{
-    std::vector<ID3D12CommandList*> command_lists;
-    command_lists.reserve(command_list.size());
-    for (const auto& cl : command_list) {
-        const auto d3d12_command_list = static_cast<CommandList*>(cl.get());
-        d3d12_command_list->OnSubmitted();
-        command_lists.push_back(d3d12_command_list->GetCommandList());
-    }
-    command_queue_->ExecuteCommandLists(static_cast<UINT>(command_lists.size()), command_lists.data());
-    for (const auto& cl : command_list) {
-        static_cast<CommandList*>(cl.get())->OnExecuted();
-    }
-}
-
 void CommandQueue::ReleaseCommandQueue() noexcept
 {
     detail::DeferredObjectRelease(command_queue_);
-}
-
-auto CommandQueue::CreateSynchronizationCounter() -> std::unique_ptr<SynchronizationCounter>
-{
-    return std::make_unique<Fence>(command_queue_);
 }

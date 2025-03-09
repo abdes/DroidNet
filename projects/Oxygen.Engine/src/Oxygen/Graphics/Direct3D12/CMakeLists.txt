@@ -77,7 +77,6 @@ target_sources(
     "Graphics.cpp"
     "MemoryBlock.cpp"
     "Renderer.cpp"
-    "Resources/Texture.cpp"
     "Resources/DescriptorHeap.cpp"
     "Resources/DescriptorHeap.h"
     "Detail/dx12_utils.cpp"
@@ -115,7 +114,6 @@ target_sources(
       "MemoryBlock.h"
       "Renderer.h"
       "RenderTarget.h"
-      "Resources/Texture.h"
       "ImGui/ImGuiModule.h"
       "Devices/DeviceManager.h"
 )

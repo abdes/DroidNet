@@ -99,7 +99,8 @@
         "numbers": "cpp",
         "string_view": "cpp",
         "*.ipp": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "strstream": "cpp"
     },
     "editor.rulers": [
         80,

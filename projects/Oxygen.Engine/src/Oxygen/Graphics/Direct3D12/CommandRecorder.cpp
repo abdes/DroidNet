@@ -27,6 +27,17 @@
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 
+CommandRecorder::CommandRecorder(const CommandListType type)
+    : Base(type)
+{
+    InitializeCommandRecorder();
+}
+
+CommandRecorder::~CommandRecorder()
+{
+    ReleaseCommandRecorder();
+}
+
 void CommandRecorder::Begin()
 {
     DCHECK_F(current_command_list_ == nullptr);
@@ -34,18 +45,16 @@ void CommandRecorder::Begin()
     // resource_state_cache_.OnBeginCommandBuffer();
 
     // TODO: consider recycling command lists
-    auto command_list = std::make_unique<CommandList>();
-    CHECK_NOTNULL_F(command_list);
     try {
-        command_list->Initialize(GetQueueType());
+        auto command_list = std::make_unique<CommandList>(GetQueueType());
+        CHECK_NOTNULL_F(command_list);
         CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
         command_list->OnBeginRecording();
+        current_command_list_ = std::move(command_list);
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to begin recording to a command list: {}", e.what());
         throw;
     }
-
-    current_command_list_ = std::move(command_list);
 
     ResetState();
 }

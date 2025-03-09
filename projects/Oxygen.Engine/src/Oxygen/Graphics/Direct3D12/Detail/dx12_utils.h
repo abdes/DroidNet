@@ -19,7 +19,7 @@
 
 namespace oxygen::graphics::d3d12 {
 
-inline void NameObject(ID3D12Object* const object, const std::string& name)
+inline void NameObject(ID3D12Object* const object, std::string_view name)
 {
 #ifdef _DEBUG
     DCHECK_F(name.size() < std::numeric_limits<UINT>::max());
