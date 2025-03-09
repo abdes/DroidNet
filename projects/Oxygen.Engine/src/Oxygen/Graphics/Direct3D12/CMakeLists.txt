@@ -38,6 +38,7 @@ else()
 endif()
 set(dxc_lib_path "${CMAKE_SOURCE_DIR}/packages/DXC/lib/${dxc_arch}")
 set(dxc_inc_path "${CMAKE_SOURCE_DIR}/packages/DXC/inc")
+set(dxc_bin_path "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${dxc_arch}")
 
 # ==============================================================================
 # Build instructions
@@ -145,11 +146,20 @@ target_link_libraries(
     dxguid
 )
 
+# Custom command to copy the dxcompiler dll to the build output directory
+add_custom_command(
+  TARGET ${META_MODULE_TARGET}
+  POST_BUILD
+  COMMAND
+    ${CMAKE_COMMAND} -E copy_if_different
+    "${dxc_bin_path}/dxcompiler.dll"
+    "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+)
+
 # ------------------------------------------------------------------------------
 # Shader compilation
 # ------------------------------------------------------------------------------
 
-set(dxc_bin_path "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${dxc_arch}")
 set(dxc_exe "${dxc_bin_path}/dxc.exe")
 message(STATUS "Using DXC Compiler: ${dxc_exe}")
 
