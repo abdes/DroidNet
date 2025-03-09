@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 
 using oxygen::graphics::d3d12::ImGuiModule;
 using oxygen::graphics::d3d12::detail::GetMainDevice;

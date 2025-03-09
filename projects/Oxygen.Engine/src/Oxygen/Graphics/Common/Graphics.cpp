@@ -9,7 +9,6 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/MixinInitialize.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Platform/Types.h>
@@ -28,13 +27,6 @@ auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
     CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
     return renderer_.get();
-}
-
-auto Graphics::GetPerFrameResourceManager() const noexcept -> const graphics::PerFrameResourceManager&
-{
-    CHECK_F(is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
-
-    return renderer_->GetPerFrameResourceManager();
 }
 
 // void Graphics::OnInitialize(const SerializedBackendConfig& props)

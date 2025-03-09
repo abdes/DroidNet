@@ -50,11 +50,15 @@ using oxygen::windows::ThrowOnFailed;
 void CommandList::ReleaseCommandList() noexcept
 {
     auto& renderer = GetRenderer();
-    // TODO: refactor into a macro
-    if (command_allocator_ != nullptr)
-        DeferredObjectRelease(command_allocator_, renderer.GetPerFrameResourceManager());
-    if (command_list_ != nullptr)
-        DeferredObjectRelease(command_list_, renderer.GetPerFrameResourceManager());
+    // TODO: user of command list must ensure the command list is no longer used
+    if (command_allocator_ != nullptr) {
+        command_allocator_->Release();
+        command_allocator_ = nullptr;
+    }
+    if (command_list_ != nullptr) {
+        command_list_->Release();
+        command_list_ = nullptr;
+    }
 }
 
 CommandList::CommandList(CommandListType type, std::string_view name)

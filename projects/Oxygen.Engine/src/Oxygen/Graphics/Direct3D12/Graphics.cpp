@@ -80,11 +80,6 @@ auto GetRenderer() -> Renderer&
     return *renderer;
 }
 
-auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&
-{
-    return GetRenderer().GetPerFrameResourceManager();
-}
-
 auto GetAllocator() -> D3D12MA::Allocator&
 {
     auto* allocator = Graphics().GetAllocator();

@@ -28,29 +28,27 @@ void ImguiModule::OnInitialize(const Graphics* gfx)
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
 
-    // TODO: FIXME Implement this
-    // imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
-    imgui_platform_ = std::make_shared<sdl3::ImGuiSdl3Backend>(nullptr, platform::kInvalidWindowId);
-    if (!imgui_platform_) {
-        LOG_F(ERROR, "Failed to create ImGui platform backend.");
-        return;
-    }
-
     IMGUI_CHECKVERSION();
     imgui_context_ = ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
-    imgui_platform_->Initialize(imgui_context_);
+    // TODO: FIXME Implement this
+    // imgui_platform_ = GetEngine().GetPlatform().CreateImGuiBackend(window_id_);
+    imgui_platform_ = std::make_shared<sdl3::ImGuiSdl3Backend>(nullptr, platform::kInvalidWindowId, imgui_context_);
+    if (!imgui_platform_) {
+        LOG_F(ERROR, "Failed to create ImGui platform backend.");
+        return;
+    }
     ImGuiBackendInit(gfx);
 
-    LOG_F(INFO, "[{}] initialized with `{}`", Name(), imgui_platform_->ObjectName());
+    LOG_F(INFO, "[{}] initialized with `{}`", Name(), imgui_platform_->GetName());
 }
 
 void ImguiModule::OnShutdown() noexcept
 {
     try {
         ImGuiBackendShutdown();
-        imgui_platform_->Shutdown();
+        imgui_platform_.reset();
         ImGui::DestroyContext();
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to shutdown ImGui module: {}", e.what());

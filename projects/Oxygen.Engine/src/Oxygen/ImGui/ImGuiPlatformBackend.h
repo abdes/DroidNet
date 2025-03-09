@@ -6,39 +6,26 @@
 
 #pragma once
 
-#include <Oxygen/Base/Mixin.h>
-#include <Oxygen/Base/MixinInitialize.h>
-#include <Oxygen/Base/MixinNamed.h>
-#include <Oxygen/Base/MixinShutdown.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 
 struct ImGuiContext;
 
 namespace oxygen::imgui {
 
-class ImGuiPlatformBackend
-    : public Mixin<ImGuiPlatformBackend, Curry<MixinNamed, const char*>::mixin, MixinInitialize, MixinShutdown> {
+class ImGuiPlatformBackend : public Composition {
 public:
-    template <typename... Args>
-    explicit ImGuiPlatformBackend(const char* name, Args&&... args)
-        : Mixin(name, std::forward<Args>(args)...)
+    explicit ImGuiPlatformBackend(std::string_view name)
     {
+        AddComponent<ObjectMetaData>(name);
     }
 
-    ~ImGuiPlatformBackend() override = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(ImGuiPlatformBackend);
-    OXYGEN_MAKE_NON_MOVABLE(ImGuiPlatformBackend);
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
 
     virtual void NewFrame() = 0;
-
-protected:
-    virtual void OnInitialize(ImGuiContext* imgui_context) = 0;
-    template <typename Base, typename... CtorArgs>
-    friend class MixinInitialize; //< Allow access to OnInitialize.
-
-    virtual void OnShutdown() = 0;
-    template <typename Base>
-    friend class MixinShutdown; //< Allow access to OnShutdown.
 };
 
 } // namespace oxygen

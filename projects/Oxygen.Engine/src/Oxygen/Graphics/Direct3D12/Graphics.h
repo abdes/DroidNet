@@ -56,7 +56,6 @@ namespace detail {
     [[nodiscard]] auto GetFactory() -> FactoryType*;
     [[nodiscard]] auto GetMainDevice() -> DeviceType*;
     [[nodiscard]] auto GetRenderer() -> Renderer&;
-    [[nodiscard]] auto GetPerFrameResourceManager() -> graphics::PerFrameResourceManager&;
     [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
     //! Get the backend memory allocator
     // TODO: Add the allocator

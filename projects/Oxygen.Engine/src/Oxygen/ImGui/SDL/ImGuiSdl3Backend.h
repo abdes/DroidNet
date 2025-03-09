@@ -15,18 +15,21 @@ namespace oxygen::imgui::sdl3 {
 
 class ImGuiSdl3Backend final : public ImGuiPlatformBackend {
 public:
-    template <typename... Args>
-    explicit ImGuiSdl3Backend(
+    ImGuiSdl3Backend(
         std::shared_ptr<const Platform> platform,
         const platform::WindowIdType window_id,
-        Args&&... args)
-        : ImGuiPlatformBackend("ImGui SDL3 Backend", std::forward<Args>(args)...)
+        ImGuiContext* imgui_context)
+        : ImGuiPlatformBackend("ImGui SDL3 Backend")
         , platform_(std::move(platform))
         , window_id_(window_id)
     {
+        OnInitialize(imgui_context);
     }
 
-    OXYGEN_IMGUI_API ~ImGuiSdl3Backend() override = default;
+    OXYGEN_IMGUI_API ~ImGuiSdl3Backend() override
+    {
+        OnShutdown();
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(ImGuiSdl3Backend);
     OXYGEN_MAKE_NON_MOVABLE(ImGuiSdl3Backend);
@@ -34,8 +37,8 @@ public:
     OXYGEN_IMGUI_API void NewFrame() override;
 
 protected:
-    void OnInitialize(ImGuiContext* imgui_context) override;
-    void OnShutdown() override;
+    void OnInitialize(ImGuiContext* imgui_context) ;
+    void OnShutdown() ;
 
 private:
     std::shared_ptr<const Platform> platform_;

@@ -30,7 +30,7 @@ void ImGuiSdl3Backend::OnInitialize(ImGuiContext* imgui_context)
 
     // Adjust the scaling to take into account the current DPI
     const float window_scale = SDL_GetWindowDisplayScale(window);
-    DLOG_F(INFO, "[{}] Using DPI scale: {}", this->ObjectName(), window_scale);
+    DLOG_F(INFO, "[{}] Using DPI scale: {}", this->GetName(), window_scale);
     auto& io = ImGui::GetIO();
     io.FontGlobalScale = window_scale;
     ImGui::GetStyle().ScaleAllSizes(window_scale);

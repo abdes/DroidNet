@@ -43,7 +43,7 @@ public:
         return GetComponent<ObjectMetaData>().GetName();
     }
 
-    [[nodiscard]] bool IsWithoutRenderer() const { return is_renderer_less_; }
+    [[nodiscard]] auto IsWithoutRenderer() const { return is_renderer_less_; }
 
     [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(std::string_view unique_id) const
         -> std::shared_ptr<graphics::IShaderByteCode>
@@ -64,9 +64,6 @@ public:
     */
     [[nodiscard]] OXYGEN_GFX_API auto GetRenderer() const noexcept -> const graphics::Renderer*;
     [[nodiscard]] OXYGEN_GFX_API auto GetRenderer() noexcept -> graphics::Renderer*;
-
-    [[nodiscard]] OXYGEN_GFX_API auto GetPerFrameResourceManager() const noexcept
-        -> const graphics::PerFrameResourceManager&;
 
     [[nodiscard]]
     virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const

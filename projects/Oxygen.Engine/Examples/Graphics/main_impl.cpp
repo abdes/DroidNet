@@ -29,6 +29,7 @@ using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
 
 namespace {
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 bool is_running { false };
 void EventLoopRun(const Platform& platform)
 {
@@ -50,6 +51,7 @@ namespace {
 
 auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int>
 {
+    // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
     OXCO_WITH_NURSERY(n)
     {
         is_running = true;
