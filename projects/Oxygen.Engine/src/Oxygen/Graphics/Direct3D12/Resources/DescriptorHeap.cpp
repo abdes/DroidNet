@@ -51,9 +51,7 @@ void DescriptorHeap::Initialize(const size_t capacity, bool is_shader_visible, D
 
     try {
         ThrowOnFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)));
-        std::wstring name {};
-        string_utils::Utf8ToWide(ObjectName(), name);
-        NameObject(heap_, name);
+        NameObject(heap_, ObjectName());
 
         free_handles_ = std::make_unique<size_t[]>(capacity);
         capacity_ = capacity;

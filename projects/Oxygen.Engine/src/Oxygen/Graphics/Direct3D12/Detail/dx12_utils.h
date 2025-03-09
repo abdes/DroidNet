@@ -7,23 +7,27 @@
 #pragma once
 
 #include <cassert>
+#include <limits>
 #include <string>
 
 #include <d3d12.h>
+#include <d3dcommon.h>
+#include <minwindef.h>
 
-#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/logging.h>
 
 namespace oxygen::graphics::d3d12 {
 
-inline void NameObject(ID3D12Object* const object, const std::wstring& name)
+inline void NameObject(ID3D12Object* const object, const std::string& name)
 {
 #ifdef _DEBUG
-    windows::ThrowOnFailed(object->SetName(name.c_str()));
-    std::string narrow_name {};
-    string_utils::WideToUtf8(name, narrow_name);
-    LOG_F(3, "+D3D12 named object created: {}", narrow_name);
+    DCHECK_F(name.size() < std::numeric_limits<UINT>::max());
+    windows::ThrowOnFailed(object->SetPrivateData(
+        WKPDID_D3DDebugObjectName,
+        static_cast<UINT>(name.size()),
+        name.data()));
+    LOG_F(3, "+D3D12 named object created: {}", name);
 #endif
 }
 

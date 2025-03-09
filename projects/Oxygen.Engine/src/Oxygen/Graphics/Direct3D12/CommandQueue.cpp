@@ -15,28 +15,28 @@
 
 namespace {
 
-auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::wstring
+auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 {
-    auto list_type_string { L"" };
+    auto list_type_string { "" };
     switch (list_type) {
     case D3D12_COMMAND_LIST_TYPE_DIRECT:
-        list_type_string = L"Graphics ";
+        list_type_string = "Graphics ";
         break;
     case D3D12_COMMAND_LIST_TYPE_COMPUTE:
-        list_type_string = L"Compute ";
+        list_type_string = "Compute ";
         break;
     case D3D12_COMMAND_LIST_TYPE_COPY:
-        list_type_string = L"Copy ";
+        list_type_string = "Copy ";
         break;
     case D3D12_COMMAND_LIST_TYPE_BUNDLE:
     case D3D12_COMMAND_LIST_TYPE_VIDEO_DECODE:
     case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
     case D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE:
     case D3D12_COMMAND_LIST_TYPE_NONE:
-        list_type_string = L" ";
+        list_type_string = " ";
     }
 
-    return std::wstring { list_type_string } + L"Command Queue";
+    return std::string { list_type_string } + "Command Queue";
 }
 
 } // namespace
@@ -82,7 +82,7 @@ void CommandQueue::InitializeCommandQueue()
 
 void CommandQueue::Submit(const CommandListPtr& command_list)
 {
-    const auto d3d12_command_list = dynamic_cast<CommandList*>(command_list.get());
+    const auto d3d12_command_list = static_cast<CommandList*>(command_list.get());
     d3d12_command_list->OnSubmitted();
     ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
@@ -94,13 +94,13 @@ void CommandQueue::Submit(const CommandLists& command_list)
     std::vector<ID3D12CommandList*> command_lists;
     command_lists.reserve(command_list.size());
     for (const auto& cl : command_list) {
-        const auto d3d12_command_list = dynamic_cast<CommandList*>(cl.get());
+        const auto d3d12_command_list = static_cast<CommandList*>(cl.get());
         d3d12_command_list->OnSubmitted();
         command_lists.push_back(d3d12_command_list->GetCommandList());
     }
     command_queue_->ExecuteCommandLists(static_cast<UINT>(command_lists.size()), command_lists.data());
     for (const auto& cl : command_list) {
-        dynamic_cast<CommandList*>(cl.get())->OnExecuted();
+        static_cast<CommandList*>(cl.get())->OnExecuted();
     }
 }
 
