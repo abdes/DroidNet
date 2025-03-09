@@ -49,25 +49,30 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "MemoryStream.cpp"
     "Detail/loguru.cpp"
     "Detail/signal.hpp"
-    "MemoryStream.cpp"
+    "Windows/ComError.cpp"
+    "Windows/Exceptions.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
+      "api_export.h"
+      "Compilers.h"
       "Endian.h"
       "FileStream.h"
       "Finally.h"
       "Logging.h"
       "Macros.h"
+      "MemoryStream.cpp"
       "MemoryStream.h"
       "NoInline.h"
       "NoStd.h"
+      "Platforms.h"
       "Reader.h"
       "Resource.h"
       "ResourceHandle.h"
-      "ResourceHandle.natvis"
       "ResourceTable.h"
       "Result.h"
       "ReturnAddress.h"
@@ -76,10 +81,13 @@ target_sources(
       "StringTypes.h"
       "StringUtils.h"
       "TimeUtils.h"
+      "Unreachable.h"
+      "Writer.h"
       "Types/Geometry.h"
       "Types/Overload.h"
       "Types/Viewport.h"
-      "Unreachable.h"
+      "Windows/ComError.h"
+      "Windows/Exceptions.h"
 )
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   target_sources(
