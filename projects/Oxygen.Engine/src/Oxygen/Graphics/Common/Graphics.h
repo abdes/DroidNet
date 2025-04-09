@@ -14,6 +14,8 @@
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
@@ -37,6 +39,9 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_DEFAULT_MOVABLE(Graphics);
+
+    OXYGEN_GFX_API auto StartAsync(co::TaskStarted<> started = {}) -> co::Co<>;
+    OXYGEN_GFX_API virtual void Run();
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view
     {
@@ -79,6 +84,12 @@ protected:
     //! Create a renderer for this graphics backend.
     virtual auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> = 0;
 
+    [[nodiscard]] auto Nursery() const -> co::Nursery&
+    {
+        DCHECK_NOTNULL_F(nursery_);
+        return *nursery_;
+    }
+
 private:
     // OXYGEN_GFX_API virtual void OnInitialize(const SerializedBackendConfig& props);
     // template <typename Base, typename... CtorArgs>
@@ -92,6 +103,8 @@ private:
 
     bool is_renderer_less_ { true }; //< Indicates if the backend is renderer-less.
     std::shared_ptr<graphics::Renderer> renderer_ {}; //< The renderer instance.
+
+    co::Nursery* nursery_ { nullptr };
 };
 
 } // namespace oxygen

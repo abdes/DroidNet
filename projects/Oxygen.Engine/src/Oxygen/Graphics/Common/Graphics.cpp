@@ -11,9 +11,21 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Types.h>
 
 using oxygen::Graphics;
+
+auto Graphics::StartAsync(co::TaskStarted<> started) -> co::Co<>
+{
+    return OpenNursery(nursery_, std::move(started));
+}
+
+void Graphics::Run()
+{
+    // TODO: run the async tasks for graphics
+}
 
 auto Graphics::GetRenderer() const noexcept -> const graphics::Renderer*
 {

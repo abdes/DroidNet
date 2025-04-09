@@ -13,6 +13,7 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Co.h>
@@ -21,6 +22,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 
+using oxygen::Graphics;
 using oxygen::GraphicsConfig;
 using oxygen::Platform;
 using oxygen::PlatformConfig;
@@ -33,6 +35,7 @@ namespace {
 bool is_running { false };
 void EventLoopRun(const Platform& platform)
 {
+    // TODO: This is the game engine main loop.
     while (is_running) {
         platform.Async().PollOne();
     }
@@ -49,17 +52,23 @@ struct oxygen::co::EventLoopTraits<Platform> {
 
 namespace {
 
-auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int>
+auto AsyncMain(std::shared_ptr<Platform> platform,
+    std::weak_ptr<Graphics> gfx_weak) -> oxygen::co::Co<int>
 {
     // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
     OXCO_WITH_NURSERY(n)
     {
         is_running = true;
 
-        // Activate the live objects with our nursery, making it available for the
-        // lifetime of the nursery.
+        // Activate and run child live objects with our nursery.
+
         co_await n.Start(&Platform::StartAsync, std::ref(*platform));
         platform->Run();
+
+        DCHECK_F(!gfx_weak.expired());
+        auto gfx = gfx_weak.lock();
+        co_await n.Start(&Graphics::StartAsync, std::ref(*gfx));
+        gfx->Run();
 
         // Add a termination signal handler
         n.Start([&]() -> oxygen::co::Co<> {
@@ -92,7 +101,7 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     auto gfx = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
     DCHECK_F(!gfx.expired());
 
-    oxygen::co::Run(*platform, AsyncMain(platform));
+    oxygen::co::Run(*platform, AsyncMain(platform, gfx));
 
     // Explicit destruction order due to dependencies.
     platform.reset();
