@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Executor.h>
+#include <Oxygen/OxCo/Detail/GetAwaiter.h>
 
 namespace oxygen::co {
 
