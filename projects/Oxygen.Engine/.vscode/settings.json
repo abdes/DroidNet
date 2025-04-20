@@ -130,6 +130,7 @@
     "editor.formatOnSave": false,
     "C_Cpp.codeAnalysis.clangTidy.enabled": true,
     "C_Cpp.codeAnalysis.clangTidy.args": [
-        "--config-file=${workspaceFolder}/.clang-tidy"
+        "--config-file=${workspaceFolder}/.clang-tidy",
+        "--stdlib=libstdc++"
     ],
 }
