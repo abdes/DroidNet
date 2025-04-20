@@ -77,9 +77,14 @@ void SwapChain::CreateSwapChain(CommandQueueType* command_queue, const DXGI_FORM
     IDXGISwapChain1* swap_chain { nullptr };
     auto* const window_handle = static_cast<HWND>(window_->Native().window_handle);
     try {
+        // NB: Misleading argument name for CreateSwapChainForHwnd().
+        // For Direct3D 11, and earlier versions of Direct3D, the first argument
+        // is a pointer to the Direct3D device for the swap chain. For Direct3D
+        // 12 this is a pointer to a direct command queue (refer to
+        // ID3D12CommandQueue). This parameter cannot be NULL.
         ThrowOnFailed(
             GetFactory()->CreateSwapChainForHwnd(
-                command_queue,
+                command_queue, // Yes, the command queue, for D3D12
                 window_handle,
                 &swap_chain_desc,
                 nullptr,
