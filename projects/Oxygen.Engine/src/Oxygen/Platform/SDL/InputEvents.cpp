@@ -298,7 +298,8 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
 
 auto InputEvents::ProcessPlatformEvents() const -> co::Co<>
 {
-    while (true) {
+    DLOG_F(INFO, "Platform Input Events async processing started");
+    while (async_->IsRunning()) {
         auto& event = co_await event_pump_->NextEvent();
         auto lock = co_await event_pump_->Lock();
         if (event.IsHandled()) {
