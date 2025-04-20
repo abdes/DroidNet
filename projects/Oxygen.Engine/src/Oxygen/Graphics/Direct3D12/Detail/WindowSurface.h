@@ -11,6 +11,7 @@
 
 #include <d3d12.h>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Surface.h>
