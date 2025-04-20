@@ -177,9 +177,9 @@ public:
 
     ~RepeatableShared()
     {
-        LOG_IF_F(WARNING, event_slots_ && event_slots_->slot1 && !event_slots_->slot1.GetAwaitable().Done(),
+        DLOG_IF_F(WARNING, event_slots_ && event_slots_->slot1 && !(event_slots_->slot1.GetAwaitable().Done() || event_slots_->slot1.GetAwaitable().Closed()),
             "RepeatableShared destroyed while not done");
-        LOG_IF_F(WARNING, event_slots_ && event_slots_->slot2 && !event_slots_->slot2.GetAwaitable().Done(),
+        DLOG_IF_F(WARNING, event_slots_ && event_slots_->slot2 && !(event_slots_->slot1.GetAwaitable().Done() || event_slots_->slot1.GetAwaitable().Closed()),
             "RepeatableShared destroyed while not done");
     }
 
@@ -402,7 +402,7 @@ private:
 
         explicit operator bool() const { return initialized; }
 
-        auto GetAwaitable() const -> const Shared<WrappedValueProduce>&
+        [[nodiscard]] auto GetAwaitable() const -> const Shared<WrappedValueProduce>&
         {
             DCHECK_F(initialized, "Slot not initialized");
             return shared_awaitable;
