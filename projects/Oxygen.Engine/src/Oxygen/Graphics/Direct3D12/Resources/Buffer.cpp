@@ -10,7 +10,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DeferredObjectRelease.h>
 
-
 using oxygen::graphics::d3d12::Buffer;
 
 Buffer::~Buffer()

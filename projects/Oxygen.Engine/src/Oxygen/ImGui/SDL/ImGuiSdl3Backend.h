@@ -37,8 +37,8 @@ public:
     OXYGEN_IMGUI_API void NewFrame() override;
 
 protected:
-    void OnInitialize(ImGuiContext* imgui_context) ;
-    void OnShutdown() ;
+    void OnInitialize(ImGuiContext* imgui_context);
+    void OnShutdown();
 
 private:
     std::shared_ptr<const Platform> platform_;

@@ -53,7 +53,6 @@ public:
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
-
 };
 
 } // namespace oxygen::graphics

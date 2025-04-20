@@ -60,6 +60,6 @@ namespace detail {
     //! Get the backend memory allocator
     // TODO: Add the allocator
     //! @}
-}  // namespace detail
+} // namespace detail
 
 } // namespace oxygen::graphics::d3d12

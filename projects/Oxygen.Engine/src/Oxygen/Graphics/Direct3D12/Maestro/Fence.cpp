@@ -8,9 +8,9 @@
 
 #include <stdexcept>
 
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::windows::ThrowOnFailed;
