@@ -9,10 +9,11 @@
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Platform/Window.h>
 
+using oxygen::graphics::detail::WindowComponent;
 using oxygen::graphics::detail::WindowSurface;
 using oxygen::graphics::resources::kSurface;
 
-auto WindowSurface::WindowComponent::Width() const -> uint32_t
+auto WindowComponent::Width() const -> uint32_t
 {
     if (const auto window = window_.lock()) {
         return window->FrameBufferSize().width;
@@ -20,7 +21,7 @@ auto WindowSurface::WindowComponent::Width() const -> uint32_t
     throw std::runtime_error("Window is no longer valid");
 }
 
-auto WindowSurface::WindowComponent::Height() const -> uint32_t
+auto WindowComponent::Height() const -> uint32_t
 {
     if (const auto window = window_.lock()) {
         return window->FrameBufferSize().height;
@@ -28,7 +29,7 @@ auto WindowSurface::WindowComponent::Height() const -> uint32_t
     throw std::runtime_error("Window is no longer valid");
 }
 
-auto WindowSurface::WindowComponent::FrameBufferSize() const -> platform::window::ExtentT
+auto WindowComponent::FrameBufferSize() const -> platform::window::ExtentT
 {
     if (const auto window = window_.lock()) {
         return window_.lock()->FrameBufferSize();
@@ -36,7 +37,7 @@ auto WindowSurface::WindowComponent::FrameBufferSize() const -> platform::window
     throw std::runtime_error("Window is no longer valid");
 }
 
-auto WindowSurface::WindowComponent::Native() const -> platform::window::NativeHandles
+auto WindowComponent::Native() const -> platform::window::NativeHandles
 {
     if (const auto window = window_.lock()) {
         return window->Native();

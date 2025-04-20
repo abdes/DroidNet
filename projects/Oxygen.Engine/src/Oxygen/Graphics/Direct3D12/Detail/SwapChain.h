@@ -24,9 +24,8 @@
 namespace oxygen::graphics::d3d12::detail {
 
 class SwapChain : public Component {
-    using WindowComponent = graphics::detail::WindowSurface::WindowComponent;
     OXYGEN_COMPONENT(SwapChain)
-    OXYGEN_COMPONENT_REQUIRES(WindowComponent)
+    OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
 public:
     explicit SwapChain(CommandQueueType* command_queue, DXGI_FORMAT format)
     {
@@ -50,7 +49,7 @@ public:
     [[nodiscard]] auto GetFormat() const { return format_; }
     void SetFormat(DXGI_FORMAT format) { format_ = format; }
 
-    [[nodiscard]] auto Rtv() const -> const DescriptorHandle&
+    [[nodiscard]] auto GetCurrentRenderTargetView() const -> const DescriptorHandle&
     {
         return render_targets_[current_back_buffer_index_].rtv;
     }
@@ -71,7 +70,7 @@ public:
 protected:
     void UpdateDependencies(const Composition& composition) override
     {
-        window_ = &(composition.GetComponent<WindowComponent>());
+        window_ = &(composition.GetComponent<oxygen::graphics::detail::WindowComponent>());
     }
 
 private:
@@ -93,7 +92,7 @@ private:
     ViewPort viewport_ {};
     Scissors scissor_ {};
 
-    WindowComponent* window_ {};
+    oxygen::graphics::detail::WindowComponent* window_ {};
 };
 
 } // namespace oxygen::graphics::d3d12::detail

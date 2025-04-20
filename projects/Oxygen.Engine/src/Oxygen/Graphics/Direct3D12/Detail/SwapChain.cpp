@@ -9,10 +9,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
 
 namespace {
 
