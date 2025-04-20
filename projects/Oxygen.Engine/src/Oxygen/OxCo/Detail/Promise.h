@@ -506,7 +506,7 @@ namespace detail {
             OXYGEN_NOINLINE auto await_suspend(Handle /*unused*/)
             {
                 // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-                promise_->ProgramCounter(reinterpret_cast<uintptr_t>(OXYGEN_RETURN_ADDRESS()));
+                promise_->ProgramCounter(reinterpret_cast<uintptr_t>(oxygen::ReturnAddress<>()));
                 return promise_->HookAwaitSuspend(awaiter_);
             }
 
@@ -551,7 +551,7 @@ namespace detail {
         OXYGEN_NOINLINE auto initial_suspend() noexcept
         {
             // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-            ProgramCounter(reinterpret_cast<uintptr_t>(OXYGEN_RETURN_ADDRESS()));
+            ProgramCounter(reinterpret_cast<uintptr_t>(oxygen::ReturnAddress<>()));
             return std::suspend_always {};
         }
 

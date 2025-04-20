@@ -260,7 +260,7 @@ auto GraphicsBackendLoader::GetInstance(std::shared_ptr<loader::detail::Platform
     // again.
     if (!first_call && platform_services) {
         try {
-            EnforceMainModuleRestriction(platform_services, "GetInstance", OXYGEN_RETURN_ADDRESS());
+            EnforceMainModuleRestriction(platform_services, "GetInstance", oxygen::ReturnAddress<>());
         } catch (const loader::InvalidOperationError&) {
             LOG_F(ERROR, "Resetting the platform services must be made from the main executable module");
             throw;
@@ -274,7 +274,7 @@ auto GraphicsBackendLoader::GetInstance(std::shared_ptr<loader::detail::Platform
 
     if (first_call) {
         try {
-            EnforceMainModuleRestriction(services, "GetInstance", OXYGEN_RETURN_ADDRESS());
+            EnforceMainModuleRestriction(services, "GetInstance", oxygen::ReturnAddress<>());
         } catch (const loader::InvalidOperationError&) {
             LOG_F(ERROR, "First call to GraphicsBackendLoader::GetInstance() must be made from the main executable module");
             instance.reset();
@@ -296,14 +296,14 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
 
 auto GraphicsBackendLoader::LoadBackend(const graphics::BackendType backend, const GraphicsConfig& config) const -> std::weak_ptr<Graphics>
 {
-    EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "LoadBackend", OXYGEN_RETURN_ADDRESS());
+    EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "LoadBackend", oxygen::ReturnAddress<>());
     return pimpl_->LoadBackend(backend, config);
 }
 
 void GraphicsBackendLoader::UnloadBackend() const noexcept
 {
     try {
-        EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "UnloadBackend", OXYGEN_RETURN_ADDRESS());
+        EnforceMainModuleRestriction(pimpl_->GetPlatformServices(), "UnloadBackend", oxygen::ReturnAddress<>());
         pimpl_->UnloadBackend();
     } catch (...) {
         // Catch any other exceptions to prevent them from propagating

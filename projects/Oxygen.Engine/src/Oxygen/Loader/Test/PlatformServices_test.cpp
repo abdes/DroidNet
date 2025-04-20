@@ -67,7 +67,7 @@ NOLINT_TEST(PlatformServicesTest, GetModuleHandleFromReturnAddressWithCurrentFun
     PlatformServices services;
 
     // Get the module handle from the current function's return address
-    void* return_address = OXYGEN_RETURN_ADDRESS();
+    void* return_address = oxygen::ReturnAddress<>();
     auto* module_handle = services.GetModuleHandleFromReturnAddress(return_address);
 
     // The module handle should not be null

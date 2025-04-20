@@ -6,12 +6,42 @@
 
 #pragma once
 
+// Helper for MSVC
 #if defined(_MSC_VER)
 #  include <intrin.h>
 #  pragma intrinsic(_ReturnAddress)
-#  define OXYGEN_RETURN_ADDRESS() _ReturnAddress()
+namespace oxygen::detail {
+[[nodiscard]] inline void* GetReturnAddress() noexcept
+{
+    return _ReturnAddress();
+}
+} // namespace oxygen::detail
 #elif defined(__GNUC__) || defined(__clang__)
-#  define OXYGEN_RETURN_ADDRESS() __builtin_return_address(0)
+namespace oxygen::detail {
+[[nodiscard]] inline void* GetReturnAddress() noexcept
+{
+    return __builtin_return_address(0);
+}
+} // namespace oxygen::detail
 #else
-#  define OXYGEN_RETURN_ADDRESS() nullptr
+namespace oxygen::detail {
+[[nodiscard]] inline void* GetReturnAddress() noexcept
+{
+    return nullptr;
+}
+} // namespace oxygen::detail
 #endif
+
+namespace oxygen {
+// User-facing constexpr template function
+template <typename T = void>
+[[nodiscard]] constexpr void* ReturnAddress() noexcept
+{
+#if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
+    return detail::GetReturnAddress();
+#else
+    return nullptr;
+#endif
+}
+
+} // namespace oxygen
