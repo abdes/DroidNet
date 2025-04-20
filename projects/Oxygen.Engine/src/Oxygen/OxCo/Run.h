@@ -74,7 +74,7 @@ namespace detail {
                         runner);
                 };
                 // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-                ProgramCounter(reinterpret_cast<uintptr_t>(OXYGEN_RETURN_ADDRESS()));
+                ProgramCounter(reinterpret_cast<uintptr_t>(oxygen::ReturnAddress<>()));
                 awaiter.await_set_executor(&executor);
                 awaiter.await_suspend(ToHandle()).resume();
                 executor.RunSoon();

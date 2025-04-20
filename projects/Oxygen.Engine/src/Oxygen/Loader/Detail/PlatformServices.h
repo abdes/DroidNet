@@ -94,7 +94,7 @@ public:
      address, or `nullptr` if the module could not be determined.
 
      The proper way to use this method is to pass the return address of a
-     function, which can be obtained by calling `OXYGEN_RETURN_ADDRESS()`
+     function, which can be obtained by calling `oxygen::ReturnAddress<>()`
      portable macro.
     */
     [[nodiscard]] virtual auto GetModuleHandleFromReturnAddress(void* returnAddress) const -> ModuleHandle;
