@@ -82,4 +82,4 @@ protected:
     Config config_ {};
 };
 
-}  // namespace oxygen::graphics
+} // namespace oxygen::graphics

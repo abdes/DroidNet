@@ -8,14 +8,14 @@
 
 #include "./api_export.h"
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
-#include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Graphics/Common/Types/RenderGameFunction.h>
+#include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 

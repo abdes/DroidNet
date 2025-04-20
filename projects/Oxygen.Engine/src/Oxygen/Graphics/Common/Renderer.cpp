@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
 
 #include <Oxygen/Graphics/Common/CommandList.h> // Needed to forward the command list ptr
 
