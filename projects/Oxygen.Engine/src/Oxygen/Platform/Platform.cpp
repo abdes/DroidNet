@@ -27,11 +27,14 @@ void Platform::Run()
 void Platform::Compose(const PlatformConfig& config)
 {
     AddComponent<AsyncOps>();
-    if (!config.headless) {
-        AddComponent<EventPump>();
-        AddComponent<WindowManager>();
-        AddComponent<InputEvents>();
+
+    if (config.headless) {
+        LOG_F(INFO, "Platform is headless -> no input, no window");
+        return;
     }
+    AddComponent<EventPump>();
+    AddComponent<WindowManager>();
+    AddComponent<InputEvents>();
 }
 
 auto Platform::GetInputSlotForKey(const platform::Key key) -> platform::InputSlot
