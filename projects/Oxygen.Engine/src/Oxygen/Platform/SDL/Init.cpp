@@ -15,10 +15,6 @@ Platform::Platform(const PlatformConfig& config)
 {
     LOG_SCOPE_F(INFO, "Platform (SDL3) Init");
 
-    if (config.headless) {
-        LOG_F(INFO, "Platform is headless");
-    }
-
     Compose(config);
 
     platform::sdl::Init(SDL_INIT_VIDEO);
