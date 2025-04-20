@@ -9,6 +9,8 @@
 #include <span>
 #include <type_traits>
 
+#include <SDL3/SDL_events.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
@@ -16,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -29,6 +32,9 @@ using oxygen::PlatformConfig;
 using oxygen::graphics::BackendType;
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
+using oxygen::platform::Window;
+using WindowProps = oxygen::platform::window::Properties;
+using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
@@ -38,6 +44,7 @@ void EventLoopRun(const Platform& platform)
     // TODO: This is the game engine main loop.
     while (is_running) {
         platform.Async().PollOne();
+        platform.Events().PollOne();
     }
 }
 } // namespace
@@ -70,11 +77,46 @@ auto AsyncMain(std::shared_ptr<Platform> platform,
         co_await n.Start(&Graphics::StartAsync, std::ref(*gfx));
         gfx->Run();
 
+        // Setup the main window
+        WindowProps props("Oxygen Window Playground");
+        props.extent = { .width = 800, .height = 600 };
+        props.flags = {
+            .hidden = false,
+            .always_on_top = false,
+            .full_screen = false,
+            .maximized = false,
+            .minimized = false,
+            .resizable = true,
+            .borderless = false
+        };
+        const auto window_weak = platform->Windows().MakeWindow(props);
+        if (const auto window = window_weak.lock()) {
+            LOG_F(INFO, "My window {} is created", window->Id());
+        }
+
+        // Immediately accept the close request for the main window
+        n.Start([window_weak, &platform]() -> oxygen::co::Co<> {
+            while (!window_weak.expired()) {
+                auto window = window_weak.lock();
+                co_await window->CloseRequested();
+                window_weak.lock()->VoteToClose();
+            }
+        });
+
+        // Terminate the application when the last window (main window) is
+        // closed
+        n.Start([&platform, &n]() -> oxygen::co::Co<> {
+            co_await platform->Windows().LastWindowClosed();
+            LOG_F(INFO, "Last window is closed -> wrapping up");
+            n.Cancel();
+        });
+
         // Add a termination signal handler
-        n.Start([&]() -> oxygen::co::Co<> {
+        n.Start([window_weak, &platform]() -> oxygen::co::Co<> {
             co_await platform->Async().OnTerminate();
             LOG_F(INFO, "terminating...");
-            n.Cancel();
+            // Terminate the application by requesting the main window to close
+            window_weak.lock()->RequestClose();
         });
 
         // Wait for all tasks to complete
@@ -88,13 +130,13 @@ auto AsyncMain(std::shared_ptr<Platform> platform,
 extern "C" void MainImpl(std::span<const char*> /*args*/)
 {
     // Create the platform
-    auto platform = std::make_shared<Platform>(PlatformConfig { .headless = true });
+    auto platform = std::make_shared<Platform>(PlatformConfig { .headless = false });
 
     // Load the graphics backend
     GraphicsConfig gfx_config {
         .enable_debug = true,
         .enable_validation = false,
-        .headless = true,
+        .headless = false,
         .extra = {},
     };
     auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
