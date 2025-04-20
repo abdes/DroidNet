@@ -99,7 +99,7 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     };
     auto& loader = oxygen::GraphicsBackendLoader::GetInstance();
     auto gfx = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
-    DCHECK_F(!gfx.expired());
+    CHECK_F(!gfx.expired()); // Expect a valid graphics backend, or abort
 
     oxygen::co::Run(*platform, AsyncMain(platform, gfx));
 
