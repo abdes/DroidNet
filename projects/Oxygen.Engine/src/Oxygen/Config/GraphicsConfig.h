@@ -32,11 +32,13 @@ struct GraphicsConfig {
     /*!
       The graphics backend will try to select the most suitable GPU based on its
       capabilities, but the selection can be influenced by the following
-      properties. Note that the properties are hints and if they cannot be
-      satisfied, the renderer will fall back to the default behavior.
+      properties.
 
-      \note The preferred_card_name and preferred_card_device_id are mutually
-      exclusive.
+      \note The properties are hints and if they cannot be satisfied, the
+      renderer will fall back to the default behavior.
+
+      \note The `preferred_card_name` and `preferred_card_device_id` are
+      mutually exclusive.
     */
     //! @{
     std::optional<std::string> preferred_card_name;
