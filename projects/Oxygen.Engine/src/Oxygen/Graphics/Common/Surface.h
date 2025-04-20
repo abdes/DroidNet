@@ -83,34 +83,37 @@ namespace detail {
         }
     };
 
+    class WindowSurface;
+
+    //! A component that encapsulates the window part of a WindowSurface.
+    class WindowComponent : public Component {
+        OXYGEN_COMPONENT(WindowComponent)
+    public:
+        using NativeHandles = platform::window::NativeHandles;
+
+        OXYGEN_DEFAULT_COPYABLE(WindowComponent)
+        OXYGEN_DEFAULT_MOVABLE(WindowComponent)
+
+        [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
+        [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;
+
+        [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const -> platform::window::ExtentT;
+
+        [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
+
+    private:
+        friend WindowSurface;
+        explicit WindowComponent(platform::WindowPtr window)
+            : window_(std::move(window))
+        {
+        }
+
+        platform::WindowPtr window_;
+    };
+
     //! Represents a surface that is associated with a window.
     class WindowSurface : public Surface {
     public:
-        class WindowComponent : public Component {
-            OXYGEN_COMPONENT(WindowComponent)
-        public:
-            using NativeHandles = platform::window::NativeHandles;
-
-            OXYGEN_DEFAULT_COPYABLE(WindowComponent)
-            OXYGEN_DEFAULT_MOVABLE(WindowComponent)
-
-            [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
-            [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;
-
-            [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const -> platform::window::ExtentT;
-
-            [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
-
-        private:
-            friend WindowSurface;
-            explicit WindowComponent(platform::WindowPtr window)
-                : window_(std::move(window))
-            {
-            }
-
-            platform::WindowPtr window_;
-        };
-
         OXYGEN_GFX_API ~WindowSurface() override = default;
 
         OXYGEN_DEFAULT_COPYABLE(WindowSurface)

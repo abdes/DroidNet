@@ -108,7 +108,7 @@ public:
 
     [[nodiscard]] auto Rtv() const -> const DescriptorHandle& override
     {
-        return GetComponent<SwapChain>().Rtv();
+        return GetComponent<SwapChain>().GetCurrentRenderTargetView();
     }
 };
 
