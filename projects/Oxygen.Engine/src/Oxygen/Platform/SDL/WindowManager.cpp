@@ -82,7 +82,8 @@ auto WindowManager::MakeWindow(const window::Properties& props) -> std::weak_ptr
 
 auto WindowManager::ProcessPlatformEvents() -> co::Co<>
 {
-    while (true) {
+    DLOG_F(INFO, "Window Manager async event processing started");
+    while (async_->IsRunning()) {
         auto& event = co_await event_pump_->NextEvent();
         auto _ = co_await event_pump_->Lock();
         if (event.IsHandled()) {

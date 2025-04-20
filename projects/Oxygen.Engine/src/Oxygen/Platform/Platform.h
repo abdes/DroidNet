@@ -136,13 +136,15 @@ namespace platform {
 
     class InputEvents final : public Component {
         OXYGEN_COMPONENT(InputEvents)
-        OXYGEN_COMPONENT_REQUIRES(EventPump)
+        OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
     public:
         auto ForRead() { return channel_.ForRead(); }
 
     protected:
         void UpdateDependencies(const Composition& composition) override
         {
+            async_ = &composition.GetComponent<AsyncOps>();
+            DCHECK_NOTNULL_F(async_);
             event_pump_ = &composition.GetComponent<EventPump>();
             DCHECK_NOTNULL_F(event_pump_);
         }
@@ -155,6 +157,7 @@ namespace platform {
         // NOLINTNEXTLINE(*-avoid-const-or-ref-data-members) - lifetime is linked to channel_
         co::BroadcastChannel<InputEvent>::Writer& channel_writer_ = channel_.ForWrite();
 
+        AsyncOps* async_ { nullptr };
         EventPump* event_pump_ { nullptr };
     };
 
@@ -192,7 +195,7 @@ namespace platform {
 
 class Platform final : public Composition {
 public:
-    OXYGEN_PLATFORM_API Platform(const PlatformConfig& config);
+    OXYGEN_PLATFORM_API explicit Platform(const PlatformConfig& config);
     OXYGEN_PLATFORM_API ~Platform() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Platform)
