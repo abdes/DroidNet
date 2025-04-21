@@ -72,12 +72,6 @@ void DestroyBackend()
 
 namespace oxygen::graphics::d3d12::detail {
 
-auto Graphics() -> d3d12::Graphics&
-{
-    CHECK_NOTNULL_F(GetBackendInternal());
-    return *GetBackendInternal();
-}
-
 auto GetFactory() -> FactoryType*
 {
     CHECK_NOTNULL_F(GetBackendInternal());
@@ -100,7 +94,7 @@ auto GetRenderer() -> Renderer&
 
 auto GetAllocator() -> D3D12MA::Allocator&
 {
-    auto* allocator = Graphics().GetAllocator();
+    auto* allocator = GetBackendInternal()->GetAllocator();
     DCHECK_NOTNULL_F(allocator);
     return *allocator;
 }
