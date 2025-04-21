@@ -35,6 +35,8 @@ public:
 
     [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
 
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface> override;
+
 protected:
     // void InitializeGraphicsBackend(const SerializedBackendConfig& props) override;
     // void ShutdownGraphicsBackend() override;

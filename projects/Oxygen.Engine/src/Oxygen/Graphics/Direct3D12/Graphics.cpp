@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
+#include "Graphics.h"
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -158,4 +159,12 @@ auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
 {
     return std::make_unique<ImGuiModule>(std::move(engine), window_id);
+}
+
+auto Graphics::CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface>
+{
+    DCHECK_F(window.Valid());
+
+    // TODO: implement CreateSurface
+    throw std::runtime_error("CreateSurface not implemented in D3D12 backend");
 }
