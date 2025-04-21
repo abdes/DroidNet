@@ -70,13 +70,14 @@ auto main(int argc, char** argv) noexcept -> int
         loguru::g_preamble_verbose = false;
         loguru::g_preamble_time = false;
         loguru::g_preamble_uptime = false;
-        loguru::g_preamble_thread = false;
+        loguru::g_preamble_thread = true;
         loguru::g_preamble_header = false;
         loguru::g_stderr_verbosity = loguru::Verbosity_1;
         loguru::g_colorlogtostderr = true;
         // Optional, but useful to time-stamp the start of the log.
         // Will also detect verbosity level on command line as -v.
         loguru::init(argc, argv);
+        loguru::set_thread_name("main");
 
         MainImpl(std::span(const_cast<const char**>(argv), static_cast<size_t>(argc)));
         exit_code = EXIT_SUCCESS;

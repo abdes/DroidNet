@@ -32,9 +32,12 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "MainModule.cpp"
+  "MainModule.h"
+  "RenderThread.cpp"
+  "RenderThread.h"
   "main_impl.cpp"
   "../main.cpp"
-)
+ "RenderThread.cpp")
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
