@@ -137,8 +137,8 @@ private:
 void RendererImpl::Init(const GraphicsConfig& props)
 {
     // Initialize the command recorder
-    command_queue_.reset(new CommandQueue(CommandListType::kGraphics));
-    command_recorder_.reset(new CommandRecorder(CommandListType::kGraphics));
+    command_queue_.reset(new CommandQueue(QueueRole::kGraphics));
+    command_recorder_.reset(new CommandRecorder(QueueRole::kGraphics));
 
     // Initialize heaps
 }

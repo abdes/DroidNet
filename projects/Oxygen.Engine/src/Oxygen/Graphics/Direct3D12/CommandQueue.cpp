@@ -17,7 +17,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/Types/CommandListType.h>
+#include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
@@ -58,7 +58,7 @@ using oxygen::graphics::d3d12::detail::GetMainDevice;
 using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
-CommandQueue::CommandQueue(CommandListType type, std::string_view name)
+CommandQueue::CommandQueue(QueueRole type, std::string_view name)
     : Base(type, name)
 {
     const auto device = GetMainDevice();
@@ -67,14 +67,17 @@ CommandQueue::CommandQueue(CommandListType type, std::string_view name)
     D3D12_COMMAND_LIST_TYPE d3d12_type;
     switch (GetQueueType()) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
     {
-    case CommandListType::kGraphics:
+    case QueueRole::kGraphics:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         break;
-    case CommandListType::kCompute:
+    case QueueRole::kCompute:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
         break;
-    case CommandListType::kCopy:
+    case QueueRole::kTransfer:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_COPY;
+        break;
+    case QueueRole::kPresent:
+        d3d12_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         break;
     default:
         throw std::runtime_error(
@@ -91,8 +94,9 @@ CommandQueue::CommandQueue(CommandListType type, std::string_view name)
 
     ThrowOnFailed(
         device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),
-        fmt::format("could not create {} Command Queue", nostd::to_string(GetQueueType())));
+        fmt::format("could not create `{}` Command Queue", nostd::to_string(GetQueueType())));
     NameObject(command_queue_, GetNameForType(d3d12_type));
+    LOG_F(INFO, "Command queue for `{}` created", nostd::to_string(GetQueueType()));
 
     try {
         fence_ = std::make_unique<Fence>(command_queue_);
@@ -106,6 +110,7 @@ CommandQueue::CommandQueue(CommandListType type, std::string_view name)
 CommandQueue::~CommandQueue() noexcept
 {
     ReleaseCommandQueue();
+    LOG_F(INFO, "Command queue for `{}` destroyed", nostd::to_string(GetQueueType()));
 }
 
 void CommandQueue::SetName(std::string_view name) noexcept

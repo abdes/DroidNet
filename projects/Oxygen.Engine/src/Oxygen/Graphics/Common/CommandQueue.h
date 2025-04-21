@@ -16,7 +16,7 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/SynchronizationCounter.h>
-#include <Oxygen/Graphics/Common/Types/CommandListType.h>
+#include <Oxygen/Graphics/Common/Types/Queues.h>
 
 namespace oxygen::graphics {
 
@@ -24,12 +24,12 @@ class CommandList;
 
 class CommandQueue : public Composition, public Named {
 public:
-    explicit CommandQueue(CommandListType type)
+    explicit CommandQueue(QueueRole type)
         : CommandQueue(type, "Command Queue")
     {
     }
 
-    CommandQueue(CommandListType type, std::string_view name)
+    CommandQueue(QueueRole type, std::string_view name)
         : type_(type)
     {
         AddComponent<ObjectMetaData>(name);
@@ -44,7 +44,7 @@ public:
 
     virtual void Flush() { Wait(GetSynchronizationCounter().GetCurrentValue()); }
 
-    [[nodiscard]] virtual auto GetQueueType() const -> CommandListType { return type_; }
+    [[nodiscard]] virtual auto GetQueueType() const -> QueueRole { return type_; }
 
     virtual void Signal(const uint64_t value)
     {
@@ -85,7 +85,7 @@ protected:
     virtual auto GetSynchronizationCounter() const -> SynchronizationCounter& = 0;
 
 private:
-    CommandListType type_ { CommandListType::kNone };
+    QueueRole type_ { QueueRole::kNone };
 };
 
 } // namespace oxygen::graphics

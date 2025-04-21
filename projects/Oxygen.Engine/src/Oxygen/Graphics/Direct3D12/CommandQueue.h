@@ -17,12 +17,12 @@ class CommandQueue final : public graphics::CommandQueue {
     using Base = graphics::CommandQueue;
 
 public:
-    CommandQueue(CommandListType type)
+    CommandQueue(QueueRole type)
         : CommandQueue(type, "Command List")
     {
     }
 
-    CommandQueue(CommandListType type, std::string_view name);
+    CommandQueue(QueueRole type, std::string_view name);
 
     ~CommandQueue() noexcept override;
     OXYGEN_MAKE_NON_COPYABLE(CommandQueue);

@@ -61,7 +61,7 @@ void CommandList::ReleaseCommandList() noexcept
     }
 }
 
-CommandList::CommandList(CommandListType type, std::string_view name)
+CommandList::CommandList(QueueRole type, std::string_view name)
     : Base(type, name)
 {
     // TODO: consider if we want to reuse command list objects
@@ -70,14 +70,17 @@ CommandList::CommandList(CommandListType type, std::string_view name)
 
     switch (type) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
     {
-    case CommandListType::kGraphics:
+    case QueueRole::kGraphics:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         break;
-    case CommandListType::kCompute:
+    case QueueRole::kCompute:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
         break;
-    case CommandListType::kCopy:
+    case QueueRole::kTransfer:
         d3d12_type = D3D12_COMMAND_LIST_TYPE_COPY;
+        break;
+    case QueueRole::kPresent:
+        d3d12_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         break;
     default:
         throw std::runtime_error(fmt::format("Unsupported CommandListType: {}", nostd::to_string(type)));
