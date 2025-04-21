@@ -13,6 +13,7 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -74,6 +75,8 @@ public:
     virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
         -> std::unique_ptr<imgui::ImguiModule>
         = 0;
+
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface> = 0;
 
 protected:
     //     //! Initialize the graphics backend module.

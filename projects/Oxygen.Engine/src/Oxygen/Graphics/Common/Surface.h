@@ -23,65 +23,51 @@
 
 namespace oxygen::graphics {
 
-//! A lightweight handle to a surface resource.
+//! Represents an area where rendering occurs.
 /*!
- The `Surface` class is a lightweight handle to a surface resource, which Can be
- freely copied, moved, and used anywhere a `SurfaceId` is expected. If the
- underlying surface resource is no longer available, the handle is invalidated
- and should not be used anymore.
-
- \see IsValid()
-*/
-class Surface final : public Resource<resources::kSurface> {
+  A surface is a region where rendering occurs. It can be a window, a
+  texture, or any other rendering target. When used for off-screen
+  rendering, the output is not directly presented to the display, and
+  therefore, the surface does not have an associated swapchain. Examples of
+  such usage include shadow maps, reflection maps, and post-processing
+  effects.
+ */
+class Surface : public Composition, public Named, public RenderTarget {
 public:
-    explicit(false) Surface(resources::SurfaceId surface_id)
-        : Resource(std::move(surface_id))
+    ~Surface() override = default;
+
+    OXYGEN_DEFAULT_COPYABLE(Surface);
+    OXYGEN_DEFAULT_MOVABLE(Surface);
+
+    void ShouldResize(const bool flag) { should_resize_ = flag; }
+    auto ShouldResize() const -> bool { return should_resize_; }
+    virtual void Resize() = 0;
+    virtual void Present() const = 0;
+
+    [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
+    [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
+
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
     {
+        return GetComponent<ObjectMetaData>().GetName();
     }
 
-    explicit(false) operator resources::SurfaceId() const { return GetId(); }
+    void SetName(std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
+
+protected:
+    explicit Surface(std::string_view name = "Surface")
+    {
+        AddComponent<ObjectMetaData>(name);
+    }
+
+private:
+    bool should_resize_ { false };
 };
 
 namespace detail {
-
-    //! Represents an area where rendering occurs.
-    /*!
-      A surface is a region where rendering occurs. It can be a window, a
-      texture, or any other rendering target. When used for off-screen
-      rendering, the output is not directly presented to the display, and
-      therefore, the surface does not have an associated swapchain. Examples of
-      such usage include shadow maps, reflection maps, and post-processing
-      effects.
-     */
-    class Surface : public Composition, public Named, public RenderTarget {
-    public:
-        ~Surface() override = default;
-
-        OXYGEN_DEFAULT_COPYABLE(Surface);
-        OXYGEN_DEFAULT_MOVABLE(Surface);
-
-        virtual void Resize() = 0;
-        virtual void Present() const = 0;
-
-        [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
-        [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
-
-        [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-        {
-            return GetComponent<ObjectMetaData>().GetName();
-        }
-
-        void SetName(std::string_view name) noexcept override
-        {
-            GetComponent<ObjectMetaData>().SetName(name);
-        }
-
-    protected:
-        explicit Surface(std::string_view name = "Surface")
-        {
-            AddComponent<ObjectMetaData>(name);
-        }
-    };
 
     class WindowSurface;
 

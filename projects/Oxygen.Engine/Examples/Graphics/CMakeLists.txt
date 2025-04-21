@@ -29,7 +29,12 @@ asap_push_module("${META_MODULE_NAME}")
 
 # -- Input System Example ------------------------------------------------------
 
-add_executable(${META_MODULE_TARGET} "main_impl.cpp" "../main.cpp")
+add_executable(
+  ${META_MODULE_TARGET}
+  "MainModule.cpp"
+  "main_impl.cpp"
+  "../main.cpp"
+)
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
@@ -39,6 +44,11 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
+target_include_directories(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
