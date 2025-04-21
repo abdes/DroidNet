@@ -57,7 +57,6 @@ namespace detail {
       initialized or has been destroyed.
     */
     //! @{
-    [[nodiscard]] auto Graphics() -> Graphics&;
     [[nodiscard]] auto GetFactory() -> FactoryType*;
     [[nodiscard]] auto GetMainDevice() -> DeviceType*;
     [[nodiscard]] auto GetRenderer() -> Renderer&;
