@@ -13,18 +13,18 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Common/Types/CommandListType.h>
+#include <Oxygen/Graphics/Common/Types/Queues.h>
 
 namespace oxygen::graphics {
 
 class CommandList : public Composition, public Named {
 public:
-    explicit CommandList(CommandListType type)
+    explicit CommandList(QueueRole type)
         : CommandList(type, "Command List")
     {
     }
 
-    CommandList(CommandListType type, std::string_view name)
+    CommandList(QueueRole type, std::string_view name)
         : type_(type)
     {
         AddComponent<ObjectMetaData>(name);
@@ -48,7 +48,7 @@ public:
     }
 
 private:
-    CommandListType type_ { CommandListType::kNone };
+    QueueRole type_ { QueueRole::kNone };
 };
 
 } // namespace oxygen::graphics

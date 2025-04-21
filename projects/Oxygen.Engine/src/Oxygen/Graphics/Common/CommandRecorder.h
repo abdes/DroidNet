@@ -11,7 +11,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Forward.h>
-#include <Oxygen/Graphics/Common/Types/CommandListType.h>
+#include <Oxygen/Graphics/Common/Types/Queues.h>
 
 namespace oxygen::graphics {
 
@@ -23,7 +23,7 @@ enum ClearFlags : uint8_t {
 
 class CommandRecorder {
 public:
-    constexpr explicit CommandRecorder(const CommandListType type)
+    constexpr explicit CommandRecorder(const QueueRole type)
         : type_ { type }
     {
     }
@@ -33,7 +33,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
-    [[nodiscard]] virtual auto GetQueueType() const -> CommandListType { return type_; }
+    [[nodiscard]] virtual auto GetQueueType() const -> QueueRole { return type_; }
 
     virtual void Begin() = 0;
     virtual auto End() -> CommandListPtr = 0;
@@ -54,7 +54,7 @@ protected:
     virtual void ReleaseCommandRecorder() noexcept = 0;
 
 private:
-    CommandListType type_ { CommandListType::kNone };
+    QueueRole type_ { QueueRole::kNone };
 };
 
 } // namespace oxygen::graphics

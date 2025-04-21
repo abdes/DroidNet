@@ -63,7 +63,7 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawD
 
     std::unique_ptr<CommandList> command_list {};
     try {
-        command_list = std::make_unique<CommandList>(CommandListType::kGraphics, "ImGui Command List");
+        command_list = std::make_unique<CommandList>(QueueRole::kGraphics, "ImGui Command List");
         CHECK_NOTNULL_F(command_list);
         CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
         command_list->OnBeginRecording();

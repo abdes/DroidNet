@@ -27,8 +27,17 @@ void MainModule::Run()
 {
     DCHECK_NOTNULL_F(nursery_);
 
+    SetupCommandQueues();
     SetupMainWindow();
     // TODO: SetupSurface();
+}
+
+void MainModule::SetupCommandQueues()
+{
+    CHECK_F(!gfx_weak_.expired());
+
+    auto gfx = gfx_weak_.lock();
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 }
 
 void MainModule::SetupSurface()

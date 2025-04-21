@@ -27,7 +27,7 @@
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
 
-CommandRecorder::CommandRecorder(const CommandListType type)
+CommandRecorder::CommandRecorder(const QueueRole type)
     : Base(type)
 {
     InitializeCommandRecorder();
@@ -92,7 +92,7 @@ void CommandRecorder::SetViewport(
     const float left, const float width, const float top, const float height,
     const float min_depth, const float max_depth)
 {
-    DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
 
     D3D12_VIEWPORT viewport;
     viewport.TopLeftX = left;
@@ -118,7 +118,7 @@ void CommandRecorder::SetScissors(
 void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
     float depth_value, uint8_t stencil_value)
 {
-    DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
     if ((flags & kClearFlagsColor) != 0u) {
@@ -164,7 +164,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
 void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buffers, const uint32_t* strides,
     const uint32_t* offsets)
 {
-    DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
 
     auto* command_list = current_command_list_->GetCommandList();
 
@@ -181,7 +181,7 @@ void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buf
 
 void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset)
 {
-    DCHECK_EQ_F(GetQueueType(), CommandListType::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
     auto* command_list = current_command_list_->GetCommandList();

@@ -8,6 +8,7 @@
 
 #include <type_traits>
 
+#include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
@@ -39,6 +40,39 @@ auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
     CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
 
     return renderer_.get();
+}
+
+void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy)
+{
+    LOG_IF_F(INFO, !command_queues_.empty(), "Re-creating command queues for the graphics backend");
+    command_queues_.clear();
+
+    auto queue_specs = queue_strategy.Specifications();
+    std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> temp_queues;
+
+    try {
+        for (const auto& spec : queue_specs) {
+            auto queue = CreateCommandQueue(spec.role, spec.allocation_preference);
+            // If CreateCommandQueue does not throw, queue is guaranteed to be not null.
+            temp_queues.emplace(spec.name, std::move(queue));
+        }
+        command_queues_ = std::move(temp_queues);
+    } catch (...) {
+        // Destroy all previously created queues
+        temp_queues.clear();
+        throw;
+    }
+}
+
+auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<graphics::CommandQueue>
+{
+    auto it = std::ranges::find(command_queues_, name, [](const auto& pair) { return pair.first; });
+    if (it != command_queues_.end()) {
+        return it->second;
+    }
+
+    LOG_F(WARNING, "Command queue '{}' not found", name);
+    return {};
 }
 
 // void Graphics::OnInitialize(const SerializedBackendConfig& props)

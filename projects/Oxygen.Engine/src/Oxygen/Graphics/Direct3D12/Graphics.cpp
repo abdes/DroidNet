@@ -12,18 +12,35 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
-#include "Graphics.h"
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
 
 namespace {
+
+//! Utility function to map QueueRole to D3D12_COMMAND_LIST_TYPE
+auto ToD3D12CommandListType(oxygen::graphics::QueueRole role)
+{
+    using oxygen::graphics::QueueRole;
+    switch (role) {
+    case QueueRole::kGraphics:
+    case QueueRole::kPresent: // D3D12 uses graphics queue for present
+        return D3D12_COMMAND_LIST_TYPE_DIRECT;
+    case QueueRole::kCompute:
+        return D3D12_COMMAND_LIST_TYPE_COMPUTE;
+    case QueueRole::kTransfer:
+        return D3D12_COMMAND_LIST_TYPE_COPY;
+    default:
+        throw std::invalid_argument("Unknown or unsupported QueueRole for D3D12");
+    }
+}
 
 auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
@@ -154,6 +171,13 @@ Graphics::Graphics(const SerializedBackendConfig& config)
 auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
 {
     return std::make_unique<Renderer>();
+}
+
+auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference) -> std::shared_ptr<graphics::CommandQueue>
+{
+    auto queue = std::make_shared<CommandQueue>(role);
+    CHECK_NOTNULL_F(queue, "Failed to create command queue");
+    return queue;
 }
 
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>

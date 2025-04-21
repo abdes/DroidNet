@@ -28,12 +28,12 @@ public:
         kExecuting = 3, //<! Command list is being executed.
     };
 
-    explicit CommandList(CommandListType type)
+    explicit CommandList(QueueRole type)
         : CommandList(type, "Command List")
     {
     }
 
-    CommandList(CommandListType type, std::string_view name);
+    CommandList(QueueRole type, std::string_view name);
 
     ~CommandList() noexcept override;
 

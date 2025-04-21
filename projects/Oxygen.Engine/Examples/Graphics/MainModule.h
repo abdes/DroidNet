@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
 namespace platform {
@@ -44,15 +44,15 @@ public:
 
     void Run();
 
-
 private:
+    void SetupCommandQueues();
     void SetupMainWindow();
     void SetupSurface();
 
     std::shared_ptr<oxygen::Platform> platform_;
     std::weak_ptr<oxygen::Graphics> gfx_weak_;
     std::weak_ptr<oxygen::platform::Window> window_weak_;
-    std::unique_ptr<oxygen::graphics::Surface> surface_ { };
+    std::unique_ptr<oxygen::graphics::Surface> surface_ {};
 
     co::Nursery* nursery_ { nullptr };
 };
