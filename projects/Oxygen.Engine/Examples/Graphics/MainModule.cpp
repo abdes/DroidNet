@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <MainModule.h>
-
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+
+#include <MainModule.h>
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;

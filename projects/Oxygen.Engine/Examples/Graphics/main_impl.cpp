@@ -11,7 +11,6 @@
 
 #include <SDL3/SDL_events.h>
 
-#include <MainModule.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
@@ -26,6 +25,9 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 
+#include <MainModule.h>
+#include <RenderThread.h>
+
 using oxygen::Graphics;
 using oxygen::GraphicsConfig;
 using oxygen::Platform;
@@ -34,6 +36,7 @@ using oxygen::graphics::BackendType;
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
 using WindowEvent = oxygen::platform::window::Event;
+using oxygen::RenderThread;
 using oxygen::examples::MainModule;
 
 namespace {
@@ -61,7 +64,9 @@ namespace {
 
 auto AsyncMain(
     std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> gfx_weak, MainModule& main_module) -> oxygen::co::Co<int>
+    std::weak_ptr<Graphics> gfx_weak,
+    RenderThread& render_thread,
+    MainModule& main_module) -> oxygen::co::Co<int>
 {
     // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
     OXCO_WITH_NURSERY(n)
@@ -83,9 +88,10 @@ auto AsyncMain(
 
         // Terminate the application when the last window (main window) is
         // closed
-        n.Start([&platform, &n]() -> oxygen::co::Co<> {
+        n.Start([&platform, &render_thread, &n]() -> oxygen::co::Co<> {
             co_await platform->Windows().LastWindowClosed();
             LOG_F(INFO, "Last window is closed -> wrapping up");
+            render_thread.Stop();
             n.Cancel();
         });
 
@@ -115,9 +121,13 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
 
     MainModule main_module(platform, gfx_weak);
 
-    oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, main_module));
+    // Start the render thread
+    auto render_thread = std::make_unique<oxygen::RenderThread>(gfx_weak);
+
+    oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, *render_thread, main_module));
 
     // Explicit destruction order due to dependencies.
+    render_thread.reset();
     platform.reset();
     gfx_weak.reset();
 }
