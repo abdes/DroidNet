@@ -13,11 +13,13 @@
 
 #include <asio/signal_set.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
@@ -34,10 +36,11 @@ class Platform;
 
 namespace platform {
 
-    class AsyncOps final : public Component {
+    class AsyncOps final : public Component, public co::LiveObject {
         OXYGEN_COMPONENT(AsyncOps)
     public:
         AsyncOps();
+        ~AsyncOps() override;
 
         //! A utility function, returning an awaitable suspending the caller for a
         //! specified duration. Suitable for use with `AnyOf()` etc.
@@ -51,15 +54,20 @@ namespace platform {
             return io_.poll();
         }
 
-        [[nodiscard]] OXYGEN_PLATFORM_API auto StartAsync(co::TaskStarted<> started = {}) -> co::Co<>;
+        void Stop() override;
+
+        [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> override;
+
+        [[nodiscard]] auto IsRunning() const -> bool
+        {
+            return nursery_ != nullptr;
+        }
 
         [[nodiscard]] auto Nursery() const -> co::Nursery&
         {
             DCHECK_NOTNULL_F(nursery_);
             return *nursery_;
         }
-
-        [[nodiscard]] auto IsRunning() const { return nursery_ != nullptr; }
 
         [[nodiscard]] auto OnTerminate() -> co::Event& { return terminate_; }
 
@@ -193,7 +201,7 @@ namespace platform {
 
 } // namespace platform
 
-class Platform final : public Composition {
+class Platform final : public Composition, public co::LiveObject {
 public:
     OXYGEN_PLATFORM_API explicit Platform(const PlatformConfig& config);
     OXYGEN_PLATFORM_API ~Platform() override;
@@ -201,13 +209,10 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Platform)
     OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-    auto StartAsync(co::TaskStarted<> started = {}) const -> co::Co<>
-    {
-        return GetComponent<platform::AsyncOps>().StartAsync(std::move(started));
-    }
-
+    OXYGEN_PLATFORM_API auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<>;
     OXYGEN_PLATFORM_API void Run();
-    auto IsRunning() const -> bool { return GetComponent<platform::AsyncOps>().IsRunning(); }
+    OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
+    OXYGEN_PLATFORM_API void Stop();
 
     auto Async() const -> platform::AsyncOps& { return GetComponent<platform::AsyncOps>(); }
     auto Events() const -> platform::EventPump& { return GetComponent<platform::EventPump>(); }

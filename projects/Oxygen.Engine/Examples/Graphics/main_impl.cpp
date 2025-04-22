@@ -75,7 +75,7 @@ auto AsyncMain(
 
         // Activate and run child live objects with our nursery.
 
-        co_await n.Start(&Platform::StartAsync, std::ref(*platform));
+        co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
         platform->Run();
 
         DCHECK_F(!gfx_weak.expired());
@@ -91,7 +91,16 @@ auto AsyncMain(
         n.Start([&platform, &render_thread, &n]() -> oxygen::co::Co<> {
             co_await platform->Windows().LastWindowClosed();
             LOG_F(INFO, "Last window is closed -> wrapping up");
+            // Explicitly stop the child live objects. Although this is not
+            // strictly required, it is a good practice to do so and ensures a
+            // controlled shutdown.
+            platform->Stop();
+
+            // Stop the render thread
             render_thread.Stop();
+
+            // Cancel the main nursery to stop all background async tasks and
+            // return control to `main()`
             n.Cancel();
         });
 
@@ -119,11 +128,13 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
     CHECK_F(!gfx_weak.expired()); // Expect a valid graphics backend, or abort
 
+    // Create the application main module
     MainModule main_module(platform, gfx_weak);
 
-    // Start the render thread
+    // TODO: Start the render thread in Graphics backend?
     auto render_thread = std::make_unique<oxygen::RenderThread>(gfx_weak);
 
+    // Transfer control to the asynchronous main loop
     oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, *render_thread, main_module));
 
     // Explicit destruction order due to dependencies.
