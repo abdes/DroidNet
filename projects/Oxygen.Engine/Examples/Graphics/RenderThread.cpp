@@ -66,11 +66,10 @@ private:
     void EventLoop()
     {
         running_ = true;
-        DLOG_F(INFO, "Render thread started");
         while (running_) {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [&] { return !frame_queue_.empty() || !running_; });
-            poll_.UnParkAll();
+            work_available_.UnParkAll();
         }
     }
 
@@ -78,7 +77,7 @@ private:
     auto RenderLoopAsync() -> oxygen::co::Co<>
     {
         while (running_) {
-            co_await poll_.Park();
+            co_await work_available_.Park();
             DCHECK_F(!frame_queue_.empty());
             if (!running_) {
                 break;
@@ -96,11 +95,11 @@ private:
 
             auto gfx = gfx_weak_.lock();
 
-            // gfx_weak_->BeginFrame();
+            // gfx->BeginFrame();
             task(*gfx);
-            // gfx_weak_->SubmitFrame();
-            // gfx_weak_->PresentFrame();
-            // gfx_weak_->AdvanceFrame();
+            // gfx->SubmitFrame();
+            // gfx->PresentFrame();
+            // gfx->AdvanceFrame();
         }
     }
 
@@ -111,7 +110,7 @@ private:
     mutable std::mutex mutex_;
     mutable std::condition_variable cv_;
     mutable std::queue<RenderThread::RenderTask> frame_queue_;
-    oxygen::co::ParkingLot poll_;
+    oxygen::co::ParkingLot work_available_;
 };
 
 } // namespace
@@ -157,6 +156,7 @@ void RenderThread::Start()
     }
     impl_->thread_ = std::thread([this]() {
         loguru::set_thread_name("render");
+        DLOG_F(INFO, "Render thread started");
         oxygen::co::Run(impl_->renderer_, [this]() -> oxygen::co::Co<> {
             // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
             OXCO_WITH_NURSERY(n)

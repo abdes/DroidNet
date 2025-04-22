@@ -51,7 +51,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
 
         // Activate the live objects with our nursery, making it available for the
         // lifetime of the nursery.
-        co_await n.Start(&Platform::StartAsync, std::ref(*platform));
+        co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
         platform->Run();
 
         WindowProps props("Oxygen Window Playground");
@@ -120,6 +120,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform) -> oxygen::co::Co<int
         n.Start([&platform, &n]() -> oxygen::co::Co<> {
             co_await platform->Windows().LastWindowClosed();
             LOG_F(INFO, "Last window is closed -> wrapping up");
+            platform->Stop();
             n.Cancel();
         });
 

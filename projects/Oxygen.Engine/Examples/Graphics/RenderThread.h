@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <memory>
 #include <functional>
+#include <memory>
 
 #include <Oxygen/Graphics/Common/Graphics.h>
 

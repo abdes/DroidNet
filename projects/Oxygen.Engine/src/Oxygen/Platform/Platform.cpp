@@ -12,8 +12,15 @@ using oxygen::platform::EventPump;
 using oxygen::platform::InputEvents;
 using oxygen::platform::WindowManager;
 
+auto Platform::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
+{
+    DLOG_F(INFO, "Platform Live Object activating...");
+    return GetComponent<platform::AsyncOps>().ActivateAsync(std::move(started));
+}
+
 void Platform::Run()
 {
+    DLOG_F(INFO, "Strating Platform async tasks...");
     auto& n = GetComponent<AsyncOps>().Nursery();
 
     if (HasComponent<EventPump>()) {
@@ -22,6 +29,17 @@ void Platform::Run()
     if (HasComponent<InputEvents>()) {
         n.Start(&InputEvents::ProcessPlatformEvents, &GetComponent<InputEvents>());
     }
+}
+
+auto Platform::Platform::IsRunning() const -> bool
+{
+    return GetComponent<platform::AsyncOps>().IsRunning();
+}
+
+void Platform::Stop()
+{
+    GetComponent<platform::AsyncOps>().Stop();
+    DLOG_F(INFO, "Platform Live Object stopped");
 }
 
 void Platform::Compose(const PlatformConfig& config)

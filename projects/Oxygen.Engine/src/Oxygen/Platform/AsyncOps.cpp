@@ -10,6 +10,7 @@
 
 #include <asio/signal_set.hpp>
 
+#include "Platform.h"
 #include <Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Platform.h>
@@ -52,7 +53,14 @@ AsyncOps::AsyncOps()
 {
 }
 
-auto AsyncOps::StartAsync(co::TaskStarted<> started) -> co::Co<>
+oxygen::platform::AsyncOps::~AsyncOps()
+{
+    DLOG_IF_F(WARNING, (nursery_ != nullptr),
+        "LiveObject destructor called while nursery is still open. "
+        "Did you forget to call Stop() on the LiveObject?");
+}
+
+auto AsyncOps::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
     signals_.async_wait(
         [this](const std::error_code& error, int signal_number) {
@@ -60,4 +68,12 @@ auto AsyncOps::StartAsync(co::TaskStarted<> started) -> co::Co<>
         });
 
     return OpenNursery(nursery_, std::move(started));
+}
+
+void AsyncOps::Stop()
+{
+    io_.stop();
+    if (nursery_ != nullptr) {
+        nursery_->Cancel();
+    }
 }
