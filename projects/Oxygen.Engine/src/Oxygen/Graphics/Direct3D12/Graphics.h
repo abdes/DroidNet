@@ -33,33 +33,36 @@ public:
     [[nodiscard]] auto GetShader(std::string_view unique_id) const
         -> std::shared_ptr<graphics::IShaderByteCode> override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
+        EngineWeakPtr engine,
+        platform::WindowIdType window_id)
+        const -> std::unique_ptr<imgui::ImguiModule> override;
 
-    [[nodiscard]] virtual OXYGEN_D3D12_API auto CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
+        const platform::Window& window)
+        const -> std::unique_ptr<graphics::Surface> override;
 
 protected:
-    // void InitializeGraphicsBackend(const SerializedBackendConfig& props) override;
-    // void ShutdownGraphicsBackend() override;
-    auto CreateRenderer() -> std::unique_ptr<graphics::Renderer> override;
-
-    [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(graphics::QueueRole role, graphics::QueueAllocationPreference allocation_preference)
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
+        graphics::QueueRole role,
+        graphics::QueueAllocationPreference allocation_preference)
         -> std::shared_ptr<graphics::CommandQueue> override;
 };
 
 namespace detail {
-    //! Get references to the Direct3D12 Renderer global objects for internal use within the
-    //! renderer implementation module.
+    //! Get references to the Direct3D12 Renderer global objects for internal
+    //! use within the renderer implementation module.
     /*!
-      \note These functions are not part of the public API and should not be used. For application
-      needs, use the GetRenderer() function from the renderer loader API and use the Renderer class.
+      \note These functions are not part of the public API and should not be
+      used. For application needs, use the GetRenderer() function from the
+      renderer loader API and use the Renderer class.
 
-      \note These functions will __abort__ when called while the renderer instance is not yet
-      initialized or has been destroyed.
+      \note These functions will __abort__ when called while the renderer
+      instance is not yet initialized or has been destroyed.
     */
     //! @{
     [[nodiscard]] auto GetFactory() -> FactoryType*;
     [[nodiscard]] auto GetMainDevice() -> DeviceType*;
-    [[nodiscard]] auto GetRenderer() -> Renderer&;
     [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
     //! Get the backend memory allocator
     // TODO: Add the allocator

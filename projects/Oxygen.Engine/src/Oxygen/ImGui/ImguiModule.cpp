@@ -25,8 +25,6 @@ ImguiModule::~ImguiModule()
 void ImguiModule::OnInitialize(const Graphics* gfx)
 {
     DCHECK_NOTNULL_F(gfx);
-    DCHECK_F(!gfx->IsWithoutRenderer());
-    DCHECK_NOTNULL_F(gfx->GetRenderer());
 
     IMGUI_CHECKVERSION();
     imgui_context_ = ImGui::CreateContext();

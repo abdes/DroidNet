@@ -13,7 +13,6 @@
 
 using oxygen::graphics::d3d12::MemoryBlock;
 using oxygen::graphics::d3d12::detail::GetAllocator;
-using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
 MemoryBlock::MemoryBlock()

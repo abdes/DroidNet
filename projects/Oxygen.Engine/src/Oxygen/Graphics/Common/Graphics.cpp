@@ -10,6 +10,7 @@
 
 #include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/OxCo/Co.h>
@@ -18,28 +19,47 @@
 
 using oxygen::Graphics;
 
-auto Graphics::StartAsync(co::TaskStarted<> started) -> co::Co<>
+using oxygen::graphics::detail::RenderThread;
+
+Graphics::Graphics(const char* name)
 {
+    AddComponent<ObjectMetaData>(name);
+    AddComponent<oxygen::graphics::detail::RenderThread>();
+}
+
+oxygen::Graphics::~Graphics()
+{
+    delete render_thread_;
+}
+
+auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
+{
+    DLOG_F(INFO, "Graphics Live Object activating...");
     return OpenNursery(nursery_, std::move(started));
 }
 
 void Graphics::Run()
 {
-    // TODO: run the async tasks for graphics
+    DLOG_F(INFO, "Starting Graphics render thread...");
+    render_thread_ = new RenderThread(kFrameBufferCount - 1);
 }
 
-auto Graphics::GetRenderer() const noexcept -> const graphics::Renderer*
+auto Graphics::IsRunning() const -> bool
 {
-    CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
-
-    return renderer_.get();
+    return nursery_ != nullptr;
 }
 
-auto Graphics::GetRenderer() noexcept -> graphics::Renderer*
+void Graphics::Stop()
 {
-    CHECK_F(!is_renderer_less_, "we're running renderer-less, but some code is requesting a renderer from the graphics backend");
+    if (render_thread_) {
+        render_thread_->Stop();
+    }
 
-    return renderer_.get();
+    if (nursery_ == nullptr) {
+        nursery_->Cancel();
+    }
+
+    DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
 void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy)
@@ -74,27 +94,3 @@ auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<g
     LOG_F(WARNING, "Command queue '{}' not found", name);
     return {};
 }
-
-// void Graphics::OnInitialize(const SerializedBackendConfig& props)
-// {
-//     InitializeGraphicsBackend(props);
-
-//     // Create and initialize the renderer instance if we are not running renderer-less.
-//     // TODO(abdes): This is a temporary solution until we have a proper way to handle
-//     // if (!props.headless) {
-//     //     is_renderer_less_ = false;
-//     //     renderer_ = CreateRenderer();
-//     //     if (renderer_) {
-//     //         renderer_->Initialize(platform_, props);
-//     //     }
-//     // }
-// }
-
-// void Graphics::OnShutdown()
-// {
-//     if (renderer_) {
-//         renderer_->Shutdown();
-//         renderer_.reset();
-//     }
-//     ShutdownGraphicsBackend();
-// }

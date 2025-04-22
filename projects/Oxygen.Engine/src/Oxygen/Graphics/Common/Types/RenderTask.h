@@ -12,6 +12,6 @@
 
 namespace oxygen::graphics {
 
-using RenderGameFunction = std::function<void(const RenderTarget& render_target)>;
+using RenderTask = std::function<void(const RenderTarget& render_target)>;
 
 } // namespace oxygen::graphics

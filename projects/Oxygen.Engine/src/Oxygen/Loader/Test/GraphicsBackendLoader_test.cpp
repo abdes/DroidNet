@@ -43,7 +43,6 @@ public:
     }
 
     // NOLINTBEGIN(modernize-use-trailing-return-type)
-    MOCK_METHOD(std::unique_ptr<oxygen::graphics::Renderer>, CreateRenderer, (), (override));
     MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
     MOCK_METHOD(std::unique_ptr<oxygen::graphics::Surface>, CreateSurface, (const oxygen::platform::Window&), (const, override));

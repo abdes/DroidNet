@@ -44,12 +44,10 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 
 using oxygen::graphics::d3d12::CommandList;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
-using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
 void CommandList::ReleaseCommandList() noexcept
 {
-    auto& renderer = GetRenderer();
     // TODO: user of command list must ensure the command list is no longer used
     if (command_allocator_ != nullptr) {
         command_allocator_->Release();

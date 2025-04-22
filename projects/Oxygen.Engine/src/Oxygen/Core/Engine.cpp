@@ -122,9 +122,8 @@ void Engine::ShutdownModules() noexcept
 void Engine::InitializeImGui()
 {
     const auto gfx = graphics_.lock();
-    if (gfx && !gfx->IsWithoutRenderer() && props_.enable_imgui_layer) {
+    if (gfx && props_.enable_imgui_layer) {
         // Initialize ImGui if required
-        DCHECK_NOTNULL_F(gfx->GetRenderer());
         imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
         imgui_module_->Initialize(gfx.get());
     }
@@ -217,7 +216,7 @@ auto Engine::Run() -> void
 
                     // Per frame updates / render
                     the_module->Update(module.frame_time.Delta());
-                    if (gfx && !gfx->IsWithoutRenderer()) {
+                    if (gfx) {
                         the_module->Render(gfx.get());
                     }
                     module.fps.Update();

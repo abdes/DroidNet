@@ -50,6 +50,8 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Detail/EnumToStringConverters.cpp"
+    "Detail/RenderThread.h"
+    "Detail/RenderThread.cpp"
     "Shaders.cpp"
     "Graphics.cpp"
     "Renderer.cpp"
@@ -86,7 +88,7 @@ target_sources(
       "Types/EngineResources.h"
       "Types/Format.h"
       "Types/Queues.h"
-      "Types/RenderGameFunction.h"
+      "Types/RenderTask.h"
       "Types/ResourceAccessMode.h"
       "Types/ShaderType.h"
 )

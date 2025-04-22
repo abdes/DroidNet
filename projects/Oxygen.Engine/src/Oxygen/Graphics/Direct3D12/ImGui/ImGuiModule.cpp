@@ -19,10 +19,10 @@
 
 using oxygen::graphics::d3d12::ImGuiModule;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
-using oxygen::graphics::d3d12::detail::GetRenderer;
 
 void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
 {
+    /* TODO: Rewrite ImGui integration
     DCHECK_NOTNULL_F(gfx);
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
@@ -33,14 +33,17 @@ void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
     ImGui::SetCurrentContext(GetImGuiContext());
     ImGui_ImplDX12_Init(GetMainDevice(), kFrameBufferCount, kDefaultBackBufferFormat,
         d3d12_render->SrvHeap().Heap(), font_srv_handle_.cpu, font_srv_handle_.gpu);
+    */
 }
 
 void ImGuiModule::ImGuiBackendShutdown()
 {
     ImGui_ImplDX12_Shutdown();
 
+    /* TODO: Rewrite ImGui integration
     // TODO: this is hacky and will be obsolete once DescriptorHandle is RAII friendly
     GetRenderer().SrvHeap().Free(font_srv_handle_);
+    */
 }
 
 void ImGuiModule::ImGuiBackendNewFrame()
@@ -51,6 +54,7 @@ void ImGuiModule::ImGuiBackendNewFrame()
 auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawData* draw_data)
     -> CommandListPtr
 {
+    /* TODO: Rewrite ImGui integration
     DCHECK_NOTNULL_F(gfx);
     DCHECK_F(!gfx->IsWithoutRenderer());
     DCHECK_NOTNULL_F(gfx->GetRenderer());
@@ -107,4 +111,6 @@ auto ImGuiModule::ImGuiBackendRenderRawData(const oxygen::Graphics* gfx, ImDrawD
         LOG_F(ERROR, "Recording failed: {}", e.what());
         return {};
     }
+        */
+    return {};
 }

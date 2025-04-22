@@ -20,7 +20,7 @@ auto Platform::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 
 void Platform::Run()
 {
-    DLOG_F(INFO, "Strating Platform async tasks...");
+    DLOG_F(INFO, "Starting Platform async tasks...");
     auto& n = GetComponent<AsyncOps>().Nursery();
 
     if (HasComponent<EventPump>()) {
