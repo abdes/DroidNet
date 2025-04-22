@@ -26,7 +26,6 @@
 #include <Oxygen/Platform/Platform.h>
 
 #include <MainModule.h>
-#include <RenderThread.h>
 
 using oxygen::Graphics;
 using oxygen::GraphicsConfig;
@@ -36,7 +35,6 @@ using oxygen::graphics::BackendType;
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
 using WindowEvent = oxygen::platform::window::Event;
-using oxygen::RenderThread;
 using oxygen::examples::MainModule;
 
 namespace {
@@ -65,7 +63,6 @@ namespace {
 auto AsyncMain(
     std::shared_ptr<Platform> platform,
     std::weak_ptr<Graphics> gfx_weak,
-    RenderThread& render_thread,
     MainModule& main_module) -> oxygen::co::Co<int>
 {
     // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
@@ -80,7 +77,7 @@ auto AsyncMain(
 
         DCHECK_F(!gfx_weak.expired());
         auto gfx = gfx_weak.lock();
-        co_await n.Start(&Graphics::StartAsync, std::ref(*gfx));
+        co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
         gfx->Run();
 
         co_await n.Start(&MainModule::StartAsync, std::ref(main_module));
@@ -88,7 +85,7 @@ auto AsyncMain(
 
         // Terminate the application when the last window (main window) is
         // closed
-        n.Start([&platform, &render_thread, &n]() -> oxygen::co::Co<> {
+        n.Start([&platform, &gfx_weak, &n]() -> oxygen::co::Co<> {
             co_await platform->Windows().LastWindowClosed();
             LOG_F(INFO, "Last window is closed -> wrapping up");
             // Explicitly stop the child live objects. Although this is not
@@ -97,7 +94,8 @@ auto AsyncMain(
             platform->Stop();
 
             // Stop the render thread
-            render_thread.Stop();
+            DCHECK_F(!gfx_weak.expired());
+            gfx_weak.lock()->Stop();
 
             // Cancel the main nursery to stop all background async tasks and
             // return control to `main()`
@@ -131,14 +129,10 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     // Create the application main module
     MainModule main_module(platform, gfx_weak);
 
-    // TODO: Start the render thread in Graphics backend?
-    auto render_thread = std::make_unique<oxygen::RenderThread>(gfx_weak);
-
     // Transfer control to the asynchronous main loop
-    oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, *render_thread, main_module));
+    oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, main_module));
 
     // Explicit destruction order due to dependencies.
-    render_thread.reset();
     platform.reset();
     gfx_weak.reset();
 }

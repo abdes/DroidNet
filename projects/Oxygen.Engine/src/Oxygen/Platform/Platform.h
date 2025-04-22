@@ -209,9 +209,9 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Platform)
     OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-    OXYGEN_PLATFORM_API auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<>;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<>;
     OXYGEN_PLATFORM_API void Run();
-    OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
+    [[nodiscard]] OXYGEN_PLATFORM_API auto IsRunning() const -> bool;
     OXYGEN_PLATFORM_API void Stop();
 
     auto Async() const -> platform::AsyncOps& { return GetComponent<platform::AsyncOps>(); }

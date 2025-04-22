@@ -55,7 +55,6 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 
 using oxygen::graphics::d3d12::CommandQueue;
 using oxygen::graphics::d3d12::detail::GetMainDevice;
-using oxygen::graphics::d3d12::detail::GetRenderer;
 using oxygen::windows::ThrowOnFailed;
 
 CommandQueue::CommandQueue(QueueRole type, std::string_view name)

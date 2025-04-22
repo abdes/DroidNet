@@ -100,7 +100,8 @@ void SwapChain::CreateSwapChain(CommandQueueType* command_queue, const DXGI_FORM
     ObjectRelease(swap_chain);
 
     for (auto& [resource, rtv] : render_targets_) {
-        rtv = GetRenderer().RtvHeap().Allocate();
+        // FIXME: Move resource management out of renderer
+        // rtv = GetRenderer().RtvHeap().Allocate();
     }
 
     Finalize();
@@ -110,7 +111,8 @@ void SwapChain::ReleaseSwapChain()
 {
     for (auto& [resource, rtv] : render_targets_) {
         ObjectRelease(resource);
-        GetRenderer().RtvHeap().Free(rtv);
+        // FIXME: Move resource management out of renderer
+        // GetRenderer().RtvHeap().Free(rtv);
     }
     ObjectRelease(swap_chain_);
 }

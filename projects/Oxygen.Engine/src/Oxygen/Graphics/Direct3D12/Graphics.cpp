@@ -84,14 +84,6 @@ auto GetMainDevice() -> DeviceType*
     return GetBackendInternal()->GetMainDevice();
 }
 
-auto GetRenderer() -> Renderer&
-{
-    CHECK_NOTNULL_F(GetBackendInternal());
-    auto* const renderer = static_cast<Renderer*>(GetBackendInternal()->GetRenderer());
-    CHECK_NOTNULL_F(renderer);
-    return *renderer;
-}
-
 auto GetAllocator() -> D3D12MA::Allocator&
 {
     auto* allocator = GetBackendInternal()->GetAllocator();
@@ -160,11 +152,6 @@ Graphics::Graphics(const SerializedBackendConfig& config)
 
     AddComponent<DeviceManager>(desc);
     AddComponent<EngineShaders>();
-}
-
-auto Graphics::CreateRenderer() -> std::unique_ptr<graphics::Renderer>
-{
-    return std::make_unique<Renderer>();
 }
 
 auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference) -> std::shared_ptr<graphics::CommandQueue>

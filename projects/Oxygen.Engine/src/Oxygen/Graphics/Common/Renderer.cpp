@@ -26,7 +26,7 @@ void Renderer::OnShutdown()
 
 void Renderer::Render(
     const resources::SurfaceId& surface_id,
-    const RenderGameFunction& render_game) const
+    const RenderTask& render_game) const
 {
     // Remove the `const` from the object to allow the renderer to render. We
     // require const in the API so that the user does not inadvertently call

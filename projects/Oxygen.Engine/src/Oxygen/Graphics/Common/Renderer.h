@@ -14,7 +14,7 @@
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
-#include <Oxygen/Graphics/Common/Types/RenderGameFunction.h>
+#include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
@@ -83,7 +83,7 @@ namespace graphics {
 
         OXYGEN_GFX_API virtual void Render(
             const resources::SurfaceId& surface_id,
-            const RenderGameFunction& render_game) const;
+            const RenderTask& render_game) const;
 
         virtual auto GetCommandRecorder() const -> CommandRecorderPtr = 0;
 

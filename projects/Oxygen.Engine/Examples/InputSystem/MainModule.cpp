@@ -18,7 +18,6 @@
 #include <Oxygen/Platform/input.h>
 
 using oxygen::Engine;
-using oxygen::graphics::Renderer;
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionTriggerTap;
