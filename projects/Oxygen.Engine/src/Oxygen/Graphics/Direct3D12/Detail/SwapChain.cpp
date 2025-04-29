@@ -47,17 +47,13 @@ void SwapChain::Present() const
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
-void SwapChain::CreateSwapChain(CommandQueueType* command_queue, const DXGI_FORMAT format)
+void SwapChain::CreateSwapChain()
 {
     // This method may be called multiple times, therefore we need to ensure
     // that any remaining resources from previous calls are released first.
     if (swap_chain_ != nullptr) {
         ReleaseSwapChain();
     }
-
-    // Remember the format used during swap-chain creation, and use it for the
-    // render target creation in Finalize()
-    format_ = format;
 
     const DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {
         .Width = window_->Width(),
@@ -84,7 +80,7 @@ void SwapChain::CreateSwapChain(CommandQueueType* command_queue, const DXGI_FORM
         // ID3D12CommandQueue). This parameter cannot be NULL.
         ThrowOnFailed(
             GetFactory()->CreateSwapChainForHwnd(
-                command_queue, // Yes, the command queue, for D3D12
+                command_queue_, // Yes, the command queue, for D3D12
                 window_handle,
                 &swap_chain_desc,
                 nullptr,

@@ -24,12 +24,12 @@ using oxygen::graphics::detail::RenderThread;
 Graphics::Graphics(const std::string_view name)
 {
     AddComponent<ObjectMetaData>(name);
-    AddComponent<oxygen::graphics::detail::RenderThread>();
 }
 
 oxygen::Graphics::~Graphics()
 {
-    delete render_thread_;
+    // Ensure we have no active renderers
+    renderers_.clear();
 }
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
@@ -40,8 +40,7 @@ auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 
 void Graphics::Run()
 {
-    DLOG_F(INFO, "Starting Graphics render thread...");
-    render_thread_ = new RenderThread(kFrameBufferCount - 1);
+    DLOG_F(INFO, "Starting Graphics backend async tasks...");
 }
 
 auto Graphics::IsRunning() const -> bool
@@ -51,9 +50,9 @@ auto Graphics::IsRunning() const -> bool
 
 void Graphics::Stop()
 {
-    if (render_thread_) {
-        render_thread_->Stop();
-    }
+    // Dstroy all renderers, stopping any background tasks they may have started
+    // and releasing any resources they may have created.
+    renderers_.clear();
 
     if (nursery_ == nullptr) {
         nursery_->Cancel();
@@ -93,4 +92,12 @@ auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<g
 
     LOG_F(WARNING, "Command queue '{}' not found", name);
     return {};
+}
+
+auto Graphics::CreateRenderer(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
+{
+    auto renderer = CreateRendererImpl(name, std::move(surface), frames_in_flight);
+    CHECK_NOTNULL_F(renderer, "Failed to create renderer");
+    renderers_.emplace_back(std::move(renderer));
+    return renderer;
 }

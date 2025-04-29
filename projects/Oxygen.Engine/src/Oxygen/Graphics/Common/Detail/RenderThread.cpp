@@ -14,7 +14,7 @@
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/Run.h>
 
-using oxygen::graphics::RenderTask;
+using oxygen::graphics::FrameRenderTask;
 using oxygen::graphics::detail::RenderThread;
 
 namespace {
@@ -43,7 +43,7 @@ public:
     auto IsRunning() const -> bool { return running_; }
 
     // Called from the game/main thread to submit a frame for rendering.
-    void Submit(RenderTask task)
+    void Submit(FrameRenderTask task)
     {
         std::unique_lock<std::mutex> lock(mutex_work_queue_);
         // Wait if the queue is full (frame lag)
@@ -53,7 +53,7 @@ public:
     }
 
     // Wait for and retrieve the next render task
-    auto GetNextTask() -> std::optional<RenderTask>
+    auto GetNextTask() -> std::optional<FrameRenderTask>
     {
         std::unique_lock<std::mutex> lock(mutex_work_queue_);
 
@@ -92,7 +92,7 @@ private:
     std::atomic<bool> running_;
     mutable std::mutex mutex_work_queue_;
     mutable std::condition_variable cv_ready_;
-    mutable std::queue<RenderTask> work_queue_;
+    mutable std::queue<FrameRenderTask> work_queue_;
     oxygen::co::ParkingLot work_available_; // Renamed from work_ for clarity
 };
 
@@ -125,16 +125,14 @@ struct RenderThread::Impl {
                 break;
             }
 
-            auto task = dispatcher_.GetNextTask();
-            DCHECK_F(task.operator bool());
+            auto render_frame = dispatcher_.GetNextTask();
+            DCHECK_F(render_frame.operator bool());
 
-            // TODO: should be a submitted render task
             // gfx->BeginFrame();
 
-            DLOG_F(INFO, "Processing render task");
-            // task(*gfx);
+            DLOG_F(INFO, "Processing frame render task");
+            // co_await render_frame(*gfx);
 
-            // TODO: should be submitted as render task
             // gfx->SubmitFrame();
             // gfx->PresentFrame();
             // gfx->AdvanceFrame();
@@ -191,7 +189,7 @@ void RenderThread::Start()
     });
 }
 
-void RenderThread::Submit(RenderTask task)
+void RenderThread::Submit(FrameRenderTask task)
 {
     impl_->dispatcher_.Submit(std::move(task));
 }

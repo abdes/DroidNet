@@ -45,8 +45,10 @@ public:
     // NOLINTBEGIN(modernize-use-trailing-return-type)
     MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
-    MOCK_METHOD(std::unique_ptr<oxygen::graphics::Surface>, CreateSurface, (const oxygen::platform::Window&), (const, override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRenderer, (const std::string_view, std::shared_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRendererImpl, (const std::string_view, std::shared_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
     // NOLINTEND(modernize-use-trailing-return-type)
 
     // Getter for the JSON data

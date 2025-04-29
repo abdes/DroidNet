@@ -212,11 +212,16 @@ auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> 
 
 using oxygen::graphics::d3d12::Renderer;
 
-Renderer::Renderer()
-    : graphics::Renderer("D3D12 Renderer")
+Renderer::Renderer(
+    std::string_view name,
+    std::weak_ptr<oxygen::Graphics> gfx_weak,
+    std::shared_ptr<oxygen::graphics::Surface> surface,
+    uint32_t frames_in_flight)
+    : oxygen::graphics::Renderer(name, std::move(gfx_weak), std::move(surface), frames_in_flight)
 {
 }
 
+#if 0
 auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr
 {
     DCHECK_NOTNULL_F(data);
@@ -268,12 +273,13 @@ void Renderer::OnInitialize(/*PlatformPtr platform, const RendererProperties& pr
         throw;
     }
 }
+#endif
 
-void Renderer::OnShutdown()
-{
-    pimpl_->ShutdownRenderer();
-    graphics::Renderer::OnShutdown();
-}
+// void Renderer::OnShutdown()
+// {
+//     pimpl_->ShutdownRenderer();
+//     graphics::Renderer::OnShutdown();
+// }
 
 auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
     -> const graphics::RenderTarget&
@@ -310,12 +316,4 @@ auto Renderer::SrvHeap() const -> detail::DescriptorHeap&
 auto Renderer::UavHeap() const -> detail::DescriptorHeap&
 {
     return pimpl_->UavHeap();
-}
-
-auto Renderer::CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId
-{
-    DCHECK_NOTNULL_F(window.lock());
-    DCHECK_F(window.lock()->Valid());
-
-    return pimpl_->CreateWindowSurfaceImpl(window);
 }

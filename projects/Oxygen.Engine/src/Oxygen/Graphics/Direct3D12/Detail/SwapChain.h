@@ -23,13 +23,14 @@
 
 namespace oxygen::graphics::d3d12::detail {
 
+    // TODO: pass the Graphics Backend instance to the SwapChain constructor
 class SwapChain : public Component {
     OXYGEN_COMPONENT(SwapChain)
     OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
 public:
-    explicit SwapChain(CommandQueueType* command_queue, DXGI_FORMAT format)
+    SwapChain(CommandQueueType* command_queue, DXGI_FORMAT format)
+    : command_queue_(command_queue), format_(format)
     {
-        CreateSwapChain(command_queue, format);
     }
 
     ~SwapChain() noexcept override;
@@ -71,14 +72,18 @@ protected:
     void UpdateDependencies(const Composition& composition) override
     {
         window_ = &(composition.GetComponent<oxygen::graphics::detail::WindowComponent>());
+        CreateSwapChain();
     }
 
 private:
     friend WindowSurface;
-    void CreateSwapChain(CommandQueueType* command_queue, DXGI_FORMAT format);
+    void CreateSwapChain();
     void Finalize();
     void ReleaseSwapChain();
     void Resize();
+
+    DXGI_FORMAT format_ { kDefaultBackBufferFormat };
+    CommandQueueType* command_queue_;
 
     IDXGISwapChain4* swap_chain_ { nullptr };
     bool should_resize_ { false };
@@ -88,7 +93,6 @@ private:
         ID3D12Resource* resource { nullptr };
         DescriptorHandle rtv {};
     } render_targets_[kFrameBufferCount] {};
-    DXGI_FORMAT format_ { kDefaultBackBufferFormat };
     ViewPort viewport_ {};
     Scissors scissor_ {};
 

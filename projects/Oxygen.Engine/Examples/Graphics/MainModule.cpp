@@ -29,7 +29,8 @@ void MainModule::Run()
 
     SetupCommandQueues();
     SetupMainWindow();
-    // TODO: SetupSurface();
+    SetupSurface();
+    SetupRenderer();
 }
 
 void MainModule::SetupCommandQueues()
@@ -46,11 +47,11 @@ void MainModule::SetupSurface()
     CHECK_F(!window_weak_.expired());
 
     auto gfx = gfx_weak_.lock();
-    auto window = window_weak_.lock();
 
-    surface_ = std::move(gfx->CreateSurface(*window));
+    oxygen::graphics::SingleQueueStrategy queues;
+    surface_ = gfx->CreateSurface(window_weak_, gfx->GetCommandQueue(queues.GraphicsQueueName()));
     surface_->SetName("Main Window Surface");
-    LOG_F(INFO, "Surface ({}) created for main widnow ({})", surface_->GetName(), window->Id());
+    LOG_F(INFO, "Surface ({}) created for main widnow ({})", surface_->GetName(), window_weak_.lock()->Id());
 }
 
 void oxygen::examples::MainModule::SetupMainWindow()
@@ -88,4 +89,12 @@ void oxygen::examples::MainModule::SetupMainWindow()
         // Terminate the application by requesting the main window to close
         window_weak_.lock()->RequestClose();
     });
+}
+
+void MainModule::SetupRenderer()
+{
+    CHECK_F(!gfx_weak_.expired());
+
+    auto gfx = gfx_weak_.lock();
+    gfx->CreateRenderer("Main Window Renderer", surface_);
 }

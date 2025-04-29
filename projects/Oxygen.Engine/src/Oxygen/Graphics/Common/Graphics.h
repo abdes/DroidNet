@@ -13,6 +13,7 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -21,6 +22,7 @@
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Types.h>
+
 
 namespace oxygen {
 
@@ -80,7 +82,8 @@ public:
         -> std::unique_ptr<imgui::ImguiModule>
         = 0;
 
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface> = 0;
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(std::weak_ptr<platform::Window> window_weak, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::shared_ptr<graphics::Surface> = 0;
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
 
 protected:
     //! Create a command queue for the given role and allocation preference.
@@ -105,25 +108,18 @@ protected:
         DCHECK_NOTNULL_F(nursery_);
         return *nursery_;
     }
+    [[nodiscard]] virtual auto CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<graphics::Renderer> = 0;
 
 private:
-    // OXYGEN_GFX_API virtual void OnInitialize(const SerializedBackendConfig& props);
-    // template <typename Base, typename... CtorArgs>
-    // friend class MixinInitialize; //< Allow access to OnInitialize.
-
-    // OXYGEN_GFX_API virtual void OnShutdown();
-    // template <typename Base>
-    // friend class MixinShutdown; //< Allow access to OnShutdown.
-
     PlatformPtr platform_ {}; //< The platform abstraction layer.
-
-    bool is_renderer_less_ { true }; //< Indicates if the backend is renderer-less.
 
     //! The command queues created by the backend.
     std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_ {};
 
+    //! Active renderers managed by this Graphics instance
+    std::vector<std::shared_ptr<graphics::Renderer>> renderers_ {};
+
     co::Nursery* nursery_ { nullptr };
-    graphics::detail::RenderThread* render_thread_ { nullptr };
 };
 
 } // namespace oxygen

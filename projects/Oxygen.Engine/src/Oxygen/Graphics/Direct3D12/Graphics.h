@@ -15,7 +15,9 @@
 
 namespace oxygen::graphics::d3d12 {
 
-class Graphics final : public oxygen::Graphics {
+    // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
+
+class Graphics final : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
     using Base = oxygen::Graphics;
 
 public:
@@ -39,14 +41,20 @@ public:
         const -> std::unique_ptr<imgui::ImguiModule> override;
 
     [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
-        const platform::Window& window)
-        const -> std::unique_ptr<graphics::Surface> override;
+        std::weak_ptr<platform::Window> window_weak,
+        std::shared_ptr<graphics::CommandQueue> command_queue)
+        const -> std::shared_ptr<graphics::Surface> override;
 
 protected:
     [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
         graphics::QueueRole role,
         graphics::QueueAllocationPreference allocation_preference)
         -> std::shared_ptr<graphics::CommandQueue> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
+        const std::string_view name,
+        std::shared_ptr<graphics::Surface> surface,
+        uint32_t frames_in_flight)
+        -> std::shared_ptr<graphics::Renderer> override;
 };
 
 namespace detail {
