@@ -101,14 +101,14 @@ CommandQueue::CommandQueue(QueueRole type, std::string_view name)
         fence_ = std::make_unique<Fence>(command_queue_);
     } catch (const std::exception& ex) {
         LOG_F(ERROR, "Failed to create Fence: {}", ex.what());
-        ReleaseCommandQueue();
+        ObjectRelease(command_queue_);
         throw;
     }
 }
 
 CommandQueue::~CommandQueue() noexcept
 {
-    ReleaseCommandQueue();
+    ObjectRelease(command_queue_);
     LOG_F(INFO, "Command queue for `{}` destroyed", nostd::to_string(GetQueueType()));
 }
 
@@ -126,9 +126,4 @@ void CommandQueue::Submit(graphics::CommandList& command_list)
     ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
     d3d12_command_list->OnExecuted();
-}
-
-void CommandQueue::ReleaseCommandQueue() noexcept
-{
-    detail::DeferredObjectRelease(command_queue_);
 }
