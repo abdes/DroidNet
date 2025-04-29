@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Graphics.h>
-
 #include <type_traits>
+#include <unordered_map>
 
-#include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/OxCo/Co.h>
@@ -50,13 +49,15 @@ auto Graphics::IsRunning() const -> bool
 
 void Graphics::Stop()
 {
-    // Dstroy all renderers, stopping any background tasks they may have started
-    // and releasing any resources they may have created.
+    // Destroy all renderers, stopping any background tasks they may have
+    // started and releasing any resources they may have created.
     renderers_.clear();
 
     if (nursery_ == nullptr) {
         nursery_->Cancel();
     }
+
+    command_queues_.clear();
 
     DLOG_F(INFO, "Graphics Live Object stopped");
 }

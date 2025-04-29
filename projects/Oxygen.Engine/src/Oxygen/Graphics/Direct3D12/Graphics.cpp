@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -96,6 +97,7 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 using oxygen::graphics::d3d12::DeviceType;
 using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::Graphics;
+using oxygen::graphics::d3d12::detail::DescriptorHeaps;
 
 auto Graphics::GetFactory() const -> FactoryType*
 {
@@ -138,6 +140,12 @@ Graphics::Graphics(const SerializedBackendConfig& config)
 
     AddComponent<DeviceManager>(desc);
     AddComponent<EngineShaders>();
+    AddComponent<DescriptorHeaps>();
+}
+
+auto Graphics::Descriptors() const -> const detail::DescriptorHeaps&
+{
+    return GetComponent<DescriptorHeaps>();
 }
 
 auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference) -> std::shared_ptr<graphics::CommandQueue>

@@ -15,6 +15,10 @@
 
 namespace oxygen::graphics::d3d12 {
 
+namespace detail {
+    class DescriptorHeaps;
+} // namespace detail
+
 // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
 
 class Graphics final : public oxygen::Graphics {
@@ -44,6 +48,8 @@ public:
     [[nodiscard]] auto GetCurrentDevice() const -> DeviceType*;
     [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
     //! @}
+
+    [[nodiscard]] OXYGEN_D3D12_API auto Descriptors() const -> const detail::DescriptorHeaps&;
 
     [[nodiscard]] auto GetShader(std::string_view unique_id) const
         -> std::shared_ptr<graphics::IShaderByteCode> override;
