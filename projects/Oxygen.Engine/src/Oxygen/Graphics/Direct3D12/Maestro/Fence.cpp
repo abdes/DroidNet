@@ -16,14 +16,14 @@
 using oxygen::windows::ThrowOnFailed;
 
 using oxygen::graphics::d3d12::Fence;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 {
     DCHECK_EQ_F(fence_, nullptr);
     current_value_ = initial_value;
     ID3DFenceV* raw_fence = nullptr;
-    ThrowOnFailed(GetMainDevice()->CreateFence(initial_value,
+    ThrowOnFailed(GetGraphics().GetCurrentDevice()->CreateFence(initial_value,
                       D3D12_FENCE_FLAG_NONE,
                       IID_PPV_ARGS(&raw_fence)),
         "Could not create a Fence");

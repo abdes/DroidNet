@@ -12,7 +12,7 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::graphics::d3d12::MemoryBlock;
-using oxygen::graphics::d3d12::detail::GetAllocator;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::windows::ThrowOnFailed;
 
 MemoryBlock::MemoryBlock()
@@ -45,7 +45,7 @@ void MemoryBlock::Init(const MemoryBlockDesc& desc)
     };
 
     D3D12MA::Allocation* allocation_raw_ptr = nullptr; // Local variable to store the raw pointer
-    ThrowOnFailed(GetAllocator().AllocateMemory(
+    ThrowOnFailed(GetGraphics().GetAllocator()->AllocateMemory(
         &alloc_desc,
         &allocation_info,
         &allocation_raw_ptr));

@@ -43,7 +43,7 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 } // namespace
 
 using oxygen::graphics::d3d12::CommandList;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::windows::ThrowOnFailed;
 
 void CommandList::ReleaseCommandList() noexcept
@@ -84,7 +84,7 @@ CommandList::CommandList(QueueRole type, std::string_view name)
         throw std::runtime_error(fmt::format("Unsupported CommandListType: {}", nostd::to_string(type)));
     }
 
-    const auto device = GetMainDevice();
+    const auto device = GetGraphics().GetCurrentDevice();
     DCHECK_NOTNULL_F(device);
 
     try {

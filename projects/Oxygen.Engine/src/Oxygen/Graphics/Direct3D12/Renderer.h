@@ -25,17 +25,15 @@ class Renderer final
       public std::enable_shared_from_this<Renderer> {
 public:
     Renderer(
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
         std::shared_ptr<oxygen::graphics::Surface> surface,
         uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
-        : Renderer("D3D12 Renderer", std::move(gfx_weak), std::move(surface), frames_in_flight)
+        : Renderer("D3D12 Renderer", std::move(surface), frames_in_flight)
     {
     }
 
     //! Default constructor, sets the object name.
     OXYGEN_D3D12_API Renderer(
         std::string_view name,
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
         std::shared_ptr<oxygen::graphics::Surface> surface,
         uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1);
 

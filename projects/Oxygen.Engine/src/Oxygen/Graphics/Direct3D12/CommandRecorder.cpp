@@ -25,7 +25,7 @@
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 using namespace oxygen::graphics::d3d12;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 
 CommandRecorder::CommandRecorder(const QueueRole type)
     : Base(type)
@@ -136,7 +136,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
             rtv_desc.Texture2D.MipSlice = 0;
             rtv_desc.Texture2D.PlaneSlice = 0;
 
-            GetMainDevice()->CreateRenderTargetView(current_render_target_->GetResource(), &rtv_desc, descriptor_handle);
+            GetGraphics().GetCurrentDevice()->CreateRenderTargetView(current_render_target_->GetResource(), &rtv_desc, descriptor_handle);
 
             current_command_list_->GetCommandList()->ClearRenderTargetView(descriptor_handle, reinterpret_cast<const float*>(&colors[i]), 0, nullptr);
         }
@@ -212,7 +212,7 @@ void CommandRecorder::CreateRootSignature()
         throw std::runtime_error("Failed to serialize root signature");
     }
 
-    hr = GetMainDevice()->CreateRootSignature(
+    hr = GetGraphics().GetCurrentDevice()->CreateRootSignature(
         0,
         signature_blob->GetBufferPointer(),
         signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature_));
@@ -261,7 +261,7 @@ void CommandRecorder::SetPipelineState(
     pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
     pso_desc.SampleDesc.Count = 1;
 
-    HRESULT hr = GetMainDevice()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state_));
+    HRESULT hr = GetGraphics().GetCurrentDevice()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state_));
     if (FAILED(hr)) {
         throw std::runtime_error("Failed to create pipeline state object");
     }

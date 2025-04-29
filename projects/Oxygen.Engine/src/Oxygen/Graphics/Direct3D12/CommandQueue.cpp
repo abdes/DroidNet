@@ -54,13 +54,13 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 } // namespace
 
 using oxygen::graphics::d3d12::CommandQueue;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::windows::ThrowOnFailed;
 
 CommandQueue::CommandQueue(QueueRole type, std::string_view name)
     : Base(type, name)
 {
-    const auto device = GetMainDevice();
+    const auto device = GetGraphics().GetCurrentDevice();
     DCHECK_NOTNULL_F(device);
 
     D3D12_COMMAND_LIST_TYPE d3d12_type;

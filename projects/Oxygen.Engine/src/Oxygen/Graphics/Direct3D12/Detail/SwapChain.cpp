@@ -79,14 +79,14 @@ void SwapChain::CreateSwapChain()
         // 12 this is a pointer to a direct command queue (refer to
         // ID3D12CommandQueue). This parameter cannot be NULL.
         ThrowOnFailed(
-            GetFactory()->CreateSwapChainForHwnd(
+            GetGraphics().GetFactory()->CreateSwapChainForHwnd(
                 command_queue_, // Yes, the command queue, for D3D12
                 window_handle,
                 &swap_chain_desc,
                 nullptr,
                 nullptr,
                 &swap_chain));
-        ThrowOnFailed(GetFactory()->MakeWindowAssociation(window_handle, DXGI_MWA_NO_ALT_ENTER));
+        ThrowOnFailed(GetGraphics().GetFactory()->MakeWindowAssociation(window_handle, DXGI_MWA_NO_ALT_ENTER));
         ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to create swap chain: {}", e.what());
@@ -129,7 +129,7 @@ void SwapChain::Finalize()
                 .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
                 .Texture2D = { 0, 0 }
             };
-            GetMainDevice()->CreateRenderTargetView(back_buffer, &rtv_desc, render_targets_[i].rtv.cpu);
+            GetGraphics().GetCurrentDevice()->CreateRenderTargetView(back_buffer, &rtv_desc, render_targets_[i].rtv.cpu);
         } catch (const std::exception& e) {
             LOG_F(ERROR, "Failed to create render target view: {}", e.what());
             ObjectRelease(back_buffer);
