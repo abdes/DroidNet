@@ -44,11 +44,6 @@ public:
 
     auto GetCommandRecorder() const -> CommandRecorderPtr override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto RtvHeap() const -> detail::DescriptorHeap&;
-    [[nodiscard]] OXYGEN_D3D12_API auto DsvHeap() const -> detail::DescriptorHeap&;
-    [[nodiscard]] OXYGEN_D3D12_API auto SrvHeap() const -> detail::DescriptorHeap&;
-    [[nodiscard]] OXYGEN_D3D12_API auto UavHeap() const -> detail::DescriptorHeap&;
-
     // [[nodiscard]] OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
 
     // OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
