@@ -37,7 +37,7 @@ namespace imgui {
 
 class Graphics : public Composition, public co::LiveObject {
 public:
-    OXYGEN_GFX_API explicit Graphics(const char* name);
+    OXYGEN_GFX_API explicit Graphics(const std::string_view name);
     OXYGEN_GFX_API ~Graphics() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
