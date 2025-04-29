@@ -38,8 +38,6 @@ protected:
     auto GetSynchronizationCounter() const -> SynchronizationCounter& override { return *fence_; }
 
 private:
-    void ReleaseCommandQueue() noexcept;
-
     ID3D12CommandQueue* command_queue_ {};
     std::unique_ptr<SynchronizationCounter> fence_ {};
 };

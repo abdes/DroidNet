@@ -74,7 +74,6 @@ target_sources(
       "Graphics.h"
       "MemoryBlock.h"
       "MixinDeferredRelease.h"
-      "MixinRendererEvents.h"
       "ObjectRelease.h"
       "PerFrameResourceManager.h"
       "Renderer.h"
