@@ -19,6 +19,8 @@
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -161,15 +163,27 @@ auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] gra
     return queue;
 }
 
+auto Graphics::CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
+{
+    return std::make_shared<graphics::d3d12::Renderer>(name, weak_from_this(), std::move(surface), frames_in_flight);
+}
+
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
 {
     return std::make_unique<ImGuiModule>(std::move(engine), window_id);
 }
 
-auto Graphics::CreateSurface(const platform::Window& window) const -> std::unique_ptr<graphics::Surface>
+auto Graphics::CreateSurface(
+    std::weak_ptr<platform::Window> window_weak,
+    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    -> std::shared_ptr<graphics::Surface>
 {
-    DCHECK_F(window.Valid());
+    DCHECK_F(!window_weak.expired());
+    DCHECK_NOTNULL_F(command_queue);
+    DCHECK_EQ_F(command_queue->GetTypeId(), graphics::d3d12::CommandQueue::ClassTypeId(), "Invalid command queue class");
 
-    // TODO: implement CreateSurface
-    throw std::runtime_error("CreateSurface not implemented in D3D12 backend");
+    auto* queue = static_cast<graphics::d3d12::CommandQueue*>(command_queue.get());
+    auto surface = std::make_shared<graphics::d3d12::detail::WindowSurface>(window_weak, queue->GetCommandQueue());
+    CHECK_NOTNULL_F(surface, "Failed to create surface");
+    return std::static_pointer_cast<graphics::Surface>(surface);
 }

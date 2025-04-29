@@ -50,11 +50,12 @@ private:
     void SetupCommandQueues();
     void SetupMainWindow();
     void SetupSurface();
+    void SetupRenderer();
 
     std::shared_ptr<oxygen::Platform> platform_;
     std::weak_ptr<oxygen::Graphics> gfx_weak_;
     std::weak_ptr<oxygen::platform::Window> window_weak_;
-    std::unique_ptr<oxygen::graphics::Surface> surface_ {};
+    std::shared_ptr<oxygen::graphics::Surface> surface_ {};
 
     co::Nursery* nursery_ { nullptr };
 };

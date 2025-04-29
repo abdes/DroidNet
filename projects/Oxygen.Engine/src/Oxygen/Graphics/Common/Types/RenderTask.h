@@ -9,9 +9,10 @@
 #include <functional>
 
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::graphics {
 
-using RenderTask = std::function<void(const RenderTarget& render_target)>;
+using FrameRenderTask = std::function<oxygen::co::Co<>(const RenderTarget& render_target)>;
 
 } // namespace oxygen::graphics

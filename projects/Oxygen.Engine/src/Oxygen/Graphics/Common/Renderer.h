@@ -6,16 +6,18 @@
 
 #pragma once
 
-#include "./api_export.h"
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/Platform/Types.h>
+
 
 namespace oxygen {
 
@@ -23,47 +25,29 @@ namespace imgui {
     class ImguiModule;
 } // namespace imgui
 
-// TODO: DELETE
-///**
-// * Rendering device information.
-// */
-// struct DeviceInfo {
-//  std::string description; //< GPU name.
-//  std::string misc; //< Miscellaneous GPU info.
-//  std::vector<std::string> features; //< Supported graphics features.
-//};
-
 namespace graphics {
 
-    /**
-     * Base class for all renderers.
-     *
-     * This is the interface that allows to interact with the graphics API to
-     * create resources, record commands and execute them. The backend
-     * implementation is dynamically loaded and initialized via the renderer
-     * loader.
-     *
-     * It is possible to have multiple renderers active at the same time, but in
-     * most cases, only one is needed, and that one can be obtained at any time
-     * using the GetRenderer() function from the loader.
-     */
     class Renderer : public Composition {
     public:
-        explicit Renderer()
-            : Renderer("Renderer")
+        Renderer(
+            std::weak_ptr<Graphics> gfx_weak,
+            std::shared_ptr<Surface> surface,
+            uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
+            : Renderer("Renderer", std::move(gfx_weak), std::move(surface), frames_in_flight)
         {
         }
 
         //! Default constructor, sets the object name.
-        Renderer(std::string_view name)
-        {
-            AddComponent<ObjectMetaData>(name);
-        }
+        OXYGEN_GFX_API Renderer(
+            std::string_view name,
+            std::weak_ptr<Graphics> gfx_weak,
+            std::shared_ptr<Surface> surface,
+            uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1);
 
-        OXYGEN_GFX_API ~Renderer() override = default;
+        OXYGEN_GFX_API ~Renderer() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(Renderer); //< Non-copyable.
-        OXYGEN_MAKE_NON_MOVABLE(Renderer); //< Non-moveable.
+        OXYGEN_MAKE_NON_COPYABLE(Renderer);
+        OXYGEN_DEFAULT_MOVABLE(Renderer);
 
         /**
          * Gets the index of the current frame being rendered.
@@ -83,42 +67,21 @@ namespace graphics {
 
         OXYGEN_GFX_API virtual void Render(
             const resources::SurfaceId& surface_id,
-            const RenderTask& render_game) const;
+            const FrameRenderTask& render_game) const;
 
         virtual auto GetCommandRecorder() const -> CommandRecorderPtr = 0;
 
         // virtual auto GetShaderCompiler() const -> ShaderCompilerPtr = 0;
         // virtual auto GetEngineShader(std::string_view unique_id) const -> IShaderByteCodePtr = 0;
 
-        /**
-         * Device resources creation functions
-         * @{
-         */
-
-        [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const -> resources::SurfaceId = 0;
-        [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
-
-        /**@}*/
+        // [[nodiscard]] virtual auto CreateWindowSurface(platform::WindowPtr weak) const -> resources::SurfaceId = 0;
+        // [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
 
     protected:
-        OXYGEN_GFX_API virtual void OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*/);
-        template <typename Base, typename... CtorArgs>
-        friend class MixinInitialize; //< Allow access to OnInitialize.
-
-        OXYGEN_GFX_API virtual void OnShutdown();
-        template <typename Base>
-        friend class MixinShutdown; //< Allow access to OnShutdown.
-
         virtual auto BeginFrame(const resources::SurfaceId& surface_id) -> const RenderTarget& = 0;
         virtual void EndFrame(const resources::SurfaceId& surface_id) const = 0;
 
-        [[nodiscard]] auto GetPlatform() const -> PlatformPtr { return platform_; }
-        [[nodiscard]] auto GetInitProperties() const -> const GraphicsConfig& { return props_; }
-
     private:
-        GraphicsConfig props_;
-        PlatformPtr platform_;
-
         mutable uint32_t current_frame_index_ { 0 };
     };
 

@@ -29,7 +29,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(RenderThread); //< Non-copyable.
     OXYGEN_DEFAULT_MOVABLE(RenderThread); //< Non-moveable.
 
-    void Submit(RenderTask task);
+    void Submit(FrameRenderTask task);
 
     void Stop();
 
