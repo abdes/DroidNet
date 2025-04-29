@@ -296,23 +296,3 @@ auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr
 {
     return pimpl_->GetCommandRecorder();
 }
-
-auto Renderer::RtvHeap() const -> detail::DescriptorHeap&
-{
-    return pimpl_->RtvHeap();
-}
-
-auto Renderer::DsvHeap() const -> detail::DescriptorHeap&
-{
-    return pimpl_->DsvHeap();
-}
-
-auto Renderer::SrvHeap() const -> detail::DescriptorHeap&
-{
-    return pimpl_->SrvHeap();
-}
-
-auto Renderer::UavHeap() const -> detail::DescriptorHeap&
-{
-    return pimpl_->UavHeap();
-}
