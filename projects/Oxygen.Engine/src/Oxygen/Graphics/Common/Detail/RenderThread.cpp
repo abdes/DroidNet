@@ -170,9 +170,14 @@ void RenderThread::Start()
             // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
             OXCO_WITH_NURSERY(n)
             {
-                // Updated to use Impl's RenderLoopAsync instead of Renderer's
+                // Start the render loop coroutine, which will run on the render
+                // thread.
                 n.Start(&RenderThread::Impl::RenderLoopAsync, impl_.get());
 
+                // Start a background task to handle when the render thread
+                // should be stopped. By canceling the nursery, we trigger
+                // cancellation of all its running coroutines, thus terminating
+                // the execution of the render thread.
                 n.Start([this, &n]() -> oxygen::co::Co<> {
                     co_await impl_->stop_;
                     n.Cancel();
