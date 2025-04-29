@@ -13,14 +13,13 @@
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -69,31 +68,16 @@ void DestroyBackend()
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// Implementation of the helper functions to access the important graphics
-// backend objects.
+// Implementation of the helper function for internal access to the graphics
+// backend instance.
 
-namespace oxygen::graphics::d3d12::detail {
-
-auto GetFactory() -> FactoryType*
+auto oxygen::graphics::d3d12::detail::GetGraphics() -> oxygen::graphics::d3d12::Graphics&
 {
-    CHECK_NOTNULL_F(GetBackendInternal());
-    return GetBackendInternal()->GetFactory();
+    auto& gfx = GetBackendInternal();
+    CHECK_NOTNULL_F(gfx,
+        "illegal access to the graphics backend before it is initialized or after it has been destroyed");
+    return *gfx;
 }
-
-auto GetMainDevice() -> DeviceType*
-{
-    CHECK_NOTNULL_F(GetBackendInternal());
-    return GetBackendInternal()->GetMainDevice();
-}
-
-auto GetAllocator() -> D3D12MA::Allocator&
-{
-    auto* allocator = GetBackendInternal()->GetAllocator();
-    DCHECK_NOTNULL_F(allocator);
-    return *allocator;
-}
-
-} // namespace oxygen::graphics::d3d12::detail
 
 //===----------------------------------------------------------------------===//
 // Public implementation of the graphics backend API.
@@ -120,7 +104,7 @@ auto Graphics::GetFactory() const -> FactoryType*
     return factory;
 }
 
-auto Graphics::GetMainDevice() const -> DeviceType*
+auto Graphics::GetCurrentDevice() const -> DeviceType*
 {
     auto* device = GetComponent<DeviceManager>().Device();
     CHECK_NOTNULL_F(device, "graphics backend not properly initialized");
@@ -165,7 +149,7 @@ auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] gra
 
 auto Graphics::CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
 {
-    return std::make_shared<graphics::d3d12::Renderer>(name, weak_from_this(), std::move(surface), frames_in_flight);
+    return std::make_shared<graphics::d3d12::Renderer>(name, std::move(surface), frames_in_flight);
 }
 
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>

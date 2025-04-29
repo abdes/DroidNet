@@ -17,7 +17,6 @@ using oxygen::graphics::detail::RenderThread;
 //! Default constructor, sets the object name.
 Renderer::Renderer(
     std::string_view name,
-    std::weak_ptr<Graphics> gfx_weak,
     std::shared_ptr<Surface> surface,
     uint32_t frames_in_flight)
 {

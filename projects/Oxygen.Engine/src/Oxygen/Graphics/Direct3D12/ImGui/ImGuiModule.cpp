@@ -18,7 +18,7 @@
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 using oxygen::graphics::d3d12::ImGuiModule;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 
 void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
 {
@@ -31,7 +31,7 @@ void ImGuiModule::ImGuiBackendInit(const oxygen::Graphics* gfx)
 
     font_srv_handle_ = d3d12_render->SrvHeap().Allocate();
     ImGui::SetCurrentContext(GetImGuiContext());
-    ImGui_ImplDX12_Init(GetMainDevice(), kFrameBufferCount, kDefaultBackBufferFormat,
+    ImGui_ImplDX12_Init(GetCurrentDevice(), kFrameBufferCount, kDefaultBackBufferFormat,
         d3d12_render->SrvHeap().Heap(), font_srv_handle_.cpu, font_srv_handle_.gpu);
     */
 }

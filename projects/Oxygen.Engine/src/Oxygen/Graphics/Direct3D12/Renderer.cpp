@@ -44,7 +44,7 @@ using Microsoft::WRL::ComPtr;
 using oxygen::graphics::ShaderType;
 using oxygen::graphics::d3d12::DeviceType;
 using oxygen::graphics::d3d12::FactoryType;
-using oxygen::graphics::d3d12::detail::GetMainDevice;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
@@ -101,7 +101,7 @@ private:
             .type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
             .capacity = 512,
             .is_shader_visible = false,
-            .device = GetMainDevice(),
+            .device = GetGraphics().GetCurrentDevice(),
             .name = "RTV Descriptor Heap",
         }
     };
@@ -110,7 +110,7 @@ private:
             .type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
             .capacity = 512,
             .is_shader_visible = false,
-            .device = GetMainDevice(),
+            .device = GetGraphics().GetCurrentDevice(),
             .name = "DSV Descriptor Heap",
         }
     };
@@ -119,7 +119,7 @@ private:
             .type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             .capacity = 4096,
             .is_shader_visible = true,
-            .device = GetMainDevice(),
+            .device = GetGraphics().GetCurrentDevice(),
             .name = "SRV Descriptor Heap",
         }
     };
@@ -128,7 +128,7 @@ private:
             .type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             .capacity = 512,
             .is_shader_visible = false,
-            .device = GetMainDevice(),
+            .device = GetGraphics().GetCurrentDevice(),
             .name = "RTV Descriptor Heap",
         }
     };
@@ -214,10 +214,9 @@ using oxygen::graphics::d3d12::Renderer;
 
 Renderer::Renderer(
     std::string_view name,
-    std::weak_ptr<oxygen::Graphics> gfx_weak,
     std::shared_ptr<oxygen::graphics::Surface> surface,
     uint32_t frames_in_flight)
-    : oxygen::graphics::Renderer(name, std::move(gfx_weak), std::move(surface), frames_in_flight)
+    : oxygen::graphics::Renderer(name, std::move(surface), frames_in_flight)
 {
 }
 

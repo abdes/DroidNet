@@ -11,6 +11,7 @@
 #include <Oxygen/Graphics/Direct3D12/Resources/DeferredObjectRelease.h>
 
 using oxygen::graphics::d3d12::Buffer;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 
 Buffer::~Buffer()
 {
@@ -28,7 +29,7 @@ Buffer::Buffer(const BufferInitInfo& init_info)
     try {
         // Create the buffer resource using D3D12MemAlloc
         D3D12MA::Allocation* allocation;
-        HRESULT hr = graphics::d3d12::detail::GetAllocator().CreateResource(
+        HRESULT hr = GetGraphics().GetAllocator()->CreateResource(
             &init_info.alloc_desc,
             &init_info.resource_desc,
             init_info.initial_state,

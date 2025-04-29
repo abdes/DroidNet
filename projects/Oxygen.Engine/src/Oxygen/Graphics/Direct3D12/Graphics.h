@@ -15,9 +15,9 @@
 
 namespace oxygen::graphics::d3d12 {
 
-    // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
+// TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
 
-class Graphics final : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
+class Graphics final : public oxygen::Graphics {
     using Base = oxygen::Graphics;
 
 public:
@@ -27,13 +27,6 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_MAKE_NON_MOVABLE(Graphics);
-
-    [[nodiscard]] OXYGEN_D3D12_API auto GetFactory() const -> FactoryType*;
-    [[nodiscard]] OXYGEN_D3D12_API auto GetMainDevice() const -> DeviceType*;
-    [[nodiscard]] OXYGEN_D3D12_API auto GetAllocator() const -> D3D12MA::Allocator*;
-
-    [[nodiscard]] auto GetShader(std::string_view unique_id) const
-        -> std::shared_ptr<graphics::IShaderByteCode> override;
 
     [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
         EngineWeakPtr engine,
@@ -45,11 +38,22 @@ public:
         std::shared_ptr<graphics::CommandQueue> command_queue)
         const -> std::shared_ptr<graphics::Surface> override;
 
+    //! @{
+    //! Device Manager API (module internal)
+    [[nodiscard]] auto GetFactory() const -> FactoryType*;
+    [[nodiscard]] auto GetCurrentDevice() const -> DeviceType*;
+    [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
+    //! @}
+
+    [[nodiscard]] auto GetShader(std::string_view unique_id) const
+        -> std::shared_ptr<graphics::IShaderByteCode> override;
+
 protected:
     [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
         graphics::QueueRole role,
         graphics::QueueAllocationPreference allocation_preference)
         -> std::shared_ptr<graphics::CommandQueue> override;
+
     [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
         const std::string_view name,
         std::shared_ptr<graphics::Surface> surface,
@@ -58,23 +62,17 @@ protected:
 };
 
 namespace detail {
-    //! Get references to the Direct3D12 Renderer global objects for internal
-    //! use within the renderer implementation module.
+    //! Get a reference to the Direct3D12 Graphics backend for internal use
+    //! within the module.
     /*!
       \note These functions are not part of the public API and should not be
-      used. For application needs, use the GetRenderer() function from the
-      renderer loader API and use the Renderer class.
+      used. For application needs, use the `GetBackend()` API from the
+      `GraphicsBackendLoader` API.
 
-      \note These functions will __abort__ when called while the renderer
-      instance is not yet initialized or has been destroyed.
+      \note These functions will __abort__ when called while the graphics
+      backend instance is not yet initialized or has been destroyed.
     */
-    //! @{
-    [[nodiscard]] auto GetFactory() -> FactoryType*;
-    [[nodiscard]] auto GetMainDevice() -> DeviceType*;
-    [[nodiscard]] auto GetAllocator() -> D3D12MA::Allocator&;
-    //! Get the backend memory allocator
-    // TODO: Add the allocator
-    //! @}
+    [[nodiscard]] auto GetGraphics() -> oxygen::graphics::d3d12::Graphics&;
 } // namespace detail
 
 } // namespace oxygen::graphics::d3d12

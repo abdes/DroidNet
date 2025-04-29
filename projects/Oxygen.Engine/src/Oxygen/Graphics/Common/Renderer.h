@@ -30,17 +30,15 @@ namespace graphics {
     class Renderer : public Composition {
     public:
         Renderer(
-            std::weak_ptr<Graphics> gfx_weak,
             std::shared_ptr<Surface> surface,
             uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
-            : Renderer("Renderer", std::move(gfx_weak), std::move(surface), frames_in_flight)
+            : Renderer("Renderer", std::move(surface), frames_in_flight)
         {
         }
 
         //! Default constructor, sets the object name.
         OXYGEN_GFX_API Renderer(
             std::string_view name,
-            std::weak_ptr<Graphics> gfx_weak,
             std::shared_ptr<Surface> surface,
             uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1);
 
