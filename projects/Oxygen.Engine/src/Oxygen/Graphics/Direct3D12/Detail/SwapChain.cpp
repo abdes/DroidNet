@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 
 namespace {
 
@@ -34,6 +35,7 @@ auto ToNonSrgb(const DXGI_FORMAT format) -> DXGI_FORMAT
 using oxygen::windows::ThrowOnFailed;
 
 using oxygen::graphics::d3d12::detail::SwapChain;
+using oxygen::graphics::d3d12::detail::GetGraphics;
 
 oxygen::graphics::d3d12::detail::SwapChain::~SwapChain() noexcept
 {
@@ -96,8 +98,7 @@ void SwapChain::CreateSwapChain()
     ObjectRelease(swap_chain);
 
     for (auto& [resource, rtv] : render_targets_) {
-        // FIXME: Move resource management out of renderer
-        // rtv = GetRenderer().RtvHeap().Allocate();
+        rtv = GetGraphics().Descriptors().RtvHeap().Allocate();
     }
 
     Finalize();
@@ -107,8 +108,7 @@ void SwapChain::ReleaseSwapChain()
 {
     for (auto& [resource, rtv] : render_targets_) {
         ObjectRelease(resource);
-        // FIXME: Move resource management out of renderer
-        // GetRenderer().RtvHeap().Free(rtv);
+        GetGraphics().Descriptors().RtvHeap().Free(rtv);
     }
     ObjectRelease(swap_chain_);
 }
