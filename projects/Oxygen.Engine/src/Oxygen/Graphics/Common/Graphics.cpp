@@ -21,7 +21,7 @@ using oxygen::Graphics;
 
 using oxygen::graphics::detail::RenderThread;
 
-Graphics::Graphics(const char* name)
+Graphics::Graphics(const std::string_view name)
 {
     AddComponent<ObjectMetaData>(name);
     AddComponent<oxygen::graphics::detail::RenderThread>();
