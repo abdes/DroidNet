@@ -13,6 +13,6 @@
 
 namespace oxygen::graphics {
 
-using FrameRenderTask = std::function<oxygen::co::Co<>(const RenderTarget& render_target)>;
+using FrameRenderTask = std::function<oxygen::co::Co<>()>;
 
 } // namespace oxygen::graphics

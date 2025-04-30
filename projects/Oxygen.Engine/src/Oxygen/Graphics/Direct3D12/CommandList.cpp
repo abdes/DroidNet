@@ -105,8 +105,6 @@ CommandList::CommandList(QueueRole type, std::string_view name)
         throw;
     }
 
-    state_ = State::kFree;
-
     NameObject(command_list_, name);
 }
 
@@ -123,35 +121,13 @@ void CommandList::SetName(std::string_view name) noexcept
 
 void CommandList::OnBeginRecording()
 {
-    if (state_ != State::kFree) {
-        throw std::runtime_error("CommandList is not in a Free state");
-    }
+    Base::OnBeginRecording();
     ThrowOnFailed(command_allocator_->Reset(), "could not reset the command allocator");
     ThrowOnFailed(command_list_->Reset(command_allocator_, nullptr), "could not reset the command list");
-    state_ = State::kRecording;
 }
 
 void CommandList::OnEndRecording()
 {
-    if (state_ != State::kRecording) {
-        throw std::runtime_error("CommandList is not in a Recording state");
-    }
+    Base::OnEndRecording();
     ThrowOnFailed(command_list_->Close(), "could not close the command list");
-    state_ = State::kRecorded;
-}
-
-void CommandList::OnSubmitted()
-{
-    if (state_ != State::kRecorded) {
-        throw std::runtime_error("CommandList is not in a Recorded state");
-    }
-    state_ = State::kExecuting;
-}
-
-void CommandList::OnExecuted()
-{
-    if (state_ != State::kExecuting) {
-        throw std::runtime_error("CommandList is not in an Executing state");
-    }
-    state_ = State::kFree;
 }

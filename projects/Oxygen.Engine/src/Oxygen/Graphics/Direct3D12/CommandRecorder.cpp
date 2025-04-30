@@ -27,72 +27,53 @@
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 
-CommandRecorder::CommandRecorder(const QueueRole type)
-    : Base(type)
+CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list)
+    : Base(command_list)
 {
-    InitializeCommandRecorder();
-}
-
-CommandRecorder::~CommandRecorder()
-{
-    ReleaseCommandRecorder();
+    CreateRootSignature();
 }
 
 void CommandRecorder::Begin()
 {
-    DCHECK_F(current_command_list_ == nullptr);
+    oxygen::graphics::CommandRecorder::Begin();
+
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
 
     // resource_state_cache_.OnBeginCommandBuffer();
 
-    // TODO: consider recycling command lists
-    try {
-        auto command_list = std::make_unique<CommandList>(GetQueueType());
-        CHECK_NOTNULL_F(command_list);
-        CHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
-        command_list->OnBeginRecording();
-        current_command_list_ = std::move(command_list);
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to begin recording to a command list: {}", e.what());
-        throw;
-    }
-
+    command_list->OnBeginRecording();
     ResetState();
 }
 
-auto CommandRecorder::End() -> oxygen::graphics::CommandListPtr
+auto CommandRecorder::End() -> std::shared_ptr<oxygen::graphics::CommandList>
 {
-    if (!current_command_list_) {
-        throw std::runtime_error("No CommandList is being recorded");
+    if (current_render_target_ != nullptr) {
+        auto* command_list = GetConcreteCommandList();
+        DCHECK_NOTNULL_F(command_list);
+
+        D3D12_RESOURCE_BARRIER barrier {
+            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+            .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+            .Transition = {
+                .pResource = current_render_target_->GetResource(),
+                .Subresource = 0,
+                .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
+                .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
+        };
+        command_list->GetCommandList()->ResourceBarrier(1, &barrier);
     }
-
-    D3D12_RESOURCE_BARRIER barrier {
-        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-        .Transition = {
-            .pResource = current_render_target_->GetResource(),
-            .Subresource = 0,
-            .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
-            .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
-    };
-    current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
-
-    try {
-        current_command_list_->OnEndRecording();
-
-        // TODO: consider recycling command lists
-
-        return std::move(current_command_list_);
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "Recording failed: {}", e.what());
-        return {};
-    }
+    return oxygen::graphics::CommandRecorder::End();
 }
 
 void CommandRecorder::SetViewport(
     const float left, const float width, const float top, const float height,
     const float min_depth, const float max_depth)
 {
-    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
 
     D3D12_VIEWPORT viewport;
     viewport.TopLeftX = left;
@@ -101,24 +82,29 @@ void CommandRecorder::SetViewport(
     viewport.Height = height;
     viewport.MinDepth = min_depth;
     viewport.MaxDepth = max_depth;
-    current_command_list_->GetCommandList()->RSSetViewports(1, &viewport);
+    command_list->GetCommandList()->RSSetViewports(1, &viewport);
 }
 
 void CommandRecorder::SetScissors(
     const int32_t left, const int32_t top, const int32_t right, const int32_t bottom)
 {
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+
     D3D12_RECT rect;
     rect.left = left;
     rect.top = top;
     rect.right = right;
     rect.bottom = bottom;
-    current_command_list_->GetCommandList()->RSSetScissorRects(1, &rect);
+    command_list->GetCommandList()->RSSetScissorRects(1, &rect);
 }
 
 void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
     float depth_value, uint8_t stencil_value)
 {
-    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
     if ((flags & kClearFlagsColor) != 0u) {
@@ -138,7 +124,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
 
             GetGraphics().GetCurrentDevice()->CreateRenderTargetView(current_render_target_->GetResource(), &rtv_desc, descriptor_handle);
 
-            current_command_list_->GetCommandList()->ClearRenderTargetView(descriptor_handle, reinterpret_cast<const float*>(&colors[i]), 0, nullptr);
+            command_list->GetCommandList()->ClearRenderTargetView(descriptor_handle, reinterpret_cast<const float*>(&colors[i]), 0, nullptr);
         }
     }
 
@@ -164,9 +150,9 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
 void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buffers, const uint32_t* strides,
     const uint32_t* offsets)
 {
-    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
-
-    auto* command_list = current_command_list_->GetCommandList();
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
 
     std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
     for (uint32_t i = 0; i < num; ++i) {
@@ -176,30 +162,26 @@ void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buf
         vertex_buffer_views[i].StrideInBytes = strides[i];
     }
 
-    command_list->IASetVertexBuffers(0, num, vertex_buffer_views.data());
+    command_list->GetCommandList()->IASetVertexBuffers(0, num, vertex_buffer_views.data());
 }
 
 void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset)
 {
-    DCHECK_EQ_F(GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
-    auto* command_list = current_command_list_->GetCommandList();
-
     // Prepare for Draw
-    command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    command_list->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    command_list->DrawInstanced(vertex_num, instances_num, vertex_offset, instance_offset);
+    command_list->GetCommandList()->DrawInstanced(vertex_num, instances_num, vertex_offset, instance_offset);
 }
 
 void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset)
 {
 }
 
-void CommandRecorder::InitializeCommandRecorder()
-{
-    CreateRootSignature();
-}
 void CommandRecorder::CreateRootSignature()
 {
     D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
@@ -222,6 +204,8 @@ void CommandRecorder::CreateRootSignature()
 }
 void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_target)
 {
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
     DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
     current_render_target_ = static_cast<const RenderTarget*>(render_target);
@@ -237,16 +221,19 @@ void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_targe
             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
     };
-    current_command_list_->GetCommandList()->ResourceBarrier(1, &barrier);
+    command_list->GetCommandList()->ResourceBarrier(1, &barrier);
 
     const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target_->Rtv().cpu };
-    current_command_list_->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
+    command_list->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
 }
 
 void CommandRecorder::SetPipelineState(
     const std::shared_ptr<IShaderByteCode>& vertex_shader,
     const std::shared_ptr<IShaderByteCode>& pixel_shader)
 {
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
     pso_desc.pRootSignature = root_signature_.Get();
     pso_desc.VS = { .pShaderBytecode = vertex_shader->Data(), .BytecodeLength = vertex_shader->Size() };
@@ -266,13 +253,8 @@ void CommandRecorder::SetPipelineState(
         throw std::runtime_error("Failed to create pipeline state object");
     }
 
-    current_command_list_->GetCommandList()->SetPipelineState(pipeline_state_.Get());
-    current_command_list_->GetCommandList()->SetGraphicsRootSignature(root_signature_.Get());
-}
-
-void CommandRecorder::ReleaseCommandRecorder() noexcept
-{
-    current_command_list_.reset();
+    command_list->GetCommandList()->SetPipelineState(pipeline_state_.Get());
+    command_list->GetCommandList()->SetGraphicsRootSignature(root_signature_.Get());
 }
 
 void CommandRecorder::ResetState()

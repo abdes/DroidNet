@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <memory>
 #include <mutex>
-#include <optional>
 #include <queue>
+#include <thread>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/Run.h>
 
@@ -53,7 +57,7 @@ public:
     }
 
     // Wait for and retrieve the next render task
-    auto GetNextTask() -> std::optional<FrameRenderTask>
+    auto GetNextTask() -> FrameRenderTask
     {
         std::unique_lock<std::mutex> lock(mutex_work_queue_);
 
@@ -84,12 +88,13 @@ private:
             // The event loop runs on the render thread, and coroutines resumed
             // to process the render tasks will also be run on the render
             // thread.
+            lock.unlock();
             work_available_.UnParkAll();
         }
     }
 
     uint32_t frames_in_flight_;
-    std::atomic<bool> running_;
+    std::atomic<bool> running_ { false };
     mutable std::mutex mutex_work_queue_;
     mutable std::condition_variable cv_ready_;
     mutable std::queue<FrameRenderTask> work_queue_;
@@ -107,17 +112,20 @@ struct oxygen::co::EventLoopTraits<RenderTaskDispatcher> {
 };
 
 struct RenderThread::Impl {
-    Impl(uint32_t frames_in_flight)
+    Impl(
+        uint32_t frames_in_flight,
+        RenderThread::BeginFrameFn begin_frame_fn,
+        RenderThread::EndFrameFn end_frame_fn)
         : dispatcher_(frames_in_flight)
+        , begin_frame_fn_(std::move(begin_frame_fn))
+        , end_frame_fn_(std::move(end_frame_fn))
     {
     }
-    oxygen::co::Event stop_;
-    RenderTaskDispatcher dispatcher_;
-    std::thread thread_;
 
     auto RenderLoopAsync() -> oxygen::co::Co<>
     {
-        while (dispatcher_.IsRunning()) {
+        DCHECK_F(!dispatcher_.IsRunning());
+        while (true) {
             // Wait for work to be available using the parking lot
             co_await dispatcher_.WorkAvailable();
 
@@ -128,20 +136,28 @@ struct RenderThread::Impl {
             auto render_frame = dispatcher_.GetNextTask();
             DCHECK_F(render_frame.operator bool());
 
-            // gfx->BeginFrame();
+            auto& render_target = begin_frame_fn_();
 
             DLOG_F(INFO, "Processing frame render task");
-            // co_await render_frame(*gfx);
+            // TODO: pass the render target to the task
+            co_await render_frame();
 
-            // gfx->SubmitFrame();
-            // gfx->PresentFrame();
-            // gfx->AdvanceFrame();
+            end_frame_fn_();
         }
     }
+
+    oxygen::co::Event stop_;
+    RenderTaskDispatcher dispatcher_;
+    std::thread thread_;
+    BeginFrameFn begin_frame_fn_;
+    EndFrameFn end_frame_fn_;
 };
 
-RenderThread::RenderThread(uint32_t frames_in_flight)
-    : impl_(std::make_unique<RenderThread::Impl>(frames_in_flight))
+RenderThread::RenderThread(
+    uint32_t frames_in_flight,
+    BeginFrameFn begin_frame_fn,
+    EndFrameFn end_frame_fn)
+    : impl_(std::make_unique<RenderThread::Impl>(frames_in_flight, std::move(begin_frame_fn), std::move(end_frame_fn)))
 {
     DCHECK_GT_F(frames_in_flight, 0UL, "The number of frames in flight must be > 0");
     Start();
@@ -159,8 +175,6 @@ RenderThread::~RenderThread()
 
 void RenderThread::Start()
 {
-    DCHECK_F(!impl_->dispatcher_.IsRunning());
-
     impl_->thread_ = std::thread([this]() {
         loguru::set_thread_name("render");
         DLOG_F(INFO, "Render thread started");
@@ -186,6 +200,7 @@ void RenderThread::Start()
                 co_return oxygen::co::kJoin;
             };
         });
+        DLOG_F(INFO, "Render thread completed");
     });
 }
 

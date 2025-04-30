@@ -20,6 +20,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(fmt CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -52,6 +53,8 @@ target_sources(
     "Detail/EnumToStringConverters.cpp"
     "Detail/RenderThread.h"
     "Detail/RenderThread.cpp"
+    "CommandList.cpp"
+    "CommandRecorder.cpp"
     "Shaders.cpp"
     "Graphics.cpp"
     "Renderer.cpp"
@@ -104,6 +107,7 @@ target_compile_definitions(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
+    glm::glm
     oxygen::base
     oxygen::config
     oxygen::platform

@@ -9,18 +9,21 @@
 #include <nlohmann/json.hpp>
 #include <wrl/client.h>
 
+#include "Graphics.h"
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-#include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -148,16 +151,28 @@ auto Graphics::Descriptors() const -> const detail::DescriptorHeaps&
     return GetComponent<DescriptorHeaps>();
 }
 
-auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference) -> std::shared_ptr<graphics::CommandQueue>
+auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference)
+    -> std::shared_ptr<graphics::CommandQueue>
 {
-    auto queue = std::make_shared<CommandQueue>(role);
-    CHECK_NOTNULL_F(queue, "Failed to create command queue");
-    return queue;
+    return std::make_shared<CommandQueue>(role);
 }
 
-auto Graphics::CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
+auto Graphics::CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight)
+    -> std::shared_ptr<oxygen::graphics::Renderer>
 {
     return std::make_shared<graphics::d3d12::Renderer>(name, std::move(surface), frames_in_flight);
+}
+
+auto Graphics::CreateCommandList(graphics::QueueRole role, std::string_view command_list_name)
+    -> std::shared_ptr<oxygen::graphics::CommandList>
+{
+    return std::make_shared<CommandList>(role, command_list_name);
+}
+
+auto Graphics::CreateCommandRecorder(graphics::CommandList* command_list)
+    -> std::unique_ptr<graphics::CommandRecorder>
+{
+    return std::make_unique<CommandRecorder>(command_list);
 }
 
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>

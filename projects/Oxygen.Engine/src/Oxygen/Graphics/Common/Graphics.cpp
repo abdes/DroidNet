@@ -7,14 +7,19 @@
 #include <type_traits>
 #include <unordered_map>
 
+#include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Types.h>
+
 
 using oxygen::Graphics;
 
@@ -29,6 +34,10 @@ oxygen::Graphics::~Graphics()
 {
     // Ensure we have no active renderers
     renderers_.clear();
+
+    // Clear command list pools
+    std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+    command_list_pool_.clear();
 }
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
@@ -99,6 +108,64 @@ auto Graphics::CreateRenderer(const std::string_view name, std::shared_ptr<graph
 {
     auto renderer = CreateRendererImpl(name, std::move(surface), frames_in_flight);
     CHECK_NOTNULL_F(renderer, "Failed to create renderer");
-    renderers_.emplace_back(std::move(renderer));
+    renderers_.emplace_back(renderer);
     return renderer;
+}
+
+auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
+    -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
+{
+    auto queue = GetCommandQueue(queue_name);
+    if (!queue) {
+        LOG_F(ERROR, "Command queue '{}' not found", queue_name);
+        return nullptr;
+    }
+
+    // Acquire or create a command list
+    std::shared_ptr<graphics::CommandList> cmd_list;
+    {
+        std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+        auto role = queue->GetQueueType();
+        auto& pool = command_list_pool_[role];
+
+        if (pool.empty()) {
+            // Create a new command list if pool is empty
+            cmd_list = CreateCommandList(role, command_list_name);
+        } else {
+            // Take one from the pool
+            cmd_list = std::move(pool.back());
+            pool.pop_back();
+            cmd_list->SetName(command_list_name);
+        }
+    }
+
+    // Create a command recorder for this command list
+    auto recorder = CreateCommandRecorder(cmd_list.get());
+
+    // Start recording
+    recorder->Begin();
+
+    // Create a unique_ptr with custom deleter that handles submission and cleanup
+    return { recorder.release(), [this, cmd_list = std::move(cmd_list), queue = std::move(queue)]
+                        (graphics::CommandRecorder* rec) mutable {
+        // Skip if recorder is null
+        if (!rec) return;
+
+        try {
+            // End recording
+            auto completed_cmd = rec->End();
+
+            // Submit to specified queue
+            queue->Submit(*completed_cmd);
+
+            // Return to pool when execution completes
+            std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+            command_list_pool_[queue->GetQueueType()].push_back(std::move(cmd_list));
+        } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
+        }
+
+        // Delete the recorder
+        delete rec;
+    }};
 }

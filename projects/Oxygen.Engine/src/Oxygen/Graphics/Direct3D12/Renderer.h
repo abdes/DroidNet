@@ -42,7 +42,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Renderer);
     OXYGEN_MAKE_NON_MOVABLE(Renderer);
 
-    auto GetCommandRecorder() const -> CommandRecorderPtr override;
+    // auto GetCommandRecorder() const -> CommandRecorderPtr override;
 
     // [[nodiscard]] OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
 
@@ -54,13 +54,6 @@ public:
     auto GetCurrentRenderTarget() const -> const RenderTarget& { return *current_render_target_; }
 
     // [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
-
-protected:
-    // void OnInitialize(/*PlatformPtr platform, const GraphicsConfig& props*/) override;
-    // void OnShutdown() override;
-
-    auto BeginFrame(const resources::SurfaceId& surface_id) -> const graphics::RenderTarget& override;
-    void EndFrame(const resources::SurfaceId& surface_id) const override;
 
 private:
     std::shared_ptr<detail::RendererImpl> pimpl_ {};

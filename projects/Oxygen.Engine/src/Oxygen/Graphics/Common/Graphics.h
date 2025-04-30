@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <unordered_map>
 
@@ -21,8 +22,8 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/Platform/Types.h>
-
 
 namespace oxygen {
 
@@ -55,6 +56,16 @@ public:
         return GetComponent<ObjectMetaData>().GetName();
     }
 
+    void Render()
+    {
+        render_.UnParkAll();
+    }
+
+    auto RenderStart()
+    {
+        return render_.Park();
+    }
+
     [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(std::string_view unique_id) const
         -> std::shared_ptr<graphics::IShaderByteCode>
         = 0;
@@ -85,6 +96,19 @@ public:
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(std::weak_ptr<platform::Window> window_weak, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::shared_ptr<graphics::Surface> = 0;
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
 
+    /**
+     * Acquire a command recorder for immediate use with automatic return to pool.
+     * Uses RAII with a custom deleter to automatically return the command list to the pool.
+     *
+     * @param role The queue role for this command list.
+     * @param name Name for debugging purposes.
+     * @return A unique_ptr to CommandRecorder with custom deleter for automatic cleanup.
+     */
+    [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandRecorder(
+        std::string_view queue_name,
+        std::string_view command_list_name)
+        -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>;
+
 protected:
     //! Create a command queue for the given role and allocation preference.
     /*!
@@ -102,6 +126,20 @@ protected:
         -> std::shared_ptr<graphics::CommandQueue>
         = 0;
 
+    /**
+     * Creates a new command list for the given queue role.
+     * For internal use by the command list pool.
+     */
+    [[nodiscard]] virtual auto CreateCommandList(
+        graphics::QueueRole role,
+        std::string_view command_list_name)
+        -> std::shared_ptr<graphics::CommandList>
+        = 0;
+
+    [[nodiscard]] virtual auto CreateCommandRecorder(graphics::CommandList* command_list)
+        -> std::unique_ptr<graphics::CommandRecorder>
+        = 0;
+
 protected:
     [[nodiscard]] auto Nursery() const -> co::Nursery&
     {
@@ -116,10 +154,15 @@ private:
     //! The command queues created by the backend.
     std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_ {};
 
+    // Pool of available command lists by queue type
+    std::unordered_map<graphics::QueueRole, std::vector<std::shared_ptr<graphics::CommandList>>> command_list_pool_;
+    std::mutex command_list_pool_mutex_;
+
     //! Active renderers managed by this Graphics instance
     std::vector<std::shared_ptr<graphics::Renderer>> renderers_ {};
 
     co::Nursery* nursery_ { nullptr };
+    co::ParkingLot render_ {};
 };
 
 } // namespace oxygen
