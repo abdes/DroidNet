@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -124,6 +125,10 @@ struct RenderThread::Impl {
         , begin_frame_fn_(std::move(begin_frame_fn))
         , end_frame_fn_(std::move(end_frame_fn))
     {
+        DCHECK_LT_F(frames_in_flight, kFrameBufferCount,
+            "The number of frames in flight must be < {}", kFrameBufferCount);
+        DCHECK_F(begin_frame_fn_.operator bool());
+        DCHECK_F(end_frame_fn_.operator bool());
     }
 
     auto RenderLoopAsync() -> oxygen::co::Co<>
@@ -133,6 +138,8 @@ struct RenderThread::Impl {
             // Wait for work to be available using the parking lot
             co_await dispatcher_.WorkAvailable();
 
+            // If work is available but the render thread is not running, then
+            // it is shutting down and we need to stop the render loop.
             if (!dispatcher_.IsRunning()) {
                 break;
             }
@@ -141,15 +148,23 @@ struct RenderThread::Impl {
             auto render_frame = dispatcher_.GetNextTask();
             DCHECK_F(render_frame.operator bool());
 
-            auto& render_target = begin_frame_fn_();
+            if (begin_frame_fn_) {
+                auto& render_target = begin_frame_fn_();
+            }
 
+            // Execute the application rendering task, asynchronously. Such task
+            // may be quite complex and may be composed of several coroutines
+            // that need to complete together. Synchronization and completion
+            // management are tyhe responsibility of the application.
             {
                 LOG_SCOPE_F(1, "Recording...");
                 // TODO: pass the render target to the task
                 co_await render_frame();
             }
 
-            end_frame_fn_();
+            if (end_frame_fn_) {
+                end_frame_fn_();
+            }
         }
     }
 
