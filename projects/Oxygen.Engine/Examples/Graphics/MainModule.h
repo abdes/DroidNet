@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Co.h>
@@ -16,17 +17,16 @@ namespace platform {
     class Platform;
     class Window;
 } // namespace platform
+class Graphics;
 namespace graphics {
-    class Graphics;
+    class RenderTarget;
+    class Renderer;
+    class Surface;
 } // namespace graphics
 namespace co {
     class Nursery;
 } // namespace co
 } // namespace oxygen
-
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/Platform/Platform.h>
 
 namespace oxygen::examples {
 
@@ -36,8 +36,8 @@ public:
         std::weak_ptr<oxygen::Graphics> gfx_weak);
     ~MainModule() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(MainModule);
-    OXYGEN_MAKE_NON_MOVABLE(MainModule);
+    OXYGEN_MAKE_NON_COPYABLE(MainModule)
+    OXYGEN_MAKE_NON_MOVABLE(MainModule)
 
     auto StartAsync(co::TaskStarted<> started = {}) -> co::Co<>
     {
@@ -52,10 +52,13 @@ private:
     void SetupSurface();
     void SetupRenderer();
 
+    auto RenderScene() -> oxygen::co::Co<>;
+
     std::shared_ptr<oxygen::Platform> platform_;
     std::weak_ptr<oxygen::Graphics> gfx_weak_;
     std::weak_ptr<oxygen::platform::Window> window_weak_;
     std::shared_ptr<oxygen::graphics::Surface> surface_ {};
+    std::shared_ptr<oxygen::graphics::Renderer> renderer_ {};
 
     co::Nursery* nursery_ { nullptr };
 };

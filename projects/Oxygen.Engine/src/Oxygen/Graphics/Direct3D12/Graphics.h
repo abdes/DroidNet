@@ -65,6 +65,14 @@ protected:
         std::shared_ptr<graphics::Surface> surface,
         uint32_t frames_in_flight)
         -> std::shared_ptr<graphics::Renderer> override;
+
+    [[nodiscard]] auto CreateCommandList(
+        graphics::QueueRole role,
+        std::string_view command_list_name)
+        -> std::shared_ptr<graphics::CommandList> override;
+
+    [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list)
+        -> std::unique_ptr<graphics::CommandRecorder> override;
 };
 
 namespace detail {

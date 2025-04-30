@@ -9,6 +9,7 @@
 #include <d3d12.h>
 
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -19,15 +20,6 @@ class CommandList final : public graphics::CommandList {
     using Base = graphics::CommandList;
 
 public:
-    enum class State : int8_t {
-        kInvalid = -1, //<! Invalid state
-
-        kFree = 0, //<! Free command list.
-        kRecording = 1, //<! Command list is being recorded.
-        kRecorded = 2, //<! Command list is recorded and ready to be submitted.
-        kExecuting = 3, //<! Command list is being executed.
-    };
-
     explicit CommandList(QueueRole type)
         : CommandList(type, "Command List")
     {
@@ -41,9 +33,12 @@ public:
     OXYGEN_DEFAULT_MOVABLE(CommandList);
 
     [[nodiscard]] auto GetCommandList() const { return command_list_; }
-    [[nodiscard]] auto GetState() const { return state_; }
 
     void SetName(std::string_view name) noexcept override;
+
+protected:
+    OXYGEN_D3D12_API void OnBeginRecording() override;
+    OXYGEN_D3D12_API void OnEndRecording() override;
 
 private:
     void ReleaseCommandList() noexcept;
@@ -51,14 +46,9 @@ private:
     friend class CommandRecorder;
     friend class CommandQueue;
     friend class ImGuiModule;
-    void OnBeginRecording();
-    void OnEndRecording();
-    void OnSubmitted();
-    void OnExecuted();
 
     ID3D12GraphicsCommandList* command_list_ {};
     ID3D12CommandAllocator* command_allocator_ {};
-    State state_ { State::kInvalid };
 };
 
 } // namespace oxygen::graphics::d3d12

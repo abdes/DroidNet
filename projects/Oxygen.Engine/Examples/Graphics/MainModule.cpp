@@ -4,7 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <type_traits>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
@@ -31,6 +37,17 @@ void MainModule::Run()
     SetupMainWindow();
     SetupSurface();
     SetupRenderer();
+
+    nursery_->Start([this]() -> oxygen::co::Co<> {
+        while (!window_weak_.expired() && !gfx_weak_.expired()) {
+            auto gfx = gfx_weak_.lock();
+            co_await gfx->RenderStart();
+            // Submit the render task to the renderer
+            renderer_->Submit([this]() -> oxygen::co::Co<> {
+                co_await RenderScene();
+            });
+        }
+    });
 }
 
 void MainModule::SetupCommandQueues()
@@ -96,5 +113,21 @@ void MainModule::SetupRenderer()
     CHECK_F(!gfx_weak_.expired());
 
     auto gfx = gfx_weak_.lock();
-    gfx->CreateRenderer("Main Window Renderer", surface_);
+    renderer_ = gfx->CreateRenderer("Main Window Renderer", surface_);
+    CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
+}
+
+auto MainModule::RenderScene() -> oxygen::co::Co<>
+{
+    if (gfx_weak_.expired()) {
+        co_return;
+    }
+
+    DLOG_F(INFO, "RenderScene() called");
+
+    auto gfx = gfx_weak_.lock();
+    auto recorder = gfx->AcquireCommandRecorder(
+        oxygen::graphics::SingleQueueStrategy().GraphicsQueueName(),
+        "Main Window Command List");
+    co_return;
 }

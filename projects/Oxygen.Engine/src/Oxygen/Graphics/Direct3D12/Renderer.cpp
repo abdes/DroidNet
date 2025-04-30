@@ -76,9 +76,6 @@ public:
     void Init(const GraphicsConfig& props);
     void ShutdownRenderer();
 
-    auto BeginFrame(const resources::SurfaceId& surface_id) const
-        -> const graphics::RenderTarget&;
-    void EndFrame(const resources::SurfaceId& surface_id) const;
     auto CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId;
 
     [[nodiscard]] auto RtvHeap() const -> DescriptorHeap& { return rtv_heap_; }
@@ -86,11 +83,11 @@ public:
     [[nodiscard]] auto SrvHeap() const -> DescriptorHeap& { return srv_heap_; }
     [[nodiscard]] auto UavHeap() const -> DescriptorHeap& { return uav_heap_; }
 
-    auto GetCommandRecorder() -> CommandRecorderPtr { return command_recorder_; }
+    // auto GetCommandRecorder() -> CommandRecorderPtr { return command_recorder_; }
 
 private:
-    std::unique_ptr<CommandQueue> command_queue_ {};
-    std::shared_ptr<CommandRecorder> command_recorder_ {};
+    // std::unique_ptr<CommandQueue> command_queue_ {};
+    // std::shared_ptr<CommandRecorder> command_recorder_ {};
     mutable size_t current_frame_index_ { 0 };
     mutable CommandFrame frames_[kFrameBufferCount] {};
 
@@ -137,8 +134,8 @@ private:
 void RendererImpl::Init(const GraphicsConfig& props)
 {
     // Initialize the command recorder
-    command_queue_.reset(new CommandQueue(QueueRole::kGraphics));
-    command_recorder_.reset(new CommandRecorder(QueueRole::kGraphics));
+    // command_queue_.reset(new CommandQueue(QueueRole::kGraphics));
+    // command_recorder_.reset(new CommandRecorder(QueueRole::kGraphics));
 
     // Initialize heaps
 }
@@ -149,64 +146,28 @@ void RendererImpl::ShutdownRenderer()
 
     // Flush any pending commands and release any deferred resources for all
     // our frame indices
-    command_queue_->Flush();
+    // command_queue_->Flush();
 
-    command_queue_.reset();
-    command_recorder_.reset();
+    // command_queue_.reset();
+    // command_recorder_.reset();
 
     // TODO: SafeRelease for objects that need to be released after a full flush
     // otherwise, we should use ObjectRelease() or DeferredObjectRelease()
     LOG_F(INFO, "D3D12MA Memory Allocator released");
 }
 
-auto RendererImpl::BeginFrame(const resources::SurfaceId& surface_id) const
-    -> const graphics::RenderTarget&
-{
-    DCHECK_NOTNULL_F(command_recorder_);
-
-    // Wait for the GPU to finish executing the previous frame, reset the
-    // allocator once the GPU is done with it to free the memory we allocated to
-    // store the commands.
-    const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
-    command_queue_->Wait(fence_value);
-
-    DCHECK_F(surface_id.IsValid());
-
-    auto& surface = surfaces.ItemAt(surface_id);
-    if (surface.ShouldResize()) {
-        command_queue_->Flush();
-        surface.Resize();
-    }
-    return static_cast<RenderTarget&>(surface);
-}
-
-void RendererImpl::EndFrame(const resources::SurfaceId& surface_id) const
-{
-    try {
-        const auto& surface = surfaces.ItemAt(surface_id);
-        // Presenting
-        surface.Present();
-    } catch (const std::exception& e) {
-        LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface_id.ToString(), e.what());
-    }
-
-    // Signal and increment the fence value for the next frame.
-    frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
-    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
-}
-
-auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId
-{
-    DCHECK_NOTNULL_F(window.lock());
-    DCHECK_F(window.lock()->Valid());
-
-    const auto surface_id = surfaces.Emplace(std::move(window), command_queue_->GetCommandQueue());
-    if (!surface_id.IsValid()) {
-        return {};
-    }
-    LOG_F(INFO, "Window Surface created: {}", surface_id.ToString());
-    return surface_id;
-}
+// auto RendererImpl::CreateWindowSurfaceImpl(platform::WindowPtr window) const -> resources::SurfaceId
+//{
+//     DCHECK_NOTNULL_F(window.lock());
+//     DCHECK_F(window.lock()->Valid());
+//
+//     const auto surface_id = surfaces.Emplace(std::move(window), command_queue_->GetCommandQueue());
+//     if (!surface_id.IsValid()) {
+//         return {};
+//     }
+//     LOG_F(INFO, "Window Surface created: {}", surface_id.ToString());
+//     return surface_id;
+// }
 
 } // namespace oxygen::graphics::d3d12::detail
 
@@ -273,26 +234,3 @@ void Renderer::OnInitialize(/*PlatformPtr platform, const RendererProperties& pr
     }
 }
 #endif
-
-// void Renderer::OnShutdown()
-// {
-//     pimpl_->ShutdownRenderer();
-//     graphics::Renderer::OnShutdown();
-// }
-
-auto Renderer::BeginFrame(const resources::SurfaceId& surface_id)
-    -> const graphics::RenderTarget&
-{
-    current_render_target_ = static_cast<const RenderTarget*>(&pimpl_->BeginFrame(surface_id));
-    return *current_render_target_;
-}
-
-void Renderer::EndFrame(const resources::SurfaceId& surface_id) const
-{
-    pimpl_->EndFrame(surface_id);
-}
-
-auto Renderer::GetCommandRecorder() const -> CommandRecorderPtr
-{
-    return pimpl_->GetCommandRecorder();
-}

@@ -6,14 +6,20 @@
 
 #pragma once
 
-#include "glm/vec4.hpp"
+#include <memory>
+
+#include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Graphics/Common/Forward.h>
-#include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
+
+class CommandList;
+class IShaderByteCode;
+class Buffer;
+class RenderTarget;
 
 enum ClearFlags : uint8_t {
     kClearFlagsColor = (1 << 0),
@@ -23,9 +29,11 @@ enum ClearFlags : uint8_t {
 
 class CommandRecorder {
 public:
-    constexpr explicit CommandRecorder(const QueueRole type)
-        : type_ { type }
+    // Add new constructor that takes a command list
+    explicit CommandRecorder(CommandList* command_list)
+        : command_list_(command_list)
     {
+        CHECK_NOTNULL_F(command_list_);
     }
 
     virtual ~CommandRecorder() = default;
@@ -33,28 +41,28 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
-    [[nodiscard]] virtual auto GetQueueType() const -> QueueRole { return type_; }
-
-    virtual void Begin() = 0;
-    virtual auto End() -> CommandListPtr = 0;
+    OXYGEN_GFX_API virtual void Begin();
+    OXYGEN_GFX_API virtual auto End() -> std::shared_ptr<graphics::CommandList>;
 
     // Graphics commands
     virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) = 0;
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
-    virtual void SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
+    virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
 
     virtual void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) = 0;
     virtual void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) = 0;
-    virtual void SetRenderTarget(RenderTargetNoDeletePtr render_target) = 0;
+    virtual void SetRenderTarget(const RenderTarget* render_target) = 0;
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
 protected:
-    virtual void InitializeCommandRecorder() = 0;
-    virtual void ReleaseCommandRecorder() noexcept = 0;
+    [[nodiscard]] auto GetCommandList() -> CommandList*
+    {
+        return command_list_;
+    }
 
 private:
-    QueueRole type_ { QueueRole::kNone };
+    CommandList* command_list_;
 };
 
 } // namespace oxygen::graphics

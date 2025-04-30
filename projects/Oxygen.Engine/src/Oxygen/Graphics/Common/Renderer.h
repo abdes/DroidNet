@@ -18,7 +18,6 @@
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/Platform/Types.h>
 
-
 namespace oxygen {
 
 namespace imgui {
@@ -47,6 +46,8 @@ namespace graphics {
         OXYGEN_MAKE_NON_COPYABLE(Renderer);
         OXYGEN_DEFAULT_MOVABLE(Renderer);
 
+        OXYGEN_GFX_API void Submit(FrameRenderTask task);
+
         /**
          * Gets the index of the current frame being rendered.
          *
@@ -58,16 +59,16 @@ namespace graphics {
          *
          * @return The index of the current frame being rendered.
          */
-        [[nodiscard]] virtual auto CurrentFrameIndex() const -> uint32_t
+        [[nodiscard]] virtual auto CurrentFrameIndex() const -> size_t
         {
             return current_frame_index_;
         }
 
-        OXYGEN_GFX_API virtual void Render(
-            const resources::SurfaceId& surface_id,
-            const FrameRenderTask& render_game) const;
+        // OXYGEN_GFX_API virtual void Render(
+        //     const resources::SurfaceId& surface_id,
+        //     const FrameRenderTask& render_game) const;
 
-        virtual auto GetCommandRecorder() const -> CommandRecorderPtr = 0;
+        // virtual auto GetCommandRecorder() const -> CommandRecorderPtr = 0;
 
         // virtual auto GetShaderCompiler() const -> ShaderCompilerPtr = 0;
         // virtual auto GetEngineShader(std::string_view unique_id) const -> IShaderByteCodePtr = 0;
@@ -76,11 +77,17 @@ namespace graphics {
         // [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
 
     protected:
-        virtual auto BeginFrame(const resources::SurfaceId& surface_id) -> const RenderTarget& = 0;
-        virtual void EndFrame(const resources::SurfaceId& surface_id) const = 0;
+        OXYGEN_GFX_API virtual auto BeginFrame() -> const RenderTarget&;
+        OXYGEN_GFX_API virtual void EndFrame();
 
     private:
-        mutable uint32_t current_frame_index_ { 0 };
+        struct Frame {
+            uint64_t fence_value { 0 };
+        };
+
+        std::shared_ptr<Surface> surface_;
+        size_t current_frame_index_ { 0 };
+        Frame frames_[kFrameBufferCount] {};
     };
 
 } // namespace graphics

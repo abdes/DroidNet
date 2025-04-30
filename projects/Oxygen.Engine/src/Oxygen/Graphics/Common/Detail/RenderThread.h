@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
@@ -23,7 +24,13 @@ namespace oxygen::graphics::detail {
 class RenderThread : public oxygen::Component {
     OXYGEN_COMPONENT(RenderThread)
 public:
-    RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1);
+    using BeginFrameFn = std::function<const RenderTarget&()>;
+    using EndFrameFn = std::function<void()>;
+
+    RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1,
+        BeginFrameFn begin_frame_fn = nullptr,
+        EndFrameFn end_frame_fn = nullptr);
+
     ~RenderThread() override;
 
     OXYGEN_MAKE_NON_COPYABLE(RenderThread); //< Non-copyable.

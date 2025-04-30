@@ -38,24 +38,59 @@ using WindowEvent = oxygen::platform::window::Event;
 using oxygen::examples::MainModule;
 
 namespace {
+
+struct MyEngine {
+    std::shared_ptr<oxygen::Platform> platform;
+    std::weak_ptr<Graphics> gfx_weak;
+};
+
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 bool is_running { false };
-void EventLoopRun(const Platform& platform)
+void EventLoopRun(const MyEngine& engine)
 {
     // TODO: This is the game engine main loop.
+
+    // Track the last render time
+    auto last_render_time = std::chrono::steady_clock::now();
+
     while (is_running) {
-        platform.Async().PollOne();
-        platform.Events().PollOne();
+        if (engine.gfx_weak.expired()) {
+            LOG_F(ERROR, "Graphics backend is no longer available");
+            is_running = false;
+            break;
+        }
+        auto gfx = engine.gfx_weak.lock();
+
+        // Physics
+        // Sleep for a while to simulate physics
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+        // Input Events
+        engine.platform->Async().PollOne();
+        engine.platform->Events().PollOne();
+
+        // Game logic
+        // Sleep for a while to simulate game logic updates
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+        // Render (only if at least 1 second has passed since the last render)
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_render_time).count() >= 1) {
+            gfx->Render();
+            last_render_time = now;
+        }
+
+        // Check for Pause/Resume
     }
 }
 } // namespace
 
 template <>
-struct oxygen::co::EventLoopTraits<Platform> {
-    static void Run(const Platform& platform) { EventLoopRun(platform); }
-    static void Stop(Platform& /*platform*/) { is_running = false; }
-    static auto IsRunning(const Platform& /*platform*/) -> bool { return is_running; }
-    static auto EventLoopId(const Platform& platform) -> EventLoopID { return EventLoopID(&platform); }
+struct oxygen::co::EventLoopTraits<MyEngine> {
+    static void Run(const MyEngine& engine) { EventLoopRun(engine); }
+    static void Stop(MyEngine& /*engine*/) { is_running = false; }
+    static auto IsRunning(const MyEngine& /*engine*/) -> bool { return is_running; }
+    static auto EventLoopId(const MyEngine& engine) -> EventLoopID { return EventLoopID(&engine); }
 };
 
 namespace {
@@ -130,7 +165,8 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     MainModule main_module(platform, gfx_weak);
 
     // Transfer control to the asynchronous main loop
-    oxygen::co::Run(*platform, AsyncMain(platform, gfx_weak, main_module));
+    MyEngine engine { platform, gfx_weak };
+    oxygen::co::Run(engine, AsyncMain(platform, gfx_weak, main_module));
 
     // Explicit destruction order due to dependencies.
     platform.reset();
