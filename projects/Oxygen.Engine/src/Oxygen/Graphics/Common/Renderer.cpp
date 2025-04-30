@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <string_view>
 #include <type_traits>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
@@ -53,7 +56,7 @@ void Renderer::Submit(FrameRenderTask task)
 
 auto Renderer::BeginFrame() -> const graphics::RenderTarget&
 {
-    LOG_SCOPE_F(1, "BeginFrame");
+    LOG_SCOPE_F(1, fmt::format("[{}] BeginFrame", CurrentFrameIndex()).c_str());
     // DCHECK_NOTNULL_F(command_recorder_);
 
     // Wait for the GPU to finish executing the previous frame, reset the
@@ -71,7 +74,7 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
 
 void Renderer::EndFrame()
 {
-    LOG_SCOPE_F(1, "EndFrame");
+    LOG_SCOPE_F(1, fmt::format("[{}] EndFrame", CurrentFrameIndex()).c_str());
     try {
         surface_->Present();
     } catch (const std::exception& e) {
