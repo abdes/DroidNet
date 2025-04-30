@@ -123,7 +123,7 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
         co_return;
     }
 
-    DLOG_F(INFO, "RenderScene() called");
+    DLOG_F(1, "Rendering scene");
 
     auto gfx = gfx_weak_.lock();
     auto recorder = gfx->AcquireCommandRecorder(
