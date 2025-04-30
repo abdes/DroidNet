@@ -218,7 +218,7 @@ auto Shared<Awaitable>::State::EarlyCancel(Awaiter* ptr) noexcept
 template <class Awaitable>
 auto Shared<Awaitable>::State::Suspend(Awaiter* ptr) -> detail::Handle
 {
-    DLOG_F(1, "    ...on shared awaitable {} (holding {})", fmt::ptr(this),
+    DLOG_F(2, "    ...on shared awaitable {} (holding {})", fmt::ptr(this),
         fmt::ptr(&awaiter_));
     const bool is_first = parents_.Empty();
     parents_.PushBack(*ptr);
@@ -287,7 +287,7 @@ template <class Awaitable>
 auto Shared<Awaitable>::State::Cancel(Awaiter* ptr) noexcept
 {
     if (parents_.ContainsOneItem()) {
-        DLOG_F(1,
+        DLOG_F(2,
             "cancelling shared awaitable {} (holding {}); "
             "forwarding cancellation",
             fmt::ptr(this), fmt::ptr(&awaiter_));
@@ -310,7 +310,7 @@ auto Shared<Awaitable>::State::Cancel(Awaiter* ptr) noexcept
     // additional parents propagate cancellation and assume that the first
     // one will do a good enough job of carrying the value. This is
     // important to allow Shared<T> to be abortable/disposable if T is.
-    DLOG_F(1,
+    DLOG_F(2,
         "cancelling shared awaitable {} (holding {}); "
         "dropping parent",
         fmt::ptr(this), fmt::ptr(&awaiter_));
@@ -367,7 +367,7 @@ auto Shared<Awaitable>::State::MustResume() const noexcept
 template <class Awaitable>
 void Shared<Awaitable>::State::Invoke()
 {
-    DLOG_F(1, "shared awaitable {} (holding {}) resumed", fmt::ptr(this),
+    DLOG_F(2, "shared awaitable {} (holding {}) resumed", fmt::ptr(this),
         fmt::ptr(&awaiter_));
     if (result_.index() == Cancelling) {
         if (awaiter_.await_must_resume()) {
