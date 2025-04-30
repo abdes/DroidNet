@@ -63,7 +63,7 @@ public:
 
     void await_suspend(const Handle h)
     {
-        DLOG_F(1, "   ...sequence {} yielding to...", fmt::ptr(this));
+        DLOG_F(2, "   ...sequence {} yielding to...", fmt::ptr(this));
         parent_ = h;
         if (first_.awaiter.await_ready()) {
             KickOffSecond();
@@ -78,7 +78,7 @@ public:
 
     auto await_cancel(Handle h) noexcept -> bool
     {
-        DLOG_F(1, "sequence {} ({} stage) cancellation requested", fmt::ptr(this),
+        DLOG_F(2, "sequence {} ({} stage) cancellation requested", fmt::ptr(this),
             InFirstStage() ? "first" : "second");
         cancelling_ = true;
         if (InFirstStage()) {
@@ -176,14 +176,14 @@ private:
     void KickOffSecond() noexcept
     {
         if (cancelling_ && !first_.awaiter.await_must_resume()) {
-            DLOG_F(1, "sequence {} (cancelling) first stage completed, "
+            DLOG_F(2, "sequence {} (cancelling) first stage completed, "
                       "confirming cancellation",
                 fmt::ptr(this));
             parent_.resume();
             return;
         }
 
-        DLOG_F(1, "sequence {}{} first stage completed, continuing with...",
+        DLOG_F(2, "sequence {}{} first stage completed, continuing with...",
             fmt::ptr(this), cancelling_ ? " (cancelling)" : "");
         DCHECK_F(InFirstStage());
         Executor* ex = std::get<Executor*>(second_);
