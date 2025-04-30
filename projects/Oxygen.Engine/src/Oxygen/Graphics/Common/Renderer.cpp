@@ -53,6 +53,7 @@ void Renderer::Submit(FrameRenderTask task)
 
 auto Renderer::BeginFrame() -> const graphics::RenderTarget&
 {
+    LOG_SCOPE_F(1, "BeginFrame");
     // DCHECK_NOTNULL_F(command_recorder_);
 
     // Wait for the GPU to finish executing the previous frame, reset the
@@ -70,6 +71,7 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
 
 void Renderer::EndFrame()
 {
+    LOG_SCOPE_F(1, "EndFrame");
     try {
         surface_->Present();
     } catch (const std::exception& e) {

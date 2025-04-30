@@ -15,36 +15,41 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/LiveObject.h>
-#include <Oxygen/OxCo/Nursery.h>
 
-namespace oxygen::graphics::detail {
+namespace oxygen::graphics {
 
-class RenderThread : public oxygen::Component {
-    OXYGEN_COMPONENT(RenderThread)
-public:
-    using BeginFrameFn = std::function<const RenderTarget&()>;
-    using EndFrameFn = std::function<void()>;
+class RenderTarget;
 
-    RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1,
-        BeginFrameFn begin_frame_fn = nullptr,
-        EndFrameFn end_frame_fn = nullptr);
+namespace detail {
+    class RenderThread : public oxygen::Component {
+        OXYGEN_COMPONENT(RenderThread)
+        OXYGEN_COMPONENT_REQUIRES(oxygen::ObjectMetaData)
+    public:
+        using BeginFrameFn = std::function<const RenderTarget&()>;
+        using EndFrameFn = std::function<void()>;
 
-    ~RenderThread() override;
+        RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1,
+            BeginFrameFn begin_frame_fn = nullptr,
+            EndFrameFn end_frame_fn = nullptr);
 
-    OXYGEN_MAKE_NON_COPYABLE(RenderThread); //< Non-copyable.
-    OXYGEN_DEFAULT_MOVABLE(RenderThread); //< Non-moveable.
+        ~RenderThread() override;
 
-    void Submit(FrameRenderTask task);
+        OXYGEN_MAKE_NON_COPYABLE(RenderThread); //< Non-copyable.
+        OXYGEN_DEFAULT_MOVABLE(RenderThread); //< Non-moveable.
 
-    void Stop();
+        void Submit(FrameRenderTask task);
 
-private:
-    void Start();
+        void Stop();
 
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
-};
+    protected:
+        void UpdateDependencies(const oxygen::Composition& composition) override;
 
-} // namespace oxygen::graphics::detail
+    private:
+        void Start();
+
+        struct Impl;
+        std::unique_ptr<Impl> impl_;
+    };
+} // namespace detail
+
+} // namespace oxygen::graphics

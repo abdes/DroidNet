@@ -8,9 +8,13 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string_view>
 #include <thread>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -133,19 +137,23 @@ struct RenderThread::Impl {
                 break;
             }
 
+            LOG_SCOPE_F(1, fmt::format("Render frame ({})", debug_name_).c_str());
             auto render_frame = dispatcher_.GetNextTask();
             DCHECK_F(render_frame.operator bool());
 
             auto& render_target = begin_frame_fn_();
 
-            DLOG_F(INFO, "Processing frame render task");
-            // TODO: pass the render target to the task
-            co_await render_frame();
+            {
+                LOG_SCOPE_F(1, "Recording...");
+                // TODO: pass the render target to the task
+                co_await render_frame();
+            }
 
             end_frame_fn_();
         }
     }
 
+    std::string_view debug_name_ {};
     oxygen::co::Event stop_;
     RenderTaskDispatcher dispatcher_;
     std::thread thread_;
@@ -212,4 +220,9 @@ void RenderThread::Submit(FrameRenderTask task)
 void RenderThread::Stop()
 {
     impl_->stop_.Trigger();
+}
+
+void RenderThread::UpdateDependencies(const oxygen::Composition& composition)
+{
+    impl_->debug_name_ = composition.GetComponent<oxygen::ObjectMetaData>().GetName();
 }
