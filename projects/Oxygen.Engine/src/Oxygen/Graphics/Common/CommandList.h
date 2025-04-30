@@ -6,14 +6,14 @@
 
 #pragma once
 
-#include <fmt/format.h>
+#include <string_view>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
@@ -30,7 +30,7 @@ public:
         AddComponent<ObjectMetaData>(name);
     }
 
-    OXYGEN_GFX_API ~CommandList() override = default;
+    ~CommandList() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_MAKE_NON_MOVABLE(CommandList);
