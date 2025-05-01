@@ -19,7 +19,7 @@
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 
-oxygen::examples::MainModule::MainModule(
+MainModule::MainModule(
     std::shared_ptr<oxygen::Platform> platform,
     std::weak_ptr<Graphics> gfx_weak)
     : platform_(std::move(platform))
@@ -27,6 +27,15 @@ oxygen::examples::MainModule::MainModule(
 {
     DCHECK_NOTNULL_F(platform_);
     DCHECK_F(!gfx_weak_.expired());
+}
+
+MainModule::~MainModule()
+{
+    LOG_SCOPE_F(INFO, "Destroying MainModule");
+
+    renderer_.reset();
+    surface_.reset();
+    platform_.reset();
 }
 
 void MainModule::Run()
@@ -95,6 +104,10 @@ void oxygen::examples::MainModule::SetupMainWindow()
         while (!window_weak_.expired()) {
             auto window = window_weak_.lock();
             co_await window->CloseRequested();
+            // Stop the nursery
+            if (nursery_) {
+                nursery_->Cancel();
+            }
             window_weak_.lock()->VoteToClose();
         }
     });

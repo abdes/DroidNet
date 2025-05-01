@@ -151,16 +151,22 @@ auto Graphics::Descriptors() const -> const detail::DescriptorHeaps&
     return GetComponent<DescriptorHeaps>();
 }
 
-auto Graphics::CreateCommandQueue(graphics::QueueRole role, [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference)
+auto Graphics::CreateCommandQueue(
+    graphics::QueueRole role,
+    [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference)
     -> std::shared_ptr<graphics::CommandQueue>
 {
     return std::make_shared<CommandQueue>(role);
 }
 
-auto Graphics::CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight)
-    -> std::shared_ptr<oxygen::graphics::Renderer>
+auto Graphics::CreateRendererImpl(
+    const std::string_view name,
+    std::weak_ptr<graphics::Surface> surface,
+    uint32_t frames_in_flight)
+    -> std::unique_ptr<oxygen::graphics::Renderer>
 {
-    return std::make_shared<graphics::d3d12::Renderer>(name, std::move(surface), frames_in_flight);
+    return std::make_unique<graphics::d3d12::Renderer>(
+        name, weak_from_this(), std::move(surface), frames_in_flight);
 }
 
 auto Graphics::CreateCommandList(graphics::QueueRole role, std::string_view command_list_name)

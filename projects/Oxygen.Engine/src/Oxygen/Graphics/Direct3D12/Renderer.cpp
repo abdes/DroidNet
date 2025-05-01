@@ -175,9 +175,10 @@ using oxygen::graphics::d3d12::Renderer;
 
 Renderer::Renderer(
     std::string_view name,
-    std::shared_ptr<oxygen::graphics::Surface> surface,
+    std::weak_ptr<oxygen::Graphics> gfx_weak,
+    std::weak_ptr<oxygen::graphics::Surface> surface_weak,
     uint32_t frames_in_flight)
-    : oxygen::graphics::Renderer(name, std::move(surface), frames_in_flight)
+    : oxygen::graphics::Renderer(name, std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
 {
 }
 

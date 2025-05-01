@@ -97,9 +97,11 @@ namespace {
 
 auto AsyncMain(
     std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> gfx_weak,
-    MainModule& main_module) -> oxygen::co::Co<int>
+    std::weak_ptr<Graphics> gfx_weak) -> oxygen::co::Co<int>
 {
+    // Create the application main module
+    auto main_module = std::make_unique<MainModule>(platform, gfx_weak);
+
     // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
     OXCO_WITH_NURSERY(n)
     {
@@ -115,14 +117,21 @@ auto AsyncMain(
         co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
         gfx->Run();
 
-        co_await n.Start(&MainModule::StartAsync, std::ref(main_module));
-        main_module.Run();
+        co_await n.Start(&MainModule::StartAsync, std::ref(*main_module));
+        main_module->Run();
 
         // Terminate the application when the last window (main window) is
         // closed
-        n.Start([&platform, &gfx_weak, &n]() -> oxygen::co::Co<> {
+        n.Start([&platform, &gfx_weak, &n, &main_module]() -> oxygen::co::Co<> {
             co_await platform->Windows().LastWindowClosed();
             LOG_F(INFO, "Last window is closed -> wrapping up");
+
+            try {
+                main_module.reset();
+            } catch (...) {
+                LOG_F(ERROR, "Main module shutdown with error");
+            }
+
             // Explicitly stop the child live objects. Although this is not
             // strictly required, it is a good practice to do so and ensures a
             // controlled shutdown.
@@ -161,12 +170,9 @@ extern "C" void MainImpl(std::span<const char*> /*args*/)
     auto gfx_weak = loader.LoadBackend(BackendType::kDirect3D12, gfx_config);
     CHECK_F(!gfx_weak.expired()); // Expect a valid graphics backend, or abort
 
-    // Create the application main module
-    MainModule main_module(platform, gfx_weak);
-
     // Transfer control to the asynchronous main loop
     MyEngine engine { platform, gfx_weak };
-    oxygen::co::Run(engine, AsyncMain(platform, gfx_weak, main_module));
+    oxygen::co::Run(engine, AsyncMain(platform, gfx_weak));
 
     // Explicit destruction order due to dependencies.
     platform.reset();

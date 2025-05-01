@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
@@ -34,11 +35,13 @@ auto ToNonSrgb(const DXGI_FORMAT format) -> DXGI_FORMAT
 
 using oxygen::windows::ThrowOnFailed;
 
-using oxygen::graphics::d3d12::detail::SwapChain;
+using oxygen::graphics::d3d12::NameObject;
 using oxygen::graphics::d3d12::detail::GetGraphics;
+using oxygen::graphics::d3d12::detail::SwapChain;
 
-oxygen::graphics::d3d12::detail::SwapChain::~SwapChain() noexcept
+SwapChain::~SwapChain() noexcept
 {
+    DLOG_F(INFO, "Release swapchain");
     ReleaseSwapChain();
 }
 
@@ -123,6 +126,7 @@ void SwapChain::Finalize()
         ID3D12Resource* back_buffer { nullptr };
         try {
             ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
+            NameObject(back_buffer, "BackBuffer");
             render_targets_[i].resource = back_buffer;
             const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc {
                 .Format = format_,

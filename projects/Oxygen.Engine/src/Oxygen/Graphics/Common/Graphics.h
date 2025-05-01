@@ -94,7 +94,7 @@ public:
         = 0;
 
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(std::weak_ptr<platform::Window> window_weak, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::shared_ptr<graphics::Surface> = 0;
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
 
     /**
      * Acquire a command recorder for immediate use with automatic return to pool.
@@ -146,7 +146,12 @@ protected:
         DCHECK_NOTNULL_F(nursery_);
         return *nursery_;
     }
-    [[nodiscard]] virtual auto CreateRendererImpl(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<graphics::Renderer> = 0;
+    [[nodiscard]] virtual auto CreateRendererImpl(
+        const std::string_view name,
+        std::weak_ptr<graphics::Surface> surface,
+        uint32_t frames_in_flight)
+        -> std::unique_ptr<graphics::Renderer>
+        = 0;
 
 private:
     PlatformPtr platform_ {}; //< The platform abstraction layer.
@@ -159,7 +164,7 @@ private:
     std::mutex command_list_pool_mutex_;
 
     //! Active renderers managed by this Graphics instance
-    std::vector<std::shared_ptr<graphics::Renderer>> renderers_ {};
+    std::vector<std::weak_ptr<graphics::Renderer>> renderers_ {};
 
     co::Nursery* nursery_ { nullptr };
     co::ParkingLot render_ {};

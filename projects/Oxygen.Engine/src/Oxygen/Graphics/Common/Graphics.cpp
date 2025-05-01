@@ -4,22 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
 #include <type_traits>
 #include <unordered_map>
 
 #include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Types.h>
-
 
 using oxygen::Graphics;
 
@@ -58,8 +58,14 @@ auto Graphics::IsRunning() const -> bool
 
 void Graphics::Stop()
 {
-    // Destroy all renderers, stopping any background tasks they may have
-    // started and releasing any resources they may have created.
+    // Stop all valid renderers
+    auto it = renderers_.begin();
+    while (it != renderers_.end()) {
+        if (auto renderer = it->lock()) {
+            renderer->Stop();
+            ++it;
+        }
+    }
     renderers_.clear();
 
     if (nursery_ == nullptr) {
@@ -104,12 +110,32 @@ auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<g
     return {};
 }
 
-auto Graphics::CreateRenderer(const std::string_view name, std::shared_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
+auto Graphics::CreateRenderer(const std::string_view name, std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
 {
+    // Create the Renderer object
     auto renderer = CreateRendererImpl(name, std::move(surface), frames_in_flight);
     CHECK_NOTNULL_F(renderer, "Failed to create renderer");
-    renderers_.emplace_back(renderer);
-    return renderer;
+
+    // Wrap the Renderer in a shared_ptr with a custom deleter
+    auto renderer_with_deleter = std::shared_ptr<oxygen::graphics::Renderer>(
+        renderer.release(),
+        [this](oxygen::graphics::Renderer* ptr) {
+            // Remove the Renderer from the renderers_ collection
+            auto it = std::remove_if(renderers_.begin(), renderers_.end(),
+                [ptr](const std::weak_ptr<oxygen::graphics::Renderer>& weak_renderer) {
+                    auto shared_renderer = weak_renderer.lock();
+                    return !shared_renderer || shared_renderer.get() == ptr;
+                });
+            renderers_.erase(it, renderers_.end());
+
+            // Delete the Renderer
+            delete ptr;
+        });
+
+    // Add a weak_ptr to the renderers_ collection
+    renderers_.emplace_back(renderer_with_deleter);
+
+    return renderer_with_deleter;
 }
 
 auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
@@ -146,26 +172,26 @@ auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     recorder->Begin();
 
     // Create a unique_ptr with custom deleter that handles submission and cleanup
-    return { recorder.release(), [this, cmd_list = std::move(cmd_list), queue = std::move(queue)]
-                        (graphics::CommandRecorder* rec) mutable {
-        // Skip if recorder is null
-        if (!rec) return;
+    return { recorder.release(), [this, cmd_list = std::move(cmd_list), queue = std::move(queue)](graphics::CommandRecorder* rec) mutable {
+                // Skip if recorder is null
+                if (!rec)
+                    return;
 
-        try {
-            // End recording
-            auto completed_cmd = rec->End();
+                try {
+                    // End recording
+                    auto completed_cmd = rec->End();
 
-            // Submit to specified queue
-            queue->Submit(*completed_cmd);
+                    // Submit to specified queue
+                    queue->Submit(*completed_cmd);
 
-            // Return to pool when execution completes
-            std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-            command_list_pool_[queue->GetQueueType()].push_back(std::move(cmd_list));
-        } catch (const std::exception& e) {
-            LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
-        }
+                    // Return to pool when execution completes
+                    std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+                    command_list_pool_[queue->GetQueueType()].push_back(std::move(cmd_list));
+                } catch (const std::exception& e) {
+                    LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
+                }
 
-        // Delete the recorder
-        delete rec;
-    }};
+                // Delete the recorder
+                delete rec;
+            } };
 }
