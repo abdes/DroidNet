@@ -42,6 +42,7 @@ public:
         if (!running_) {
             return;
         }
+        DLOG_F(INFO, "Stopping render task dispatcher");
         running_ = false;
         {
             std::lock_guard<std::mutex> lock(mutex_work_queue_);
@@ -155,7 +156,7 @@ struct RenderThread::Impl {
             // Execute the application rendering task, asynchronously. Such task
             // may be quite complex and may be composed of several coroutines
             // that need to complete together. Synchronization and completion
-            // management are tyhe responsibility of the application.
+            // management are the responsibility of the application.
             {
                 LOG_SCOPE_F(1, "Recording...");
                 // TODO: pass the render target to the task
@@ -215,14 +216,15 @@ void RenderThread::Start()
                 // the execution of the render thread.
                 n.Start([this, &n]() -> oxygen::co::Co<> {
                     co_await impl_->stop_;
+                    DLOG_F(1, "Cancel RenderThread nursery");
                     n.Cancel();
-                    DLOG_F(INFO, "Render thread stopped");
                 });
 
                 // Wait for all tasks to complete
                 co_return oxygen::co::kJoin;
             };
         });
+        impl_->dispatcher_.Stop();
         DLOG_F(INFO, "Render thread completed");
     });
 }
@@ -234,7 +236,14 @@ void RenderThread::Submit(FrameRenderTask task)
 
 void RenderThread::Stop()
 {
+    if (!impl_->dispatcher_.IsRunning()) {
+        return;
+    }
+
     impl_->stop_.Trigger();
+    if (impl_->thread_.joinable()) {
+        impl_->thread_.join();
+    }
 }
 
 void RenderThread::UpdateDependencies(const oxygen::Composition& composition)

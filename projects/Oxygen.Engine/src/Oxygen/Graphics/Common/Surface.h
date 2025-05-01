@@ -34,7 +34,7 @@ namespace oxygen::graphics {
  */
 class Surface : public Composition, public Named, public RenderTarget {
 public:
-    ~Surface() override = default;
+    OXYGEN_GFX_API ~Surface() override;
 
     OXYGEN_DEFAULT_COPYABLE(Surface);
     OXYGEN_DEFAULT_MOVABLE(Surface);
@@ -79,6 +79,8 @@ namespace detail {
 
         OXYGEN_DEFAULT_COPYABLE(WindowComponent)
         OXYGEN_DEFAULT_MOVABLE(WindowComponent)
+
+        [[nodiscard]] auto IsValid() const { return !window_.expired(); }
 
         [[nodiscard]] OXYGEN_GFX_API auto Width() const -> uint32_t;
         [[nodiscard]] OXYGEN_GFX_API auto Height() const -> uint32_t;

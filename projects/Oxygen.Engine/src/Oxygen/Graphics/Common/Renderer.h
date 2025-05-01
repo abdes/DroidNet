@@ -6,13 +6,15 @@
 
 #pragma once
 
+#include <memory>
+#include <string_view>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Constants.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -29,16 +31,18 @@ namespace graphics {
     class Renderer : public Composition {
     public:
         Renderer(
-            std::shared_ptr<Surface> surface,
+            std::weak_ptr<Graphics> gfx_weak,
+            std::weak_ptr<Surface> surface_weak,
             uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
-            : Renderer("Renderer", std::move(surface), frames_in_flight)
+            : Renderer("Renderer", std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
         {
         }
 
         //! Default constructor, sets the object name.
         OXYGEN_GFX_API Renderer(
             std::string_view name,
-            std::shared_ptr<Surface> surface,
+            std::weak_ptr<Graphics> gfx_weak,
+            std::weak_ptr<Surface> surface_weak,
             uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1);
 
         OXYGEN_GFX_API ~Renderer() override;
@@ -47,6 +51,7 @@ namespace graphics {
         OXYGEN_DEFAULT_MOVABLE(Renderer);
 
         OXYGEN_GFX_API void Submit(FrameRenderTask task);
+        OXYGEN_GFX_API void Stop();
 
         /**
          * Gets the index of the current frame being rendered.
@@ -59,10 +64,7 @@ namespace graphics {
          *
          * @return The index of the current frame being rendered.
          */
-        [[nodiscard]] virtual auto CurrentFrameIndex() const -> size_t
-        {
-            return current_frame_index_;
-        }
+        [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_index_; }
 
         // OXYGEN_GFX_API virtual void Render(
         //     const resources::SurfaceId& surface_id,
@@ -77,17 +79,23 @@ namespace graphics {
         // [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
 
     protected:
+        [[nodiscard]] auto GetGraphics() const noexcept -> std::shared_ptr<Graphics>;
+        [[nodiscard]] auto GetSurface() const -> const Surface& { return *surface_weak_.lock(); }
+
         OXYGEN_GFX_API virtual auto BeginFrame() -> const RenderTarget&;
         OXYGEN_GFX_API virtual void EndFrame();
 
     private:
+        std::weak_ptr<Graphics> gfx_weak_;
+        std::weak_ptr<Surface> surface_weak_;
+
         struct Frame {
             uint64_t fence_value { 0 };
         };
 
-        std::shared_ptr<Surface> surface_;
-        size_t current_frame_index_ { 0 };
-        Frame frames_[kFrameBufferCount] {};
+        uint32_t frame_count_;
+        std::unique_ptr<Frame[]> frames_;
+        uint32_t current_frame_index_ { 0 };
     };
 
 } // namespace graphics

@@ -34,7 +34,7 @@ class MainModule final {
 public:
     MainModule(std::shared_ptr<oxygen::Platform> platform,
         std::weak_ptr<oxygen::Graphics> gfx_weak);
-    ~MainModule() = default;
+    ~MainModule();
 
     OXYGEN_MAKE_NON_COPYABLE(MainModule)
     OXYGEN_MAKE_NON_MOVABLE(MainModule)

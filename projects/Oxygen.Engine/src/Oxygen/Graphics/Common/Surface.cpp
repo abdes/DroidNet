@@ -6,12 +6,19 @@
 
 #include <Oxygen/Graphics/Common/Surface.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Platform/Window.h>
 
+using oxygen::graphics::Surface;
 using oxygen::graphics::detail::WindowComponent;
 using oxygen::graphics::detail::WindowSurface;
 using oxygen::graphics::resources::kSurface;
+
+Surface::~Surface()
+{
+    DLOG_F(INFO, "Surface `{}` destroyed", GetName());
+}
 
 auto WindowComponent::Width() const -> uint32_t
 {

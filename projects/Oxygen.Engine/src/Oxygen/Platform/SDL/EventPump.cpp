@@ -27,7 +27,6 @@ EventPump::EventPump()
 
 auto EventPump::PollOne() -> bool
 {
-    std::this_thread::sleep_for(10ms);
     if (sdl::PollEvent(nullptr)) {
         poll_.UnParkAll();
         return true;

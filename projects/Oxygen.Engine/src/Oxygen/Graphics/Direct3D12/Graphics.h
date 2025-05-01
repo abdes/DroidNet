@@ -21,7 +21,7 @@ namespace detail {
 
 // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
 
-class Graphics final : public oxygen::Graphics {
+class Graphics final : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
     using Base = oxygen::Graphics;
 
 public:
@@ -62,9 +62,9 @@ protected:
 
     [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
         const std::string_view name,
-        std::shared_ptr<graphics::Surface> surface,
+        std::weak_ptr<graphics::Surface> surface,
         uint32_t frames_in_flight)
-        -> std::shared_ptr<graphics::Renderer> override;
+        -> std::unique_ptr<graphics::Renderer> override;
 
     [[nodiscard]] auto CreateCommandList(
         graphics::QueueRole role,

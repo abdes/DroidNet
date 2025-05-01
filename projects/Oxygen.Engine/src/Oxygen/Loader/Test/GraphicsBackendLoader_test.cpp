@@ -14,8 +14,8 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/ImGui/ImguiModule.h>
@@ -49,9 +49,9 @@ public:
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandList>, CreateCommandList, (oxygen::graphics::QueueRole, std::string_view), (override));
-    MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (oxygen::graphics::CommandList *), (override));
-    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRenderer, (const std::string_view, std::shared_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
-    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRendererImpl, (const std::string_view, std::shared_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (oxygen::graphics::CommandList*), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRenderer, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::unique_ptr<oxygen::graphics::Renderer>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
     // NOLINTEND(modernize-use-trailing-return-type)
 
     // Getter for the JSON data

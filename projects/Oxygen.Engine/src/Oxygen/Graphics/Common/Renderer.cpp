@@ -29,10 +29,22 @@ using oxygen::graphics::detail::RenderThread;
 //! Default constructor, sets the object name.
 Renderer::Renderer(
     std::string_view name,
-    std::shared_ptr<Surface> surface,
+    std::weak_ptr<Graphics> gfx_weak,
+    std::weak_ptr<Surface> surface_weak,
     uint32_t frames_in_flight)
-    : surface_(std::move(surface))
+    : gfx_weak_(std::move(gfx_weak))
+    , surface_weak_(std::move(surface_weak))
+    , frame_count_(frames_in_flight + 1)
+    , frames_(std::make_unique<Frame[]>(frame_count_))
 {
+    CHECK_F(!surface_weak_.expired(), "Renderer cannot be created with a null Surface");
+    DCHECK_F(!gfx_weak_.expired(), "Renderer cannot be created with an expired Graphics backend pointer");
+
+    // Initialize all frame values to 0
+    for (uint32_t i = 0; i < frame_count_; ++i) {
+        frames_[i] = Frame {};
+    }
+
     AddComponent<ObjectMetaData>(name);
     AddComponent<RenderThread>(
         frames_in_flight,
@@ -46,7 +58,19 @@ Renderer::Renderer(
 
 Renderer::~Renderer()
 {
+    Stop();
+    DLOG_F(INFO, "Renderer destroyed");
+}
+
+void Renderer::Stop()
+{
     GetComponent<RenderThread>().Stop();
+}
+
+auto Renderer::GetGraphics() const noexcept -> std::shared_ptr<Graphics>
+{
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    return gfx_weak_.lock();
 }
 
 void Renderer::Submit(FrameRenderTask task)
@@ -56,6 +80,10 @@ void Renderer::Submit(FrameRenderTask task)
 
 auto Renderer::BeginFrame() -> const graphics::RenderTarget&
 {
+    if (surface_weak_.expired()) {
+        throw std::runtime_error("Cannot BeginFrame when surface is not valid");
+    }
+
     LOG_SCOPE_F(1, fmt::format("[{}] BeginFrame", CurrentFrameIndex()).c_str());
     // DCHECK_NOTNULL_F(command_recorder_);
 
@@ -65,23 +93,28 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
     const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
     // command_queue_->Wait(fence_value);
 
-    if (surface_->ShouldResize()) {
+    auto surface = surface_weak_.lock();
+    if (surface->ShouldResize()) {
         // command_queue_->Flush();
-        surface_->Resize();
+        surface->Resize();
     }
-    return static_cast<graphics::RenderTarget&>(*surface_);
+    return static_cast<graphics::RenderTarget&>(*surface);
 }
 
 void Renderer::EndFrame()
 {
+    CHECK_F(!surface_weak_.expired(), "Cannot BeginFrame when surface is not valid");
+
     LOG_SCOPE_F(1, fmt::format("[{}] EndFrame", CurrentFrameIndex()).c_str());
+    auto surface = surface_weak_.lock();
     try {
-        surface_->Present();
+        // TODO: present the surface (need to properly use the fence)
+        // surface->Present();
     } catch (const std::exception& e) {
-        LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface_->GetName(), e.what());
+        LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface->GetName(), e.what());
     }
 
     // Signal and increment the fence value for the next frame.
     // frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
-    current_frame_index_ = (current_frame_index_ + 1) % kFrameBufferCount;
+    current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
 }
