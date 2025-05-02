@@ -11,12 +11,26 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/SynchronizationCounter.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using oxygen::windows::ThrowOnFailed;
 
 using oxygen::graphics::d3d12::Fence;
 using oxygen::graphics::d3d12::detail::GetGraphics;
+
+Fence::Fence(std::string_view name, std::shared_ptr<oxygen::graphics::CommandQueue> command_queue)
+    : SynchronizationCounter(name, command_queue)
+    , command_queue_ { std::static_pointer_cast<CommandQueue>(command_queue) }
+{
+    InitializeSynchronizationObject(0);
+}
+
+Fence::~Fence()
+{
+    ReleaseSynchronizationObject();
+}
 
 void Fence::InitializeSynchronizationObject(const uint64_t initial_value)
 {
@@ -59,7 +73,7 @@ void Fence::Signal(const uint64_t value) const
     DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
 
     DCHECK_GT_F(value, fence_->GetCompletedValue(), "New value must be greater than the current value");
-    ThrowOnFailed((command_queue_->Signal(fence_, value)),
+    ThrowOnFailed((command_queue_->GetCommandQueue()->Signal(fence_, value)),
         fmt::format("Signal({}) on fence failed", value));
     current_value_ = value;
 }
@@ -91,7 +105,7 @@ void Fence::QueueWaitCommand(const uint64_t value) const
     DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
     DCHECK_NOTNULL_F(fence_, "fence must be initialized");
 
-    ThrowOnFailed(command_queue_->Wait(fence_, value),
+    ThrowOnFailed(command_queue_->GetCommandQueue()->Wait(fence_, value),
         fmt::format("QueueWaitCommand({}) on fence failed", value));
 }
 
@@ -99,7 +113,7 @@ void Fence::QueueSignalCommand(const uint64_t value)
 {
     DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
     DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-    ThrowOnFailed(command_queue_->Signal(fence_, value),
+    ThrowOnFailed(command_queue_->GetCommandQueue()->Signal(fence_, value),
         fmt::format("QueueSignalCommand({}) on fence failed", value));
 }
 

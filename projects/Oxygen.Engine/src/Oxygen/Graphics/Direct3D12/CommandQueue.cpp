@@ -96,14 +96,6 @@ CommandQueue::CommandQueue(QueueRole type, std::string_view name)
         fmt::format("could not create `{}` Command Queue", nostd::to_string(GetQueueType())));
     NameObject(command_queue_, GetNameForType(d3d12_type));
     LOG_F(INFO, "Command queue for `{}` created", nostd::to_string(GetQueueType()));
-
-    try {
-        fence_ = std::make_unique<Fence>(command_queue_);
-    } catch (const std::exception& ex) {
-        LOG_F(ERROR, "Failed to create Fence: {}", ex.what());
-        ObjectRelease(command_queue_);
-        throw;
-    }
 }
 
 CommandQueue::~CommandQueue() noexcept

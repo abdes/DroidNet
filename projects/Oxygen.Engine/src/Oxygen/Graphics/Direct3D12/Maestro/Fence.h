@@ -17,17 +17,9 @@ namespace oxygen::graphics::d3d12 {
 
 class Fence final : public SynchronizationCounter {
 public:
-    explicit Fence(ID3D12CommandQueue* command_queue)
-        : SynchronizationCounter("Fence")
-        , command_queue_ { command_queue }
-    {
-        InitializeSynchronizationObject(0);
-    }
+    OXYGEN_D3D12_API Fence(std::string_view name, std::shared_ptr<oxygen::graphics::CommandQueue> command_queue);
 
-    OXYGEN_D3D12_API ~Fence() override
-    {
-        ReleaseSynchronizationObject();
-    }
+    OXYGEN_D3D12_API ~Fence() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Fence);
     OXYGEN_MAKE_NON_MOVABLE(Fence);
@@ -49,7 +41,7 @@ private:
     mutable uint64_t current_value_ { 0 };
 
     ID3DFenceV* fence_ { nullptr };
-    ID3D12CommandQueue* command_queue_;
+    std::shared_ptr<CommandQueue> command_queue_;
     HANDLE fence_event_ { nullptr };
 };
 
