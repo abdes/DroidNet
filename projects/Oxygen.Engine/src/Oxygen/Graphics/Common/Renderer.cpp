@@ -14,8 +14,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -76,6 +78,61 @@ auto Renderer::GetGraphics() const noexcept -> std::shared_ptr<Graphics>
 void Renderer::Submit(FrameRenderTask task)
 {
     GetComponent<RenderThread>().Submit(std::move(task));
+}
+
+auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
+    -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
+{
+    auto gfx = GetGraphics();
+
+    auto queue = gfx->GetCommandQueue(queue_name);
+    if (!queue) {
+        LOG_F(ERROR, "Command queue '{}' not found", queue_name);
+        return nullptr;
+    }
+
+    // Get a command list with automatic cleanup
+    auto cmd_list = gfx->AcquireCommandList(queue->GetQueueType(), command_list_name);
+    if (!cmd_list) {
+        return nullptr;
+    }
+
+    // Create a command recorder for this command list
+    auto recorder = CreateCommandRecorder(cmd_list.get(), queue.get());
+    if (!recorder) {
+        return nullptr;
+    }
+
+    // Start recording
+    recorder->Begin();
+
+    // Create a unique_ptr with custom deleter that manages both the recorder and the command list
+    return {
+        recorder.release(),
+        [cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
+            if (rec) {
+                try {
+                    // End recording
+                    auto completed_cmd = rec->End();
+
+                    // Submit to the queue
+                    if (auto* queue = rec->GetTargetQueue()) {
+                        queue->Submit(*completed_cmd);
+                    } else {
+                        LOG_F(ERROR, "Command list has no target queue for submission");
+                    }
+
+                    // TODO: queue fence management
+
+                } catch (const std::exception& e) {
+                    LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
+                }
+
+                delete rec;
+            }
+            // cmd_list will be automatically released and returned to the pool here
+        }
+    };
 }
 
 auto Renderer::BeginFrame() -> const graphics::RenderTarget&

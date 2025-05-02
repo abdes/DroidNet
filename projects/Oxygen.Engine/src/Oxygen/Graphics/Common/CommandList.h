@@ -8,8 +8,8 @@
 
 #include <string_view>
 
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
@@ -18,7 +18,7 @@
 
 namespace oxygen::graphics {
 
-    class CommandRecorder;
+class CommandRecorder;
 
 class CommandList : public Composition, public Named {
 public:

@@ -8,7 +8,6 @@
 
 using oxygen::graphics::CommandList;
 
-
 void CommandList::OnBeginRecording()
 {
     if (state_ != State::kFree) {

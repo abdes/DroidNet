@@ -57,6 +57,10 @@ public:
 
     // [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
 
+protected:
+    [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+        -> std::unique_ptr<graphics::CommandRecorder> override;
+
 private:
     std::shared_ptr<detail::RendererImpl> pimpl_ {};
 

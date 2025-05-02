@@ -53,7 +53,7 @@ void MainModule::Run()
             co_await gfx->RenderStart();
             // Submit the render task to the renderer
             renderer_->Submit([this]() -> oxygen::co::Co<> {
-                co_await RenderScene();
+                co_await RenderScene(*renderer_);
             });
         }
     });
@@ -130,7 +130,7 @@ void MainModule::SetupRenderer()
     CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }
 
-auto MainModule::RenderScene() -> oxygen::co::Co<>
+auto MainModule::RenderScene(oxygen::graphics::Renderer& renderer) -> oxygen::co::Co<>
 {
     if (gfx_weak_.expired()) {
         co_return;
@@ -139,7 +139,7 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
     DLOG_F(1, "Rendering scene");
 
     auto gfx = gfx_weak_.lock();
-    auto recorder = gfx->AcquireCommandRecorder(
+    auto recorder = renderer.AcquireCommandRecorder(
         oxygen::graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
     co_return;

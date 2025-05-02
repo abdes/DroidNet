@@ -52,7 +52,7 @@ private:
     void SetupSurface();
     void SetupRenderer();
 
-    auto RenderScene() -> oxygen::co::Co<>;
+    auto RenderScene(oxygen::graphics::Renderer& renderer) -> oxygen::co::Co<>;
 
     std::shared_ptr<oxygen::Platform> platform_;
     std::weak_ptr<oxygen::Graphics> gfx_weak_;
