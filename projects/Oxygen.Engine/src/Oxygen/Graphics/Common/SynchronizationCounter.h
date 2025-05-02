@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
@@ -15,6 +16,8 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 
 namespace oxygen::graphics {
+
+class CommandQueue;
 
 //! A synchronization counter, for a timeline oriented CPU-GPU command queue.
 /*!
@@ -40,7 +43,7 @@ namespace oxygen::graphics {
 */
 class SynchronizationCounter : public Composition, public Named {
 public:
-    explicit SynchronizationCounter(std::string_view name)
+    SynchronizationCounter(std::string_view name, std::shared_ptr<CommandQueue> command_queue)
     {
         AddComponent<ObjectMetaData>(name);
     }

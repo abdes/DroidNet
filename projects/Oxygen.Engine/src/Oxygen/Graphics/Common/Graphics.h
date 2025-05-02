@@ -107,6 +107,7 @@ public:
         -> std::unique_ptr<imgui::ImguiModule>
         = 0;
 
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSynchronizationCounter(std::string_view name, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::unique_ptr<graphics::SynchronizationCounter> = 0;
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(std::weak_ptr<platform::Window> window_weak, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::shared_ptr<graphics::Surface> = 0;
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
 

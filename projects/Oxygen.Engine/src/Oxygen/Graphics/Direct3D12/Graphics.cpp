@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
+#include <Oxygen/Graphics/Direct3D12/Maestro/Fence.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -157,6 +158,13 @@ auto Graphics::CreateCommandQueue(
     -> std::shared_ptr<graphics::CommandQueue>
 {
     return std::make_shared<CommandQueue>(role);
+}
+auto Graphics::CreateSynchronizationCounter(
+    std::string_view name,
+    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    -> std::unique_ptr<graphics::SynchronizationCounter>
+{
+    return std::make_unique<Fence>(name, command_queue);
 }
 
 auto Graphics::CreateRendererImpl(
