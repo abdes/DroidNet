@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -88,6 +89,19 @@ public:
     [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(std::string_view name) const
         -> std::shared_ptr<graphics::CommandQueue>;
 
+    /**
+     * Acquire a command list from the pool or create a new one if needed.
+     * The command list will be automatically returned to the pool when the shared_ptr is destroyed.
+     *
+     * @param queue_name The name of the queue to use for this command list
+     * @param command_list_name Name for debugging purposes
+     * @return A shared_ptr to CommandList with custom deleter for automatic return to pool
+     */
+    [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandList(
+        graphics::QueueRole queue_role,
+        std::string_view command_list_name)
+        -> std::shared_ptr<graphics::CommandList>;
+
     [[nodiscard]]
     virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
         -> std::unique_ptr<imgui::ImguiModule>
@@ -130,13 +144,13 @@ protected:
      * Creates a new command list for the given queue role.
      * For internal use by the command list pool.
      */
-    [[nodiscard]] virtual auto CreateCommandList(
+    [[nodiscard]] virtual auto CreateCommandListImpl(
         graphics::QueueRole role,
         std::string_view command_list_name)
-        -> std::shared_ptr<graphics::CommandList>
+        -> std::unique_ptr<graphics::CommandList>
         = 0;
 
-    [[nodiscard]] virtual auto CreateCommandRecorder(graphics::CommandList* command_list)
+    [[nodiscard]] virtual auto CreateCommandRecorderImpl(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder>
         = 0;
 
@@ -154,13 +168,26 @@ protected:
         = 0;
 
 private:
+
+    /**
+     * Create a command recorder for an existing command list.
+     * The command recorder will automatically handle Begin() on creation and End() when destroyed.
+     *
+     * @param command_list The command list to create a recorder for
+     * @return A unique_ptr to CommandRecorder with custom deleter for automatic Begin/End handling
+     */
+    [[nodiscard]] OXYGEN_GFX_API auto CreateCommandRecorder(
+        graphics::CommandList* command_list)
+        -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>;
+
+
     PlatformPtr platform_ {}; //< The platform abstraction layer.
 
     //! The command queues created by the backend.
     std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_ {};
 
     // Pool of available command lists by queue type
-    std::unordered_map<graphics::QueueRole, std::vector<std::shared_ptr<graphics::CommandList>>> command_list_pool_;
+    std::unordered_map<graphics::QueueRole, std::vector<std::unique_ptr<graphics::CommandList>>> command_list_pool_;
     std::mutex command_list_pool_mutex_;
 
     //! Active renderers managed by this Graphics instance

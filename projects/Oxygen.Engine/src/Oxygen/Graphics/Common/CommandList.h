@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
@@ -24,6 +25,7 @@ public:
     explicit CommandList(QueueRole type)
         : CommandList(type, "Command List")
     {
+        DLOG_F(INFO, "CommandList created: {}", GetName());
     }
 
     CommandList(QueueRole type, std::string_view name)
@@ -33,7 +35,10 @@ public:
         state_ = State::kFree;
     }
 
-    ~CommandList() override = default;
+    ~CommandList() override
+    {
+        DLOG_F(INFO, "CommandList destroyed: {}", GetName());
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_MAKE_NON_MOVABLE(CommandList);

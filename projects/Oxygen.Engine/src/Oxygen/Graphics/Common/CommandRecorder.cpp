@@ -13,7 +13,7 @@ using oxygen::graphics::CommandRecorder;
 {
 }
 
- auto CommandRecorder::End() -> std::shared_ptr<graphics::CommandList>
+ auto CommandRecorder::End() -> graphics::CommandList*
 {
     if (command_list_ == nullptr) {
         return {};
@@ -21,8 +21,7 @@ using oxygen::graphics::CommandRecorder;
 
     try {
         command_list_->OnEndRecording();
-        // Return a non-owning pointer (wrapped in unique_ptr)
-        return std::shared_ptr<graphics::CommandList>(command_list_, [](graphics::CommandList*) { });
+        return command_list_;
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Recording failed: {}", e.what());
         return {};

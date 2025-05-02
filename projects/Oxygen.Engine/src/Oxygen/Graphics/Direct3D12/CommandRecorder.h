@@ -19,14 +19,14 @@ class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
-    explicit CommandRecorder(oxygen::graphics::CommandList* command_list);
+    CommandRecorder(oxygen::graphics::CommandList* command_list, oxygen::graphics::CommandQueue* target_queue);
     ~CommandRecorder() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
     void Begin() override;
-    auto End() -> std::shared_ptr<oxygen::graphics::CommandList> override;
+    auto End() -> oxygen::graphics::CommandList* override;
 
     // TODO: push up to base class
     void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) override;
