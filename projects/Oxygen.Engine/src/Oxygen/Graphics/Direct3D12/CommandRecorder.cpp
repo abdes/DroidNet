@@ -27,8 +27,8 @@
 using namespace oxygen::graphics::d3d12;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 
-CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list)
-    : Base(command_list)
+CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list, oxygen::graphics::CommandQueue* target_queue)
+    : Base(command_list, target_queue)
 {
     CreateRootSignature();
 }
@@ -47,7 +47,7 @@ void CommandRecorder::Begin()
     ResetState();
 }
 
-auto CommandRecorder::End() -> std::shared_ptr<oxygen::graphics::CommandList>
+auto CommandRecorder::End() -> oxygen::graphics::CommandList*
 {
     if (current_render_target_ != nullptr) {
         auto* command_list = GetConcreteCommandList();

@@ -138,6 +138,91 @@ auto Graphics::CreateRenderer(const std::string_view name, std::weak_ptr<graphic
     return renderer_with_deleter;
 }
 
+auto Graphics::AcquireCommandList(graphics::QueueRole queue_role, std::string_view command_list_name)
+    -> std::shared_ptr<graphics::CommandList>
+{
+    // Acquire or create a command list
+    std::unique_ptr<graphics::CommandList> cmd_list;
+    {
+        std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+        auto& pool = command_list_pool_[queue_role];
+
+        if (pool.empty()) {
+            // Create a new command list if pool is empty
+            cmd_list = CreateCommandListImpl(queue_role, command_list_name);
+        } else {
+            // Take one from the pool
+            cmd_list = std::move(pool.back());
+            pool.pop_back();
+            cmd_list->SetName(command_list_name);
+        }
+    }
+
+    // Create a shared_ptr with custom deleter that returns the command list to the pool
+    return std::shared_ptr<graphics::CommandList>(
+        cmd_list.release(),
+        [this, queue_role, cmd_list_raw = cmd_list.get()](graphics::CommandList*) mutable {
+            cmd_list_raw->SetName("Recycled Command List");
+            // Create a new unique_ptr that owns the command list
+            auto recycled_cmd_list = std::unique_ptr<graphics::CommandList>(cmd_list_raw);
+
+            // Return to pool
+            std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+            command_list_pool_[queue_role].push_back(std::move(recycled_cmd_list));
+        });
+
+    // Original shared_ptr will be destroyed, but the command list is now managed by the custom deleter
+    // and will be returned to the pool when the returned shared_ptr is destroyed
+}
+
+auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
+    -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
+{
+    auto queue = GetCommandQueue(queue_name);
+    if (!queue) {
+        LOG_F(ERROR, "Command queue '{}' not found", queue_name);
+        return nullptr;
+    }
+
+    // Get a command list with automatic cleanup
+    auto cmd_list = AcquireCommandList(queue->GetQueueType(), command_list_name);
+    if (!cmd_list) {
+        return nullptr;
+    }
+
+    // Create a command recorder for this command list
+    auto recorder = CreateCommandRecorderImpl(cmd_list.get(), queue.get());
+    if (!recorder) {
+        return nullptr;
+    }
+
+    // Start recording
+    recorder->Begin();
+
+    // Create a unique_ptr with custom deleter that manages both the recorder and the command list
+    return { recorder.release(), [cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
+        if (rec) {
+            try {
+                // End recording
+                auto completed_cmd = rec->End();
+
+                // Submit to the queue
+                if (auto *queue = rec->GetTargetQueue()) {
+                    queue->Submit(*completed_cmd);
+                } else {
+                    LOG_F(ERROR, "Command list has no target queue for submission");
+                }
+            } catch (const std::exception& e) {
+                LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
+            }
+
+            delete rec;
+        }
+        // cmd_list will be automatically released and returned to the pool here
+    }};
+}
+
+#if 0
 auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
 {
@@ -195,3 +280,4 @@ auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_v
                 delete rec;
             } };
 }
+#endif

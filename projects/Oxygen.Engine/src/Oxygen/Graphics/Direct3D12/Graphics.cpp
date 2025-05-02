@@ -169,16 +169,16 @@ auto Graphics::CreateRendererImpl(
         name, weak_from_this(), std::move(surface), frames_in_flight);
 }
 
-auto Graphics::CreateCommandList(graphics::QueueRole role, std::string_view command_list_name)
-    -> std::shared_ptr<oxygen::graphics::CommandList>
+auto Graphics::CreateCommandListImpl(graphics::QueueRole role, std::string_view command_list_name)
+    -> std::unique_ptr<oxygen::graphics::CommandList>
 {
-    return std::make_shared<CommandList>(role, command_list_name);
+    return std::make_unique<CommandList>(role, command_list_name);
 }
 
-auto Graphics::CreateCommandRecorder(graphics::CommandList* command_list)
+auto Graphics::CreateCommandRecorderImpl(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     -> std::unique_ptr<graphics::CommandRecorder>
 {
-    return std::make_unique<CommandRecorder>(command_list);
+    return std::make_unique<CommandRecorder>(command_list, target_queue);
 }
 
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>

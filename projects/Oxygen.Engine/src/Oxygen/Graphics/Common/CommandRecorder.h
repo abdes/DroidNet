@@ -17,6 +17,7 @@
 namespace oxygen::graphics {
 
 class CommandList;
+class CommandQueue;
 class IShaderByteCode;
 class Buffer;
 class RenderTarget;
@@ -30,8 +31,9 @@ enum ClearFlags : uint8_t {
 class CommandRecorder {
 public:
     // Add new constructor that takes a command list
-    explicit CommandRecorder(CommandList* command_list)
+    explicit CommandRecorder(CommandList* command_list, CommandQueue* target_queue)
         : command_list_(command_list)
+        , target_queue_(target_queue)
     {
         CHECK_NOTNULL_F(command_list_);
     }
@@ -41,8 +43,10 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
+    [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
+
     OXYGEN_GFX_API virtual void Begin();
-    OXYGEN_GFX_API virtual auto End() -> std::shared_ptr<graphics::CommandList>;
+    OXYGEN_GFX_API virtual auto End() -> graphics::CommandList*;
 
     // Graphics commands
     virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) = 0;
@@ -63,6 +67,7 @@ protected:
 
 private:
     CommandList* command_list_;
+    CommandQueue* target_queue_;
 };
 
 } // namespace oxygen::graphics

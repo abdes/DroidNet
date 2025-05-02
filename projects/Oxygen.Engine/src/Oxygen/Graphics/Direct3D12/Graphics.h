@@ -66,12 +66,12 @@ protected:
         uint32_t frames_in_flight)
         -> std::unique_ptr<graphics::Renderer> override;
 
-    [[nodiscard]] auto CreateCommandList(
+    [[nodiscard]] auto CreateCommandListImpl(
         graphics::QueueRole role,
         std::string_view command_list_name)
-        -> std::shared_ptr<graphics::CommandList> override;
+        -> std::unique_ptr<graphics::CommandList> override;
 
-    [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list)
+    [[nodiscard]] auto CreateCommandRecorderImpl(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
 };
 
