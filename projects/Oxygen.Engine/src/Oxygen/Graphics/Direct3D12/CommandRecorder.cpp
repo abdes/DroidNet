@@ -24,7 +24,7 @@
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
-using namespace oxygen::graphics::d3d12;
+using oxygen::graphics::d3d12::CommandRecorder;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 
 CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list, oxygen::graphics::CommandQueue* target_queue)
@@ -73,7 +73,7 @@ void CommandRecorder::SetViewport(
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
     D3D12_VIEWPORT viewport;
     viewport.TopLeftX = left;
@@ -104,7 +104,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
     if ((flags & kClearFlagsColor) != 0u) {
@@ -152,7 +152,7 @@ void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buf
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
     std::vector<D3D12_VERTEX_BUFFER_VIEW> vertex_buffer_views(num);
     for (uint32_t i = 0; i < num; ++i) {
@@ -169,7 +169,7 @@ void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetQueueType(), QueueRole::kGraphics, "Invalid queue type");
+    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
     CHECK_NOTNULL_F(current_render_target_);
 
     // Prepare for Draw

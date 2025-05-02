@@ -60,10 +60,7 @@ public:
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
 protected:
-    [[nodiscard]] auto GetCommandList() -> CommandList*
-    {
-        return command_list_;
-    }
+    [[nodiscard]] auto GetCommandList() const -> CommandList* { return command_list_; }
 
 private:
     CommandList* command_list_;

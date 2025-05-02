@@ -9,7 +9,6 @@
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Windows/ComError.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 using Microsoft::WRL::ComPtr;

@@ -18,17 +18,19 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 namespace oxygen::graphics::d3d12::detail {
+
+class WindowSurface;
 
 // TODO: pass the Graphics Backend instance to the SwapChain constructor
 class SwapChain : public Component {
     OXYGEN_COMPONENT(SwapChain)
     OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
 public:
-    SwapChain(CommandQueueType* command_queue, DXGI_FORMAT format)
+    SwapChain(dx::ICommandQueue* command_queue, DXGI_FORMAT format)
         : command_queue_(command_queue)
         , format_(format)
     {
@@ -77,14 +79,14 @@ protected:
     }
 
 private:
-    friend WindowSurface;
+    friend class WindowSurface;
     void CreateSwapChain();
     void Finalize();
     void ReleaseSwapChain();
     void Resize();
 
     DXGI_FORMAT format_ { kDefaultBackBufferFormat };
-    CommandQueueType* command_queue_;
+    dx::ICommandQueue* command_queue_;
 
     IDXGISwapChain4* swap_chain_ { nullptr };
     bool should_resize_ { false };

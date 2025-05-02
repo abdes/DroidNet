@@ -59,7 +59,7 @@ void MainModule::Run()
     });
 }
 
-void MainModule::SetupCommandQueues()
+void MainModule::SetupCommandQueues() const
 {
     CHECK_F(!gfx_weak_.expired());
 
@@ -80,7 +80,7 @@ void MainModule::SetupSurface()
     LOG_F(INFO, "Surface ({}) created for main widnow ({})", surface_->GetName(), window_weak_.lock()->Id());
 }
 
-void oxygen::examples::MainModule::SetupMainWindow()
+void MainModule::SetupMainWindow()
 {
     // Setup the main window
     WindowProps props("Oxygen Window Playground");
@@ -126,11 +126,12 @@ void MainModule::SetupRenderer()
     CHECK_F(!gfx_weak_.expired());
 
     auto gfx = gfx_weak_.lock();
-    renderer_ = gfx->CreateRenderer("Main Window Renderer", surface_);
+    renderer_ = gfx->CreateRenderer("Main Window Renderer", surface_, kFrameBufferCount - 1);
     CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }
 
-auto MainModule::RenderScene(oxygen::graphics::Renderer& renderer) -> oxygen::co::Co<>
+// FIXME: replace the reference to renderer with a shared_ptr or std::ref
+auto MainModule::RenderScene(graphics::Renderer& renderer) -> oxygen::co::Co<>
 {
     if (gfx_weak_.expired()) {
         co_return;

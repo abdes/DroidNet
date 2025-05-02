@@ -16,6 +16,10 @@ namespace oxygen::graphics::d3d12 {
 class CommandQueue;
 class CommandRecorder;
 
+namespace detail {
+    class SynchronizedCommandQueue;
+} // namespace detail
+
 class CommandList final : public graphics::CommandList {
     using Base = graphics::CommandList;
 
@@ -37,6 +41,7 @@ public:
     void SetName(std::string_view name) noexcept override;
 
 protected:
+    friend class detail::SynchronizedCommandQueue;
     OXYGEN_D3D12_API void OnBeginRecording() override;
     OXYGEN_D3D12_API void OnEndRecording() override;
 

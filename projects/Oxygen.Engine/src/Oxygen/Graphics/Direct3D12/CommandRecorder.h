@@ -19,28 +19,28 @@ class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
-    CommandRecorder(oxygen::graphics::CommandList* command_list, oxygen::graphics::CommandQueue* target_queue);
+    CommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue);
     ~CommandRecorder() override = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
 
     void Begin() override;
-    auto End() -> oxygen::graphics::CommandList* override;
+    auto End() -> graphics::CommandList* override;
 
     // TODO: push up to base class
     void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) override;
     void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) override;
-    void SetRenderTarget(const oxygen::graphics::RenderTarget* render_target) override;
+    void SetRenderTarget(const graphics::RenderTarget* render_target) override;
 
     void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) override;
-    void SetVertexBuffers(uint32_t num, const std::shared_ptr<oxygen::graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
+    void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
     void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) override;
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
 private:
-    [[nodiscard]] auto GetConcreteCommandList() -> CommandList* { return static_cast<CommandList*>(GetCommandList()); }
+    [[nodiscard]] auto GetConcreteCommandList() const -> CommandList* { return static_cast<CommandList*>(GetCommandList()); }
 
     void ResetState();
 

@@ -15,13 +15,9 @@
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
-#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
-#include <Oxygen/Graphics/Direct3D12/Maestro/Fence.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -30,23 +26,6 @@
 // Internal implementation of the graphics backend module API.
 
 namespace {
-
-//! Utility function to map QueueRole to D3D12_COMMAND_LIST_TYPE
-auto ToD3D12CommandListType(oxygen::graphics::QueueRole role)
-{
-    using oxygen::graphics::QueueRole;
-    switch (role) {
-    case QueueRole::kGraphics:
-    case QueueRole::kPresent: // D3D12 uses graphics queue for present
-        return D3D12_COMMAND_LIST_TYPE_DIRECT;
-    case QueueRole::kCompute:
-        return D3D12_COMMAND_LIST_TYPE_COMPUTE;
-    case QueueRole::kTransfer:
-        return D3D12_COMMAND_LIST_TYPE_COPY;
-    default:
-        throw std::invalid_argument("Unknown or unsupported QueueRole for D3D12");
-    }
-}
 
 auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
@@ -98,19 +77,17 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 //===----------------------------------------------------------------------===//
 // The Graphics class methods
 
-using oxygen::graphics::d3d12::DeviceType;
-using oxygen::graphics::d3d12::FactoryType;
 using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::detail::DescriptorHeaps;
 
-auto Graphics::GetFactory() const -> FactoryType*
+auto Graphics::GetFactory() const -> dx::IFactory*
 {
     auto* factory = GetComponent<DeviceManager>().Factory();
     CHECK_NOTNULL_F(factory, "graphics backend not properly initialized");
     return factory;
 }
 
-auto Graphics::GetCurrentDevice() const -> DeviceType*
+auto Graphics::GetCurrentDevice() const -> dx::IDevice*
 {
     auto* device = GetComponent<DeviceManager>().Device();
     CHECK_NOTNULL_F(device, "graphics backend not properly initialized");
@@ -153,18 +130,12 @@ auto Graphics::Descriptors() const -> const detail::DescriptorHeaps&
 }
 
 auto Graphics::CreateCommandQueue(
+    std::string_view name,
     graphics::QueueRole role,
     [[maybe_unused]] graphics::QueueAllocationPreference allocation_preference)
     -> std::shared_ptr<graphics::CommandQueue>
 {
-    return std::make_shared<CommandQueue>(role);
-}
-auto Graphics::CreateSynchronizationCounter(
-    std::string_view name,
-    std::shared_ptr<graphics::CommandQueue> command_queue) const
-    -> std::unique_ptr<graphics::SynchronizationCounter>
-{
-    return std::make_unique<Fence>(name, command_queue);
+    return std::make_shared<CommandQueue>(name, role);
 }
 
 auto Graphics::CreateRendererImpl(

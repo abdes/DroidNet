@@ -14,7 +14,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12::detail {
@@ -67,7 +67,7 @@ public:
         D3D12_DESCRIPTOR_HEAP_TYPE type { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
         size_t capacity { 512 };
         bool is_shader_visible { false };
-        DeviceType* device { nullptr };
+        dx::IDevice* device { nullptr };
         std::string_view name { "Descriptor Heap" };
     };
 
@@ -81,7 +81,7 @@ public:
     [[nodiscard]] OXYGEN_D3D12_API auto Allocate() -> DescriptorHandle;
     OXYGEN_D3D12_API void Free(DescriptorHandle& handle);
 
-    [[nodiscard]] auto Heap() const -> DescriptorHeapType* { return heap_; }
+    [[nodiscard]] auto Heap() const -> dx::IDescriptorHeap* { return heap_; }
     [[nodiscard]] auto Size() const -> size_t { return size_; }
     [[nodiscard]] auto Capacity() const -> size_t { return capacity_; }
     [[nodiscard]] auto Type() const -> D3D12_DESCRIPTOR_HEAP_TYPE { return type_; }
@@ -100,7 +100,7 @@ private:
     std::mutex mutex_ {};
     bool should_release_ { false };
 
-    DescriptorHeapType* heap_ { nullptr };
+    dx::IDescriptorHeap* heap_ { nullptr };
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_start_ {};
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_start_ {};
     size_t capacity_ { 0 };
