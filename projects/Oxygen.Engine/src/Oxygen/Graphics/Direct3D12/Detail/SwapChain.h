@@ -23,13 +23,14 @@
 
 namespace oxygen::graphics::d3d12::detail {
 
-    // TODO: pass the Graphics Backend instance to the SwapChain constructor
+// TODO: pass the Graphics Backend instance to the SwapChain constructor
 class SwapChain : public Component {
     OXYGEN_COMPONENT(SwapChain)
     OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
 public:
     SwapChain(CommandQueueType* command_queue, DXGI_FORMAT format)
-    : command_queue_(command_queue), format_(format)
+        : command_queue_(command_queue)
+        , format_(format)
     {
     }
 

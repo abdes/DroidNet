@@ -70,9 +70,6 @@ protected:
         graphics::QueueRole role,
         std::string_view command_list_name)
         -> std::unique_ptr<graphics::CommandList> override;
-
-    [[nodiscard]] auto CreateCommandRecorderImpl(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
-        -> std::unique_ptr<graphics::CommandRecorder> override;
 };
 
 namespace detail {

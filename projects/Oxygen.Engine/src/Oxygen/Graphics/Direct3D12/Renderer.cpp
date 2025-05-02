@@ -182,6 +182,12 @@ Renderer::Renderer(
 {
 }
 
+auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+    -> std::unique_ptr<graphics::CommandRecorder>
+{
+    return std::make_unique<CommandRecorder>(command_list, target_queue);
+}
+
 #if 0
 auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr
 {

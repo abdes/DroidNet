@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 
 using oxygen::graphics::CommandRecorder;
 
- void CommandRecorder::Begin()
+void CommandRecorder::Begin()
 {
 }
 
- auto CommandRecorder::End() -> graphics::CommandList*
+auto CommandRecorder::End() -> graphics::CommandList*
 {
     if (command_list_ == nullptr) {
         return {};

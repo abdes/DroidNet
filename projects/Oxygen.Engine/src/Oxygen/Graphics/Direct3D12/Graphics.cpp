@@ -175,12 +175,6 @@ auto Graphics::CreateCommandListImpl(graphics::QueueRole role, std::string_view 
     return std::make_unique<CommandList>(role, command_list_name);
 }
 
-auto Graphics::CreateCommandRecorderImpl(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
-    -> std::unique_ptr<graphics::CommandRecorder>
-{
-    return std::make_unique<CommandRecorder>(command_list, target_queue);
-}
-
 auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
 {
     return std::make_unique<ImGuiModule>(std::move(engine), window_id);

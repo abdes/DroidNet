@@ -54,6 +54,19 @@ namespace graphics {
         OXYGEN_GFX_API void Stop();
 
         /**
+         * Acquire a command recorder for immediate use with automatic return to pool.
+         * Uses RAII with a custom deleter to automatically return the command list to the pool.
+         *
+         * @param role The queue role for this command list.
+         * @param name Name for debugging purposes.
+         * @return A unique_ptr to CommandRecorder with custom deleter for automatic cleanup.
+         */
+        [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandRecorder(
+            std::string_view queue_name,
+            std::string_view command_list_name)
+            -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>;
+
+        /**
          * Gets the index of the current frame being rendered.
          *
          * The renderer manages a set of frame buffer resources that are used to
@@ -79,6 +92,10 @@ namespace graphics {
         // [[nodiscard]] virtual auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr = 0;
 
     protected:
+        [[nodiscard]] virtual auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+            -> std::unique_ptr<graphics::CommandRecorder>
+            = 0;
+
         [[nodiscard]] auto GetGraphics() const noexcept -> std::shared_ptr<Graphics>;
         [[nodiscard]] auto GetSurface() const -> const Surface& { return *surface_weak_.lock(); }
 
