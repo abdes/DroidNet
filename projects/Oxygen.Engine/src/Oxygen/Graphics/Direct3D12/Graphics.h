@@ -13,7 +13,7 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 
 namespace oxygen::graphics {
@@ -40,11 +40,6 @@ namespace d3d12 {
         OXYGEN_MAKE_NON_COPYABLE(Graphics);
         OXYGEN_MAKE_NON_MOVABLE(Graphics);
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateSynchronizationCounter(
-            std::string_view name,
-            std::shared_ptr<graphics::CommandQueue> command_queue) const
-            -> std::unique_ptr<graphics::SynchronizationCounter> override;
-
         [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
             EngineWeakPtr engine,
             platform::WindowIdType window_id)
@@ -57,8 +52,8 @@ namespace d3d12 {
 
         //! @{
         //! Device Manager API (module internal)
-        [[nodiscard]] auto GetFactory() const -> FactoryType*;
-        [[nodiscard]] auto GetCurrentDevice() const -> DeviceType*;
+        [[nodiscard]] auto GetFactory() const -> dx::IFactory*;
+        [[nodiscard]] auto GetCurrentDevice() const -> dx::IDevice*;
         [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
         //! @}
 
@@ -69,12 +64,13 @@ namespace d3d12 {
 
     protected:
         [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
+            std::string_view name,
             graphics::QueueRole role,
             graphics::QueueAllocationPreference allocation_preference)
             -> std::shared_ptr<graphics::CommandQueue> override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
-            const std::string_view name,
+            std::string_view name,
             std::weak_ptr<graphics::Surface> surface,
             uint32_t frames_in_flight)
             -> std::unique_ptr<graphics::Renderer> override;
@@ -101,4 +97,4 @@ namespace d3d12 {
 
 } // namespace d3d12
 
-} // namespace oxygen::graphics::d3d12
+} // namespace oxygen::graphics

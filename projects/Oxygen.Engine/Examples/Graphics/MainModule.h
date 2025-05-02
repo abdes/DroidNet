@@ -47,18 +47,18 @@ public:
     void Run();
 
 private:
-    void SetupCommandQueues();
+    void SetupCommandQueues() const;
     void SetupMainWindow();
     void SetupSurface();
     void SetupRenderer();
 
-    auto RenderScene(oxygen::graphics::Renderer& renderer) -> oxygen::co::Co<>;
+    auto RenderScene(graphics::Renderer& renderer) -> co::Co<>;
 
-    std::shared_ptr<oxygen::Platform> platform_;
-    std::weak_ptr<oxygen::Graphics> gfx_weak_;
-    std::weak_ptr<oxygen::platform::Window> window_weak_;
-    std::shared_ptr<oxygen::graphics::Surface> surface_ {};
-    std::shared_ptr<oxygen::graphics::Renderer> renderer_ {};
+    std::shared_ptr<Platform> platform_;
+    std::weak_ptr<Graphics> gfx_weak_;
+    std::weak_ptr<platform::Window> window_weak_;
+    std::shared_ptr<graphics::Surface> surface_;
+    std::shared_ptr<graphics::Renderer> renderer_;
 
     co::Nursery* nursery_ { nullptr };
 };

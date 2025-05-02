@@ -9,7 +9,8 @@
 #include <d3d12.h>
 
 #include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <memory>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -17,29 +18,29 @@ class CommandQueue final : public graphics::CommandQueue {
     using Base = graphics::CommandQueue;
 
 public:
-    CommandQueue(QueueRole type)
-        : CommandQueue(type, "Command List")
-    {
-    }
+    OXYGEN_D3D12_API CommandQueue(std::string_view name, QueueRole role);
 
-    CommandQueue(QueueRole type, std::string_view name);
-
-    ~CommandQueue() noexcept override;
+    OXYGEN_D3D12_API ~CommandQueue() noexcept override;
     OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
     OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
 
-    void Submit(graphics::CommandList& command_list) override;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetQueueRole() const -> QueueRole override;
 
-    [[nodiscard]] ID3D12CommandQueue* GetCommandQueue() const { return command_queue_; }
+    OXYGEN_D3D12_API void Signal(uint64_t value) const override;
+    [[nodiscard]] OXYGEN_D3D12_API auto Signal() const -> uint64_t override;
+    OXYGEN_D3D12_API void Wait(uint64_t value, std::chrono::milliseconds timeout) const override;
+    OXYGEN_D3D12_API void Wait(uint64_t value) const override;
+    OXYGEN_D3D12_API void QueueSignalCommand(uint64_t value) override;
+    OXYGEN_D3D12_API void QueueWaitCommand(uint64_t value) const override;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCompletedValue() const -> uint64_t override;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCurrentValue() const -> uint64_t override;
 
-    void SetName(std::string_view name) noexcept override;
+    OXYGEN_D3D12_API void Submit(graphics::CommandList& command_list) override;
 
-protected:
-    auto GetSynchronizationCounter() const -> SynchronizationCounter& override { return *fence_; }
+    OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
-private:
-    ID3D12CommandQueue* command_queue_ {};
-    std::unique_ptr<SynchronizationCounter> fence_ {};
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCommandQueue() const -> dx::ICommandQueue*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetFence() const -> dx::IFence*;
 };
 
 } // namespace oxygen::graphics::d3d12

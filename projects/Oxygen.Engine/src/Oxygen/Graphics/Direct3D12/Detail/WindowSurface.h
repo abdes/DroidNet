@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
-#include <Oxygen/Graphics/Direct3D12/Forward.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Platform/Types.h>
@@ -41,13 +41,13 @@ class WindowSurface
       public RenderTarget {
 
 public:
-    WindowSurface(platform::WindowPtr window, CommandQueueType* command_queue, DXGI_FORMAT format)
+    WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue, DXGI_FORMAT format)
         : graphics::detail::WindowSurface(std::move(window))
     {
         AddComponent<SwapChain>(command_queue, format);
     }
 
-    WindowSurface(platform::WindowPtr window, CommandQueueType* command_queue)
+    WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue)
         : graphics::detail::WindowSurface(std::move(window))
     {
         AddComponent<SwapChain>(command_queue, kDefaultBackBufferFormat);

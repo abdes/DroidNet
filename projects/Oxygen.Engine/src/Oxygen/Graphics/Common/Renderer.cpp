@@ -92,7 +92,7 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     }
 
     // Get a command list with automatic cleanup
-    auto cmd_list = gfx->AcquireCommandList(queue->GetQueueType(), command_list_name);
+    auto cmd_list = gfx->AcquireCommandList(queue->GetQueueRole(), command_list_name);
     if (!cmd_list) {
         return nullptr;
     }

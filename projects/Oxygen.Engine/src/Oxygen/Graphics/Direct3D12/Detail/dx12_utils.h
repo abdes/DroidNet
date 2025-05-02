@@ -9,6 +9,7 @@
 #include <cassert>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include <d3d12.h>
 #include <d3dcommon.h>
@@ -28,6 +29,38 @@ inline void NameObject(ID3D12Object* const object, std::string_view name)
         static_cast<UINT>(name.size()),
         name.data()));
     LOG_F(3, "+D3D12 named object created: {}", name);
+#endif
+}
+
+inline std::string GetObjectName(ID3D12Object* const object, std::string_view fallback_name)
+{
+#ifdef _DEBUG
+    if (object == nullptr) {
+        return "<null>";
+    }
+
+    UINT size = 0;
+    // First call to get the required size
+    HRESULT hr = object->GetPrivateData(WKPDID_D3DDebugObjectName, &size, nullptr);
+
+    if (FAILED(hr) || size == 0) {
+        return std::string(fallback_name);
+    }
+
+    // Allocate buffer for the name
+    std::vector<char> buffer(size);
+
+    // Second call to get the actual name
+    hr = object->GetPrivateData(WKPDID_D3DDebugObjectName, &size, buffer.data());
+
+    if (FAILED(hr)) {
+        return std::string(fallback_name);
+    }
+
+    // Return the name as a string
+    return std::string(buffer.data(), size);
+#else
+    return std::string(fallback_name);
 #endif
 }
 

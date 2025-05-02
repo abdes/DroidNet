@@ -6,7 +6,6 @@
 #pragma once
 
 #include <functional>
-#include <optional>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -41,16 +40,16 @@ namespace imgui {
 
 class Graphics : public Composition, public co::LiveObject {
 public:
-    OXYGEN_GFX_API explicit Graphics(const std::string_view name);
+    OXYGEN_GFX_API explicit Graphics(std::string_view name);
     OXYGEN_GFX_API ~Graphics() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Graphics);
     OXYGEN_DEFAULT_MOVABLE(Graphics);
 
-    [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<>;
-    OXYGEN_GFX_API void Run();
-    [[nodiscard]] OXYGEN_GFX_API auto IsRunning() const -> bool;
-    OXYGEN_GFX_API void Stop();
+    [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started) -> co::Co<> override;
+    OXYGEN_GFX_API void Run() override;
+    [[nodiscard]] OXYGEN_GFX_API auto IsRunning() const -> bool override;
+    OXYGEN_GFX_API void Stop() override;
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view
     {
@@ -77,54 +76,49 @@ public:
       queues.
      \return A vector of command queues created by the backend.
     */
-    [[nodiscard]] OXYGEN_GFX_API void CreateCommandQueues(
-        const graphics::QueueStrategy& queue_strategy);
+    OXYGEN_GFX_API void CreateCommandQueues(const graphics::QueueStrategy& queue_strategy);
 
-    //! Get a command queue by its unique name.
-    /*!
-     \param name The unique name of the queue as specified in QueueSpecification
-      when the application queue management strategy was defined.
-     \return A pointer to the command queue, or nullptr if not found.
-    */
     [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(std::string_view name) const
         -> std::shared_ptr<graphics::CommandQueue>;
 
-    /**
-     * Acquire a command list from the pool or create a new one if needed.
-     * The command list will be automatically returned to the pool when the shared_ptr is destroyed.
-     *
-     * @param queue_name The name of the queue to use for this command list
-     * @param command_list_name Name for debugging purposes
-     * @return A shared_ptr to CommandList with custom deleter for automatic return to pool
-     */
     [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandList(
         graphics::QueueRole queue_role,
         std::string_view command_list_name)
         -> std::shared_ptr<graphics::CommandList>;
 
-    [[nodiscard]]
-    virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
+    [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
         -> std::unique_ptr<imgui::ImguiModule>
         = 0;
 
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSynchronizationCounter(std::string_view name, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::unique_ptr<graphics::SynchronizationCounter> = 0;
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(std::weak_ptr<platform::Window> window_weak, std::shared_ptr<graphics::CommandQueue> command_queue) const -> std::shared_ptr<graphics::Surface> = 0;
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(const std::string_view name, std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1) -> std::shared_ptr<graphics::Renderer>;
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
+        std::weak_ptr<platform::Window> window_weak,
+        std::shared_ptr<graphics::CommandQueue> command_queue) const
+        -> std::shared_ptr<graphics::Surface>
+        = 0;
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(
+        std::string_view name,
+        std::weak_ptr<graphics::Surface> surface,
+        uint32_t frames_in_flight)
+        -> std::shared_ptr<graphics::Renderer>;
 
 protected:
     //! Create a command queue for the given role and allocation preference.
     /*!
+     \param queue_name The debug name for this queue.
      \param role The role of the command queue.
      \param allocation_preference The allocation preference for the command queue.
      \return A shared pointer to the created command queue.
-     \throw std::runtime_error if the command queue could not be created.
+     \throw std::runtime_error If the command queue could not be created.
 
      This method is called by the graphics backend to create a command queue for
      a specific role and allocation preference. The backend implementation is
      responsible for mapping these parameters to API-specific queue types or
      families.
     */
-    [[nodiscard]] virtual auto CreateCommandQueue(graphics::QueueRole role, graphics::QueueAllocationPreference allocation_preference)
+    [[nodiscard]] virtual auto CreateCommandQueue(
+        std::string_view queue_name,
+        graphics::QueueRole role,
+        graphics::QueueAllocationPreference allocation_preference)
         -> std::shared_ptr<graphics::CommandQueue>
         = 0;
 
@@ -138,14 +132,13 @@ protected:
         -> std::unique_ptr<graphics::CommandList>
         = 0;
 
-protected:
     [[nodiscard]] auto Nursery() const -> co::Nursery&
     {
         DCHECK_NOTNULL_F(nursery_);
         return *nursery_;
     }
     [[nodiscard]] virtual auto CreateRendererImpl(
-        const std::string_view name,
+        std::string_view name,
         std::weak_ptr<graphics::Surface> surface,
         uint32_t frames_in_flight)
         -> std::unique_ptr<graphics::Renderer>

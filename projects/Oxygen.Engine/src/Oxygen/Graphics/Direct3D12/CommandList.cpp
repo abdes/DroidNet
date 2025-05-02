@@ -9,7 +9,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Windows/ComError.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
@@ -18,7 +17,7 @@ namespace {
 
 auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 {
-    auto list_type_string { "" };
+    const auto* list_type_string { "" };
     switch (list_type) {
     case D3D12_COMMAND_LIST_TYPE_DIRECT:
         list_type_string = "Graphics ";
@@ -64,8 +63,7 @@ CommandList::CommandList(QueueRole type, std::string_view name)
 {
     // TODO: consider if we want to reuse command list objects
 
-    D3D12_COMMAND_LIST_TYPE d3d12_type;
-
+    D3D12_COMMAND_LIST_TYPE d3d12_type; // NOLINT(*-init-variables)
     switch (type) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
     {
     case QueueRole::kGraphics:
@@ -84,7 +82,7 @@ CommandList::CommandList(QueueRole type, std::string_view name)
         throw std::runtime_error(fmt::format("Unsupported CommandListType: {}", nostd::to_string(type)));
     }
 
-    const auto device = GetGraphics().GetCurrentDevice();
+    auto* const device = GetGraphics().GetCurrentDevice();
     DCHECK_NOTNULL_F(device);
 
     try {

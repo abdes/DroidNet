@@ -10,7 +10,6 @@
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
-#include <Oxygen/Platform/Types.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -25,9 +24,9 @@ class Renderer final
       public std::enable_shared_from_this<Renderer> {
 public:
     Renderer(
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
-        std::shared_ptr<oxygen::graphics::Surface> surface,
-        uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
+        std::weak_ptr<Graphics> gfx_weak,
+        std::weak_ptr<Surface> surface,
+        const uint32_t frames_in_flight = kFrameBufferCount - 1)
         : Renderer("D3D12 Renderer", std::move(gfx_weak), std::move(surface), frames_in_flight)
     {
     }
@@ -35,9 +34,9 @@ public:
     //! Default constructor, sets the object name.
     OXYGEN_D3D12_API Renderer(
         std::string_view name,
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
-        std::weak_ptr<oxygen::graphics::Surface> surface_weak,
-        uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1);
+        std::weak_ptr<Graphics> gfx_weak,
+        std::weak_ptr<Surface> surface_weak,
+        uint32_t frames_in_flight = kFrameBufferCount - 1);
 
     OXYGEN_D3D12_API ~Renderer() override = default;
 
@@ -62,7 +61,7 @@ protected:
         -> std::unique_ptr<graphics::CommandRecorder> override;
 
 private:
-    std::shared_ptr<detail::RendererImpl> pimpl_ {};
+    std::shared_ptr<detail::RendererImpl> pimpl_;
 
     // TODO: Temporary until we separate the rendering surfaces from the app module
     const RenderTarget* current_render_target_ { nullptr };

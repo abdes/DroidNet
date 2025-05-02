@@ -25,25 +25,25 @@ public:
     explicit CommandList(QueueRole type)
         : CommandList(type, "Command List")
     {
-        DLOG_F(INFO, "CommandList created: {}", GetName());
     }
 
     CommandList(QueueRole type, std::string_view name)
         : type_(type)
+        , state_(State::kFree)
     {
         AddComponent<ObjectMetaData>(name);
-        state_ = State::kFree;
+        DLOG_F(INFO, "CommandList created: {}", name);
     }
 
     ~CommandList() override
     {
-        DLOG_F(INFO, "CommandList destroyed: {}", GetName());
+        DLOG_F(INFO, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
     }
 
     OXYGEN_MAKE_NON_COPYABLE(CommandList);
     OXYGEN_MAKE_NON_MOVABLE(CommandList);
 
-    [[nodiscard]] auto GetQueueType() const { return type_; }
+    [[nodiscard]] auto GetQueueRole() const { return type_; }
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
     {
@@ -62,9 +62,9 @@ protected:
         kInvalid = -1, //<! Invalid state
 
         kFree = 0, //<! Free command list.
-        kRecording = 1, //<! Command list is being recorded.
-        kRecorded = 2, //<! Command list is recorded and ready to be submitted.
-        kExecuting = 3, //<! Command list is being executed.
+        kRecording = 1, //<! The command list is being recorded.
+        kRecorded = 2, //<! The command list is recorded and ready to be submitted.
+        kExecuting = 3, //<! The command list is being executed.
     };
     [[nodiscard]] auto GetState() const { return state_; }
 

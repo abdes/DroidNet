@@ -43,7 +43,7 @@ class CommandQueue;
 */
 class SynchronizationCounter : public Composition, public Named {
 public:
-    SynchronizationCounter(std::string_view name, std::shared_ptr<CommandQueue> command_queue)
+    explicit SynchronizationCounter(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
     }

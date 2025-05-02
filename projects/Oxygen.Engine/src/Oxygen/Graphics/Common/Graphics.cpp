@@ -12,14 +12,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/Platform/Types.h>
 
 using oxygen::Graphics;
 
@@ -68,7 +65,7 @@ void Graphics::Stop()
     }
     renderers_.clear();
 
-    if (nursery_ == nullptr) {
+    if (nursery_ != nullptr) {
         nursery_->Cancel();
     }
 
@@ -87,7 +84,7 @@ void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy
 
     try {
         for (const auto& spec : queue_specs) {
-            auto queue = CreateCommandQueue(spec.role, spec.allocation_preference);
+            auto queue = CreateCommandQueue(spec.name, spec.role, spec.allocation_preference);
             // If CreateCommandQueue does not throw, queue is guaranteed to be not null.
             temp_queues.emplace(spec.name, std::move(queue));
         }
@@ -159,9 +156,9 @@ auto Graphics::AcquireCommandList(graphics::QueueRole queue_role, std::string_vi
     }
 
     // Create a shared_ptr with custom deleter that returns the command list to the pool
-    return std::shared_ptr<graphics::CommandList>(
-        cmd_list.release(),
-        [this, queue_role, cmd_list_raw = cmd_list.get()](graphics::CommandList*) mutable {
+    return {
+        cmd_list.get(),
+        [this, queue_role, cmd_list_raw = cmd_list.release()](graphics::CommandList*) mutable {
             cmd_list_raw->SetName("Recycled Command List");
             // Create a new unique_ptr that owns the command list
             auto recycled_cmd_list = std::unique_ptr<graphics::CommandList>(cmd_list_raw);
@@ -169,68 +166,10 @@ auto Graphics::AcquireCommandList(graphics::QueueRole queue_role, std::string_vi
             // Return to pool
             std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
             command_list_pool_[queue_role].push_back(std::move(recycled_cmd_list));
-        });
-
-    // Original shared_ptr will be destroyed, but the command list is now managed by the custom deleter
-    // and will be returned to the pool when the returned shared_ptr is destroyed
-}
-
-#if 0
-auto Graphics::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
-    -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
-{
-    auto queue = GetCommandQueue(queue_name);
-    if (!queue) {
-        LOG_F(ERROR, "Command queue '{}' not found", queue_name);
-        return nullptr;
-    }
-
-    // Acquire or create a command list
-    std::shared_ptr<graphics::CommandList> cmd_list;
-    {
-        std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-        auto role = queue->GetQueueType();
-        auto& pool = command_list_pool_[role];
-
-        if (pool.empty()) {
-            // Create a new command list if pool is empty
-            cmd_list = CreateCommandList(role, command_list_name);
-        } else {
-            // Take one from the pool
-            cmd_list = std::move(pool.back());
-            pool.pop_back();
-            cmd_list->SetName(command_list_name);
         }
-    }
+    };
 
-    // Create a command recorder for this command list
-    auto recorder = CreateCommandRecorder(cmd_list.get());
-
-    // Start recording
-    recorder->Begin();
-
-    // Create a unique_ptr with custom deleter that handles submission and cleanup
-    return { recorder.release(), [this, cmd_list = std::move(cmd_list), queue = std::move(queue)](graphics::CommandRecorder* rec) mutable {
-                // Skip if recorder is null
-                if (!rec)
-                    return;
-
-                try {
-                    // End recording
-                    auto completed_cmd = rec->End();
-
-                    // Submit to specified queue
-                    queue->Submit(*completed_cmd);
-
-                    // Return to pool when execution completes
-                    std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-                    command_list_pool_[queue->GetQueueType()].push_back(std::move(cmd_list));
-                } catch (const std::exception& e) {
-                    LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
-                }
-
-                // Delete the recorder
-                delete rec;
-            } };
+    // The Original shared_ptr will be destroyed, but the command list is now
+    // managed by the custom deleter and will be returned to the pool when the
+    // returned shared_ptr is destroyed
 }
-#endif
