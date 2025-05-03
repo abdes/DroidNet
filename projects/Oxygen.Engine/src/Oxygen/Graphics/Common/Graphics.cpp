@@ -5,15 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <mutex>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
-#include "Graphics.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
-#include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -27,14 +28,8 @@ Graphics::Graphics(const std::string_view name)
     AddComponent<ObjectMetaData>(name);
 }
 
-oxygen::Graphics::~Graphics()
+Graphics::~Graphics()
 {
-    // Ensure we have no active renderers
-    renderers_.clear();
-
-    // Clear command list pools
-    std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-    command_list_pool_.clear();
 }
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
@@ -72,6 +67,12 @@ void Graphics::Stop()
         nursery_->Cancel();
     }
 
+    // Clear command list pool
+    {
+        std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
+        command_list_pool_.clear();
+    }
+
     command_queues_.clear();
 
     DLOG_F(INFO, "Graphics Live Object stopped");
@@ -101,7 +102,7 @@ void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy
 
 void Graphics::FlushCommandQueues()
 {
-    DLOG_F(INFO, "Flushing command queues");
+    LOG_SCOPE_F(1, "Flushing all command queues");
     for (const auto& [name, queue] : command_queues_) {
         DCHECK_NOTNULL_F(queue);
         queue->Flush();
