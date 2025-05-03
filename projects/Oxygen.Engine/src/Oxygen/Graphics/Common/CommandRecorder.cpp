@@ -8,7 +8,6 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 
-
 using oxygen::graphics::CommandRecorder;
 
 CommandRecorder::CommandRecorder(CommandList* command_list, CommandQueue* target_queue)
@@ -21,6 +20,7 @@ CommandRecorder::CommandRecorder(CommandList* command_list, CommandQueue* target
 void CommandRecorder::Begin()
 {
     if (command_list_ != nullptr) {
+        DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
         command_list_->OnBeginRecording();
     }
 }

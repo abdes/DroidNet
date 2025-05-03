@@ -37,13 +37,8 @@ void CommandRecorder::Begin()
 {
     oxygen::graphics::CommandRecorder::Begin();
 
-    auto* command_list = GetConcreteCommandList();
-    DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetState(), CommandList::State::kFree);
-
     // resource_state_cache_.OnBeginCommandBuffer();
 
-    command_list->OnBeginRecording();
     ResetState();
 }
 

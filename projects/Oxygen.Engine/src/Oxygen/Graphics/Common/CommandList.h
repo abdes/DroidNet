@@ -19,6 +19,7 @@
 namespace oxygen::graphics {
 
 class CommandRecorder;
+class Renderer;
 
 class CommandList : public Composition, public Named {
 public:
@@ -57,6 +58,7 @@ public:
 
 protected:
     friend class oxygen::graphics::CommandRecorder;
+    friend class oxygen::graphics::Renderer;
 
     enum class State : int8_t {
         kInvalid = -1, //<! Invalid state
