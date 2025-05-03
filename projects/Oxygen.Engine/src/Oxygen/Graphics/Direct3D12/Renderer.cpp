@@ -21,7 +21,7 @@ using oxygen::graphics::d3d12::Renderer;
 Renderer::Renderer(
     const std::string_view name,
     std::weak_ptr<oxygen::Graphics> gfx_weak,
-    std::weak_ptr<Surface> surface_weak,
+    std::weak_ptr<graphics::Surface> surface_weak,
     const uint32_t frames_in_flight)
     : graphics::Renderer(name, std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
 {

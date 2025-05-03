@@ -43,6 +43,10 @@ public:
 
     [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
 
+    // Prepare the swapchain for a new frame.
+    void Prepare();
+
+    // Present the current frame to the screen.
     void Present() const;
 
     [[nodiscard]] virtual auto GetResource() const -> ID3D12Resource*

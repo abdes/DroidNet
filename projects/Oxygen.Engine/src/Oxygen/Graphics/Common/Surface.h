@@ -41,7 +41,14 @@ public:
 
     void ShouldResize(const bool flag) { should_resize_ = flag; }
     auto ShouldResize() const -> bool { return should_resize_; }
+
+    //! Handle a surface resize.
     virtual void Resize() = 0;
+
+    //! Prepare the surface for a new frame.
+    virtual void Prepare() = 0;
+
+    //! Present the current frame is the surface supports presentation.
     virtual void Present() const = 0;
 
     [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
@@ -106,9 +113,6 @@ namespace detail {
 
         OXYGEN_DEFAULT_COPYABLE(WindowSurface)
         OXYGEN_DEFAULT_MOVABLE(WindowSurface)
-
-        //! Request the surface swapchain to be presented to the display.
-        void Present() const override = 0;
 
         [[nodiscard]] auto Width() const -> uint32_t override
         {

@@ -28,11 +28,14 @@ namespace imgui {
 
 namespace graphics {
 
-    class Renderer : public Composition {
+    class Surface;
+
+    class Renderer : public Composition, public std::enable_shared_from_this<Renderer> {
+        OXYGEN_TYPED(Renderer)
     public:
         Renderer(
-            std::weak_ptr<Graphics> gfx_weak,
-            std::weak_ptr<Surface> surface_weak,
+            std::weak_ptr<oxygen::Graphics> gfx_weak,
+            std::weak_ptr<graphics::Surface> surface_weak,
             uint32_t frames_in_flight = oxygen::kFrameBufferCount - 1)
             : Renderer("Renderer", std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
         {
@@ -103,11 +106,18 @@ namespace graphics {
         OXYGEN_GFX_API virtual void EndFrame();
 
     private:
+        void HandleSurfaceResize(Surface& surface);
+
         std::weak_ptr<Graphics> gfx_weak_;
         std::weak_ptr<Surface> surface_weak_;
 
+        //! Holds the data to manage the frame render cycle.
         struct Frame {
-            uint64_t fence_value { 0 };
+            //! Synchronization timeline values for all queues involved in this
+            //! cycle.
+            std::unordered_map<std::string, uint64_t> timeline_values;
+            //! command lists, submitted but still pending execution.
+            std::vector<std::shared_ptr<CommandList>> pending_command_lists;
         };
 
         uint32_t frame_count_;

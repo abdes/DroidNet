@@ -61,7 +61,7 @@ public:
         render_.UnParkAll();
     }
 
-    auto RenderStart()
+    auto OnRenderStart()
     {
         return render_.Park();
     }
@@ -80,6 +80,8 @@ public:
 
     [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(std::string_view name) const
         -> std::shared_ptr<graphics::CommandQueue>;
+
+    OXYGEN_GFX_API void FlushCommandQueues();
 
     [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandList(
         graphics::QueueRole queue_role,
