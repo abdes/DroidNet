@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
@@ -106,30 +107,29 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     // Start recording
     recorder->Begin();
 
-    // Create a unique_ptr with custom deleter that manages both the recorder and the command list
+    // Create a unique_ptr with custom deleter that manages the recorder's lifetime
+    // queue and command list when the recording is done.
     return {
         recorder.release(),
         [cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
-            if (rec) {
-                try {
-                    // End recording
-                    auto completed_cmd = rec->End();
-
-                    // Submit to the queue
-                    if (auto* queue = rec->GetTargetQueue()) {
-                        queue->Submit(*completed_cmd);
-                    } else {
-                        LOG_F(ERROR, "Command list has no target queue for submission");
-                    }
-
-                    // TODO: queue fence management
-
-                } catch (const std::exception& e) {
-                    LOG_F(ERROR, "Exception in command recorder cleanup: %s", e.what());
-                }
-
-                delete rec;
+            if (rec == nullptr) {
+                return;
             }
+            try {
+                // End recording
+                auto completed_cmd = rec->End();
+                if (completed_cmd != nullptr) {
+                    auto* queue = rec->GetTargetQueue();
+                    DCHECK_NOTNULL_F(queue);
+                    queue->Submit(*completed_cmd);
+                    completed_cmd->OnSubmitted();
+                    // TODO: queue fence management
+                }
+            } catch (const std::exception& ex) {
+                LOG_F(ERROR, "Exception in command recorder cleanup: %s", ex.what());
+            }
+
+            delete rec;
             // cmd_list will be automatically released and returned to the pool here
         }
     };
@@ -147,7 +147,8 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
     // Wait for the GPU to finish executing the previous frame, reset the
     // allocator once the GPU is done with it to free the memory we allocated to
     // store the commands.
-    const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
+
+    // const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
     // command_queue_->Wait(fence_value);
 
     auto surface = surface_weak_.lock();
