@@ -57,9 +57,6 @@ public:
     }
 
 protected:
-    friend class oxygen::graphics::CommandRecorder;
-    friend class oxygen::graphics::Renderer;
-
     enum class State : int8_t {
         kInvalid = -1, //<! Invalid state
 
@@ -70,8 +67,11 @@ protected:
     };
     [[nodiscard]] auto GetState() const { return state_; }
 
+    friend class oxygen::graphics::CommandRecorder;
     OXYGEN_GFX_API virtual void OnBeginRecording();
     OXYGEN_GFX_API virtual void OnEndRecording();
+
+    friend class oxygen::graphics::Renderer;
     OXYGEN_GFX_API virtual void OnSubmitted();
     OXYGEN_GFX_API virtual void OnExecuted();
 

@@ -189,11 +189,8 @@ auto SynchronizedCommandQueue::GetCompletedValue() const -> uint64_t
 void SynchronizedCommandQueue::Submit(graphics::CommandList& command_list) const
 {
     auto* d3d12_command_list = static_cast<CommandList*>(&command_list);
-    d3d12_command_list->OnSubmitted();
-    // TODO: replace with std::array
     ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
-    d3d12_command_list->OnExecuted();
 }
 
 void SynchronizedCommandQueue::SetCommandQueueName(std::string_view name) const noexcept

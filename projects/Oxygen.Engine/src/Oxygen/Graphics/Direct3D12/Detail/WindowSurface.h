@@ -58,6 +58,12 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
     OXYGEN_DEFAULT_MOVABLE(WindowSurface);
 
+    // Prepare the swapchain for a new frame.
+    void Prepare() override
+    {
+        GetComponent<SwapChain>().Prepare();
+    }
+
     void Present() const override
     {
         GetComponent<SwapChain>().Present();

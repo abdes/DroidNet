@@ -9,6 +9,7 @@
 #include <memory>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 
 #include <fmt/format.h>
 
@@ -32,7 +33,7 @@ using oxygen::graphics::detail::RenderThread;
 //! Default constructor, sets the object name.
 Renderer::Renderer(
     std::string_view name,
-    std::weak_ptr<Graphics> gfx_weak,
+    std::weak_ptr<oxygen::Graphics> gfx_weak,
     std::weak_ptr<Surface> surface_weak,
     uint32_t frames_in_flight)
     : gfx_weak_(std::move(gfx_weak))
@@ -107,26 +108,42 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     // Start recording
     recorder->Begin();
 
+    // Capture a weak_ptr to this renderer to avoid circular references
+    std::weak_ptr<Renderer> self_weak = weak_from_this();
+    std::string queue_name_str(queue_name);
+
     // Create a unique_ptr with custom deleter that manages the recorder's lifetime
     // queue and command list when the recording is done.
     return {
         recorder.release(),
-        [cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
+        [self_weak, queue_name_str, cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
             if (rec == nullptr) {
                 return;
             }
             try {
                 // End recording
-                auto completed_cmd = rec->End();
+                auto* completed_cmd = rec->End();
                 if (completed_cmd != nullptr) {
                     auto* queue = rec->GetTargetQueue();
                     DCHECK_NOTNULL_F(queue);
+
+                    // Submit the command list
                     queue->Submit(*completed_cmd);
                     completed_cmd->OnSubmitted();
-                    // TODO: queue fence management
+
+                    // Get timeline value for tracking completion
+                    uint64_t timeline_value = queue->Signal();
+
+                    // Store timeline value and command list in the current frame
+                    if (auto renderer = self_weak.lock()) {
+                        uint32_t frame_idx = renderer->CurrentFrameIndex();
+                        Frame& current_frame = renderer->frames_[frame_idx];
+                        current_frame.timeline_values[queue_name_str] = timeline_value;
+                        current_frame.pending_command_lists.push_back(cmd_list);
+                    }
                 }
             } catch (const std::exception& ex) {
-                LOG_F(ERROR, "Exception in command recorder cleanup: %s", ex.what());
+                LOG_F(ERROR, "Exception in command recorder cleanup: {}", ex.what());
             }
 
             delete rec;
@@ -142,20 +159,30 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
     }
 
     LOG_SCOPE_F(1, fmt::format("[{}] BeginFrame", CurrentFrameIndex()).c_str());
-    // DCHECK_NOTNULL_F(command_recorder_);
 
-    // Wait for the GPU to finish executing the previous frame, reset the
-    // allocator once the GPU is done with it to free the memory we allocated to
-    // store the commands.
-
-    // const auto& fence_value = frames_[CurrentFrameIndex()].fence_value;
-    // command_queue_->Wait(fence_value);
-
-    auto surface = surface_weak_.lock();
-    if (surface->ShouldResize()) {
-        // command_queue_->Flush();
-        surface->Resize();
+    // Wait for the GPU to finish executing the previous frame
+    Frame& previous_frame = frames_[CurrentFrameIndex()];
+    for (const auto& [queue_name, fence_value] : previous_frame.timeline_values) {
+        auto gfx = GetGraphics();
+        auto queue = gfx->GetCommandQueue(queue_name);
+        DCHECK_NOTNULL_F(queue, "Command queue '{}' not found", queue_name);
+        if (queue) {
+            queue->Wait(fence_value);
+        }
     }
+
+    // Release all completed command lists and call OnExecuted
+    for (auto& cmd_list : previous_frame.pending_command_lists) {
+        cmd_list->OnExecuted();
+    }
+    previous_frame.pending_command_lists.clear();
+    previous_frame.timeline_values.clear();
+
+    DCHECK_F(!surface_weak_.expired());
+    auto surface = surface_weak_.lock();
+    surface->Prepare();
+    HandleSurfaceResize(*surface);
+
     return static_cast<graphics::RenderTarget&>(*surface);
 }
 
@@ -166,13 +193,42 @@ void Renderer::EndFrame()
     LOG_SCOPE_F(1, fmt::format("[{}] EndFrame", CurrentFrameIndex()).c_str());
     auto surface = surface_weak_.lock();
     try {
-        // TODO: present the surface (need to properly use the fence)
-        // surface->Present();
+        surface->Present();
     } catch (const std::exception& e) {
         LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface->GetName(), e.what());
     }
 
-    // Signal and increment the fence value for the next frame.
-    // frames_[CurrentFrameIndex()].fence_value = command_queue_->Signal();
     current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
+}
+
+void Renderer::HandleSurfaceResize(Surface& surface)
+{
+    if (!surface.ShouldResize()) {
+        return;
+    }
+    // Collect all queues that have pending work across any frame
+    std::unordered_set<std::string> active_queues;
+
+    // Check all frames for pending work
+    for (uint32_t i = 0; i < frame_count_; ++i) {
+        if (i != CurrentFrameIndex()) { // Already processed current frame above
+            for (const auto& [queue_name, _] : frames_[i].timeline_values) {
+                active_queues.insert(queue_name);
+            }
+        }
+    }
+
+    // Only flush queues with pending work from this renderer
+    if (!active_queues.empty()) {
+        auto gfx = GetGraphics();
+        for (const auto& queue_name : active_queues) {
+            auto queue = gfx->GetCommandQueue(queue_name);
+            if (queue) {
+                DLOG_F(INFO, "Flushing queue '{}' during resize", queue_name);
+                queue->Flush();
+            }
+        }
+    }
+
+    surface.Resize();
 }

@@ -55,6 +55,9 @@ auto Graphics::IsRunning() const -> bool
 
 void Graphics::Stop()
 {
+    // Flush all command queues
+    FlushCommandQueues();
+
     // Stop all valid renderers
     auto it = renderers_.begin();
     while (it != renderers_.end()) {
@@ -93,6 +96,15 @@ void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy
         // Destroy all previously created queues
         temp_queues.clear();
         throw;
+    }
+}
+
+void Graphics::FlushCommandQueues()
+{
+    DLOG_F(INFO, "Flushing command queues");
+    for (const auto& [name, queue] : command_queues_) {
+        DCHECK_NOTNULL_F(queue);
+        queue->Flush();
     }
 }
 

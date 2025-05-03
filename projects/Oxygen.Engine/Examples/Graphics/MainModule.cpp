@@ -50,7 +50,7 @@ void MainModule::Run()
     nursery_->Start([this]() -> oxygen::co::Co<> {
         while (!window_weak_.expired() && !gfx_weak_.expired()) {
             auto gfx = gfx_weak_.lock();
-            co_await gfx->RenderStart();
+            co_await gfx->OnRenderStart();
             // Submit the render task to the renderer
             renderer_->Submit([this]() -> oxygen::co::Co<> {
                 co_await RenderScene(*renderer_);
