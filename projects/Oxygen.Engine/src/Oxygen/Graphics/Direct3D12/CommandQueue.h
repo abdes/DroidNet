@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <d3d12.h>
-
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -33,14 +31,37 @@ public:
     OXYGEN_D3D12_API void QueueSignalCommand(uint64_t value) override;
     OXYGEN_D3D12_API void QueueWaitCommand(uint64_t value) const override;
     [[nodiscard]] OXYGEN_D3D12_API auto GetCompletedValue() const -> uint64_t override;
-    [[nodiscard]] OXYGEN_D3D12_API auto GetCurrentValue() const -> uint64_t override;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCurrentValue() const -> uint64_t override
+    {
+        return current_value_;
+    }
 
     OXYGEN_D3D12_API void Submit(graphics::CommandList& command_list) override;
 
     OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
-    [[nodiscard]] OXYGEN_D3D12_API auto GetCommandQueue() const -> dx::ICommandQueue*;
-    [[nodiscard]] OXYGEN_D3D12_API auto GetFence() const -> dx::IFence*;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCommandQueue() const -> dx::ICommandQueue*
+    {
+        return command_queue_;
+    }
+
+    [[nodiscard]] OXYGEN_D3D12_API auto GetFence() const -> dx::IFence*
+    {
+        return fence_;
+    }
+
+private:
+    void CreateCommandQueue(QueueRole type, std::string_view queue_name);
+    void CreateFence(std::string_view fence_name, uint64_t initial_value);
+    void ReleaseCommandQueue() noexcept;
+    void ReleaseFence() noexcept;
+
+    QueueRole queue_role_; //<! The cached role of the command queue.
+    dx::ICommandQueue* command_queue_ { nullptr };
+
+    dx::IFence* fence_ { nullptr };
+    mutable uint64_t current_value_ { 0 };
+    HANDLE fence_event_ { nullptr };
 };
 
 } // namespace oxygen::graphics::d3d12

@@ -83,8 +83,6 @@ target_sources(
     "Detail/dx12_utils.h"
     "Detail/SwapChain.cpp"
     "Detail/SwapChain.h"
-    "Detail/SynchronizedCommandQueue.h"
-    "Detail/SynchronizedCommandQueue.cpp"
     "Detail/Types.h"
     "Detail/WindowSurface.h"
     "Devices/DebugLayer.cpp"

@@ -42,11 +42,11 @@ DebugLayer::~DebugLayer() noexcept
         PrintLiveObjectsReport();
     }
 
+    LOG_F(1, "release debug objects");
     ObjectRelease(d3d12_debug_);
     ObjectRelease(dxgi_info_queue_);
     ObjectRelease(dxgi_debug_);
     ObjectRelease(dred_settings_);
-    LOG_F(1, "release debug objects");
 }
 
 void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept

@@ -54,6 +54,7 @@ target_sources(
     "Detail/RenderThread.h"
     "Detail/RenderThread.cpp"
     "CommandList.cpp"
+    "CommandQueue.cpp"
     "CommandRecorder.cpp"
     "Shaders.cpp"
     "Graphics.cpp"

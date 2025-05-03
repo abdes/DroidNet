@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
@@ -27,7 +28,10 @@ public:
         AddComponent<ObjectMetaData>(name);
     }
 
-    ~CommandQueue() override = default;
+    ~CommandQueue() override
+    {
+        DLOG_F(INFO, "CommandQueue destroyed: {}", GetComponent<ObjectMetaData>().GetName());
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
     OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
@@ -78,7 +82,7 @@ public:
     [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
 
     virtual void Submit(CommandList& command_list) = 0;
-    void Flush() const { Wait(GetCurrentValue()); }
+    OXYGEN_GFX_API void Flush() const;
 
     [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;
 

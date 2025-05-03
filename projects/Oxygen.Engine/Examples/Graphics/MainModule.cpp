@@ -7,6 +7,7 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -32,6 +33,13 @@ MainModule::MainModule(
 MainModule::~MainModule()
 {
     LOG_SCOPE_F(INFO, "Destroying MainModule");
+
+    // Flush command queues used for the surface
+    if (!gfx_weak_.expired()) {
+        auto gfx = gfx_weak_.lock();
+        oxygen::graphics::SingleQueueStrategy queues;
+        gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
+    }
 
     renderer_.reset();
     surface_.reset();

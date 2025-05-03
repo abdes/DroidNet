@@ -127,7 +127,6 @@ auto AsyncMain(
             LOG_F(INFO, "Last window is closed -> wrapping up");
 
             try {
-                gfx_weak.lock()->FlushCommandQueues();
                 main_module.reset();
             } catch (...) {
                 LOG_F(ERROR, "Main module shutdown with error");

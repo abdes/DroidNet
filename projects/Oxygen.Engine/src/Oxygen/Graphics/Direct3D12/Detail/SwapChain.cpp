@@ -116,6 +116,7 @@ void SwapChain::CreateSwapChain()
 void SwapChain::ReleaseSwapChain()
 {
     for (auto& [resource, rtv] : render_targets_) {
+        // FIXME: ensure backbuffer no longer in use
         ObjectRelease(resource);
         GetGraphics().Descriptors().RtvHeap().Free(rtv);
     }
