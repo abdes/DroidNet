@@ -10,7 +10,6 @@
 
 #include <glm/vec4.hpp>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -30,15 +29,9 @@ enum ClearFlags : uint8_t {
 
 class CommandRecorder {
 public:
-    // Add new constructor that takes a command list
-    explicit CommandRecorder(CommandList* command_list, CommandQueue* target_queue)
-        : command_list_(command_list)
-        , target_queue_(target_queue)
-    {
-        CHECK_NOTNULL_F(command_list_);
-    }
+    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue);
 
-    virtual ~CommandRecorder() = default;
+    OXYGEN_GFX_API virtual ~CommandRecorder() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);

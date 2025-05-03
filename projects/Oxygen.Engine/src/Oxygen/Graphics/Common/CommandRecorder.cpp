@@ -4,13 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 
+
 using oxygen::graphics::CommandRecorder;
+
+CommandRecorder::CommandRecorder(CommandList* command_list, CommandQueue* target_queue)
+    : command_list_(command_list)
+    , target_queue_(target_queue)
+{
+    CHECK_NOTNULL_F(command_list_);
+}
 
 void CommandRecorder::Begin()
 {
+    if (command_list_ != nullptr) {
+        command_list_->OnBeginRecording();
+    }
 }
 
 auto CommandRecorder::End() -> graphics::CommandList*
