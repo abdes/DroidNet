@@ -147,7 +147,10 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
     //  mCommandList->ClearDepthStencilView(handle, clearFlags, depthValue, stencilValue, 0, NULL);
     //}
 }
-void CommandRecorder::SetVertexBuffers(uint32_t num, const BufferPtr* vertex_buffers, const uint32_t* strides,
+void CommandRecorder::SetVertexBuffers(
+    uint32_t num,
+    const std::shared_ptr<graphics::Buffer>* vertex_buffers,
+    const uint32_t* strides,
     const uint32_t* offsets)
 {
     auto* command_list = GetConcreteCommandList();
