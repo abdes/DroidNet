@@ -31,7 +31,7 @@ public:
     // TODO: push up to base class
     void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) override;
     void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) override;
-    void SetRenderTarget(const graphics::RenderTarget* render_target) override;
+    void SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target) override;
 
     void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) override;
     void SetVertexBuffers(uint32_t num, const std::shared_ptr<graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
@@ -46,7 +46,7 @@ private:
 
     void CreateRootSignature();
 
-    const RenderTarget* current_render_target_ { nullptr };
+    std::unique_ptr<RenderTarget> current_render_target_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pipeline_state_;
     Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
 };

@@ -25,7 +25,7 @@ namespace detail {
         OXYGEN_COMPONENT(RenderThread)
         OXYGEN_COMPONENT_REQUIRES(oxygen::ObjectMetaData)
     public:
-        using BeginFrameFn = std::function<const RenderTarget&()>;
+        using BeginFrameFn = std::function<void()>;
         using EndFrameFn = std::function<void()>;
 
         RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1,

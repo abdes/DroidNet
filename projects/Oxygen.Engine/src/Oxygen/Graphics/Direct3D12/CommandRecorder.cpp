@@ -200,13 +200,14 @@ void CommandRecorder::CreateRootSignature()
         throw std::runtime_error("Failed to create root signature");
     }
 }
-void CommandRecorder::SetRenderTarget(const RenderTargetNoDeletePtr render_target)
+void CommandRecorder::SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target)
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
     DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
-    current_render_target_ = static_cast<const RenderTarget*>(render_target);
+    current_render_target_ = std::unique_ptr<RenderTarget>(
+        static_cast<RenderTarget*>(render_target.release()));
     CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
 
     // Indicate that the back buffer will be used as a render target.

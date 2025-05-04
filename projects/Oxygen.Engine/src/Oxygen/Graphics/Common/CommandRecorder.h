@@ -49,7 +49,7 @@ public:
 
     virtual void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) = 0;
     virtual void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) = 0;
-    virtual void SetRenderTarget(const RenderTarget* render_target) = 0;
+    virtual void SetRenderTarget(std::unique_ptr<RenderTarget> render_target) = 0;
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
 protected:
