@@ -68,23 +68,10 @@ public:
         GetComponent<SwapChain>().Present();
     }
 
-    [[nodiscard]] auto ShouldResize() const -> bool
-    {
-        return GetComponent<SwapChain>().ShouldResize();
-    }
-
     void Resize() override
     {
-        // Resizing the surface will resize the swap chain, which can only
-        // happen when the swap chain is not in use. Therefore, we just set the
-        // ShouldResize flag and wait for the renderer to call Resize() when
-        // it's safe.
-        auto& swap_chain = GetComponent<SwapChain>();
-        if (!swap_chain.ShouldResize()) {
-            swap_chain.ShouldResize(true);
-            return;
-        }
-        swap_chain.Resize();
+        GetComponent<SwapChain>().Resize();
+        ShouldResize(false);
     }
 
     [[nodiscard]] auto GetViewPort() const -> const ViewPort& override
@@ -116,7 +103,6 @@ public:
     {
         return std::make_unique<RenderTarget>(&GetComponent<SwapChain>());
     }
-
 };
 
 } // namespace oxygen::graphics::d3d12::detail

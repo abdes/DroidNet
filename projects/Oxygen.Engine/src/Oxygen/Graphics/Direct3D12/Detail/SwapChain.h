@@ -72,15 +72,8 @@ public:
         return scissor_;
     }
 
-    void ShouldResize(const bool flag) { should_resize_ = flag; }
-    auto ShouldResize() const -> bool { return should_resize_; }
-
 protected:
-    void UpdateDependencies(const Composition& composition) override
-    {
-        window_ = &(composition.GetComponent<oxygen::graphics::detail::WindowComponent>());
-        CreateSwapChain();
-    }
+    void UpdateDependencies(const Composition& composition) override;
 
 private:
     friend class WindowSurface;
@@ -93,7 +86,6 @@ private:
     dx::ICommandQueue* command_queue_;
 
     IDXGISwapChain4* swap_chain_ { nullptr };
-    bool should_resize_ { false };
 
     mutable uint32_t current_back_buffer_index_ { 0 };
     struct {

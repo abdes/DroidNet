@@ -51,3 +51,7 @@ auto WindowComponent::Native() const -> platform::window::NativeHandles
     }
     throw std::runtime_error("Window is no longer valid");
 }
+auto WindowComponent::GetWindowTitle() const -> std::string
+{
+    return window_.expired() ? "" : window_.lock()->Title();
+}
