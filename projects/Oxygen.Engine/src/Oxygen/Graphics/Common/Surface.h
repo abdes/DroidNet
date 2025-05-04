@@ -17,9 +17,12 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Types/EngineResources.h>
+#include <Oxygen/Graphics/Common/Types/Scissors.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
+
 
 namespace oxygen::graphics {
 
@@ -32,7 +35,7 @@ namespace oxygen::graphics {
   such usage include shadow maps, reflection maps, and post-processing
   effects.
  */
-class Surface : public Composition, public Named, public RenderTarget {
+class Surface : public Composition, public Named {
 public:
     OXYGEN_GFX_API ~Surface() override;
 
@@ -48,8 +51,13 @@ public:
     //! Prepare the surface for a new frame.
     virtual void Prepare() = 0;
 
+    virtual auto GetRenderTarget() const -> std::unique_ptr<RenderTarget> = 0;
+
     //! Present the current frame is the surface supports presentation.
     virtual void Present() const = 0;
+
+    [[nodiscard]] virtual auto GetViewPort() const -> const ViewPort& = 0;
+    [[nodiscard]] virtual auto GetScissors() const -> const Scissors& = 0;
 
     [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
     [[nodiscard]] virtual auto Height() const -> uint32_t = 0;

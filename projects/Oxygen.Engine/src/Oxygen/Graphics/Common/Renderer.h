@@ -102,7 +102,7 @@ namespace graphics {
         [[nodiscard]] auto GetGraphics() const noexcept -> std::shared_ptr<Graphics>;
         [[nodiscard]] auto GetSurface() const -> const Surface& { return *surface_weak_.lock(); }
 
-        OXYGEN_GFX_API virtual auto BeginFrame() -> const RenderTarget&;
+        OXYGEN_GFX_API virtual void BeginFrame();
         OXYGEN_GFX_API virtual void EndFrame();
 
     private:

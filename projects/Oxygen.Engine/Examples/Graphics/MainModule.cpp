@@ -61,7 +61,7 @@ void MainModule::Run()
             co_await gfx->OnRenderStart();
             // Submit the render task to the renderer
             renderer_->Submit([this]() -> oxygen::co::Co<> {
-                co_await RenderScene(*renderer_);
+                co_await RenderScene();
             });
         }
     });
@@ -139,7 +139,7 @@ void MainModule::SetupRenderer()
 }
 
 // FIXME: replace the reference to renderer with a shared_ptr or std::ref
-auto MainModule::RenderScene(graphics::Renderer& renderer) -> oxygen::co::Co<>
+auto MainModule::RenderScene() -> oxygen::co::Co<>
 {
     if (gfx_weak_.expired()) {
         co_return;
@@ -148,8 +148,20 @@ auto MainModule::RenderScene(graphics::Renderer& renderer) -> oxygen::co::Co<>
     DLOG_F(1, "Rendering scene");
 
     auto gfx = gfx_weak_.lock();
-    auto recorder = renderer.AcquireCommandRecorder(
+    auto recorder = renderer_->AcquireCommandRecorder(
         oxygen::graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
+
+    recorder->SetRenderTarget(surface_->GetRenderTarget());
+
+    const auto& [TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth] = surface_->GetViewPort();
+    recorder->SetViewport(TopLeftX, Width, TopLeftY, Height, MinDepth, MaxDepth);
+
+    const auto& [left, top, right, bottom] = surface_->GetScissors();
+    recorder->SetScissors(left, top, right, bottom);
+
+    constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8f, 1.0F }; // Violet color
+    recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0F, 0);
+
     co_return;
 }

@@ -52,7 +52,7 @@ private:
     void SetupSurface();
     void SetupRenderer();
 
-    auto RenderScene(graphics::Renderer& renderer) -> co::Co<>;
+    auto RenderScene() -> co::Co<>;
 
     std::shared_ptr<Platform> platform_;
     std::weak_ptr<Graphics> gfx_weak_;

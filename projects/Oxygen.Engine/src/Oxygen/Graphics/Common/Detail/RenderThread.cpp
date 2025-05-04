@@ -150,7 +150,7 @@ struct RenderThread::Impl {
             DCHECK_F(render_frame.operator bool());
 
             if (begin_frame_fn_) {
-                auto& render_target = begin_frame_fn_();
+                begin_frame_fn_();
             }
 
             // Execute the application rendering task, asynchronously. Such task

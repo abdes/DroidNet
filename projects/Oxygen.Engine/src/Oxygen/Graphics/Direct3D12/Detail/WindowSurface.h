@@ -37,8 +37,7 @@ namespace oxygen::graphics::d3d12::detail {
 */
 
 class WindowSurface
-    : public graphics::detail::WindowSurface,
-      public RenderTarget {
+    : public graphics::detail::WindowSurface {
 
 public:
     WindowSurface(platform::WindowPtr window, dx::ICommandQueue* command_queue, DXGI_FORMAT format)
@@ -88,16 +87,6 @@ public:
         swap_chain.Resize();
     }
 
-    [[nodiscard]] auto Width() const -> uint32_t override
-    {
-        return static_cast<uint32_t>(GetViewPort().width);
-    }
-
-    [[nodiscard]] auto Height() const -> uint32_t override
-    {
-        return static_cast<uint32_t>(GetViewPort().height);
-    }
-
     [[nodiscard]] auto GetViewPort() const -> const ViewPort& override
     {
         return GetComponent<SwapChain>().GetViewPort();
@@ -108,15 +97,26 @@ public:
         return GetComponent<SwapChain>().GetScissors();
     }
 
-    [[nodiscard]] auto GetResource() const -> ID3D12Resource* override
+    [[nodiscard]] auto GetResource() const -> ID3D12Resource*
     {
         return GetComponent<SwapChain>().GetResource();
     }
 
-    [[nodiscard]] auto Rtv() const -> const DescriptorHandle& override
+    [[nodiscard]] auto Width() const -> uint32_t override
     {
-        return GetComponent<SwapChain>().GetCurrentRenderTargetView();
+        return static_cast<uint32_t>(GetComponent<SwapChain>().GetViewPort().width);
     }
+
+    [[nodiscard]] auto Height() const -> uint32_t override
+    {
+        return static_cast<uint32_t>(GetComponent<SwapChain>().GetViewPort().height);
+    }
+
+    auto GetRenderTarget() const -> std::unique_ptr<oxygen::graphics::RenderTarget> override
+    {
+        return std::make_unique<RenderTarget>(&GetComponent<SwapChain>());
+    }
+
 };
 
 } // namespace oxygen::graphics::d3d12::detail

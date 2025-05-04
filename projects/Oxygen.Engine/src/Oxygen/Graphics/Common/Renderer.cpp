@@ -52,8 +52,8 @@ Renderer::Renderer(
     AddComponent<ObjectMetaData>(name);
     AddComponent<RenderThread>(
         frames_in_flight,
-        [this]() -> const graphics::RenderTarget& {
-            return this->BeginFrame();
+        [this]() {
+            this->BeginFrame();
         },
         [this]() {
             this->EndFrame();
@@ -152,7 +152,7 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     };
 }
 
-auto Renderer::BeginFrame() -> const graphics::RenderTarget&
+void Renderer::BeginFrame()
 {
     if (surface_weak_.expired()) {
         throw std::runtime_error("Cannot BeginFrame when surface is not valid");
@@ -182,8 +182,6 @@ auto Renderer::BeginFrame() -> const graphics::RenderTarget&
     auto surface = surface_weak_.lock();
     surface->Prepare();
     HandleSurfaceResize(*surface);
-
-    return static_cast<graphics::RenderTarget&>(*surface);
 }
 
 void Renderer::EndFrame()
