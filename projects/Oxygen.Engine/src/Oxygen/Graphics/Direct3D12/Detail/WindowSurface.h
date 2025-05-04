@@ -19,12 +19,11 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen::graphics::d3d12::detail {
 
-//! Represents a surface that is associated with a window.
+//! Represents a surface associated with a window.
 /*!
  A `WindowSurface` has a swapchain, which size typically corresponds to the
  entire surface of the window. The swapchain is used to present the rendered
