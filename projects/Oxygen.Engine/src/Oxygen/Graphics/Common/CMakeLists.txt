@@ -93,6 +93,7 @@ target_sources(
       "Types/Queues.h"
       "Types/RenderTask.h"
       "Types/ResourceAccessMode.h"
+      "Types/ResourceState.h"
       "Types/ShaderType.h"
 )
 
