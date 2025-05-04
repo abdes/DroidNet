@@ -10,13 +10,11 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Resource.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
-#include <Oxygen/Graphics/Common/Types/EngineResources.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -52,7 +50,7 @@ public:
 
     virtual auto GetRenderTarget() const -> std::unique_ptr<RenderTarget> = 0;
 
-    //! Present the current frame is the surface supports presentation.
+    //! Present the current frame if the surface supports it.
     virtual void Present() const = 0;
 
     [[nodiscard]] virtual auto GetViewPort() const -> const ViewPort& = 0;
@@ -86,10 +84,12 @@ namespace detail {
     class WindowSurface;
 
     //! A component that encapsulates the window part of a WindowSurface.
-    class WindowComponent : public Component {
+    class WindowComponent final : public Component {
         OXYGEN_COMPONENT(WindowComponent)
     public:
         using NativeHandles = platform::window::NativeHandles;
+
+        ~WindowComponent() override = default;
 
         OXYGEN_DEFAULT_COPYABLE(WindowComponent)
         OXYGEN_DEFAULT_MOVABLE(WindowComponent)
@@ -115,7 +115,7 @@ namespace detail {
         platform::WindowPtr window_;
     };
 
-    //! Represents a surface that is associated with a window.
+    //! Represents a surface associated with a window.
     class WindowSurface : public Surface {
     public:
         OXYGEN_GFX_API ~WindowSurface() override = default;
