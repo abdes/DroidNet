@@ -19,6 +19,7 @@
 
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
+using WindowEvent = oxygen::platform::window::Event;
 
 MainModule::MainModule(
     std::shared_ptr<oxygen::Platform> platform,
@@ -91,7 +92,7 @@ void MainModule::SetupSurface()
 void MainModule::SetupMainWindow()
 {
     // Setup the main window
-    WindowProps props("Oxygen Window Playground");
+    WindowProps props("Oxygen Graphics Example");
     props.extent = { .width = 800, .height = 600 };
     props.flags = {
         .hidden = false,
@@ -117,6 +118,21 @@ void MainModule::SetupMainWindow()
                 nursery_->Cancel();
             }
             window_weak_.lock()->VoteToClose();
+        }
+    });
+
+    nursery_->Start([this]() -> oxygen::co::Co<> {
+        while (!window_weak_.expired()) {
+            auto window = window_weak_.lock();
+            if (const auto [from, to] = co_await window->Events().UntilChanged();
+                to == WindowEvent::kResized) {
+                LOG_F(INFO, "Main window was resized");
+                surface_->ShouldResize(true);
+            } else {
+                if (to == WindowEvent::kExposed) {
+                    LOG_F(INFO, "My window is exposed");
+                }
+            }
         }
     });
 

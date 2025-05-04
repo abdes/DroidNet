@@ -58,6 +58,12 @@ void SwapChain::Present() const
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
+void SwapChain::UpdateDependencies(const Composition& composition)
+{
+    window_ = &(composition.GetComponent<oxygen::graphics::detail::WindowComponent>());
+    CreateSwapChain();
+}
+
 void SwapChain::CreateSwapChain()
 {
     // This method may be called multiple times, therefore we need to ensure
@@ -171,6 +177,7 @@ void SwapChain::Finalize()
 
 void SwapChain::Resize()
 {
+    DLOG_F(INFO, "Resizing swap chain for window `{}`", window_->GetWindowTitle());
     const auto [width, height] = window_->FrameBufferSize();
     try {
         for (auto& [resource, rtv] : render_targets_) {
@@ -184,6 +191,6 @@ void SwapChain::Resize()
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
     }
-    ShouldResize(false);
+
     Finalize();
 }

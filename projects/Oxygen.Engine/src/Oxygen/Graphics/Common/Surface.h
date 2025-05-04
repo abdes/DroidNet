@@ -23,7 +23,6 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
 
-
 namespace oxygen::graphics {
 
 //! Represents an area where rendering occurs.
@@ -103,6 +102,8 @@ namespace detail {
         [[nodiscard]] OXYGEN_GFX_API auto FrameBufferSize() const -> platform::window::ExtentT;
 
         [[nodiscard]] OXYGEN_GFX_API auto Native() const -> NativeHandles;
+
+        [[nodiscard]] OXYGEN_GFX_API auto GetWindowTitle() const -> std::string;
 
     private:
         friend WindowSurface;
