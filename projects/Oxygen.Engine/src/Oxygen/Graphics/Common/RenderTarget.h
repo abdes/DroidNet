@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <Oxygen/Base/Macros.h>
 
 namespace oxygen::graphics {
