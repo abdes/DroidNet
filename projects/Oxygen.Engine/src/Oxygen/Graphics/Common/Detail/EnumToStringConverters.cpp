@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/Types/ResourceState.h>
 #include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
 auto oxygen::graphics::to_string(const QueueRole value) -> const char*
@@ -21,7 +22,8 @@ auto oxygen::graphics::to_string(const QueueRole value) -> const char*
     case QueueRole::kNone:
         return "Unknown";
     }
-    return "Unknown";
+
+    return "__NotSupported__";
 }
 
 auto oxygen::graphics::to_string(QueueAllocationPreference value) -> const char*
@@ -32,7 +34,8 @@ auto oxygen::graphics::to_string(QueueAllocationPreference value) -> const char*
     case QueueAllocationPreference::kDedicated:
         return "Dedicated";
     }
-    return "Unknown";
+
+    return "__NotSupported__";
 }
 
 auto oxygen::graphics::to_string(QueueSharingPreference value) -> const char*
@@ -43,7 +46,8 @@ auto oxygen::graphics::to_string(QueueSharingPreference value) -> const char*
     case QueueSharingPreference::kSeparate:
         return "Separate";
     }
-    return "Unknown";
+
+    return "__NotSupported__";
 }
 
 auto oxygen::graphics::to_string(const ShaderType value) -> const char*
@@ -69,5 +73,62 @@ auto oxygen::graphics::to_string(const ShaderType value) -> const char*
     case ShaderType::kCount:
         return "__count__";
     }
-    return "unknown";
+
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(const ResourceState value) -> const char*
+{
+    switch (value) {
+    case ResourceState::kUnknown:
+        return "Unknown";
+    case ResourceState::kUndefined:
+        return "Undefined";
+    case ResourceState::kVertexBuffer:
+        return "VertexBuffer";
+    case ResourceState::kConstantBuffer:
+        return "ConstantBuffer";
+    case ResourceState::kIndexBuffer:
+        return "IndexBuffer";
+    case ResourceState::kRenderTarget:
+        return "RenderTarget";
+    case ResourceState::kUnorderedAccess:
+        return "UnorderedAccess";
+    case ResourceState::kDepthWrite:
+        return "DepthWrite";
+    case ResourceState::kDepthRead:
+        return "DepthRead";
+    case ResourceState::kShaderResource:
+        return "ShaderResource";
+    case ResourceState::kStreamOut:
+        return "StreamOut";
+    case ResourceState::kIndirectArgument:
+        return "IndirectArgument";
+    case ResourceState::kCopyDest:
+        return "CopyDest";
+    case ResourceState::kCopySource:
+        return "CopySource";
+    case ResourceState::kResolveDest:
+        return "ResolveDest";
+    case ResourceState::kResolveSource:
+        return "ResolveSource";
+    case ResourceState::kInputAttachment:
+        return "InputAttachment";
+    case ResourceState::kPresent:
+        return "Present";
+    case ResourceState::kBuildASRead:
+        return "BuildASRead";
+    case ResourceState::kBuildASWrite:
+        return "BuildASWrite";
+    case ResourceState::kRayTracing:
+        return "RayTracing";
+    case ResourceState::kCommon:
+        return "Common";
+    case ResourceState::kShadingRate:
+        return "ShadingRate";
+    case ResourceState::kGenericRead:
+        return "GenericRead";
+    }
+
+    return "__NotSupported__";
 }
