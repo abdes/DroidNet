@@ -45,12 +45,6 @@ SwapChain::~SwapChain() noexcept
     ReleaseSwapChain();
 }
 
-void SwapChain::Prepare()
-{
-    // TODO: If the current back buffer is not in render target state,
-    // transition it to render target state.
-}
-
 void SwapChain::Present() const
 {
     DCHECK_NOTNULL_F(swap_chain_);
