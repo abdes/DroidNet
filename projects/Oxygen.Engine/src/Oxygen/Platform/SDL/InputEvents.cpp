@@ -165,14 +165,14 @@ auto MapKeyCode(const SDL_Keycode code)
 auto TranslateKeyboardEvent(SDL_Event const& event)
     -> std::unique_ptr<InputEvent>
 {
-    LOG_SCOPE_F(0, "Keyboard event");
-    DLOG_F(0, "type      = {}",
+    LOG_SCOPE_F(2, "Keyboard event");
+    DLOG_F(2, "type      = {}",
         ((event.key.type == SDL_EVENT_KEY_UP) ? "KEY_UP" : "KEY_DOWN"));
-    DLOG_F(0, "window id = {}", event.key.windowID);
-    DLOG_F(0, "repeat    = {}", event.key.repeat);
-    DLOG_F(0, "scancode  = {}", static_cast<uint32_t>(event.key.scancode));
-    DLOG_F(0, "keycode   = {}", event.key.key);
-    DLOG_F(0, "key name  = {}", GetKeyName(event.key.key));
+    DLOG_F(2, "window id = {}", event.key.windowID);
+    DLOG_F(2, "repeat    = {}", event.key.repeat);
+    DLOG_F(2, "scancode  = {}", static_cast<uint32_t>(event.key.scancode));
+    DLOG_F(2, "keycode   = {}", event.key.key);
+    DLOG_F(2, "key name  = {}", GetKeyName(event.key.key));
 
     const auto key_code = MapKeyCode(event.key.key);
     if (key_code == Key::kNone) {
@@ -180,7 +180,7 @@ auto TranslateKeyboardEvent(SDL_Event const& event)
         // Do not generate an event for it
         const uint32_t key = event.key.key;
         const uint32_t scan_code = event.key.scancode;
-        DLOG_F(0,
+        DLOG_F(2,
             "Keyboard event with key code = {} (scan code = {}) is not "
             "something we can handle. Ignoring event.",
             key,
@@ -217,8 +217,8 @@ auto MapMouseButton(auto button)
 auto TranslateMouseButtonEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent>
 {
-    LOG_SCOPE_F(0, "Mouse button event");
-    DLOG_F(0, "button = {}", event.button.button);
+    LOG_SCOPE_F(2, "Mouse button event");
+    DLOG_F(2, "button = {}", event.button.button);
     DLOG_F(
         2,
         "state  = {}",
@@ -253,9 +253,9 @@ auto TranslateMouseButtonEvent(const SDL_Event& event)
 auto TranslateMouseMotionEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent>
 {
-    LOG_SCOPE_F(0, "Mouse motion event");
-    DLOG_F(0, "dx = {}", event.motion.xrel);
-    DLOG_F(0, "dy = {}", event.motion.yrel);
+    LOG_SCOPE_F(2, "Mouse motion event");
+    DLOG_F(2, "dx = {}", event.motion.xrel);
+    DLOG_F(2, "dy = {}", event.motion.yrel);
 
     auto motion_event = std::make_unique<MouseMotionEvent>(
         std::chrono::duration_cast<oxygen::TimePoint>(
@@ -275,9 +275,9 @@ auto TranslateMouseMotionEvent(const SDL_Event& event)
 auto TranslateMouseWheelEvent(const SDL_Event& event)
     -> std::unique_ptr<InputEvent>
 {
-    LOG_SCOPE_F(0, "Mouse wheel event");
-    DLOG_F(0, "dx = {}", event.wheel.x);
-    DLOG_F(0, "dy = {}", event.wheel.y);
+    LOG_SCOPE_F(2, "Mouse wheel event");
+    DLOG_F(2, "dx = {}", event.wheel.x);
+    DLOG_F(2, "dy = {}", event.wheel.y);
 
     const auto direction = event.wheel.direction == SDL_MOUSEWHEEL_NORMAL ? 1.0F : -1.0F;
 
