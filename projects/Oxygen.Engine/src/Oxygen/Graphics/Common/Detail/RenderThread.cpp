@@ -14,6 +14,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
@@ -29,13 +30,16 @@ using oxygen::graphics::detail::RenderThread;
 namespace {
 class RenderTaskDispatcher {
 public:
-    RenderTaskDispatcher(uint32_t frames_in_flight)
+    explicit RenderTaskDispatcher(const uint32_t frames_in_flight)
         : frames_in_flight_(frames_in_flight)
     {
         DCHECK_GT_F(frames_in_flight_, 0UL, "The number of frames in flight must be > 0");
     }
 
     ~RenderTaskDispatcher() { Stop(); }
+
+    OXYGEN_MAKE_NON_COPYABLE(RenderTaskDispatcher)
+    OXYGEN_MAKE_NON_MOVABLE(RenderTaskDispatcher)
 
     void Stop()
     {
@@ -45,27 +49,29 @@ public:
         DLOG_F(INFO, "Stopping render task dispatcher");
         running_ = false;
         {
-            std::lock_guard<std::mutex> lock(mutex_work_queue_);
+            std::lock_guard lock(mutex_work_queue_);
             cv_ready_.notify_all();
         }
     }
 
     auto IsRunning() const -> bool { return running_; }
 
-    // Called from the game/main thread to submit a frame for rendering.
+    // ReSharper disable once CppMemberFunctionMayBeConst
     void Submit(FrameRenderTask task)
     {
         std::unique_lock<std::mutex> lock(mutex_work_queue_);
         // Wait if the queue is full (frame lag)
-        cv_ready_.wait(lock, [&] { return work_queue_.size() < static_cast<size_t>(frames_in_flight_) || !running_; });
+        cv_ready_.wait(lock, [&] {
+            return work_queue_.size() < static_cast<size_t>(frames_in_flight_) || !running_;
+        });
         work_queue_.emplace(std::move(task));
         cv_ready_.notify_all();
     }
 
     // Wait for and retrieve the next render task
-    auto GetNextTask() -> FrameRenderTask
+    auto GetNextTask() const -> FrameRenderTask
     {
-        std::unique_lock<std::mutex> lock(mutex_work_queue_);
+        std::unique_lock lock(mutex_work_queue_);
 
         CHECK_F(!work_queue_.empty(), "GetNextTask() called with empty task queue");
 
@@ -89,8 +95,10 @@ private:
     {
         running_ = true;
         while (running_) {
-            std::unique_lock<std::mutex> lock(mutex_work_queue_);
-            cv_ready_.wait(lock, [&] { return !work_queue_.empty() || !running_; });
+            std::unique_lock lock(mutex_work_queue_);
+            cv_ready_.wait(lock, [&] {
+                return !work_queue_.empty() || !running_;
+            });
             // The event loop runs on the render thread, and coroutines resumed
             // to process the render tasks will also be run on the render
             // thread.
@@ -113,44 +121,52 @@ template <>
 struct oxygen::co::EventLoopTraits<RenderTaskDispatcher> {
     static void Run(RenderTaskDispatcher& rtd) { rtd.EventLoop(); }
     static void Stop(RenderTaskDispatcher& rtd) { rtd.Stop(); }
-    static auto IsRunning(RenderTaskDispatcher& rtd) -> bool { return rtd.IsRunning(); }
+    static auto IsRunning(const RenderTaskDispatcher& rtd) -> bool { return rtd.IsRunning(); }
     static auto EventLoopId(RenderTaskDispatcher& rtd) -> EventLoopID { return EventLoopID(&rtd); }
 };
 
 struct RenderThread::Impl {
+    std::string_view debug_name {};
+    co::Event stop;
+    RenderTaskDispatcher dispatcher;
+    std::thread thread;
+    BeginFrameFn begin_frame_fn;
+    EndFrameFn end_frame_fn;
+
     Impl(
-        uint32_t frames_in_flight,
-        RenderThread::BeginFrameFn begin_frame_fn,
-        RenderThread::EndFrameFn end_frame_fn)
-        : dispatcher_(frames_in_flight)
-        , begin_frame_fn_(std::move(begin_frame_fn))
-        , end_frame_fn_(std::move(end_frame_fn))
+        const uint32_t frames_in_flight,
+        BeginFrameFn begin_frame,
+        EndFrameFn end_frame)
+        : dispatcher(frames_in_flight)
+        , begin_frame_fn(std::move(begin_frame))
+        , end_frame_fn(std::move(end_frame))
     {
         DCHECK_LT_F(frames_in_flight, kFrameBufferCount,
             "The number of frames in flight must be < {}", kFrameBufferCount);
-        DCHECK_F(begin_frame_fn_.operator bool());
-        DCHECK_F(end_frame_fn_.operator bool());
+        DCHECK_F(begin_frame_fn.operator bool());
+        DCHECK_F(end_frame_fn.operator bool());
     }
 
-    auto RenderLoopAsync() -> oxygen::co::Co<>
+    auto RenderLoopAsync() -> co::Co<>
     {
-        DCHECK_F(!dispatcher_.IsRunning());
+        DCHECK_F(!dispatcher.IsRunning());
         while (true) {
             // Wait for work to be available using the parking lot
-            co_await dispatcher_.WorkAvailable();
+            co_await dispatcher.WorkAvailable();
 
             // If work is available but the render thread is not running, then
-            // it is shutting down and we need to stop the render loop.
-            if (!dispatcher_.IsRunning()) {
+            // it is shutting down, and we need to stop the render loop.
+            if (!dispatcher.IsRunning()) {
                 break;
             }
 
-            LOG_SCOPE_F(1, fmt::format("Render frame ({})", debug_name_).c_str());
-            auto render_frame = dispatcher_.GetNextTask();
+            LOG_SCOPE_F(1, "Render frame");
+            DLOG_F(1, "Renderer: {}", debug_name);
+            auto render_frame = dispatcher.GetNextTask();
             DCHECK_F(render_frame.operator bool());
 
-            if (begin_frame_fn_) {
-                begin_frame_fn_();
+            if (begin_frame_fn) {
+                begin_frame_fn();
             }
 
             // Execute the application rendering task, asynchronously. Such task
@@ -158,30 +174,25 @@ struct RenderThread::Impl {
             // that need to complete together. Synchronization and completion
             // management are the responsibility of the application.
             {
-                LOG_SCOPE_F(1, "Recording...");
-                // TODO: pass the render target to the task
+                LOG_SCOPE_F(1, "Execute render task...");
                 co_await render_frame();
             }
 
-            if (end_frame_fn_) {
-                end_frame_fn_();
+            if (end_frame_fn) {
+                end_frame_fn();
             }
         }
     }
-
-    std::string_view debug_name_ {};
-    oxygen::co::Event stop_;
-    RenderTaskDispatcher dispatcher_;
-    std::thread thread_;
-    BeginFrameFn begin_frame_fn_;
-    EndFrameFn end_frame_fn_;
 };
 
 RenderThread::RenderThread(
     uint32_t frames_in_flight,
-    BeginFrameFn begin_frame_fn,
-    EndFrameFn end_frame_fn)
-    : impl_(std::make_unique<RenderThread::Impl>(frames_in_flight, std::move(begin_frame_fn), std::move(end_frame_fn)))
+    BeginFrameFn begin_frame,
+    EndFrameFn end_frame)
+    : impl_(std::make_unique<Impl>(
+          frames_in_flight,
+          std::move(begin_frame),
+          std::move(end_frame)))
 {
     DCHECK_GT_F(frames_in_flight, 0UL, "The number of frames in flight must be > 0");
     Start();
@@ -189,64 +200,65 @@ RenderThread::RenderThread(
 
 RenderThread::~RenderThread()
 {
-    if (!impl_->stop_.Triggered()) {
+    if (!impl_->stop.Triggered()) {
         Stop();
     }
-    if (impl_->thread_.joinable()) {
-        impl_->thread_.join();
+    if (impl_->thread.joinable()) {
+        impl_->thread.join();
     }
 }
 
 void RenderThread::Start()
 {
-    impl_->thread_ = std::thread([this]() {
+    impl_->thread = std::thread([this]() {
         loguru::set_thread_name("render");
         DLOG_F(INFO, "Render thread started");
-        oxygen::co::Run(impl_->dispatcher_, [this]() -> oxygen::co::Co<> {
-            // NOLINTNEXTLINE(*-capturing-lambda-coroutines, *-reference-coroutine-parameters)
+        co::Run(impl_->dispatcher, [this]() -> co::Co<> {
             OXCO_WITH_NURSERY(n)
             {
                 // Start the render loop coroutine, which will run on the render
                 // thread.
-                n.Start(&RenderThread::Impl::RenderLoopAsync, impl_.get());
+                n.Start(&Impl::RenderLoopAsync, impl_.get());
 
                 // Start a background task to handle when the render thread
                 // should be stopped. By canceling the nursery, we trigger
                 // cancellation of all its running coroutines, thus terminating
                 // the execution of the render thread.
-                n.Start([this, &n]() -> oxygen::co::Co<> {
-                    co_await impl_->stop_;
+                n.Start([this, &n]() -> co::Co<> {
+                    co_await impl_->stop;
                     DLOG_F(1, "Cancel RenderThread nursery");
                     n.Cancel();
                 });
 
                 // Wait for all tasks to complete
-                co_return oxygen::co::kJoin;
+                co_return co::kJoin;
             };
         });
-        impl_->dispatcher_.Stop();
+        impl_->dispatcher.Stop();
         DLOG_F(INFO, "Render thread completed");
     });
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 void RenderThread::Submit(FrameRenderTask task)
 {
-    impl_->dispatcher_.Submit(std::move(task));
+    impl_->dispatcher.Submit(std::move(task));
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 void RenderThread::Stop()
 {
-    if (!impl_->dispatcher_.IsRunning()) {
+    if (!impl_->dispatcher.IsRunning()) {
         return;
     }
 
-    impl_->stop_.Trigger();
-    if (impl_->thread_.joinable()) {
-        impl_->thread_.join();
+    impl_->stop.Trigger();
+    if (impl_->thread.joinable()) {
+        impl_->thread.join();
     }
 }
 
-void RenderThread::UpdateDependencies(const oxygen::Composition& composition)
+void RenderThread::UpdateDependencies(const Composition& composition)
 {
-    impl_->debug_name_ = composition.GetComponent<oxygen::ObjectMetaData>().GetName();
+    impl_->debug_name = composition.GetComponent<ObjectMetaData>().GetName();
 }

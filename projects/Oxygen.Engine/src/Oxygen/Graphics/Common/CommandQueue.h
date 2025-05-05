@@ -13,7 +13,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -23,18 +22,12 @@ class CommandList;
 
 class CommandQueue : public Composition, public Named {
 public:
-    explicit CommandQueue(std::string_view name)
-    {
-        AddComponent<ObjectMetaData>(name);
-    }
+    OXYGEN_GFX_API explicit CommandQueue(std::string_view name);
 
-    ~CommandQueue() override
-    {
-        DLOG_F(INFO, "CommandQueue destroyed: {}", GetComponent<ObjectMetaData>().GetName());
-    }
+    OXYGEN_GFX_API ~CommandQueue() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
-    OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
+    OXYGEN_MAKE_NON_COPYABLE(CommandQueue)
+    OXYGEN_MAKE_NON_MOVABLE(CommandQueue)
 
     //! Set the counter to the specified value on the CPU side.
     /*!
@@ -86,15 +79,8 @@ public:
 
     [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;
 
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-    {
-        return GetComponent<ObjectMetaData>().GetName();
-    }
-
-    void SetName(std::string_view name) noexcept override
-    {
-        GetComponent<ObjectMetaData>().SetName(name);
-    }
+    [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept -> std::string_view override;
+    OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
 };
 
 } // namespace oxygen::graphics

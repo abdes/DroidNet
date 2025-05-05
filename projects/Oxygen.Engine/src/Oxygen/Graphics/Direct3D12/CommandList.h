@@ -24,11 +24,6 @@ class CommandList final : public graphics::CommandList {
     using Base = graphics::CommandList;
 
 public:
-    explicit CommandList(QueueRole type)
-        : CommandList(type, "Command List")
-    {
-    }
-
     CommandList(QueueRole type, std::string_view name);
 
     ~CommandList() noexcept override;

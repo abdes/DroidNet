@@ -5,13 +5,34 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 
 using oxygen::graphics::CommandQueue;
+
+CommandQueue::CommandQueue(std::string_view name)
+{
+    AddComponent<ObjectMetaData>(name);
+}
+
+CommandQueue::~CommandQueue()
+{
+    DLOG_F(INFO, "CommandQueue destroyed: {}", GetComponent<ObjectMetaData>().GetName());
+}
 
 void CommandQueue::Flush() const
 {
     DLOG_F(1, "CommandQueue[{}] flushed", GetName());
     Signal(GetCompletedValue() + 1);
     Wait(GetCurrentValue());
+}
+
+auto CommandQueue::GetName() const noexcept -> std::string_view
+{
+    return GetComponent<ObjectMetaData>().GetName();
+}
+
+void CommandQueue::SetName(const std::string_view name) noexcept
+{
+    GetComponent<ObjectMetaData>().SetName(name);
 }
