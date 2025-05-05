@@ -61,17 +61,17 @@ enum class ResourceState : uint32_t {
     //! The resource is used as the source in a resolve operation (Graphics).
     kResolveSource = 1 << 14,
 
-    //! The resource is used as an input attachment in a render pass subpass (Graphics).
+    //! The resource is used as an input attachment in a render pass (Graphics).
     kInputAttachment = 1 << 15,
 
     //! The resource is used for swapchain presentation (Graphics).
     kPresent = 1 << 16,
 
-    //! The resource is used as vertex/index/instance data in acceleration structure builds or as source in AS copy operations (Graphics, Compute).
-    kBuildASRead = 1 << 17,
+    //! The resource is used as vertex/index/instance data in AS builds or as source in AS copy operations (Graphics, Compute).
+    kBuildAccelStructureRead = 1 << 17,
 
-    //! The resource is used as the target for acceleration structure building or AS copy operations (Graphics, Compute).
-    kBuildASWrite = 1 << 18,
+    //! The resource is used as the target for AS building or AS copy operations (Graphics, Compute).
+    kBuildAccelStructureWrite = 1 << 18,
 
     //! The resource is used as an acceleration structure shader resource in a ray tracing operation (Graphics, Compute).
     kRayTracing = 1 << 19,

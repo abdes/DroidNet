@@ -26,7 +26,7 @@ auto oxygen::graphics::to_string(const QueueRole value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(QueueAllocationPreference value) -> const char*
+auto oxygen::graphics::to_string(const QueueAllocationPreference value) -> const char*
 {
     switch (value) {
     case QueueAllocationPreference::kAllInOne:
@@ -38,7 +38,7 @@ auto oxygen::graphics::to_string(QueueAllocationPreference value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(QueueSharingPreference value) -> const char*
+auto oxygen::graphics::to_string(const QueueSharingPreference value) -> const char*
 {
     switch (value) {
     case QueueSharingPreference::kShared:
@@ -116,10 +116,10 @@ auto oxygen::graphics::to_string(const ResourceState value) -> const char*
         return "InputAttachment";
     case ResourceState::kPresent:
         return "Present";
-    case ResourceState::kBuildASRead:
-        return "BuildASRead";
-    case ResourceState::kBuildASWrite:
-        return "BuildASWrite";
+    case ResourceState::kBuildAccelStructureRead:
+        return "BuildAccelStructureRead";
+    case ResourceState::kBuildAccelStructureWrite:
+        return "BuildAccelStructureWrite";
     case ResourceState::kRayTracing:
         return "RayTracing";
     case ResourceState::kCommon:
