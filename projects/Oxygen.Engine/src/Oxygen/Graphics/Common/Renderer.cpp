@@ -180,7 +180,6 @@ void Renderer::BeginFrame()
 
     DCHECK_F(!surface_weak_.expired());
     auto surface = surface_weak_.lock();
-    surface->Prepare();
     HandleSurfaceResize(*surface);
 }
 

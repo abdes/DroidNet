@@ -45,9 +45,6 @@ public:
     //! Handle a surface resize.
     virtual void Resize() = 0;
 
-    //! Prepare the surface for a new frame.
-    virtual void Prepare() = 0;
-
     virtual auto GetRenderTarget() const -> std::unique_ptr<RenderTarget> = 0;
 
     //! Present the current frame if the surface supports it.
