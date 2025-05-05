@@ -39,7 +39,7 @@ public:
     [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
 
     OXYGEN_GFX_API virtual void Begin();
-    OXYGEN_GFX_API virtual auto End() -> graphics::CommandList*;
+    OXYGEN_GFX_API virtual auto End() -> CommandList*;
 
     // Graphics commands
     virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) = 0;
