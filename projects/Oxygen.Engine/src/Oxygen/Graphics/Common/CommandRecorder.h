@@ -33,8 +33,8 @@ public:
 
     OXYGEN_GFX_API virtual ~CommandRecorder() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
-    OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
+    OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
+    OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
 
     [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
 
