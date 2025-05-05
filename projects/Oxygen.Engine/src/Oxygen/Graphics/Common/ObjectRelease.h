@@ -29,26 +29,15 @@ void ObjectRelease(T*& resource) noexcept
     }
 }
 
-//! Immediately releases a resource that has a `Release()` method, resets the
-//! reference to it, and sets the provided pointer to `nullptr`.
-template <typename T>
-void ObjectRelease(std::shared_ptr<T>& resource) noexcept
-    requires HasReleaseMethod<T>
-{
-    if (resource) {
-        resource->Release();
-        resource = nullptr;
-    }
-}
-
 //! Immediately releases a resource with no `Release()` method, resets the
 //! reference to it and sets the provided pointer to `nullptr`.
 template <typename T>
 void ObjectRelease(std::shared_ptr<T>& resource) noexcept
 {
-    if (resource) {
-        resource = nullptr;
-    }
+    // This will reset the shared_ptr, call the object destructor and nullify
+    // the referenced variable/member. Note that the actual release of the
+    // graphics resource must be done in the destructor of the object.
+    resource = {};
 }
 
-} // namespace oxygen::graphics::d3d12::detail
+} // namespace oxygen::graphics

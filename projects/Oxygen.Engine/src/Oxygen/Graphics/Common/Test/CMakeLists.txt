@@ -44,3 +44,4 @@ add_test(
 include(GTestHelpers)
 
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
+m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
