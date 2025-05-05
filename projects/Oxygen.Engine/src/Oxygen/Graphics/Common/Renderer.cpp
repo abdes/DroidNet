@@ -7,11 +7,10 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <ranges>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
-
-#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
@@ -20,12 +19,9 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
-
-// #include <Oxygen/Graphics/Common/CommandList.h> // Needed to forward the command list ptr
 
 using oxygen::graphics::Renderer;
 using oxygen::graphics::detail::RenderThread;
@@ -33,7 +29,7 @@ using oxygen::graphics::detail::RenderThread;
 //! Default constructor, sets the object name.
 Renderer::Renderer(
     std::string_view name,
-    std::weak_ptr<oxygen::Graphics> gfx_weak,
+    std::weak_ptr<Graphics> gfx_weak,
     std::weak_ptr<Surface> surface_weak,
     uint32_t frames_in_flight)
     : gfx_weak_(std::move(gfx_weak))
@@ -66,28 +62,25 @@ Renderer::~Renderer()
     DLOG_F(INFO, "Renderer destroyed");
 }
 
+// ReSharper disable once CppMemberFunctionMayBeConst
 void Renderer::Stop()
 {
     GetComponent<RenderThread>().Stop();
 }
 
-auto Renderer::GetGraphics() const noexcept -> std::shared_ptr<Graphics>
-{
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
-    return gfx_weak_.lock();
-}
-
+// ReSharper disable once CppMemberFunctionMayBeConst
 void Renderer::Submit(FrameRenderTask task)
 {
     GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_view command_list_name)
-    -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>
+auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const std::string_view command_list_name)
+    -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
-    auto gfx = GetGraphics();
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    const auto gfx = gfx_weak_.lock();
 
-    auto queue = gfx->GetCommandQueue(queue_name);
+    const auto queue = gfx->GetCommandQueue(queue_name);
     if (!queue) {
         LOG_F(ERROR, "Command queue '{}' not found", queue_name);
         return nullptr;
@@ -116,30 +109,29 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
     // queue and command list when the recording is done.
     return {
         recorder.release(),
-        [self_weak, queue_name_str, cmd_list = std::move(cmd_list)](graphics::CommandRecorder* rec) mutable {
+        [self_weak, queue_name_str, cmd_list = std::move(cmd_list)](CommandRecorder* rec) mutable {
             if (rec == nullptr) {
                 return;
             }
             try {
                 // End recording
-                auto* completed_cmd = rec->End();
-                if (completed_cmd != nullptr) {
-                    auto* queue = rec->GetTargetQueue();
-                    DCHECK_NOTNULL_F(queue);
+                if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
+                    auto* target_queue = rec->GetTargetQueue();
+                    DCHECK_NOTNULL_F(target_queue);
 
                     // Submit the command list
-                    queue->Submit(*completed_cmd);
+                    target_queue->Submit(*completed_cmd);
                     completed_cmd->OnSubmitted();
 
                     // Get timeline value for tracking completion
-                    uint64_t timeline_value = queue->Signal();
+                    const uint64_t timeline_value = target_queue->Signal();
 
                     // Store timeline value and command list in the current frame
-                    if (auto renderer = self_weak.lock()) {
-                        uint32_t frame_idx = renderer->CurrentFrameIndex();
-                        Frame& current_frame = renderer->frames_[frame_idx];
-                        current_frame.timeline_values[queue_name_str] = timeline_value;
-                        current_frame.pending_command_lists.push_back(cmd_list);
+                    if (const auto renderer = self_weak.lock()) {
+                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
+                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
+                        timeline_values[queue_name_str] = timeline_value;
+                        pending_command_lists.push_back(cmd_list);
                     }
                 }
             } catch (const std::exception& ex) {
@@ -154,16 +146,19 @@ auto Renderer::AcquireCommandRecorder(std::string_view queue_name, std::string_v
 
 void Renderer::BeginFrame()
 {
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+
     if (surface_weak_.expired()) {
         throw std::runtime_error("Cannot BeginFrame when surface is not valid");
     }
 
-    LOG_SCOPE_F(1, fmt::format("[{}] BeginFrame", CurrentFrameIndex()).c_str());
+    LOG_SCOPE_FUNCTION(1);
+    DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
 
     // Wait for the GPU to finish executing the previous frame
-    Frame& previous_frame = frames_[CurrentFrameIndex()];
-    for (const auto& [queue_name, fence_value] : previous_frame.timeline_values) {
-        auto gfx = GetGraphics();
+    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+    for (const auto& [queue_name, fence_value] : timeline_values) {
+        const auto gfx = gfx_weak_.lock();
         auto queue = gfx->GetCommandQueue(queue_name);
         DCHECK_NOTNULL_F(queue, "Command queue '{}' not found", queue_name);
         if (queue) {
@@ -172,14 +167,14 @@ void Renderer::BeginFrame()
     }
 
     // Release all completed command lists and call OnExecuted
-    for (auto& cmd_list : previous_frame.pending_command_lists) {
+    for (const auto& cmd_list : pending_command_lists) {
         cmd_list->OnExecuted();
     }
-    previous_frame.pending_command_lists.clear();
-    previous_frame.timeline_values.clear();
+    pending_command_lists.clear();
+    timeline_values.clear();
 
     DCHECK_F(!surface_weak_.expired());
-    auto surface = surface_weak_.lock();
+    const auto surface = surface_weak_.lock();
     HandleSurfaceResize(*surface);
 }
 
@@ -187,8 +182,10 @@ void Renderer::EndFrame()
 {
     CHECK_F(!surface_weak_.expired(), "Cannot BeginFrame when surface is not valid");
 
-    LOG_SCOPE_F(1, fmt::format("[{}] EndFrame", CurrentFrameIndex()).c_str());
-    auto surface = surface_weak_.lock();
+    LOG_SCOPE_FUNCTION(1);
+    DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
+
+    const auto surface = surface_weak_.lock();
     try {
         surface->Present();
     } catch (const std::exception& e) {
@@ -200,16 +197,19 @@ void Renderer::EndFrame()
 
 void Renderer::HandleSurfaceResize(Surface& surface)
 {
+    DCHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+
     if (!surface.ShouldResize()) {
         return;
     }
+
     // Collect all queues that have pending work across any frame
     std::unordered_set<std::string> active_queues;
 
     // Check all frames for pending work
     for (uint32_t i = 0; i < frame_count_; ++i) {
         if (i != CurrentFrameIndex()) { // Already processed current frame above
-            for (const auto& [queue_name, _] : frames_[i].timeline_values) {
+            for (const auto& queue_name : frames_[i].timeline_values | std::views::keys) {
                 active_queues.insert(queue_name);
             }
         }
@@ -217,10 +217,9 @@ void Renderer::HandleSurfaceResize(Surface& surface)
 
     // Only flush queues with pending work from this renderer
     if (!active_queues.empty()) {
-        auto gfx = GetGraphics();
+        const auto gfx = gfx_weak_.lock();
         for (const auto& queue_name : active_queues) {
-            auto queue = gfx->GetCommandQueue(queue_name);
-            if (queue) {
+            if (const auto queue = gfx->GetCommandQueue(queue_name)) {
                 DLOG_F(INFO, "Flushing queue '{}' during resize", queue_name);
                 queue->Flush();
             }
