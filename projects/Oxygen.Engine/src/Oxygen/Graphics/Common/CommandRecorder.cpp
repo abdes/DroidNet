@@ -25,7 +25,7 @@ void CommandRecorder::Begin()
     }
 }
 
-auto CommandRecorder::End() -> graphics::CommandList*
+auto CommandRecorder::End() -> CommandList*
 {
     if (command_list_ == nullptr) {
         return {};
