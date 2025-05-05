@@ -324,10 +324,11 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendErrorHandling)
     EXPECT_CALL(*platform, LoadModule(testing::_))
         .WillOnce(testing::Throw(std::runtime_error("Module loading failed")));
 
-    // This should not throw but return an empty pointer
     oxygen::GraphicsConfig config;
-    auto backend = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config);
-    EXPECT_TRUE(backend.expired());
+    EXPECT_THROW(
+        auto _ = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config),
+        std::runtime_error
+    );
 }
 
 // Test loading a backend after previous backend was unloaded
