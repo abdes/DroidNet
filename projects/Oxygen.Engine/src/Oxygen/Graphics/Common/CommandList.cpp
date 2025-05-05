@@ -4,9 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 
 using oxygen::graphics::CommandList;
+
+CommandList::CommandList(const QueueRole type, std::string_view name)
+    : type_(type)
+    , state_(State::kFree)
+{
+    AddComponent<ObjectMetaData>(name);
+    DLOG_F(INFO, "CommandList created: {}", name);
+}
+
+CommandList::~CommandList()
+{
+    DLOG_F(INFO, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
+}
+
+auto CommandList::GetName() const noexcept -> std::string_view
+{
+    return GetComponent<ObjectMetaData>().GetName();
+}
+
+void CommandList::SetName(const std::string_view name) noexcept
+{
+    GetComponent<ObjectMetaData>().SetName(name);
+}
 
 void CommandList::OnBeginRecording()
 {

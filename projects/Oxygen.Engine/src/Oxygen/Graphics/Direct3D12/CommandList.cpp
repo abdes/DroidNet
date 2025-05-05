@@ -47,7 +47,6 @@ using oxygen::windows::ThrowOnFailed;
 
 void CommandList::ReleaseCommandList() noexcept
 {
-    // TODO: user of command list must ensure the command list is no longer used
     if (command_allocator_ != nullptr) {
         command_allocator_->Release();
         command_allocator_ = nullptr;
@@ -58,11 +57,9 @@ void CommandList::ReleaseCommandList() noexcept
     }
 }
 
-CommandList::CommandList(QueueRole type, std::string_view name)
+CommandList::CommandList(QueueRole type, const std::string_view name)
     : Base(type, name)
 {
-    // TODO: consider if we want to reuse command list objects
-
     D3D12_COMMAND_LIST_TYPE d3d12_type; // NOLINT(*-init-variables)
     switch (type) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
     {
@@ -106,12 +103,12 @@ CommandList::CommandList(QueueRole type, std::string_view name)
     NameObject(command_list_, name);
 }
 
-CommandList::~CommandList()
+CommandList::~CommandList() noexcept
 {
     ReleaseCommandList();
 }
 
-void CommandList::SetName(std::string_view name) noexcept
+void CommandList::SetName(const std::string_view name) noexcept
 {
     Base::SetName(name);
     NameObject(command_list_, name);

@@ -8,11 +8,9 @@
 
 #include <string_view>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -23,38 +21,23 @@ class Renderer;
 
 class CommandList : public Composition, public Named {
 public:
-    explicit CommandList(QueueRole type)
-        : CommandList(type, "Command List")
-    {
-    }
+    OXYGEN_GFX_API CommandList(QueueRole type, std::string_view name);
 
-    CommandList(QueueRole type, std::string_view name)
-        : type_(type)
-        , state_(State::kFree)
-    {
-        AddComponent<ObjectMetaData>(name);
-        DLOG_F(INFO, "CommandList created: {}", name);
-    }
+    //! Destroys the command list after releasing all graphics resources it was
+    //! using.
+    /*!
+     \note It is the responsibility of the user to ensure the command list (or
+     its associated resources) are not in use by ongoing GPU operations.
+    */
+    OXYGEN_GFX_API ~CommandList() override;
 
-    ~CommandList() override
-    {
-        DLOG_F(INFO, "CommandList destroyed: {}", GetComponent<ObjectMetaData>().GetName());
-    }
+    OXYGEN_MAKE_NON_COPYABLE(CommandList)
+    OXYGEN_MAKE_NON_MOVABLE(CommandList)
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandList);
-    OXYGEN_MAKE_NON_MOVABLE(CommandList);
+    [[nodiscard]] OXYGEN_GFX_API auto GetQueueRole() const { return type_; }
 
-    [[nodiscard]] auto GetQueueRole() const { return type_; }
-
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-    {
-        return GetComponent<ObjectMetaData>().GetName();
-    }
-
-    void SetName(std::string_view name) noexcept override
-    {
-        GetComponent<ObjectMetaData>().SetName(name);
-    }
+    [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept -> std::string_view override;
+    OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
 
 protected:
     enum class State : int8_t {
@@ -67,11 +50,11 @@ protected:
     };
     [[nodiscard]] auto GetState() const { return state_; }
 
-    friend class oxygen::graphics::CommandRecorder;
+    friend class CommandRecorder;
     OXYGEN_GFX_API virtual void OnBeginRecording();
     OXYGEN_GFX_API virtual void OnEndRecording();
 
-    friend class oxygen::graphics::Renderer;
+    friend class Renderer;
     OXYGEN_GFX_API virtual void OnSubmitted();
     OXYGEN_GFX_API virtual void OnExecuted();
 

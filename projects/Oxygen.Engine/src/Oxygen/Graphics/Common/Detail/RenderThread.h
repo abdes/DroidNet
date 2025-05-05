@@ -13,7 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 
 namespace oxygen::graphics {
@@ -21,28 +21,29 @@ namespace oxygen::graphics {
 class RenderTarget;
 
 namespace detail {
-    class RenderThread : public oxygen::Component {
+    class RenderThread final : public Component {
         OXYGEN_COMPONENT(RenderThread)
         OXYGEN_COMPONENT_REQUIRES(oxygen::ObjectMetaData)
     public:
         using BeginFrameFn = std::function<void()>;
         using EndFrameFn = std::function<void()>;
 
-        RenderThread(uint32_t frames_in_flight = kFrameBufferCount - 1,
-            BeginFrameFn begin_frame_fn = nullptr,
-            EndFrameFn end_frame_fn = nullptr);
+        explicit RenderThread(
+            uint32_t frames_in_flight,
+            BeginFrameFn begin_frame = nullptr,
+            EndFrameFn end_frame = nullptr);
 
         ~RenderThread() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(RenderThread); //< Non-copyable.
-        OXYGEN_DEFAULT_MOVABLE(RenderThread); //< Non-moveable.
+        OXYGEN_MAKE_NON_COPYABLE(RenderThread)
+        OXYGEN_DEFAULT_MOVABLE(RenderThread)
 
         void Submit(FrameRenderTask task);
 
         void Stop();
 
     protected:
-        void UpdateDependencies(const oxygen::Composition& composition) override;
+        void UpdateDependencies(const Composition& composition) override;
 
     private:
         void Start();
