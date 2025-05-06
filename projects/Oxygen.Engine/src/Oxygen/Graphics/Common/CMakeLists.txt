@@ -88,6 +88,7 @@ target_sources(
       "Shaders.h"
       "Surface.h"
       "SynchronizationCounter.h"
+      "Detail/NativeObject.h"
       "Types/EngineResources.h"
       "Types/Format.h"
       "Types/Queues.h"

@@ -45,3 +45,4 @@ include(GTestHelpers)
 
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
 m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
+m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
