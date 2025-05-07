@@ -8,11 +8,13 @@
 
 #include <cstdint>
 
+#include <Oxygen/Graphics/Common/api_export.h>
+
 namespace oxygen::graphics {
 
 //! Represents the usage state of a resource in a 3D rendering engine.
 //! Supports Direct3D 12 and Vulkan interchangeably.
-enum class ResourceState : uint32_t {
+enum class ResourceStates : uint32_t {
     //! The resource state is unknown to the engine and is managed by the application (None).
     kUnknown = 0,
 
@@ -87,7 +89,57 @@ enum class ResourceState : uint32_t {
     kGenericRead = kVertexBuffer | kConstantBuffer | kIndexBuffer | kShaderResource | kIndirectArgument | kCopySource
 };
 
+// Enable bitwise operations for ResourceStates
+inline auto operator&(const ResourceStates lhs, const ResourceStates rhs) -> ResourceStates
+{
+    using T = std::underlying_type_t<ResourceStates>;
+    return static_cast<ResourceStates>(static_cast<T>(lhs) & static_cast<T>(rhs));
+}
+
+inline auto operator|(const ResourceStates lhs, const ResourceStates rhs) -> ResourceStates
+{
+    using T = std::underlying_type_t<ResourceStates>;
+    return static_cast<ResourceStates>(static_cast<T>(lhs) | static_cast<T>(rhs));
+}
+
+inline auto operator|=(ResourceStates& lhs, const ResourceStates rhs) -> ResourceStates&
+{
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+inline auto operator&=(ResourceStates& lhs, const ResourceStates rhs) -> ResourceStates&
+{
+    lhs = lhs & rhs;
+    return lhs;
+}
+
 //! String representation of enum values in `QueueFamilyType`.
-OXYGEN_GFX_API auto to_string(ResourceState value) -> const char*;
+OXYGEN_GFX_API auto to_string(ResourceStates value) -> const char*;
+
+//! Specifies the tracking mode for resource state transitions managed by the
+//! `CommandList`.
+enum class ResourceStateTrackingMode : uint8_t {
+    //! Default tracking mode. The application will manually update the resource
+    //! state using `UpdateResourceState` method in `CommandList`. The command
+    //! list will insert necessary barriers, avoiding redundant transitions.
+    kDefault,
+
+    //! Similar to `kDefault`, but the command list will always ensure that
+    //! resource is in the initial state, provided when `TrackResourceState` was
+    //! called, when it leaves the command list.
+    kKeepInitialState,
+
+    //! This is useful for static resources like material textures and vertex
+    //! buffers: after initialization, their contents never change, and they can
+    //! be kept in the same state without ever being transitioned. Permanent
+    //! resources cannot be transitioned using `UpdateResourceState`, and the
+    //! command list will discard such requests and log them as errors in
+    //! development builds.
+    kPermanentState
+};
+
+//! String representation of enum values in `QueueFamilyType`.
+OXYGEN_GFX_API auto to_string(ResourceStateTrackingMode value) -> const char*;
 
 } // namespace oxygen::graphics

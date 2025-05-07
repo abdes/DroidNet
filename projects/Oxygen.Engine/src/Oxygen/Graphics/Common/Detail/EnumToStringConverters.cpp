@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <sstream>
+#include <string>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
-#include <Oxygen/Graphics/Common/Types/ResourceState.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
 auto oxygen::graphics::to_string(const QueueRole value) -> const char*
@@ -77,57 +81,75 @@ auto oxygen::graphics::to_string(const ShaderType value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(const ResourceState value) -> const char*
+auto oxygen::graphics::to_string(const ResourceStates value) -> const char*
+{
+    if (value == ResourceStates::kUnknown) {
+        return "Unknown";
+    }
+
+    std::ostringstream result;
+    bool first = true;
+
+    // Bitmask to track all checked states
+    auto checked_states = ResourceStates::kUnknown;
+
+    // Helper lambda to check if a bit is set and append the state name
+    auto check_and_append = [&](const ResourceStates state, const char* state_name) {
+        if ((value & state) == state) {
+            if (!first) {
+                result << " | ";
+            }
+            result << state_name;
+            first = false;
+
+            // Add the state to the checked_states bitmask
+            checked_states |= state;
+        }
+    };
+
+    // Use the helper lambda to check and append each state
+    check_and_append(ResourceStates::kUndefined, "Undefined");
+    check_and_append(ResourceStates::kVertexBuffer, "VertexBuffer");
+    check_and_append(ResourceStates::kConstantBuffer, "ConstantBuffer");
+    check_and_append(ResourceStates::kIndexBuffer, "IndexBuffer");
+    check_and_append(ResourceStates::kRenderTarget, "RenderTarget");
+    check_and_append(ResourceStates::kUnorderedAccess, "UnorderedAccess");
+    check_and_append(ResourceStates::kDepthWrite, "DepthWrite");
+    check_and_append(ResourceStates::kDepthRead, "DepthRead");
+    check_and_append(ResourceStates::kShaderResource, "ShaderResource");
+    check_and_append(ResourceStates::kStreamOut, "StreamOut");
+    check_and_append(ResourceStates::kIndirectArgument, "IndirectArgument");
+    check_and_append(ResourceStates::kCopyDest, "CopyDest");
+    check_and_append(ResourceStates::kCopySource, "CopySource");
+    check_and_append(ResourceStates::kResolveDest, "ResolveDest");
+    check_and_append(ResourceStates::kResolveSource, "ResolveSource");
+    check_and_append(ResourceStates::kInputAttachment, "InputAttachment");
+    check_and_append(ResourceStates::kPresent, "Present");
+    check_and_append(ResourceStates::kBuildAccelStructureRead, "BuildAccelStructureRead");
+    check_and_append(ResourceStates::kBuildAccelStructureWrite, "BuildAccelStructureWrite");
+    check_and_append(ResourceStates::kRayTracing, "RayTracing");
+    check_and_append(ResourceStates::kCommon, "Common");
+    check_and_append(ResourceStates::kShadingRate, "ShadingRate");
+    check_and_append(ResourceStates::kGenericRead, "GenericRead");
+
+    // Validate that all bits in `value` were checked
+    DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ResourceStates value detected");
+
+    // Return the concatenated string
+    static std::string result_str;
+    result_str = result.str();
+    return result_str.c_str();
+}
+
+auto oxygen::graphics::to_string(const ResourceStateTrackingMode value) -> const char*
 {
     switch (value) {
-    case ResourceState::kUnknown:
-        return "Unknown";
-    case ResourceState::kUndefined:
-        return "Undefined";
-    case ResourceState::kVertexBuffer:
-        return "VertexBuffer";
-    case ResourceState::kConstantBuffer:
-        return "ConstantBuffer";
-    case ResourceState::kIndexBuffer:
-        return "IndexBuffer";
-    case ResourceState::kRenderTarget:
-        return "RenderTarget";
-    case ResourceState::kUnorderedAccess:
-        return "UnorderedAccess";
-    case ResourceState::kDepthWrite:
-        return "DepthWrite";
-    case ResourceState::kDepthRead:
-        return "DepthRead";
-    case ResourceState::kShaderResource:
-        return "ShaderResource";
-    case ResourceState::kStreamOut:
-        return "StreamOut";
-    case ResourceState::kIndirectArgument:
-        return "IndirectArgument";
-    case ResourceState::kCopyDest:
-        return "CopyDest";
-    case ResourceState::kCopySource:
-        return "CopySource";
-    case ResourceState::kResolveDest:
-        return "ResolveDest";
-    case ResourceState::kResolveSource:
-        return "ResolveSource";
-    case ResourceState::kInputAttachment:
-        return "InputAttachment";
-    case ResourceState::kPresent:
-        return "Present";
-    case ResourceState::kBuildAccelStructureRead:
-        return "BuildAccelStructureRead";
-    case ResourceState::kBuildAccelStructureWrite:
-        return "BuildAccelStructureWrite";
-    case ResourceState::kRayTracing:
-        return "RayTracing";
-    case ResourceState::kCommon:
-        return "Common";
-    case ResourceState::kShadingRate:
-        return "ShadingRate";
-    case ResourceState::kGenericRead:
-        return "GenericRead";
+    case ResourceStateTrackingMode::kDefault:
+        return "Default";
+    case ResourceStateTrackingMode::kKeepInitialState:
+        return "Keep Initial State";
+    case ResourceStateTrackingMode::kPermanentState:
+        return "Permanent State";
     }
 
     return "__NotSupported__";

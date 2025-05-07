@@ -121,7 +121,7 @@ auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const s
 
                     // Submit the command list
                     target_queue->Submit(*completed_cmd);
-                    completed_cmd->OnSubmitted();
+                    rec->OnSubmitted();
 
                     // Get timeline value for tracking completion
                     const uint64_t timeline_value = target_queue->Signal();

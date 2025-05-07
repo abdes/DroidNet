@@ -39,3 +39,11 @@ auto CommandRecorder::End() -> CommandList*
         return {};
     }
 }
+
+void CommandRecorder::OnSubmitted()
+{
+    DCHECK_NOTNULL_F(command_list_);
+    command_list_->OnSubmitted();
+
+    // TODO: notify the resource state tracker
+}

@@ -20,6 +20,7 @@ class CommandQueue;
 class IShaderByteCode;
 class Buffer;
 class RenderTarget;
+class Renderer;
 
 enum ClearFlags : uint8_t {
     kClearFlagsColor = (1 << 0),
@@ -56,6 +57,9 @@ protected:
     [[nodiscard]] auto GetCommandList() const -> CommandList* { return command_list_; }
 
 private:
+    friend class Renderer;
+    OXYGEN_GFX_API virtual void OnSubmitted();
+
     CommandList* command_list_;
     CommandQueue* target_queue_;
 };

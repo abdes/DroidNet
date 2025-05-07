@@ -12,7 +12,7 @@
 
 #include <Oxygen/Composition/TypeSystem.h>
 
-namespace oxygen::graphics::detail {
+namespace oxygen::graphics {
 
 //! Represents a native object handle or pointer.
 /*!
@@ -95,7 +95,13 @@ public:
     }
 };
 
-} // namespace oxygen::graphics::detail
+// C++20 concept to identify resources that can have barriers
+template <typename T>
+concept HoldsNativeResource = requires(T obj) {
+  { obj.GetNativeResource() } -> std::convertible_to<NativeObject>;
+};
+
+} // namespace oxygen::graphics
 
 //! Provides a hash function for `NativeObject`.
 /*!
@@ -103,8 +109,8 @@ public:
  * produce a unique hash value for the `NativeObject`.
  */
 template <>
-struct std::hash<oxygen::graphics::detail::NativeObject> {
-    auto operator()(const oxygen::graphics::detail::NativeObject& obj) const noexcept -> size_t
+struct std::hash<oxygen::graphics::NativeObject> {
+    auto operator()(const oxygen::graphics::NativeObject& obj) const noexcept -> size_t
     {
         // Combine the hash of owner_type_id_ and integer
         const size_t owner_type_hash = std::hash<oxygen::TypeId> {}(obj.OwnerTypeId());

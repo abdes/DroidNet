@@ -45,17 +45,17 @@ protected:
 
         kFree = 0, //<! Free command list.
         kRecording = 1, //<! The command list is being recorded.
-        kRecorded = 2, //<! The command list is recorded and ready to be submitted.
-        kExecuting = 3, //<! The command list is being executed.
+        kClosed = 2, //<! The command list is recorded and ready to be submitted.
+        kSubmitted = 3, //<! The command list is being executed.
     };
     [[nodiscard]] auto GetState() const { return state_; }
 
     friend class CommandRecorder;
     OXYGEN_GFX_API virtual void OnBeginRecording();
     OXYGEN_GFX_API virtual void OnEndRecording();
+    OXYGEN_GFX_API virtual void OnSubmitted();
 
     friend class Renderer;
-    OXYGEN_GFX_API virtual void OnSubmitted();
     OXYGEN_GFX_API virtual void OnExecuted();
 
 private:
