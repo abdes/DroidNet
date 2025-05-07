@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Detail/NativeObject.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <gtest/gtest.h>
 #include <stdexcept>
 
 using oxygen::TypeId;
-using oxygen::graphics::detail::NativeObject;
+using oxygen::graphics::NativeObject;
 
 namespace {
 

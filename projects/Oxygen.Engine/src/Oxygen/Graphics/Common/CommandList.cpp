@@ -46,20 +46,20 @@ void CommandList::OnEndRecording()
     if (state_ != State::kRecording) {
         throw std::runtime_error("CommandList is not in a Recording state");
     }
-    state_ = State::kRecorded;
+    state_ = State::kClosed;
 }
 
 void CommandList::OnSubmitted()
 {
-    if (state_ != State::kRecorded) {
+    if (state_ != State::kClosed) {
         throw std::runtime_error("CommandList is not in a Recorded state");
     }
-    state_ = State::kExecuting;
+    state_ = State::kSubmitted;
 }
 
 void CommandList::OnExecuted()
 {
-    if (state_ != State::kExecuting) {
+    if (state_ != State::kSubmitted) {
         throw std::runtime_error("CommandList is not in an Executing state");
     }
     state_ = State::kFree;
