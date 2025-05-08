@@ -50,6 +50,7 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "Detail/Barriers.cpp"
     "Detail/EnumToStringConverters.cpp"
     "Detail/RenderThread.h"
     "Detail/RenderThread.cpp"
@@ -91,6 +92,7 @@ target_sources(
       "Surface.h"
       "SynchronizationCounter.h"
       "Texture.h"
+      "Detail/Barriers.h"
       "Detail/ResourceStateTracker.h"
       "Types/EngineResources.h"
       "Types/Format.h"

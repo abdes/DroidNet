@@ -12,6 +12,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 
 namespace oxygen::graphics {
 
@@ -32,6 +33,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Texture);
     OXYGEN_DEFAULT_MOVABLE(Texture);
 
+    virtual auto GetNativeResource() const -> NativeObject = 0;
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
     {

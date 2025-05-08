@@ -7,9 +7,9 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
-#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -82,6 +82,59 @@ public:
             descriptor_);
     }
 
+    ResourceStates GetStateBefore()
+    {
+        return std::visit(
+            [](auto&& desc) -> ResourceStates {
+                using T = std::decay_t<decltype(desc)>;
+                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
+                    return desc.before;
+                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
+                    return desc.before;
+                } else {
+                    return ResourceStates::kUnknown;
+                }
+            },
+            descriptor_);
+    }
+
+    ResourceStates GetStateAfter()
+    {
+        return std::visit(
+            [](auto&& desc) -> ResourceStates {
+                using T = std::decay_t<decltype(desc)>;
+                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
+                    return desc.after;
+                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
+                    return desc.after;
+                } else {
+                    return ResourceStates::kUnknown;
+                }
+            },
+            descriptor_);
+    }
+
+    void AppendState(ResourceStates state)
+    {
+        std::visit(
+            [state](auto&& desc) {
+                using T = std::decay_t<decltype(desc)>;
+
+                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
+                    desc.after |= state;
+                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
+                    desc.after |= state;
+                }
+            },
+            descriptor_);
+    }
+
+    // Check if the barrier is a memory barrier
+    bool IsMemoryBarrier() const
+    {
+        return std::holds_alternative<MemoryBarrierDesc>(descriptor_);
+    }
+
 private:
     BarrierDesc descriptor_;
 };
@@ -132,69 +185,159 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(ResourceStateTracker)
     OXYGEN_MAKE_NON_MOVABLE(ResourceStateTracker)
 
-    template <HoldsNativeResource T>
-    void BeginTrackingResourceState(const T& resource, ResourceStates initial_state, bool keep_initial_state = false)
+    template <Trackable T>
+    void BeginTrackingResourceState(
+        const T& resource,
+        const ResourceStates initial_state,
+        const bool keep_initial_state = false)
     {
+        // Calling BeginTrackingResourceState on a resource that is already being tracked
+        // will throw an exception.
+        NativeObject native_object = resource.GetNativeResource();
+        auto it = tracking_.find(native_object);
+        if (it != tracking_.end()) {
+            throw std::runtime_error("Resource is already being tracked");
+        }
+
+        if constexpr (IsBuffer<T>) {
+            tracking_.emplace(native_object, BufferTrackingInfo(initial_state, keep_initial_state));
+        } else if constexpr (IsTexture<T>) {
+            tracking_.emplace(native_object, TextureTrackingInfo(initial_state, keep_initial_state));
+        } else {
+            throw std::runtime_error("Unsupported resource type");
+        }
     }
 
-    template <HoldsNativeResource T>
+    template <Trackable T>
     void EnableAutoMemoryBarriers(const T& resource)
     {
+        auto& ti = GetTrackingInfo(resource.GetNativeResource());
+        std::visit(
+            [&](auto& info) {
+                info.enable_auto_memory_barriers = true;
+            },
+            ti);
     }
 
-    template <HoldsNativeResource T>
+    template <Trackable T>
     void DisableAutoMemoryBarriers(const T& resource)
     {
+        auto& ti = GetTrackingInfo(resource.GetNativeResource());
+        std::visit(
+            [&](auto& info) {
+                info.enable_auto_memory_barriers = false;
+            },
+            ti);
     }
 
-    template <HoldsNativeResource T>
-    void RequireResourceState(const T& resource, ResourceStates state, bool is_permanent = false)
+    // Require a resource to be in a specific state (non-permanent)
+    template <Trackable T>
+    void RequireResourceState(
+        const T& resource,
+        ResourceStates required_state)
     {
+        if constexpr (IsBuffer<T>) {
+            RequireBufferState(resource, required_state, false);
+        } else if constexpr (IsTexture<T>) {
+            RequireTextureState(resource, required_state, false);
+        } else {
+            throw std::runtime_error("Unsupported resource type");
+        }
     }
 
-    void OnCommandListClosed()
+    // Require a resource to be in a specific state permanently (no further changes allowed)
+    template <Trackable T>
+    void RequireResourceStateFinal(
+        const T& resource,
+        ResourceStates required_state)
     {
+        if constexpr (IsBuffer<T>) {
+            RequireBufferState(resource, required_state, true);
+        } else if constexpr (IsTexture<T>) {
+            RequireTextureState(resource, required_state, true);
+        } else {
+            throw std::runtime_error("Unsupported resource type");
+        }
     }
 
-    void OnCommandListSubmitted()
+    // Get all pending barriers
+    [[nodiscard]] auto GetPendingBarriers() const -> const std::vector<Barrier>&
     {
+        return pending_barriers_;
     }
+
+    // Clear all tracking data
+    void Clear();
+
+    void OnCommandListClosed();
+
+    void OnCommandListSubmitted();
 
 private:
     struct BasicTrackingInfo {
+        ResourceStates initial_state;
         ResourceStates current_state;
-        bool is_permanent = false;
-        bool is_auto_memory_barriers_enabled = false;
+
+        bool enable_auto_memory_barriers { true };
+
+        bool is_permanent { false };
+        bool keep_initial_state { false };
+
+        bool first_memory_barrier_inserted { false };
     };
 
     struct BufferTrackingInfo : public BasicTrackingInfo {
+        BufferTrackingInfo(ResourceStates initial_state, bool keep_initial_state)
+        {
+            this->initial_state = initial_state;
+            this->current_state = initial_state;
+            this->keep_initial_state = keep_initial_state;
+            // All other members use BasicTrackingInfo's defaults
+        }
     };
 
     struct TextureTrackingInfo : public BasicTrackingInfo {
-        // TODO(abdes): add texture-specific fields like mip levels, array slices, etc.
+        TextureTrackingInfo(ResourceStates initial_state, bool keep_initial_state)
+        {
+            this->initial_state = initial_state;
+            this->current_state = initial_state;
+            this->keep_initial_state = keep_initial_state;
+            // All other members use BasicTrackingInfo's defaults
+        }
     };
 
     // The barrier descriptor - a variant that can hold any type of barrier description
     using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
 
+    auto GetTrackingInfo(const NativeObject& resource) -> TrackingInfo&;
+
+    void RequireBufferState(const Buffer& buffer, ResourceStates required_state, bool is_permanent);
+    void RequireTextureState(const Texture& texture, ResourceStates required_state, bool is_permanent);
+
+    // Create a barrier descriptor for buffer resources
+    auto CreateBufferBarrierDesc(
+        const NativeObject& native_object,
+        ResourceStates before,
+        ResourceStates after) -> BufferBarrierDesc
+    {
+        return BufferBarrierDesc { .resource = native_object, .before = before, .after = after };
+        // TODO: Could add buffer-specific fields here  or keep a reference to
+        // the buffer object itself
+    }
+
+    // Create a barrier descriptor for texture resources
+    auto CreateTextureBarrierDesc(
+        const NativeObject& native_object,
+        ResourceStates before,
+        ResourceStates after) -> TextureBarrierDesc
+    {
+        return TextureBarrierDesc { .resource = native_object, .before = before, .after = after };
+        // TODO: Could add texture-specific fields here (mip levels, array
+        // slices, etc.) or keep a reference to the texture object itself
+    }
+
     std::unordered_map<NativeObject, TrackingInfo> tracking_;
+    std::vector<Barrier> pending_barriers_;
 };
 
 } // namespace oxygen::graphics::detail
-
-// TODO(abdes): feature, similar to NVRHI, that may be implemented later
-// As part of state tracking, NVRHI will place UAV barriers between successive
-// uses of the same resource in UnorderedAccess state. That might not always be
-// desired: for example, some rendering methods address the same texture as a
-// UAV from the pixel shader, and do not care about ordering of accesses for
-// different meshes. For such use cases, the command list provides the
-// setEnableUavBarriersForTexture/Buffer(bool enable) methods that can be used
-// to temporarily remove such UAV barriers. On DX11, these methods map to
-// NVAPI_D3D11_Begin/EndUAVOverlap calls. Conversely, it is sometimes necessary
-// to place UAV barriers more often than NVRHI would do it, which is at every
-// setGraphicsState or similar call. For example, there may be a sequence of
-// compute passes operating on a buffer that use the same shader but different
-// constants. As updating constants does not require a call to one of those
-// state setting functions, an automatic barrier will not be placed. To place a
-// UAV barrier manually, use the nvrhi::utils::texture/bufferUavBarrier
-// functions.
