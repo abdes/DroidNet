@@ -6,12 +6,11 @@
 
 #pragma once
 
-#include <type_traits>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 
 namespace oxygen::graphics {
 
@@ -39,6 +38,8 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(Buffer);
     OXYGEN_DEFAULT_MOVABLE(Buffer);
+
+    virtual auto GetNativeResource() const -> NativeObject = 0;
 
     virtual void Bind() = 0;
     virtual void* Map() = 0;
