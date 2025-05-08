@@ -81,6 +81,7 @@ target_sources(
       "StringUtils.h"
       "TimeUtils.h"
       "Unreachable.h"
+      "VariantHelpers.h"
       "Writer.h"
       "Types/Geometry.h"
       "Types/Overload.h"
