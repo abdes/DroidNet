@@ -327,8 +327,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendErrorHandling)
     oxygen::GraphicsConfig config;
     EXPECT_THROW(
         auto _ = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config),
-        std::runtime_error
-    );
+        std::runtime_error);
 }
 
 // Test loading a backend after previous backend was unloaded
