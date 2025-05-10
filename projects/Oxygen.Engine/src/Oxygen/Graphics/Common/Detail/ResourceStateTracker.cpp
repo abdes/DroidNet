@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <ranges>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-
-#include <ranges>
 
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::MemoryBarrierDesc;
@@ -105,14 +105,8 @@ void ResourceStateTracker::OnCommandListClosed()
             [&]<typename TDescriptor>(TDescriptor& info) {
                 using T = std::decay<TDescriptor>;
                 if (!info.is_permanent && info.keep_initial_state && info.current_state != info.initial_state) {
-                    // Insert a transition barrier back to initial state
-                    if constexpr (std::is_same_v<T, BufferTrackingInfo>) {
-                        pending_barriers_.emplace_back(CreateBufferBarrierDesc(
-                            native_object, info.current_state, info.initial_state));
-                    } else if constexpr (std::is_same_v<T, TextureTrackingInfo>) {
-                        pending_barriers_.emplace_back(CreateTextureBarrierDesc(
-                            native_object, info.current_state, info.initial_state));
-                    }
+                    pending_barriers_.emplace_back(CreateBufferBarrierDesc(
+                        native_object, info.current_state, info.initial_state));
                     info.current_state = info.initial_state;
                 }
             },
