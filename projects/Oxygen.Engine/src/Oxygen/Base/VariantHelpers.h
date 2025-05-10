@@ -15,8 +15,8 @@ namespace oxygen {
  of the template parameter, it can be used in contexts where you need to fail
  compilation for specific template instantiations.
 
- **Example usage:**
- ```cpp
+ <b>Example usage:</b>
+ \code
  template <typename T>
  void process(const T& value) {
      if constexpr (std::is_integral_v<T>) {
@@ -27,6 +27,7 @@ namespace oxygen {
          static_assert(always_false_v<T>, "Unsupported type!");
      }
  }
+ \endcode
 */
 template <typename>
 inline constexpr bool always_false_v = false;
@@ -39,8 +40,8 @@ inline constexpr bool always_false_v = false;
  type-specific code, and a 'catch-all' lambda provides helpful runtime errors
  for unexpected types.
 
- **Example usage:**
- ```cpp
+ <b>Example usage:</b>
+ \code
  using BarrierDesc = std::variant<
     BufferBarrierDesc,
     TextureBarrierDesc,
@@ -59,7 +60,7 @@ inline constexpr bool always_false_v = false;
         },
         descriptor_);
  }
- ```
+ \endcode
 */
 template <class... Ts>
 struct Overloads : Ts... {
