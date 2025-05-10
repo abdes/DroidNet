@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <Oxygen/Graphics/Common/api_export.h>
+
 namespace oxygen::graphics {
 
 //! GPU resource access modes.
@@ -52,5 +54,8 @@ enum class ResourceAccessMode : uint8_t {
     */
     kReadBack
 };
+
+//! String representation of enum values in `ResourceAccessMode`.
+OXYGEN_GFX_API auto to_string(ResourceAccessMode value) -> const char*;
 
 } // namespace oxygen::graphics

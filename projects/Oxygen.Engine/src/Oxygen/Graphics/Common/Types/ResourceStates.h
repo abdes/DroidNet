@@ -7,7 +7,9 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits> // Required for std::underlying_type_t used by the macro
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -19,70 +21,70 @@ enum class ResourceStates : uint32_t {
     kUnknown = 0,
 
     //! The resource state is defined but uninitialized (Graphics, Compute).
-    kUndefined = 1 << 0,
+    kUndefined = OXYGEN_FLAG(0),
 
     //! The resource is accessed as a vertex buffer (Graphics).
-    kVertexBuffer = 1 << 1,
+    kVertexBuffer = OXYGEN_FLAG(1),
 
     //! The resource is accessed as a constant (uniform) buffer (Graphics, Compute).
-    kConstantBuffer = 1 << 2,
+    kConstantBuffer = OXYGEN_FLAG(2),
 
     //! The resource is accessed as an index buffer (Graphics).
-    kIndexBuffer = 1 << 3,
+    kIndexBuffer = OXYGEN_FLAG(3),
 
     //! The resource is accessed as a render target (Graphics).
-    kRenderTarget = 1 << 4,
+    kRenderTarget = OXYGEN_FLAG(4),
 
     //! The resource is used for unordered access (UAV) (Graphics, Compute).
-    kUnorderedAccess = 1 << 5,
+    kUnorderedAccess = OXYGEN_FLAG(5),
 
     //! The resource is used for writable depth-stencil operations (Graphics).
-    kDepthWrite = 1 << 6,
+    kDepthWrite = OXYGEN_FLAG(6),
 
     //! The resource is used for read-only depth-stencil operations (Graphics).
-    kDepthRead = 1 << 7,
+    kDepthRead = OXYGEN_FLAG(7),
 
     //! The resource is accessed as a shader resource (Graphics, Compute).
-    kShaderResource = 1 << 8,
+    kShaderResource = OXYGEN_FLAG(8),
 
     //! The resource is used as the destination for stream output (Graphics).
-    kStreamOut = 1 << 9,
+    kStreamOut = OXYGEN_FLAG(9),
 
     //! The resource is used as an indirect draw/dispatch argument buffer (Graphics, Compute).
-    kIndirectArgument = 1 << 10,
+    kIndirectArgument = OXYGEN_FLAG(10),
 
     //! The resource is used as the destination in a copy operation (Graphics, Compute, Transfer).
-    kCopyDest = 1 << 11,
+    kCopyDest = OXYGEN_FLAG(11),
 
     //! The resource is used as the source in a copy operation (Graphics, Compute, Transfer).
-    kCopySource = 1 << 12,
+    kCopySource = OXYGEN_FLAG(12),
 
     //! The resource is used as the destination in a resolve operation (Graphics).
-    kResolveDest = 1 << 13,
+    kResolveDest = OXYGEN_FLAG(13),
 
     //! The resource is used as the source in a resolve operation (Graphics).
-    kResolveSource = 1 << 14,
+    kResolveSource = OXYGEN_FLAG(14),
 
     //! The resource is used as an input attachment in a render pass (Graphics).
-    kInputAttachment = 1 << 15,
+    kInputAttachment = OXYGEN_FLAG(15),
 
     //! The resource is used for swapchain presentation (Graphics).
-    kPresent = 1 << 16,
+    kPresent = OXYGEN_FLAG(16),
 
     //! The resource is used as vertex/index/instance data in AS builds or as source in AS copy operations (Graphics, Compute).
-    kBuildAccelStructureRead = 1 << 17,
+    kBuildAccelStructureRead = OXYGEN_FLAG(17),
 
     //! The resource is used as the target for AS building or AS copy operations (Graphics, Compute).
-    kBuildAccelStructureWrite = 1 << 18,
+    kBuildAccelStructureWrite = OXYGEN_FLAG(18),
 
     //! The resource is used as an acceleration structure shader resource in a ray tracing operation (Graphics, Compute).
-    kRayTracing = 1 << 19,
+    kRayTracing = OXYGEN_FLAG(19),
 
     //! The resource is readable, but transitioning to this state may cause a pipeline stall or cache flush (Graphics, Compute, Transfer).
-    kCommon = 1 << 20,
+    kCommon = OXYGEN_FLAG(20),
 
     //! The resource is used as a shading rate image (Graphics).
-    kShadingRate = 1 << 21,
+    kShadingRate = OXYGEN_FLAG(21),
 
     //! A generic read state for multiple resource usages combined (Graphics, Compute).
     //! Avoid using this state unless necessary, as it is not optimal.
@@ -90,29 +92,7 @@ enum class ResourceStates : uint32_t {
 };
 
 // Enable bitwise operations for ResourceStates
-inline auto operator&(const ResourceStates lhs, const ResourceStates rhs) -> ResourceStates
-{
-    using T = std::underlying_type_t<ResourceStates>;
-    return static_cast<ResourceStates>(static_cast<T>(lhs) & static_cast<T>(rhs));
-}
-
-inline auto operator|(const ResourceStates lhs, const ResourceStates rhs) -> ResourceStates
-{
-    using T = std::underlying_type_t<ResourceStates>;
-    return static_cast<ResourceStates>(static_cast<T>(lhs) | static_cast<T>(rhs));
-}
-
-inline auto operator|=(ResourceStates& lhs, const ResourceStates rhs) -> ResourceStates&
-{
-    lhs = lhs | rhs;
-    return lhs;
-}
-
-inline auto operator&=(ResourceStates& lhs, const ResourceStates rhs) -> ResourceStates&
-{
-    lhs = lhs & rhs;
-    return lhs;
-}
+OXYGEN_DEFINE_FLAGS_OPERATORS(ResourceStates)
 
 //! String representation of enum values in `QueueFamilyType`.
 OXYGEN_GFX_API auto to_string(ResourceStates value) -> const char*;

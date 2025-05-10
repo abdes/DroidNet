@@ -52,6 +52,7 @@ target_sources(
   PRIVATE
     "Detail/Barriers.cpp"
     "Detail/EnumToStringConverters.cpp"
+    "Detail/FormatUtils.cpp"
     "Detail/RenderThread.h"
     "Detail/RenderThread.cpp"
     "Detail/ResourceStateTracker.cpp"
@@ -93,7 +94,9 @@ target_sources(
       "SynchronizationCounter.h"
       "Texture.h"
       "Detail/Barriers.h"
+      "Detail/FormatUtils.h"
       "Detail/ResourceStateTracker.h"
+      "Types/Color.h"
       "Types/EngineResources.h"
       "Types/Format.h"
       "Types/Queues.h"

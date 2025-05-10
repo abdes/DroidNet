@@ -10,13 +10,13 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -103,6 +103,15 @@ public:
         uint32_t frames_in_flight)
         -> std::shared_ptr<graphics::Renderer>;
 
+    [[nodiscard]] virtual auto CreateTexture(
+        graphics::TextureDesc desc, std::string_view name = "Texture") const
+        -> std::shared_ptr<graphics::Texture>
+        = 0;
+    [[nodiscard]] virtual auto CreateTextureFromNativeObject(
+        graphics::TextureDesc desc, graphics::NativeObject native, std::string_view name = "Texture") const
+        -> std::shared_ptr<graphics::Texture>
+        = 0;
+
 protected:
     //! Create a command queue for the given role and allocation preference.
     /*!
@@ -147,28 +156,17 @@ protected:
         = 0;
 
 private:
-    /**
-     * Create a command recorder for an existing command list.
-     * The command recorder will automatically handle Begin() on creation and End() when destroyed.
-     *
-     * @param command_list The command list to create a recorder for
-     * @return A unique_ptr to CommandRecorder with custom deleter for automatic Begin/End handling
-     */
-    [[nodiscard]] OXYGEN_GFX_API auto CreateCommandRecorder(
-        graphics::CommandList* command_list)
-        -> std::unique_ptr<graphics::CommandRecorder, std::function<void(graphics::CommandRecorder*)>>;
-
-    PlatformPtr platform_ {}; //< The platform abstraction layer.
+    PlatformPtr platform_; //< The platform abstraction layer.
 
     //! The command queues created by the backend.
-    std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_ {};
+    std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_;
 
     // Pool of available command lists by queue type
     std::unordered_map<graphics::QueueRole, std::vector<std::unique_ptr<graphics::CommandList>>> command_list_pool_;
     std::mutex command_list_pool_mutex_;
 
     //! Active renderers managed by this Graphics instance
-    std::vector<std::weak_ptr<graphics::Renderer>> renderers_ {};
+    std::vector<std::weak_ptr<graphics::Renderer>> renderers_;
 
     co::Nursery* nursery_ { nullptr };
     co::ParkingLot render_ {};
