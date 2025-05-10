@@ -39,6 +39,9 @@ public:
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
+protected:
+    void ExecuteBarriers(std::span<const oxygen::graphics::detail::Barrier> barriers) override;
+
 private:
     [[nodiscard]] auto GetConcreteCommandList() const -> CommandList* { return static_cast<CommandList*>(GetCommandList()); }
 

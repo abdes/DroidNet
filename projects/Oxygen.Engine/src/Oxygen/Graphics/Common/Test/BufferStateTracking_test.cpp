@@ -9,7 +9,6 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Testing/GTest.h>
 
-
 using oxygen::graphics::Buffer;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
