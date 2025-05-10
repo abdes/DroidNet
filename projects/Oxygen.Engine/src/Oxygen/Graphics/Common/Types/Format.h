@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <Oxygen/Graphics/Common/api_export.h>
+
 namespace oxygen::graphics {
 
 // ReSharper disable IdentifierTypo
@@ -113,5 +115,8 @@ enum class Format : uint8_t {
 
     kMax = 68 //!< Maximum value for validation
 };
+
+//! String representation of enum values in `QueueFamilyType`.
+OXYGEN_GFX_API auto to_string(Format value) -> const char*;
 
 } // namespace oxygen::graphics

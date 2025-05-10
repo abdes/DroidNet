@@ -8,7 +8,9 @@
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
@@ -150,6 +152,52 @@ auto oxygen::graphics::to_string(const ResourceStateTrackingMode value) -> const
         return "Keep Initial State";
     case ResourceStateTrackingMode::kPermanentState:
         return "Permanent State";
+    }
+
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(ResourceAccessMode value) -> const char*
+{
+    switch (value) {
+    case ResourceAccessMode::kInvalid:
+        return "Invalid";
+    case ResourceAccessMode::kImmutable:
+        return "Immutable";
+    case ResourceAccessMode::kGpuOnly:
+        return "GPU Only";
+    case ResourceAccessMode::kUpload:
+        return "Upload";
+    case ResourceAccessMode::kVolatile:
+        return "Volatile";
+    case ResourceAccessMode::kReadBack:
+        return "Read Back";
+    }
+
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(TextureDimension value) -> const char*
+{
+    switch (value) {
+    case TextureDimension::kTexture1DArray:
+        return "1D Array";
+    case TextureDimension::kTexture1D:
+        return "1D";
+    case TextureDimension::kTexture2D:
+        return "2D";
+    case TextureDimension::kTexture2DArray:
+        return "2D Array";
+    case TextureDimension::kTextureCube:
+        return "Cube";
+    case TextureDimension::kTextureCubeArray:
+        return "Cube Array";
+    case TextureDimension::kTexture2DMS:
+        return "2D MS";
+    case TextureDimension::kTexture2DMSArray:
+        return "2D MS Array";
+    case TextureDimension::kTexture3D:
+        return "3D";
     }
 
     return "__NotSupported__";

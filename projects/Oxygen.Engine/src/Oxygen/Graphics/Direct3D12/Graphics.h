@@ -50,6 +50,12 @@ namespace d3d12 {
             std::shared_ptr<graphics::CommandQueue> command_queue)
             const -> std::shared_ptr<graphics::Surface> override;
 
+        [[nodiscard]] auto CreateTexture(TextureDesc desc, std::string_view name) const
+            -> std::shared_ptr<graphics::Texture> override;
+        [[nodiscard]] auto CreateTextureFromNativeObject(
+            TextureDesc desc, NativeObject native, std::string_view name) const
+            -> std::shared_ptr<graphics::Texture> override;
+
         //! @{
         //! Device Manager API (module internal)
         [[nodiscard]] auto GetFactory() const -> dx::IFactory*;
@@ -60,25 +66,30 @@ namespace d3d12 {
         [[nodiscard]] OXYGEN_D3D12_API auto Descriptors() const -> const detail::DescriptorHeaps&;
 
         [[nodiscard]] auto GetShader(std::string_view unique_id) const
-            -> std::shared_ptr<graphics::IShaderByteCode> override;
+            -> std::shared_ptr<IShaderByteCode> override;
+
+        [[nodiscard]] auto GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t;
 
     protected:
         [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
             std::string_view name,
-            graphics::QueueRole role,
-            graphics::QueueAllocationPreference allocation_preference)
+            QueueRole role,
+            QueueAllocationPreference allocation_preference)
             -> std::shared_ptr<graphics::CommandQueue> override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
             std::string_view name,
-            std::weak_ptr<graphics::Surface> surface,
+            std::weak_ptr<Surface> surface,
             uint32_t frames_in_flight)
             -> std::unique_ptr<graphics::Renderer> override;
 
         [[nodiscard]] auto CreateCommandListImpl(
-            graphics::QueueRole role,
+            QueueRole role,
             std::string_view command_list_name)
             -> std::unique_ptr<graphics::CommandList> override;
+
+    private:
+        mutable std::unordered_map<DXGI_FORMAT, uint8_t> dxgi_format_plane_count_cache_ {};
     };
 
     namespace detail {
@@ -92,7 +103,7 @@ namespace d3d12 {
           \note These functions will __abort__ when called while the graphics
           backend instance is not yet initialized or has been destroyed.
         */
-        [[nodiscard]] auto GetGraphics() -> oxygen::graphics::d3d12::Graphics&;
+        [[nodiscard]] auto GetGraphics() -> Graphics&;
     } // namespace detail
 
 } // namespace d3d12
