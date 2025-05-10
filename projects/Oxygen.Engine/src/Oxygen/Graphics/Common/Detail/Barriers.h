@@ -85,7 +85,7 @@ public:
     {
     }
 
-    virtual ~Barrier() = default;
+    ~Barrier() = default;
 
     OXYGEN_DEFAULT_COPYABLE(Barrier)
     OXYGEN_DEFAULT_MOVABLE(Barrier)
