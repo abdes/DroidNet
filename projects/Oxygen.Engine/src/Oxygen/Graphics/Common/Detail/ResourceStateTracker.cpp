@@ -51,8 +51,8 @@ void ResourceStateTracker::RequireBufferState(
         ((required_state & ResourceStates::kUnorderedAccess) == ResourceStates::kUnorderedAccess) && (
             // We are auto inserting memory barriers, OR
             tracking.enable_auto_memory_barriers ||
-            // memory barriers are manually managed and this is the first time a
-            // transition for UnorderedAccess is requested
+            // memory barriers are manually managed, and this is the first time
+            // a transition for UnorderedAccess is requested
             !tracking.first_memory_barrier_inserted);
 
     if (need_transition) {
@@ -91,7 +91,6 @@ void ResourceStateTracker::RequireTextureState(
 {
 }
 
-// Clear all tracking data
 void ResourceStateTracker::Clear()
 {
     pending_barriers_.clear();
@@ -101,18 +100,35 @@ void ResourceStateTracker::Clear()
 void ResourceStateTracker::OnCommandListClosed()
 {
     for (auto& [native_object, tracking] : tracking_) {
+        // Visit the tracking info using `constexpr` rather than the `Overloads`
+        // pattern to avoid code duplication as all supported barrier types
+        // share the same condition for determining whether the initial state
+        // should be restored.
         std::visit(
             [&]<typename TDescriptor>(TDescriptor& info) {
-                using T = std::decay<TDescriptor>;
-                if (!info.is_permanent && info.keep_initial_state && info.current_state != info.initial_state) {
-                    pending_barriers_.emplace_back(CreateBufferBarrierDesc(
-                        native_object, info.current_state, info.initial_state));
+                if (!info.is_permanent
+                    && info.keep_initial_state
+                    && info.current_state != info.initial_state) {
+                    // Create the appropriate barrier descriptor and add it to
+                    // the pending barriers
+                    using T = std::decay_t<TDescriptor>;
+                    if constexpr (std::is_same_v<T, BufferTrackingInfo>) {
+                        pending_barriers_.emplace_back(CreateBufferBarrierDesc(
+                            native_object, info.current_state, info.initial_state));
+                    } else if constexpr (std::is_same_v<T, TextureTrackingInfo>) {
+                        pending_barriers_.emplace_back(CreateTextureBarrierDesc(
+                            native_object, info.current_state, info.initial_state));
+                    } else {
+                        static_assert(always_false_v<T>, "Unsupported barrier type");
+                    }
+                    // Reset the current state to the initial state
                     info.current_state = info.initial_state;
                 }
             },
             tracking);
     }
 }
+
 void ResourceStateTracker::OnCommandListSubmitted()
 {
     Clear();

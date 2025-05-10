@@ -6,141 +6,18 @@
 
 #pragma once
 
-#include <string>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics::detail {
-
-// Barrier description structures - these contain all information needed to create barriers
-// but don't represent the actual API-specific barriers
-
-// Memory barrier description
-struct MemoryBarrierDesc {
-    NativeObject resource;
-
-    bool operator==(const MemoryBarrierDesc& other) const
-    {
-        return resource == other.resource;
-    }
-};
-
-// Buffer barrier description
-struct BufferBarrierDesc {
-    NativeObject resource;
-    ResourceStates before;
-    ResourceStates after;
-
-    bool operator==(const BufferBarrierDesc& other) const
-    {
-        return resource == other.resource && before == other.before
-            && after == other.after;
-    }
-};
-
-// Texture barrier description
-struct TextureBarrierDesc {
-    NativeObject resource;
-    ResourceStates before;
-    ResourceStates after;
-    // Could add additional texture-specific fields like mip levels, array slices, etc.
-
-    bool operator==(const TextureBarrierDesc& other) const
-    {
-        return resource == other.resource && before == other.before
-            && after == other.after;
-    }
-};
-
-// The barrier descriptor - a variant that can hold any type of barrier description
-using BarrierDesc = std::variant<BufferBarrierDesc, TextureBarrierDesc, MemoryBarrierDesc>;
-
-// Abstract Barrier base class - now just a handle to a barrier description
-class Barrier {
-public:
-    // Constructor with descriptor only (type deduced from descriptor)
-    explicit Barrier(BarrierDesc desc)
-        : descriptor_(std::move(desc))
-    {
-    }
-
-    virtual ~Barrier() = default;
-
-    // Get the barrier descriptor
-    const BarrierDesc& GetDescriptor() const { return descriptor_; }
-
-    // Get the resource for this barrier
-    NativeObject GetResource() const
-    {
-        return std::visit([](auto&& desc) -> NativeObject { return desc.resource; },
-            descriptor_);
-    }
-
-    ResourceStates GetStateBefore()
-    {
-        return std::visit(
-            [](auto&& desc) -> ResourceStates {
-                using T = std::decay_t<decltype(desc)>;
-                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
-                    return desc.before;
-                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
-                    return desc.before;
-                } else {
-                    return ResourceStates::kUnknown;
-                }
-            },
-            descriptor_);
-    }
-
-    ResourceStates GetStateAfter()
-    {
-        return std::visit(
-            [](auto&& desc) -> ResourceStates {
-                using T = std::decay_t<decltype(desc)>;
-                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
-                    return desc.after;
-                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
-                    return desc.after;
-                } else {
-                    return ResourceStates::kUnknown;
-                }
-            },
-            descriptor_);
-    }
-
-    void AppendState(ResourceStates state)
-    {
-        std::visit(
-            [state](auto&& desc) {
-                using T = std::decay_t<decltype(desc)>;
-
-                if constexpr (std::is_same_v<T, BufferBarrierDesc>) {
-                    desc.after |= state;
-                } else if constexpr (std::is_same_v<T, TextureBarrierDesc>) {
-                    desc.after |= state;
-                }
-            },
-            descriptor_);
-    }
-
-    // Check if the barrier is a memory barrier
-    bool IsMemoryBarrier() const
-    {
-        return std::holds_alternative<MemoryBarrierDesc>(descriptor_);
-    }
-
-private:
-    BarrierDesc descriptor_;
-};
-
-OXYGEN_GFX_API auto to_string(const Barrier& barrier) -> std::string;
 
 //! Resource state tracker and barrier management for command lists.
 /*!
@@ -160,7 +37,7 @@ OXYGEN_GFX_API auto to_string(const Barrier& barrier) -> std::string;
  which determines how the command list will track the resource state.
 
    - `kDefault`: The application will manually update the resource state using
-     `UpdateResourceState`. The command list will insert necessary barriers,
+     `UpdateResourceState`. The command list will insert the necessary barriers,
      avoiding redundant transitions.
 
    - `kKeepInitialState`: This is similar to `kDefault`, but the command list
@@ -276,8 +153,8 @@ public:
 
 private:
     struct BasicTrackingInfo {
-        ResourceStates initial_state;
-        ResourceStates current_state;
+        ResourceStates initial_state { ResourceStates::kUnknown };
+        ResourceStates current_state { ResourceStates::kUnknown };
 
         bool enable_auto_memory_barriers { true };
 
@@ -288,7 +165,7 @@ private:
     };
 
     struct BufferTrackingInfo : public BasicTrackingInfo {
-        BufferTrackingInfo(ResourceStates initial_state, bool keep_initial_state)
+        BufferTrackingInfo(const ResourceStates initial_state, const bool keep_initial_state)
         {
             this->initial_state = initial_state;
             this->current_state = initial_state;
@@ -298,7 +175,7 @@ private:
     };
 
     struct TextureTrackingInfo : public BasicTrackingInfo {
-        TextureTrackingInfo(ResourceStates initial_state, bool keep_initial_state)
+        TextureTrackingInfo(const ResourceStates initial_state, const bool keep_initial_state)
         {
             this->initial_state = initial_state;
             this->current_state = initial_state;
@@ -316,10 +193,10 @@ private:
     OXYGEN_GFX_API void RequireTextureState(const Texture& texture, ResourceStates required_state, bool is_permanent);
 
     // Create a barrier descriptor for buffer resources
-    auto CreateBufferBarrierDesc(
+    static auto CreateBufferBarrierDesc(
         const NativeObject& native_object,
-        ResourceStates before,
-        ResourceStates after) -> BufferBarrierDesc
+        const ResourceStates before,
+        const ResourceStates after) -> BufferBarrierDesc
     {
         return BufferBarrierDesc { .resource = native_object, .before = before, .after = after };
         // TODO: Could add buffer-specific fields here  or keep a reference to
@@ -327,10 +204,10 @@ private:
     }
 
     // Create a barrier descriptor for texture resources
-    auto CreateTextureBarrierDesc(
+    static auto CreateTextureBarrierDesc(
         const NativeObject& native_object,
-        ResourceStates before,
-        ResourceStates after) -> TextureBarrierDesc
+        const ResourceStates before,
+        const ResourceStates after) -> TextureBarrierDesc
     {
         return TextureBarrierDesc { .resource = native_object, .before = before, .after = after };
         // TODO: Could add texture-specific fields here (mip levels, array
