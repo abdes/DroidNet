@@ -52,7 +52,7 @@ struct BufferBarrierDesc {
 //! Barrier description for texture state transitions.
 /*!
  Texture barriers ensure proper synchronization when a texture's usage changes
- between different GPU operations (rendering, sampling, copying, etc).
+ between different GPU operations (rendering, sampling, copying, etc.).
 */
 struct TextureBarrierDesc {
     NativeObject resource;
