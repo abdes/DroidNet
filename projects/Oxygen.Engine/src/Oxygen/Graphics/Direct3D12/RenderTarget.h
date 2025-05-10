@@ -26,16 +26,6 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(RenderTarget);
     OXYGEN_DEFAULT_MOVABLE(RenderTarget);
 
-    [[nodiscard]] auto GetViewPort() const -> const ViewPort& override
-    {
-        return swap_chain_->GetViewPort();
-    }
-
-    [[nodiscard]] auto GetScissors() const -> const Scissors& override
-    {
-        return swap_chain_->GetScissors();
-    }
-
     [[nodiscard]] auto GetResource() const -> ID3D12Resource*
     {
         return swap_chain_->GetResource();

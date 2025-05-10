@@ -67,29 +67,9 @@ public:
         ShouldResize(false);
     }
 
-    [[nodiscard]] auto GetViewPort() const -> const ViewPort& override
-    {
-        return GetComponent<SwapChain>().GetViewPort();
-    }
-
-    [[nodiscard]] auto GetScissors() const -> const Scissors& override
-    {
-        return GetComponent<SwapChain>().GetScissors();
-    }
-
     [[nodiscard]] auto GetResource() const -> ID3D12Resource*
     {
         return GetComponent<SwapChain>().GetResource();
-    }
-
-    [[nodiscard]] auto Width() const -> uint32_t override
-    {
-        return static_cast<uint32_t>(GetComponent<SwapChain>().GetViewPort().width);
-    }
-
-    [[nodiscard]] auto Height() const -> uint32_t override
-    {
-        return static_cast<uint32_t>(GetComponent<SwapChain>().GetViewPort().height);
     }
 
     auto GetRenderTarget() const -> std::unique_ptr<oxygen::graphics::RenderTarget> override

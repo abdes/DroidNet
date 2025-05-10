@@ -29,8 +29,8 @@ public:
     auto End() -> graphics::CommandList* override;
 
     // TODO: push up to base class
-    void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) override;
-    void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) override;
+    void SetViewport(const ViewPort& viewport) override;
+    void SetScissors(const Scissors& scissors) override;
     void SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target) override;
 
     void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) override;

@@ -20,6 +20,8 @@
 using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
+using oxygen::graphics::Scissors;
+using oxygen::graphics::ViewPort;
 
 MainModule::MainModule(
     std::shared_ptr<oxygen::Platform> platform,
@@ -170,11 +172,18 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
 
     recorder->SetRenderTarget(surface_->GetRenderTarget());
 
-    const auto& [TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth] = surface_->GetViewPort();
-    recorder->SetViewport(TopLeftX, Width, TopLeftY, Height, MinDepth, MaxDepth);
+    ViewPort viewport {
+        .width = static_cast<float>(surface_->Width()),
+        .height = static_cast<float>(surface_->Height()),
+    };
 
-    const auto& [left, top, right, bottom] = surface_->GetScissors();
-    recorder->SetScissors(left, top, right, bottom);
+    Scissors scissors {
+        .right = static_cast<int32_t>(surface_->Width()),
+        .bottom = static_cast<int32_t>(surface_->Height())
+    };
+
+    recorder->SetViewport(viewport);
+    recorder->SetScissors(scissors);
 
     constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8f, 1.0F }; // Violet color
     recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0F, 0);

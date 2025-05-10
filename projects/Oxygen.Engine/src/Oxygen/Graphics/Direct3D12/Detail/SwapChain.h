@@ -59,16 +59,6 @@ public:
         return render_targets_[current_back_buffer_index_].rtv;
     }
 
-    [[nodiscard]] auto GetViewPort() const -> const ViewPort&
-    {
-        return viewport_;
-    }
-
-    [[nodiscard]] auto GetScissors() const -> const Scissors&
-    {
-        return scissor_;
-    }
-
 protected:
     void UpdateDependencies(const Composition& composition) override;
 
@@ -89,8 +79,6 @@ private:
         ID3D12Resource* resource { nullptr };
         DescriptorHandle rtv {};
     } render_targets_[kFrameBufferCount] {};
-    ViewPort viewport_ {};
-    Scissors scissor_ {};
 
     oxygen::graphics::detail::WindowComponent* window_ {};
 };

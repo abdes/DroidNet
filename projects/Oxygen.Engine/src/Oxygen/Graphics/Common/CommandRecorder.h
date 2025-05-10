@@ -16,7 +16,9 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -60,8 +62,8 @@ public:
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
 
-    virtual void SetViewport(float left, float width, float top, float height, float min_depth, float max_depth) = 0;
-    virtual void SetScissors(int32_t left, int32_t top, int32_t right, int32_t bottom) = 0;
+    virtual void SetViewport(const ViewPort& viewport) = 0;
+    virtual void SetScissors(const Scissors& scissors) = 0;
     virtual void SetRenderTarget(std::unique_ptr<RenderTarget> render_target) = 0;
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 

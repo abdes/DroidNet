@@ -50,9 +50,6 @@ public:
     //! Present the current frame if the surface supports it.
     virtual void Present() const = 0;
 
-    [[nodiscard]] virtual auto GetViewPort() const -> const ViewPort& = 0;
-    [[nodiscard]] virtual auto GetScissors() const -> const Scissors& = 0;
-
     [[nodiscard]] virtual auto Width() const -> uint32_t = 0;
     [[nodiscard]] virtual auto Height() const -> uint32_t = 0;
 

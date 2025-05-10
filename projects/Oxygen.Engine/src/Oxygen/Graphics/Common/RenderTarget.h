@@ -21,9 +21,6 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(RenderTarget);
     OXYGEN_DEFAULT_MOVABLE(RenderTarget);
-
-    [[nodiscard]] virtual auto GetViewPort() const -> const ViewPort& = 0;
-    [[nodiscard]] virtual auto GetScissors() const -> const Scissors& = 0;
 };
 
 } // namespace oxygen
