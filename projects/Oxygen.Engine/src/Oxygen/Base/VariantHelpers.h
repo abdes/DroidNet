@@ -53,7 +53,10 @@ inline constexpr bool always_false_v = false;
         overloads {
             [](const BufferBarrierDesc& desc) { return desc.after; },
             [](const TextureBarrierDesc& desc) { return desc.after; },
-            // Catch-all for unexpected types
+            [](const MemoryBarrierDesc& desc) { return desc.after; },
+            // Provide a catch-all for unexpected types at runtime, or omit it
+            // to have a compile time error if a new type is added but still not
+            // implemented.
             [](const auto&) -> ResourceStates {
                 ABORT_F("Unexpected barrier descriptor type");
             },
