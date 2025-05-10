@@ -184,35 +184,33 @@ auto CommandRecorder::End() -> graphics::CommandList*
     return graphics::CommandRecorder::End();
 }
 
-void CommandRecorder::SetViewport(
-    const float left, const float width, const float top, const float height,
-    const float min_depth, const float max_depth)
+void CommandRecorder::SetViewport(const ViewPort& viewport)
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
     DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
-    D3D12_VIEWPORT viewport;
-    viewport.TopLeftX = left;
-    viewport.TopLeftY = top;
-    viewport.Width = width;
-    viewport.Height = height;
-    viewport.MinDepth = min_depth;
-    viewport.MaxDepth = max_depth;
-    command_list->GetCommandList()->RSSetViewports(1, &viewport);
+    D3D12_VIEWPORT d3d_viewport;
+    d3d_viewport.TopLeftX = viewport.top_left_x;
+    d3d_viewport.TopLeftY = viewport.top_left_y;
+    d3d_viewport.Width = viewport.width;
+    d3d_viewport.Height = viewport.height;
+    d3d_viewport.MinDepth = viewport.min_depth;
+    d3d_viewport.MaxDepth = viewport.max_depth;
+
+    command_list->GetCommandList()->RSSetViewports(1, &d3d_viewport);
 }
 
-void CommandRecorder::SetScissors(
-    const int32_t left, const int32_t top, const int32_t right, const int32_t bottom)
+void CommandRecorder::SetScissors(const Scissors& scissors)
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
 
     D3D12_RECT rect;
-    rect.left = left;
-    rect.top = top;
-    rect.right = right;
-    rect.bottom = bottom;
+    rect.left = scissors.left;
+    rect.top = scissors.top;
+    rect.right = scissors.right;
+    rect.bottom = scissors.bottom;
     command_list->GetCommandList()->RSSetScissorRects(1, &rect);
 }
 

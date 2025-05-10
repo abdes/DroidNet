@@ -11,16 +11,6 @@
 namespace oxygen::graphics {
 
 struct Scissors {
-    Scissors() = default;
-    Scissors(
-        const int32_t left, const int32_t top,
-        const int32_t right, const int32_t bottom)
-        : left(left)
-        , top(top)
-        , right(right)
-        , bottom(bottom)
-    {
-    }
     int32_t left { 0 };
     int32_t top { 0 };
     int32_t right { 0 };

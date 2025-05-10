@@ -153,20 +153,6 @@ void SwapChain::Finalize()
     const auto [width, height] = window_->FrameBufferSize();
     DCHECK_EQ_F(width, swap_chain_desc.Width);
     DCHECK_EQ_F(height, swap_chain_desc.Height);
-
-    // Set viewport
-    viewport_.top_left_x = 0.0F;
-    viewport_.top_left_y = 0.0F;
-    viewport_.width = static_cast<float>(width);
-    viewport_.height = static_cast<float>(height);
-    viewport_.max_depth = 0.0F;
-    viewport_.max_depth = 1.0F;
-
-    // Set scissor rectangle
-    scissor_.left = 0;
-    scissor_.top = 0;
-    scissor_.right = static_cast<LONG>(width);
-    scissor_.bottom = static_cast<LONG>(height);
 }
 
 void SwapChain::Resize()
