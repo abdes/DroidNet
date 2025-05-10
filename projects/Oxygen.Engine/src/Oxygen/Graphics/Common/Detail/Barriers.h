@@ -6,23 +6,23 @@
 
 #pragma once
 
-#include "Oxygen/Base/Logging.h"
-
 #include <string>
 #include <variant>
-#include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 
+
 namespace oxygen::graphics::detail {
 
-// Barrier description structures - these contain all information needed to
-// create barriers but don't represent the actual API-specific barriers
-
-// Memory barrier description
+//! Barrier description for memory operations synchronization.
+/*!
+ Memory barriers ensure visibility of memory operations across the GPU pipeline
+ without requiring explicit state transitions.
+*/
 struct MemoryBarrierDesc {
     NativeObject resource;
 
@@ -32,7 +32,11 @@ struct MemoryBarrierDesc {
     }
 };
 
-// Buffer barrier description
+//! Barrier description for buffer state transitions.
+/*!
+ Buffer barriers ensure proper synchronization when a buffer's usage changes
+ between different GPU operations (e.g., from vertex buffer to UAV).
+*/
 struct BufferBarrierDesc {
     NativeObject resource;
     ResourceStates before;
@@ -45,7 +49,11 @@ struct BufferBarrierDesc {
     }
 };
 
-// Texture barrier description
+//! Barrier description for texture state transitions.
+/*!
+ Texture barriers ensure proper synchronization when a texture's usage changes
+ between different GPU operations (rendering, sampling, copying, etc).
+*/
 struct TextureBarrierDesc {
     NativeObject resource;
     ResourceStates before;
@@ -59,10 +67,16 @@ struct TextureBarrierDesc {
     }
 };
 
-// The barrier descriptor - a variant that can hold any type of barrier description
+//! A variant that can hold any type of barrier description
 using BarrierDesc = std::variant<BufferBarrierDesc, TextureBarrierDesc, MemoryBarrierDesc>;
 
-// Abstract Barrier base class - now just a handle to a barrier description
+//! Unified interface for all types of resource barriers in the graphics system.
+/*!
+ A barrier describes a resource state transition or synchronization point for
+ GPU operations. This class provides a type-safe wrapper around the different
+ barrier descriptors (buffer, texture, and memory) and utility methods to access
+ their properties.
+*/
 class Barrier final {
 public:
     // Constructor with descriptor only (type deduced from descriptor)
@@ -76,16 +90,16 @@ public:
     OXYGEN_DEFAULT_COPYABLE(Barrier)
     OXYGEN_DEFAULT_MOVABLE(Barrier)
 
-    // Check if the barrier is a memory barrier
     [[nodiscard]] auto IsMemoryBarrier() const -> bool
     {
         return std::holds_alternative<MemoryBarrierDesc>(descriptor_);
     }
 
-    // Get the barrier descriptor
-    [[nodiscard]] auto GetDescriptor() const -> const BarrierDesc& { return descriptor_; }
+    [[nodiscard]] auto GetDescriptor() const -> const BarrierDesc&
+    {
+        return descriptor_;
+    }
 
-    // Get the resource for this barrier
     [[nodiscard]] auto GetResource() const -> NativeObject
     {
         return std::visit(
@@ -96,7 +110,7 @@ public:
     auto GetStateBefore() -> ResourceStates
     {
         return std::visit(
-            overloads {
+            Overloads {
                 [](const BufferBarrierDesc& desc) { return desc.before; },
                 [](const TextureBarrierDesc& desc) { return desc.before; },
                 [](const auto&) -> ResourceStates {
@@ -109,7 +123,7 @@ public:
     auto GetStateAfter() -> ResourceStates
     {
         return std::visit(
-            overloads {
+            Overloads {
                 [](const BufferBarrierDesc& desc) { return desc.after; },
                 [](const TextureBarrierDesc& desc) { return desc.after; },
                 [](const auto&) -> ResourceStates {
@@ -119,10 +133,15 @@ public:
             descriptor_);
     }
 
+    //! Append the provided state to the barrier's 'after' state.
+    /*!
+     This method is used to accumulate multiple states for a resource in a
+     single barrier, reducing the number of barriers needed in a command list.
+    */
     void AppendState(ResourceStates state)
     {
         std::visit(
-            overloads {
+            Overloads {
                 [state](BufferBarrierDesc& desc) { desc.after |= state; },
                 [state](TextureBarrierDesc& desc) { desc.after |= state; },
                 [](auto&) {
@@ -133,12 +152,6 @@ public:
     }
 
 private:
-    // helper type for the visitor
-    template <class... Ts>
-    struct overloads : Ts... {
-        using Ts::operator()...;
-    };
-
     BarrierDesc descriptor_;
 };
 
