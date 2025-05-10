@@ -98,7 +98,7 @@ public:
 // C++20 concept to identify resources that can have barriers
 template <typename T>
 concept HoldsNativeResource = requires(T obj) {
-  { obj.GetNativeResource() } -> std::convertible_to<NativeObject>;
+    { obj.GetNativeResource() } -> std::convertible_to<NativeObject>;
 };
 
 } // namespace oxygen::graphics

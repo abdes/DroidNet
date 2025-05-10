@@ -15,7 +15,6 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 
-
 namespace oxygen::graphics::detail {
 
 //! Barrier description for memory operations synchronization.
@@ -113,8 +112,10 @@ public:
             Overloads {
                 [](const BufferBarrierDesc& desc) { return desc.before; },
                 [](const TextureBarrierDesc& desc) { return desc.before; },
-                [](const auto&) -> ResourceStates {
-                    ABORT_F("Unhandled barrier descriptor type in Barrier::GetStateBefore");
+                [](const MemoryBarrierDesc&) {
+                    ABORT_F("Invalid use of GetStateBefore() for MemoryBarrierDesc");
+                    // ReSharper disable once CppDFAUnreachableCode
+                    return ResourceStates::kUnknown; // Unreachable
                 },
             },
             descriptor_);
@@ -126,8 +127,10 @@ public:
             Overloads {
                 [](const BufferBarrierDesc& desc) { return desc.after; },
                 [](const TextureBarrierDesc& desc) { return desc.after; },
-                [](const auto&) -> ResourceStates {
-                    ABORT_F("Unhandled barrier descriptor type in Barrier::GetStateAfter");
+                [](const MemoryBarrierDesc&) {
+                    ABORT_F("Invalid use of GetStateAfter() for MemoryBarrierDesc");
+                    // ReSharper disable once CppDFAUnreachableCode
+                    return ResourceStates::kUnknown; // Unreachable
                 },
             },
             descriptor_);
@@ -144,8 +147,8 @@ public:
             Overloads {
                 [state](BufferBarrierDesc& desc) { desc.after |= state; },
                 [state](TextureBarrierDesc& desc) { desc.after |= state; },
-                [](auto&) {
-                    ABORT_F("Unhandled barrier descriptor type in Barrier::AppendState");
+                [](const MemoryBarrierDesc&) {
+                    ABORT_F("Invalid use of AppendState() for MemoryBarrierDesc");
                 },
             },
             descriptor_);

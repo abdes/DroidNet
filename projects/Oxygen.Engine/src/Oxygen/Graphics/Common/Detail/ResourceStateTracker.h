@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <span>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -138,14 +139,21 @@ public:
         }
     }
 
-    // Get all pending barriers
-    [[nodiscard]] auto GetPendingBarriers() const -> const std::vector<Barrier>&
+    [[nodiscard]] auto GetPendingBarriers() const -> std::span<const Barrier>
     {
         return pending_barriers_;
     }
 
+    [[nodiscard]] auto HasPendingBarriers() const
+    {
+        return !pending_barriers_.empty();
+    }
+
     // Clear all tracking data
     OXYGEN_GFX_API void Clear();
+
+    // Clear pending barriers
+    OXYGEN_GFX_API void ClearPendingBarriers();
 
     OXYGEN_GFX_API void OnCommandListClosed();
 
@@ -162,6 +170,22 @@ private:
         bool keep_initial_state { false };
 
         bool first_memory_barrier_inserted { false };
+
+        [[nodiscard]] auto NeedsTransition(const ResourceStates required_state) const
+        {
+            return current_state != required_state;
+        }
+
+        [[nodiscard]] auto NeedsMemoryBarrier(const ResourceStates required_state) const
+        {
+            // Requested state includes UnorderedAccess, AND
+            return ((required_state & ResourceStates::kUnorderedAccess) == ResourceStates::kUnorderedAccess) && (
+                       // We are auto inserting memory barriers, OR
+                       enable_auto_memory_barriers ||
+                       // memory barriers are manually managed, and this is the first time
+                       // a transition for UnorderedAccess is requested
+                       !first_memory_barrier_inserted);
+        }
     };
 
     struct BufferTrackingInfo : public BasicTrackingInfo {
@@ -188,31 +212,30 @@ private:
     using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
 
     OXYGEN_GFX_API auto GetTrackingInfo(const NativeObject& resource) -> TrackingInfo&;
-
     OXYGEN_GFX_API void RequireBufferState(const Buffer& buffer, ResourceStates required_state, bool is_permanent);
     OXYGEN_GFX_API void RequireTextureState(const Texture& texture, ResourceStates required_state, bool is_permanent);
 
-    // Create a barrier descriptor for buffer resources
-    static auto CreateBufferBarrierDesc(
-        const NativeObject& native_object,
-        const ResourceStates before,
-        const ResourceStates after) -> BufferBarrierDesc
-    {
-        return BufferBarrierDesc { .resource = native_object, .before = before, .after = after };
-        // TODO: Could add buffer-specific fields here  or keep a reference to
-        // the buffer object itself
-    }
+    //! Validates state transition requests for resources that may have previously transitioned to a permanent state.
+    /*!
+     For resources which state has been marked as permanent, this method enforces that their state cannot be changed. If
+     a state transition is attempted for a permanent resource to a state different from its current state, an error is
+     logged and an exception is thrown.
 
-    // Create a barrier descriptor for texture resources
-    static auto CreateTextureBarrierDesc(
+     \return `true` if the resource state is permanent and the requested state is not different (indicating that no
+             further processing is needed), `false` if the resource state is not permanent (allowing state transition)
+     \throws std::runtime_error If attempting to change a permanent resource's state.
+    */
+    static auto HandlePermanentState(const BasicTrackingInfo& tracking,
+        ResourceStates required_state,
+        const char* resource_type_name) -> bool;
+
+    // Attempts to merge a new state transition with an existing pending barrier
+    // Returns true if successfully merged, false if a new barrier is needed
+    template <typename BarrierDescType>
+    auto TryMergeWithExistingTransition(
         const NativeObject& native_object,
-        const ResourceStates before,
-        const ResourceStates after) -> TextureBarrierDesc
-    {
-        return TextureBarrierDesc { .resource = native_object, .before = before, .after = after };
-        // TODO: Could add texture-specific fields here (mip levels, array
-        // slices, etc.) or keep a reference to the texture object itself
-    }
+        ResourceStates& current_state,
+        ResourceStates required_state) -> bool;
 
     std::unordered_map<NativeObject, TrackingInfo> tracking_;
     std::vector<Barrier> pending_barriers_;

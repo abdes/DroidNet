@@ -7,14 +7,97 @@
 #include <ranges>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
+using oxygen::graphics::NativeObject;
+using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::MemoryBarrierDesc;
 using oxygen::graphics::detail::ResourceStateTracker;
+using oxygen::graphics::detail::TextureBarrierDesc;
+
+namespace {
+
+// Create a barrier descriptor for buffer resources
+auto CreateBufferBarrierDesc(
+    const NativeObject& native_object,
+    const ResourceStates before,
+    const ResourceStates after) -> BufferBarrierDesc
+{
+    return BufferBarrierDesc { .resource = native_object, .before = before, .after = after };
+    // TODO: Could add buffer-specific fields here  or keep a reference to
+    // the buffer object itself
+}
+
+// Create a barrier descriptor for texture resources
+auto CreateTextureBarrierDesc(
+    const NativeObject& native_object,
+    const ResourceStates before,
+    const ResourceStates after) -> TextureBarrierDesc
+{
+    return TextureBarrierDesc { .resource = native_object, .before = before, .after = after };
+    // TODO: Could add texture-specific fields here (mip levels, array
+    // slices, etc.) or keep a reference to the texture object itself
+}
+
+} // namespace
+
+auto ResourceStateTracker::HandlePermanentState(
+    const BasicTrackingInfo& tracking,
+    ResourceStates required_state,
+    const char* resource_type_name) -> bool
+{
+    if (tracking.is_permanent) {
+        if (tracking.current_state != required_state) {
+            LOG_F(ERROR,
+                "Attempt to change the permanent state of a {} resource from {} to {}.",
+                resource_type_name,
+                nostd::to_string(tracking.current_state),
+                nostd::to_string(required_state));
+            throw std::runtime_error("Cannot change state of a resource which was "
+                                     "previously transitioned to a permanent state");
+        }
+        return true;
+    }
+    return false;
+}
+
+template <typename BarrierDescType>
+auto ResourceStateTracker::TryMergeWithExistingTransition(
+    const NativeObject& native_object,
+    ResourceStates& current_state,
+    const ResourceStates required_state) -> bool
+{
+    for (auto& pending_barrier : std::ranges::reverse_view(pending_barriers_)) {
+        if (pending_barrier.GetResource() == native_object) {
+            if (std::holds_alternative<BarrierDescType>(pending_barrier.GetDescriptor())) {
+                pending_barrier.AppendState(required_state);
+                current_state = pending_barrier.GetStateAfter();
+                return true; // Successfully merged
+            }
+            if (pending_barrier.IsMemoryBarrier()) {
+                // Stop merging if a memory barrier for this resource is encountered
+                break;
+            }
+        }
+    }
+    return false; // Not merged
+}
+
+// Explicit instantiations for the template specializations we need
+template auto ResourceStateTracker::TryMergeWithExistingTransition<BufferBarrierDesc>(
+    const NativeObject& native_object,
+    ResourceStates& current_state,
+    const ResourceStates required_state) -> bool;
+
+template auto ResourceStateTracker::TryMergeWithExistingTransition<TextureBarrierDesc>(
+    const NativeObject& native_object,
+    ResourceStates& current_state,
+    const ResourceStates required_state) -> bool;
 
 auto ResourceStateTracker::GetTrackingInfo(const NativeObject& resource) -> TrackingInfo&
 {
@@ -35,42 +118,20 @@ void ResourceStateTracker::RequireBufferState(
         "Resource is not a buffer or not tracked as a buffer");
     auto& tracking = std::get<BufferTrackingInfo>(tracking_info);
 
-    // Now you can use tracking as before, no need for std::visit
-    if (tracking.is_permanent) {
-        if (tracking.current_state != required_state) {
-            throw std::runtime_error("Cannot change state of a resource marked as permanent");
-        }
+    if (HandlePermanentState(tracking, required_state, "buffer")) {
         return;
     }
+
     if (is_permanent) {
         tracking.is_permanent = true;
     }
-    const bool need_transition = tracking.current_state != required_state;
-    const bool need_memory_barrier =
-        // Requested state includes UnorderedAccess, AND
-        ((required_state & ResourceStates::kUnorderedAccess) == ResourceStates::kUnorderedAccess) && (
-            // We are auto inserting memory barriers, OR
-            tracking.enable_auto_memory_barriers ||
-            // memory barriers are manually managed, and this is the first time
-            // a transition for UnorderedAccess is requested
-            !tracking.first_memory_barrier_inserted);
+
+    const bool need_transition = tracking.NeedsTransition(required_state);
+    const bool need_memory_barrier = tracking.NeedsMemoryBarrier(required_state);
 
     if (need_transition) {
-        auto merged = false;
-        for (auto& pending_barrier : std::ranges::reverse_view(pending_barriers_)) {
-            if (pending_barrier.GetResource() == native_object) {
-                if (std::holds_alternative<BufferBarrierDesc>(pending_barrier.GetDescriptor())) {
-                    pending_barrier.AppendState(required_state);
-                    tracking.current_state = pending_barrier.GetStateAfter();
-                    merged = true;
-                    break;
-                }
-                if (pending_barrier.IsMemoryBarrier()) {
-                    break;
-                }
-            }
-        }
-        if (!merged) {
+        if (!TryMergeWithExistingTransition<BufferBarrierDesc>(
+                native_object, tracking.current_state, required_state)) {
             pending_barriers_.emplace_back(CreateBufferBarrierDesc(
                 native_object,
                 tracking.current_state,
@@ -85,16 +146,58 @@ void ResourceStateTracker::RequireBufferState(
 }
 
 void ResourceStateTracker::RequireTextureState(
-    const Texture& resource,
+    const Texture& texture,
     ResourceStates required_state,
     bool is_permanent)
 {
+    const NativeObject native_object = texture.GetNativeResource();
+    auto& tracking_info = GetTrackingInfo(native_object);
+    DCHECK_F(std::holds_alternative<TextureTrackingInfo>(tracking_info),
+        "Resource is not a texture or not tracked as a texture");
+    auto& tracking = std::get<TextureTrackingInfo>(tracking_info);
+
+    if (HandlePermanentState(tracking, required_state, "texture")) {
+        return;
+    }
+
+    if (is_permanent) {
+        tracking.is_permanent = true;
+    }
+
+    const bool need_transition = tracking.NeedsTransition(required_state);
+    const bool need_memory_barrier = tracking.NeedsMemoryBarrier(required_state);
+
+    if (need_transition) {
+        if (!TryMergeWithExistingTransition<TextureBarrierDesc>(
+                native_object, tracking.current_state, required_state)) {
+            pending_barriers_.emplace_back(CreateTextureBarrierDesc(
+                native_object,
+                tracking.current_state,
+                required_state));
+        }
+    } else if (need_memory_barrier) {
+        // This case handles when the state is not changing (e.g., already UAV)
+        // but a memory barrier is needed for synchronization between UAV operations.
+        pending_barriers_.emplace_back(MemoryBarrierDesc { native_object });
+        tracking.first_memory_barrier_inserted = true;
+    }
+
+    // Update the tracked current state to the newly required state.
+    // If merged, pending_barrier.GetStateAfter() would be this required_state.
+    // If a new transition was added, its 'after' state is this required_state.
+    // If only a memory barrier was added, the state itself didn't change, but this reaffirms it.
+    tracking.current_state = required_state;
 }
 
 void ResourceStateTracker::Clear()
 {
     pending_barriers_.clear();
     tracking_.clear();
+}
+
+void ResourceStateTracker::ClearPendingBarriers()
+{
+    pending_barriers_.clear();
 }
 
 void ResourceStateTracker::OnCommandListClosed()

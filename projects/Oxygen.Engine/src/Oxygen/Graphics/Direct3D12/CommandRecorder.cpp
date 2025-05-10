@@ -12,12 +12,16 @@
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 #include <d3d12.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -26,8 +30,126 @@
 
 using oxygen::graphics::d3d12::CommandRecorder;
 using oxygen::graphics::d3d12::detail::GetGraphics;
+using oxygen::graphics::detail::Barrier;
+using oxygen::graphics::detail::BufferBarrierDesc;
+using oxygen::graphics::detail::MemoryBarrierDesc;
+using oxygen::graphics::detail::TextureBarrierDesc;
 
-CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list, oxygen::graphics::CommandQueue* target_queue)
+namespace {
+
+// Helper function to convert common ResourceStates to D3D12_RESOURCE_STATES
+auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states) -> D3D12_RESOURCE_STATES
+{
+    using oxygen::graphics::ResourceStates;
+
+    DCHECK_F(common_states != ResourceStates::kUnknown,
+        "Illegal `ResourceStates::kUnknown` encountered in barrier state mapping to D3D12.");
+
+    // Handle specific, non-bitwise states first. Mixing these with other states
+    // is meaningless and can lead to undefined behavior.
+    if (common_states == ResourceStates::kUndefined) {
+        // Typically initial state for many resources
+        return D3D12_RESOURCE_STATE_COMMON;
+    }
+    if (common_states == ResourceStates::kPresent) {
+        // For swap chain presentation
+        return D3D12_RESOURCE_STATE_PRESENT;
+    }
+    if (common_states == ResourceStates::kCommon) {
+        // Explicit request for D3D12 common state
+        return D3D12_RESOURCE_STATE_COMMON;
+    }
+
+    D3D12_RESOURCE_STATES d3d_states = {};
+
+    // Define a local capturing lambda to handle the mapping
+    auto map_flag_if_present =
+        [&](ResourceStates flag_to_check, D3D12_RESOURCE_STATES d3d12_equivalent) {
+            if ((common_states & flag_to_check) == flag_to_check) {
+                d3d_states |= d3d12_equivalent;
+            }
+        };
+
+    map_flag_if_present(ResourceStates::kBuildAccelStructureRead, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    map_flag_if_present(ResourceStates::kBuildAccelStructureWrite, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    map_flag_if_present(ResourceStates::kConstantBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    map_flag_if_present(ResourceStates::kCopyDest, D3D12_RESOURCE_STATE_COPY_DEST);
+    map_flag_if_present(ResourceStates::kCopySource, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    map_flag_if_present(ResourceStates::kDepthRead, D3D12_RESOURCE_STATE_DEPTH_READ);
+    map_flag_if_present(ResourceStates::kDepthWrite, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    map_flag_if_present(ResourceStates::kGenericRead, D3D12_RESOURCE_STATE_GENERIC_READ);
+    map_flag_if_present(ResourceStates::kIndexBuffer, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+    map_flag_if_present(ResourceStates::kIndirectArgument, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+    map_flag_if_present(ResourceStates::kInputAttachment, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    map_flag_if_present(ResourceStates::kRayTracing, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+    map_flag_if_present(ResourceStates::kRenderTarget, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    map_flag_if_present(ResourceStates::kResolveDest, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+    map_flag_if_present(ResourceStates::kResolveSource, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+    map_flag_if_present(ResourceStates::kShaderResource, (D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+    map_flag_if_present(ResourceStates::kShadingRate, D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE);
+    map_flag_if_present(ResourceStates::kStreamOut, D3D12_RESOURCE_STATE_STREAM_OUT);
+    map_flag_if_present(ResourceStates::kUnorderedAccess, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    map_flag_if_present(ResourceStates::kVertexBuffer, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+
+    if (d3d_states == 0) {
+        DLOG_F(WARNING, "ResourceStates ({:#X}) did not map to any specific D3D12 states; "
+                        "falling back to D3D12_RESOURCE_STATE_COMMON.",
+            static_cast<std::underlying_type_t<ResourceStates>>(common_states));
+        return D3D12_RESOURCE_STATE_COMMON;
+    }
+
+    return d3d_states;
+}
+
+// Static helper functions to process specific barrier types
+auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
+{
+    D3D12_RESOURCE_BARRIER d3d12_barrier = {};
+    d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+    auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
+    DCHECK_NOTNULL_F(p_resource, "Transition barrier (Buffer) cannot have a null resource.");
+
+    d3d12_barrier.Transition.pResource = p_resource;
+    d3d12_barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES; // Or specific subresource if provided
+    d3d12_barrier.Transition.StateBefore = ConvertResourceStates(desc.before);
+    d3d12_barrier.Transition.StateAfter = ConvertResourceStates(desc.after);
+    return d3d12_barrier;
+}
+
+auto ProcessBarrierDesc(const TextureBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
+{
+    D3D12_RESOURCE_BARRIER d3d12_barrier = {};
+    d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+    auto* p_resource = desc.resource.AsPointer<ID3D12Resource>();
+    DCHECK_NOTNULL_F(p_resource, "Transition barrier (Texture) cannot have a null resource.");
+
+    d3d12_barrier.Transition.pResource = p_resource;
+    d3d12_barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES; // Or specific subresource if provided
+    d3d12_barrier.Transition.StateBefore = ConvertResourceStates(desc.before);
+    d3d12_barrier.Transition.StateAfter = ConvertResourceStates(desc.after);
+    return d3d12_barrier;
+}
+
+auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
+{
+    D3D12_RESOURCE_BARRIER d3d12_barrier = {};
+    d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    if (desc.resource.AsPointer<ID3D12Resource>() != nullptr) {
+        d3d12_barrier.UAV.pResource = desc.resource.AsPointer<ID3D12Resource>();
+    } else {
+        d3d12_barrier.UAV.pResource = nullptr; // Global UAV barrier
+    }
+    return d3d12_barrier;
+}
+
+} // anonymous namespace
+
+CommandRecorder::CommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     : Base(command_list, target_queue)
 {
     CreateRootSignature();
@@ -35,14 +157,14 @@ CommandRecorder::CommandRecorder(oxygen::graphics::CommandList* command_list, ox
 
 void CommandRecorder::Begin()
 {
-    oxygen::graphics::CommandRecorder::Begin();
+    graphics::CommandRecorder::Begin();
 
     // resource_state_cache_.OnBeginCommandBuffer();
 
     ResetState();
 }
 
-auto CommandRecorder::End() -> oxygen::graphics::CommandList*
+auto CommandRecorder::End() -> graphics::CommandList*
 {
     if (current_render_target_ != nullptr) {
         auto* command_list = GetConcreteCommandList();
@@ -59,7 +181,7 @@ auto CommandRecorder::End() -> oxygen::graphics::CommandList*
         };
         command_list->GetCommandList()->ResourceBarrier(1, &barrier);
     }
-    return oxygen::graphics::CommandRecorder::End();
+    return graphics::CommandRecorder::End();
 }
 
 void CommandRecorder::SetViewport(
@@ -140,7 +262,7 @@ void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, co
     //    clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
 
     //  mCommandList->ClearDepthStencilView(handle, clearFlags, depthValue, stencilValue, 0, NULL);
-    //}
+    // }
 }
 void CommandRecorder::SetVertexBuffers(
     uint32_t num,
@@ -276,7 +398,37 @@ void CommandRecorder::ResetState()
     // mIndexBufferChanged = false;
 
     // for (uint32 i = 0; i < NFE_RENDERER_MAX_VERTEX_BUFFERS; ++i)
-    //{
-    //   mBoundVertexBuffers[i] = nullptr;
+    // {
+    //     mBoundVertexBuffers[i] = nullptr;
     // }
+}
+
+void CommandRecorder::ExecuteBarriers(std::span<const Barrier> barriers)
+{
+    if (barriers.empty()) {
+        return;
+    }
+
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    std::vector<D3D12_RESOURCE_BARRIER> d3d12_barriers;
+    d3d12_barriers.reserve(barriers.size());
+
+    for (const auto& barrier : barriers) {
+        const auto& desc_variant = barrier.GetDescriptor();
+        d3d12_barriers.push_back(std::visit(
+            Overloads {
+                [](const BufferBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
+                [](const TextureBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
+                [](const MemoryBarrierDesc& desc) { return ProcessBarrierDesc(desc); },
+            },
+            desc_variant));
+    }
+
+    if (!d3d12_barriers.empty()) {
+        d3d12_command_list->ResourceBarrier(static_cast<UINT>(d3d12_barriers.size()), d3d12_barriers.data());
+    }
 }
