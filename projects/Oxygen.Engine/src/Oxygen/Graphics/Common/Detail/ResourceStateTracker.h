@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics::detail {
 
@@ -267,11 +268,11 @@ public:
     }
 
     // Clear all tracking data
-    void Clear();
+    OXYGEN_GFX_API void Clear();
 
-    void OnCommandListClosed();
+    OXYGEN_GFX_API void OnCommandListClosed();
 
-    void OnCommandListSubmitted();
+    OXYGEN_GFX_API void OnCommandListSubmitted();
 
 private:
     struct BasicTrackingInfo {
@@ -309,10 +310,10 @@ private:
     // The barrier descriptor - a variant that can hold any type of barrier description
     using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
 
-    auto GetTrackingInfo(const NativeObject& resource) -> TrackingInfo&;
+    OXYGEN_GFX_API auto GetTrackingInfo(const NativeObject& resource) -> TrackingInfo&;
 
-    void RequireBufferState(const Buffer& buffer, ResourceStates required_state, bool is_permanent);
-    void RequireTextureState(const Texture& texture, ResourceStates required_state, bool is_permanent);
+    OXYGEN_GFX_API void RequireBufferState(const Buffer& buffer, ResourceStates required_state, bool is_permanent);
+    OXYGEN_GFX_API void RequireTextureState(const Texture& texture, ResourceStates required_state, bool is_permanent);
 
     // Create a barrier descriptor for buffer resources
     auto CreateBufferBarrierDesc(
