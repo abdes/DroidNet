@@ -63,6 +63,7 @@ target_sources(
       "Endian.h"
       "FileStream.h"
       "Finally.h"
+      "Hash.h"
       "Logging.h"
       "Macros.h"
       "MemoryStream.h"
