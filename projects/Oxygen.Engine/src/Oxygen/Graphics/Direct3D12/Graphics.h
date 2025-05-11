@@ -50,12 +50,6 @@ namespace d3d12 {
             std::shared_ptr<graphics::CommandQueue> command_queue)
             const -> std::shared_ptr<graphics::Surface> override;
 
-        [[nodiscard]] auto CreateTexture(TextureDesc desc, std::string_view name) const
-            -> std::shared_ptr<graphics::Texture> override;
-        [[nodiscard]] auto CreateTextureFromNativeObject(
-            TextureDesc desc, NativeObject native, std::string_view name) const
-            -> std::shared_ptr<graphics::Texture> override;
-
         //! @{
         //! Device Manager API (module internal)
         [[nodiscard]] auto GetFactory() const -> dx::IFactory*;

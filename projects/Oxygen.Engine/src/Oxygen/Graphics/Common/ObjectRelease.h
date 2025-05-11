@@ -29,10 +29,21 @@ void ObjectRelease(T*& resource) noexcept
     }
 }
 
-//! Immediately releases a resource with no `Release()` method, resets the
-//! reference to it and sets the provided pointer to `nullptr`.
+//! Immediately releases a resource  held by a `shared_ptr`, resulting in its
+//! reference count being decremented, and sets the provided pointer to null.
 template <typename T>
 void ObjectRelease(std::shared_ptr<T>& resource) noexcept
+{
+    // This will reset the shared_ptr, call the object destructor and nullify
+    // the referenced variable/member. Note that the actual release of the
+    // graphics resource must be done in the destructor of the object.
+    resource = {};
+}
+
+//! Immediately releases a resource held by a `unique_ptr` (which may or may not
+//! have a custom deleter), and sets the provided pointer to null.
+template <typename T>
+void ObjectRelease(std::unique_ptr<T>& resource) noexcept
 {
     // This will reset the shared_ptr, call the object destructor and nullify
     // the referenced variable/member. Note that the actual release of the

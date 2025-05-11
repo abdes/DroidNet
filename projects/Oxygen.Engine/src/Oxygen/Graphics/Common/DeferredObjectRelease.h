@@ -6,28 +6,46 @@
 
 #pragma once
 
-#include <Oxygen/Graphics/Common/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 
 namespace oxygen::graphics {
 
-template <typename T>
+//! Registers a resource with a `Release()` method for deferred release, and
+//! resets the variable holding it to null. The resource's reference count is
+//! __NOT__ decremented until the release actually happends.
+template <HasReleaseMethod T>
 void DeferredObjectRelease(T*& resource,
-    PerFrameResourceManager& resource_manager) noexcept
+    detail::PerFrameResourceManager& resource_manager) noexcept
 {
     if (resource) {
         resource_manager.RegisterDeferredRelease(resource);
+        resource = nullptr;
     }
 }
 
-//! Immediately releases a resource that has a `Release()` method, and
-//! sets the provided pointer to `nullptr`.
-template <typename T>
+//! Registers a resource held by a `shared_ptr` for deferred release, and resets
+//! the pointer. The resource's reference count will stay > 0 for as long as it
+//! is waiting to be released.
+template <HasReleaseMethod T>
 void DeferredObjectRelease(std::shared_ptr<T>& resource,
-    PerFrameResourceManager& resource_manager) noexcept
+    detail::PerFrameResourceManager& resource_manager) noexcept
     requires HasReleaseMethod<T>
 {
     if (resource) {
         resource_manager.RegisterDeferredRelease(resource);
+        resource.reset();
+    }
+}
+
+//! Immediately releases a resource held by a `unique_ptr`, and
+//! sets the provided pointer to `nullptr`.
+template <HasReleaseMethod T>
+void DeferredObjectRelease(std::unique_ptr<T>& resource,
+    detail::PerFrameResourceManager& resource_manager) noexcept
+    requires HasReleaseMethod<T>
+{
+    if (resource) {
+        resource_manager.RegisterDeferredRelease(resource.release());
     }
 }
 

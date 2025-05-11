@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <functional>
+#include <memory>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -13,10 +13,8 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/Constants.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -29,6 +27,10 @@ namespace oxygen {
 
 namespace graphics {
     class IShaderByteCode;
+    class CommandQueue;
+    class CommandList;
+    class Renderer;
+
     namespace detail {
         class RenderThread;
     } // namespace detail
@@ -102,15 +104,6 @@ public:
         std::weak_ptr<graphics::Surface> surface,
         uint32_t frames_in_flight)
         -> std::shared_ptr<graphics::Renderer>;
-
-    [[nodiscard]] virtual auto CreateTexture(
-        graphics::TextureDesc desc, std::string_view name = "Texture") const
-        -> std::shared_ptr<graphics::Texture>
-        = 0;
-    [[nodiscard]] virtual auto CreateTextureFromNativeObject(
-        graphics::TextureDesc desc, graphics::NativeObject native, std::string_view name = "Texture") const
-        -> std::shared_ptr<graphics::Texture>
-        = 0;
 
 protected:
     //! Create a command queue for the given role and allocation preference.

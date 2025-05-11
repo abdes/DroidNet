@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "ShaderManager.h"
+
 #include <memory>
 #include <string_view>
 
@@ -14,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 namespace oxygen {
 
@@ -25,6 +28,10 @@ namespace graphics {
     class CommandList;
     class CommandQueue;
     class CommandRecorder;
+
+    namespace detail {
+        class PerFrameResourceManager;
+    } // namespace detail
 
     class Renderer
         : public Composition,
@@ -50,6 +57,20 @@ namespace graphics {
             -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>;
 
         [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_index_; }
+
+        [[nodiscard]] auto GetPerFrameResourceManager() const -> detail::PerFrameResourceManager&
+        {
+            return *per_frame_resource_manager_;
+        }
+
+        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateTexture(graphics::TextureDesc desc) const
+            -> std::shared_ptr<graphics::Texture>
+            = 0;
+
+        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateTextureFromNativeObject(
+            TextureDesc desc, NativeObject native) const
+            -> std::shared_ptr<graphics::Texture>
+            = 0;
 
     protected:
         [[nodiscard]] virtual auto CreateCommandRecorder(
@@ -78,7 +99,9 @@ namespace graphics {
         uint32_t frame_count_;
         std::unique_ptr<Frame[]> frames_;
         uint32_t current_frame_index_ { 0 };
+
+        std::shared_ptr<detail::PerFrameResourceManager> per_frame_resource_manager_;
     };
 
 } // namespace graphics
-} // namespace oxygen::graphics
+} // namespace oxygen

@@ -9,26 +9,25 @@
 #include <Oxygen/Base/logging.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
-#include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
+using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::Texture;
 
 Texture::Texture(
     TextureDesc desc,
     D3D12_RESOURCE_DESC resource_desc,
-    ResourcePtr resource,
-    D3D12MA::Allocation* allocation,
-    const std::string_view name)
-    : Base(name)
+    GraphicResource::ManagedPtr<ID3D12Resource> resource,
+    GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation)
+    : Base(desc.debug_name)
     , desc_(desc)
     , resource_desc_(resource_desc)
-    , resource_(std::move(resource))
-    , allocation_(allocation)
 {
-    DCHECK_NOTNULL_F(resource_);
+    DCHECK_NOTNULL_F(resource);
 
-    NameObject(resource_.get(), name);
+    AddComponent<GraphicResource>(desc.debug_name, std::move(resource), std::move(allocation));
 
     // if (desc.is_uav) {
     //     m_ClearMipLevelUAVs.resize(desc.mip_levels);
@@ -40,40 +39,37 @@ Texture::Texture(
 
 Texture::~Texture()
 {
-    ObjectRelease(allocation_);
-
-    // The resource will be autoimatically released by the unique_ptr custom
-    // deleter when it goes out of scope.
 }
 
 Texture::Texture(Texture&& other) noexcept
     : Base(std::move(other))
-    , desc_(other.desc_)
-    , resource_(std::exchange(other.resource_, nullptr))
+    , desc_(std::move(other.desc_))
     , resource_desc_(other.resource_desc_)
     , plane_count_(std::exchange(other.plane_count_, 1))
 {
-    static_assert(std::is_trivially_copyable<TextureDesc>());
     static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
 }
 
 auto Texture::operator=(Texture&& other) noexcept -> Texture&
 {
-    static_assert(std::is_trivially_copyable<TextureDesc>());
     static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
 
     if (this != &other) {
         Base::operator=(std::move(other));
-        desc_ = other.desc_;
-        resource_ = std::exchange(other.resource_, nullptr);
+        desc_ = std::move(other.desc_);
         resource_desc_ = other.resource_desc_;
         plane_count_ = std::exchange(other.plane_count_, 1);
     }
     return *this;
 }
 
-void Texture::SetName(std::string_view name) noexcept
+auto Texture::GetNativeResource() const -> NativeObject
+{
+    return NativeObject(GetComponent<GraphicResource>().GetResource(), ClassTypeId());
+}
+
+void Texture::SetName(const std::string_view name) noexcept
 {
     Base::SetName(name);
-    NameObject(resource_.get(), name);
+    GetComponent<GraphicResource>().SetName(name);
 }

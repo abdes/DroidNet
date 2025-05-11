@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 #include <string_view>
 
@@ -14,50 +13,50 @@
 
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
-namespace oxygen::graphics::d3d12 {
+namespace oxygen::graphics {
 
-class Texture : public graphics::Texture {
-    using Base = graphics::Texture;
+namespace detail {
+    class PerFrameResourceManager;
+} // namespace detail
 
-public:
-    using ResourceDeleter = std::function<void(ID3D12Resource*)>;
-    using ResourcePtr = std::unique_ptr<ID3D12Resource, ResourceDeleter>;
+namespace d3d12 {
 
-    OXYGEN_D3D12_API explicit Texture(
-        TextureDesc desc,
-        D3D12_RESOURCE_DESC resource_desc,
-        ResourcePtr resource,
-        D3D12MA::Allocation* allocation,
-        std::string_view name = "Texture");
+    class Texture : public graphics::Texture {
+        using Base = graphics::Texture;
 
-    ~Texture() override;
+    public:
+        OXYGEN_D3D12_API Texture(
+            TextureDesc desc,
+            D3D12_RESOURCE_DESC resource_desc,
+            GraphicResource::ManagedPtr<ID3D12Resource> resource = nullptr,
+            GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation = nullptr);
 
-    OXYGEN_MAKE_NON_COPYABLE(Texture);
-    Texture(Texture&& other) noexcept;
-    auto operator=(Texture&& other) noexcept -> Texture&;
+        ~Texture() override;
 
-    [[nodiscard]] auto GetNativeResource() const -> NativeObject override
-    {
-        return NativeObject(resource_.get(), ClassTypeId());
-    }
+        OXYGEN_MAKE_NON_COPYABLE(Texture);
+        Texture(Texture&& other) noexcept;
+        auto operator=(Texture&& other) noexcept -> Texture&;
 
-    [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc&
-    {
-        return desc_;
-    }
+        [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
 
-    void SetName(std::string_view name) noexcept override;
+        [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc&
+        {
+            return desc_;
+        }
 
-private:
-    TextureDesc desc_;
-    ResourcePtr resource_;
-    D3D12MA::Allocation* allocation_ { nullptr };
-    D3D12_RESOURCE_DESC resource_desc_;
-    uint8_t plane_count_ = 1;
+        void SetName(std::string_view name) noexcept override;
 
-    // std::vector<DescriptorIndex> m_ClearMipLevelUAVs;
-};
+    private:
+        TextureDesc desc_;
+        D3D12_RESOURCE_DESC resource_desc_;
+        uint8_t plane_count_ = 1;
 
-} // namespace oxygen::graphics::d3d12
+        // std::vector<DescriptorIndex> m_ClearMipLevelUAVs;
+    };
+
+} // namespace d3d12
+
+} // namespace oxygen::graphics

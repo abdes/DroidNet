@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <Oxygen/Config/GraphicsConfig.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -55,6 +53,13 @@ public:
     auto GetCurrentRenderTarget() const -> const RenderTarget& { return *current_render_target_; }
 
     // [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
+
+    [[nodiscard]] auto CreateTexture(TextureDesc desc) const
+        -> std::shared_ptr<graphics::Texture> override;
+
+    [[nodiscard]] auto CreateTextureFromNativeObject(
+        TextureDesc desc, NativeObject native) const
+        -> std::shared_ptr<graphics::Texture> override;
 
 protected:
     [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)

@@ -24,11 +24,6 @@ struct BufferView {
 
 class Buffer : public Composition, public Named {
 public:
-    Buffer()
-        : Buffer("Buffer")
-    {
-    }
-
     explicit Buffer(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);

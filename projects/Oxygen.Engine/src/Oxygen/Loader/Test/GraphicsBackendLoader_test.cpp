@@ -49,8 +49,6 @@ public:
     MOCK_METHOD(std::unique_ptr<oxygen::imgui::ImguiModule>, CreateImGuiModule, (oxygen::EngineWeakPtr, oxygen::platform::WindowIdType), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
-    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (oxygen::graphics::TextureDesc, std::string_view), (const, override));
-    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (oxygen::graphics::TextureDesc, oxygen::graphics::NativeObject, std::string_view), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (std::string_view, oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
     MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRenderer, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
