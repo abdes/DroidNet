@@ -48,7 +48,7 @@ struct TextureDesc {
 
     std::string debug_name { "Texture" };
 
-    bool is_shader_resource = true; // Note: is_shader_resource is initialized to 'true' for backward compatibility
+    bool is_shader_resource = false;
     bool is_render_target = false;
     bool is_uav = false;
     bool is_typeless = false;
@@ -71,17 +71,156 @@ struct TextureDesc {
     ResourceAccessMode cpu_access = ResourceAccessMode::kImmutable;
 };
 
+typedef uint32_t MipLevel;
+typedef uint32_t ArraySlice;
+
+//! Represents a specific section of texture data, defined by coordinates,
+//! dimensions, mip level and array slice.
+/*!
+ TextureSlice allows accessing a specific region within a texture resource. It
+ defines both the position (x, y, z coordinates) and dimensions (width, height,
+ depth) of the region, as well as which mip level and array slice to target.
+
+ Mipmaps are progressively smaller versions of the original texture that:
+ - Reduce texture aliasing artifacts by providing pre-filtered versions
+ - Improve performance through better texture caching
+ - Are organized as a hierarchy where each level is half the size of the
+   previous level
+
+ In graphics API terminology:
+ - D3D12: "Mip Slice" refers to all mips at the same level across array
+   elements, and "Array Slice" refers to all mips belonging to the same texture
+   element
+ - Vulkan: Uses "mip level" to identify the mip level and "array layer" for the
+   array index. For cube maps, each face is treated as a separate array layer,
+   similar to D3D12's array slices.
+
+ Both terminologies are particularly relevant for texture arrays and cube maps
+ where each face represents a distinct slice or layer.
+*/
+struct TextureSlice {
+    uint32_t x = 0; //!< X offset into the texture (in texels).
+    uint32_t y = 0; //!< Y offset into the texture (in texels).
+    uint32_t z = 0; //!< Z offset into the texture (in texels, for 3D textures).
+
+    //! Width of the region in texels.
+    //! Value of uint32_t(-1) means the entire width.
+    uint32_t width = static_cast<uint32_t>(-1);
+
+    //! Height of the region in texels.
+    //! Value of uint32_t(-1) means the entire height.
+    uint32_t height = static_cast<uint32_t>(-1);
+
+    //! Depth of the region in texels.
+    //! Value of uint32_t(-1) means the entire depth.
+    uint32_t depth = static_cast<uint32_t>(-1);
+
+    //! Mip level to access (0 is the largest/original texture).
+    MipLevel mip_level = 0;
+
+    //! Array slice to access (relevant for texture arrays and cube maps).
+    ArraySlice array_slice = 0;
+
+    //! Resolves special dimension values into actual texture dimensions for the
+    //! specified mip level.
+    /*!
+     When width, height, or depth is set to uint32_t(-1), this method calculates
+     the actual dimensions based on the texture description and mip level. This
+     is particularly useful when:
+     - You want to refer to the entire width/height/depth of a texture at a
+       specific mip level.
+     - You need to account for mip level scaling (each mip level reduces
+       dimensions by half).
+
+     The method ensures proper dimension calculations with mip chain reduction
+     (>> mipLevel) while guaranteeing dimensions are at least 1 texel.
+
+     \param desc The base texture description.
+     \return A new TextureSlice with all dimensions fully resolved to
+     actual values.
+     */
+    [[nodiscard]] OXYGEN_GFX_API auto Resolve(const TextureDesc& desc) const -> TextureSlice;
+};
+
+//! Defines a set of texture sub-resources across multiple mip levels and array
+//! slices.
+/*!
+ Provides a way to reference ranges of sub-resources within a texture. This is
+ useful for operations that need to target specific mip levels or array slices,
+ such as resource transitions, copies, and barriers.
+
+ Special values can be used to reference all mip levels or array slices, which
+ will be resolved to appropriate values when needed based on the texture
+ description.
+ */
+struct TextureSubResourceSet {
+    //! Special value indicating all mip levels of a texture.
+    static constexpr MipLevel kAllMipLevels = static_cast<MipLevel>(-1);
+
+    //! Special value indicating all array slices of a texture.
+    static constexpr ArraySlice kAllArraySlices = static_cast<ArraySlice>(-1);
+
+    //! Base mip level (0 is the highest resolution level).
+    MipLevel base_mip_level = 0;
+
+    //! Number of mip levels to include (1 means just the base level).
+    MipLevel num_mip_levels = 1;
+
+    //! Base array slice (0 is the first array element).
+    ArraySlice base_array_slice = 0;
+
+    //! Number of array slices to include (1 means just the base slice).
+    ArraySlice num_array_slices = 1;
+
+    //! Resolves any special values to concrete ranges based on the texture
+    //! description.
+    /*!
+     Converts kAllMipLevels and kAllArraySlices to actual ranges based on the
+     texture. Also handles dimension-specific array slice resolution for
+     different texture types.
+
+     \param desc The base texture description.
+     \param single_mip_level If true, forces the result to target only a single
+     mip level.
+     \return A new TextureSubResourceSet with all values resolved to concrete
+     ranges.
+     */
+    [[nodiscard]] OXYGEN_GFX_API auto Resolve(
+        const TextureDesc& desc, bool single_mip_level) const -> TextureSubResourceSet;
+
+    //! Checks if this set references the entire texture (all mips and slices).
+    [[nodiscard]] OXYGEN_GFX_API auto IsEntireTexture(const TextureDesc& desc) const -> bool;
+
+    auto operator==(const TextureSubResourceSet& other) const -> bool
+    {
+        return base_mip_level == other.base_mip_level
+            && num_mip_levels == other.num_mip_levels
+            && base_array_slice == other.base_array_slice
+            && num_array_slices == other.num_array_slices;
+    }
+
+    auto operator!=(const TextureSubResourceSet& other) const -> bool { return !(*this == other); }
+};
+
 class Texture : public Composition, public Named {
 public:
-    Texture(std::string_view name)
+    //! Predefined constant representing all sub-resources in a texture
+    static constexpr TextureSubResourceSet kAllSubResources = {
+        .base_mip_level = 0,
+        .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
+        .base_array_slice = 0,
+        .num_array_slices = TextureSubResourceSet::kAllArraySlices
+    };
+
+    explicit Texture(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
     }
 
     ~Texture() override = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(Texture);
-    OXYGEN_DEFAULT_MOVABLE(Texture);
+    OXYGEN_MAKE_NON_COPYABLE(Texture)
+    OXYGEN_DEFAULT_MOVABLE(Texture)
 
     virtual auto GetNativeResource() const -> NativeObject = 0;
 
@@ -90,7 +229,7 @@ public:
         return GetComponent<ObjectMetaData>().GetName();
     }
 
-    void SetName(std::string_view name) noexcept override
+    void SetName(const std::string_view name) noexcept override
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
