@@ -66,6 +66,7 @@ target_sources(
     "ShaderCompiler.cpp"
     "ShaderManager.cpp"
     "Surface.cpp"
+    "Texture.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
