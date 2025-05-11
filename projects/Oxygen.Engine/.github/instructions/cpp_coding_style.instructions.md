@@ -1,5 +1,5 @@
 ---
-applyTo: '**/*.(cpp|h)'
+applyTo: '**/*.cpp;**/*.h'
 ---
 Follow Google C++ Style Guide for all C++ code. The guide can be found at:
 https://google.github.io/styleguide/cppguide.html.
