@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
@@ -36,6 +37,7 @@ Renderer::Renderer(
     , surface_weak_(std::move(surface_weak))
     , frame_count_(frames_in_flight + 1)
     , frames_(std::make_unique<Frame[]>(frame_count_))
+    , per_frame_resource_manager_(std::make_shared<detail::PerFrameResourceManager>())
 {
     CHECK_F(!surface_weak_.expired(), "Renderer cannot be created with a null Surface");
     DCHECK_F(!gfx_weak_.expired(), "Renderer cannot be created with an expired Graphics backend pointer");
@@ -66,6 +68,7 @@ Renderer::~Renderer()
 void Renderer::Stop()
 {
     GetComponent<RenderThread>().Stop();
+    per_frame_resource_manager_->OnRendererShutdown();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
@@ -165,6 +168,9 @@ void Renderer::BeginFrame()
             queue->Wait(fence_value);
         }
     }
+
+    // Process all deferred releases for the current frame
+    per_frame_resource_manager_->OnBeginFrame(CurrentFrameIndex());
 
     // Release all completed command lists and call OnExecuted
     for (const auto& cmd_list : pending_command_lists) {

@@ -46,6 +46,8 @@ struct TextureDesc {
     Format format = Format::kUnknown;
     TextureDimension dimension = TextureDimension::kTexture2D;
 
+    std::string debug_name { "Texture" };
+
     bool is_shader_resource = true; // Note: is_shader_resource is initialized to 'true' for backward compatibility
     bool is_render_target = false;
     bool is_uav = false;
@@ -71,7 +73,7 @@ struct TextureDesc {
 
 class Texture : public Composition, public Named {
 public:
-    Texture(std::string_view name = "Texture")
+    Texture(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
     }

@@ -9,15 +9,14 @@
 #include <functional>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 
-namespace oxygen::graphics {
+namespace oxygen::graphics::detail {
 
 //! Tracks resources allocated during the rendering of a frame and releases
-//! them when no longer used by the GPU (i.e. at the beginning of the new
+//! them when no longer used by the GPU (i.e., at the beginning of the new
 //! render for that same frame index).
 class PerFrameResourceManager {
 public:
@@ -67,7 +66,7 @@ public:
     //! release. When the resource is finally released, the pointer is also set
     //! to `nullptr`.
     template <HasReleaseMethod T>
-    void RegisterDeferredRelease(T*& resource) noexcept
+    void RegisterDeferredRelease(T* const resource) noexcept
         requires HasReleaseMethod<T>
     {
         auto& frame_resources = deferred_releases_[current_frame_index_];
@@ -75,48 +74,20 @@ public:
             [resource]() mutable {
                 if (resource) {
                     resource->Release();
-                    resource = nullptr;
                 }
             });
     }
 
-private:
-    // Declare MixinDeferredRelease as a friend so it can call OnBeginFrame(),
-    // ReleaseDeferredResources() and ReleaseAllDeferredResources(). Other than
-    // that, we do not want anyone else to call these methods and interfere with
-    // the coordination of deferred resource management with the rendering state
-    // transitions.
-    template <typename Base>
-    friend class MixinDeferredRelease;
-
     //! Called at the beginning of a new frame to release resources from the
-    //! lats render of that same frame index.
-    void OnBeginFrame(const uint32_t frame_index)
-    {
-        current_frame_index_ = frame_index;
-        ReleaseDeferredResources(frame_index);
-    }
+    //! last render of that same frame index.
+    void OnBeginFrame(uint32_t frame_index);
 
+    //! Releases all deferred resources from all frames.
+    void OnRendererShutdown();
+
+private:
     //! Releases all deferred resources from the previous render of the frame.
-    void ReleaseDeferredResources(const uint32_t frame_index)
-    {
-        auto& frame_resources = deferred_releases_[frame_index];
-        DLOG_F(2, "{} deferred resources from previous render of frame[{}] to release", frame_resources.size(), frame_index);
-        for (auto& release : frame_resources) {
-            release();
-        }
-        frame_resources.clear();
-    }
-
-    //! Releases all deferred resources from all frames. Typically called when
-    //! the renderer is shutting down.
-    void ReleaseAllDeferredResources()
-    {
-        DLOG_F(INFO, "Releasing all deferred resource");
-        for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
-            ReleaseDeferredResources(i);
-        }
-    }
+    void ReleaseDeferredResources(uint32_t frame_index);
 
     //! The current frame index.
     uint32_t current_frame_index_ { 0 };
@@ -125,4 +96,4 @@ private:
     std::vector<std::function<void()>> deferred_releases_[kFrameBufferCount] {};
 };
 
-} // namespace oxygen
+} // namespace oxygen::graphics::detail

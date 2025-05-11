@@ -11,64 +11,71 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/D3DResource.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 
-namespace oxygen::graphics::d3d12 {
+namespace oxygen::graphics {
 
-/**
- * Buffer's usage flags. The buffer usage must be determined upon creation.
- */
-enum class BufferUsageFlags : uint8_t {
-    kNone = OXYGEN_FLAG(0),
+namespace detail {
+    class PerFrameResourceManager;
+} // namespace detail
 
-    kIndexBuffer = OXYGEN_FLAG(1),
-    kVertexBuffer = OXYGEN_FLAG(2),
-    kConstantBuffer = OXYGEN_FLAG(3),
-    kReadonlyStruct = OXYGEN_FLAG(4),
-    kWritableStruct = OXYGEN_FLAG(5),
-    kReadonlyBuffer = OXYGEN_FLAG(6),
-    kWritableBuffer = OXYGEN_FLAG(7),
-};
-OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsageFlags);
+namespace d3d12 {
+    /**
+     * Buffer's usage flags. The buffer usage must be determined upon creation.
+     */
+    enum class BufferUsageFlags : uint8_t {
+        kNone = OXYGEN_FLAG(0),
 
-struct BufferDesc : public CommonResourceDesc {
-    ResourceAccessMode mode { ResourceAccessMode::kImmutable };
-    BufferUsageFlags usage { BufferUsageFlags::kNone };
-    uint32_t size { 0u };
-    uint32_t struct_size = { 0u };
-};
+        kIndexBuffer = OXYGEN_FLAG(1),
+        kVertexBuffer = OXYGEN_FLAG(2),
+        kConstantBuffer = OXYGEN_FLAG(3),
+        kReadonlyStruct = OXYGEN_FLAG(4),
+        kWritableStruct = OXYGEN_FLAG(5),
+        kReadonlyBuffer = OXYGEN_FLAG(6),
+        kWritableBuffer = OXYGEN_FLAG(7),
+    };
+    OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsageFlags);
 
-struct BufferInitInfo {
-    D3D12MA::ALLOCATION_DESC alloc_desc;
-    D3D12_RESOURCE_DESC resource_desc;
-    D3D12_RESOURCE_STATES initial_state;
-    uint64_t size_in_bytes;
-};
+    struct BufferDesc {
+        // ResourceAccessMode mode { ResourceAccessMode::kImmutable };
+        BufferUsageFlags usage { BufferUsageFlags::kNone };
+        uint32_t size { 0U };
+        uint32_t struct_size = { 0U };
+    };
 
-class Buffer : public graphics::Buffer, public D3DResource {
-    using Base = graphics::Buffer;
+    struct BufferInitInfo {
+        D3D12MA::ALLOCATION_DESC alloc_desc;
+        D3D12_RESOURCE_DESC resource_desc;
+        D3D12_RESOURCE_STATES initial_state;
+        uint64_t size_in_bytes;
 
-public:
-    explicit Buffer(const BufferInitInfo& init_info);
-    ~Buffer() override;
+        std::string_view debug_name { "Buffer" };
+    };
 
-    OXYGEN_MAKE_NON_COPYABLE(Buffer);
-    OXYGEN_MAKE_NON_MOVABLE(Buffer);
+    class Buffer : public graphics::Buffer {
+        using Base = graphics::Buffer;
 
-    [[nodiscard]] auto GetResource() const -> ID3D12Resource* override { return resource_; }
+    public:
+        Buffer(graphics::detail::PerFrameResourceManager& resource_manager, const BufferInitInfo& init_info);
+        ~Buffer() override;
 
-    [[nodiscard]] auto GetSize() const -> size_t { return size_; }
+        OXYGEN_MAKE_NON_COPYABLE(Buffer);
+        OXYGEN_MAKE_NON_MOVABLE(Buffer);
 
-    void Bind() override { };
-    void* Map() override;
-    void Unmap() override;
+        [[nodiscard]] auto GetResource() const -> ID3D12Resource*;
 
-    void SetName(std::string_view name) noexcept override;
+        [[nodiscard]] auto GetSize() const -> size_t { return size_; }
 
-private:
-    D3D12MA::Allocation* allocation_ { nullptr };
-    ID3D12Resource* resource_ { nullptr };
-    size_t size_ { 0 };
-};
+        void Bind() override { };
+        auto Map() -> void* override;
+        void Unmap() override;
+
+        void SetName(std::string_view name) noexcept override;
+
+    private:
+        size_t size_ { 0 };
+    };
+
+} // namespace d3d12
 
 } // namespace oxygen::graphics::d3d12
