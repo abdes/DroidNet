@@ -37,7 +37,7 @@ public:
 
     //! Create a clone of the component.
     /*!
-     \note The clone will not have its dependencies updated until a call to its
+     \note The clone will not have any dependencies updated until a call to its
      UpdateDependencies method is made.
     */
     [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<Component>
@@ -56,6 +56,11 @@ private:
     [[nodiscard]] virtual auto Dependencies() const -> std::span<const TypeId> { return ClassDependencies(); }
 };
 
+// Non-member swap (move semantics implementation in derived classes)
+inline void swap(Component& /*lhs*/, Component& /*rhs*/) noexcept
+{
+}
+
 //! Specifies the requirements on a type to be considered as a Component.
 template <typename T>
 concept IsComponent = std::is_base_of_v<Component, T>;
@@ -64,7 +69,7 @@ class Composition : public virtual Object {
     OXYGEN_TYPED(Composition)
 
     struct ComponentManager;
-    // Implementation of the components storage, wrapped in a shared_ptr so we
+    // Implementation of the component storage, wrapped in a shared_ptr so we
     // can share it when shallow copying the composition.
     std::shared_ptr<ComponentManager> pimpl_;
 
