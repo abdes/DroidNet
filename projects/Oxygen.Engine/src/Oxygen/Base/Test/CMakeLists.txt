@@ -66,6 +66,8 @@ m_gtest_program(
     "ResourceTable_test.cpp"
 )
 
+m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
+
 include(Catch2Helpers)
 
 # -- Catch2 custom main --------------------------------------------------------

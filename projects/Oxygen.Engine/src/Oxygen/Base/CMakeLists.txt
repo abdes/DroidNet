@@ -77,6 +77,7 @@ target_sources(
       "Result.h"
       "ReturnAddress.h"
       "Signals.h"
+      "StaticVector.h"
       "Stream.h"
       "StringTypes.h"
       "StringUtils.h"
