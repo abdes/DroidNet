@@ -22,7 +22,8 @@ namespace {
 class MinimalBuffer : public Buffer {
 public:
     explicit MinimalBuffer(const uint64_t id)
-        : Buffer("Test Buffer"), native_ { id, Buffer::ClassTypeId() }
+        : Buffer("Test Buffer")
+        , native_ { id, Buffer::ClassTypeId() }
     {
     }
     auto GetNativeResource() const -> NativeObject override { return native_; }
