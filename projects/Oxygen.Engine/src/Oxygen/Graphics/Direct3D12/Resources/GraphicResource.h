@@ -91,7 +91,7 @@ namespace d3d12 {
 
         [[nodiscard]] auto GetResource() const { return resource_.get(); }
 
- // ReSharper disable once CppMemberFunctionMayBeConst
+        // ReSharper disable once CppMemberFunctionMayBeConst
         void SetName(const std::string_view name) noexcept
         {
             NameObject(resource_.get(), name);
