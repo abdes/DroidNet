@@ -59,7 +59,7 @@ void DescriptorHeaps::UpdateDependencies(const Composition& composition)
         DescriptorHeap::InitInfo {
             .type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             .capacity = 512,
-            .is_shader_visible = false,
+            .is_shader_visible = true,
             .device = device,
             .name = "UAV Descriptor Heap",
         }
