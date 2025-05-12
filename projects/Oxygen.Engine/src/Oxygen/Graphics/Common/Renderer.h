@@ -14,9 +14,10 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/Graphics/Common/api_export.h>
-#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 namespace oxygen {
 
@@ -70,6 +71,10 @@ namespace graphics {
         OXYGEN_GFX_API [[nodiscard]] virtual auto CreateTextureFromNativeObject(
             TextureDesc desc, NativeObject native) const
             -> std::shared_ptr<graphics::Texture>
+            = 0;
+
+        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateFramebuffer(graphics::FramebufferDesc desc) const
+            -> std::shared_ptr<graphics::Framebuffer>
             = 0;
 
     protected:

@@ -44,14 +44,10 @@ namespace d3d12 {
         Texture(Texture&& other) noexcept;
         auto operator=(Texture&& other) noexcept -> Texture&;
 
-        [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc&
-        {
-            return desc_;
-        }
-
         void SetName(std::string_view name) noexcept override;
 
         [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
+        [[nodiscard]] auto GetDescriptor() const -> const TextureDesc& override { return desc_; }
 
         auto GetShaderResourceView(
             Format format,
@@ -94,7 +90,7 @@ namespace d3d12 {
             TextureSubResourceSet sub_resources,
             bool is_read_only = false) const;
 
-        auto GetClearMipLevelUnorderedAccessView(uint32_t mip_level) -> NativeObject;
+        auto GetClearMipLevelUnorderedAccessView(uint32_t mip_level) -> const detail::DescriptorHandle&;
 
     private:
         TextureDesc desc_;

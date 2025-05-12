@@ -13,7 +13,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 
 namespace {
@@ -36,6 +36,7 @@ auto ToNonSrgb(const DXGI_FORMAT format) -> DXGI_FORMAT
 using oxygen::windows::ThrowOnFailed;
 
 using oxygen::graphics::d3d12::NameObject;
+using oxygen::graphics::d3d12::Renderer;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::d3d12::detail::SwapChain;
 
@@ -60,7 +61,7 @@ void SwapChain::UpdateDependencies(const Composition& composition)
 
 void SwapChain::CreateSwapChain()
 {
-    // This method may be called multiple times, therefore we need to ensure
+    // This method may be called multiple times; therefore, we need to ensure
     // that any remaining resources from previous calls are released first.
     if (swap_chain_ != nullptr) {
         ReleaseSwapChain();
@@ -105,64 +106,42 @@ void SwapChain::CreateSwapChain()
         ObjectRelease(swap_chain_);
     }
     ObjectRelease(swap_chain);
-
-    for (auto& [resource, rtv] : render_targets_) {
-        rtv = GetGraphics().Descriptors().RtvHeap().Allocate();
-    }
-
-    Finalize();
 }
 
 void SwapChain::ReleaseSwapChain()
 {
-    for (auto& [resource, rtv] : render_targets_) {
-        // FIXME: ensure backbuffer no longer in use
-        ObjectRelease(resource);
-        GetGraphics().Descriptors().RtvHeap().Free(rtv);
-    }
+    ReleaseRenderTargets();
     ObjectRelease(swap_chain_);
 }
 
-void SwapChain::Finalize()
+void SwapChain::AttachRenderer(std::shared_ptr<graphics::Renderer> renderer)
 {
-    current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+    CHECK_F(!renderer_, "A renderer is already attached to the swap chain");
+    renderer_ = std::move(renderer);
+    CreateRenderTargets();
+}
 
-    // NOLINTBEGIN(*-pro-bounds-constant-array-index)
-    for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
-        DCHECK_F(render_targets_[i].resource == nullptr);
-        ID3D12Resource* back_buffer { nullptr };
-        try {
-            ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
-            NameObject(back_buffer, "BackBuffer");
-            render_targets_[i].resource = back_buffer;
-            const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc {
-                .Format = format_,
-                .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
-                .Texture2D = { 0, 0 }
-            };
-            GetGraphics().GetCurrentDevice()->CreateRenderTargetView(back_buffer, &rtv_desc, render_targets_[i].rtv.cpu);
-        } catch (const std::exception& e) {
-            LOG_F(ERROR, "Failed to create render target view: {}", e.what());
-            ObjectRelease(back_buffer);
-        }
+void SwapChain::DetachRenderer()
+{
+    if (!renderer_) {
+        return;
     }
-    // NOLINTEND(*-pro-bounds-constant-array-index)
 
-    DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {};
-    ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
-    const auto [width, height] = window_->FrameBufferSize();
-    DCHECK_EQ_F(width, swap_chain_desc.Width);
-    DCHECK_EQ_F(height, swap_chain_desc.Height);
+    ReleaseRenderTargets();
+    renderer_.reset();
 }
 
 void SwapChain::Resize()
 {
+    DCHECK_NOTNULL_F(renderer_);
+    DCHECK_NOTNULL_F(swap_chain_);
+
     DLOG_F(INFO, "Resizing swap chain for window `{}`", window_->GetWindowTitle());
+
+    ReleaseRenderTargets();
+
     const auto [width, height] = window_->FrameBufferSize();
     try {
-        for (auto& [resource, rtv] : render_targets_) {
-            ObjectRelease(resource);
-        }
         windows::ThrowOnFailed(swap_chain_->ResizeBuffers(
             kFrameBufferCount,
             width, height,
@@ -172,5 +151,40 @@ void SwapChain::Resize()
         LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
     }
 
-    Finalize();
+    CreateRenderTargets();
+}
+
+void SwapChain::CreateRenderTargets()
+{
+    DCHECK_F(swap_chain_ != nullptr);
+    DCHECK_F(render_targets_.size() == 0);
+
+    DXGI_SWAP_CHAIN_DESC1 swap_chain_desc {};
+    ThrowOnFailed(swap_chain_->GetDesc1(&swap_chain_desc));
+
+    render_targets_.resize(kFrameBufferCount);
+    for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
+        ID3D12Resource* back_buffer { nullptr };
+        ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
+        auto texture = render_targets_[i] = std::make_shared<Texture>(
+            TextureDesc {
+                .width = swap_chain_desc.Width,
+                .height = swap_chain_desc.Height,
+                .sample_count = swap_chain_desc.SampleDesc.Count,
+                .sample_quality = swap_chain_desc.SampleDesc.Quality,
+                .format = Format::kR8G8B8A8UNorm, // TODO(abdes): Use the format of the swap chain
+                .debug_name = "SwapChain BackBuffer",
+                .is_render_target = true,
+                .initial_state = ResourceStates::kPresent,
+            },
+            back_buffer->GetDesc(),
+            GraphicResource::WrapForDeferredRelease<ID3D12Resource>(back_buffer, renderer_->GetPerFrameResourceManager()),
+            nullptr);
+    }
+}
+
+void SwapChain::ReleaseRenderTargets()
+{
+    DCHECK_F(swap_chain_ != nullptr);
+    render_targets_.clear();
 }

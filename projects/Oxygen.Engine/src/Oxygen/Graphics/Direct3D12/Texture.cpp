@@ -458,14 +458,15 @@ void Texture::CreateDepthStencilView(
         GetNativeResource().AsPointer<ID3D12Resource>(), &view_desc, dh.cpu);
 }
 
-auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> NativeObject
+auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> const DescriptorHandle&
 {
     DCHECK_F(desc_.is_uav, "Mip level UAVs are only supported for UAV textures.");
 
     // Check if the mip level UAV is already cached
     if (mip_level < clear_mip_level_uav_cache_.size()) {
         if (const auto& handle = clear_mip_level_uav_cache_[mip_level]; handle.IsValid()) {
-            return NativeObject(handle.cpu.ptr, ClassTypeId());
+            // return NativeObject(handle.cpu.ptr, ClassTypeId());
+            return handle;
         }
     }
 
@@ -479,7 +480,7 @@ auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> N
     };
     CreateUnorderedAccessView(handle, Format::kUnknown, TextureDimension::kUnknown, sub_resources);
 
-    auto [native_handle] = handle.cpu;
+    // auto [native_handle] = handle.cpu;
 
     // Ensure the cache is large enough and store the handle
     if (mip_level >= clear_mip_level_uav_cache_.size()) {
@@ -487,5 +488,7 @@ auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> N
     }
     clear_mip_level_uav_cache_[mip_level] = std::move(handle);
 
-    return NativeObject(native_handle, ClassTypeId());
+    // return NativeObject(native_handle, ClassTypeId());
+
+    return clear_mip_level_uav_cache_[mip_level];
 }
