@@ -35,6 +35,7 @@ class Buffer;
 class Texture;
 class RenderTarget;
 class Renderer;
+class Framebuffer;
 
 enum ClearFlags : uint8_t {
     kClearFlagsColor = (1 << 0),
@@ -57,15 +58,18 @@ public:
     OXYGEN_GFX_API virtual auto End() -> CommandList*;
 
     // Graphics commands
-    virtual void Clear(uint32_t flags, uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors, float depth_value, uint8_t stencil_value) = 0;
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
 
     virtual void SetViewport(const ViewPort& viewport) = 0;
     virtual void SetScissors(const Scissors& scissors) = 0;
-    virtual void SetRenderTarget(std::unique_ptr<RenderTarget> render_target) = 0;
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
+
+    virtual void InitResourceStatesFromFramebuffer(const Framebuffer& framebuffer) = 0;
+    virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
+
+    virtual void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) = 0;
 
     //! @{
     //! Resource state management and barriers.
@@ -143,7 +147,7 @@ public:
     }
 
     // Process all pending barriers and execute them
-    void FlushBarriers();
+    OXYGEN_GFX_API void FlushBarriers();
 
     //! @}
 
@@ -165,20 +169,20 @@ private:
     //! Private non-template dispatch methods for resource state tracking and
     //! barrier management.
 
-    void DoBeginTrackingResourceState(const Buffer& resource, ResourceStates initial_state, bool keep_initial_state);
-    void DoBeginTrackingResourceState(const Texture& resource, ResourceStates initial_state, bool keep_initial_state);
+    OXYGEN_GFX_API void DoBeginTrackingResourceState(const Buffer& resource, ResourceStates initial_state, bool keep_initial_state);
+    OXYGEN_GFX_API void DoBeginTrackingResourceState(const Texture& resource, ResourceStates initial_state, bool keep_initial_state);
 
-    void DoEnableAutoMemoryBarriers(const Buffer& resource);
-    void DoEnableAutoMemoryBarriers(const Texture& resource);
+    OXYGEN_GFX_API void DoEnableAutoMemoryBarriers(const Buffer& resource);
+    OXYGEN_GFX_API void DoEnableAutoMemoryBarriers(const Texture& resource);
 
-    void DoDisableAutoMemoryBarriers(const Buffer& resource);
-    void DoDisableAutoMemoryBarriers(const Texture& resource);
+    OXYGEN_GFX_API void DoDisableAutoMemoryBarriers(const Buffer& resource);
+    OXYGEN_GFX_API void DoDisableAutoMemoryBarriers(const Texture& resource);
 
-    void DoRequireResourceState(const Buffer& resource, ResourceStates state);
-    void DoRequireResourceState(const Texture& resource, ResourceStates state);
+    OXYGEN_GFX_API void DoRequireResourceState(const Buffer& resource, ResourceStates state);
+    OXYGEN_GFX_API void DoRequireResourceState(const Texture& resource, ResourceStates state);
 
-    void DoRequireResourceStateFinal(const Buffer& resource, ResourceStates state);
-    void DoRequireResourceStateFinal(const Texture& resource, ResourceStates state);
+    OXYGEN_GFX_API void DoRequireResourceStateFinal(const Buffer& resource, ResourceStates state);
+    OXYGEN_GFX_API void DoRequireResourceStateFinal(const Texture& resource, ResourceStates state);
 
     //! @}
 

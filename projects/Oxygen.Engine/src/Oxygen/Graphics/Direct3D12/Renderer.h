@@ -49,9 +49,6 @@ public:
     //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;
     //  TODO: Add backend independent support for format
 
-    // TODO: Temporary until we separate the rendering surfaces from the app module
-    auto GetCurrentRenderTarget() const -> const RenderTarget& { return *current_render_target_; }
-
     // [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
 
     [[nodiscard]] auto CreateTexture(TextureDesc desc) const
@@ -61,15 +58,15 @@ public:
         TextureDesc desc, NativeObject native) const
         -> std::shared_ptr<graphics::Texture> override;
 
+    [[nodiscard]] auto CreateFramebuffer(graphics::FramebufferDesc desc) const
+        -> std::shared_ptr<graphics::Framebuffer> override;
+
 protected:
     [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
 
 private:
     std::shared_ptr<detail::RendererImpl> pimpl_;
-
-    // TODO: Temporary until we separate the rendering surfaces from the app module
-    const RenderTarget* current_render_target_ { nullptr };
 };
 
 } // namespace oxygen::graphics::d3d12

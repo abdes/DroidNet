@@ -9,16 +9,12 @@
 #include <cstdint>
 #include <type_traits>
 
-#include <d3d12.h>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Graphics/Common/RenderTarget.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
-#include <Oxygen/Graphics/Direct3D12/RenderTarget.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen::graphics::d3d12::detail {
@@ -56,6 +52,25 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
     OXYGEN_DEFAULT_MOVABLE(WindowSurface);
 
+    void AttachRenderer(const std::shared_ptr<graphics::Renderer> renderer) override
+    {
+        GetComponent<SwapChain>().AttachRenderer(renderer);
+    }
+
+    void DetachRenderer() override
+    {
+        GetComponent<SwapChain>().DetachRenderer();
+    }
+
+    auto GetCurrentBackBuffer() const -> std::shared_ptr<graphics::Texture> override
+    {
+        return GetComponent<SwapChain>().GetCurrentBackBuffer();
+    }
+    auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<graphics::Texture> override
+    {
+        return GetComponent<SwapChain>().GetBackBuffer(index);
+    }
+
     void Present() const override
     {
         GetComponent<SwapChain>().Present();
@@ -65,16 +80,6 @@ public:
     {
         GetComponent<SwapChain>().Resize();
         ShouldResize(false);
-    }
-
-    [[nodiscard]] auto GetResource() const -> ID3D12Resource*
-    {
-        return GetComponent<SwapChain>().GetResource();
-    }
-
-    auto GetRenderTarget() const -> std::unique_ptr<oxygen::graphics::RenderTarget> override
-    {
-        return std::make_unique<RenderTarget>(&GetComponent<SwapChain>());
     }
 };
 

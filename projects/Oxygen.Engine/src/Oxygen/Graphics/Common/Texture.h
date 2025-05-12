@@ -224,6 +224,7 @@ public:
     OXYGEN_DEFAULT_MOVABLE(Texture)
 
     [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+    [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
 
     [[nodiscard]] virtual auto GetShaderResourceView(
         Format format,

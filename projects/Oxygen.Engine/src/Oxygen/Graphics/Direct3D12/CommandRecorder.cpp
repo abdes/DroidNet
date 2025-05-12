@@ -19,11 +19,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
-#include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
@@ -64,7 +65,7 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states) -> D3
 
     // Define a local capturing lambda to handle the mapping
     auto map_flag_if_present =
-        [&](ResourceStates flag_to_check, D3D12_RESOURCE_STATES d3d12_equivalent) {
+        [&](const ResourceStates flag_to_check, const D3D12_RESOURCE_STATES d3d12_equivalent) {
             if ((common_states & flag_to_check) == flag_to_check) {
                 d3d_states |= d3d12_equivalent;
             }
@@ -166,21 +167,21 @@ void CommandRecorder::Begin()
 
 auto CommandRecorder::End() -> graphics::CommandList*
 {
-    if (current_render_target_ != nullptr) {
-        auto* command_list = GetConcreteCommandList();
-        DCHECK_NOTNULL_F(command_list);
+    // if (current_render_target_ != nullptr) {
+    //     auto* command_list = GetConcreteCommandList();
+    //     DCHECK_NOTNULL_F(command_list);
 
-        D3D12_RESOURCE_BARRIER barrier {
-            .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-            .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-            .Transition = {
-                .pResource = current_render_target_->GetResource(),
-                .Subresource = 0,
-                .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
-                .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
-        };
-        command_list->GetCommandList()->ResourceBarrier(1, &barrier);
-    }
+    //     D3D12_RESOURCE_BARRIER barrier {
+    //         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+    //         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+    //         .Transition = {
+    //             .pResource = current_render_target_->GetResource(),
+    //             .Subresource = 0,
+    //             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
+    //             .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
+    //     };
+    //     command_list->GetCommandList()->ResourceBarrier(1, &barrier);
+    // }
     return graphics::CommandRecorder::End();
 }
 
@@ -214,56 +215,8 @@ void CommandRecorder::SetScissors(const Scissors& scissors)
     command_list->GetCommandList()->RSSetScissorRects(1, &rect);
 }
 
-void CommandRecorder::Clear(const uint32_t flags, const uint32_t num_targets, const uint32_t* slots, const glm::vec4* colors,
-    float depth_value, uint8_t stencil_value)
-{
-    auto* command_list = GetConcreteCommandList();
-    DCHECK_NOTNULL_F(command_list);
-    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
-    CHECK_NOTNULL_F(current_render_target_);
-
-    if ((flags & kClearFlagsColor) != 0u) {
-        // TODO: temporarily accept only 1 target
-        DCHECK_EQ_F(num_targets, 1u, "Only 1 render target is supported");
-
-        for (uint32_t i = 0; i < num_targets; ++i) {
-            // TODO: handle sub-resources
-
-            const auto descriptor_handle = current_render_target_->Rtv().cpu;
-
-            D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-            rtv_desc.Format = kDefaultBackBufferFormat; // Set the appropriate format
-            rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-            rtv_desc.Texture2D.MipSlice = 0;
-            rtv_desc.Texture2D.PlaneSlice = 0;
-
-            GetGraphics().GetCurrentDevice()->CreateRenderTargetView(current_render_target_->GetResource(), &rtv_desc, descriptor_handle);
-
-            command_list->GetCommandList()->ClearRenderTargetView(descriptor_handle, reinterpret_cast<const float*>(&colors[i]), 0, nullptr);
-        }
-    }
-
-    // if (flags & (kClearFlagsDepth | kClearFlagsStencil))
-    //{
-    //   HeapAllocator& dsvAllocator = gDevice->GetDsvHeapAllocator();
-
-    //  if (mCurrRenderTarget->GetDSV() == -1)
-    //    return;
-
-    //  D3D12_CPU_DESCRIPTOR_HANDLE handle = dsvAllocator.GetCpuHandle();
-    //  handle.ptr += mCurrRenderTarget->GetDSV() * dsvAllocator.GetDescriptorSize();
-
-    //  D3D12_CLEAR_FLAGS clearFlags = static_cast<D3D12_CLEAR_FLAGS>(0);
-    //  if (flags & kClearFlagsDepth)
-    //    clearFlags |= D3D12_CLEAR_FLAG_DEPTH;
-    //  if (flags & kClearFlagsStencil)
-    //    clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
-
-    //  mCommandList->ClearDepthStencilView(handle, clearFlags, depthValue, stencilValue, 0, NULL);
-    // }
-}
 void CommandRecorder::SetVertexBuffers(
-    uint32_t num,
+    const uint32_t num,
     const std::shared_ptr<graphics::Buffer>* vertex_buffers,
     const uint32_t* strides,
     const uint32_t* offsets)
@@ -283,12 +236,11 @@ void CommandRecorder::SetVertexBuffers(
     command_list->GetCommandList()->IASetVertexBuffers(0, num, vertex_buffer_views.data());
 }
 
-void CommandRecorder::Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset)
+void CommandRecorder::Draw(const uint32_t vertex_num, const uint32_t instances_num, const uint32_t vertex_offset, const uint32_t instance_offset)
 {
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
     DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
-    CHECK_NOTNULL_F(current_render_target_);
 
     // Prepare for Draw
     command_list->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -320,31 +272,31 @@ void CommandRecorder::CreateRootSignature()
         throw std::runtime_error("Failed to create root signature");
     }
 }
-void CommandRecorder::SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target)
-{
-    auto* command_list = GetConcreteCommandList();
-    DCHECK_NOTNULL_F(command_list);
-    DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
+// void CommandRecorder::SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target)
+// {
+//     auto* command_list = GetConcreteCommandList();
+//     DCHECK_NOTNULL_F(command_list);
+//     DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
 
-    current_render_target_ = std::unique_ptr<RenderTarget>(
-        static_cast<RenderTarget*>(render_target.release()));
-    CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
+//     current_render_target_ = std::unique_ptr<RenderTarget>(
+//         static_cast<RenderTarget*>(render_target.release()));
+//     CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
 
-    // Indicate that the back buffer will be used as a render target.
-    const D3D12_RESOURCE_BARRIER barrier {
-        .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-        .Transition = {
-            .pResource = current_render_target_->GetResource(),
-            .Subresource = 0,
-            .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
-            .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
-    };
-    command_list->GetCommandList()->ResourceBarrier(1, &barrier);
+//     // Indicate that the back buffer will be used as a render target.
+//     const D3D12_RESOURCE_BARRIER barrier {
+//         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+//         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+//         .Transition = {
+//             .pResource = current_render_target_->GetResource(),
+//             .Subresource = 0,
+//             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
+//             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
+//     };
+//     command_list->GetCommandList()->ResourceBarrier(1, &barrier);
 
-    const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target_->Rtv().cpu };
-    command_list->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
-}
+//     const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target_->Rtv().cpu };
+//     command_list->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
+// }
 
 void CommandRecorder::SetPipelineState(
     const std::shared_ptr<IShaderByteCode>& vertex_shader,
@@ -361,7 +313,7 @@ void CommandRecorder::SetPipelineState(
     pso_desc.SampleMask = UINT_MAX;
     pso_desc.RasterizerState = kRasterizerState.no_cull;
     pso_desc.DepthStencilState = kDepthState.disabled;
-    pso_desc.InputLayout = { nullptr, 0 }; // Assuming no input layout for full-screen triangle
+    pso_desc.InputLayout = { .pInputElementDescs = nullptr, .NumElements = 0 }; // Assuming no input layout for full-screen triangle
     pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     pso_desc.NumRenderTargets = 1;
     pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
@@ -401,7 +353,7 @@ void CommandRecorder::ResetState()
     // }
 }
 
-void CommandRecorder::ExecuteBarriers(std::span<const Barrier> barriers)
+void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 {
     if (barriers.empty()) {
         return;
@@ -428,5 +380,107 @@ void CommandRecorder::ExecuteBarriers(std::span<const Barrier> barriers)
 
     if (!d3d12_barriers.empty()) {
         d3d12_command_list->ResourceBarrier(static_cast<UINT>(d3d12_barriers.size()), d3d12_barriers.data());
+    }
+}
+
+auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
+{
+    return static_cast<CommandList*>(GetCommandList()); // NOLINT(*-pro-type-static-cast-downcast)
+}
+
+void CommandRecorder::InitResourceStatesFromFramebuffer(const graphics::Framebuffer& framebuffer)
+{
+    const FramebufferDesc& desc = framebuffer.GetDescriptor();
+
+    for (const auto& attachment : desc.color_attachments) {
+        BeginTrackingResourceState(*attachment.texture, ResourceStates::kPresent, true);
+        RequireResourceState(*attachment.texture, ResourceStates::kRenderTarget);
+    }
+
+    if (desc.depth_attachment.IsValid()) {
+        BeginTrackingResourceState(*desc.depth_attachment.texture, ResourceStates::kUndefined, false);
+        RequireResourceStateFinal(*desc.depth_attachment.texture,
+            ResourceStates::kDepthRead | ResourceStates::kDepthWrite);
+    }
+}
+
+void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
+{
+    const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast-downcast)
+    StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
+    for (const auto& rtv : fb.GetRenderTargetViews()) {
+        rtvs.push_back(rtv.cpu);
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
+    if (fb.GetDescriptor().depth_attachment.IsValid()) {
+        dsv = fb.GetDepthStencilView().cpu;
+    }
+
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    d3d12_command_list->OMSetRenderTargets(
+        static_cast<UINT>(rtvs.size()),
+        rtvs.data(),
+        0,
+        fb.GetDescriptor().depth_attachment.IsValid() ? &dsv : nullptr);
+}
+
+void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor)
+{
+    auto* t = static_cast<Texture*>(_t); // NOLINT(*-pro-type-static-cast-downcast)
+    const auto& desc = t->GetDescriptor();
+
+#ifdef _DEBUG
+    const graphics::detail::FormatInfo& formatInfo = graphics::detail::GetFormatInfo(desc.format);
+    assert(!formatInfo.has_depth && !formatInfo.has_stencil);
+    assert(desc.is_uav || desc.is_render_target);
+#endif
+
+    sub_resources = sub_resources.Resolve(desc, false);
+
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    if (desc.is_render_target) {
+        // if (m_EnableAutomaticBarriers)
+        //{
+        //     requireTextureState(t, subresources, ResourceStates::RenderTarget);
+        // }
+        // commitBarriers();
+
+        for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
+            D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->GetRenderTargetView(Format::kUnknown, sub_resources).AsInteger() };
+
+            d3d12_command_list->ClearRenderTargetView(
+                RTV,
+                &clearColor.r,
+                0, nullptr);
+        }
+    } else {
+        // if (m_EnableAutomaticBarriers)
+        //{
+        //     requireTextureState(t, subresources, ResourceStates::UnorderedAccess);
+        // }
+        // commitBarriers();
+
+        // commitDescriptorHeaps();
+
+        for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
+            const auto& desc_handle = t->GetClearMipLevelUnorderedAccessView(mipLevel);
+            assert(desc_handle.IsValid());
+            d3d12_command_list->ClearUnorderedAccessViewFloat(
+                desc_handle.gpu,
+                desc_handle.cpu,
+                t->GetNativeResource().AsPointer<ID3D12Resource>(),
+                &clearColor.r,
+                0,
+                nullptr);
+        }
     }
 }

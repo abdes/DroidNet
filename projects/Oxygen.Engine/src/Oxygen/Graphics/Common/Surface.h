@@ -14,14 +14,14 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Common/RenderTarget.h>
-#include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
 
 namespace oxygen::graphics {
+
+class Texture;
+class Renderer;
 
 //! Represents an area where rendering occurs.
 /*!
@@ -39,13 +39,17 @@ public:
     OXYGEN_DEFAULT_COPYABLE(Surface);
     OXYGEN_DEFAULT_MOVABLE(Surface);
 
+    virtual void AttachRenderer(std::shared_ptr<Renderer> renderer) = 0;
+    virtual void DetachRenderer() = 0;
+
     void ShouldResize(const bool flag) { should_resize_ = flag; }
     auto ShouldResize() const -> bool { return should_resize_; }
 
     //! Handle a surface resize.
     virtual void Resize() = 0;
 
-    virtual auto GetRenderTarget() const -> std::unique_ptr<RenderTarget> = 0;
+    virtual auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture> = 0;
+    virtual auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture> = 0;
 
     //! Present the current frame if the surface supports it.
     virtual void Present() const = 0;

@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
@@ -22,6 +23,7 @@ namespace graphics {
     class RenderTarget;
     class Renderer;
     class Surface;
+    class Framebuffer;
 } // namespace graphics
 namespace co {
     class Nursery;
@@ -51,6 +53,7 @@ private:
     void SetupMainWindow();
     void SetupSurface();
     void SetupRenderer();
+    void SetupFramebuffers();
 
     auto RenderScene() -> co::Co<>;
 
@@ -59,6 +62,7 @@ private:
     std::weak_ptr<platform::Window> window_weak_;
     std::shared_ptr<graphics::Surface> surface_;
     std::shared_ptr<graphics::Renderer> renderer_;
+    StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_;
 
     co::Nursery* nursery_ { nullptr };
 };

@@ -35,8 +35,13 @@ void CommandRecorder::Begin()
 auto CommandRecorder::End() -> CommandList*
 {
     try {
-        command_list_->OnEndRecording();
+        // Give a chance to the resource state tracker to restore initial states
+        // fore resources that requested to do so. Immediately flush barriers,
+        // in case barriers were placed.
         resource_state_tracker_->OnCommandListClosed();
+        FlushBarriers();
+
+        command_list_->OnEndRecording();
         return command_list_;
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Recording failed: {}", e.what());

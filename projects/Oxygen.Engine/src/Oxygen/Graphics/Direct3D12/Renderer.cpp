@@ -10,11 +10,11 @@
 #include <type_traits>
 #include <utility>
 
-#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 
@@ -83,18 +83,21 @@ auto ConvertTextureDesc(const TextureDesc& d) -> D3D12_RESOURCE_DESC
         break;
     }
 
-    if (!d.is_shader_resource)
+    if (!d.is_shader_resource) {
         desc.Flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
-
-    if (d.is_render_target) {
-        if (formatInfo.has_depth || formatInfo.has_stencil)
-            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-        else
-            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     }
 
-    if (d.is_uav)
+    if (d.is_render_target) {
+        if (formatInfo.has_depth || formatInfo.has_stencil) {
+            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        } else {
+            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        }
+    }
+
+    if (d.is_uav) {
         desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
 
     return desc;
 }
@@ -184,56 +187,8 @@ auto Renderer::CreateTextureFromNativeObject(
     );
 }
 
-#if 0
-auto Renderer::CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr
+auto Renderer::CreateFramebuffer(graphics::FramebufferDesc desc) const
+    -> std::shared_ptr<graphics::Framebuffer>
 {
-    DCHECK_NOTNULL_F(data);
-    DCHECK_GT_F(size, 0u);
-    DCHECK_GT_F(stride, 0u);
-
-    // Create the vertex buffer resource
-    D3D12_RESOURCE_DESC resourceDesc = {};
-    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    resourceDesc.Alignment = 0;
-    resourceDesc.Width = size;
-    resourceDesc.Height = 1;
-    resourceDesc.DepthOrArraySize = 1;
-    resourceDesc.MipLevels = 1;
-    resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
-    resourceDesc.SampleDesc.Count = 1;
-    resourceDesc.SampleDesc.Quality = 0;
-    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    D3D12MA::ALLOCATION_DESC allocDesc = {};
-    allocDesc.HeapType = D3D12_HEAP_TYPE_UPLOAD;
-
-    BufferInitInfo initInfo = {
-        .alloc_desc = allocDesc,
-        .resource_desc = resourceDesc,
-        .initial_state = D3D12_RESOURCE_STATE_GENERIC_READ,
-        .size_in_bytes = size
-    };
-
-    auto buffer = std::make_shared<Buffer>(initInfo);
-
-    // Copy the vertex data to the buffer
-    void* mappedData = buffer->Map();
-    memcpy(mappedData, data, size);
-    buffer->Unmap();
-
-    return buffer;
+    return std::make_shared<Framebuffer>(desc);
 }
-
-void Renderer::OnInitialize(/*PlatformPtr platform, const RendererProperties& props*/)
-{
-    graphics::Renderer::OnInitialize();
-    pimpl_ = std::make_shared<detail::RendererImpl>();
-    try {
-        pimpl_->Init(GetInitProperties());
-    } catch (const std::runtime_error&) {
-        // Request a shutdown to clean up resources
-        throw;
-    }
-}
-#endif

@@ -7,11 +7,11 @@
 #pragma once
 
 #include <assert.h>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <cstddef>
 
 // ReSharper disable CppMemberFunctionMayBeStatic
 

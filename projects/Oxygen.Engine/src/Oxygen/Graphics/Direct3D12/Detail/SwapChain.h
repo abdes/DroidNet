@@ -12,7 +12,9 @@
 #include <dxgi1_5.h>
 #include <dxgiformat.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/Constants.h>
@@ -20,67 +22,77 @@
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
-namespace oxygen::graphics::d3d12::detail {
+namespace oxygen::graphics::d3d12 {
 
-class WindowSurface;
+class Renderer;
 
-// TODO: pass the Graphics Backend instance to the SwapChain constructor
-class SwapChain : public Component {
-    OXYGEN_COMPONENT(SwapChain)
-    OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
-public:
-    SwapChain(dx::ICommandQueue* command_queue, DXGI_FORMAT format)
-        : command_queue_(command_queue)
-        , format_(format)
-    {
-    }
+namespace detail {
+    class WindowSurface;
 
-    ~SwapChain() noexcept override;
+    // TODO: pass the Graphics Backend instance to the SwapChain constructor
+    class SwapChain : public Component {
+        OXYGEN_COMPONENT(SwapChain)
+        OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::detail::WindowComponent)
+    public:
+        SwapChain(dx::ICommandQueue* command_queue, const DXGI_FORMAT format)
+            : format_(format)
+            , command_queue_(command_queue)
+        {
+        }
 
-    OXYGEN_MAKE_NON_COPYABLE(SwapChain);
-    OXYGEN_DEFAULT_MOVABLE(SwapChain);
+        ~SwapChain() noexcept override;
 
-    [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
+        OXYGEN_MAKE_NON_COPYABLE(SwapChain);
+        OXYGEN_DEFAULT_MOVABLE(SwapChain);
 
-    // Present the current frame to the screen.
-    void Present() const;
+        [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
 
-    [[nodiscard]] virtual auto GetResource() const -> ID3D12Resource*
-    {
-        return render_targets_[current_back_buffer_index_].resource;
-    }
+        void AttachRenderer(std::shared_ptr<graphics::Renderer> renderer);
+        void DetachRenderer();
 
-    [[nodiscard]] auto GetFormat() const { return format_; }
-    void SetFormat(DXGI_FORMAT format) { format_ = format; }
+        // Present the current frame to the screen.
+        void Present() const;
 
-    [[nodiscard]] auto GetCurrentRenderTargetView() const -> const DescriptorHandle&
-    {
-        return render_targets_[current_back_buffer_index_].rtv;
-    }
+        [[nodiscard]] auto GetFormat() const { return format_; }
+        void SetFormat(const DXGI_FORMAT format) { format_ = format; }
 
-protected:
-    void UpdateDependencies(const Composition& composition) override;
+        auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture>
+        {
+            return render_targets_[current_back_buffer_index_];
+        }
 
-private:
-    friend class WindowSurface;
-    void CreateSwapChain();
-    void Finalize();
-    void ReleaseSwapChain();
-    void Resize();
+        auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture>
+        {
+            CHECK_F(index < render_targets_.size(),
+                "back buffer index {} is out of range ({})", index, render_targets_.size());
+            return render_targets_[index];
+        }
 
-    DXGI_FORMAT format_ { kDefaultBackBufferFormat };
-    dx::ICommandQueue* command_queue_;
+    protected:
+        void UpdateDependencies(const Composition& composition) override;
 
-    IDXGISwapChain4* swap_chain_ { nullptr };
+    private:
+        friend class WindowSurface;
+        void CreateSwapChain();
+        void CreateRenderTargets();
+        void ReleaseRenderTargets();
+        void Resize();
+        void ReleaseSwapChain();
 
-    mutable uint32_t current_back_buffer_index_ { 0 };
-    struct {
-        ID3D12Resource* resource { nullptr };
-        DescriptorHandle rtv {};
-    } render_targets_[kFrameBufferCount] {};
+        DXGI_FORMAT format_ { kDefaultBackBufferFormat };
+        dx::ICommandQueue* command_queue_;
 
-    oxygen::graphics::detail::WindowComponent* window_ {};
-};
+        IDXGISwapChain4* swap_chain_ { nullptr };
 
-} // namespace oxygen::graphics::d3d12::detail
+        mutable uint32_t current_back_buffer_index_ { 0 };
+        StaticVector<std::shared_ptr<Texture>, kFrameBufferCount> render_targets_;
+
+        graphics::detail::WindowComponent* window_ { nullptr };
+        std::shared_ptr<graphics::Renderer> renderer_;
+    };
+
+} // namespace detail
+
+} // namespace oxygen::graphics::d3d12

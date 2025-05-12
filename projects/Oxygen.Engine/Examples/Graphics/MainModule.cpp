@@ -12,6 +12,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
@@ -44,6 +45,8 @@ MainModule::~MainModule()
         gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
     }
 
+    framebuffers_.clear();
+    surface_->DetachRenderer();
     renderer_.reset();
     surface_.reset();
     platform_.reset();
@@ -57,6 +60,9 @@ void MainModule::Run()
     SetupMainWindow();
     SetupSurface();
     SetupRenderer();
+    // Attach the renderer to the surface
+    surface_->AttachRenderer(renderer_);
+    SetupFramebuffers();
 
     nursery_->Start([this]() -> oxygen::co::Co<> {
         while (!window_weak_.expired() && !gfx_weak_.expired()) {
@@ -88,12 +94,12 @@ void MainModule::SetupSurface()
     oxygen::graphics::SingleQueueStrategy queues;
     surface_ = gfx->CreateSurface(window_weak_, gfx->GetCommandQueue(queues.GraphicsQueueName()));
     surface_->SetName("Main Window Surface");
-    LOG_F(INFO, "Surface ({}) created for main widnow ({})", surface_->GetName(), window_weak_.lock()->Id());
+    LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(), window_weak_.lock()->Id());
 }
 
 void MainModule::SetupMainWindow()
 {
-    // Setup the main window
+    // Set up the main window
     WindowProps props("Oxygen Graphics Example");
     props.extent = { .width = 800, .height = 600 };
     props.flags = {
@@ -156,7 +162,22 @@ void MainModule::SetupRenderer()
     CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }
 
-// FIXME: replace the reference to renderer with a shared_ptr or std::ref
+void MainModule::SetupFramebuffers()
+{
+    CHECK_F(!gfx_weak_.expired());
+
+    auto gfx = gfx_weak_.lock();
+
+    auto fb_desc = graphics::FramebufferDesc {}.AddColorAttachment(surface_->GetCurrentBackBuffer());
+
+    for (auto i = 0U; i < kFrameBufferCount; ++i) {
+        framebuffers_.push_back(renderer_->CreateFramebuffer(
+            graphics::FramebufferDesc {}
+                .AddColorAttachment(surface_->GetBackBuffer(i))));
+        CHECK_NOTNULL_F(framebuffers_[i], "Failed to create framebuffer for main window");
+    }
+}
+
 auto MainModule::RenderScene() -> oxygen::co::Co<>
 {
     if (gfx_weak_.expired()) {
@@ -170,7 +191,10 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
         oxygen::graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
 
-    recorder->SetRenderTarget(surface_->GetRenderTarget());
+    auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
+
+    recorder->InitResourceStatesFromFramebuffer(*fb);
+    recorder->BindFrameBuffer(*fb);
 
     ViewPort viewport {
         .width = static_cast<float>(surface_->Width()),
@@ -185,8 +209,15 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
     recorder->SetViewport(viewport);
     recorder->SetScissors(scissors);
 
-    constexpr glm::vec4 clear_color = { 0.4F, 0.4F, .8f, 1.0F }; // Violet color
-    recorder->Clear(oxygen::graphics::kClearFlagsColor, 1, nullptr, &clear_color, 0.0F, 0);
+    recorder->RequireResourceState(
+        *fb->GetDescriptor().color_attachments[0].texture,
+        graphics::ResourceStates::kRenderTarget);
+    recorder->FlushBarriers();
+
+    recorder->ClearTextureFloat(
+        fb->GetDescriptor().color_attachments[0].texture.get(),
+        graphics::Texture::kAllSubResources,
+        graphics::Color(0.4F, 0.4F, .8f, 1.0F));
 
     co_return;
 }
