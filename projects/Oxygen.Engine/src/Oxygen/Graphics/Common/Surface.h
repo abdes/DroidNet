@@ -23,15 +23,22 @@ namespace oxygen::graphics {
 class Texture;
 class Renderer;
 
-//! Represents an area where rendering occurs.
-/*!
-  A surface is a region where rendering occurs. It can be a window, a
-  texture, or any other rendering target. When used for off-screen
-  rendering, the output is not directly presented to the display, and
-  therefore, the surface does not have an associated swapchain. Examples of
-  such usage include shadow maps, reflection maps, and post-processing
-  effects.
- */
+//! Represents a rendering surface, such as a window or off-screen target.
+/*
+ A Surface defines a region where rendering occurs, which may be a window, a
+ texture, or any other renderable target. For off-screen rendering, the surface
+ does not have an associated swapchain, and its output is not presented directly
+ to the display (e.g., for shadow maps, reflection maps, or post-processing).
+
+ The surface becomes usable only after being attached to a renderer. Resource
+ allocation is deferred until this attachment, ensuring that GPU resources are
+ created, managed, and destroyed in sync with the renderer's frame lifecycle.
+ This design enables correct synchronization, efficient resource reuse, and
+ proper cleanup.
+
+ Multiple surfaces can be used in parallel, each with its own renderer and
+ rendering context, supporting independent rendering pipelines.
+*/
 class Surface : public Composition, public Named {
 public:
     OXYGEN_GFX_API ~Surface() override;
