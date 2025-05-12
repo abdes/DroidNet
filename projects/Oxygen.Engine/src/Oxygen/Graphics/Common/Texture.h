@@ -8,6 +8,7 @@
 
 #include <string_view>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
@@ -71,8 +72,8 @@ struct TextureDesc {
     ResourceAccessMode cpu_access = ResourceAccessMode::kImmutable;
 };
 
-typedef uint32_t MipLevel;
-typedef uint32_t ArraySlice;
+using MipLevel = uint32_t;
+using ArraySlice = uint32_t;
 
 //! Represents a specific section of texture data, defined by coordinates,
 //! dimensions, mip level and array slice.
@@ -222,7 +223,30 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Texture)
     OXYGEN_DEFAULT_MOVABLE(Texture)
 
-    virtual auto GetNativeResource() const -> NativeObject = 0;
+    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+
+    [[nodiscard]] virtual auto GetShaderResourceView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        TextureDimension dimension) -> NativeObject
+        = 0;
+
+    [[nodiscard]] virtual auto GetUnorderedAccessView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        TextureDimension dimension) -> NativeObject
+        = 0;
+
+    [[nodiscard]] virtual auto GetRenderTargetView(
+        Format format,
+        TextureSubResourceSet sub_resources) -> NativeObject
+        = 0;
+
+    [[nodiscard]] virtual auto GetDepthStencilView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        bool is_read_only) -> NativeObject
+        = 0;
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
     {
@@ -235,4 +259,82 @@ public:
     }
 };
 
+//! Describes a texture binding used to manage SRV/VkImageView per texture.
+/*!
+ TextureBindingKey extends TextureSubResourceSet with additional information
+ needed to create appropriate texture view objects in different graphics APIs.
+
+ This struct acts as a key for caching texture views, allowing the engine to
+ reuse existing views when the same texture is bound with identical parameters
+ multiple times, improving performance and reducing resource overhead.
+*/
+struct TextureBindingKey : TextureSubResourceSet {
+    //! Format to use when creating the view (can differ from the texture's
+    //! native format).
+    Format format { Format::kUnknown };
+
+    //! Indicates if this is a read-only depth-stencil view.
+    //! Used in APIs like D3D12 that have separate read-only DSV states.
+    bool is_read_only_dsv { false };
+
+    TextureBindingKey() = default;
+
+    TextureBindingKey(
+        const TextureSubResourceSet& b,
+        const Format _format,
+        const bool _is_read_only_dsv = false)
+        : TextureSubResourceSet(b)
+        , format(_format)
+        , is_read_only_dsv(_is_read_only_dsv)
+    {
+    }
+
+    auto operator==(const TextureBindingKey& other) const -> bool
+    {
+        return format == other.format
+            && static_cast<const TextureSubResourceSet&>(*this) == other
+            && is_read_only_dsv == other.is_read_only_dsv;
+    }
+};
+
 } // namespace oxygen::graphics
+
+//! Hash specialization for TextureSubResourceSet.
+/*!
+ Enables TextureSubResourceSet to be used as key in hash-based containers like
+ std::unordered_map or std::unordered_set.
+
+ Combines hashes of all the TextureSubResourceSet members using the HashCombine
+ function to generate a consistent, well-distributed hash value.
+*/
+template <>
+struct std::hash<oxygen::graphics::TextureSubResourceSet> {
+    auto operator()(oxygen::graphics::TextureSubResourceSet const& s) const noexcept -> std::size_t
+    {
+        size_t hash = 0;
+        oxygen::HashCombine(hash, s.base_mip_level);
+        oxygen::HashCombine(hash, s.num_mip_levels);
+        oxygen::HashCombine(hash, s.base_array_slice);
+        oxygen::HashCombine(hash, s.num_array_slices);
+        return hash;
+    }
+};
+
+//! Hash specialization for TextureBindingKey.
+/*!
+ Enables TextureBindingKey to be used as key in hash-based containers like
+ std::unordered_map or std::unordered_set.
+
+ Combines hashes of the TextureBindingKey format, its base TextureSubResourceSet
+ (using its hash specialization), and the read-only DSV flag using XOR
+ operations to produce a well-distributed hash value.
+*/
+template <>
+struct std::hash<oxygen::graphics::TextureBindingKey> {
+    auto operator()(oxygen::graphics::TextureBindingKey const& s) const noexcept -> std::size_t
+    {
+        return std::hash<oxygen::graphics::Format>()(s.format)
+            ^ std::hash<oxygen::graphics::TextureSubResourceSet>()(s)
+            ^ std::hash<bool>()(s.is_read_only_dsv);
+    }
+};
