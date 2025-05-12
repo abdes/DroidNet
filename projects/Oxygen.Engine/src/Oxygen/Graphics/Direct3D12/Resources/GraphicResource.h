@@ -44,8 +44,8 @@ namespace d3d12 {
         template <HasReleaseMethod T>
         static auto WrapForImmediateRelease(T* obj) noexcept
         {
-            return ManagedPtr<T>(obj, [](T* obj) {
-                ObjectRelease(obj);
+            return ManagedPtr<T>(obj, [](T* wrapped) {
+                ObjectRelease(wrapped);
             });
         }
 
@@ -59,7 +59,7 @@ namespace d3d12 {
         }
 
         explicit GraphicResource(
-            std::string_view debug_name,
+            const std::string_view debug_name,
             ManagedPtr<ID3D12Resource> resource,
             ManagedPtr<D3D12MA::Allocation> allocation = nullptr)
             : resource_(std::move(resource))
@@ -71,8 +71,9 @@ namespace d3d12 {
 
         ~GraphicResource() noexcept override = default;
 
-        OXYGEN_MAKE_NON_COPYABLE(GraphicResource);
+        OXYGEN_MAKE_NON_COPYABLE(GraphicResource)
 
+        // NOLINTBEGIN(bugprone-use-after-move)
         GraphicResource(GraphicResource&& other) noexcept
             : Component(std::move(other))
             , resource_(std::exchange(other.resource_, nullptr))
@@ -88,6 +89,7 @@ namespace d3d12 {
             }
             return *this;
         }
+        // NOLINTEND(bugprone-use-after-move)
 
         [[nodiscard]] auto GetResource() const { return resource_.get(); }
 

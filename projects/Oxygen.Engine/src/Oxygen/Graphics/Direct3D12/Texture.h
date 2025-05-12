@@ -8,11 +8,14 @@
 
 #include <memory>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include <d3d12.h>
 
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -36,11 +39,10 @@ namespace d3d12 {
 
         ~Texture() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(Texture);
+        OXYGEN_MAKE_NON_COPYABLE(Texture)
+
         Texture(Texture&& other) noexcept;
         auto operator=(Texture&& other) noexcept -> Texture&;
-
-        [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
 
         [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc&
         {
@@ -49,12 +51,62 @@ namespace d3d12 {
 
         void SetName(std::string_view name) noexcept override;
 
+        [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
+
+        auto GetShaderResourceView(
+            Format format,
+            TextureSubResourceSet sub_resources,
+            TextureDimension dimension) -> NativeObject override;
+
+        auto GetUnorderedAccessView(
+            Format format,
+            TextureSubResourceSet sub_resources,
+            TextureDimension dimension) -> NativeObject override;
+
+        auto GetRenderTargetView(
+            Format format,
+            TextureSubResourceSet sub_resources) -> NativeObject override;
+
+        auto GetDepthStencilView(
+            Format format,
+            TextureSubResourceSet sub_resources,
+            bool is_read_only) -> NativeObject override;
+
+        void CreateShaderResourceView(
+            detail::DescriptorHandle& dh,
+            Format format,
+            TextureDimension dimension,
+            TextureSubResourceSet sub_resources) const;
+
+        void CreateUnorderedAccessView(
+            detail::DescriptorHandle& dh,
+            Format format,
+            TextureDimension dimension,
+            TextureSubResourceSet sub_resources) const;
+
+        void CreateRenderTargetView(
+            detail::DescriptorHandle& dh,
+            Format format,
+            TextureSubResourceSet sub_resources) const;
+
+        void CreateDepthStencilView(
+            detail::DescriptorHandle& dh,
+            TextureSubResourceSet sub_resources,
+            bool is_read_only = false) const;
+
+        auto GetClearMipLevelUnorderedAccessView(uint32_t mip_level) -> NativeObject;
+
     private:
         TextureDesc desc_;
         D3D12_RESOURCE_DESC resource_desc_;
         uint8_t plane_count_ = 1;
 
-        // std::vector<DescriptorIndex> m_ClearMipLevelUAVs;
+        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> rtv_cache_;
+        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> dsv_cache_;
+        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> srv_cache_;
+        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> uav_cache_;
+
+        std::vector<detail::DescriptorHandle> clear_mip_level_uav_cache_;
     };
 
 } // namespace d3d12

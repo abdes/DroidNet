@@ -29,8 +29,8 @@ struct DescriptorHandle {
     DescriptorHandle() = default;
     ~DescriptorHandle();
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle);
-    OXYGEN_DEFAULT_MOVABLE(DescriptorHandle);
+    OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle)
+    OXYGEN_DEFAULT_MOVABLE(DescriptorHandle)
 
     D3D12_CPU_DESCRIPTOR_HANDLE cpu {};
     D3D12_GPU_DESCRIPTOR_HANDLE gpu {};
@@ -75,8 +75,8 @@ public:
 
     ~DescriptorHeap() noexcept override;
 
-    OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap);
-    OXYGEN_MAKE_NON_MOVABLE(DescriptorHeap);
+    OXYGEN_MAKE_NON_COPYABLE(DescriptorHeap)
+    OXYGEN_MAKE_NON_MOVABLE(DescriptorHeap)
 
     [[nodiscard]] OXYGEN_D3D12_API auto Allocate() -> DescriptorHandle;
     OXYGEN_D3D12_API void Free(DescriptorHandle& handle);
