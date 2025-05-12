@@ -23,8 +23,8 @@ public:
     PerFrameResourceManager() = default;
     ~PerFrameResourceManager() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(PerFrameResourceManager);
-    OXYGEN_MAKE_NON_MOVABLE(PerFrameResourceManager);
+    OXYGEN_MAKE_NON_COPYABLE(PerFrameResourceManager)
+    OXYGEN_MAKE_NON_MOVABLE(PerFrameResourceManager)
 
     //! Registers a resource managed through a `std::shared_ptr` for deferred
     //! release.
@@ -84,6 +84,9 @@ public:
 
     //! Releases all deferred resources from all frames.
     void OnRendererShutdown();
+
+    //! Process all deferred releases for all frames.
+    void ProcessAllDeferredReleases();
 
 private:
     //! Releases all deferred resources from the previous render of the frame.

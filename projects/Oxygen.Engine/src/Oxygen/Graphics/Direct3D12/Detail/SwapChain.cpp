@@ -142,7 +142,7 @@ void SwapChain::Resize()
 
     const auto [width, height] = window_->FrameBufferSize();
     try {
-        windows::ThrowOnFailed(swap_chain_->ResizeBuffers(
+        ThrowOnFailed(swap_chain_->ResizeBuffers(
             kFrameBufferCount,
             width, height,
             format_, // ToNonSrgb(format_),
@@ -166,7 +166,7 @@ void SwapChain::CreateRenderTargets()
     for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
         ID3D12Resource* back_buffer { nullptr };
         ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
-        auto texture = render_targets_[i] = std::make_shared<Texture>(
+        render_targets_[i] = std::make_shared<Texture>(
             TextureDesc {
                 .width = swap_chain_desc.Width,
                 .height = swap_chain_desc.Height,
@@ -175,10 +175,11 @@ void SwapChain::CreateRenderTargets()
                 .format = Format::kR8G8B8A8UNorm, // TODO(abdes): Use the format of the swap chain
                 .debug_name = "SwapChain BackBuffer",
                 .is_render_target = true,
+                .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
                 .initial_state = ResourceStates::kPresent,
             },
             back_buffer->GetDesc(),
-            GraphicResource::WrapForDeferredRelease<ID3D12Resource>(back_buffer, renderer_->GetPerFrameResourceManager()),
+            GraphicResource::WrapForImmediateRelease<ID3D12Resource>(back_buffer),
             nullptr);
     }
 }

@@ -142,7 +142,7 @@ void CommandQueue::Signal(const uint64_t value) const
     DCHECK_NOTNULL_F(fence_, "fence must be initialized");
     DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
 
-    DCHECK_GT_F(value, fence_->GetCompletedValue(), "New value must be greater than the current value");
+    DCHECK_GT_F(value, GetCurrentValue(), "New value must be greater than the current value");
     DLOG_F(2, "CommandQueue[{}]::Signal({} / current={})", GetName(), value, GetCurrentValue());
     ThrowOnFailed((command_queue_->Signal(fence_, value)),
         fmt::format("Signal({}) on fence failed", value));

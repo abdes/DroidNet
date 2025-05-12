@@ -55,6 +55,7 @@ public:
     //! Handle a surface resize.
     virtual void Resize() = 0;
 
+    virtual auto GetCurrentBackBufferIndex() const -> uint32_t = 0;
     virtual auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture> = 0;
     virtual auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture> = 0;
 

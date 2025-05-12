@@ -25,6 +25,8 @@ void CommandQueue::Flush() const
     DLOG_F(1, "CommandQueue[{}] flushed", GetName());
     Signal(GetCompletedValue() + 1);
     Wait(GetCurrentValue());
+    DLOG_F(1, "CommandQueue[{}] fence current value: {}", GetName(), GetCurrentValue());
+    DLOG_F(1, "CommandQueue[{}] fence completed value: {}", GetName(), GetCompletedValue());
 }
 
 auto CommandQueue::GetName() const noexcept -> std::string_view
