@@ -62,6 +62,11 @@ public:
         GetComponent<SwapChain>().DetachRenderer();
     }
 
+    auto GetCurrentBackBufferIndex() const -> uint32_t override
+    {
+        return GetComponent<SwapChain>().GetCurrentBackBufferIndex();
+    }
+
     auto GetCurrentBackBuffer() const -> std::shared_ptr<graphics::Texture> override
     {
         return GetComponent<SwapChain>().GetCurrentBackBuffer();

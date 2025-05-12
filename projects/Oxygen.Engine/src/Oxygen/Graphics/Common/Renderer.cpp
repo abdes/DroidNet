@@ -155,22 +155,35 @@ void Renderer::BeginFrame()
         throw std::runtime_error("Cannot BeginFrame when surface is not valid");
     }
 
+    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+
     LOG_SCOPE_FUNCTION(1);
     DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
 
-    // Wait for the GPU to finish executing the previous frame
-    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
-    for (const auto& [queue_name, fence_value] : timeline_values) {
-        const auto gfx = gfx_weak_.lock();
-        auto queue = gfx->GetCommandQueue(queue_name);
-        DCHECK_NOTNULL_F(queue, "Command queue '{}' not found", queue_name);
-        if (queue) {
-            queue->Wait(fence_value);
-        }
-    }
+    // NB: Must handle surface resize early as it may affect the current frame
+    // index.
 
-    // Process all deferred releases for the current frame
-    per_frame_resource_manager_->OnBeginFrame(CurrentFrameIndex());
+    if (const auto surface = surface_weak_.lock(); surface->ShouldResize()) {
+        // This will flush the command queues and wait for all pending work to
+        // finish for all frames, release all deferred resources and resize the
+        // swapchain.
+        HandleSurfaceResize(*surface);
+        DLOG_F(1, "Frame index after resize: {}", CurrentFrameIndex());
+    } else {
+        // Wait for the GPU to finish executing the previous frame (only for the
+        // current frame index).
+        for (const auto& [queue_name, fence_value] : timeline_values) {
+            const auto gfx = gfx_weak_.lock();
+            auto queue = gfx->GetCommandQueue(queue_name);
+            DCHECK_NOTNULL_F(queue, "Command queue '{}' not found", queue_name);
+            if (queue) {
+                queue->Wait(fence_value);
+            }
+        }
+
+        // Process all deferred releases for the current frame
+        per_frame_resource_manager_->OnBeginFrame(CurrentFrameIndex());
+    }
 
     // Release all completed command lists and call OnExecuted
     for (const auto& cmd_list : pending_command_lists) {
@@ -178,10 +191,6 @@ void Renderer::BeginFrame()
     }
     pending_command_lists.clear();
     timeline_values.clear();
-
-    DCHECK_F(!surface_weak_.expired());
-    const auto surface = surface_weak_.lock();
-    HandleSurfaceResize(*surface);
 }
 
 void Renderer::EndFrame()
@@ -195,7 +204,7 @@ void Renderer::EndFrame()
     try {
         surface->Present();
     } catch (const std::exception& e) {
-        LOG_F(WARNING, "No surface for id=`{}`; frame discarded: {}", surface->GetName(), e.what());
+        LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}", surface->GetName(), e.what());
     }
 
     current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
@@ -204,10 +213,6 @@ void Renderer::EndFrame()
 void Renderer::HandleSurfaceResize(Surface& surface)
 {
     DCHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
-
-    if (!surface.ShouldResize()) {
-        return;
-    }
 
     // Collect all queues that have pending work across any frame
     std::unordered_set<std::string> active_queues;
@@ -232,5 +237,10 @@ void Renderer::HandleSurfaceResize(Surface& surface)
         }
     }
 
+    // Process all deferred releases for all frames since we have flushed all
+    // pending work for all frames and we are going to reset the swapchain.
+    per_frame_resource_manager_->ProcessAllDeferredReleases();
+
     surface.Resize();
+    current_frame_index_ = surface.GetCurrentBackBufferIndex();
 }

@@ -44,8 +44,8 @@ namespace detail {
 
         ~SwapChain() noexcept override;
 
-        OXYGEN_MAKE_NON_COPYABLE(SwapChain);
-        OXYGEN_DEFAULT_MOVABLE(SwapChain);
+        OXYGEN_MAKE_NON_COPYABLE(SwapChain)
+        OXYGEN_DEFAULT_MOVABLE(SwapChain)
 
         [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
 
@@ -57,6 +57,12 @@ namespace detail {
 
         [[nodiscard]] auto GetFormat() const { return format_; }
         void SetFormat(const DXGI_FORMAT format) { format_ = format; }
+
+        auto GetCurrentBackBufferIndex() const -> uint32_t
+        {
+            DCHECK_NOTNULL_F(swap_chain_);
+            return swap_chain_->GetCurrentBackBufferIndex();
+        }
 
         auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture>
         {

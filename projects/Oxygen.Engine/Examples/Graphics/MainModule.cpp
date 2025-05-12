@@ -60,9 +60,7 @@ void MainModule::Run()
     SetupMainWindow();
     SetupSurface();
     SetupRenderer();
-    // Attach the renderer to the surface
     surface_->AttachRenderer(renderer_);
-    SetupFramebuffers();
 
     nursery_->Start([this]() -> oxygen::co::Co<> {
         while (!window_weak_.expired() && !gfx_weak_.expired()) {
@@ -136,6 +134,7 @@ void MainModule::SetupMainWindow()
                 to == WindowEvent::kResized) {
                 LOG_F(INFO, "Main window was resized");
                 surface_->ShouldResize(true);
+                framebuffers_.clear();
             } else {
                 if (to == WindowEvent::kExposed) {
                     LOG_F(INFO, "My window is exposed");
@@ -184,7 +183,11 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
         co_return;
     }
 
-    DLOG_F(1, "Rendering scene");
+    if (framebuffers_.empty()) {
+        SetupFramebuffers();
+    }
+
+    DLOG_F(1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());
 
     auto gfx = gfx_weak_.lock();
     auto recorder = renderer_->AcquireCommandRecorder(

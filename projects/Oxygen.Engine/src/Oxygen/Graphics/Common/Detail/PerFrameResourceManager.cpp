@@ -15,12 +15,17 @@ void PerFrameResourceManager::OnBeginFrame(const uint32_t frame_index)
     ReleaseDeferredResources(frame_index);
 }
 
-void PerFrameResourceManager::OnRendererShutdown()
+void PerFrameResourceManager::ProcessAllDeferredReleases()
 {
     DLOG_F(INFO, "Releasing all deferred resource for all frames...");
     for (uint32_t i = 0; i < kFrameBufferCount; ++i) {
         ReleaseDeferredResources(i);
     }
+}
+
+void PerFrameResourceManager::OnRendererShutdown()
+{
+    ProcessAllDeferredReleases();
 }
 
 void PerFrameResourceManager::ReleaseDeferredResources(const uint32_t frame_index)
@@ -29,7 +34,8 @@ void PerFrameResourceManager::ReleaseDeferredResources(const uint32_t frame_inde
 
 #if !defined(NDEBUG)
     if (!frame_resources.empty()) {
-        LOG_SCOPE_F(2, fmt::format("Deferred releases for frame [{}]", frame_index).c_str());
+        LOG_SCOPE_FUNCTION(2);
+        DLOG_F(2, "Frame [{}]", frame_index);
         DLOG_F(2, "{} objects to release", frame_resources.size());
     }
 #endif // NDEBUG
