@@ -10,7 +10,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 
 namespace oxygen::graphics {
@@ -20,60 +19,43 @@ namespace detail {
 } // namespace detail
 
 namespace d3d12 {
-    /**
-     * Buffer's usage flags. The buffer usage must be determined upon creation.
-     */
-    enum class BufferUsageFlags : uint8_t {
-        kNone = OXYGEN_FLAG(0),
-
-        kIndexBuffer = OXYGEN_FLAG(1),
-        kVertexBuffer = OXYGEN_FLAG(2),
-        kConstantBuffer = OXYGEN_FLAG(3),
-        kReadonlyStruct = OXYGEN_FLAG(4),
-        kWritableStruct = OXYGEN_FLAG(5),
-        kReadonlyBuffer = OXYGEN_FLAG(6),
-        kWritableBuffer = OXYGEN_FLAG(7),
-    };
-    OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsageFlags);
-
-    struct BufferDesc {
-        // ResourceAccessMode mode { ResourceAccessMode::kImmutable };
-        BufferUsageFlags usage { BufferUsageFlags::kNone };
-        uint32_t size { 0U };
-        uint32_t struct_size = { 0U };
-    };
-
-    struct BufferInitInfo {
-        D3D12MA::ALLOCATION_DESC alloc_desc;
-        D3D12_RESOURCE_DESC resource_desc;
-        D3D12_RESOURCE_STATES initial_state;
-        uint64_t size_in_bytes;
-
-        std::string_view debug_name { "Buffer" };
-    };
 
     class Buffer : public graphics::Buffer {
         using Base = graphics::Buffer;
 
     public:
-        Buffer(graphics::detail::PerFrameResourceManager& resource_manager, const BufferInitInfo& init_info);
+        Buffer(
+            graphics::detail::PerFrameResourceManager& resource_manager,
+            const BufferDesc& desc,
+            const void* initial_data = nullptr);
         ~Buffer() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Buffer);
         OXYGEN_MAKE_NON_MOVABLE(Buffer);
 
         [[nodiscard]] auto GetResource() const -> ID3D12Resource*;
-
-        [[nodiscard]] auto GetSize() const -> size_t { return size_; }
-
-        void Bind() override { };
-        auto Map() -> void* override;
+        [[nodiscard]] auto Map(size_t offset = 0, size_t size = 0) -> void* override;
         void Unmap() override;
-
+        void Update(const void* data, size_t size, size_t offset = 0) override;
+        [[nodiscard]] auto GetSize() const noexcept -> size_t override;
+        [[nodiscard]] auto GetUsage() const noexcept -> BufferUsage override;
+        [[nodiscard]] auto GetMemoryType() const noexcept -> BufferMemory override;
+        [[nodiscard]] auto IsMapped() const noexcept -> bool override;
+        [[nodiscard]] auto GetDesc() const noexcept -> BufferDesc override;
+        [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
         void SetName(std::string_view name) noexcept override;
 
     private:
+        void CreateBufferResource(
+            graphics::detail::PerFrameResourceManager& resource_manager,
+            const BufferDesc& desc,
+            const void* initial_data);
+
         size_t size_ { 0 };
+        BufferUsage usage_ { BufferUsage::kNone };
+        BufferMemory memory_ { BufferMemory::kDeviceLocal };
+        uint32_t stride_ { 0 };
+        bool mapped_ { false };
     };
 
 } // namespace d3d12

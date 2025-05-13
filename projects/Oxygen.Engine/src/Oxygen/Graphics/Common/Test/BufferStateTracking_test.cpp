@@ -7,19 +7,22 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::Buffer;
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferUsage;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
-using oxygen::graphics::detail::Barrier;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::ResourceStateTracker;
 
 namespace {
 
 // Minimal concrete Buffer for testing
-class MinimalBuffer : public Buffer {
+class MinimalBuffer final : public Buffer {
 public:
     explicit MinimalBuffer(const uint64_t id)
         : Buffer("Test Buffer")
@@ -27,9 +30,15 @@ public:
     {
     }
     auto GetNativeResource() const -> NativeObject override { return native_; }
-    void Bind() override { }
-    auto Map() -> void* override { return nullptr; }
+    auto Map(size_t, size_t) -> void* override { return nullptr; }
     void Unmap() override { }
+    void Update(const void*, size_t, size_t) override { }
+    auto GetSize() const noexcept -> size_t override { return 0; }
+    auto GetUsage() const noexcept -> BufferUsage override { return BufferUsage::kNone; }
+    auto GetMemoryType() const noexcept -> BufferMemory override { return BufferMemory::kDeviceLocal; }
+    auto IsMapped() const noexcept -> bool override { return false; }
+    auto GetDesc() const noexcept -> BufferDesc override { return {}; }
+    void SetName(std::string_view) noexcept override { }
 
 private:
     NativeObject native_;
@@ -78,7 +87,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, TransitionFromUAVToNonUAVState_CreatesTra
     tracker.RequireResourceState(buffer1, ResourceStates::kCopyDest);
     const auto& barriers = tracker.GetPendingBarriers();
     ASSERT_FALSE(barriers.empty());
-    auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
+    const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
     EXPECT_EQ(desc.before, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(desc.after, ResourceStates::kCopyDest);
 }
@@ -98,7 +107,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, RedundantTransitions_MergeBarriers)
     const auto& barriers = tracker.GetPendingBarriers();
     ASSERT_EQ(barriers.size(), 1);
     ASSERT_TRUE(std::holds_alternative<BufferBarrierDesc>(barriers[0].GetDescriptor()));
-    auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
+    const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
     EXPECT_EQ(desc.before, ResourceStates::kCommon);
     EXPECT_EQ(desc.after, (ResourceStates::kUnorderedAccess | ResourceStates::kCopyDest));
 
@@ -116,7 +125,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, RedundantTransitions_MergeBarriers)
     ASSERT_EQ(barriers2.size(), 2);
     EXPECT_TRUE(barriers2[0].IsMemoryBarrier());
     EXPECT_TRUE(std::holds_alternative<BufferBarrierDesc>(barriers2[1].GetDescriptor()));
-    auto desc2 = std::get<BufferBarrierDesc>(barriers2[1].GetDescriptor());
+    const auto desc2 = std::get<BufferBarrierDesc>(barriers2[1].GetDescriptor());
     EXPECT_EQ(desc2.before, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(desc2.after, ResourceStates::kCopyDest);
 }
@@ -230,7 +239,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, RestoreInitialState_AfterNonPermanentTran
     // There should be two barriers: one for the transition to UAV, one for the restore
     ASSERT_EQ(barriers.size(), 2);
     // The last barrier should restore to initial state
-    auto desc = std::get<BufferBarrierDesc>(barriers[1].GetDescriptor());
+    const auto desc = std::get<BufferBarrierDesc>(barriers[1].GetDescriptor());
     EXPECT_EQ(desc.before, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(desc.after, ResourceStates::kCommon);
 }
@@ -246,7 +255,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, NoRestoreInitialState_AfterPermanentTrans
     // Only one barrier for the permanent transition
     ASSERT_EQ(barriers.size(), 1);
     // The barrier should be to the permanent state
-    auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
+    const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
     EXPECT_EQ(desc.before, ResourceStates::kCommon);
     EXPECT_EQ(desc.after, ResourceStates::kUnorderedAccess);
 }
@@ -260,7 +269,7 @@ NOLINT_TEST_F(BufferStateTrackingTest, NoRestoreInitialState_IfKeepInitialStateF
     const auto& barriers = tracker.GetPendingBarriers();
     // Only one barrier for the transition, no restore
     ASSERT_EQ(barriers.size(), 1);
-    auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
+    const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
     EXPECT_EQ(desc.before, ResourceStates::kCommon);
     EXPECT_EQ(desc.after, ResourceStates::kUnorderedAccess);
 }

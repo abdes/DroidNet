@@ -24,6 +24,7 @@ namespace graphics {
     class Renderer;
     class Surface;
     class Framebuffer;
+    class Buffer;
 } // namespace graphics
 namespace co {
     class Nursery;
@@ -63,8 +64,11 @@ private:
     std::shared_ptr<graphics::Surface> surface_;
     std::shared_ptr<graphics::Renderer> renderer_;
     StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_;
+    std::shared_ptr<graphics::Buffer> vertex_buffer_;
 
     co::Nursery* nursery_ { nullptr };
+
+    void CreateTriangleVertexBuffer();
 };
 
 } // namespace oxygen::examples
