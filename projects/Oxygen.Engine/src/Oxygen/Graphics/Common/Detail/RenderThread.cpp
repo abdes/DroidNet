@@ -166,7 +166,12 @@ struct RenderThread::Impl {
             DCHECK_F(render_frame.operator bool());
 
             if (begin_frame_fn) {
-                begin_frame_fn();
+                try {
+                    begin_frame_fn();
+                } catch (const std::exception& ex) {
+                    LOG_F(ERROR, "Exception caught in BeginFrame(), and the frame will be dropped: {}", ex.what());
+                    continue;
+                }
             }
 
             // Execute the application rendering task, asynchronously. Such task
@@ -175,11 +180,20 @@ struct RenderThread::Impl {
             // management are the responsibility of the application.
             {
                 LOG_SCOPE_F(1, "Execute render task...");
-                co_await render_frame();
+                try {
+                    co_await render_frame();
+                } catch (const std::exception& ex) {
+                    LOG_F(ERROR, "Exception caught in Render Frame Task, frame may be garbage: {}", ex.what());
+                }
             }
 
             if (end_frame_fn) {
-                end_frame_fn();
+                try {
+                    end_frame_fn();
+                } catch (const std::exception& ex) {
+                    LOG_F(ERROR, "Exception caught in EndFrame(), and the rendering task dispatcher will be stopped: {}", ex.what());
+                    stop.Trigger();
+                }
             }
         }
     }

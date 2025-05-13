@@ -77,7 +77,7 @@ void Renderer::Submit(FrameRenderTask task)
     GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const std::string_view command_list_name)
+auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const std::string_view command_list_name, bool immediate_submission)
     -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
     CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
@@ -100,51 +100,78 @@ auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const s
     if (!recorder) {
         return nullptr;
     }
-
-    // Start recording
     recorder->Begin();
 
-    // Capture a weak_ptr to this renderer to avoid circular references
     std::weak_ptr<Renderer> self_weak = weak_from_this();
-    std::string queue_name_str(queue_name);
 
-    // Create a unique_ptr with custom deleter that manages the recorder's lifetime
-    // queue and command list when the recording is done.
     return {
         recorder.release(),
-        [self_weak, queue_name_str, cmd_list = std::move(cmd_list)](CommandRecorder* rec) mutable {
+        [self_weak, cmd_list = std::move(cmd_list), queue = queue.get(), immediate_submission](CommandRecorder* rec) mutable {
             if (rec == nullptr) {
                 return;
             }
             try {
-                // End recording
-                if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-                    auto* target_queue = rec->GetTargetQueue();
-                    DCHECK_NOTNULL_F(target_queue);
-
-                    // Submit the command list
-                    target_queue->Submit(*completed_cmd);
-                    rec->OnSubmitted();
-
-                    // Get timeline value for tracking completion
-                    const uint64_t timeline_value = target_queue->Signal();
-
-                    // Store timeline value and command list in the current frame
-                    if (const auto renderer = self_weak.lock()) {
-                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
-                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
-                        timeline_values[queue_name_str] = timeline_value;
-                        pending_command_lists.push_back(cmd_list);
+                if (immediate_submission) {
+                    if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
+                        auto* target_queue = rec->GetTargetQueue();
+                        DCHECK_NOTNULL_F(target_queue);
+                        target_queue->Submit(*completed_cmd);
+                        rec->OnSubmitted();
+                        const uint64_t timeline_value = target_queue->Signal();
+                        if (const auto renderer = self_weak.lock()) {
+                            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+                            auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
+                            timeline_values[queue] = timeline_value;
+                            pending_command_lists.emplace_back(cmd_list, queue);
+                        }
+                    }
+                } else {
+                    // Deferred: just end, don't submit. Add to pending_command_lists for later flush.
+                    if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
+                        if (const auto renderer = self_weak.lock()) {
+                            const uint32_t frame_idx = renderer->CurrentFrameIndex();
+                            auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
+                            pending_command_lists.emplace_back(cmd_list, queue);
+                        }
                     }
                 }
             } catch (const std::exception& ex) {
                 LOG_F(ERROR, "Exception in command recorder cleanup: {}", ex.what());
             }
-
             delete rec;
-            // cmd_list will be automatically released and returned to the pool here
         }
     };
+}
+
+void Renderer::FlushPendingCommandLists()
+{
+    auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
+    if (pending_command_lists.empty())
+        return;
+    if (!gfx_weak_.expired()) {
+        auto it = pending_command_lists.begin();
+        while (it != pending_command_lists.end()) {
+            CommandQueue* current_queue = it->second;
+            std::vector<CommandList*> batch;
+            auto batch_start = it;
+            // Collect contiguous command lists for the same queue, only if closed and not submitted
+            while (it != pending_command_lists.end() && it->second == current_queue) {
+                if (it->first && it->first->IsClosed() && !it->first->IsSubmitted()) {
+                    batch.push_back(it->first.get());
+                }
+                ++it;
+            }
+            if (!batch.empty()) {
+                current_queue->Submit(std::span<CommandList*> { batch });
+                uint64_t timeline_value = current_queue->Signal();
+                timeline_values[current_queue] = timeline_value;
+                for (auto* cmd_list : batch) {
+                    cmd_list->OnSubmitted();
+                }
+            }
+        }
+    }
+    // Do not clear pending_command_lists or timeline_values here; this is done in BeginFrame().
 }
 
 void Renderer::BeginFrame()
@@ -172,10 +199,9 @@ void Renderer::BeginFrame()
     } else {
         // Wait for the GPU to finish executing the previous frame (only for the
         // current frame index).
-        for (const auto& [queue_name, fence_value] : timeline_values) {
+        for (const auto& [queue, fence_value] : timeline_values) {
             const auto gfx = gfx_weak_.lock();
-            auto queue = gfx->GetCommandQueue(queue_name);
-            DCHECK_NOTNULL_F(queue, "Command queue '{}' not found", queue_name);
+            DCHECK_NOTNULL_F(queue, "Command queue is null");
             if (queue) {
                 queue->Wait(fence_value);
             }
@@ -186,7 +212,7 @@ void Renderer::BeginFrame()
     }
 
     // Release all completed command lists and call OnExecuted
-    for (const auto& cmd_list : pending_command_lists) {
+    for (const auto& [cmd_list, queue] : pending_command_lists) {
         cmd_list->OnExecuted();
     }
     pending_command_lists.clear();
@@ -199,6 +225,9 @@ void Renderer::EndFrame()
 
     LOG_SCOPE_FUNCTION(1);
     DLOG_F(1, "Frame index: {}", CurrentFrameIndex());
+
+    // Always flush before presenting
+    FlushPendingCommandLists();
 
     const auto surface = surface_weak_.lock();
     try {
@@ -215,13 +244,13 @@ void Renderer::HandleSurfaceResize(Surface& surface)
     DCHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
 
     // Collect all queues that have pending work across any frame
-    std::unordered_set<std::string> active_queues;
+    std::unordered_set<CommandQueue*> active_queues;
 
     // Check all frames for pending work
     for (uint32_t i = 0; i < frame_count_; ++i) {
         if (i != CurrentFrameIndex()) { // Already processed current frame above
-            for (const auto& queue_name : frames_[i].timeline_values | std::views::keys) {
-                active_queues.insert(queue_name);
+            for (const auto& queue : frames_[i].timeline_values | std::views::keys) {
+                active_queues.insert(queue);
             }
         }
     }
@@ -229,11 +258,9 @@ void Renderer::HandleSurfaceResize(Surface& surface)
     // Only flush queues with pending work from this renderer
     if (!active_queues.empty()) {
         const auto gfx = gfx_weak_.lock();
-        for (const auto& queue_name : active_queues) {
-            if (const auto queue = gfx->GetCommandQueue(queue_name)) {
-                DLOG_F(INFO, "Flushing queue '{}' during resize", queue_name);
-                queue->Flush();
-            }
+        for (const auto& queue : active_queues) {
+            DLOG_F(INFO, "Flushing queue '{}' during resize", queue->GetName());
+            queue->Flush();
         }
     }
 

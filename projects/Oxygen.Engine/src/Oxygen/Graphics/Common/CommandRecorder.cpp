@@ -13,8 +13,9 @@ using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::Texture;
 
-CommandRecorder::CommandRecorder(CommandList* command_list, CommandQueue* target_queue)
-    : command_list_(command_list)
+CommandRecorder::CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode)
+    : submission_mode_(mode)
+    , command_list_(command_list)
     , target_queue_(target_queue)
     , resource_state_tracker_(std::make_unique<detail::ResourceStateTracker>())
 {

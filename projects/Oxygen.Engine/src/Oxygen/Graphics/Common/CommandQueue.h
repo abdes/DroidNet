@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
@@ -75,6 +76,7 @@ public:
     [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
 
     virtual void Submit(CommandList& command_list) = 0;
+    virtual void Submit(std::span<CommandList*> command_lists) = 0;
     OXYGEN_GFX_API void Flush() const;
 
     [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;

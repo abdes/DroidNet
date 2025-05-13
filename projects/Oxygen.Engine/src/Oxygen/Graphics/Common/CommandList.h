@@ -39,6 +39,12 @@ public:
     [[nodiscard]] OXYGEN_GFX_API auto GetName() const noexcept -> std::string_view override;
     OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
 
+    // State query methods
+    [[nodiscard]] bool IsFree() const noexcept { return state_ == State::kFree; }
+    [[nodiscard]] bool IsRecording() const noexcept { return state_ == State::kRecording; }
+    [[nodiscard]] bool IsClosed() const noexcept { return state_ == State::kClosed; }
+    [[nodiscard]] bool IsSubmitted() const noexcept { return state_ == State::kSubmitted; }
+
 protected:
     enum class State : int8_t {
         kInvalid = -1, //<! Invalid state
