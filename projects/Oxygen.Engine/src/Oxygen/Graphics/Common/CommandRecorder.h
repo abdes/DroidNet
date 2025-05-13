@@ -45,7 +45,12 @@ enum ClearFlags : uint8_t {
 
 class CommandRecorder {
 public:
-    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue);
+    enum class SubmissionMode {
+        Immediate,
+        Deferred
+    };
+
+    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode = SubmissionMode::Immediate);
 
     OXYGEN_GFX_API virtual ~CommandRecorder(); // Definition moved to .cpp
 
@@ -164,6 +169,8 @@ protected:
 private:
     friend class Renderer;
     OXYGEN_GFX_API virtual void OnSubmitted();
+    SubmissionMode GetSubmissionMode() const { return submission_mode_; }
+    SubmissionMode submission_mode_ { SubmissionMode::Immediate };
 
     //! @{
     //! Private non-template dispatch methods for resource state tracking and

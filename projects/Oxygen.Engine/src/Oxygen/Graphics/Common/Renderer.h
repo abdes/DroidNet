@@ -34,6 +34,94 @@ namespace graphics {
         class PerFrameResourceManager;
     } // namespace detail
 
+    //! Orchestrates the frame render loop.
+    /*!
+     The frame render loop in this engine is managed by the `Renderer` class,
+     which orchestrates all per-frame operations. Each frame begins with
+     BeginFrame(), where the renderer checks for surface resizes, synchronizes
+     with the GPU to ensure previous frame completion, and processes any
+     deferred resource releases. After these preparations, the application’s
+     rendering logic is executed, typically involving command recording and
+     resource updates. The frame concludes with EndFrame(), which presents the
+     rendered image to the display and advances the frame index for the next
+     iteration.
+
+     __Parallel Rendering and Work Submission__
+
+     To maximize throughput and minimize CPU-GPU idle time, the engine supports
+     multiple frames in flight. This is achieved by decoupling the application’s
+     frame submission from the actual rendering work using a dedicated render
+     thread (RenderThread). The application submits FrameRenderTask objects to
+     the renderer, which queues them for execution. The render thread consumes
+     these tasks, ensuring that the CPU can prepare new frames while the GPU is
+     still processing previous ones. The number of frames in flight is
+     configurable, providing a balance between latency and performance.
+
+     __Coordination and Synchronization__
+
+     Work coordination between the application and the renderer is handled
+     through a producer-consumer model. The application acts as the producer,
+     submitting frame tasks, while the render thread is the consumer, executing
+     these tasks in order. The render thread enforces backpressure by limiting
+     the queue size to the number of frames in flight, ensuring the application
+     cannot get too far ahead of the GPU. Synchronization primitives and
+     per-frame tracking structures ensure that resources are only released when
+     the GPU has finished using them, and that command lists are properly
+     managed. This design guarantees safe, efficient, and parallel rendering,
+     allowing for smooth frame delivery and optimal GPU utilization.
+
+     __Overview of the Frame Render Loop__ \verbatim Application Renderer
+     RenderThread             GPU
+     |                          |                        |                    |
+     |--Submit(Frame Render)--->|                        |                    |
+     |                          |--enqueue task--------->|                    |
+     |                          |                        |                    |
+     |                          |        (waits)---------|                    |
+     |                          |                        |                    |
+     |                          |<-----BeginFrame()------|                    |
+     |                          |---->Wait for previous  |                    |
+     |                          |      frame GPU done    |                    |
+     |                          |<-----GPU done-------------------------------|
+     |                          |--Check resize/sync     |                    |
+     |                          |--Deferred releases     |                    |
+     |                          |--Release cmd lists     |                    |
+     |                          |----------------------->|                    |
+     |<----------------Execute Render Frame Task---------|                    |
+     |--AcquireCommandRecorder->|                        |                    |
+     |--Record commands-------->|                        |                    |
+     |     ...                  |                        |                    |
+     |-------------------------------------------------->|                    |
+     |                          |<--------EndFrame()-----|                    |
+     |                          |--Submit to Command Lists to GPU------------>|
+     |                          |---->Present            |                    |
+     |                          |--Advance frame index   |                    |
+     |                          |----------------------->|                    |
+     |                          |                        |                    |
+     \endverbatim
+
+     __Command Recording, Batching, and Submission__
+
+     Command recording happens during the execution of the 'Render Frame Task',
+     allowing a flexible model with immediate command list submission or
+     batching of multiple command lists in one submission.
+
+     When a CommandRecorder is disposed of, its command list is added by the
+     Renderer to an ordered collection of pending command lists for the current
+     frame. The 'Render Frame Task' can choose to submit command lists
+     immediately or defer them for batch submission. At any point during the
+     frame render cycle, the application or engine can call
+     FlushPendingCommandLists() to submit all pending command lists for the
+     current frame, enabling explicit control over command list submission and
+     advanced batching strategies.
+
+     The submission mode for command recorders can be specified during
+     acquisition, allowing flexibility in choosing between immediate submission
+     and deferred batching.
+
+     EndFrame() always calls FlushPendingCommandLists(), ensuring that no
+     command lists are left unsubmitted and maintaining correct timeline
+     synchronization and resource management.
+    */
     class Renderer
         : public Composition,
           public std::enable_shared_from_this<Renderer> {
@@ -54,7 +142,8 @@ namespace graphics {
 
         [[nodiscard]] OXYGEN_GFX_API auto AcquireCommandRecorder(
             std::string_view queue_name,
-            std::string_view command_list_name)
+            std::string_view command_list_name,
+            bool immediate_submission = true)
             -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>;
 
         [[nodiscard]] auto CurrentFrameIndex() const { return current_frame_index_; }
@@ -77,6 +166,8 @@ namespace graphics {
             -> std::shared_ptr<graphics::Framebuffer>
             = 0;
 
+        OXYGEN_GFX_API virtual void FlushPendingCommandLists();
+
     protected:
         [[nodiscard]] virtual auto CreateCommandRecorder(
             CommandList* command_list,
@@ -96,9 +187,9 @@ namespace graphics {
         //! Holds the data to manage the frame render cycle.
         struct Frame {
             //! Synchronization timeline values for all queues involved in this cycle.
-            std::unordered_map<std::string, uint64_t> timeline_values;
-            //! command lists, submitted but still pending execution.
-            std::vector<std::shared_ptr<CommandList>> pending_command_lists;
+            std::unordered_map<CommandQueue*, uint64_t> timeline_values;
+            //! Command lists, submitted but still pending execution.
+            std::vector<std::pair<std::shared_ptr<CommandList>, CommandQueue*>> pending_command_lists;
         };
 
         uint32_t frame_count_;

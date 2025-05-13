@@ -76,8 +76,14 @@ void EventLoopRun(const MyEngine& engine)
         // Render (only if at least 1 second has passed since the last render)
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::seconds>(now - last_render_time).count() >= 1) {
-            gfx->Render();
-            last_render_time = now;
+            try {
+                gfx->Render();
+                last_render_time = now;
+            } catch (const std::exception& ex) {
+                LOG_F(ERROR, "Unhandled exception caught during rendering: {}", ex.what());
+                is_running = false;
+                break;
+            }
         }
 
         // Check for Pause/Resume

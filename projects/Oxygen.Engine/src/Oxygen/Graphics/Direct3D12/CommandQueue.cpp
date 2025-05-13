@@ -204,6 +204,19 @@ void CommandQueue::Submit(graphics::CommandList& command_list)
     command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
 }
 
+void CommandQueue::Submit(std::span<graphics::CommandList*> command_lists)
+{
+    std::vector<ID3D12CommandList*> d3d12_lists;
+    d3d12_lists.reserve(command_lists.size());
+    for (auto* cl : command_lists) {
+        auto* d3d12_command_list = static_cast<graphics::d3d12::CommandList*>(cl);
+        d3d12_lists.push_back(d3d12_command_list->GetCommandList());
+    }
+    if (!d3d12_lists.empty()) {
+        command_queue_->ExecuteCommandLists(static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
+    }
+}
+
 void CommandQueue::SetName(std::string_view name) noexcept
 {
     Base::SetName(name);

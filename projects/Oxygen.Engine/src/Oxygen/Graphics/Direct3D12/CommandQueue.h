@@ -37,6 +37,7 @@ public:
     }
 
     OXYGEN_D3D12_API void Submit(graphics::CommandList& command_list) override;
+    OXYGEN_D3D12_API void Submit(std::span<graphics::CommandList*> command_lists) override;
 
     OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 

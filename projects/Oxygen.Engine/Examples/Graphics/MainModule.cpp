@@ -41,7 +41,7 @@ MainModule::~MainModule()
     // Flush command queues used for the surface
     if (!gfx_weak_.expired()) {
         auto gfx = gfx_weak_.lock();
-        oxygen::graphics::SingleQueueStrategy queues;
+        graphics::SingleQueueStrategy queues;
         gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
     }
 
