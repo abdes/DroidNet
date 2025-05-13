@@ -172,7 +172,7 @@ void SwapChain::CreateRenderTargets()
                 .height = swap_chain_desc.Height,
                 .sample_count = swap_chain_desc.SampleDesc.Count,
                 .sample_quality = swap_chain_desc.SampleDesc.Quality,
-                .format = Format::kR8G8B8A8UNorm, // TODO(abdes): Use the format of the swap chain
+                .format = Format::kRGBA8UNorm, // TODO(abdes): Use the format of the swap chain
                 .debug_name = "SwapChain BackBuffer",
                 .is_render_target = true,
                 .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
