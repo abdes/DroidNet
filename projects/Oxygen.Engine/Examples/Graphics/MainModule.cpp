@@ -24,8 +24,20 @@ using WindowEvent = oxygen::platform::window::Event;
 using oxygen::graphics::Scissors;
 using oxygen::graphics::ViewPort;
 
+namespace {
+struct Vertex {
+    float position[3];
+    float color[3];
+};
+constexpr Vertex triangle_vertices[] = {
+    { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } }, // Top
+    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } }, // Right
+    { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } } // Left
+};
+}
+
 MainModule::MainModule(
-    std::shared_ptr<oxygen::Platform> platform,
+    std::shared_ptr<Platform> platform,
     std::weak_ptr<Graphics> gfx_weak)
     : platform_(std::move(platform))
     , gfx_weak_(std::move(gfx_weak))
@@ -45,6 +57,7 @@ MainModule::~MainModule()
         gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
     }
 
+    vertex_buffer_.reset();
     framebuffers_.clear();
     surface_->DetachRenderer();
     renderer_.reset();
@@ -62,12 +75,12 @@ void MainModule::Run()
     SetupRenderer();
     surface_->AttachRenderer(renderer_);
 
-    nursery_->Start([this]() -> oxygen::co::Co<> {
+    nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired() && !gfx_weak_.expired()) {
             auto gfx = gfx_weak_.lock();
             co_await gfx->OnRenderStart();
             // Submit the render task to the renderer
-            renderer_->Submit([this]() -> oxygen::co::Co<> {
+            renderer_->Submit([this]() -> co::Co<> {
                 co_await RenderScene();
             });
         }
@@ -79,7 +92,7 @@ void MainModule::SetupCommandQueues() const
     CHECK_F(!gfx_weak_.expired());
 
     auto gfx = gfx_weak_.lock();
-    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+    gfx->CreateCommandQueues(graphics::SingleQueueStrategy());
 }
 
 void MainModule::SetupSurface()
@@ -89,7 +102,7 @@ void MainModule::SetupSurface()
 
     auto gfx = gfx_weak_.lock();
 
-    oxygen::graphics::SingleQueueStrategy queues;
+    graphics::SingleQueueStrategy queues;
     surface_ = gfx->CreateSurface(window_weak_, gfx->GetCommandQueue(queues.GraphicsQueueName()));
     surface_->SetName("Main Window Surface");
     LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(), window_weak_.lock()->Id());
@@ -115,7 +128,7 @@ void MainModule::SetupMainWindow()
     }
 
     // Immediately accept the close request for the main window
-    nursery_->Start([this]() -> oxygen::co::Co<> {
+    nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired()) {
             auto window = window_weak_.lock();
             co_await window->CloseRequested();
@@ -127,7 +140,7 @@ void MainModule::SetupMainWindow()
         }
     });
 
-    nursery_->Start([this]() -> oxygen::co::Co<> {
+    nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired()) {
             auto window = window_weak_.lock();
             if (const auto [from, to] = co_await window->Events().UntilChanged();
@@ -144,7 +157,7 @@ void MainModule::SetupMainWindow()
     });
 
     // Add a termination signal handler
-    nursery_->Start([this]() -> oxygen::co::Co<> {
+    nursery_->Start([this]() -> co::Co<> {
         co_await platform_->Async().OnTerminate();
         LOG_F(INFO, "terminating...");
         // Terminate the application by requesting the main window to close
@@ -159,6 +172,19 @@ void MainModule::SetupRenderer()
     auto gfx = gfx_weak_.lock();
     renderer_ = gfx->CreateRenderer("Main Window Renderer", surface_, kFrameBufferCount - 1);
     CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
+}
+
+void MainModule::CreateTriangleVertexBuffer()
+{
+    if (vertex_buffer_)
+        return;
+    graphics::BufferDesc vb_desc;
+    vb_desc.size = sizeof(triangle_vertices);
+    vb_desc.usage = graphics::BufferUsage::kVertex;
+    vb_desc.memory = graphics::BufferMemory::kUpload;
+    vb_desc.stride = sizeof(Vertex);
+    vertex_buffer_ = renderer_->CreateBuffer(vb_desc, triangle_vertices);
+    vertex_buffer_->SetName("Triangle Vertex Buffer");
 }
 
 void MainModule::SetupFramebuffers()
@@ -177,7 +203,7 @@ void MainModule::SetupFramebuffers()
     }
 }
 
-auto MainModule::RenderScene() -> oxygen::co::Co<>
+auto MainModule::RenderScene() -> co::Co<>
 {
     if (gfx_weak_.expired()) {
         co_return;
@@ -191,7 +217,7 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
 
     auto gfx = gfx_weak_.lock();
     auto recorder = renderer_->AcquireCommandRecorder(
-        oxygen::graphics::SingleQueueStrategy().GraphicsQueueName(),
+        graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
 
     auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
@@ -221,6 +247,8 @@ auto MainModule::RenderScene() -> oxygen::co::Co<>
         fb->GetDescriptor().color_attachments[0].texture.get(),
         graphics::Texture::kAllSubResources,
         graphics::Color(0.4F, 0.4F, .8f, 1.0F));
+
+    CreateTriangleVertexBuffer();
 
     co_return;
 }

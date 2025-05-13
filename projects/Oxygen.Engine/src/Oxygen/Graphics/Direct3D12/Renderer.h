@@ -61,6 +61,9 @@ public:
     [[nodiscard]] auto CreateFramebuffer(graphics::FramebufferDesc desc) const
         -> std::shared_ptr<graphics::Framebuffer> override;
 
+    [[nodiscard]] auto CreateBuffer(const graphics::BufferDesc& desc, const void* initial_data = nullptr) const
+        -> std::shared_ptr<graphics::Buffer> override;
+
 protected:
     [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;

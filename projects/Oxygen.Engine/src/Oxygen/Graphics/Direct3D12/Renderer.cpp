@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
 
 using oxygen::graphics::d3d12::Renderer;
 using oxygen::graphics::d3d12::detail::GetGraphics;
@@ -24,7 +25,7 @@ using oxygen::graphics::d3d12::detail::GetGraphics;
 Renderer::Renderer(
     const std::string_view name,
     std::weak_ptr<oxygen::Graphics> gfx_weak,
-    std::weak_ptr<graphics::Surface> surface_weak,
+    std::weak_ptr<Surface> surface_weak,
     const uint32_t frames_in_flight)
     : graphics::Renderer(name, std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
 {
@@ -187,8 +188,13 @@ auto Renderer::CreateTextureFromNativeObject(
     );
 }
 
-auto Renderer::CreateFramebuffer(graphics::FramebufferDesc desc) const
+auto Renderer::CreateFramebuffer(FramebufferDesc desc) const
     -> std::shared_ptr<graphics::Framebuffer>
 {
     return std::make_shared<Framebuffer>(desc);
+}
+
+auto Renderer::CreateBuffer(const BufferDesc& desc, const void* initial_data) const -> std::shared_ptr<graphics::Buffer>
+{
+    return std::make_shared<Buffer>(GetPerFrameResourceManager(), desc, initial_data);
 }

@@ -29,6 +29,8 @@ namespace graphics {
     class CommandList;
     class CommandQueue;
     class CommandRecorder;
+    struct BufferDesc;
+    class Buffer;
 
     namespace detail {
         class PerFrameResourceManager;
@@ -153,17 +155,23 @@ namespace graphics {
             return *per_frame_resource_manager_;
         }
 
-        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateTexture(graphics::TextureDesc desc) const
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTexture(graphics::TextureDesc desc) const
             -> std::shared_ptr<graphics::Texture>
             = 0;
 
-        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateTextureFromNativeObject(
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTextureFromNativeObject(
             TextureDesc desc, NativeObject native) const
             -> std::shared_ptr<graphics::Texture>
             = 0;
 
-        OXYGEN_GFX_API [[nodiscard]] virtual auto CreateFramebuffer(graphics::FramebufferDesc desc) const
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateFramebuffer(graphics::FramebufferDesc desc) const
             -> std::shared_ptr<graphics::Framebuffer>
+            = 0;
+
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateBuffer(
+            const BufferDesc& desc,
+            const void* initial_data = nullptr) const
+            -> std::shared_ptr<Buffer>
             = 0;
 
         OXYGEN_GFX_API virtual void FlushPendingCommandLists();
