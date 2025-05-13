@@ -206,64 +206,64 @@ void Texture::CreateShaderResourceView(
         dimension = desc_.dimension;
     }
 
-    D3D12_SHADER_RESOURCE_VIEW_DESC view_desc = {};
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
 
-    view_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).srv_format;
-    view_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).srv_format;
+    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-    uint32_t plane_slice = (view_desc.Format == DXGI_FORMAT_X24_TYPELESS_G8_UINT) ? 1 : 0;
+    uint32_t plane_slice = (srv_desc.Format == DXGI_FORMAT_X24_TYPELESS_G8_UINT) ? 1 : 0;
 
     switch (dimension) {
     case TextureDimension::kTexture1D:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
-        view_desc.Texture1D.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.Texture1D.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
+        srv_desc.Texture1D.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.Texture1D.MipLevels = sub_resources.num_mip_levels;
         break;
     case TextureDimension::kTexture1DArray:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
-        view_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture1DArray.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.Texture1DArray.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1DARRAY;
+        srv_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
+        srv_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
+        srv_desc.Texture1DArray.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.Texture1DArray.MipLevels = sub_resources.num_mip_levels;
         break;
     case TextureDimension::kTexture2D:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        view_desc.Texture2D.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.Texture2D.MipLevels = sub_resources.num_mip_levels;
-        view_desc.Texture2D.PlaneSlice = plane_slice;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srv_desc.Texture2D.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.Texture2D.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.Texture2D.PlaneSlice = plane_slice;
         break;
     case TextureDimension::kTexture2DArray:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-        view_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture2DArray.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.Texture2DArray.MipLevels = sub_resources.num_mip_levels;
-        view_desc.Texture2DArray.PlaneSlice = plane_slice;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+        srv_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
+        srv_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
+        srv_desc.Texture2DArray.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.Texture2DArray.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.Texture2DArray.PlaneSlice = plane_slice;
         break;
     case TextureDimension::kTextureCube:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-        view_desc.TextureCube.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.TextureCube.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+        srv_desc.TextureCube.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.TextureCube.MipLevels = sub_resources.num_mip_levels;
         break;
     case TextureDimension::kTextureCubeArray:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
-        view_desc.TextureCubeArray.First2DArrayFace = sub_resources.base_array_slice;
-        view_desc.TextureCubeArray.NumCubes = sub_resources.num_array_slices / kNumArraySlicesInCube;
-        view_desc.TextureCubeArray.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.TextureCubeArray.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+        srv_desc.TextureCubeArray.First2DArrayFace = sub_resources.base_array_slice;
+        srv_desc.TextureCubeArray.NumCubes = sub_resources.num_array_slices / kNumArraySlicesInCube;
+        srv_desc.TextureCubeArray.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.TextureCubeArray.MipLevels = sub_resources.num_mip_levels;
         break;
     case TextureDimension::kTexture2DMS:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
         break;
     case TextureDimension::kTexture2DMSArray:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
-        view_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+        srv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
+        srv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
         break;
     case TextureDimension::kTexture3D:
-        view_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
-        view_desc.Texture3D.MostDetailedMip = sub_resources.base_mip_level;
-        view_desc.Texture3D.MipLevels = sub_resources.num_mip_levels;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+        srv_desc.Texture3D.MostDetailedMip = sub_resources.base_mip_level;
+        srv_desc.Texture3D.MipLevels = sub_resources.num_mip_levels;
         break;
     case TextureDimension::kUnknown:
         ABORT_F("Invalid texture dimension: {}", nostd::to_string(dimension));
@@ -272,7 +272,7 @@ void Texture::CreateShaderResourceView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateShaderResourceView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &view_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh.cpu);
 }
 
 void Texture::CreateUnorderedAccessView(
@@ -287,38 +287,38 @@ void Texture::CreateUnorderedAccessView(
         dimension = desc_.dimension;
     }
 
-    D3D12_UNORDERED_ACCESS_VIEW_DESC view_desc = {};
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
 
-    view_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).srv_format;
+    uav_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).srv_format;
 
     switch (dimension) {
     case TextureDimension::kTexture1D:
-        view_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
-        view_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
+        uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1D;
+        uav_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture1DArray:
-        view_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
-        view_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
+        uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE1DARRAY;
+        uav_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
+        uav_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
+        uav_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2D:
-        view_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-        view_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
+        uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        uav_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DArray:
     case TextureDimension::kTextureCube:
     case TextureDimension::kTextureCubeArray:
-        view_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-        view_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
+        uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+        uav_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
+        uav_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
+        uav_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture3D:
-        view_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
-        view_desc.Texture3D.FirstWSlice = 0;
-        view_desc.Texture3D.WSize = desc_.depth;
-        view_desc.Texture3D.MipSlice = sub_resources.base_mip_level;
+        uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+        uav_desc.Texture3D.FirstWSlice = 0;
+        uav_desc.Texture3D.WSize = desc_.depth;
+        uav_desc.Texture3D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DMS:
     case TextureDimension::kTexture2DMSArray:
@@ -332,7 +332,7 @@ void Texture::CreateUnorderedAccessView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &view_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &uav_desc, dh.cpu);
 }
 
 void Texture::CreateRenderTargetView(
@@ -342,46 +342,46 @@ void Texture::CreateRenderTargetView(
 {
     sub_resources = sub_resources.Resolve(desc_, true);
 
-    D3D12_RENDER_TARGET_VIEW_DESC view_desc = {};
+    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
 
-    view_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).rtv_format;
+    rtv_desc.Format = GetDxgiFormatMapping(format == Format::kUnknown ? desc_.format : format).rtv_format;
 
     switch (desc_.dimension) {
     case TextureDimension::kTexture1D:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1D;
-        view_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1D;
+        rtv_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture1DArray:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
-        view_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1DARRAY;
+        rtv_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
+        rtv_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
+        rtv_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2D:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-        view_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        rtv_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DArray:
     case TextureDimension::kTextureCube:
     case TextureDimension::kTextureCubeArray:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-        view_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+        rtv_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
+        rtv_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
+        rtv_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DMS:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
         break;
     case TextureDimension::kTexture2DMSArray:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
-        view_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+        rtv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
+        rtv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
         break;
     case TextureDimension::kTexture3D:
-        view_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
-        view_desc.Texture3D.FirstWSlice = sub_resources.base_array_slice;
-        view_desc.Texture3D.WSize = sub_resources.num_array_slices;
-        view_desc.Texture3D.MipSlice = sub_resources.base_mip_level;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+        rtv_desc.Texture3D.FirstWSlice = sub_resources.base_array_slice;
+        rtv_desc.Texture3D.WSize = sub_resources.num_array_slices;
+        rtv_desc.Texture3D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kUnknown:
         ABORT_F("Invalid texture dimension: {}", nostd::to_string(desc_.dimension));
@@ -390,7 +390,7 @@ void Texture::CreateRenderTargetView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateRenderTargetView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &view_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh.cpu);
 }
 
 void Texture::CreateDepthStencilView(
@@ -400,48 +400,48 @@ void Texture::CreateDepthStencilView(
 {
     sub_resources = sub_resources.Resolve(desc_, true);
 
-    D3D12_DEPTH_STENCIL_VIEW_DESC view_desc = {};
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
 
-    view_desc.Format = GetDxgiFormatMapping(desc_.format).rtv_format;
+    dsv_desc.Format = GetDxgiFormatMapping(desc_.format).rtv_format;
 
     if (is_read_only) {
-        view_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_DEPTH;
-        if (view_desc.Format == DXGI_FORMAT_D24_UNORM_S8_UINT
-            || view_desc.Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
-            view_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_STENCIL;
+        dsv_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+        if (dsv_desc.Format == DXGI_FORMAT_D24_UNORM_S8_UINT
+            || dsv_desc.Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+            dsv_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_STENCIL;
         }
     }
 
     switch (desc_.dimension) {
     case TextureDimension::kTexture1D:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE1D;
-        view_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE1D;
+        dsv_desc.Texture1D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture1DArray:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
-        view_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE1DARRAY;
+        dsv_desc.Texture1DArray.FirstArraySlice = sub_resources.base_array_slice;
+        dsv_desc.Texture1DArray.ArraySize = sub_resources.num_array_slices;
+        dsv_desc.Texture1DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2D:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        view_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        dsv_desc.Texture2D.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DArray:
     case TextureDimension::kTextureCube:
     case TextureDimension::kTextureCubeArray:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-        view_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
-        view_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+        dsv_desc.Texture2DArray.ArraySize = sub_resources.num_array_slices;
+        dsv_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
+        dsv_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
         break;
     case TextureDimension::kTexture2DMS:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
         break;
     case TextureDimension::kTexture2DMSArray:
-        view_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
-        view_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
-        view_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
+        dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+        dsv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
+        dsv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
         break;
     case TextureDimension::kTexture3D: {
         DLOG_F(ERROR, "Texture `{}` has unsupported dimension `{}` for DSV",
@@ -455,7 +455,7 @@ void Texture::CreateDepthStencilView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateDepthStencilView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &view_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), &dsv_desc, dh.cpu);
 }
 
 auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> const DescriptorHandle&
