@@ -39,48 +39,48 @@ enum class Format : uint8_t {
     kR32Float = 12, //!< 32-bit float
 
     // Double 8-bit values
-    kR8G8UInt = 13, //!< 8-bit unsigned integer (2 components)
-    kR8G8SInt = 14, //!< 8-bit signed integer (2 components)
-    kR8G8UNorm = 15, //!< 8-bit unsigned normalized (2 components)
-    kR8G8SNorm = 16, //!< 8-bit signed normalized (2 components)
+    kRG8UInt = 13, //!< 8-bit unsigned integer (2 components)
+    kRG8SInt = 14, //!< 8-bit signed integer (2 components)
+    kRG8UNorm = 15, //!< 8-bit unsigned normalized (2 components)
+    kRG8SNorm = 16, //!< 8-bit signed normalized (2 components)
 
     // Double 16-bit values
-    kR16G16UInt = 17, //!< 16-bit unsigned integer (2 components)
-    kR16G16SInt = 18, //!< 16-bit signed integer (2 components)
-    kR16G16UNorm = 19, //!< 16-bit unsigned normalized (2 components)
-    kR16G16SNorm = 20, //!< 16-bit signed normalized (2 components)
-    kR16G16Float = 21, //!< 16-bit float (2 components)
+    kRG16UInt = 17, //!< 16-bit unsigned integer (2 components)
+    kRG16SInt = 18, //!< 16-bit signed integer (2 components)
+    kRG16UNorm = 19, //!< 16-bit unsigned normalized (2 components)
+    kRG16SNorm = 20, //!< 16-bit signed normalized (2 components)
+    kRG16Float = 21, //!< 16-bit float (2 components)
 
     // Double 32-bit values
-    kR32G32UInt = 22, //!< 32-bit unsigned integer (2 components)
-    kR32G32SInt = 23, //!< 32-bit signed integer (2 components)
-    kR32G32Float = 24, //!< 32-bit float (2 components)
+    kRG32UInt = 22, //!< 32-bit unsigned integer (2 components)
+    kRG32SInt = 23, //!< 32-bit signed integer (2 components)
+    kRG32Float = 24, //!< 32-bit float (2 components)
 
     // Triple 32-bit values
-    kR32G32B32UInt = 25, //!< 32-bit unsigned integer (3 components)
-    kR32G32B32SInt = 26, //!< 32-bit signed integer (3 components)
-    kR32G32B32Float = 27, //!< 32-bit float (3 components)
+    kRGB32UInt = 25, //!< 32-bit unsigned integer (3 components)
+    kRGB32SInt = 26, //!< 32-bit signed integer (3 components)
+    kRGB32Float = 27, //!< 32-bit float (3 components)
 
     // Quadruple 8-bit values
-    kR8G8B8A8UInt = 28, //!< 8-bit unsigned integer (4 components)
-    kR8G8B8A8SInt = 29, //!< 8-bit signed integer (4 components)
-    kR8G8B8A8UNorm = 30, //!< 8-bit unsigned normalized (4 components)
-    kR8G8B8A8UNormSRGB = 31, //!< 8-bit unsigned normalized sRGB (4 components)
-    kR8G8B8A8SNorm = 32, //!< 8-bit signed normalized (4 components)
-    kB8G8R8A8UNorm = 33, //!< 8-bit unsigned normalized (4 components, BGRA)
-    kB8G8R8A8UNormSRGB = 34, //!< 8-bit unsigned normalized sRGB (4 components, BGRA)
+    kRGBA8UInt = 28, //!< 8-bit unsigned integer (4 components)
+    kRGBA8SInt = 29, //!< 8-bit signed integer (4 components)
+    kRGBA8UNorm = 30, //!< 8-bit unsigned normalized (4 components)
+    kRGBA8UNormSRGB = 31, //!< 8-bit unsigned normalized sRGB (4 components)
+    kRGBA8SNorm = 32, //!< 8-bit signed normalized (4 components)
+    kBGRA8UNorm = 33, //!< 8-bit unsigned normalized (4 components, BGRA)
+    kBGRA8UNormSRGB = 34, //!< 8-bit unsigned normalized sRGB (4 components, BGRA)
 
     // Quadruple 16-bit values
-    kR16G16B16A16UInt = 35, //!< 16-bit unsigned integer (4 components)
-    kR16G16B16A16SInt = 36, //!< 16-bit signed integer (4 components)
-    kR16G16B16A16UNorm = 37, //!< 16-bit unsigned normalized (4 components)
-    kR16G16B16A16SNorm = 38, //!< 16-bit signed normalized (4 components)
-    kR16G16B16A16Float = 39, //!< 16-bit float (4 components)
+    kRGBA16UInt = 35, //!< 16-bit unsigned integer (4 components)
+    kRGBA16SInt = 36, //!< 16-bit signed integer (4 components)
+    kRGBA16UNorm = 37, //!< 16-bit unsigned normalized (4 components)
+    kRGBA16SNorm = 38, //!< 16-bit signed normalized (4 components)
+    kRGBA16Float = 39, //!< 16-bit float (4 components)
 
     // Quadruple 32-bit values
-    kR32G32B32A32UInt = 40, //!< 32-bit unsigned integer (4 components)
-    kR32G32B32A32SInt = 41, //!< 32-bit signed integer (4 components)
-    kR32G32B32A32Float = 42, //!< 32-bit float (4 components)
+    kRGBA32UInt = 40, //!< 32-bit unsigned integer (4 components)
+    kRGBA32SInt = 41, //!< 32-bit signed integer (4 components)
+    kRGBA32Float = 42, //!< 32-bit float (4 components)
 
     // Packed types
     kB5G6R5UNorm = 43, //!< 5-6-5 unsigned normalized
