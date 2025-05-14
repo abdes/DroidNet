@@ -14,6 +14,7 @@
 namespace oxygen {
 
 using TypeId = uint64_t;
+auto constexpr kInvalidTypeId = static_cast<TypeId>(-1);
 
 class TypeRegistry {
 public:
