@@ -20,6 +20,7 @@
 #include <iostream>
 #include <shared_mutex>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Detail/FastIntMap.h>
 #include <Oxygen/Composition/TypeSystem.h>
 
@@ -170,6 +171,7 @@ auto TypeRegistry::RegisterType(const char* name) const -> TypeId
         return out_id;
     }
     const auto id = impl_->next_type_id_++;
+    CHECK_F(id != kInvalidTypeId, "TypeId overflow, aborting...");
     impl_->type_map_.Insert(name_hash, id);
     return id;
 }
