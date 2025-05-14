@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
@@ -31,10 +32,6 @@ namespace graphics {
     class CommandRecorder;
     struct BufferDesc;
     class Buffer;
-
-    namespace detail {
-        class PerFrameResourceManager;
-    } // namespace detail
 
     //! Orchestrates the frame render loop.
     /*!
@@ -152,7 +149,12 @@ namespace graphics {
 
         [[nodiscard]] auto GetPerFrameResourceManager() const -> detail::PerFrameResourceManager&
         {
-            return *per_frame_resource_manager_;
+            return per_frame_resource_manager_;
+        }
+
+        [[nodiscard]] auto GetTextureViewsCache() const -> ViewCache<Texture, TextureBindingKey>&
+        {
+            return texture_views_cache_;
         }
 
         [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTexture(graphics::TextureDesc desc) const
@@ -204,7 +206,8 @@ namespace graphics {
         std::unique_ptr<Frame[]> frames_;
         uint32_t current_frame_index_ { 0 };
 
-        std::shared_ptr<detail::PerFrameResourceManager> per_frame_resource_manager_;
+        mutable detail::PerFrameResourceManager per_frame_resource_manager_;
+        mutable DefaultViewCache<Texture, TextureBindingKey> texture_views_cache_;
     };
 
 } // namespace graphics

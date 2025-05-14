@@ -34,6 +34,7 @@ namespace d3d12 {
         OXYGEN_D3D12_API Texture(
             TextureDesc desc,
             D3D12_RESOURCE_DESC resource_desc,
+            ViewCache<graphics::Texture, TextureBindingKey>& view_cache,
             GraphicResource::ManagedPtr<ID3D12Resource> resource = nullptr,
             GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation = nullptr);
 
@@ -49,25 +50,27 @@ namespace d3d12 {
         [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
         [[nodiscard]] auto GetDescriptor() const -> const TextureDesc& override { return desc_; }
 
-        auto GetShaderResourceView(
+        // Abstract method implementations from base class
+        [[nodiscard]] auto CreateShaderResourceView(
+            Format format,
+            TextureDimension dimension,
+            TextureSubResourceSet sub_resources) const -> NativeObject override;
+
+        [[nodiscard]] auto CreateUnorderedAccessView(
+            Format format,
+            TextureDimension dimension,
+            TextureSubResourceSet sub_resources) const -> NativeObject override;
+
+        [[nodiscard]] auto CreateRenderTargetView(
+            Format format,
+            TextureSubResourceSet sub_resources) const -> NativeObject override;
+
+        [[nodiscard]] auto CreateDepthStencilView(
             Format format,
             TextureSubResourceSet sub_resources,
-            TextureDimension dimension) -> NativeObject override;
+            bool is_read_only) const -> NativeObject override;
 
-        auto GetUnorderedAccessView(
-            Format format,
-            TextureSubResourceSet sub_resources,
-            TextureDimension dimension) -> NativeObject override;
-
-        auto GetRenderTargetView(
-            Format format,
-            TextureSubResourceSet sub_resources) -> NativeObject override;
-
-        auto GetDepthStencilView(
-            Format format,
-            TextureSubResourceSet sub_resources,
-            bool is_read_only) -> NativeObject override;
-
+        // Internal helper methods that create views with provided descriptor handles
         void CreateShaderResourceView(
             detail::DescriptorHandle& dh,
             Format format,
@@ -96,11 +99,6 @@ namespace d3d12 {
         TextureDesc desc_;
         D3D12_RESOURCE_DESC resource_desc_;
         uint8_t plane_count_ = 1;
-
-        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> rtv_cache_;
-        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> dsv_cache_;
-        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> srv_cache_;
-        std::unordered_map<TextureBindingKey, detail::DescriptorHandle> uav_cache_;
 
         std::vector<detail::DescriptorHandle> clear_mip_level_uav_cache_;
     };

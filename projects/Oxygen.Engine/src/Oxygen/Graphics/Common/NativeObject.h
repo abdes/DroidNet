@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #pragma once
@@ -22,9 +22,12 @@ namespace oxygen::graphics {
  safety and debugging.
 */
 class NativeObject {
+    //! Indicates an invalid handle value, or uninitialized state.
+    inline static constexpr uint64_t kInvalidHandle { 0 };
+
     //! The native object handle, either as an integer or as a pointer.
     union {
-        uint64_t integer;
+        uint64_t integer { kInvalidHandle };
         void* pointer;
     };
 
@@ -42,7 +45,7 @@ public:
      \param handle The integer handle of the native object.
      \param type_id The type ID of the owning graphics object.
     */
-    explicit NativeObject(const uint64_t handle, const TypeId type_id)
+    constexpr NativeObject(const uint64_t handle, const TypeId type_id) noexcept
         : integer(handle)
         , owner_type_id_(type_id)
     {
@@ -53,15 +56,18 @@ public:
      \param pointer The pointer to the native object.
      \param type_id The type ID of the owning graphics object.
     */
-    explicit NativeObject(void* pointer, const TypeId type_id)
+    constexpr NativeObject(void* pointer, const TypeId type_id) noexcept
         : pointer(pointer)
         , owner_type_id_(type_id)
         , is_pointer_(true)
     {
     }
 
+    //! Checks if the `NativeObject` holds a valid handle or pointer.
+    [[nodiscard]] constexpr auto IsValid() const noexcept { return integer != kInvalidHandle; }
+
     //! Retrieves the integer handle of the native object.
-    [[nodiscard]] auto AsInteger() const { return integer; }
+    [[nodiscard]] constexpr auto AsInteger() const noexcept { return integer; }
 
     //! Retrieves the pointer to the native object.
     /*!
@@ -81,7 +87,7 @@ public:
     }
 
     //! Retrieves the type ID of the owning graphics object.
-    [[nodiscard]] auto OwnerTypeId() const { return owner_type_id_; }
+    [[nodiscard]] constexpr auto OwnerTypeId() const noexcept { return owner_type_id_; }
 
     //! Compares two `NativeObject` instances for equality.
     /*!
@@ -89,7 +95,7 @@ public:
      \return `true` if the two objects have the same owner type id and the same
      handle value, `false` otherwise.
     */
-    auto operator==(const NativeObject& other) const -> bool
+    constexpr auto operator==(const NativeObject& other) const noexcept -> bool
     {
         return (owner_type_id_ == other.owner_type_id_) && (integer == other.integer);
     }

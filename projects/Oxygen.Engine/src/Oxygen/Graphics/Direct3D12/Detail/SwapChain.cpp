@@ -179,6 +179,7 @@ void SwapChain::CreateRenderTargets()
                 .initial_state = ResourceStates::kPresent,
             },
             back_buffer->GetDesc(),
+            renderer_->GetTextureViewsCache(),
             GraphicResource::WrapForImmediateRelease<ID3D12Resource>(back_buffer),
             nullptr);
     }
