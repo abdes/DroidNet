@@ -37,7 +37,6 @@ Renderer::Renderer(
     , surface_weak_(std::move(surface_weak))
     , frame_count_(frames_in_flight + 1)
     , frames_(std::make_unique<Frame[]>(frame_count_))
-    , per_frame_resource_manager_(std::make_shared<detail::PerFrameResourceManager>())
 {
     CHECK_F(!surface_weak_.expired(), "Renderer cannot be created with a null Surface");
     DCHECK_F(!gfx_weak_.expired(), "Renderer cannot be created with an expired Graphics backend pointer");
@@ -61,6 +60,10 @@ Renderer::Renderer(
 Renderer::~Renderer()
 {
     Stop();
+    {
+        LOG_SCOPE_F(INFO, "Clearing texture views cache");
+        texture_views_cache_.Clear();
+    }
     DLOG_F(INFO, "Renderer destroyed");
 }
 
@@ -68,7 +71,7 @@ Renderer::~Renderer()
 void Renderer::Stop()
 {
     GetComponent<RenderThread>().Stop();
-    per_frame_resource_manager_->OnRendererShutdown();
+    per_frame_resource_manager_.OnRendererShutdown();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
@@ -208,7 +211,7 @@ void Renderer::BeginFrame()
         }
 
         // Process all deferred releases for the current frame
-        per_frame_resource_manager_->OnBeginFrame(CurrentFrameIndex());
+        per_frame_resource_manager_.OnBeginFrame(CurrentFrameIndex());
     }
 
     // Release all completed command lists and call OnExecuted
@@ -266,7 +269,7 @@ void Renderer::HandleSurfaceResize(Surface& surface)
 
     // Process all deferred releases for all frames since we have flushed all
     // pending work for all frames and we are going to reset the swapchain.
-    per_frame_resource_manager_->ProcessAllDeferredReleases();
+    per_frame_resource_manager_.ProcessAllDeferredReleases();
 
     surface.Resize();
     current_frame_index_ = surface.GetCurrentBackBufferIndex();

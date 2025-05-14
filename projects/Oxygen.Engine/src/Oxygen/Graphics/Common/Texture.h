@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string_view>
 
 #include <Oxygen/Base/Hash.h>
@@ -18,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/ViewCache.h>
 
 namespace oxygen::graphics {
 
@@ -203,63 +205,6 @@ struct TextureSubResourceSet {
     auto operator!=(const TextureSubResourceSet& other) const -> bool { return !(*this == other); }
 };
 
-class Texture : public Composition, public Named {
-public:
-    //! Predefined constant representing all sub-resources in a texture
-    static constexpr TextureSubResourceSet kAllSubResources = {
-        .base_mip_level = 0,
-        .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
-        .base_array_slice = 0,
-        .num_array_slices = TextureSubResourceSet::kAllArraySlices
-    };
-
-    explicit Texture(std::string_view name)
-    {
-        AddComponent<ObjectMetaData>(name);
-    }
-
-    ~Texture() override = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(Texture)
-    OXYGEN_DEFAULT_MOVABLE(Texture)
-
-    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
-    [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
-
-    [[nodiscard]] virtual auto GetShaderResourceView(
-        Format format,
-        TextureSubResourceSet sub_resources,
-        TextureDimension dimension) -> NativeObject
-        = 0;
-
-    [[nodiscard]] virtual auto GetUnorderedAccessView(
-        Format format,
-        TextureSubResourceSet sub_resources,
-        TextureDimension dimension) -> NativeObject
-        = 0;
-
-    [[nodiscard]] virtual auto GetRenderTargetView(
-        Format format,
-        TextureSubResourceSet sub_resources) -> NativeObject
-        = 0;
-
-    [[nodiscard]] virtual auto GetDepthStencilView(
-        Format format,
-        TextureSubResourceSet sub_resources,
-        bool is_read_only) -> NativeObject
-        = 0;
-
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-    {
-        return GetComponent<ObjectMetaData>().GetName();
-    }
-
-    void SetName(const std::string_view name) noexcept override
-    {
-        GetComponent<ObjectMetaData>().SetName(name);
-    }
-};
-
 //! Describes a texture binding used to manage SRV/VkImageView per texture.
 /*!
  TextureBindingKey extends TextureSubResourceSet with additional information
@@ -278,15 +223,20 @@ struct TextureBindingKey : TextureSubResourceSet {
     //! Used in APIs like D3D12 that have separate read-only DSV states.
     bool is_read_only_dsv { false };
 
+    //! Dimension of the view (can differ from texture's dimension)
+    TextureDimension dimension { TextureDimension::kUnknown };
+
     TextureBindingKey() = default;
 
     TextureBindingKey(
         const TextureSubResourceSet& b,
         const Format _format,
+        const TextureDimension _dimension = TextureDimension::kUnknown,
         const bool _is_read_only_dsv = false)
         : TextureSubResourceSet(b)
         , format(_format)
         , is_read_only_dsv(_is_read_only_dsv)
+        , dimension(_dimension)
     {
     }
 
@@ -294,11 +244,11 @@ struct TextureBindingKey : TextureSubResourceSet {
     {
         return format == other.format
             && static_cast<const TextureSubResourceSet&>(*this) == other
-            && is_read_only_dsv == other.is_read_only_dsv;
+            && is_read_only_dsv == other.is_read_only_dsv
+            && dimension == other.dimension;
     }
 };
-
-} // namespace oxygen::graphics
+}
 
 //! Hash specialization for TextureSubResourceSet.
 /*!
@@ -339,3 +289,150 @@ struct std::hash<oxygen::graphics::TextureBindingKey> {
             ^ std::hash<bool>()(s.is_read_only_dsv);
     }
 };
+
+namespace oxygen::graphics {
+class Texture : public Composition, public Named, public std::enable_shared_from_this<Texture> {
+public:
+    //! Predefined constant representing all sub-resources in a texture
+    static constexpr TextureSubResourceSet kAllSubResources = {
+        .base_mip_level = 0,
+        .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
+        .base_array_slice = 0,
+        .num_array_slices = TextureSubResourceSet::kAllArraySlices
+    };
+
+    explicit Texture(
+        std::string_view name,
+        ViewCache<Texture, TextureBindingKey>& view_cache)
+        : view_cache_(&view_cache)
+    {
+        AddComponent<ObjectMetaData>(name);
+    }
+
+    ~Texture() override
+    {
+        view_cache_->RemoveAll(*this);
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(Texture)
+    OXYGEN_DEFAULT_MOVABLE(Texture)
+
+    //! Gets the native resource handle for the texture.
+    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+
+    //! Gets the descriptor for this texture.
+    [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
+
+    //! Gets a shader resource view for the texture.
+    [[nodiscard]] auto GetShaderResourceView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        TextureDimension dimension) const -> NativeObject
+    {
+        const TextureBindingKey key(sub_resources, format, dimension);
+        auto view = view_cache_->Find(*this, key);
+
+        if (!view.IsValid()) {
+            view = CreateShaderResourceView(format, dimension, sub_resources);
+            view_cache_->Store(this->shared_from_this(), key, view);
+        }
+
+        return view;
+    }
+
+    //! Gets an unordered access view for the texture.
+    [[nodiscard]] auto GetUnorderedAccessView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        TextureDimension dimension) const -> NativeObject
+    {
+        const TextureBindingKey key(sub_resources, format, dimension);
+        auto view = view_cache_->Find(*this, key);
+
+        if (!view.IsValid()) {
+            view = CreateUnorderedAccessView(format, dimension, sub_resources);
+            view_cache_->Store(this->shared_from_this(), key, view);
+        }
+
+        return view;
+    }
+
+    //! Gets a render target view for the texture.
+    [[nodiscard]] auto GetRenderTargetView(
+        Format format,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+    {
+        const TextureBindingKey key(sub_resources, format);
+        auto view = view_cache_->Find(*this, key);
+
+        if (!view.IsValid()) {
+            view = CreateRenderTargetView(format, sub_resources);
+            view_cache_->Store(this->shared_from_this(), key, view);
+        }
+
+        return view;
+    }
+
+    //! Gets a depth stencil view for the texture.
+    [[nodiscard]] auto GetDepthStencilView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        bool is_read_only) const -> NativeObject
+    {
+        const TextureBindingKey key(sub_resources, format, TextureDimension::kUnknown, is_read_only);
+        auto view = view_cache_->Find(*this, key);
+
+        if (!view.IsValid()) {
+            view = CreateDepthStencilView(format, sub_resources, is_read_only);
+            view_cache_->Store(this->shared_from_this(), key, view);
+        }
+
+        return view;
+    }
+
+    //! Gets the name of the texture.
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
+
+    //! Sets the name of the texture.
+    void SetName(const std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
+
+protected:
+    //! Creates a shader resource view for the texture.
+    [[nodiscard]] virtual auto CreateShaderResourceView(
+        Format format,
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Creates an unordered access view for the texture.
+    [[nodiscard]] virtual auto CreateUnorderedAccessView(
+        Format format,
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Creates a render target view for the texture.
+    [[nodiscard]] virtual auto CreateRenderTargetView(
+        Format format,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Creates a depth stencil view for the texture.
+    [[nodiscard]] virtual auto CreateDepthStencilView(
+        Format format,
+        TextureSubResourceSet sub_resources,
+        bool is_read_only) const -> NativeObject
+        = 0;
+
+private:
+    // Single view cache for all view types
+    ViewCache<Texture, TextureBindingKey>* view_cache_ { nullptr };
+};
+
+} // namespace oxygen::graphics

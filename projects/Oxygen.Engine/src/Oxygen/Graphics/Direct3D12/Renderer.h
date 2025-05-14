@@ -7,12 +7,12 @@
 #pragma once
 
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/ViewCache.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 
 namespace detail {
-    class RendererImpl;
     class DescriptorHeap;
     class PerFrameResourceManager;
 } // namespace detail
@@ -67,9 +67,6 @@ public:
 protected:
     [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
-
-private:
-    std::shared_ptr<detail::RendererImpl> pimpl_;
 };
 
 } // namespace oxygen::graphics::d3d12
