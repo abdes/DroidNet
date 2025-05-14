@@ -124,12 +124,27 @@ template <typename Resource, typename BindingKey>
     }
 class DefaultViewCache : public ViewCache<Resource, BindingKey> {
 public:
+    DefaultViewCache() = default;
+
+    ~DefaultViewCache() override
+    {
+        std::lock_guard lock(mutex_);
+        if (!cache_.empty()) {
+            LOG_F(WARNING, "DefaultViewCache destroyed with {} entries still in the cache!", cache_.size());
+            CheckExpiredResourcesNoLock();
+            cache_.clear();
+        }
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(DefaultViewCache)
+    OXYGEN_DEFAULT_MOVABLE(DefaultViewCache)
+
     void Store(
         const std::shared_ptr<const Resource>& resource,
         const BindingKey& key,
         NativeObject view) noexcept override
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
         try {
             DCHECK_NOTNULL_F(resource, "Illegal attempt to store view with null resource");
             DCHECK_F(view.IsValid(), "Illegal attempt to store an invalid view");
@@ -153,7 +168,7 @@ public:
         const Resource& resource,
         const BindingKey& key) const noexcept -> NativeObject override
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
         try {
             auto resource_it = cache_.find(&resource);
             if (resource_it == cache_.end()) {
@@ -186,7 +201,7 @@ public:
         const Resource& resource,
         const BindingKey& key) noexcept -> bool override
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
         try {
             auto resource_it = cache_.find(&resource);
             if (resource_it == cache_.end()) {
@@ -213,7 +228,7 @@ public:
     auto RemoveAll(
         const Resource& resource) noexcept -> std::size_t override
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
         try {
             auto resource_it = cache_.find(&resource);
             if (resource_it == cache_.end()) {
@@ -235,7 +250,8 @@ public:
 
     void Clear() noexcept override
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
+        CheckExpiredResourcesNoLock();
         cache_.clear();
     }
 
@@ -245,7 +261,7 @@ public:
     {
         LOG_SCOPE_FUNCTION(INFO);
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard lock(mutex_);
         try {
             std::size_t expired_count = 0;
             std::erase_if(cache_, [&](const auto& item) {
@@ -269,6 +285,29 @@ public:
     }
 
 private:
+    void CheckExpiredResourcesNoLock() const noexcept
+    {
+        // No locking here. This method is only called for debugging purposes
+        // within the scope of an existing lock.
+        try {
+            const std::size_t expired_count = std::count_if(
+                cache_.cbegin(), cache_.cend(), [&](const auto& item) {
+                    if (item.second.resource_ref.expired()) {
+                        DLOG_F(1, "Expired resource at {}", fmt::ptr(item.first));
+                        return true;
+                    }
+                    return false;
+                });
+            if (expired_count > 0) {
+                DLOG_F(INFO, "Cache has {} expired resource(s)", expired_count);
+            } else {
+                DLOG_F(1, "No expired resources found");
+            }
+        } catch (...) {
+            LOG_F(ERROR, "Unknown exception while looking for stale resources");
+        }
+    }
+
     struct ResourceEntry {
         std::weak_ptr<const Resource> resource_ref; // Weak reference to the resource
         std::unordered_map<BindingKey, NativeObject> views;
