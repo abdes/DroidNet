@@ -102,6 +102,13 @@ public:
     //! invalidates the handle.
     OXYGEN_GFX_API void Release() noexcept;
 
+    //! Invalidates this handle without releasing the descriptor.
+    void Invalidate() noexcept
+    {
+        allocator_ = nullptr;
+        index_ = ~0u;
+    }
+
 private:
     //! Back-reference to allocator for lifetime management.
     DescriptorAllocator* allocator_ = nullptr;
@@ -114,13 +121,6 @@ private:
 
     //! Visibility of the memory space where this descriptor resides.
     DescriptorVisibility visibility_ = DescriptorVisibility::kShaderVisible;
-
-    //! Invalidates this handle without releasing the descriptor.
-    void Invalidate() noexcept
-    {
-        allocator_ = nullptr;
-        index_ = ~0u;
-    }
 };
 
 } // namespace oxygen::graphics
