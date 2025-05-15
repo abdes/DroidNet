@@ -14,16 +14,21 @@
 
 namespace oxygen::graphics {
 
-//! Represents a native object handle or pointer.
+//! Non-owning holder of a native object handle or pointer.
 /*!
  The `NativeObject` class is a utility for managing native object handles or
  pointers in a type-safe manner. It stores either an integer handle or a
  pointer, along with the type ID of the owning graphics object for additional
  safety and debugging.
+
+\note This class does not participate in any way or form in the lifecycle of the
+      native object handle or pointer it holds. It is the responsibility of the
+      user to ensure that the lifetime of a NativeObject is shorter than that of
+      the native object handle or pointer it holds.
 */
 class NativeObject {
     //! Indicates an invalid handle value, or uninitialized state.
-    inline static constexpr uint64_t kInvalidHandle { 0 };
+    static constexpr uint64_t kInvalidHandle { 0 };
 
     //! The native object handle, either as an integer or as a pointer.
     union {
