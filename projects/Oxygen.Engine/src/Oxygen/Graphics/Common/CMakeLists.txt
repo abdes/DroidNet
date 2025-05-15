@@ -119,8 +119,7 @@ target_sources(
       "Types/ShaderType.h"
       "Types/TrackableResource.h"
       "Types/ViewPort.h"
-      "Types/TrackableResource.h"
-      "Types/ViewPort.h"
+      "Types/IndexRange.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
