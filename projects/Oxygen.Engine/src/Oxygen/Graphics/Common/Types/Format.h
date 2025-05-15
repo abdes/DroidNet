@@ -116,7 +116,7 @@ enum class Format : uint8_t {
     kMax = 68 //!< Maximum value for validation
 };
 
-//! String representation of enum values in `QueueFamilyType`.
+//! String representation of enum values in `Format`.
 OXYGEN_GFX_API auto to_string(Format value) -> const char*;
 
 } // namespace oxygen::graphics
