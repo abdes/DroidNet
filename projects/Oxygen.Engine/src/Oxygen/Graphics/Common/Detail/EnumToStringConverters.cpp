@@ -9,9 +9,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
 auto oxygen::graphics::to_string(const QueueRole value) -> const char*
@@ -198,6 +200,53 @@ auto oxygen::graphics::to_string(TextureDimension value) -> const char*
         return "2D MS Array";
     case TextureDimension::kTexture3D:
         return "3D";
+    }
+
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
+{
+    switch (value) {
+    case ResourceViewType::kNone:
+        return "None";
+    case ResourceViewType::kTexture_SRV:
+        return "Texture SRV";
+    case ResourceViewType::kTypedBuffer_SRV:
+        return "Typed Buffer SRV";
+    case ResourceViewType::kStructuredBuffer_SRV:
+        return "Structured Buffer SRV";
+    case ResourceViewType::kRawBuffer_SRV:
+        return "Raw Buffer SRV";
+    case ResourceViewType::kConstantBuffer:
+        return "Constant Buffer";
+    case ResourceViewType::kTexture_UAV:
+        return "Texture UAV";
+    case ResourceViewType::kTypedBuffer_UAV:
+        return "Typed Buffer UAV";
+    case ResourceViewType::kStructuredBuffer_UAV:
+        return "Structured Buffer UAV";
+    case ResourceViewType::kRawBuffer_UAV:
+        return "Raw Buffer UAV";
+    case ResourceViewType::kSampler:
+        return "Sampler";
+    case ResourceViewType::kRayTracingAccelStructure:
+        return "Ray Tracing Acceleration Structure";
+
+    case ResourceViewType::kMax:
+        return "__Max__";
+    }
+
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(DescriptorVisibility value) -> const char*
+{
+    switch (value) {
+    case DescriptorVisibility::kShaderVisible:
+        return "Shader Visible";
+    case DescriptorVisibility::kCpuOnly:
+        return "CPU Only";
     }
 
     return "__NotSupported__";
