@@ -81,7 +81,11 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
-target_compile_options(${META_MODULE_TARGET} INTERFACE ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_options(
+  ${META_MODULE_TARGET}
+  INTERFACE
+    ${OXYGEN_COMMON_CXX_FLAGS}
+)
 
 # Header only libraries don't get a Visual Studio project file generated for
 # them. This is a workaround to make sure the header files are visible in the

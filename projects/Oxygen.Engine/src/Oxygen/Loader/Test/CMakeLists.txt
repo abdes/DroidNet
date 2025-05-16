@@ -35,14 +35,6 @@ add_test(NAME "Oxygen.Loader Link Test" COMMAND "Oxygen.Loader.LinkTest")
 
 include(GTestHelpers)
 
-m_gtest_program(
-  "GraphicsBackend"
-  SOURCES
-    "GraphicsBackendLoader_test.cpp"
-)
+m_gtest_program("GraphicsBackend" SOURCES "GraphicsBackendLoader_test.cpp")
 
-m_gtest_program(
-  "PlatformServices"
-  SOURCES
-    "PlatformServices_test.cpp"
-)
+m_gtest_program("PlatformServices" SOURCES "PlatformServices_test.cpp")

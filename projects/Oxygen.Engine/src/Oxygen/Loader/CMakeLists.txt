@@ -49,9 +49,7 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "GraphicsBackendLoader.h"
-      "Detail/PlatformServices.h"
+    FILES "GraphicsBackendLoader.h" "Detail/PlatformServices.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -69,7 +67,7 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
- add_subdirectory("Test")
+  add_subdirectory("Test")
 endif()
 
 # ==============================================================================
