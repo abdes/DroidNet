@@ -111,6 +111,7 @@ target_sources(
       "SynchronizationCounter.h"
       "Texture.h"
       "Detail/Barriers.h"
+      "Detail/DescriptorHeapSegment.h"
       "Detail/FormatUtils.h"
       "Detail/PerFrameResourceManager.h"
       "Detail/ResourceStateTracker.h"
