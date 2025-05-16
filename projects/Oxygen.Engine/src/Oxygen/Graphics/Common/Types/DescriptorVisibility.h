@@ -27,9 +27,26 @@ namespace oxygen::graphics {
  update patterns. It also supports persistent/immutable descriptor heaps.
 */
 enum class DescriptorVisibility : std::uint8_t {
+    kNone, //!< No visibility, invalid state.
+
     kShaderVisible, //!< GPU-accessible descriptor heap/pool.
-    kCpuOnly //!< CPU-only descriptor heap/pool, not directly accessible to shaders.
+    kCpuOnly, //!< CPU-only descriptor heap/pool, not directly accessible to shaders.
+
+    kMaxDescriptorVisibility //!< Sentinel value for the number of visibilities.
 };
+
+//! Check if the given resource view type is valid.
+constexpr auto IsValid(DescriptorVisibility visibility) noexcept
+{
+    return visibility > DescriptorVisibility::kNone
+        && visibility < DescriptorVisibility::kMaxDescriptorVisibility;
+}
+
+//! Check if the given resource view type is undefined.
+constexpr auto IsUndefined(DescriptorVisibility visibility) noexcept
+{
+    return visibility == DescriptorVisibility::kNone;
+}
 
 //! String representation of enum values in `DescriptorVisibility`.
 OXYGEN_GFX_API auto to_string(DescriptorVisibility value) -> const char*;
