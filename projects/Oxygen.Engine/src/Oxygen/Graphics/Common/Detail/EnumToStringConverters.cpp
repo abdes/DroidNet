@@ -230,9 +230,14 @@ auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
         return "Raw Buffer UAV";
     case ResourceViewType::kSampler:
         return "Sampler";
+    case ResourceViewType::kSamplerFeedbackTexture_UAV:
+        return "Sampler Feedback Texture UAV";
     case ResourceViewType::kRayTracingAccelStructure:
         return "Ray Tracing Acceleration Structure";
-
+    case ResourceViewType::kTexture_DSV:
+        return "Texture DSV";
+    case ResourceViewType::kTexture_RTV:
+        return "Texture RTV";
     case ResourceViewType::kMax:
         return "__Max__";
     }
