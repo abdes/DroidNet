@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #define NOLINT_TEST(ts, name) TEST(ts, name) // NOLINT
