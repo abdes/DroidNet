@@ -37,7 +37,7 @@ public:
     auto GetUsage() const noexcept -> BufferUsage override { return BufferUsage::kNone; }
     auto GetMemoryType() const noexcept -> BufferMemory override { return BufferMemory::kDeviceLocal; }
     auto IsMapped() const noexcept -> bool override { return false; }
-    auto GetDesc() const noexcept -> BufferDesc override { return {}; }
+    auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
     void SetName(std::string_view) noexcept override { }
 
 private:
