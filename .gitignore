@@ -410,3 +410,4 @@ FodyWeavers.xsd
 # From within a project directory, run:
 # > msbuild /Target:SlnGen /Verbosity:Minimal /NoLogo
 *.sln
+projects/Oxygen.Engine/Testing/Temporary/CTestCostData.txt
