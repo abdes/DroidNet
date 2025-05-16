@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 
 #include <Oxygen/Base/Macros.h>
@@ -51,6 +52,9 @@ class DescriptorAllocator;
 */
 class DescriptorHandle {
 public:
+    //! Represents an invalid descriptor index.
+    static constexpr auto kInvalidIndex = ~0u;
+
     //! Default constructor creates an invalid handle.
     DescriptorHandle() noexcept = default;
 
@@ -77,7 +81,12 @@ public:
 
     [[nodiscard]] constexpr auto IsValid() const noexcept
     {
-        return allocator_ != nullptr && index_ != ~0u;
+        auto properly_allocated = allocator_ != nullptr && index_ != kInvalidIndex;
+        // When properly allocated, the view type and visibility should also be
+        // valid.
+        assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
+        assert(!properly_allocated || oxygen::graphics::IsValid(visibility_));
+        return properly_allocated;
     }
 
     [[nodiscard]] constexpr auto GetIndex() const noexcept
@@ -106,21 +115,23 @@ public:
     void Invalidate() noexcept
     {
         allocator_ = nullptr;
-        index_ = ~0u;
+        index_ = kInvalidIndex;
+        view_type_ = ResourceViewType::kNone;
+        visibility_ = DescriptorVisibility::kNone;
     }
 
 private:
     //! Back-reference to allocator for lifetime management.
-    DescriptorAllocator* allocator_ = nullptr;
+    DescriptorAllocator* allocator_ { nullptr };
 
     //! Stable index for shader reference.
-    uint32_t index_ = ~0u;
+    uint32_t index_ { kInvalidIndex };
 
     //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
-    ResourceViewType view_type_ = ResourceViewType::kNone;
+    ResourceViewType view_type_ { ResourceViewType::kNone };
 
     //! Visibility of the memory space where this descriptor resides.
-    DescriptorVisibility visibility_ = DescriptorVisibility::kShaderVisible;
+    DescriptorVisibility visibility_ { DescriptorVisibility::kShaderVisible };
 };
 
 } // namespace oxygen::graphics
