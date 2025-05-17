@@ -12,7 +12,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Common/Detail/StaticDescriptorHeapSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -55,13 +55,13 @@ void ExpectEmpty(const auto& segment)
 }
 void ExpectFull(auto& segment)
 {
-    EXPECT_EQ(segment.GetSize(), segment.GetCapacity());
+    EXPECT_EQ(segment.GetAllocatedCount(), segment.GetCapacity());
     EXPECT_EQ(segment.GetAvailableCount(), 0UL);
     EXPECT_EQ(segment.Allocate(), DescriptorHandle::kInvalidIndex);
 }
 void ExpectSize(const auto& segment, uint32_t used)
 {
-    EXPECT_EQ(segment.GetSize(), used);
+    EXPECT_EQ(segment.GetAllocatedCount(), used);
     EXPECT_EQ(segment.GetAvailableCount(), segment.GetCapacity() - used);
 }
 
@@ -114,9 +114,9 @@ struct ResourceViewTypeNameGenerator {
 
 //! Test fixture for TestDescriptorHeapSegment.
 template <typename T>
-class TestDescriptorHeapSegmentTest : public ::testing::Test { };
+class StaticDescriptorHeapSegmentTest : public ::testing::Test { };
 TYPED_TEST_SUITE(
-    TestDescriptorHeapSegmentTest,
+    StaticDescriptorHeapSegmentTest,
     AllResourceViewTypes,
     ResourceViewTypeNameGenerator);
 
@@ -125,7 +125,7 @@ TYPED_TEST_SUITE(
 //===----------------------------------------------------------------------===//
 
 //! Construction and initial state.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ConstructionAndProperties)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ConstructionAndProperties)
 {
     constexpr ResourceViewType type = TypeParam::value;
     {
@@ -146,7 +146,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ConstructionAndProperties)
 }
 
 //! Construction and initial state.
-TYPED_TEST(TestDescriptorHeapSegmentTest, DestructionWhenNotEmpty)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, DestructionWhenNotEmpty)
 {
     // Setup log capture for destruction warnings.
     // Save the current verbosity so we can restore it after the test
@@ -184,7 +184,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, DestructionWhenNotEmpty)
 }
 
 //! Capacity matches expected per type.
-TYPED_TEST(TestDescriptorHeapSegmentTest, CapacityMatchesContract)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, CapacityMatchesContract)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -213,7 +213,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, CapacityMatchesContract)
 //===----------------------------------------------------------------------===//
 
 //! Sequential allocation returns correct indices and updates state.
-TYPED_TEST(TestDescriptorHeapSegmentTest, SequentialAllocation)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, SequentialAllocation)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 10;
@@ -228,7 +228,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, SequentialAllocation)
 }
 
 //! Allocate until full, then fail.
-TYPED_TEST(TestDescriptorHeapSegmentTest, AllocateUntilFull)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, AllocateUntilFull)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -252,7 +252,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, AllocateUntilFull)
 //===----------------------------------------------------------------------===//
 
 //! Release and immediate recycle of a single descriptor.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAndRecycleSingle)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseAndRecycleSingle)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -271,7 +271,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAndRecycleSingle)
 }
 
 //! Release multiple descriptors, verify counts, no recycle.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseMultipleNoRecycle)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseMultipleNoRecycle)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -293,7 +293,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseMultipleNoRecycle)
 //===----------------------------------------------------------------------===//
 
 //! Release already released index fails.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAlreadyReleasedFails)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseAlreadyReleasedFails)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -310,7 +310,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAlreadyReleasedFails)
 }
 
 //! Release unallocated index fails.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseUnallocatedIndexFails)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseUnallocatedIndexFails)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 10;
@@ -322,14 +322,14 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseUnallocatedIndexFails)
     [[maybe_unused]] auto _2 = seg.Allocate();
     uint32_t unallocated = base + 5;
     EXPECT_FALSE(seg.Release(unallocated));
-    uint32_t next = base + seg.GetSize();
+    uint32_t next = base + seg.GetAllocatedCount();
     if (next < base + cap) {
         EXPECT_FALSE(seg.Release(next));
     }
 }
 
 //! Release out-of-bounds indices fails.
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseOutOfBoundsFails)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseOutOfBoundsFails)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 20;
@@ -357,7 +357,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseOutOfBoundsFails)
     EXPECT_FALSE(seg.Release(DescriptorHandle::kInvalidIndex));
 }
 
-TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAfterReallocation)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, ReleaseAfterReallocation)
 {
     constexpr ResourceViewType type = TypeParam::value;
     TestDescriptorHeapSegment<type> seg(DescriptorVisibility::kShaderVisible, 0);
@@ -394,7 +394,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, ReleaseAfterReallocation)
 //===----------------------------------------------------------------------===//
 
 //! LIFO recycling behavior.
-TYPED_TEST(TestDescriptorHeapSegmentTest, LIFORecycling)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, LIFORecycling)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 100;
@@ -430,7 +430,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, LIFORecycling)
 }
 
 //! Full cycle LIFO verification.
-TYPED_TEST(TestDescriptorHeapSegmentTest, FullCycleLIFOVerification)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, FullCycleLIFOVerification)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 0;
@@ -473,7 +473,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, FullCycleLIFOVerification)
 //===----------------------------------------------------------------------===//
 
 //! Move construction and assignment.
-TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, MoveSemantics)
 {
     constexpr ResourceViewType type = TypeParam::value;
     constexpr uint32_t base = 77;
@@ -502,7 +502,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
     }
 
     // Record the state of the original segment before moving
-    uint32_t orig_size = orig.GetSize();
+    uint32_t orig_size = orig.GetAllocatedCount();
     uint32_t orig_avail = orig.GetAvailableCount();
     uint32_t orig_next = orig.Allocate();
     if (orig_next != DescriptorHandle::kInvalidIndex) {
@@ -517,7 +517,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
     EXPECT_EQ(moved.GetVisibility(), vis);
     EXPECT_EQ(moved.GetBaseIndex(), base);
     EXPECT_EQ(moved.GetCapacity(), cap);
-    EXPECT_EQ(moved.GetSize(), orig_size);
+    EXPECT_EQ(moved.GetAllocatedCount(), orig_size);
     EXPECT_EQ(moved.GetAvailableCount(), orig_avail);
 
     // Allocate from the moved segment and verify the next index matches
@@ -532,7 +532,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
     if constexpr (cap > 0) {
         [[maybe_unused]] auto _ = another.Allocate();
     }
-    uint32_t another_size = another.GetSize();
+    uint32_t another_size = another.GetAllocatedCount();
     uint32_t another_avail = another.GetAvailableCount();
     uint32_t another_next = another.Allocate();
     if (another_next != DescriptorHandle::kInvalidIndex) {
@@ -546,7 +546,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
     EXPECT_EQ(moved.GetVisibility(), vis);
     EXPECT_EQ(moved.GetBaseIndex(), base + 100);
     EXPECT_EQ(moved.GetCapacity(), cap);
-    EXPECT_EQ(moved.GetSize(), another_size);
+    EXPECT_EQ(moved.GetAllocatedCount(), another_size);
     EXPECT_EQ(moved.GetAvailableCount(), another_avail);
 
     // Allocate from the newly assigned segment and verify the next index
@@ -562,7 +562,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, MoveSemantics)
 //===----------------------------------------------------------------------===//
 
 //! Polymorphic interface usage.
-TYPED_TEST(TestDescriptorHeapSegmentTest, PolymorphicInterfaceUsage)
+TYPED_TEST(StaticDescriptorHeapSegmentTest, PolymorphicInterfaceUsage)
 {
     constexpr ResourceViewType type = TypeParam::value;
     const std::unique_ptr<DescriptorHeapSegment> seg
@@ -580,7 +580,7 @@ TYPED_TEST(TestDescriptorHeapSegmentTest, PolymorphicInterfaceUsage)
         uint32_t idx = seg->Allocate();
         EXPECT_NE(idx, DescriptorHandle::kInvalidIndex);
         EXPECT_EQ(idx, seg->GetBaseIndex() + i);
-        EXPECT_EQ(seg->GetSize(), i + 1);
+        EXPECT_EQ(seg->GetAllocatedCount(), i + 1);
     }
     for (uint32_t i = 0; i < n; ++i) {
         EXPECT_TRUE(seg->Release(seg->GetBaseIndex() + i));

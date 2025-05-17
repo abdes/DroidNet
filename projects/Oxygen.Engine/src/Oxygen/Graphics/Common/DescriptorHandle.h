@@ -137,7 +137,7 @@ private:
     ResourceViewType view_type_ { ResourceViewType::kNone };
 
     //! Visibility of the memory space where this descriptor resides.
-    DescriptorVisibility visibility_ { DescriptorVisibility::kShaderVisible };
+    DescriptorVisibility visibility_ { DescriptorVisibility::kNone };
 };
 
 } // namespace oxygen::graphics

@@ -238,7 +238,7 @@ auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
         return "Texture DSV";
     case ResourceViewType::kTexture_RTV:
         return "Texture RTV";
-    case ResourceViewType::kMax:
+    case ResourceViewType::kMaxResourceViewType:
         return "__Max__";
     }
 

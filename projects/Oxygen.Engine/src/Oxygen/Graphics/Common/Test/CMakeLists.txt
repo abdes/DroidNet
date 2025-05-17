@@ -48,8 +48,21 @@ m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
 m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
 m_gtest_program(BufferStateTracking SOURCES "BufferStateTracking_test.cpp")
 m_gtest_program(ViewCache SOURCES "ViewCache_test.cpp")
-m_gtest_program(DescriptorHandle SOURCES "DescriptorHandle_test.cpp")
-# m_gtest_program(DescriptorAllocator SOURCES "DescriptorAllocator_test.cpp")
-# m_gtest_program(ResourceRegistry SOURCES "ResourceRegistry_test.cpp")
-m_gtest_program(IndexRange SOURCES "IndexRange_test.cpp")
-m_gtest_program(DescriptorHeapSegment SOURCES "DescriptorHeapSegment_test.cpp")
+m_gtest_program(DescriptorHandle SOURCES "Bindless/DescriptorHandle_test.cpp")
+m_gtest_program(IndexRange SOURCES "Bindless/IndexRange_test.cpp")
+m_gtest_program(
+  DescriptorHeapSegment
+  SOURCES
+    "Bindless/FixedDescriptorHeapSegment_test.cpp"
+    "Bindless/StaticDescriptorHeapSegment_test.cpp"
+)
+m_gtest_program(
+  BaseDescriptorAllocator
+  SOURCES
+    "Bindless/BaseDescriptorAllocatorTest.h"
+    "Bindless/BaseDescriptorAllocator_Basic_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Growth_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Init_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Error_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Concurrency_test.cpp"
+)
