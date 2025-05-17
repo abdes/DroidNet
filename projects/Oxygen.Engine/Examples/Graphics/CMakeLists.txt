@@ -34,7 +34,8 @@ add_executable(
   "MainModule.cpp"
   "MainModule.h"
   "main_impl.cpp"
-  "../main.cpp")
+  "../main.cpp"
+)
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
