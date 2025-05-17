@@ -16,7 +16,6 @@
 
 namespace oxygen::graphics {
 
-// Forward declarations
 class DescriptorAllocator;
 
 //! An allocated descriptor slot with stable index for use by shaders.
@@ -51,22 +50,14 @@ class DescriptorAllocator;
  - Release explicitly when no longer needed, or let RAII handle cleanup
 */
 class DescriptorHandle {
+    friend class DescriptorAllocator;
+
 public:
     //! Represents an invalid descriptor index.
-    static constexpr auto kInvalidIndex = ~0u;
+    static constexpr auto kInvalidIndex = ~0U;
 
     //! Default constructor creates an invalid handle.
     DescriptorHandle() noexcept = default;
-
-    //! Constructor that takes an allocator and index.
-    /*!
-     \param allocator The allocator that created this descriptor.
-     \param index The stable index for shader reference.
-     \param view_type The resource view type (SRV, UAV, CBV, Sampler, etc.).
-     \param visibility The memory visibility where this descriptor resides.
-    */
-    OXYGEN_GFX_API DescriptorHandle(DescriptorAllocator* allocator, uint32_t index,
-        ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
     //! Destructor that automatically releases the descriptor if still valid.
     OXYGEN_GFX_API ~DescriptorHandle();
@@ -81,7 +72,7 @@ public:
 
     [[nodiscard]] constexpr auto IsValid() const noexcept
     {
-        auto properly_allocated = allocator_ != nullptr && index_ != kInvalidIndex;
+        const auto properly_allocated = allocator_ != nullptr && index_ != kInvalidIndex;
         // When properly allocated, the view type and visibility should also be
         // valid.
         assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
@@ -119,6 +110,21 @@ public:
         view_type_ = ResourceViewType::kNone;
         visibility_ = DescriptorVisibility::kNone;
     }
+
+protected:
+    //! Constructor that takes an allocator and index.
+    /*!
+     Creating a valid handle can only be done by the entity that allocated
+     descriptors. In the current design, this is the DescriptorAllocator
+     class.
+
+     This constructor is protected to prevent misuse outside the allocator
+     context, while still allowing unit tests to create handles for testing
+     purposes via derivation.
+    */
+    OXYGEN_GFX_API DescriptorHandle(
+        DescriptorAllocator* allocator, uint32_t index,
+        ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
 private:
     //! Back-reference to allocator for lifetime management.
