@@ -8,10 +8,7 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "Sample program using oxygen::graphics device manager."
-)
+set(description "Sample program using oxygen::graphics device manager.")
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.DeviceManager.Example"
   DESCRIPTION description
@@ -29,7 +26,11 @@ asap_push_module("${META_MODULE_NAME}")
 
 # -- Input System Example ------------------------------------------------------
 
-add_executable(${META_MODULE_TARGET} "main_impl.cpp" "../main.cpp")
+add_executable(
+  ${META_MODULE_TARGET}
+  "main_impl.cpp"
+  "../main.cpp"
+)
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
