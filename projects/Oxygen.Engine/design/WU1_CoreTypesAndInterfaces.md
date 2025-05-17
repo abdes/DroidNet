@@ -25,7 +25,7 @@ None
 - `src/Oxygen/Graphics/Common/Types/DescriptorVisibility.h` - Defines memory residence for descriptors
 - `src/Oxygen/Graphics/Common/Types/IndexRange.h` - Defines mapping between local and global index spaces
 - `src/Oxygen/Graphics/Common/DescriptorHandle.h` - Defines descriptor handle type
-- `src/Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h` - Defines `DescriptorHeapSegment` interface and `StaticDescriptorHeapSegment` implementation.
+- `src/Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h` - Defines `DescriptorHeapSegment` interface and `FixedDescriptorHeapSegment` implementation.
 - `src/Oxygen/Graphics/Common/DescriptorAllocator.h` - Defines allocator interface
 - `src/Oxygen/Graphics/Common/ResourceRegistry.h` - Defines resource registry
 - `src/Oxygen/Graphics/Common/CMakeLists.txt` - Added new files
@@ -92,22 +92,21 @@ None
      - **Consistent Properties**: `GetViewType()`, `GetVisibility()`,
        `GetBaseIndex()`, and `GetCapacity()` must remain constant
        post-construction.
-     - **Accurate Counts**: `GetSize()` (allocated count) and
+     - **Accurate Counts**: `GetAllocatedCount()` and
        `GetAvailableCount()` must be accurate.
 
-   - **`StaticDescriptorHeapSegment` Specialization**:
-     - **Compile-Time Capacity**: The maximum number of descriptors is fixed at
-       compile time per `ResourceViewType` via `GetOptimalCapacity()`. This
-       allows internal structures (like `std::bitset` for `released_flags_` and
-       `StaticVector` for `free_list_`) to be statically sized, avoiding dynamic
-       memory allocation for segment management itself.
+   - **`FixedDescriptorHeapSegment` Implementation**:
+     - **Pre-allocated Capacity**: The maximum number of descriptors is fixed at
+       construction time and cannot be changed later. The segment maintains a
+       fixed-size pool of descriptor indices.
      - **LIFO Recycling**: Implements a Last-In, First-Out (LIFO) strategy for
        reusing descriptors from its `free_list_`. This can benefit cache
        locality.
      - **Sequential Allocation Fallback**: If the `free_list_` is empty, new
        descriptors are allocated sequentially by incrementing an internal
        counter (`next_index_`).
-     - **Non-Growable**: The segment's capacity is fixed upon creation.
+     - **Efficient State Tracking**: Uses a vector of boolean flags to track which
+       indices have been released, allowing quick validation during release operations.
 
    - **Relationship with `DescriptorAllocator`**: `DescriptorAllocator`
      implementations will typically manage collections of
@@ -115,7 +114,7 @@ None
      The allocator will delegate requests for specific descriptor types and
      visibilities to the appropriate segment.
 
-### 5. DescriptorAllocator
+### 5. ✓ DescriptorAllocator
 
    - Abstract interface for descriptor allocation from underlying graphics API
      heaps/pools.
@@ -130,19 +129,19 @@ None
      - Manages shader-visible and CPU-only descriptor spaces by potentially
        using different sets of `DescriptorHeapSegment`s for each
        `DescriptorVisibility`.
-     - Provides methods for allocation (`Allocate`) and release (`Free`) of
+     - Provides methods for allocation (`Allocate`) and release (`Release`) of
        `DescriptorHandle`s. These operations will typically be routed to an
        appropriate `DescriptorHeapSegment`.
-     - Facilitates copying descriptors between visibility spaces (e.g., from a
-       CPU-only segment to a shader-visible segment).
+     - Facilitates copying descriptors between visibility spaces through the
+       `CopyDescriptor` method.
      - Exposes methods to get associated platform-specific handles/pointers for
-       descriptors (e.g., `GetCpuHandle`, `GetGpuHandle`), which might involve
-       querying the relevant `DescriptorHeapSegment` and translating its local
-       index.
-     - Prepares resources for rendering by ensuring necessary heaps/sets are
-       bound, potentially by coordinating with the underlying segments.
-   - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
-     etc.) when interacting with segments.
+       descriptors via `GetNativeHandle`.
+     - Prepares resources for rendering via `PrepareForRendering` by ensuring necessary
+       heaps/sets are bound.
+     - Provides utility methods like `GetRemainingDescriptorsCount`, `GetAllocatedDescriptorsCount`,
+       and `Contains` for descriptor management.
+     - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
+       etc.) when interacting with segments.
 
    - **Ownership Model**:
       - Owns the descriptor heaps/pools
@@ -155,77 +154,41 @@ None
       - Persists for the duration of rendering operations
       - Outlives individual resources but not the rendering system
 
-   **Draft Interface**
+### 5.1 ✓ Heap Allocation Strategy
 
-   ```cpp
-   struct DescriptorAllocatorConfig {
-       // Resource limits
-       uint32_t maxSRVs = 500000;                // Maximum SRVs
-       uint32_t maxUAVs = 64000;                 // Maximum UAVs
-       uint32_t maxCBVs = 16000;                 // Maximum CBVs
-       uint32_t maxSamplers = 2048;              // Maximum samplers
-       uint32_t maxRTVs = 1024;                  // Maximum RTVs
-       uint32_t maxDSVs = 1024;                  // Maximum DSVs
+   - **Purpose**: Defines how descriptor heaps are organized and configured across
+     different resource types and visibilities.
 
-       // Growth policy
-       bool enableDynamicGrowth = true;          // Allow dynamic growth of pools/heaps
-       float growthFactor = 2.0f;                // Multiplication factor when expanding
-       uint32_t maxGrowthIterations = 3;         // Maximum number of growth cycles
+   - **Interface**: `DescriptorAllocationStrategy`
+     - `GetHeapKey(ResourceViewType, DescriptorVisibility)`: Maps a resource view
+       type and visibility to a unique string key that identifies the heap configuration.
+     - `GetHeapDescription(string)`: Retrieves the `HeapDescription` for a given heap key.
 
-       // Memory optimization
-       bool useSeparateHeaps = false;            // Use separate heaps for different descriptor types
-       uint32_t initialFreeListCapacity = 1024;  // Initial capacity for descriptor recycling lists
+   - **Default Implementation**: `DefaultDescriptorAllocationStrategy`
+     - Provides a reasonable default mapping of resource types to heap configurations.
+     - Uses a key format of "ViewType:Visibility" (e.g., "Texture_SRV:gpu").
+     - Pre-configures appropriate capacities for different descriptor types.
+     - Allows customization of heap growth parameters.
 
-       // Update strategy
-       bool enableBatchedUpdates = true;         // Batch descriptor updates when possible
-       uint32_t maxUpdatesPerBatch = 256;        // Maximum descriptor updates per batch operation
+   - **HeapDescription Structure**:
+     - `cpu_visible_capacity`: Initial capacity for CPU-visible descriptors.
+     - `shader_visible_capacity`: Initial capacity for shader-visible descriptors.
+     - `allow_growth`: Whether dynamic growth is allowed when heaps are full.
+     - `growth_factor`: Multiplication factor when expanding descriptor heaps.
+     - `max_growth_iterations`: Maximum number of growth cycles before failing allocations.
 
-       // Threading model
-       bool enableThreadSafety = true;           // Enable thread-safe descriptor allocation
-       uint32_t perThreadCacheSize = 64;         // Number of descriptors to cache per thread
+   - **Base Implementation**: `BaseDescriptorAllocator`
+     - Implements the core functionality of the `DescriptorAllocator` interface.
+     - Uses the `DescriptorAllocationStrategy` to configure and manage its heaps.
+     - Maintains a collection of heap segments for each (type, visibility) combination.
+     - Provides thread safety through mutexes for all allocation and release operations.
+     - Creates new segments dynamically as needed based on the heap configuration.
+     - Delegates the actual segment creation to derived classes through a virtual method.
 
-       // Debug options
-       bool enableValidation = true;             // Additional validation in debug builds
-       bool trackDescriptorUsage = false;        // Track descriptor usage patterns (dev only)
-   };
-
-   class DescriptorAllocator {
-   public:
-       virtual ~DescriptorAllocator() = default;
-
-       // Allocate a descriptor of specified type
-       [[nodiscard]] virtual DescriptorHandle Allocate(
-           ResourceViewType viewType,
-           DescriptorVisibility visibility = DescriptorVisibility::kShaderVisible) = 0;
-
-       // Free a descriptor
-       virtual void Free(DescriptorHandle& handle) = 0;
-
-       // Copy from a CPU-only descriptor to a shader-visible descriptor
-       virtual void CopyToShaderVisible(
-           const DescriptorHandle& src,
-           const DescriptorHandle& dst) = 0;
-
-       // Get platform-specific pointer for descriptor updates (CPU side)
-       [[nodiscard]] virtual NativeObject GetCpuHandle(const DescriptorHandle& handle) = 0;
-
-       // Get platform-specific pointer for descriptor (GPU side)
-       [[nodiscard]] virtual NativeObject GetGpuHandle(const DescriptorHandle& handle) = 0;
-
-       // Prepare descriptors for use in rendering (bind heaps/sets as needed)
-       virtual void PrepareForRendering(CommandList* commandList) = 0;
-
-       // Factory method for creating platform-specific allocators
-       static std::unique_ptr<DescriptorAllocator> Create(
-           Device* device,
-           const DescriptorAllocatorConfig& config);
-
-       // Optional methods for advanced use cases
-       virtual void BatchBegin() {}
-       virtual void BatchEnd() {}
-       virtual void SetDebugName(const DescriptorHandle& handle, const char* name) {}
-   };
-   ```
+   - **Configuration**: `BaseDescriptorAllocatorConfig`
+     - Contains a `heap_strategy` shared pointer that can be customized at creation time.
+     - Used to initialize the `BaseDescriptorAllocator` with specific heap configurations.
+     - Falls back to a `DefaultDescriptorAllocationStrategy` if none is provided.
 
 ### D3D12 Implementation Considerations
 
@@ -514,13 +477,61 @@ auto terrainHeightfield = registry.FindTextureUAVByName("terrain/heightfield_dat
   - Construction, initial state, and core accessor methods.
   - Sequential allocation until segment is full.
   - Allocation from empty segment and full segment (expecting sentinel).
-  - Single descriptor release and immediate reallocation (LIFO for `StaticDescriptorHeapSegment`).
+  - Single descriptor release and immediate reallocation (LIFO for `FixedDescriptorHeapSegment`).
   - Multiple descriptor releases and subsequent reallocations.
   - Releasing unallocated indices (never allocated, or beyond current `next_index_`).
   - Releasing already released indices (double release).
   - Releasing indices out of the segment's bounds.
   - Behavior with zero-capacity segments (where applicable).
   - Typed tests to ensure consistent behavior across different configurations.
-- `src/Oxygen/Graphics/Common/Test/DescriptorAllocator_test.cpp` - Mock allocator testing for API correctness
 - `src/Oxygen/Graphics/Common/Test/ResourceRegistry_test.cpp` - Integrated view cache functionality
 - `src/Oxygen/Graphics/Common/Test/CMakeLists.txt` - Added tests to build system
+- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Basic_test.cpp` - Core allocation tests:
+  - Segment creation on first allocation
+  - Reuse of existing segments for subsequent allocations
+  - Descriptor recycling and handle reuse
+  - Multiple visibility and view type combinations
+  - Descriptor copying between visibility spaces
+  - Error handling for invalid releases
+
+- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Concurrency_test.cpp` - Multi-threaded stress testing:
+  - Allocations and releases from multiple concurrent threads
+  - Thread safety verification with different resource types
+  - Resource index verification across thread boundaries
+  - Race condition detection
+  - Proper state management when multiple threads operate on the same heap
+
+## Thread Safety Design
+
+The `BaseDescriptorAllocator` ensures thread safety through several mechanisms:
+
+- **Synchronized Core Operations**: All allocation and release operations are protected by a mutex to prevent race conditions when multiple threads access the same descriptor heap.
+- **Safe Index Management**: The implementation ensures that indices are uniquely allocated and properly tracked even under concurrent access.
+- **Atomic State Management**: Segment state changes are atomic operations to prevent partial updates.
+- **Fail-Fast Error Handling**: Any thread-safety violations result in clear error messages rather than undefined behavior.
+
+These protections allow descriptors to be safely allocated and released from any thread in the engine, enabling parallel processing of resource loading and view creation.
+
+## Design Evolution and Alternatives Considered
+
+Throughout the implementation, several design alternatives were considered:
+
+1. **Segmentation Strategy**:
+   - **Adopted**: Fixed-size segments with growth through creation of additional segments
+   - **Alternative**: Dynamically resizable segments using vector reallocation
+   - **Rationale**: Fixed segments provide better cache locality and avoid costly vector reallocations
+
+2. **Heap Mapping Strategy**:
+   - **Adopted**: String-based heap key mapping with declarative configuration
+   - **Alternative**: Enum-based direct mapping with constexpr lookup tables
+   - **Rationale**: String-based approach provides better extensibility and debugging, at minimal runtime cost since mapping occurs only during initialization
+
+3. **Thread Safety Approach**:
+   - **Adopted**: Global mutex per allocator
+   - **Alternative**: Fine-grained locking per segment
+   - **Rationale**: Simpler implementation with negligible performance impact for most use cases. Applications with extreme thread contention can implement custom allocators.
+
+4. **Memory Management**:
+   - **Adopted**: LIFO recycling for better cache locality
+   - **Alternative**: More complex strategies like defragmentation or best-fit
+   - **Rationale**: LIFO provides good performance characteristics while maintaining simplicity
