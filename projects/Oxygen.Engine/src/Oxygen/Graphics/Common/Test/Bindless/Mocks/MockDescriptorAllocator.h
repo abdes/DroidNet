@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 
 // ReSharper disable CppClangTidyModernizeUseTrailingReturnType
 
@@ -35,6 +36,9 @@ public:
     MOCK_METHOD(void, CopyDescriptor, (const DescriptorHandle&, const DescriptorHandle&), (override));
     MOCK_METHOD(NativeObject, GetNativeHandle, (const DescriptorHandle&), (const, override));
     MOCK_METHOD(void, PrepareForRendering, (const NativeObject&), (override));
+
+    // Expose GetInitialCapacity for testing
+    using BaseDescriptorAllocator::GetInitialCapacity;
 
 protected:
     // Manual override for heap segment creation (not mocked)

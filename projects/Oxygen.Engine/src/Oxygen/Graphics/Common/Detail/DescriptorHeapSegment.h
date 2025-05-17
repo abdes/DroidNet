@@ -8,12 +8,13 @@
 
 #include <bitset>
 #include <cstdint>
-#include <limits>
 
 // ReSharper disable once CppUnusedIncludeDirective - OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -41,8 +42,7 @@ namespace oxygen::graphics::detail {
 
  - **State Integrity**:
     - `Allocate()`: If no descriptors are available (i.e., the segment is full),
-      it must return a sentinel value (typically
-      `std::numeric_limits<uint32_t>::max()`).
+      it must return a sentinel value (`DescriptorHandle::kInvalidIndex`).
     - `Release(index)`: Must return `true` if the given `index` was valid
       (within segment bounds, currently allocated) and successfully made
       available. It must return `false` if the index is out of bounds, was not
@@ -67,8 +67,8 @@ namespace oxygen::graphics::detail {
 */
 class DescriptorHeapSegment {
 public:
-    DescriptorHeapSegment() = default;
-    virtual ~DescriptorHeapSegment() = default;
+    DescriptorHeapSegment() noexcept = default;
+    virtual ~DescriptorHeapSegment() noexcept = default;
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorHeapSegment)
     OXYGEN_DEFAULT_MOVABLE(DescriptorHeapSegment)
@@ -77,39 +77,39 @@ public:
     /*!
      \return The allocated index, or std::numeric_limits<uint32_t>::max() if the segment is full.
     */
-    [[nodiscard]] virtual auto Allocate() -> uint32_t = 0;
+    [[nodiscard]] virtual auto Allocate() noexcept -> uint32_t = 0;
 
     //! Releases a descriptor index back to this segment.
     /*!
      \param index The global index to release.
      \return True if the index was successfully released, false otherwise.
     */
-    virtual auto Release(uint32_t index) -> bool = 0;
+    virtual auto Release(uint32_t index) noexcept -> bool = 0;
 
     //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] virtual auto GetAvailableCount() const -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetAvailableCount() const noexcept -> uint32_t = 0;
 
     //! Returns the resource view type of this segment.
-    [[nodiscard]] virtual auto GetViewType() const -> ResourceViewType = 0;
+    [[nodiscard]] virtual auto GetViewType() const noexcept -> ResourceViewType = 0;
 
     //! Returns the visibility of this segment.
-    [[nodiscard]] virtual auto GetVisibility() const -> DescriptorVisibility = 0;
+    [[nodiscard]] virtual auto GetVisibility() const noexcept -> DescriptorVisibility = 0;
 
     //! Returns the base index of this segment.
-    [[nodiscard]] virtual auto GetBaseIndex() const -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> uint32_t = 0;
 
     //! Returns the capacity of this segment.
-    [[nodiscard]] virtual auto GetCapacity() const -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetCapacity() const noexcept -> uint32_t = 0;
 
     //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] virtual auto GetSize() const -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetSize() const noexcept -> uint32_t = 0;
 
-    //! Checks if the segment is empty (i.e. no allocated descriptors).
-    [[nodiscard]] auto IsEmpty() const { return GetSize() == 0; }
+    //! Checks if the segment is empty (i.e., no allocated descriptors).
+    [[nodiscard]] auto IsEmpty() const noexcept { return GetSize() == 0; }
 
-    //! Checks if the segment is full (i.e. all capacity is used for allocated
+    //! Checks if the segment is full (i.e., all capacity is used for allocated
     //! descriptors).
-    [[nodiscard]] auto IsFull() const { return GetSize() == GetCapacity(); }
+    [[nodiscard]] auto IsFull() const noexcept { return GetSize() == GetCapacity(); }
 };
 
 //! Specialized implementation of a descriptor heap segment with compile-time
@@ -165,61 +165,81 @@ public:
  \tparam ViewType The resource view type this segment manages
 */
 template <ResourceViewType ViewType>
-class StaticDescriptorHeapSegment final : public DescriptorHeapSegment {
-    static_assert(ViewType < ResourceViewType::kMax && ViewType != ResourceViewType::kNone,
+class StaticDescriptorHeapSegment : public DescriptorHeapSegment {
+    static_assert(ViewType < ResourceViewType::kMaxResourceViewType && ViewType != ResourceViewType::kNone,
         "StaticDescriptorHeapSegment: ViewType must be a valid ResourceViewType (not kMax or greater)");
 
 public:
     StaticDescriptorHeapSegment(
         const DescriptorVisibility visibility,
-        const uint32_t base_index)
+        const uint32_t base_index) noexcept
         : visibility_(visibility)
         , base_index_(base_index)
         , next_index_(0)
     {
     }
 
-    ~StaticDescriptorHeapSegment() override = default;
+    //! Destructor.
+    /*!
+     This destructor does not own any resources that require explicit cleanup.
+     However, it is not a good practice to destroy a segment while it still has
+     allocated descriptors. When this class is extended, the derived class
+     should ensure that all descriptors are released before destruction.
+    */
+    ~StaticDescriptorHeapSegment() noexcept override
+    {
+        try {
+            // Do not call the virtual method GetSize() in the destructor.
+            if (const auto size = next_index_ - static_cast<uint32_t>(free_list_.size()); size > 0U) {
+                LOG_F(WARNING, "Destroying segment with allocated descriptors ({})", size);
+            }
+        } catch (...) {
+            // Nothing to do, but adding a placeholder statement to avoid warnings.
+            [[maybe_unused]] auto _ = 0;
+        }
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(StaticDescriptorHeapSegment)
     OXYGEN_DEFAULT_MOVABLE(StaticDescriptorHeapSegment)
 
     //! Allocates a descriptor index from this segment.
     /*!
-     \return The allocated index, or std::numeric_limits<uint32_t>::max() if the segment is full.
-
-     First tries to reuse a previously freed index. If none are available,
-     allocates the next available index. Returns std::numeric_limits<uint32_t>::max() if the segment is full.
+     \return The allocated index, or DescriptorHandle::kInvalidIndex if the
+             segment is full, or an error occurs. Errors are logged but not
+             propagated.
     */
-    [[nodiscard]] auto Allocate() -> uint32_t override
+    [[nodiscard]] auto Allocate() noexcept -> uint32_t override
     {
         // First try to reuse a released descriptor (LIFO for better cache locality)
         if (!free_list_.empty()) {
             uint32_t local_index = free_list_.back();
             free_list_.pop_back();
             released_flags_.reset(local_index);
+            DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})",
+                local_index, GetAvailableCount(), GetCapacity());
             return base_index_ + local_index;
         }
 
         // If no freed descriptors, allocate a new one
         if (next_index_ < GetCapacity()) {
+            DLOG_F(2, "Allocated new descriptor index {} (remaining: {}/{})",
+                next_index_, GetAvailableCount(), GetCapacity());
             return base_index_ + next_index_++;
         }
 
-        // Segment is full
-        return std::numeric_limits<uint32_t>::max();
+        return DescriptorHandle::kInvalidIndex;
     }
 
     //! Releases a descriptor index back to this segment.
     /*!
-     \param index The global index to release.
+     \param index The index to release. Must be within the segment's range.
      \return True if the index was successfully released, false otherwise.
 
-     Validates that the index belongs to this segment before releasing it.
-     Adds the released index to the free list for future reuse.
+     Validates that the index belongs to this segment before releasing it, then
+     adds the released index to the free list for future reuse.
      Ensures the same descriptor cannot be released twice.
     */
-    auto Release(const uint32_t index) -> bool override
+    auto Release(const uint32_t index) noexcept -> bool override
     {
         // Check if the index belongs to this segment
         if (index < base_index_ || index >= base_index_ + GetCapacity()) {
@@ -229,8 +249,8 @@ public:
         // Convert to local index
         uint32_t local_index = index - base_index_;
 
-        // Check if this index was never allocated or is beyond the currently allocated range
-        // An index can only be released if it's < next_index_ (meaning it was allocated)
+        // Check if this index was never allocated or is beyond the currently allocated range.
+        // An index can only be released if it's < next_index_ (meaning it was allocated),
         // AND it's not already in the free_list_ (checked by released_flags_).
         if (local_index >= next_index_ && !released_flags_.test(local_index)) {
             return false;
@@ -241,47 +261,72 @@ public:
             return false; // Already released
         }
 
-        // Mark as released and add to free list
+        // Add to the free list
+        try {
+            free_list_.emplace_back(local_index);
+        } catch (const std::exception& ex) {
+            // The only reason this would fail is due to memory allocation failure.
+            LOG_F(ERROR, "Failed to add released index {} to free list: {}", local_index, ex.what());
+            return false;
+        }
+        // Mark as released
         released_flags_.set(local_index);
-        free_list_.push_back(local_index);
 
+        DLOG_F(2, "Released descriptor index {} (remaining: {}/{})",
+            local_index, GetAvailableCount(), GetCapacity());
         return true;
     }
 
     //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] auto GetAvailableCount() const -> uint32_t override
+    [[nodiscard]] auto GetAvailableCount() const noexcept -> uint32_t override
     {
         return GetCapacity() - next_index_ + static_cast<uint32_t>(free_list_.size());
     }
 
     //! Returns the resource view type of this segment.
-    [[nodiscard]] auto GetViewType() const -> ResourceViewType override
+    [[nodiscard]] auto GetViewType() const noexcept -> ResourceViewType override
     {
         return ViewType;
     }
 
     //! Returns the visibility of this segment.
-    [[nodiscard]] auto GetVisibility() const -> DescriptorVisibility override
+    [[nodiscard]] auto GetVisibility() const noexcept -> DescriptorVisibility override
     {
         return visibility_;
     }
 
     //! Returns the base index of this segment.
-    [[nodiscard]] auto GetBaseIndex() const -> uint32_t override
+    [[nodiscard]] auto GetBaseIndex() const noexcept -> uint32_t override
     {
         return base_index_;
     }
 
     //! Returns the capacity of this segment.
-    [[nodiscard]] constexpr auto GetCapacity() const -> uint32_t override
+    [[nodiscard]] constexpr auto GetCapacity() const noexcept -> uint32_t override
     {
         return GetOptimalCapacity();
     }
 
     //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] auto GetSize() const -> uint32_t override
+    [[nodiscard]] auto GetSize() const noexcept -> uint32_t override
     {
         return next_index_ - static_cast<uint32_t>(free_list_.size());
+    }
+
+protected:
+    //! Releases all descriptors in this segment.
+    /*!
+     Releases all allocated descriptors, resetting the segment to its initial
+     state. Use with caution, as this will make all allocated indices, in use
+     anywhere, invalid.
+     */
+    void ReleaseAll()
+    {
+        // Clear the free list and reset the released flags
+        free_list_.clear();
+        released_flags_.reset();
+        // Reset the next index to the base index
+        next_index_ = 0;
     }
 
 private:
@@ -292,7 +337,7 @@ private:
      minimize the number of segments used by an allocator while also minimizing
      the wasted space in the segments.
     */
-    [[nodiscard]] static constexpr auto GetOptimalCapacity() -> uint32_t
+    [[nodiscard]] static constexpr auto GetOptimalCapacity() noexcept -> uint32_t
     {
         switch (ViewType) {
         case ResourceViewType::kConstantBuffer:
@@ -322,7 +367,7 @@ private:
             return 16; // RT/DS/RT-AS views are used in small numbers
 
         case ResourceViewType::kNone:
-        case ResourceViewType::kMax:
+        case ResourceViewType::kMaxResourceViewType:
         default: // NOLINT(clang-diagnostic-covered-switch-default)
             OXYGEN_UNREACHABLE_RETURN(128);
         }
