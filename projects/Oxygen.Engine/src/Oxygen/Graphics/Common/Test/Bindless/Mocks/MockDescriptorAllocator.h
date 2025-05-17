@@ -20,7 +20,8 @@ namespace oxygen::graphics::bindless::testing {
 // ReSharper disable once CppClassCanBeFinal - Mock class cannot be final
 class MockDescriptorAllocator : public detail::BaseDescriptorAllocator {
 public:
-    using SegmentFactory = std::function<std::unique_ptr<detail::DescriptorHeapSegment>(ResourceViewType, DescriptorVisibility)>;
+    using SegmentFactory = std::function<std::unique_ptr<detail::DescriptorHeapSegment>(
+        ResourceViewType, DescriptorVisibility)>;
 
     using BaseDescriptorAllocator::BaseDescriptorAllocator;
     SegmentFactory segment_factory_;
@@ -42,10 +43,16 @@ public:
 
 protected:
     // Manual override for heap segment creation (not mocked)
-    auto CreateHeapSegment(const ResourceViewType type, const DescriptorVisibility vis)
+    auto CreateHeapSegment(
+        uint32_t /*capacity*/,
+        uint32_t /*base_index*/,
+        const ResourceViewType view_type,
+        const DescriptorVisibility visibility)
         -> std::unique_ptr<detail::DescriptorHeapSegment> override
     {
-        return segment_factory_ ? segment_factory_(type, vis) : nullptr;
+        // capacity and base_index are ignored becauuse test cases will mock the
+        // segment methods
+        return segment_factory_ ? segment_factory_(view_type, visibility) : nullptr;
     }
 };
 

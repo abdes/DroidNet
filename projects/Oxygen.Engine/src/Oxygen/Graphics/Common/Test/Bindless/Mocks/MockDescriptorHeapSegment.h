@@ -24,7 +24,7 @@ public:
     MOCK_METHOD(DescriptorVisibility, GetVisibility, (), (const, override, noexcept));
     MOCK_METHOD(uint32_t, GetBaseIndex, (), (const, override, noexcept));
     MOCK_METHOD(uint32_t, GetCapacity, (), (const, override, noexcept));
-    MOCK_METHOD(uint32_t, GetSize, (), (const, override, noexcept));
+    MOCK_METHOD(uint32_t, GetAllocatedCount, (), (const, override, noexcept));
 };
 
 } // namespace oxygen::graphics::bindless::testing

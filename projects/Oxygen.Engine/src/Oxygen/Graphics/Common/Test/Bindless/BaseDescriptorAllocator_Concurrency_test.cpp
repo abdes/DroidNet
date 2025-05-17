@@ -1,0 +1,318 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+/**
+ * @file BaseDescriptorAllocator_Concurrency_test.cpp
+ *
+ * Unit tests for the BaseDescriptorAllocator class covering concurrency and
+ * thread safety behaviors.
+ */
+
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+
+#include "./BaseDescriptorAllocatorTest.h"
+#include "./Mocks/MockDescriptorAllocator.h"
+#include "./Mocks/MockDescriptorHeapSegment.h"
+#include "./Mocks/TestDescriptorHandle.h"
+
+using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorVisibility;
+using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
+using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
+using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::TestDescriptorHandle;
+using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
+using oxygen::graphics::detail::DescriptorHeapSegment;
+
+// -------------------- Test Fixture --------------------
+class BaseDescriptorAllocatorConcurrencyTest : public BaseDescriptorAllocatorTest {
+};
+
+// -------------------- Thread Safety Tests --------------------
+
+NOLINT_TEST_F(BaseDescriptorAllocatorConcurrencyTest, ThreadSafetyWithConcurrentAllocRelease)
+{
+    // Tests that concurrent allocations and releases from multiple threads
+    // do not cause race conditions or data corruption
+
+    // Keep track of allocated indices to verify correctness
+    std::atomic<uint32_t> next_index(0);
+    constexpr uint32_t capacity = 1000;
+
+    // Setup the segment factory to create mock segments
+    allocator->segment_factory_ = [&next_index, capacity](ResourceViewType type, DescriptorVisibility vis) {
+        auto mockSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+
+        // Setup allocate to return sequential indices
+        ON_CALL(*mockSegment, Allocate())
+            .WillByDefault([&next_index, capacity]() {
+                uint32_t idx = next_index.fetch_add(1);
+                return idx < capacity ? idx : DescriptorHandle::kInvalidIndex;
+            });
+
+        // Setup release to always succeed
+        ON_CALL(*mockSegment, Release(::testing::_)).WillByDefault(::testing::Return(true));
+
+        // Setup other required methods
+        ON_CALL(*mockSegment, GetAvailableCount()).WillByDefault(::testing::Return(capacity));
+        ON_CALL(*mockSegment, GetViewType()).WillByDefault(::testing::Return(type));
+        ON_CALL(*mockSegment, GetVisibility()).WillByDefault(::testing::Return(vis));
+        ON_CALL(*mockSegment, GetBaseIndex()).WillByDefault(::testing::Return(0));
+        ON_CALL(*mockSegment, GetCapacity()).WillByDefault(::testing::Return(capacity));
+        ON_CALL(*mockSegment, GetAllocatedCount())
+            .WillByDefault([&next_index]() {
+                return next_index.load();
+            });
+
+        return mockSegment;
+    };
+
+    // Number of operations per thread
+    const size_t kOperationsPerThread = 100;
+
+    // Number of threads
+    const size_t kNumThreads = 4;
+
+    // Flag to start all threads at the same time
+    std::atomic<bool> start_flag(false);
+
+    // Threads will record successful operations here
+    std::atomic<size_t> successful_allocs(0);
+    std::atomic<size_t> successful_releases(0);
+
+    // Vector to hold all generated handles across threads
+    std::vector<std::vector<DescriptorHandle>> thread_handles(kNumThreads);
+
+    // Create threads that will perform allocations and releases
+    std::vector<std::thread> threads;
+    for (size_t t = 0; t < kNumThreads; ++t) {
+        threads.emplace_back([&, t]() {
+            // Wait for the start signal
+            while (!start_flag.load(std::memory_order_relaxed)) {
+                std::this_thread::yield();
+            }
+
+            // Reserve space for handles
+            thread_handles[t].reserve(kOperationsPerThread);
+
+            // Perform allocations
+            for (size_t i = 0; i < kOperationsPerThread; ++i) {
+                try {
+                    auto handle = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+                    if (handle.IsValid()) {
+                        thread_handles[t].push_back(std::move(handle));
+                        successful_allocs.fetch_add(1, std::memory_order_relaxed);
+                    }
+                } catch (const std::exception& e) {
+                    // Just log the exception and continue
+                    std::cerr << "Thread " << t << " caught exception: " << e.what() << std::endl;
+                }
+
+                // Occasionally release a handle we've allocated
+                if (!thread_handles[t].empty() && (i % 3 == 0)) {
+                    size_t index = i % thread_handles[t].size();
+                    if (thread_handles[t][index].IsValid()) {
+                        try {
+                            allocator->Release(thread_handles[t][index]);
+                            successful_releases.fetch_add(1, std::memory_order_relaxed);
+                        } catch (const std::exception& e) {
+                            std::cerr << "Thread " << t << " release exception: " << e.what() << std::endl;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Start all threads
+    start_flag.store(true, std::memory_order_relaxed);
+
+    // Wait for all threads to finish
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // Verify results
+    size_t total_allocs = successful_allocs.load();
+    size_t total_releases = successful_releases.load();
+    size_t remaining_valid_handles = 0;
+
+    // Count remaining valid handles
+    for (const auto& handles : thread_handles) {
+        for (const auto& h : handles) {
+            if (h.IsValid()) {
+                remaining_valid_handles++;
+            }
+        }
+    }
+
+    // Verify balance: allocs - releases = remaining valid handles
+    EXPECT_EQ(total_allocs - total_releases, remaining_valid_handles);
+
+    // Verify that at least some operations were successful
+    EXPECT_GT(total_allocs, 0);
+}
+
+NOLINT_TEST_F(BaseDescriptorAllocatorConcurrencyTest, MultiThreadedDifferentTypeVisibility)
+{
+    // Tests parallel operations with different types and visibilities
+
+    // Setup the segment factory with base indices for different type/visibility combinations
+    std::map<std::pair<ResourceViewType, DescriptorVisibility>, uint32_t> baseIndices = {
+        { { ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible }, 1000 },
+        { { ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible }, 2000 },
+        { { ResourceViewType::kRawBuffer_SRV, DescriptorVisibility::kShaderVisible }, 3000 },
+        { { ResourceViewType::kRawBuffer_UAV, DescriptorVisibility::kShaderVisible }, 4000 },
+        { { ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly }, 5000 },
+        { { ResourceViewType::kTexture_UAV, DescriptorVisibility::kCpuOnly }, 6000 },
+    };
+
+    // Track next index per type/visibility
+    std::map<std::pair<ResourceViewType, DescriptorVisibility>, std::atomic<uint32_t>> nextIndices;
+    for (auto& [pair, baseIndex] : baseIndices) {
+        nextIndices[pair].store(baseIndex);
+    }
+
+    constexpr uint32_t capacity = 500;
+
+    allocator->segment_factory_ = [&baseIndices, &nextIndices, capacity](ResourceViewType type, DescriptorVisibility vis) {
+        // Skip combinations not in baseIndices to match thread skip logic
+        if (baseIndices.find({ type, vis }) == baseIndices.end()) {
+            return std::unique_ptr<::testing::NiceMock<MockDescriptorHeapSegment>> {};
+        }
+
+        auto mockSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        uint32_t baseIndex = baseIndices[{ type, vis }];
+
+        // Setup allocate to return sequential indices for this type/visibility
+        ON_CALL(*mockSegment, Allocate())
+            .WillByDefault([&nextIndices, type, vis, capacity, baseIndex]() {
+                uint32_t idx = nextIndices[{ type, vis }].fetch_add(1);
+                return (idx - baseIndex) < capacity ? idx : DescriptorHandle::kInvalidIndex;
+            });
+
+        // Setup release to always succeed
+        ON_CALL(*mockSegment, Release(::testing::_)).WillByDefault(::testing::Return(true));
+
+        // Setup other required methods
+        ON_CALL(*mockSegment, GetAvailableCount()).WillByDefault(::testing::Return(capacity));
+        ON_CALL(*mockSegment, GetViewType()).WillByDefault(::testing::Return(type));
+        ON_CALL(*mockSegment, GetVisibility()).WillByDefault(::testing::Return(vis));
+        ON_CALL(*mockSegment, GetBaseIndex()).WillByDefault(::testing::Return(baseIndex));
+        ON_CALL(*mockSegment, GetCapacity()).WillByDefault(::testing::Return(capacity));
+        ON_CALL(*mockSegment, GetAllocatedCount())
+            .WillByDefault([&nextIndices, type, vis, baseIndex]() {
+                return nextIndices[{ type, vis }].load() - baseIndex;
+            });
+
+        return mockSegment;
+    };
+
+    // Resource types to test with
+    std::vector<ResourceViewType> types = {
+        ResourceViewType::kTexture_SRV,
+        ResourceViewType::kTexture_UAV,
+        ResourceViewType::kRawBuffer_SRV,
+        ResourceViewType::kRawBuffer_UAV
+    };
+
+    // Visibilities to test with
+    std::vector<DescriptorVisibility> visibilities = {
+        DescriptorVisibility::kShaderVisible,
+        DescriptorVisibility::kCpuOnly
+    };
+
+    // Start threads testing different combinations
+    std::vector<std::thread> threads;
+    std::mutex printMutex;
+
+    for (auto type : types) {
+        for (auto vis : visibilities) {
+            threads.emplace_back([type, vis, this, &printMutex, &baseIndices]() {
+                // Skip some combinations to avoid too many threads
+                if ((type == ResourceViewType::kRawBuffer_SRV
+                        || type == ResourceViewType::kRawBuffer_UAV)
+                    && vis == DescriptorVisibility::kCpuOnly) {
+                    return;
+                }
+
+                std::vector<DescriptorHandle> handles;
+
+                // Perform some allocations
+                for (int i = 0; i < 20; ++i) {
+                    try {
+                        auto handle = allocator->Allocate(type, vis);
+                        if (handle.IsValid()) {
+                            handles.push_back(std::move(handle));
+
+                            // Only check properties if handle is valid and not kInvalidIndex
+                            uint32_t expectedBaseIndex = baseIndices[{ type, vis }];
+                            EXPECT_NE(handles.back().GetIndex(), DescriptorHandle::kInvalidIndex);
+                            EXPECT_GE(handles.back().GetIndex(), expectedBaseIndex);
+                            EXPECT_LT(handles.back().GetIndex(), expectedBaseIndex + 500);
+                            // Only check type/vis if valid
+                            EXPECT_TRUE(handles.back().IsValid());
+                            EXPECT_TRUE(handles.back().GetViewType() == type);
+                            EXPECT_TRUE(handles.back().GetVisibility() == vis);
+                        }
+                    } catch (const std::exception& e) {
+                        std::lock_guard<std::mutex> lock(printMutex);
+                        std::cerr << "Thread for " << static_cast<int>(type) << ","
+                                  << static_cast<int>(vis) << " exception: "
+                                  << e.what() << std::endl;
+                    }
+                }
+
+                // Release some handles
+                for (size_t i = 0; i < handles.size(); i += 2) {
+                    try {
+                        allocator->Release(handles[i]);
+                    } catch (const std::exception& e) {
+                        std::lock_guard<std::mutex> lock(printMutex);
+                        std::cerr << "Release exception: " << e.what() << std::endl;
+                    }
+                }
+            });
+        }
+    }
+
+    // Wait for all threads to finish
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // Verify that each segment has the expected number of allocated descriptors
+    for (auto type : types) {
+        for (auto vis : visibilities) {
+            // Skip some combinations to match the thread creation logic
+            if ((type == ResourceViewType::kRawBuffer_SRV
+                    || type == ResourceViewType::kRawBuffer_UAV)
+                && vis == DescriptorVisibility::kCpuOnly) {
+                continue;
+            }
+
+            size_t allocator_size = allocator->GetAllocatedDescriptorsCount(type, vis);
+            EXPECT_GE(allocator_size, 0);
+            EXPECT_LE(allocator_size, 20); // we allocated at most 20 per thread
+
+            // Get remaining capacity
+            size_t remaining = allocator->GetRemainingDescriptorsCount(type, vis);
+            EXPECT_GT(remaining, 0);
+        }
+    }
+}
