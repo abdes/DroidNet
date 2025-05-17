@@ -8,26 +8,27 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorHeapSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+
+#include "./Mocks/MockDescriptorAllocator.h"
+#include "./Mocks/MockDescriptorHeapSegment.h"
+#include "./Mocks/TestDescriptorHandle.h"
 
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
+using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
+using oxygen::graphics::bindless::testing::TestDescriptorHandle;
 using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 using oxygen::graphics::detail::DescriptorHeapSegment;
-using oxygen::graphics::testing::MockDescriptorAllocator;
-using oxygen::graphics::testing::MockDescriptorHeapSegment;
 
 namespace {
 
 // Base fixture for descriptor handle tests
-class DescriptorHandleTest : public ::testing::Test {
+class UnitTests : public ::testing::Test {
 protected:
     MockDescriptorAllocator allocator_ { BaseDescriptorAllocatorConfig {} };
 
@@ -57,20 +58,19 @@ protected:
     // ReSharper disable once CppMemberFunctionMayBeConst
     void SetSegmentFactory(MockDescriptorAllocator::SegmentFactory&& factory)
     {
-        allocator_.segmentFactory = std::move(factory);
+        allocator_.segment_factory_ = std::move(factory);
     }
 };
 
 // Test Group: Construction and Validity
-TEST_F(DescriptorHandleTest, DefaultConstructedHandleIsInvalid)
+NOLINT_TEST_F(UnitTests, DefaultConstructedHandleIsInvalid)
 {
     const DescriptorHandle handle;
     EXPECT_FALSE(handle.IsValid());
     EXPECT_EQ(handle.GetIndex(), DescriptorHandle::kInvalidIndex);
 }
 
-// Test Group: Construction and Validity
-TEST_F(DescriptorHandleTest, InvalidateDoesNotRelease)
+NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
 {
     auto mock_segment = CreateSegment(42);
 
@@ -92,7 +92,7 @@ TEST_F(DescriptorHandleTest, InvalidateDoesNotRelease)
     // No release should be called here, as we just invalidated the handle
 }
 
-TEST_F(DescriptorHandleTest, ReleasingInvalidHandleIsNoop)
+NOLINT_TEST_F(UnitTests, ReleasingInvalidHandleIsNoop)
 {
     // Invalid handles shouldn't trigger any segment operations
     SetSegmentFactory([](auto, auto) {
@@ -106,7 +106,7 @@ TEST_F(DescriptorHandleTest, ReleasingInvalidHandleIsNoop)
     EXPECT_FALSE(handle.IsValid());
 }
 
-TEST_F(DescriptorHandleTest, ExplicitReleaseInvalidatesHandle)
+NOLINT_TEST_F(UnitTests, ExplicitReleaseInvalidatesHandle)
 {
     auto mock_segment = CreateSegment(42);
 
@@ -128,7 +128,7 @@ TEST_F(DescriptorHandleTest, ExplicitReleaseInvalidatesHandle)
     EXPECT_EQ(handle.GetIndex(), DescriptorHandle::kInvalidIndex);
 }
 
-TEST_F(DescriptorHandleTest, DestructorReleasesHandle)
+NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
 {
     auto mock_segment = CreateSegment(42);
 
@@ -147,9 +147,9 @@ TEST_F(DescriptorHandleTest, DestructorReleasesHandle)
     } // Handle goes out of scope, destructor should release
 }
 
-TEST_F(DescriptorHandleTest, MoveConstructorDestinationEquivalentToSource)
+NOLINT_TEST_F(UnitTests, MoveConstructorDestinationEquivalentToSource)
 {
-    DescriptorHandle src(&allocator_, 77,
+    TestDescriptorHandle src(&allocator_, 77,
         ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
 
     DescriptorHandle dst(std::move(src));
@@ -165,11 +165,12 @@ TEST_F(DescriptorHandleTest, MoveConstructorDestinationEquivalentToSource)
     dst.Invalidate();
 }
 
-TEST_F(DescriptorHandleTest, MoveConstructorInvalidatesSource)
+NOLINT_TEST_F(UnitTests, MoveConstructorInvalidatesSource)
 {
-    DescriptorHandle src(&allocator_, 77,
+    TestDescriptorHandle src(&allocator_, 77,
         ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
-    DescriptorHandle dst(std::move(src));
+
+    auto dst(std::move(src));
 
     // Source should be invalidated
     EXPECT_FALSE(src.IsValid()); // NOLINT(bugprone-use-after-move) - testing
@@ -180,13 +181,13 @@ TEST_F(DescriptorHandleTest, MoveConstructorInvalidatesSource)
     dst.Invalidate();
 }
 
-TEST_F(DescriptorHandleTest, MoveAssignmentDestinationEquivalentToSource)
+NOLINT_TEST_F(UnitTests, MoveAssignmentDestinationEquivalentToSource)
 {
     auto* allocator_ptr = &allocator_;
-    DescriptorHandle src(allocator_ptr, 33,
+    TestDescriptorHandle src(allocator_ptr, 33,
         ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
 
-    DescriptorHandle dst = std::move(src);
+    auto dst = std::move(src);
 
     EXPECT_TRUE(dst.IsValid());
     EXPECT_EQ(dst.GetIndex(), 33U);
@@ -198,7 +199,7 @@ TEST_F(DescriptorHandleTest, MoveAssignmentDestinationEquivalentToSource)
     dst.Invalidate();
 }
 
-TEST_F(DescriptorHandleTest, MoveAssignmentReleasesDestinationBeforeAssign)
+NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
 {
     // Set up a mock segment to verify release is called
     auto mock_segment = CreateSegment(55);
@@ -213,11 +214,11 @@ TEST_F(DescriptorHandleTest, MoveAssignmentReleasesDestinationBeforeAssign)
     });
 
     // Allocate a handle so that it owns index 55
-    DescriptorHandle dst = allocator_.Allocate(
+    auto dst = allocator_.Allocate(
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
     // Hand made source so we do not need to manage its release
-    DescriptorHandle src(&allocator_, 99,
+    TestDescriptorHandle src(&allocator_, 99,
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
     // Now move-assign a new handle to dst, which should release the old one
@@ -230,13 +231,13 @@ TEST_F(DescriptorHandleTest, MoveAssignmentReleasesDestinationBeforeAssign)
     EXPECT_EQ(dst.GetVisibility(), DescriptorVisibility::kShaderVisible);
 }
 
-TEST_F(DescriptorHandleTest, MoveAssignmentInvalidatesSource)
+NOLINT_TEST_F(UnitTests, MoveAssignmentInvalidatesSource)
 {
-    DescriptorHandle src(&allocator_, 77,
+    TestDescriptorHandle src(&allocator_, 77,
         ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
     EXPECT_TRUE(src.IsValid());
 
-    DescriptorHandle dst = std::move(src);
+    auto dst = std::move(src);
 
     // Source should be invalidated
     EXPECT_FALSE(src.IsValid()); // NOLINT(bugprone-use-after-move) - testing
