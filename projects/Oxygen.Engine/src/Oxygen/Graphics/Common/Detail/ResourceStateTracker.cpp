@@ -6,6 +6,7 @@
 
 #include <ranges>
 
+#include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
