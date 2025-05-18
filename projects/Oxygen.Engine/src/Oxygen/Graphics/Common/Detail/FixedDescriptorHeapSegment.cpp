@@ -11,7 +11,7 @@
 using oxygen::graphics::detail::FixedDescriptorHeapSegment;
 
 FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
-    uint32_t capacity, uint32_t base_index,
+    IndexT capacity, IndexT base_index,
     ResourceViewType view_type,
     DescriptorVisibility visibility)
     : capacity_(capacity)
@@ -26,11 +26,19 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
         base_index_, GetCapacity());
 }
 
+inline auto FixedDescriptorHeapSegment::FreeListSize() const -> IndexT
+{
+    size_t free_count = free_list_.size();
+    DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
+        "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
+    return static_cast<IndexT>(free_count);
+}
+
 FixedDescriptorHeapSegment::~FixedDescriptorHeapSegment() noexcept
 {
     try {
         // Do not call the virtual method GetSize() in the destructor.
-        if (const auto size = next_index_ - static_cast<uint32_t>(free_list_.size()); size > 0U) {
+        if (const auto size = next_index_ - FreeListSize(); size > 0U) {
             LOG_F(WARNING, "Destroying segment with allocated descriptors ({})", size);
         }
     } catch (...) {
@@ -47,7 +55,7 @@ auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
 {
     // First try to reuse a released descriptor (LIFO for better cache locality)
     if (!free_list_.empty()) {
-        uint32_t local_index = free_list_.back();
+        auto local_index = free_list_.back();
         free_list_.pop_back();
         released_flags_[local_index] = false;
         DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})",
@@ -65,7 +73,7 @@ auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
     return DescriptorHandle::kInvalidIndex;
 }
 
-auto FixedDescriptorHeapSegment::Release(const uint32_t index) noexcept -> bool
+auto FixedDescriptorHeapSegment::Release(const IndexT index) noexcept -> bool
 {
     // Check if the index belongs to this segment
     if (index < base_index_ || index >= base_index_ + GetCapacity()) {
@@ -73,7 +81,8 @@ auto FixedDescriptorHeapSegment::Release(const uint32_t index) noexcept -> bool
     }
 
     // Convert to local index
-    uint32_t local_index = index - base_index_;
+    auto local_index = index - base_index_;
+    DCHECK_GE_F(local_index, 0U); // local_index should never be negative
 
     // Check if this index was never allocated or is beyond the currently allocated range.
     // An index can only be released if it's < next_index_ (meaning it was allocated),
@@ -98,14 +107,14 @@ auto FixedDescriptorHeapSegment::Release(const uint32_t index) noexcept -> bool
     return true;
 }
 
-auto FixedDescriptorHeapSegment::GetAvailableCount() const noexcept -> uint32_t
+auto FixedDescriptorHeapSegment::GetAvailableCount() const noexcept -> IndexT
 {
-    return GetCapacity() - next_index_ + static_cast<uint32_t>(free_list_.size());
+    return GetCapacity() - next_index_ + FreeListSize();
 }
 
-auto FixedDescriptorHeapSegment::GetAllocatedCount() const noexcept -> uint32_t
+auto FixedDescriptorHeapSegment::GetAllocatedCount() const noexcept -> IndexT
 {
-    return next_index_ - static_cast<uint32_t>(free_list_.size());
+    return next_index_ - FreeListSize();
 }
 
 void FixedDescriptorHeapSegment::ReleaseAll()

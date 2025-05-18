@@ -13,11 +13,10 @@
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 
-// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
-
 namespace oxygen::graphics::bindless::testing {
 
 // ReSharper disable once CppClassCanBeFinal - Mock class cannot be final
+// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
 class MockDescriptorAllocator : public detail::BaseDescriptorAllocator {
 public:
     using SegmentFactory = std::function<std::unique_ptr<detail::DescriptorHeapSegment>(
@@ -41,11 +40,14 @@ public:
     // Expose GetInitialCapacity for testing
     using BaseDescriptorAllocator::GetInitialCapacity;
 
+    // Expose GetAllocationStrategy for testing
+    using BaseDescriptorAllocator::GetAllocationStrategy;
+
 protected:
     // Manual override for heap segment creation (not mocked)
     auto CreateHeapSegment(
-        uint32_t /*capacity*/,
-        uint32_t /*base_index*/,
+        IndexT /*capacity*/,
+        IndexT /*base_index*/,
         const ResourceViewType view_type,
         const DescriptorVisibility visibility)
         -> std::unique_ptr<detail::DescriptorHeapSegment> override

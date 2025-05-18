@@ -29,11 +29,10 @@
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 using oxygen::graphics::detail::DescriptorHeapSegment;
+using IndexT = DescriptorHandle::IndexT;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
-using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
 using oxygen::graphics::bindless::testing::TestDescriptorHandle;
 
@@ -48,7 +47,7 @@ class BaseDescriptorAllocatorBasicTest : public BaseDescriptorAllocatorTest {
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, AllocatesFromEmptyHeapCreatesSegment)
 {
     bool called = false;
-    allocator->segment_factory_ = [&called](auto, auto) -> std::unique_ptr<DescriptorHeapSegment> {
+    allocator_->segment_factory_ = [&called](auto, auto) -> std::unique_ptr<DescriptorHeapSegment> {
         if (called) {
             ADD_FAILURE() << "Segment factory called more than once";
             return nullptr;
@@ -67,14 +66,14 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, AllocatesFromEmptyHeapCreatesSeg
     };
 
     // Action: Allocate a descriptor
-    auto handle = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    auto handle = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
     // Verify: Handle should be valid
     EXPECT_TRUE(handle.IsValid());
     EXPECT_EQ(handle.GetIndex(), 0);
 
     // Explicitly release the handle to ensure the Release method gets called
-    allocator->Release(handle);
+    allocator_->Release(handle);
     EXPECT_FALSE(handle.IsValid());
 }
 
@@ -83,105 +82,105 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, AllocatesFromNonEmptyHeapNoNewSe
     // Tests that subsequent allocations reuse the existing heap segment
     // rather than creating new ones
 
-    int allocCount = 0;
-    allocator->segment_factory_ = [this, &allocCount](auto, auto) {
-        auto testSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-        EXPECT_CALL(*testSegment, Allocate())
-            .WillOnce([&]() { allocCount++; return 0; })
-            .WillOnce([&]() { allocCount++; return 1; });
-        EXPECT_CALL(*testSegment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
-        EXPECT_CALL(*testSegment, Release(0)).WillOnce(::testing::Return(true));
-        EXPECT_CALL(*testSegment, Release(1)).WillOnce(::testing::Return(true));
-        EXPECT_CALL(*testSegment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
-        EXPECT_CALL(*testSegment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
-        EXPECT_CALL(*testSegment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
-        EXPECT_CALL(*testSegment, GetCapacity()).WillRepeatedly(::testing::Return(2));
-        return std::move(testSegment);
+    int alloc_count = 0;
+    allocator_->segment_factory_ = [this, &alloc_count](auto, auto) {
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        EXPECT_CALL(*segment, Allocate())
+            .WillOnce([&] { alloc_count++; return 0; })
+            .WillOnce([&] { alloc_count++; return 1; });
+        EXPECT_CALL(*segment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
+        EXPECT_CALL(*segment, Release(0)).WillOnce(::testing::Return(true));
+        EXPECT_CALL(*segment, Release(1)).WillOnce(::testing::Return(true));
+        EXPECT_CALL(*segment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
+        EXPECT_CALL(*segment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
+        EXPECT_CALL(*segment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, GetCapacity()).WillRepeatedly(::testing::Return(2));
+        return std::move(segment);
     };
 
     // Action: Perform two allocations from the same heap
-    auto h1 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    auto h2 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const auto h1 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const auto h2 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
     // Verify: Both allocations were made and handles are valid
-    EXPECT_EQ(allocCount, 2);
+    EXPECT_EQ(alloc_count, 2);
     EXPECT_TRUE(h1.IsValid());
     EXPECT_TRUE(h2.IsValid());
 }
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleaseMakesDescriptorAvailable)
 {
-    allocator->segment_factory_ = [this](auto, auto) {
-    auto testSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-    EXPECT_CALL(*testSegment, Allocate()).WillOnce(::testing::Return(0));
-    EXPECT_CALL(*testSegment, Release(0)).WillOnce(::testing::Return(true));
-    EXPECT_CALL(*testSegment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
-    EXPECT_CALL(*testSegment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
-    EXPECT_CALL(*testSegment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
-    EXPECT_CALL(*testSegment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
-    EXPECT_CALL(*testSegment, GetCapacity()).WillRepeatedly(::testing::Return(1));
-        return std::move(testSegment);
+    allocator_->segment_factory_ = [this](auto, auto) {
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        EXPECT_CALL(*segment, Allocate()).WillOnce(::testing::Return(0));
+        EXPECT_CALL(*segment, Release(0)).WillOnce(::testing::Return(true));
+        EXPECT_CALL(*segment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
+        EXPECT_CALL(*segment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
+        EXPECT_CALL(*segment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
+        EXPECT_CALL(*segment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, GetCapacity()).WillRepeatedly(::testing::Return(1));
+        return std::move(segment);
     };
 
-    auto handle = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    auto handle = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     EXPECT_TRUE(handle.IsValid());
-    allocator->Release(handle);
+    allocator_->Release(handle);
     EXPECT_FALSE(handle.IsValid());
 }
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleasingInvalidHandleIsNoOp)
 {
     DescriptorHandle invalid;
-    EXPECT_NO_THROW(allocator->Release(invalid));
+    EXPECT_NO_THROW(allocator_->Release(invalid));
 }
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, GetRemainingDescriptorsReturnsCorrectCount)
 {
-    const uint32_t kAvailableCount = 42;
-    allocator->segment_factory_ = [this](auto, auto) {
-        auto testSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-        EXPECT_CALL(*testSegment, GetAvailableCount()).WillRepeatedly(::testing::Return(kAvailableCount));
-        EXPECT_CALL(*testSegment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
-        EXPECT_CALL(*testSegment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
-        EXPECT_CALL(*testSegment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
-        EXPECT_CALL(*testSegment, GetCapacity()).WillRepeatedly(::testing::Return(1));
-        EXPECT_CALL(*testSegment, Release(0)).WillOnce(::testing::Return(true));
-        EXPECT_CALL(*testSegment, Allocate()).WillOnce(::testing::Return(0));
-        return std::move(testSegment);
+    constexpr IndexT kAvailableCount = 42;
+    allocator_->segment_factory_ = [this](auto, auto) {
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        EXPECT_CALL(*segment, GetAvailableCount()).WillRepeatedly(::testing::Return(kAvailableCount));
+        EXPECT_CALL(*segment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
+        EXPECT_CALL(*segment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
+        EXPECT_CALL(*segment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, GetCapacity()).WillRepeatedly(::testing::Return(1));
+        EXPECT_CALL(*segment, Release(0)).WillOnce(::testing::Return(true));
+        EXPECT_CALL(*segment, Allocate()).WillOnce(::testing::Return(0));
+        return std::move(segment);
     };
 
-    auto handle = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    auto handle = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
-    auto remainingCount = allocator->GetRemainingDescriptorsCount(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    EXPECT_EQ(remainingCount, kAvailableCount);
+    const auto remaining_count = allocator_->GetRemainingDescriptorsCount(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    EXPECT_EQ(remaining_count, kAvailableCount);
 
-    allocator->Release(handle);
+    allocator_->Release(handle);
     EXPECT_FALSE(handle.IsValid());
 }
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandleRecyclingReusesSameIndex)
 {
-    allocator->segment_factory_ = [this](auto, auto) {
-        auto testSegment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
-        EXPECT_CALL(*testSegment, Allocate()).WillRepeatedly(::testing::Return(42));
-        EXPECT_CALL(*testSegment, Release(42)).WillRepeatedly(::testing::Return(true));
-        EXPECT_CALL(*testSegment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
-        EXPECT_CALL(*testSegment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
-        EXPECT_CALL(*testSegment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
-        EXPECT_CALL(*testSegment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
-        EXPECT_CALL(*testSegment, GetCapacity()).WillRepeatedly(::testing::Return(43));
-        return std::move(testSegment);
+    allocator_->segment_factory_ = [this](auto, auto) {
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
+        EXPECT_CALL(*segment, Allocate()).WillRepeatedly(::testing::Return(42));
+        EXPECT_CALL(*segment, Release(42)).WillRepeatedly(::testing::Return(true));
+        EXPECT_CALL(*segment, GetAvailableCount()).WillRepeatedly(::testing::Return(1));
+        EXPECT_CALL(*segment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
+        EXPECT_CALL(*segment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
+        EXPECT_CALL(*segment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, GetCapacity()).WillRepeatedly(::testing::Return(43));
+        return std::move(segment);
     };
 
-    auto handle1 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    uint32_t index1 = handle1.GetIndex();
-    allocator->Release(handle1);
-    auto handle2 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    uint32_t index2 = handle2.GetIndex();
+    auto handle1 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const IndexT index1 = handle1.GetIndex();
+    allocator_->Release(handle1);
+    auto handle2 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const IndexT index2 = handle2.GetIndex();
 
     EXPECT_EQ(index1, index2);
 
-    allocator->Release(handle2);
+    allocator_->Release(handle2);
     EXPECT_FALSE(handle2.IsValid());
 }
 
@@ -189,7 +188,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandlesMultipleTypesAndVisibilit
 {
     std::map<std::pair<ResourceViewType, DescriptorVisibility>, bool> segmentCreated;
 
-    allocator->segment_factory_ = [&segmentCreated](auto type, auto vis) {
+    allocator_->segment_factory_ = [&segmentCreated](auto type, auto vis) {
         segmentCreated[{ type, vis }] = true;
         auto seg = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
         EXPECT_CALL(*seg, Allocate()).WillOnce(::testing::Return(0));
@@ -202,9 +201,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandlesMultipleTypesAndVisibilit
         return seg;
     };
 
-    auto h1 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    auto h2 = allocator->Allocate(ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
-    auto h3 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
+    auto h1 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    auto h2 = allocator_->Allocate(ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+    auto h3 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
 
     auto created = segmentCreated.find({ ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible });
     EXPECT_TRUE(created != segmentCreated.end());
@@ -213,9 +212,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandlesMultipleTypesAndVisibilit
     created = segmentCreated.find({ ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly });
     EXPECT_TRUE(created != segmentCreated.end());
 
-    allocator->Release(h1);
-    allocator->Release(h2);
-    allocator->Release(h3);
+    allocator_->Release(h1);
+    allocator_->Release(h2);
+    allocator_->Release(h3);
 
     EXPECT_FALSE(h1.IsValid());
     EXPECT_FALSE(h2.IsValid());
@@ -224,18 +223,18 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandlesMultipleTypesAndVisibilit
 
 TEST_F(BaseDescriptorAllocatorBasicTest, CopyDescriptorBetweenSpaces)
 {
-    TestDescriptorHandle src_handle(allocator.get(), 5,
+    TestDescriptorHandle src_handle(allocator_.get(), 5,
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
-    TestDescriptorHandle dst_handle(allocator.get(), 10,
+    TestDescriptorHandle dst_handle(allocator_.get(), 10,
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
-    EXPECT_CALL(*allocator, CopyDescriptor(::testing::_, ::testing::_)).Times(1);
+    EXPECT_CALL(*allocator_, CopyDescriptor(::testing::_, ::testing::_)).Times(1);
 
     // Both handles should be valid before copy
     EXPECT_TRUE(src_handle.IsValid());
     EXPECT_TRUE(dst_handle.IsValid());
 
-    allocator->CopyDescriptor(src_handle, dst_handle);
+    allocator_->CopyDescriptor(src_handle, dst_handle);
 
     // Both handles should remain valid after copy
     EXPECT_TRUE(src_handle.IsValid());

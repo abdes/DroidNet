@@ -23,10 +23,10 @@ class NativeObject;
 //! Describes the properties of a descriptor heap or pool.
 struct HeapDescription {
     //! Initial capacity for CPU-visible descriptors.
-    uint32_t cpu_visible_capacity { 0 };
+    DescriptorHandle::IndexT cpu_visible_capacity { 0 };
 
     //! Initial capacity for shader-visible descriptors.
-    uint32_t shader_visible_capacity { 0 };
+    DescriptorHandle::IndexT shader_visible_capacity { 0 };
 
     //! Flag indicating if dynamic growth is allowed when heaps are full.
     bool allow_growth { true };
@@ -182,8 +182,8 @@ private:
 */
 class OXYGEN_GFX_API DescriptorAllocator {
 public:
-    //! Represents an invalid descriptor index.
-    static constexpr auto kInvalidIndex = std::numeric_limits<uint32_t>::max();
+    //! Alias the descriptor handle index type for convenience.
+    using IndexT = DescriptorHandle::IndexT;
 
     virtual ~DescriptorAllocator() = default;
 
@@ -237,7 +237,7 @@ public:
      \param visibility The memory visibility.
      \return The number of descriptors remaining.
     */
-    [[nodiscard]] virtual uint32_t GetRemainingDescriptorsCount(
+    [[nodiscard]] virtual IndexT GetRemainingDescriptorsCount(
         ResourceViewType view_type, DescriptorVisibility visibility) const
         = 0;
 
@@ -254,14 +254,16 @@ public:
      \param visibility The memory visibility.
      \return The number of allocated descriptors.
     */
-    [[nodiscard]] virtual uint32_t GetAllocatedDescriptorsCount(ResourceViewType view_type, DescriptorVisibility visibility) const = 0;
+    [[nodiscard]] virtual IndexT GetAllocatedDescriptorsCount(
+        ResourceViewType view_type, DescriptorVisibility visibility) const
+        = 0;
 
 protected:
     //! Protected method to create a descriptor handle instance. Provided for
     //! classes implementing this interface, which is the only one declared as
     //! a friend in DescriptorHandle.
     auto CreateDescriptorHandle(
-        uint32_t index,
+        IndexT index,
         ResourceViewType view_type,
         DescriptorVisibility visibility)
     {

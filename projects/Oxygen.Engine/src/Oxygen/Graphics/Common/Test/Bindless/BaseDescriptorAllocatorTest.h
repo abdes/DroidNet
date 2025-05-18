@@ -9,7 +9,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include <Oxygen/Testing/GTest.h>
+#include <gtest/gtest.h>
 
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
@@ -17,46 +17,44 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorHeapSegment.h"
 
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
-
 namespace oxygen::graphics::bindless::testing {
 
-class NoGrowthDescriptorAllocationStrategy : public DescriptorAllocationStrategy {
+class NoGrowthDescriptorAllocationStrategy final : public DescriptorAllocationStrategy {
 public:
-    auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const
+    auto GetHeapKey(const ResourceViewType view_type, const DescriptorVisibility visibility) const
         -> std::string override
     {
-        return default_strategy.GetHeapKey(view_type, visibility);
+        return default_strategy_.GetHeapKey(view_type, visibility);
     }
 
     auto GetHeapDescription(const std::string& heap_key) const
         -> const HeapDescription& override
     {
         // Reuse the default strategy's heap description but disable growth
-        auto desc = default_strategy.GetHeapDescription(heap_key);
+        auto desc = default_strategy_.GetHeapDescription(heap_key);
         desc.allow_growth = false;
         // Update the heap description in the cache and return it
         return heap_descriptions_[heap_key] = desc;
     }
 
 private:
-    DefaultDescriptorAllocationStrategy default_strategy;
+    DefaultDescriptorAllocationStrategy default_strategy_;
     mutable std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 };
 
-class ZeroCapacityDescriptorAllocationStrategy : public DescriptorAllocationStrategy {
+class ZeroCapacityDescriptorAllocationStrategy final : public DescriptorAllocationStrategy {
 public:
-    auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const
+    auto GetHeapKey(const ResourceViewType view_type, const DescriptorVisibility visibility) const
         -> std::string override
     {
-        return default_strategy.GetHeapKey(view_type, visibility);
+        return default_strategy_.GetHeapKey(view_type, visibility);
     }
 
     auto GetHeapDescription(const std::string& heap_key) const
         -> const HeapDescription& override
     {
         // Reuse the default strategy's heap description but disable growth
-        HeapDescription desc = default_strategy.GetHeapDescription(heap_key);
+        HeapDescription desc = default_strategy_.GetHeapDescription(heap_key);
         desc.allow_growth = true; // growth is allowed but should be ignored
         desc.cpu_visible_capacity = 0;
         desc.shader_visible_capacity = 0;
@@ -65,23 +63,23 @@ public:
     }
 
 private:
-    DefaultDescriptorAllocationStrategy default_strategy;
+    DefaultDescriptorAllocationStrategy default_strategy_;
     mutable std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 };
 
-class OneCapacityDescriptorAllocationStrategy : public DescriptorAllocationStrategy {
+class OneCapacityDescriptorAllocationStrategy final : public DescriptorAllocationStrategy {
 public:
-    auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const
+    auto GetHeapKey(const ResourceViewType view_type, const DescriptorVisibility visibility) const
         -> std::string override
     {
-        return default_strategy.GetHeapKey(view_type, visibility);
+        return default_strategy_.GetHeapKey(view_type, visibility);
     }
 
     auto GetHeapDescription(const std::string& heap_key) const
         -> const HeapDescription& override
     {
         // Reuse the default strategy's heap description but disable growth
-        HeapDescription desc = default_strategy.GetHeapDescription(heap_key);
+        HeapDescription desc = default_strategy_.GetHeapDescription(heap_key);
         desc.allow_growth = true;
         desc.cpu_visible_capacity = 1;
         desc.shader_visible_capacity = 1;
@@ -90,25 +88,25 @@ public:
     }
 
 private:
-    DefaultDescriptorAllocationStrategy default_strategy;
+    DefaultDescriptorAllocationStrategy default_strategy_;
     mutable std::unordered_map<std::string, HeapDescription> heap_descriptions_;
 };
 
 class BaseDescriptorAllocatorTest : public ::testing::Test {
 protected:
-    BaseDescriptorAllocatorConfig default_config {
+    detail::BaseDescriptorAllocatorConfig default_config_ {
         .heap_strategy = std::make_shared<DefaultDescriptorAllocationStrategy>(),
     };
-    std::unique_ptr<MockDescriptorAllocator> allocator;
+    std::unique_ptr<MockDescriptorAllocator> allocator_;
 
     void SetUp() override
     {
-        allocator = std::make_unique<MockDescriptorAllocator>(default_config);
+        allocator_ = std::make_unique<MockDescriptorAllocator>(default_config_);
     }
 
     void DisableGrowth()
     {
-        allocator = std::make_unique<MockDescriptorAllocator>(BaseDescriptorAllocatorConfig {
+        allocator_ = std::make_unique<MockDescriptorAllocator>(detail::BaseDescriptorAllocatorConfig {
             .heap_strategy = std::make_shared<NoGrowthDescriptorAllocationStrategy>(),
         });
     }
