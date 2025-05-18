@@ -265,6 +265,8 @@ auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
 auto oxygen::graphics::to_string(DescriptorVisibility value) -> const char*
 {
     switch (value) {
+    case DescriptorVisibility::kNone:
+        return "None";
     case DescriptorVisibility::kShaderVisible:
         return "Shader Visible";
     case DescriptorVisibility::kCpuOnly:
