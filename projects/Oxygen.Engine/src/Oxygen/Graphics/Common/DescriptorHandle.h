@@ -73,6 +73,19 @@ public:
     //! Move assignment transfers ownership of the descriptor.
     OXYGEN_GFX_API auto operator=(DescriptorHandle&& other) noexcept -> DescriptorHandle&;
 
+    [[nodiscard]] constexpr auto operator==(const DescriptorHandle& other) const noexcept
+    {
+        return allocator_ == other.allocator_ &&
+               index_ == other.index_ &&
+               view_type_ == other.view_type_ &&
+               visibility_ == other.visibility_;
+    }
+
+    [[nodiscard]] constexpr auto operator!=(const DescriptorHandle& other) const noexcept
+    {
+        return !(*this == other);
+    }
+
     [[nodiscard]] constexpr auto IsValid() const noexcept
     {
         const auto properly_allocated = allocator_ != nullptr && index_ != kInvalidIndex;
@@ -106,12 +119,9 @@ public:
     OXYGEN_GFX_API void Release() noexcept;
 
     //! Invalidates this handle without releasing the descriptor.
-    void Invalidate() noexcept
+     void Invalidate() noexcept
     {
-        allocator_ = nullptr;
-        index_ = kInvalidIndex;
-        view_type_ = ResourceViewType::kNone;
-        visibility_ = DescriptorVisibility::kNone;
+        InvalidateInternal(false);
     }
 
 protected:
@@ -130,6 +140,8 @@ protected:
         ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
 private:
+    OXYGEN_GFX_API void InvalidateInternal(bool moved) noexcept;
+
     //! Back-reference to allocator for lifetime management.
     DescriptorAllocator* allocator_ { nullptr };
 

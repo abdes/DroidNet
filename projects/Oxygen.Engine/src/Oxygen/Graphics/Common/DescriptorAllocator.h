@@ -54,12 +54,34 @@ public:
      May throw an exception if the key is not recognized.
     */
     virtual auto GetHeapDescription(const std::string& heap_key) const -> const HeapDescription& = 0;
+
+    //! Returns the base index for a heap (default 0 for backward compatibility).
+    virtual auto GetHeapBaseIndex(ResourceViewType view_type, DescriptorVisibility visibility) const
+        -> DescriptorHandle::IndexT
+        = 0;
 };
 
 //! Default heap mapping strategy: one heap per (view type, visibility) pair,
 //! using some reasonable value for HeapDescription.
 class DefaultDescriptorAllocationStrategy : public DescriptorAllocationStrategy {
 public:
+    DefaultDescriptorAllocationStrategy()
+    {
+        DescriptorHandle::IndexT current_base = 0;
+        for (const auto& [view_type_str, desc] : heaps_) {
+            for (DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly, DescriptorVisibility::kShaderVisible }) {
+                std::string heap_key = view_type_str + ":" + (vis == DescriptorVisibility::kCpuOnly ? "cpu" : "gpu");
+                DescriptorHandle::IndexT capacity = (vis == DescriptorVisibility::kShaderVisible)
+                    ? desc.shader_visible_capacity
+                    : desc.cpu_visible_capacity;
+                if (capacity == 0)
+                    continue;
+                heap_base_indices_[heap_key] = current_base;
+                current_base += capacity;
+            }
+        }
+    }
+
     ~DefaultDescriptorAllocationStrategy() override = default;
 
     //! Returns a unique key formed by concatenating the view type and
@@ -141,6 +163,15 @@ public:
         throw std::runtime_error("Heap description not found for view type: " + view_type_str);
     }
 
+    //! Allow specifying base indices for heaps (default 0, but can be extended).
+    DescriptorHandle::IndexT GetHeapBaseIndex(ResourceViewType view_type, DescriptorVisibility visibility) const override
+    {
+        auto it = heap_base_indices_.find(GetHeapKey(view_type, visibility));
+        if (it != heap_base_indices_.end())
+            return it->second;
+        return 0;
+    }
+
 private:
     //! Initial capacities for different resource view types.
     std::unordered_map<std::string, HeapDescription> heaps_ = {
@@ -161,6 +192,9 @@ private:
         { "Texture_RTV", HeapDescription { .cpu_visible_capacity = 1024, .shader_visible_capacity = 0 } },
         // clang-format on
     };
+
+    //! Base indices for different heaps.
+    std::unordered_map<std::string, DescriptorHandle::IndexT> heap_base_indices_ {};
 };
 
 //! Abstract interface for descriptor allocation from heaps.

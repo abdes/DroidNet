@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypeSystem.h>
 
 namespace oxygen::graphics {
@@ -84,6 +85,9 @@ public:
     {
     }
 
+    OXYGEN_DEFAULT_COPYABLE(NativeObject)
+    OXYGEN_DEFAULT_MOVABLE(NativeObject)
+
     //! Checks if the `NativeObject` holds a valid handle or pointer.
     [[nodiscard]] constexpr auto IsValid() const noexcept { return integer != kInvalidHandle; }
 
@@ -126,15 +130,18 @@ public:
     //! Retrieves the type ID of the owning graphics object.
     [[nodiscard]] constexpr auto OwnerTypeId() const noexcept { return owner_type_id_; }
 
-    //! Compares two `NativeObject` instances for equality.
-    /*!
-     \param other The other `NativeObject` to compare with.
-     \return `true` if the two objects have the same owner type id and the same
-     handle value, `false` otherwise.
-    */
+    //! Compares two `NativeObject` instances for equality. Only compares the
+    //! pointer/handle and the owner type id.
     constexpr auto operator==(const NativeObject& other) const noexcept -> bool
     {
         return (owner_type_id_ == other.owner_type_id_) && (integer == other.integer);
+    }
+
+    //! Compares two `NativeObject` instances for inequality. Only compares the
+    //! pointer/handle and the owner type id.
+    constexpr auto operator!=(const NativeObject& other) const noexcept -> bool
+    {
+        return !(*this == other);
     }
 };
 
