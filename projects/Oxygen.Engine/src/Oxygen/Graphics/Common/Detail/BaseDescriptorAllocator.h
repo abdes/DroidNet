@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -86,13 +86,16 @@ public:
 
         // If no segments exist, create initial segment
         if (segments.empty()) {
-            auto capacity = visibility == DescriptorVisibility::kShaderVisible
+            const auto capacity = visibility == DescriptorVisibility::kShaderVisible
                 ? desc->shader_visible_capacity
                 : desc->cpu_visible_capacity;
             if (capacity == 0) {
                 throw std::runtime_error("Failed to allocate descriptor: zero capacity");
             }
-            auto segment = CreateHeapSegment(capacity, 0, view_type, visibility);
+            // Use the base index from the allocation strategy
+            auto& strategy = GetAllocationStrategy();
+            const auto base_index = strategy.GetHeapBaseIndex(view_type, visibility);
+            auto segment = CreateHeapSegment(capacity, base_index, view_type, visibility);
             if (!segment) {
                 throw std::runtime_error("Failed to allocate descriptor: could not create initial segment");
             }
@@ -116,8 +119,8 @@ public:
         // If we couldn't allocate from existing segments, try to create a new one
         if (desc->allow_growth && segments.size() < (1 + desc->max_growth_iterations)) {
             const auto& last = segments.back();
-            auto base_index = last->GetBaseIndex() + last->GetCapacity();
-            auto capacity = static_cast<IndexT>(desc->growth_factor * last->GetCapacity());
+            const auto base_index = last->GetBaseIndex() + last->GetCapacity();
+            const auto capacity = CalculateGrowthCapacity(desc->growth_factor, last->GetCapacity());
             if (auto segment = CreateHeapSegment(capacity, base_index, view_type, visibility)) {
                 segments.push_back(std::move(segment));
                 if (const auto index = segments.back()->Allocate();
@@ -148,12 +151,12 @@ public:
         const auto view_type = handle.GetViewType();
         const auto visibility = handle.GetVisibility();
         const auto index = handle.GetIndex();
-        auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
+        const auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
         for (const auto& segment : segments) {
             // Only release to the segment that owns the index range.
             const auto base = segment->GetBaseIndex();
-            const auto cap = segment->GetCapacity();
-            if (index >= base && index < base + cap) {
+            const auto capacity = segment->GetCapacity();
+            if (index >= base && index < base + capacity) {
                 if (segment->Release(index)) {
                     handle.Invalidate();
                     return;
@@ -229,9 +232,7 @@ public:
         return AbortOnFailed(__func__, [&]() {
             std::lock_guard lock(mutex_);
             uint32_t total = 0;
-            const auto& segments = heaps_.at(HeapIndex(view_type, visibility)).segments;
-
-            for (const auto& segment : segments) {
+            for (const auto& segment : heaps_.at(HeapIndex(view_type, visibility)).segments) {
                 total += segment->GetAllocatedCount();
             }
 
@@ -242,6 +243,7 @@ public:
 protected:
     //! Creates a new heap segment for the specified view type and visibility.
     /*!
+     \param capacity The capacity of the new segment.
      \param view_type The resource view type for the new segment.
      \param visibility The memory visibility for the new segment.
      \param base_index The base index for the new segment.
@@ -288,7 +290,35 @@ protected:
         }
     }
 
+    auto GetAllocationStrategy() const noexcept -> const graphics::DescriptorAllocationStrategy&
+    {
+        DCHECK_NOTNULL_F(config_.heap_strategy);
+        return *config_.heap_strategy;
+    }
+
 private:
+    /**
+     * Calculates the next capacity for heap growth, rounding to the nearest integer and clamping to IndexT max if needed.
+     * Logs a warning if the result would overflow IndexT.
+     */
+    static auto CalculateGrowthCapacity(const float growth_factor, const uint32_t prev_capacity) -> IndexT
+    {
+        DCHECK_GT_F(growth_factor, 0.0F, "growth factor must be > 0");
+        DCHECK_NE_F(prev_capacity, 0U, "previous capacity must be > 0");
+
+        // The new capacity cannot be greater than the max value of IndexT.
+        constexpr auto kMax = std::numeric_limits<IndexT>::max();
+
+        const auto result = static_cast<double>(prev_capacity) * static_cast<double>(growth_factor);
+        const auto rounded = std::llround(result);
+
+        if (std::cmp_greater(rounded, kMax)) {
+            LOG_F(WARNING, "Growth calculation overflow: requested {}, clamping to max {}", rounded, kMax);
+            return kMax;
+        }
+        return static_cast<IndexT>(rounded);
+    }
+
     /**
      * Pre-computes the mapping from (ResourceViewType, DescriptorVisibility) pairs to heap indices.
      *
@@ -360,7 +390,7 @@ private:
     struct HeapInfo {
         std::string key { "__Unknown__:__Unknown__" };
         const HeapDescription* description { nullptr };
-        std::vector<std::unique_ptr<DescriptorHeapSegment>> segments;
+        std::vector<std::unique_ptr<DescriptorHeapSegment>> segments {};
     };
 
     //! Precomputed heap information
