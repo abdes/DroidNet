@@ -12,6 +12,7 @@
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
