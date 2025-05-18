@@ -427,6 +427,12 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthCapacityClampedToMaxIndex
             };
             return desc;
         }
+
+        [[nodiscard]] auto GetHeapBaseIndex(ResourceViewType /*type*/, DescriptorVisibility /*vis*/) const
+            -> DescriptorHandle::IndexT override
+        {
+            return 0;
+        }
     };
 
     const BaseDescriptorAllocatorConfig config {

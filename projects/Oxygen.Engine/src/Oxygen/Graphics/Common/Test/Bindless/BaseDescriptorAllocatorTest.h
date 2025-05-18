@@ -37,6 +37,12 @@ public:
         return heap_descriptions_[heap_key] = desc;
     }
 
+    auto GetHeapBaseIndex(ResourceViewType /*view_type*/, DescriptorVisibility /*visibility*/) const
+        -> DescriptorHandle::IndexT override
+    {
+        return 0; // Always return 0 for base index
+    }
+
 private:
     DefaultDescriptorAllocationStrategy default_strategy_;
     mutable std::unordered_map<std::string, HeapDescription> heap_descriptions_;
@@ -62,6 +68,12 @@ public:
         return heap_descriptions_[heap_key] = desc;
     }
 
+    auto GetHeapBaseIndex(ResourceViewType /*view_type*/, DescriptorVisibility /*visibility*/) const
+        -> DescriptorHandle::IndexT override
+    {
+        return 0; // Always return 0 for base index
+    }
+
 private:
     DefaultDescriptorAllocationStrategy default_strategy_;
     mutable std::unordered_map<std::string, HeapDescription> heap_descriptions_;
@@ -85,6 +97,12 @@ public:
         desc.shader_visible_capacity = 1;
         // Update the heap description in the cache and return it
         return heap_descriptions_[heap_key] = desc;
+    }
+
+    auto GetHeapBaseIndex(ResourceViewType view_type, DescriptorVisibility visibility) const
+        -> DescriptorHandle::IndexT override
+    {
+        return default_strategy_.GetHeapBaseIndex(view_type, visibility);
     }
 
 private:
