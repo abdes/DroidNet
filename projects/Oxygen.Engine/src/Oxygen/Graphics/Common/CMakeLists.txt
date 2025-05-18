@@ -52,7 +52,7 @@ target_sources(
   PRIVATE
     "Detail/Barriers.cpp"
     "Detail/DefaultViewCache.h"
-    "Detail/EnumToStringConverters.cpp"
+    "Detail/ToStringConverters.cpp"
     "Detail/FixedDescriptorHeapSegment.cpp"
     "Detail/FormatUtils.cpp"
     "Detail/PerFrameResourceManager.cpp"

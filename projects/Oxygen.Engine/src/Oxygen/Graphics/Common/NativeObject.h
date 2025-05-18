@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Composition/TypeSystem.h>
 
 namespace oxygen::graphics {
@@ -39,12 +40,15 @@ class NativeObject {
     //! The type ID of the graphics object that owns this handle. Typically
     //! requires that the owner class is derived from `oxygen::Object` and
     //! implements the required methods of the oxygen type system.
-    TypeId owner_type_id_;
+    TypeId owner_type_id_ { kInvalidTypeId };
 
     //! Indicates whether the stored value is a pointer.
     bool is_pointer_ { false };
 
 public:
+    //! Default constructor; creates an invalid `NativeObject`.
+    constexpr NativeObject() noexcept = default;
+
     //! Constructs a `NativeObject` with an integer handle.
     /*!
      \param handle The integer handle of the native object.
@@ -56,13 +60,25 @@ public:
     {
     }
 
-    //! Constructs a `NativeObject` with a pointer.
+    //! Constructs a `NativeObject` with a non-const pointer.
     /*!
-     \param pointer The pointer to the native object.
+     \param _pointer The pointer to the native object.
      \param type_id The type ID of the owning graphics object.
     */
-    constexpr NativeObject(void* pointer, const TypeId type_id) noexcept
-        : pointer(pointer)
+    constexpr NativeObject(void* _pointer, const TypeId type_id) noexcept
+        : pointer(_pointer)
+        , owner_type_id_(type_id)
+        , is_pointer_(true)
+    {
+    }
+
+    //! Constructs a `NativeObject` with a const pointer.
+    /*!
+     \param _pointer The const pointer to the native object.
+     \param type_id The type ID of the owning graphics object.
+    */
+    constexpr NativeObject(const void* _pointer, const TypeId type_id) noexcept
+        : pointer(const_cast<void*>(_pointer))
         , owner_type_id_(type_id)
         , is_pointer_(true)
     {
@@ -74,23 +90,39 @@ public:
     //! Retrieves the integer handle of the native object.
     [[nodiscard]] constexpr auto AsInteger() const noexcept { return integer; }
 
-    //! Retrieves the pointer to the native object.
+    //! Retrieves the pointer to the native object. (const version)
     /*!
-     \tparam T The type of the native object being pointed to (depending on the
-     graphics backend).
-     \return A pointer to the native object.
+     \tparam T The type of the native object being pointed to.
+     \return A const pointer to the native object.
      \throws std::runtime_error If the `NativeObject` was created with an
      integer handle.
     */
     template <typename T>
-    [[nodiscard]] auto AsPointer() const
+    [[nodiscard]] auto AsPointer() const -> T*
     {
         if (!is_pointer_) {
-            throw std::runtime_error("Cannot convert a NativeObject created with integer handle to a pointer");
+            throw std::runtime_error(
+                "Cannot convert a NativeObject created with integer handle to a pointer");
         }
         return static_cast<T*>(pointer);
     }
 
+    //! Retrieves the pointer to the native object. (non-const version)
+    /*!
+     \tparam T The type of the native object being pointed to.
+     \return A pointer to the native object.
+     \throws std::runtime_error If the `NativeObject` was created with an
+     integer handle, or if it was initialized with a const pointer.
+    */
+    template <typename T>
+    [[nodiscard]] auto AsPointer() -> T*
+    {
+        if (!is_pointer_) {
+            throw std::runtime_error(
+                "Cannot convert a NativeObject created with integer handle to a pointer");
+        }
+        return static_cast<T*>(pointer);
+    }
     //! Retrieves the type ID of the owning graphics object.
     [[nodiscard]] constexpr auto OwnerTypeId() const noexcept { return owner_type_id_; }
 
@@ -112,6 +144,9 @@ concept HoldsNativeResource = requires(T obj) {
     { obj.GetNativeResource() } -> std::convertible_to<NativeObject>;
 };
 
+//! Converts a `NativeObject` to a string representation.
+auto to_string(const NativeObject& obj) -> std::string;
+
 } // namespace oxygen::graphics
 
 //! Provides a hash function for `NativeObject`.
@@ -123,11 +158,9 @@ template <>
 struct std::hash<oxygen::graphics::NativeObject> {
     auto operator()(const oxygen::graphics::NativeObject& obj) const noexcept -> size_t
     {
-        // Combine the hash of owner_type_id_ and integer
-        const size_t owner_type_hash = std::hash<oxygen::TypeId> {}(obj.OwnerTypeId());
-        const size_t native_handle_hash = std::hash<uint64_t> {}(obj.AsInteger());
-
-        // Combine the two hashes using a common hash combining technique
-        return owner_type_hash ^ (native_handle_hash + 0x9e3779b9 + (owner_type_hash << 6) + (owner_type_hash >> 2));
+        size_t seed = 0;
+        oxygen::HashCombine(seed, obj.OwnerTypeId());
+        oxygen::HashCombine(seed, obj.AsInteger());
+        return seed;
     }
 };
