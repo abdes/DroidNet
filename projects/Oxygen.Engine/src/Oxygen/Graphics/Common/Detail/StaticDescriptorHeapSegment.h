@@ -81,7 +81,7 @@ class StaticDescriptorHeapSegment : public DescriptorHeapSegment {
 public:
     StaticDescriptorHeapSegment(
         const DescriptorVisibility visibility,
-        const uint32_t base_index) noexcept
+        const IndexT base_index) noexcept
         : visibility_(visibility)
         , base_index_(base_index)
         , next_index_(0)
@@ -117,11 +117,11 @@ public:
              segment is full, or an error occurs. Errors are logged but not
              propagated.
     */
-    [[nodiscard]] auto Allocate() noexcept -> uint32_t override
+    [[nodiscard]] auto Allocate() noexcept -> IndexT override
     {
         // First try to reuse a released descriptor (LIFO for better cache locality)
         if (!free_list_.empty()) {
-            uint32_t local_index = free_list_.back();
+            auto local_index = free_list_.back();
             free_list_.pop_back();
             released_flags_.reset(local_index);
             DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})",
@@ -148,7 +148,7 @@ public:
      adds the released index to the free list for future reuse.
      Ensures the same descriptor cannot be released twice.
     */
-    auto Release(const uint32_t index) noexcept -> bool override
+    auto Release(const IndexT index) noexcept -> bool override
     {
         // Check if the index belongs to this segment
         if (index < base_index_ || index >= base_index_ + GetCapacity()) {
@@ -156,7 +156,8 @@ public:
         }
 
         // Convert to local index
-        uint32_t local_index = index - base_index_;
+        auto local_index = index - base_index_;
+        DCHECK_GE_F(local_index, 0U); // local_index should never be negative
 
         // Check if this index was never allocated or is beyond the currently allocated range.
         // An index can only be released if it's < next_index_ (meaning it was allocated),
@@ -187,9 +188,9 @@ public:
     }
 
     //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] auto GetAvailableCount() const noexcept -> uint32_t override
+    [[nodiscard]] auto GetAvailableCount() const noexcept -> IndexT override
     {
-        return GetCapacity() - next_index_ + static_cast<uint32_t>(free_list_.size());
+        return GetCapacity() - next_index_ + FreeListSize();
     }
 
     //! Returns the resource view type of this segment.
@@ -205,21 +206,21 @@ public:
     }
 
     //! Returns the base index of this segment.
-    [[nodiscard]] auto GetBaseIndex() const noexcept -> uint32_t override
+    [[nodiscard]] auto GetBaseIndex() const noexcept -> IndexT override
     {
         return base_index_;
     }
 
     //! Returns the capacity of this segment.
-    [[nodiscard]] constexpr auto GetCapacity() const noexcept -> uint32_t override
+    [[nodiscard]] constexpr auto GetCapacity() const noexcept -> IndexT override
     {
         return GetOptimalCapacity();
     }
 
     //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] auto GetAllocatedCount() const noexcept -> uint32_t override
+    [[nodiscard]] auto GetAllocatedCount() const noexcept -> IndexT override
     {
-        return next_index_ - static_cast<uint32_t>(free_list_.size());
+        return next_index_ - FreeListSize();
     }
 
 protected:
@@ -282,11 +283,19 @@ private:
         }
     }
 
+    auto FreeListSize() const -> IndexT
+    {
+        size_t free_count = free_list_.size();
+        DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
+            "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
+        return static_cast<IndexT>(free_count);
+    }
+
     DescriptorVisibility visibility_;
-    uint32_t base_index_;
-    uint32_t next_index_;
+    IndexT base_index_;
+    IndexT next_index_;
     std::bitset<GetOptimalCapacity()> released_flags_ {};
-    StaticVector<uint32_t, GetOptimalCapacity()> free_list_ {};
+    StaticVector<IndexT, GetOptimalCapacity()> free_list_ {};
 };
 
 } // namespace oxygen::graphics::detail

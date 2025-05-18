@@ -117,10 +117,10 @@ public:
         if (desc->allow_growth && segments.size() < (1 + desc->max_growth_iterations)) {
             const auto& last = segments.back();
             auto base_index = last->GetBaseIndex() + last->GetCapacity();
-            auto capacity = static_cast<uint32_t>(desc->growth_factor * last->GetCapacity());
+            auto capacity = static_cast<IndexT>(desc->growth_factor * last->GetCapacity());
             if (auto segment = CreateHeapSegment(capacity, base_index, view_type, visibility)) {
                 segments.push_back(std::move(segment));
-                if (const uint32_t index = segments.back()->Allocate();
+                if (const auto index = segments.back()->Allocate();
                     index != DescriptorHandle::kInvalidIndex) {
                     return CreateDescriptorHandle(index, view_type, visibility);
                 }
@@ -151,8 +151,8 @@ public:
         auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
         for (const auto& segment : segments) {
             // Only release to the segment that owns the index range.
-            const uint32_t base = segment->GetBaseIndex();
-            const uint32_t cap = segment->GetCapacity();
+            const auto base = segment->GetBaseIndex();
+            const auto cap = segment->GetCapacity();
             if (index >= base && index < base + cap) {
                 if (segment->Release(index)) {
                     handle.Invalidate();

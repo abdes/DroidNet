@@ -53,8 +53,11 @@ class DescriptorHandle {
     friend class DescriptorAllocator;
 
 public:
+    //! The underlying type for the descriptor index.
+    using IndexT = uint32_t;
+
     //! Represents an invalid descriptor index.
-    static constexpr auto kInvalidIndex = ~0U;
+    static constexpr IndexT kInvalidIndex = ~0U;
 
     //! Default constructor creates an invalid handle.
     DescriptorHandle() noexcept = default;
@@ -123,7 +126,7 @@ protected:
      purposes via derivation.
     */
     OXYGEN_GFX_API DescriptorHandle(
-        DescriptorAllocator* allocator, uint32_t index,
+        DescriptorAllocator* allocator, IndexT index,
         ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
 
 private:
@@ -131,7 +134,7 @@ private:
     DescriptorAllocator* allocator_ { nullptr };
 
     //! Stable index for shader reference.
-    uint32_t index_ { kInvalidIndex };
+    IndexT index_ { kInvalidIndex };
 
     //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
     ResourceViewType view_type_ { ResourceViewType::kNone };

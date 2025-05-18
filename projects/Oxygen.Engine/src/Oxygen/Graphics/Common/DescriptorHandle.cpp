@@ -12,7 +12,7 @@ using oxygen::graphics::DescriptorHandle;
 
 DescriptorHandle::DescriptorHandle(
     DescriptorAllocator* allocator,
-    const uint32_t index,
+    const IndexT index,
     const ResourceViewType view_type,
     const DescriptorVisibility visibility) noexcept
     : allocator_(allocator)

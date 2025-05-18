@@ -26,17 +26,13 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorHeapSegment.h"
 
-using oxygen::graphics::DefaultDescriptorAllocationStrategy;
-using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
-using oxygen::graphics::HeapDescription;
 using oxygen::graphics::ResourceViewType;
+
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
-using oxygen::graphics::detail::DescriptorHeapSegment;
 
 // -------------------- Test Fixture --------------------
 class BaseDescriptorAllocatorErrorTest : public BaseDescriptorAllocatorTest {
@@ -54,32 +50,32 @@ NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ThrowsIfOutOfSpaceAndNoGrowth)
     DisableGrowth();
 
     bool one_segment = false;
-    allocator->segment_factory_ = [this, &one_segment](auto, auto) -> std::unique_ptr<MockDescriptorHeapSegment> {
+    allocator_->segment_factory_ = [this, &one_segment](auto, auto) -> std::unique_ptr<MockDescriptorHeapSegment> {
         if (one_segment) {
             ADD_FAILURE() << "Unexpected segment requested";
             return nullptr;
         }
         one_segment = true;
-        auto testSegment = std::make_unique<MockDescriptorHeapSegment>();
-        EXPECT_CALL(*testSegment, Allocate())
+        auto segment = std::make_unique<MockDescriptorHeapSegment>();
+        EXPECT_CALL(*segment, Allocate())
             .WillOnce(::testing::Return(0))
             .WillRepeatedly(::testing::Return(DescriptorHandle::kInvalidIndex));
-        EXPECT_CALL(*testSegment, GetAvailableCount()).WillRepeatedly(::testing::Return(0));
-        EXPECT_CALL(*testSegment, Release(0)).WillRepeatedly(::testing::Return(true));
-        EXPECT_CALL(*testSegment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
-        EXPECT_CALL(*testSegment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
-        EXPECT_CALL(*testSegment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
-        EXPECT_CALL(*testSegment, GetCapacity()).WillRepeatedly(::testing::Return(1));
-        EXPECT_CALL(*testSegment, GetAllocatedCount())
+        EXPECT_CALL(*segment, GetAvailableCount()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, Release(0)).WillRepeatedly(::testing::Return(true));
+        EXPECT_CALL(*segment, GetViewType()).WillRepeatedly(::testing::Return(ResourceViewType::kTexture_SRV));
+        EXPECT_CALL(*segment, GetVisibility()).WillRepeatedly(::testing::Return(DescriptorVisibility::kShaderVisible));
+        EXPECT_CALL(*segment, GetBaseIndex()).WillRepeatedly(::testing::Return(0));
+        EXPECT_CALL(*segment, GetCapacity()).WillRepeatedly(::testing::Return(1));
+        EXPECT_CALL(*segment, GetAllocatedCount())
             .WillOnce(::testing::Return(0))
             .WillRepeatedly(::testing::Return(1));
-        return std::move(testSegment);
+        return std::move(segment);
     };
 
     // Action & Verify: First allocation succeeds, second throws
-    auto h1 = allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const auto h1 = allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     EXPECT_TRUE(h1.IsValid());
-    EXPECT_THROW(allocator->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible), std::runtime_error);
+    EXPECT_THROW(allocator_->Allocate(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible), std::runtime_error);
 }
 
 NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ReleaseFromDifferentAllocatorThrows)
@@ -87,8 +83,8 @@ NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ReleaseFromDifferentAllocatorThr
     // Tests that attempting to release a handle from a different allocator throws
 
     // Setup: Create two allocators and a handle from the first
-    auto allocator1 = std::make_unique<MockDescriptorAllocator>(default_config);
-    auto allocator2 = std::make_unique<MockDescriptorAllocator>(default_config);
+    const auto allocator1 = std::make_unique<MockDescriptorAllocator>(default_config_);
+    const auto allocator2 = std::make_unique<MockDescriptorAllocator>(default_config_);
 
     allocator1->segment_factory_ = [](auto, auto) {
         // Create test segment for first allocator

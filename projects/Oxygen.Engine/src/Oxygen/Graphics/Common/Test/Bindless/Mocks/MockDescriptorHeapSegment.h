@@ -6,25 +6,25 @@
 
 #pragma once
 
-#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
 #include <gmock/gmock.h>
 
-// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
+#include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
 
 namespace oxygen::graphics::bindless::testing {
 
 // ReSharper disable once CppClassCanBeFinal - Mock class cannot be final
+// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
 class MockDescriptorHeapSegment : public detail::DescriptorHeapSegment {
 public:
     // Updated to match DescriptorHeapSegment interface: [[nodiscard]] and noexcept
-    MOCK_METHOD(uint32_t, Allocate, (), (override, noexcept));
-    MOCK_METHOD(bool, Release, (uint32_t), (override, noexcept));
-    MOCK_METHOD(uint32_t, GetAvailableCount, (), (const, override, noexcept));
+    MOCK_METHOD(IndexT, Allocate, (), (override, noexcept));
+    MOCK_METHOD(bool, Release, (IndexT), (override, noexcept));
+    MOCK_METHOD(IndexT, GetAvailableCount, (), (const, override, noexcept));
     MOCK_METHOD(ResourceViewType, GetViewType, (), (const, override, noexcept));
     MOCK_METHOD(DescriptorVisibility, GetVisibility, (), (const, override, noexcept));
-    MOCK_METHOD(uint32_t, GetBaseIndex, (), (const, override, noexcept));
-    MOCK_METHOD(uint32_t, GetCapacity, (), (const, override, noexcept));
-    MOCK_METHOD(uint32_t, GetAllocatedCount, (), (const, override, noexcept));
+    MOCK_METHOD(IndexT, GetBaseIndex, (), (const, override, noexcept));
+    MOCK_METHOD(IndexT, GetCapacity, (), (const, override, noexcept));
+    MOCK_METHOD(IndexT, GetAllocatedCount, (), (const, override, noexcept));
 };
 
 } // namespace oxygen::graphics::bindless::testing

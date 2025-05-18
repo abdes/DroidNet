@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 
 namespace oxygen::graphics::detail {
 
@@ -63,6 +64,9 @@ namespace oxygen::graphics::detail {
 */
 class DescriptorHeapSegment {
 public:
+    //! Alias the descriptor handle index type for convenience.
+    using IndexT = DescriptorHandle::IndexT;
+
     DescriptorHeapSegment() noexcept = default;
     virtual ~DescriptorHeapSegment() noexcept = default;
 
@@ -73,17 +77,17 @@ public:
     /*!
      \return The allocated index, or std::numeric_limits<uint32_t>::max() if the segment is full.
     */
-    [[nodiscard]] virtual auto Allocate() noexcept -> uint32_t = 0;
+    [[nodiscard]] virtual auto Allocate() noexcept -> IndexT = 0;
 
     //! Releases a descriptor index back to this segment.
     /*!
      \param index The global index to release.
      \return True if the index was successfully released, false otherwise.
     */
-    virtual auto Release(uint32_t index) noexcept -> bool = 0;
+    virtual auto Release(IndexT index) noexcept -> bool = 0;
 
     //! Returns the number of descriptors currently available in this segment.
-    [[nodiscard]] virtual auto GetAvailableCount() const noexcept -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetAvailableCount() const noexcept -> IndexT = 0;
 
     //! Returns the resource view type of this segment.
     [[nodiscard]] virtual auto GetViewType() const noexcept -> ResourceViewType = 0;
@@ -92,13 +96,13 @@ public:
     [[nodiscard]] virtual auto GetVisibility() const noexcept -> DescriptorVisibility = 0;
 
     //! Returns the base index of this segment.
-    [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetBaseIndex() const noexcept -> IndexT = 0;
 
     //! Returns the capacity of this segment.
-    [[nodiscard]] virtual auto GetCapacity() const noexcept -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetCapacity() const noexcept -> IndexT = 0;
 
     //! Returns the current size (number of allocated descriptors) of this segment.
-    [[nodiscard]] virtual auto GetAllocatedCount() const noexcept -> uint32_t = 0;
+    [[nodiscard]] virtual auto GetAllocatedCount() const noexcept -> IndexT = 0;
 
     //! Checks if the segment is empty (i.e., no allocated descriptors).
     [[nodiscard]] auto IsEmpty() const noexcept { return GetAllocatedCount() == 0; }
