@@ -60,9 +60,32 @@ public:
             config_.heap_strategy = std::make_shared<DefaultDescriptorAllocationStrategy>();
         }
         PrecomputeHeapKeys();
+        DLOG_F(INFO, "Descriptor Allocator created; {} heaps configured in allocation strategy.",
+            heaps_.size());
     }
 
-    ~BaseDescriptorAllocator() override = default;
+    ~BaseDescriptorAllocator() override
+    {
+        // Release all heaps, but do a sanity check to ensure all
+        // descriptors have been released.
+        for (auto& [key, desc, segments] : heaps_) {
+            auto segments_count = segments.size();
+            if (segments_count == 0) {
+                continue;
+            }
+            DLOG_F(1, "Cleaning up heap `{}` with {} segment{}",
+                key, segments_count, segments_count == 1 ? "" : "s");
+            LOG_SCOPE_F(1, "Releasing segments");
+            for (const auto& segment : segments) {
+                if (!segment->IsEmpty()) {
+                    LOG_F(1, "Heap segment has {} descriptors still allocated.",
+                         segment->GetAvailableCount());
+                }
+            }
+            segments.clear();
+        }
+        DLOG_F(INFO, "Descriptor Allocator destroyed.");
+    }
 
     OXYGEN_MAKE_NON_COPYABLE(BaseDescriptorAllocator)
     OXYGEN_DEFAULT_MOVABLE(BaseDescriptorAllocator)
