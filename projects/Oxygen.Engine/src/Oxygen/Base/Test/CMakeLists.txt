@@ -67,6 +67,7 @@ m_gtest_program(
 )
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
+m_gtest_program(Logging SOURCES "Logging_test.cpp")
 
 include(Catch2Helpers)
 

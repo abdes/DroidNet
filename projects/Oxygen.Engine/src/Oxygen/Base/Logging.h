@@ -609,9 +609,23 @@ void log(Verbosity verbosity,
     const char* file,
     unsigned line,
     LOGURU_FORMAT_STRING_TYPE format,
-    const Args&... args)
+    const Args&... args) noexcept
 {
-    vlog(verbosity, file, line, format, fmt::make_format_args(args...));
+    if (format == nullptr) {
+        fprintf(stderr, "Null format string at %s:%u, log dropped\n", file, line);
+        return;
+    }
+    try {
+        vlog(verbosity, file, line, format, fmt::make_format_args(args...));
+    } catch (const std::exception& ex) {
+        // Catch all exceptions and log them as a fatal error.
+        fprintf(stderr, "Exception caught at %s:%u: %s\n",
+            file, line, ex.what());
+    } catch(...){
+        // Catch all exceptions and log them as a fatal error.
+        fprintf(stderr, "Exception caught at %s:%u: %s\n",
+            file, line, errno_as_text().c_str());
+    }
 }
 
 // Log without any preamble or indentation.
