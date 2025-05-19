@@ -240,7 +240,6 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
             : Base(cfg), expected_base_index_(expected), checked_(false) {}
         // Implement all pure virtuals from DescriptorAllocator
         void CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&) override { throw std::logic_error("Not used in this test"); }
-        oxygen::graphics::NativeObject GetNativeHandle(const DescriptorHandle&) const override { return {}; }
         void PrepareForRendering(const oxygen::graphics::NativeObject&) override {}
     protected:
         std::unique_ptr<DescriptorHeapSegment> CreateHeapSegment(

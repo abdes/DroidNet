@@ -393,11 +393,6 @@ protected:
 
 public:
     void CopyDescriptor(const DescriptorHandle& /*source*/, const DescriptorHandle& /*destination*/) override { }
-    [[nodiscard]] auto GetNativeHandle(const DescriptorHandle& /*handle*/) const
-        -> oxygen::graphics::NativeObject override
-    {
-        return { 0ULL, oxygen::kInvalidTypeId };
-    }
     void PrepareForRendering(const oxygen::graphics::NativeObject& /*command_list*/) override { }
 };
 

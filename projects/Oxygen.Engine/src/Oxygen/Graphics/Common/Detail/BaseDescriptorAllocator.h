@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -18,6 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h>
@@ -50,7 +52,8 @@ struct BaseDescriptorAllocatorConfig {
  Thread safety is provided through a mutex that protects all allocation and
  release operations.
 */
-class BaseDescriptorAllocator : public DescriptorAllocator {
+class BaseDescriptorAllocator : public DescriptorAllocator, public oxygen::Object {
+    OXYGEN_TYPED(BaseDescriptorAllocator)
 public:
     explicit BaseDescriptorAllocator(BaseDescriptorAllocatorConfig config)
         : config_(std::move(config))
@@ -79,7 +82,7 @@ public:
             for (const auto& segment : segments) {
                 if (!segment->IsEmpty()) {
                     LOG_F(1, "Heap segment has {} descriptors still allocated.",
-                         segment->GetAvailableCount());
+                        segment->GetAvailableCount());
                 }
             }
             segments.clear();
@@ -160,8 +163,8 @@ public:
     /*!
      \param handle The handle to release.
 
-     Thread-safe implementation that returns the descriptor to its
-     original segment for future reuse.
+     Thread-safe implementation that returns the descriptor to its original
+     segment for future reuse.
     */
     void Release(DescriptorHandle& handle) override
     {
@@ -317,6 +320,59 @@ protected:
     {
         DCHECK_NOTNULL_F(config_.heap_strategy);
         return *config_.heap_strategy;
+    }
+
+    //! Gets the segment for a given descriptor handle.
+    /*!
+     \param handle The descriptor handle to find the segment for.
+     \return An optional containing a pointer to the segment, or std::nullopt if not found.
+
+     This method does not validate if the handle was allocated by this allocator.
+     The caller should use Contains() first to validate ownership.
+    */
+    [[nodiscard]] auto GetSegmentForHandle(const DescriptorHandle& handle) const
+        -> std::optional<const DescriptorHeapSegment*>
+    {
+        if (!handle.IsValid()) {
+            return std::nullopt;
+        }
+
+        std::lock_guard lock(mutex_);
+
+        const auto view_type = handle.GetViewType();
+        const auto visibility = handle.GetVisibility();
+        const auto index = handle.GetIndex();
+        const auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
+
+        for (const auto& segment : segments) {
+            const auto base = segment->GetBaseIndex();
+            const auto capacity = segment->GetCapacity();
+            if (index >= base && index < base + capacity) {
+                return segment.get();
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    struct HeapView {
+        const HeapDescription* description;
+        std::span<const std::unique_ptr<DescriptorHeapSegment>> segments;
+    };
+
+    //! Returns a vector of HeapView for all heaps that have at least one segment.
+    auto Heaps() const -> std::vector<HeapView>
+    {
+        std::lock_guard lock(mutex_);
+        std::vector<HeapView> result;
+        for (const auto& heap : heaps_) {
+            if (!heap.segments.empty()) {
+                result.push_back(HeapView {
+                    heap.description,
+                    std::span<const std::unique_ptr<DescriptorHeapSegment>>(heap.segments) });
+            }
+        }
+        return result;
     }
 
 private:
