@@ -75,10 +75,10 @@ public:
 
     [[nodiscard]] constexpr auto operator==(const DescriptorHandle& other) const noexcept
     {
-        return allocator_ == other.allocator_ &&
-               index_ == other.index_ &&
-               view_type_ == other.view_type_ &&
-               visibility_ == other.visibility_;
+        return allocator_ == other.allocator_
+            && index_ == other.index_
+            && view_type_ == other.view_type_
+            && visibility_ == other.visibility_;
     }
 
     [[nodiscard]] constexpr auto operator!=(const DescriptorHandle& other) const noexcept
@@ -119,10 +119,7 @@ public:
     OXYGEN_GFX_API void Release() noexcept;
 
     //! Invalidates this handle without releasing the descriptor.
-     void Invalidate() noexcept
-    {
-        InvalidateInternal(false);
-    }
+    OXYGEN_GFX_API void Invalidate() noexcept;
 
 protected:
     //! Constructor that takes an allocator and index.
@@ -154,5 +151,8 @@ private:
     //! Visibility of the memory space where this descriptor resides.
     DescriptorVisibility visibility_ { DescriptorVisibility::kNone };
 };
+
+//! Converts a `DescriptorHandle` to a string representation.
+auto to_string(const DescriptorHandle& obj) -> std::string;
 
 } // namespace oxygen::graphics

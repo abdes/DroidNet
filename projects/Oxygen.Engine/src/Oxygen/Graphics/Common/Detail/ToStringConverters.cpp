@@ -8,6 +8,9 @@
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
@@ -15,8 +18,6 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/Types/ShaderType.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
-
 
 auto oxygen::graphics::to_string(const oxygen::graphics::NativeObject& obj) -> std::string
 {
@@ -30,6 +31,16 @@ auto oxygen::graphics::to_string(const oxygen::graphics::NativeObject& obj) -> s
         }
     } else {
         return "NativeObject{invalid}";
+    }
+}
+
+auto oxygen::graphics::to_string(const oxygen::graphics::DescriptorHandle& handle) -> std::string
+{
+    if (handle.IsValid()) {
+        return fmt::format("DescriptorHandle{{index: {}, view_type: {}, visibility: {}}}",
+            handle.GetIndex(), nostd::to_string(handle.GetViewType()), nostd::to_string(handle.GetVisibility()));
+    } else {
+        return "DescriptorHandle{invalid}";
     }
 }
 
