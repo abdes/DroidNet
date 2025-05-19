@@ -21,7 +21,7 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
     , next_index_(0)
     , released_flags_(capacity, false)
 {
-    DLOG_F(1, "Descriptor heap segment created ({} / {}, base index: {}, capacity: {})",
+    DLOG_F(1, "constructed: heap segment ({} / {}, base index: {}, capacity: {})",
         nostd::to_string(view_type_), nostd::to_string(visibility_),
         base_index_, GetCapacity());
 }
@@ -46,48 +46,72 @@ FixedDescriptorHeapSegment::~FixedDescriptorHeapSegment() noexcept
         [[maybe_unused]] auto _ = 0;
     }
 
-    DLOG_F(1, "Descriptor heap segment destroyed ({} / {}, base index: {}, capacity: {})",
+    DLOG_F(1, "destroyed: heap segment ({} / {}, base index: {}, capacity: {})",
         nostd::to_string(view_type_), nostd::to_string(visibility_),
         base_index_, GetCapacity());
 }
 
 auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
 {
+    LOG_SCOPE_F(2, "Allocate descriptor index");
+    LOG_F(2, "segment ({} / {}, base index: {}, capacity: {})",
+        nostd::to_string(view_type_), nostd::to_string(visibility_),
+        base_index_, GetCapacity());
+
+    auto global_index = DescriptorHandle::kInvalidIndex;
+
     // First try to reuse a released descriptor (LIFO for better cache locality)
     if (!free_list_.empty()) {
         auto local_index = free_list_.back();
         free_list_.pop_back();
         released_flags_[local_index] = false;
-        DLOG_F(2, "Recycled descriptor index {} (remaining: {}/{})",
+        DLOG_F(2, "recycled descriptor with local index {} (remaining: {}/{})",
             local_index, GetAvailableCount(), GetCapacity());
-        return base_index_ + local_index;
+        global_index = base_index_ + local_index;
+    } else if (next_index_ < GetCapacity()) {
+        // If no freed descriptors, allocate a new one
+        auto local_index = next_index_++;
+        DLOG_F(2, "allocated new local index {} (remaining: {}/{})",
+            local_index, GetAvailableCount(), GetCapacity());
+        global_index = base_index_ + local_index;
+    } else {
+        // No more descriptors available
+        DLOG_F(ERROR, "segment is full");
     }
 
-    // If no freed descriptors, allocate a new one
-    if (next_index_ < GetCapacity()) {
-        DLOG_F(2, "Allocated new descriptor index {} (remaining: {}/{})",
-            next_index_, GetAvailableCount(), GetCapacity());
-        return base_index_ + next_index_++;
-    }
+    LOG_F(2, "{}returning global index {}",
+        global_index == DescriptorHandle::kInvalidIndex
+            ? "failed: "
+            : "",
+        global_index);
 
-    return DescriptorHandle::kInvalidIndex;
+    return global_index;
 }
 
 auto FixedDescriptorHeapSegment::Release(const IndexT index) noexcept -> bool
 {
+    LOG_SCOPE_F(2, "Release descriptor index");
+    DLOG_F(2, "segment ({} / {}, base index: {}, capacity: {})",
+        nostd::to_string(view_type_), nostd::to_string(visibility_),
+        base_index_, GetCapacity());
+
     // Check if the index belongs to this segment
     if (index < base_index_ || index >= base_index_ + GetCapacity()) {
+        LOG_F(WARNING, "index {} does not belong to me", index);
         return false;
     }
 
     // Convert to local index
     auto local_index = index - base_index_;
     DCHECK_GE_F(local_index, 0U); // local_index should never be negative
+    DLOG_F(2, "index {} -> local index is {}", index, local_index);
 
     // Check if this index was never allocated or is beyond the currently allocated range.
     // An index can only be released if it's < next_index_ (meaning it was allocated),
     // AND it's not already in the free_list_ (checked by released_flags_).
     if (local_index >= next_index_ || released_flags_[local_index]) {
+        LOG_F(WARNING, "local index is not valid ({} >= {} or already released)",
+            local_index, next_index_);
         return false;
     }
 
@@ -96,14 +120,14 @@ auto FixedDescriptorHeapSegment::Release(const IndexT index) noexcept -> bool
         free_list_.emplace_back(local_index);
     } catch (const std::exception& ex) {
         // The only reason this would fail is due to memory allocation failure.
-        LOG_F(ERROR, "Failed to add released index {} to free list: {}", local_index, ex.what());
+        LOG_F(ERROR, "Failed to add released local index {} to free list: {}", local_index, ex.what());
         return false;
     }
     // Mark as released
     released_flags_[local_index] = true;
 
-    DLOG_F(2, "Released descriptor index {} (remaining: {}/{})",
-        local_index, GetAvailableCount(), GetCapacity());
+    LOG_F(2, "released: descriptor index (l:{}, g:{}) (remaining: {}/{})",
+        local_index, index, GetAvailableCount(), GetCapacity());
     return true;
 }
 
