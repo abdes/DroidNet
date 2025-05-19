@@ -6,7 +6,6 @@
 
 #include <atomic>
 #include <thread>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
@@ -218,18 +217,6 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewAfterUnregisterResource
     const auto view2 = registry_->RegisterView(*resource_, desc);
     EXPECT_TRUE(view2.IsValid());
     EXPECT_NE(view1, view2) << "Re-registering with a new resource instance should not return stale view";
-}
-
-NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewInvalidResource)
-{
-    TestResource* null_resource = nullptr;
-    constexpr TestViewDesc desc {
-        .view_type = ResourceViewType::kConstantBuffer,
-        .visibility = DescriptorVisibility::kShaderVisible,
-        .id = 99
-    };
-    const auto view_object = registry_->RegisterView(*null_resource, desc);
-    EXPECT_FALSE(view_object.IsValid());
 }
 
 // --- Error Handling Tests ---
