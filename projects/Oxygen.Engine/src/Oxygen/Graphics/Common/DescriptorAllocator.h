@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -41,22 +40,31 @@ struct HeapDescription {
 //! Interface for heap mapping strategy used by descriptor allocators.
 class DescriptorAllocationStrategy {
 public:
+    DescriptorAllocationStrategy() = default;
     virtual ~DescriptorAllocationStrategy() = default;
+
+    OXYGEN_DEFAULT_COPYABLE(DescriptorAllocationStrategy)
+    OXYGEN_DEFAULT_MOVABLE(DescriptorAllocationStrategy)
 
     //! Returns a unique heap key string for a given view type and visibility.
     /*!
      May throw an exception if the view type or visibility is not recognized.
     */
-    virtual auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const -> std::string = 0;
+    [[nodiscard]] virtual auto GetHeapKey(
+        ResourceViewType view_type, DescriptorVisibility visibility) const
+        -> std::string
+        = 0;
 
     //! Returns the heap description for a given heap key.
     /*!
      May throw an exception if the key is not recognized.
     */
-    virtual auto GetHeapDescription(const std::string& heap_key) const -> const HeapDescription& = 0;
+    [[nodiscard]] virtual auto GetHeapDescription(const std::string& heap_key) const
+        -> const HeapDescription& = 0;
 
     //! Returns the base index for a heap (default 0 for backward compatibility).
-    virtual auto GetHeapBaseIndex(ResourceViewType view_type, DescriptorVisibility visibility) const
+    [[nodiscard]] virtual auto GetHeapBaseIndex(
+        ResourceViewType view_type, DescriptorVisibility visibility) const
         -> DescriptorHandle::IndexT
         = 0;
 };
@@ -69,9 +77,9 @@ public:
     {
         DescriptorHandle::IndexT current_base = 0;
         for (const auto& [view_type_str, desc] : heaps_) {
-            for (DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly, DescriptorVisibility::kShaderVisible }) {
+            for (const DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly, DescriptorVisibility::kShaderVisible }) {
                 std::string heap_key = view_type_str + ":" + (vis == DescriptorVisibility::kCpuOnly ? "cpu" : "gpu");
-                DescriptorHandle::IndexT capacity = (vis == DescriptorVisibility::kShaderVisible)
+                const DescriptorHandle::IndexT capacity = (vis == DescriptorVisibility::kShaderVisible)
                     ? desc.shader_visible_capacity
                     : desc.cpu_visible_capacity;
                 if (capacity == 0)
@@ -84,24 +92,27 @@ public:
 
     ~DefaultDescriptorAllocationStrategy() override = default;
 
+    OXYGEN_DEFAULT_COPYABLE(DefaultDescriptorAllocationStrategy)
+    OXYGEN_DEFAULT_MOVABLE(DefaultDescriptorAllocationStrategy)
+
     //! Returns a unique key formed by concatenating the view type and
     //! visibility, separated by a colon.
     /*!
      The view type part is guaranteed to be unique on its own, and can be used
      to index the heap descriptions table.
 
-     \note It is not reccommended to frequently call this function in a
+     \note It is not recommended to frequently call this function in a
            performance-critical path as it creates a new string each time.
 
      \return A unique key for the combination of view type and visibility, or
              "__Unknown__:__Unknown__" if the view type or visibility is not
              recognized as valid.
     */
-    auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const
+    [[nodiscard]] auto GetHeapKey(ResourceViewType view_type, DescriptorVisibility visibility) const
         -> std::string override
     {
         std::string view_type_str;
-        switch (view_type) {
+        switch (view_type) { // NOLINT(clang-diagnostic-switch-enum)
             // clang-format off
         case ResourceViewType::kTexture_SRV: view_type_str = "Texture_SRV"; break;
         case ResourceViewType::kTexture_UAV: view_type_str = "Texture_UAV"; break;
@@ -122,7 +133,7 @@ public:
         }
 
         std::string visibility_str;
-        switch (visibility) {
+        switch (visibility) { // NOLINT(clang-diagnostic-switch-enum)
             // clang-format off
         case DescriptorVisibility::kCpuOnly: visibility_str = "cpu"; break;
         case DescriptorVisibility::kShaderVisible: visibility_str = "gpu"; break;
@@ -146,28 +157,30 @@ public:
      \throws std::runtime_error if the heap key is ill-formatted or does not
              correspond to a pre-configured heap.
     */
-    auto GetHeapDescription(const std::string& heap_key) const -> const HeapDescription& override
+    [[nodiscard]] auto GetHeapDescription(const std::string& heap_key) const
+        -> const HeapDescription& override
     {
         // Parse view type from heap_key (format: ViewType:Visibility)
-        auto pos = heap_key.find(':');
+        const auto pos = heap_key.find(':');
         if (pos == std::string::npos) {
             throw std::runtime_error("Invalid heap key format");
         }
 
-        std::string view_type_str = heap_key.substr(0, pos);
+        const std::string view_type_str = heap_key.substr(0, pos);
 
-        auto it = heaps_.find(view_type_str);
-        if (it != heaps_.end()) {
+        if (const auto it = heaps_.find(view_type_str); it != heaps_.end()) {
             return it->second;
         }
         throw std::runtime_error("Heap description not found for view type: " + view_type_str);
     }
 
     //! Allow specifying base indices for heaps (default 0, but can be extended).
-    DescriptorHandle::IndexT GetHeapBaseIndex(ResourceViewType view_type, DescriptorVisibility visibility) const override
+    [[nodiscard]] auto GetHeapBaseIndex(
+        const ResourceViewType view_type, const DescriptorVisibility visibility) const
+        -> DescriptorHandle::IndexT override
     {
-        auto it = heap_base_indices_.find(GetHeapKey(view_type, visibility));
-        if (it != heap_base_indices_.end())
+        if (const auto it = heap_base_indices_.find(GetHeapKey(view_type, visibility));
+            it != heap_base_indices_.end())
             return it->second;
         return 0;
     }
@@ -200,16 +213,17 @@ private:
 //! Abstract interface for descriptor allocation from heaps.
 /*!
  Manages descriptor heaps of different types and visibility. Each descriptor
- type typically requires a separate heap allocation, and each heap has
- an associated visibility (shader-visible or CPU-only).
+ type typically requires a separate heap allocation, and each heap has an
+ associated visibility (shader-visible or CPU-only).
 
- In D3D12, this maps to descriptor heaps of different types (CBV_SRV_UAV, SAMPLER,
- RTV, DSV) each with a visibility flag. In Vulkan, this maps to descriptor pools
- that can contain mixed descriptor types.
+ In D3D12, this maps to descriptor heaps of different types (CBV_SRV_UAV,
+ SAMPLER, RTV, DSV) each with a visibility flag. In Vulkan, this maps to
+ descriptor pools that can contain mixed descriptor types.
 
  The allocator owns the descriptor heaps and is responsible for allocating,
- releasing, and optionally copying descriptors. It provides methods for obtaining
- platform-specific handles for descriptors and preparing resources for rendering.
+ releasing, and optionally copying descriptors. It provides methods for
+ obtaining platform-specific handles for descriptors and preparing resources for
+ rendering.
 
  The allocator is responsible for managing the lifecycle of descriptors but not
  the resources they describe (textures, buffers, etc.).
@@ -219,7 +233,11 @@ public:
     //! Alias the descriptor handle index type for convenience.
     using IndexT = DescriptorHandle::IndexT;
 
+    DescriptorAllocator() = default;
     virtual ~DescriptorAllocator() = default;
+
+    OXYGEN_DEFAULT_COPYABLE(DescriptorAllocator)
+    OXYGEN_DEFAULT_MOVABLE(DescriptorAllocator)
 
     //! Allocates a descriptor of the specified view type from the specified
     //! visibility.
@@ -228,7 +246,9 @@ public:
      \param visibility The memory visibility to allocate from (shader-visible or CPU-only).
      \return A handle to the allocated descriptor.
     */
-    virtual DescriptorHandle Allocate(ResourceViewType view_type, DescriptorVisibility visibility) = 0;
+    virtual auto Allocate(ResourceViewType view_type, DescriptorVisibility visibility)
+        -> DescriptorHandle
+        = 0;
 
     //! Releases a previously allocated descriptor.
     /*!
@@ -244,17 +264,9 @@ public:
      Source and destination must be of the same descriptor type but can be in
      different visibility spaces. Typically used to copy from CPU-only to shader-visible.
     */
-    virtual void CopyDescriptor(const DescriptorHandle& source, const DescriptorHandle& destination) = 0;
-
-    //! Gets a native platform-specific handle from a descriptor handle.
-    /*!
-     \param handle The descriptor handle.
-     \return A NativeObject representing the platform-specific handle.
-
-     The returned handle might be a D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE,
-     or VkDescriptorSet, depending on the platform and the handle's visibility.
-    */
-    [[nodiscard]] virtual NativeObject GetNativeHandle(const DescriptorHandle& handle) const = 0;
+    virtual void CopyDescriptor(
+        const DescriptorHandle& source, const DescriptorHandle& destination)
+        = 0;
 
     //! Prepares descriptors for rendering, binding necessary heaps.
     /*!
@@ -265,14 +277,15 @@ public:
     */
     virtual void PrepareForRendering(const NativeObject& command_list) = 0;
 
-    //! Returns the number of descriptors remaining of a specific view type in a specific visibility.
+    //! Returns the number of descriptors remaining of a specific view type in a
+    //! specific visibility.
     /*!
      \param view_type The resource view type.
      \param visibility The memory visibility.
      \return The number of descriptors remaining.
     */
-    [[nodiscard]] virtual IndexT GetRemainingDescriptorsCount(
-        ResourceViewType view_type, DescriptorVisibility visibility) const
+    [[nodiscard]] virtual auto GetRemainingDescriptorsCount(
+        ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
         = 0;
 
     //! Checks if this allocator owns the given descriptor handle.
@@ -280,16 +293,17 @@ public:
      \param handle The descriptor handle to check.
      \return True if this allocator owns the handle, false otherwise.
     */
-    [[nodiscard]] virtual bool Contains(const DescriptorHandle& handle) const = 0;
+    [[nodiscard]] virtual auto Contains(const DescriptorHandle& handle) const -> bool = 0;
 
-    //! Returns the number of allocated descriptors of a specific view type in a specific visibility.
+    //! Returns the number of allocated descriptors of a specific view type in a
+    //! specific visibility.
     /*!
      \param view_type The resource view type.
      \param visibility The memory visibility.
      \return The number of allocated descriptors.
     */
-    [[nodiscard]] virtual IndexT GetAllocatedDescriptorsCount(
-        ResourceViewType view_type, DescriptorVisibility visibility) const
+    [[nodiscard]] virtual auto GetAllocatedDescriptorsCount(
+        ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
         = 0;
 
 protected:
@@ -297,9 +311,9 @@ protected:
     //! classes implementing this interface, which is the only one declared as
     //! a friend in DescriptorHandle.
     auto CreateDescriptorHandle(
-        IndexT index,
-        ResourceViewType view_type,
-        DescriptorVisibility visibility)
+        const IndexT index,
+        const ResourceViewType view_type,
+        const DescriptorVisibility visibility)
     {
         return DescriptorHandle { this, index, view_type, visibility };
     }
