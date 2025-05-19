@@ -70,6 +70,7 @@ target_sources(
     "Framebuffer.cpp"
     "Graphics.cpp"
     "Renderer.cpp"
+    "ResourceRegistry.cpp"
     "Sampler.cpp"
     "SamplerFeedbackTexture.cpp"
     "ShaderCompiler.cpp"
