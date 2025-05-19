@@ -7,6 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <ranges>
 
 using oxygen::graphics::ResourceRegistry;
 
@@ -21,56 +22,60 @@ ResourceRegistry::ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocato
 ResourceRegistry::~ResourceRegistry() noexcept
 {
     try {
-        // Note: we do not cleanup any of the native objects corresponding to the
-        // resources or their views. We do however have to release the descriptors
-        // for views in the cache that were not unregistered before the registry is
-        // destroyed. This may indicate bad resource management in the client code,
-        // or that the renderer is shutting down and some permanent resources are
-        // still in the registry. In any case, we must leave the allocator in a
-        // clean state.
+        LOG_SCOPE_FUNCTION(INFO);
+
+        // Note: we don't clean up any of the native objects corresponding to
+        // the resources or their views. We do, however, have to release the
+        // descriptors for views in the cache that were not unregistered before
+        // the registry is destroyed. This may indicate bad resource management
+        // in the client code, or that the renderer is shutting down and some
+        // permanent resources are still in the registry. In any case, we must
+        // leave the allocator in a clean state.
 
         std::lock_guard lock(registry_mutex_);
 
-        size_t resource_count = resources_.size();
+        const size_t resource_count = resources_.size();
         if (resource_count == 0) {
-            DLOG_F(INFO, "Resource registry destroyed.");
             return;
         }
 
-        DLOG_F(INFO, "Registry destroyed with {} resource{} still registered",
+        DLOG_F(INFO, "{} resource{} still registered",
             resource_count, resource_count == 1 ? "" : "s");
         {
-            LOG_SCOPE_FUNCTION(INFO);
             for (auto& [resource, entry] : resources_) {
                 auto view_count = entry.descriptors.size();
-                DLOG_F(INFO, "Resource `{}` with {} view{}",
+                DLOG_F(INFO, "resource `{}` with {} view{}",
                     nostd::to_string(resource), view_count, view_count == 1 ? "" : "s");
                 if (view_count > 0) {
-                    LOG_SCOPE_F(4, "Releasing descriptors");
-                    for (auto& [index, view_entry] : entry.descriptors) {
-                        if (view_entry.descriptor.IsValid()) {
-                            view_entry.descriptor.Release();
+                    LOG_SCOPE_F(4, "releasing resource descriptors");
+                    for (auto& [_, descriptor] : entry.descriptors | std::views::values) {
+                        if (descriptor.IsValid()) {
+                            descriptor.Release();
                         }
                     }
                 }
-                // Release the strong reference to the resource
+                // Release the reference to the resource
                 entry.resource.reset();
             }
         }
-        DLOG_F(INFO, "Resource registry destroyed.");
 
         // The rest will be done automatically when the different collections are
         // destroyed.
-    } catch (...) {
+    } catch (...) { // NOLINT(bugprone-empty-catch)
         // Swallow all exceptions to guarantee noexcept
     }
 }
 
 void ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
 {
+    DCHECK_NOTNULL_F(resource, "Resource must not be null");
+
     std::lock_guard lock(registry_mutex_);
 
-    NativeObject key { resource.get(), type_id };
+    LOG_SCOPE_F(INFO, "Register resource");
+    DLOG_F(3, "resource: {}, type id: {}", fmt::ptr(resource.get()), nostd::to_string(type_id));
+
+    const NativeObject key { resource.get(), type_id };
     ResourceEntry entry;
     entry.resource = std::move(resource);
     resources_[key] = std::move(entry);
@@ -83,33 +88,46 @@ auto ResourceRegistry::RegisterView(
     ResourceViewType view_type, DescriptorVisibility visibility)
     -> NativeObject
 {
+    DCHECK_F(view_description_for_cache.has_value(), "View description must be valid");
+    DCHECK_F(key_hash != 0, "Key hash must be valid");
+
     std::lock_guard lock(registry_mutex_);
 
+    LOG_SCOPE_F(INFO, "Register view");
+    DLOG_F(INFO, "resource: {}", nostd::to_string(resource));
+    DLOG_F(INFO, "view: {}", nostd::to_string(view));
+    DLOG_F(3, "view type: {}, visibility: {}", nostd::to_string(view_type), nostd::to_string(visibility));
+    DLOG_F(3, "key hash: {}", key_hash);
+
+    if (!resource.IsValid()) {
+        LOG_F(ERROR, "invalid resource used for view registration");
+        return {};
+    }
+    if (!view.IsValid()) {
+        LOG_F(ERROR, "invalid view used for view registration");
+        return {};
+    }
+
     // Check if resource exists
-    auto resource_it = resources_.find(resource);
+    const auto resource_it = resources_.find(resource);
     if (resource_it == resources_.end()) {
-        LOG_F(WARNING, "Attempt to register view for unregistered resource: {}",
-            nostd::to_string(resource));
+        LOG_F(WARNING, "resource not found -> failed");
         return {};
     }
 
     // Check view cache first
-    CacheKey cache_key { resource, key_hash };
-    auto cache_it = view_cache_.find(cache_key);
-
-    // BUG: this should be an error if the view is already registered.
-    if (cache_it != view_cache_.end()) {
-        DLOG_F(4, "View cache hit for resource {} (desc hash {})",
-            nostd::to_string(resource), key_hash);
-        return cache_it->second.view_object;
+    const CacheKey cache_key { .resource = resource, .hash = key_hash };
+    if (const auto cache_it = view_cache_.find(cache_key); cache_it != view_cache_.end()) {
+        DLOG_F(4, "cache hit ({})-> ", nostd::to_string(cache_it->second.view_object));
+        DLOG_F(4, "view already registered, "
+                  "use UpdateView() to update while keeping the same descriptor");
+        throw std::runtime_error("View already registered");
     }
 
     // Allocate a descriptor
     DescriptorHandle descriptor = descriptor_allocator_->Allocate(view_type, visibility);
-
     if (!descriptor.IsValid()) {
-        LOG_F(ERROR, "Failed to allocate descriptor for view type: {} (resource: {})",
-            nostd::to_string(view_type), nostd::to_string(resource));
+        LOG_F(ERROR, "failed: no descriptor available");
         return {};
     }
 
@@ -118,9 +136,11 @@ auto ResourceRegistry::RegisterView(
     auto& descriptors = resource_it->second.descriptors;
     auto [desc_it, inserted] = descriptors.emplace(
         index,
-        ResourceEntry::ViewEntry { view, std::move(descriptor) });
-    DLOG_F(4, "Descriptor {} {} for resource {}",
-        index, inserted ? "inserted" : "reused", nostd::to_string(resource));
+        ResourceEntry::ViewEntry {
+            .view_object = view,
+            .descriptor = std::move(descriptor) });
+    DLOG_F(4, "updated descriptors map with index {} ({})",
+        index, inserted ? "inserted" : "reused");
     descriptor_to_resource_[index] = resource;
 
     // Store in view cache
@@ -129,37 +149,35 @@ auto ResourceRegistry::RegisterView(
         .view_description = std::move(view_description_for_cache) // Store the original description
     };
     view_cache_[cache_key] = std::move(cache_entry);
-    DLOG_F(4, "View cached for resource {} (desc hash {})",
-        nostd::to_string(resource), key_hash);
+    DLOG_F(4, "updated cache");
 
     // Return the view
-    DLOG_F(3, "RegisterView: returning view {} for resource {}",
+    DLOG_F(3, "returning view {}",
         nostd::to_string(view), nostd::to_string(resource));
     return view;
 }
 
-auto ResourceRegistry::Contains(NativeObject resource) const -> bool
+auto ResourceRegistry::Contains(const NativeObject& resource) const -> bool
 {
     std::lock_guard lock(registry_mutex_);
     return resources_.contains(resource);
 }
 
-auto ResourceRegistry::Contains(NativeObject resource, size_t key_hash) const -> bool
+auto ResourceRegistry::Contains(const NativeObject& resource, const size_t key_hash) const -> bool
 {
     std::lock_guard lock(registry_mutex_);
 
-    CacheKey cache_key { resource, key_hash };
-    return view_cache_.find(cache_key) != view_cache_.end();
+    const CacheKey cache_key { .resource = resource, .hash = key_hash };
+    return view_cache_.contains(cache_key);
 }
 
-auto ResourceRegistry::Find(NativeObject resource, size_t key_hash) const -> NativeObject
+auto ResourceRegistry::Find(const NativeObject& resource, const size_t key_hash) const -> NativeObject
 {
     std::lock_guard lock(registry_mutex_);
 
-    CacheKey cache_key { resource, key_hash };
-    auto it = view_cache_.find(cache_key);
+    const CacheKey cache_key { .resource = resource, .hash = key_hash };
 
-    if (it != view_cache_.end()) {
+    if (const auto it = view_cache_.find(cache_key); it != view_cache_.end()) {
         return it->second.view_object;
     }
 
@@ -174,11 +192,9 @@ auto ResourceRegistry::Contains(const DescriptorHandle& descriptor) const -> Nat
         return {}; // Return invalid NativeObject
     }
 
-    uint32_t index = descriptor.GetIndex();
-    auto it = descriptor_to_resource_.find(index);
-
+    const uint32_t index = descriptor.GetIndex();
     // If we have a mapping for this descriptor, return the resource
-    if (it != descriptor_to_resource_.end()) {
+    if (const auto it = descriptor_to_resource_.find(index); it != descriptor_to_resource_.end()) {
         return it->second;
     }
 
@@ -193,15 +209,15 @@ auto ResourceRegistry::Find(const DescriptorHandle& descriptor) const -> NativeO
         return { 0ULL, kInvalidTypeId }; // Return invalid NativeObject
     }
 
-    uint32_t index = descriptor.GetIndex();
-    auto resource_it = descriptor_to_resource_.find(index);
+    const uint32_t index = descriptor.GetIndex();
+    const auto resource_it = descriptor_to_resource_.find(index);
 
     if (resource_it == descriptor_to_resource_.end()) {
         return { 0ULL, kInvalidTypeId }; // Return invalid NativeObject
     }
 
     const NativeObject& resource = resource_it->second;
-    auto it = resources_.find(resource);
+    const auto it = resources_.find(resource);
     if (it == resources_.end()) {
         // This shouldn't happen - inconsistent state
         LOG_F(ERROR, "Inconsistent state: descriptor points to non-existent resource");
@@ -210,7 +226,7 @@ auto ResourceRegistry::Find(const DescriptorHandle& descriptor) const -> NativeO
 
     // Look up the view entry
     auto& descriptors = it->second.descriptors;
-    auto view_it = descriptors.find(index);
+    const auto view_it = descriptors.find(index);
 
     if (view_it == descriptors.end()) {
         // Again, shouldn't happen
@@ -229,19 +245,19 @@ void ResourceRegistry::UnRegisterView(const NativeObject& resource, const Native
 
 void ResourceRegistry::UnRegisterViewNoLock(const NativeObject& resource, const NativeObject& view)
 {
-    LOG_SCOPE_F(3, "Unregister view");
+    LOG_SCOPE_F(3, "UnRegister view");
     DLOG_F(3, "resource: {}", nostd::to_string(resource));
     DLOG_F(3, "view: {}", nostd::to_string(view));
 
-    auto it = resources_.find(resource);
+    const auto it = resources_.find(resource);
     if (it == resources_.end()) {
         DLOG_F(3, "resource not found -> throw");
-        throw std::runtime_error("Resource not found while unregistering view");
+        throw std::runtime_error("resource not found while un-registering view");
     }
 
     auto& descriptors = it->second.descriptors;
     // Remove the descriptor with the matching view_object (only one possible)
-    auto desc_it = std::ranges::find_if(descriptors, [&](const auto& pair) {
+    const auto desc_it = std::ranges::find_if(descriptors, [&](const auto& pair) {
         return pair.second.view_object == view;
     });
     if (desc_it == descriptors.end()) {
@@ -256,17 +272,17 @@ void ResourceRegistry::UnRegisterViewNoLock(const NativeObject& resource, const 
 
     DLOG_F(4, "remove cache entry");
     // Use std::erase_if to efficiently find and remove the matching cache entry
-    size_t erased_count = std::erase_if(view_cache_, [&resource, &view](const auto& cache_pair) {
+    const size_t erased_count = std::erase_if(view_cache_, [&resource, &view](const auto& cache_pair) {
         return cache_pair.first.resource == resource && cache_pair.second.view_object == view;
     });
     DCHECK_EQ_F(erased_count, 1, "Cache entry not found for resource {} and view {}",
-         nostd::to_string(resource), nostd::to_string(view));
+        nostd::to_string(resource), nostd::to_string(view));
 }
 
 void ResourceRegistry::UnRegisterResource(const NativeObject& resource)
 {
     std::lock_guard lock(registry_mutex_);
-    auto it = resources_.find(resource);
+    const auto it = resources_.find(resource);
     if (it == resources_.end()) {
         DLOG_F(3, "UnRegisterResource: resource {} not found (already unregistered)", nostd::to_string(resource));
         return;
@@ -279,32 +295,33 @@ void ResourceRegistry::UnRegisterResource(const NativeObject& resource)
 
 void ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
 {
-    LOG_SCOPE_F(2, fmt::format("Unregister all views for resource `{}`", nostd::to_string(resource)).c_str());
     std::lock_guard lock(registry_mutex_);
+
+    LOG_SCOPE_F(2, "UnRegisterResourceViews");
+    DLOG_F(2, "resource {}", nostd::to_string(resource));
     UnRegisterResourceViewsNoLock(resource);
 }
 
 // Private helper to avoid lock duplication
 void ResourceRegistry::UnRegisterResourceViewsNoLock(const NativeObject& resource)
 {
-    LOG_SCOPE_F(3, "Unregister all views for resource");
+    LOG_SCOPE_F(3, "UnRegister all views for resource");
     DLOG_F(3, "resource: {}", nostd::to_string(resource));
 
-    auto it = resources_.find(resource);
+    const auto it = resources_.find(resource);
     if (it == resources_.end()) {
-        DLOG_F(3, "resource not found -> nothing to unregister");
+        DLOG_F(3, "resource not found -> nothing to un-register");
         return;
     }
 
-    auto& resource_entry = it->second;
-    auto& descriptors = resource_entry.descriptors;
+    auto& [_, descriptors] = it->second;
     if (descriptors.empty()) {
-        DLOG_F(4, "no views to unregister");
+        DLOG_F(4, "no views to un-register");
         return;
     }
 
-    size_t view_count = descriptors.size();
-    DLOG_F(4, "{} view{} to unregister", view_count, view_count == 1 ? "" : "s");
+    const size_t view_count = descriptors.size();
+    DLOG_F(4, "{} view{} to un-register", view_count, view_count == 1 ? "" : "s");
 
     // Release all descriptors and remove from descriptor_to_resource_ map
     for (auto& [index, view_entry] : descriptors) {

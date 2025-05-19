@@ -14,7 +14,6 @@
 #include <utility>
 
 #include <Oxygen/Base/Hash.h>
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -75,7 +74,7 @@ public:
     /*!
      The registry will keep a strong reference to the resource until it is
      unregistered. Therefore, the recommended lifetime management process is to
-     un-register the resource when it is no longer needed, which will also
+     unregister the resource when it is no longer necessary, which will also
      release all views associated with it. Only then can the resource be really
      released.
     */
@@ -152,17 +151,18 @@ public:
              during the view registration.
     */
     template <ResourceWithViews Resource>
-    void RegisterView(Resource& resource, NativeObject view,
-        const typename Resource::ViewDescriptionT& desc)
+    auto RegisterView(Resource& resource, NativeObject view,
+        const typename Resource::ViewDescriptionT& desc) -> bool
     {
         auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-        RegisterView(
+        return RegisterView(
             NativeObject { &resource, Resource::ClassTypeId() },
             std::move(view),
             std::any(desc),
             key,
             desc.view_type,
-            desc.visibility);
+            desc.visibility)
+            .IsValid();
     }
 
     [[nodiscard]] OXYGEN_GFX_API auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
@@ -232,10 +232,10 @@ private:
     void UnRegisterViewNoLock(const NativeObject& resource, const NativeObject& view);
     void UnRegisterResourceViewsNoLock(const NativeObject& resource);
 
-    [[nodiscard]] OXYGEN_GFX_API auto Contains(NativeObject resource) const -> bool;
-    [[nodiscard]] OXYGEN_GFX_API auto Contains(NativeObject resource, size_t key) const -> bool;
+    [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource) const -> bool;
+    [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource, size_t key_hash) const -> bool;
 
-    [[nodiscard]] OXYGEN_GFX_API auto Find(NativeObject resource, size_t key) const -> NativeObject;
+    [[nodiscard]] OXYGEN_GFX_API auto Find(const NativeObject& resource, size_t key_hash) const -> NativeObject;
 
     // Core dependencies
     std::shared_ptr<DescriptorAllocator> descriptor_allocator_;
@@ -270,7 +270,7 @@ private:
         NativeObject resource; // The resource object
         std::size_t hash; // Hash of the view description
 
-        bool operator==(const CacheKey& other) const
+        auto operator==(const CacheKey& other) const -> bool
         {
             return hash == other.hash && resource == other.resource;
         }
@@ -278,7 +278,7 @@ private:
 
     //! A custom hash functor for CacheKey.
     struct CacheKeyHasher {
-        std::size_t operator()(const CacheKey& k) const noexcept
+        auto operator()(const CacheKey& k) const noexcept -> std::size_t
         {
             std::size_t result = std::hash<NativeObject> {}(k.resource);
             oxygen::HashCombine(result, k.hash);
@@ -292,7 +292,7 @@ private:
         std::any view_description; //!< The original view description.
     };
 
-    //! A unified view cache for all resource and view types.
+    //! A unified view cache for all resources and view types.
     std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
 };
 
