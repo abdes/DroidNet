@@ -62,17 +62,14 @@ concept ResourceWithViews = SupportedResource<T>
 //! Registry for graphics resources and their views, supporting bindless rendering.
 class ResourceRegistry {
 public:
-    explicit ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocator)
-        : descriptor_allocator_(std::move(allocator))
-    {
-    }
+    OXYGEN_GFX_API explicit ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocator);
 
-    ~ResourceRegistry()
-    {
-    }
+    OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
 
     OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
     OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
+
+    // TODO: provide API to update a view registration with a new native object, keeping the same descriptor handle.
 
     //! Register a graphics resource, such as textures and buffers.
     /*!
@@ -90,6 +87,29 @@ public:
             Resource::ClassTypeId());
     }
 
+    //! Register a view for a graphics resource, such as textures and buffers,
+    //! making it available for bindless rendering and for cached resource
+    //! lookups.
+    /*!
+     Use this method when you are certain that the view description is unique
+     and does not conflict with any existing views. If no cached view is found,
+     a new view and a corresponding descriptor handle will be created. The view
+     is then registered for bindless rendering and cached for future use. If a
+     view with a compatible descriptor is already registered for the resource,
+     this method will do nothing and throw and exception to prevent accidental
+     overwriting of existing views.
+
+     \note This method is thread-safe.
+
+     \param resource The resource to register the view for. Must be already
+            registered in the registry.
+     \param desc The view description, which must be hashable and comparable.
+     \return A handle to the native view, newly created or from the cache.
+
+     \throws std::runtime_error if the resource is not registered, a view with a
+             compatible descriptor exists in the cache, or an error occurs
+             during the view creation or registration.
+    */
     template <ResourceWithViews Resource>
     auto RegisterView(
         Resource& resource,
@@ -107,16 +127,54 @@ public:
             desc.visibility);
     }
 
-    OXYGEN_GFX_API auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
+    //! Register an already created view for a graphics resource, such as
+    //! textures and buffers, making it available for bindless rendering and for
+    //! cached resource lookups.
+    /*!
+     Use this method when complete control over the view creation is needed. The
+     view description is still required to be unique and not conflict with any
+     cached views. If no cached view is found, a corresponding descriptor handle
+     will be created. The view is then registered for bindless rendering and
+     cached for future use. If a view with a compatible descriptor is already
+     registered for the resource, this method will do nothing and throw and
+     exception to prevent accidental overwriting of existing views.
+
+     \note This method is thread-safe.
+
+     \param resource The resource to register the view for. Must be already
+            registered in the registry.
+     \param view The native view object to register.
+     \param desc The view description, which must be hashable and comparable.
+     \return A handle to the native view, newly created or from the cache.
+
+     \throws std::runtime_error if the resource is not registered, a view with a
+             compatible descriptor exists in the cache, or an error occurs
+             during the view registration.
+    */
+    template <ResourceWithViews Resource>
+    void RegisterView(Resource& resource, NativeObject view,
+        const typename Resource::ViewDescriptionT& desc)
+    {
+        auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+        RegisterView(
+            NativeObject { &resource, Resource::ClassTypeId() },
+            std::move(view),
+            std::any(desc),
+            key,
+            desc.view_type,
+            desc.visibility);
+    }
+
+    [[nodiscard]] OXYGEN_GFX_API auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
 
     template <ResourceWithViews Resource>
-    auto Contains(const Resource& resource) const -> bool
+    [[nodiscard]] auto Contains(const Resource& resource) const -> bool
     {
         return Contains(NativeObject(&resource, Resource::ClassTypeId()));
     }
 
     template <ResourceWithViews Resource>
-    auto Contains(
+    [[nodiscard]] auto Contains(
         const Resource& resource,
         const typename Resource::ViewDescriptionT& desc) const -> bool
     {
@@ -125,10 +183,10 @@ public:
     }
 
     //! Get native view for a descriptor
-    OXYGEN_GFX_API auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
+    [[nodiscard]] OXYGEN_GFX_API auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
 
     template <ResourceWithViews Resource>
-    auto Find(
+    [[nodiscard]] auto Find(
         const Resource& resource,
         const typename Resource::ViewDescriptionT& desc) const
         -> NativeObject
@@ -138,13 +196,23 @@ public:
     }
 
     template <SupportedResource Resource>
-    void UnRegister(const Resource& resource)
+    void UnRegisterView(const Resource& resource, const NativeObject& view)
     {
-        UnRegister(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+        UnRegisterView(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() }, view);
+    }
+
+    template <SupportedResource Resource>
+    void UnRegisterResource(const Resource& resource)
+    {
+        UnRegisterResource(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
     }
 
     //! Release all views for a resource
-    OXYGEN_GFX_API void UnRegisterViews(const NativeObject& resource);
+    template <SupportedResource Resource>
+    void UnRegisterViews(const Resource& resource)
+    {
+        UnRegisterResourceViews(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+    }
 
 private:
     OXYGEN_GFX_API void Register(std::shared_ptr<void> resource, TypeId type_id);
@@ -156,13 +224,18 @@ private:
         ResourceViewType view_type, DescriptorVisibility visibility)
         -> NativeObject;
 
-    OXYGEN_GFX_API void UnRegister(const NativeObject& resource);
-    OXYGEN_GFX_API void UnRegisterViewsInternal(const NativeObject& resource);
+    OXYGEN_GFX_API void UnRegisterView(const NativeObject& resource, const NativeObject& view);
 
-    OXYGEN_GFX_API auto Contains(NativeObject resource) const -> bool;
-    OXYGEN_GFX_API auto Contains(NativeObject resource, size_t key) const -> bool;
+    OXYGEN_GFX_API void UnRegisterResource(const NativeObject& resource);
+    OXYGEN_GFX_API void UnRegisterResourceViews(const NativeObject& resource);
 
-    OXYGEN_GFX_API auto Find(NativeObject resource, size_t key) const -> NativeObject;
+    void UnRegisterViewNoLock(const NativeObject& resource, const NativeObject& view);
+    void UnRegisterResourceViewsNoLock(const NativeObject& resource);
+
+    [[nodiscard]] OXYGEN_GFX_API auto Contains(NativeObject resource) const -> bool;
+    [[nodiscard]] OXYGEN_GFX_API auto Contains(NativeObject resource, size_t key) const -> bool;
+
+    [[nodiscard]] OXYGEN_GFX_API auto Find(NativeObject resource, size_t key) const -> NativeObject;
 
     // Core dependencies
     std::shared_ptr<DescriptorAllocator> descriptor_allocator_;

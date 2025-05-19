@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License: BSD-3-Clause
+// SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
@@ -9,6 +9,62 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 
 using oxygen::graphics::ResourceRegistry;
+
+ResourceRegistry::ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocator)
+    : descriptor_allocator_(std::move(allocator))
+{
+    DCHECK_NOTNULL_F(descriptor_allocator_, "Descriptor allocator must not be null");
+
+    DLOG_F(INFO, "ResourceRegistry created.");
+}
+
+ResourceRegistry::~ResourceRegistry() noexcept
+{
+    try {
+        // Note: we do not cleanup any of the native objects corresponding to the
+        // resources or their views. We do however have to release the descriptors
+        // for views in the cache that were not unregistered before the registry is
+        // destroyed. This may indicate bad resource management in the client code,
+        // or that the renderer is shutting down and some permanent resources are
+        // still in the registry. In any case, we must leave the allocator in a
+        // clean state.
+
+        std::lock_guard lock(registry_mutex_);
+
+        size_t resource_count = resources_.size();
+        if (resource_count == 0) {
+            DLOG_F(INFO, "Resource registry destroyed.");
+            return;
+        }
+
+        DLOG_F(INFO, "Registry destroyed with {} resource{} still registered",
+            resource_count, resource_count == 1 ? "" : "s");
+        {
+            LOG_SCOPE_FUNCTION(INFO);
+            for (auto& [resource, entry] : resources_) {
+                auto view_count = entry.descriptors.size();
+                DLOG_F(INFO, "Resource `{}` with {} view{}",
+                    nostd::to_string(resource), view_count, view_count == 1 ? "" : "s");
+                if (view_count > 0) {
+                    LOG_SCOPE_F(4, "Releasing descriptors");
+                    for (auto& [index, view_entry] : entry.descriptors) {
+                        if (view_entry.descriptor.IsValid()) {
+                            view_entry.descriptor.Release();
+                        }
+                    }
+                }
+                // Release the strong reference to the resource
+                entry.resource.reset();
+            }
+        }
+        DLOG_F(INFO, "Resource registry destroyed.");
+
+        // The rest will be done automatically when the different collections are
+        // destroyed.
+    } catch (...) {
+        // Swallow all exceptions to guarantee noexcept
+    }
+}
 
 void ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
 {
@@ -33,7 +89,7 @@ auto ResourceRegistry::RegisterView(
     auto resource_it = resources_.find(resource);
     if (resource_it == resources_.end()) {
         LOG_F(WARNING, "Attempt to register view for unregistered resource: {}",
-             nostd::to_string(resource));
+            nostd::to_string(resource));
         return {};
     }
 
@@ -41,6 +97,7 @@ auto ResourceRegistry::RegisterView(
     CacheKey cache_key { resource, key_hash };
     auto cache_it = view_cache_.find(cache_key);
 
+    // BUG: this should be an error if the view is already registered.
     if (cache_it != view_cache_.end()) {
         DLOG_F(4, "View cache hit for resource {} (desc hash {})",
             nostd::to_string(resource), key_hash);
@@ -77,7 +134,7 @@ auto ResourceRegistry::RegisterView(
 
     // Return the view
     DLOG_F(3, "RegisterView: returning view {} for resource {}",
-         nostd::to_string(view), nostd::to_string(resource));
+        nostd::to_string(view), nostd::to_string(resource));
     return view;
 }
 
@@ -164,70 +221,105 @@ auto ResourceRegistry::Find(const DescriptorHandle& descriptor) const -> NativeO
     return view_it->second.view_object;
 }
 
-void ResourceRegistry::UnRegister(const NativeObject& resource)
+void ResourceRegistry::UnRegisterView(const NativeObject& resource, const NativeObject& view)
 {
     std::lock_guard lock(registry_mutex_);
+    UnRegisterViewNoLock(resource, view);
+}
+
+void ResourceRegistry::UnRegisterViewNoLock(const NativeObject& resource, const NativeObject& view)
+{
+    LOG_SCOPE_F(3, "Unregister view");
+    DLOG_F(3, "resource: {}", nostd::to_string(resource));
+    DLOG_F(3, "view: {}", nostd::to_string(view));
 
     auto it = resources_.find(resource);
     if (it == resources_.end()) {
-        DLOG_F(3, "UnRegister: resource {} not found (already unregistered)",
-             nostd::to_string(resource));
-        return; // Already unregistered
+        DLOG_F(3, "resource not found -> throw");
+        throw std::runtime_error("Resource not found while unregistering view");
     }
 
-    DLOG_F(2, "UnRegister: removing resource {} and all its views",
-        nostd::to_string(resource));
-    // First remove all views associated with this resource
-    UnRegisterViewsInternal(resource);
+    auto& descriptors = it->second.descriptors;
+    // Remove the descriptor with the matching view_object (only one possible)
+    auto desc_it = std::ranges::find_if(descriptors, [&](const auto& pair) {
+        return pair.second.view_object == view;
+    });
+    if (desc_it == descriptors.end()) {
+        DLOG_F(3, "view not found, already unregistered?");
+        return; // Nothing to do
+    }
 
-    // Now remove the resource itself
-    resources_.erase(it);
-    DLOG_F(3, "UnRegister: resource {} removed", nostd::to_string(resource));
+    DLOG_F(4, "release view descriptor handle ({})", desc_it->first);
+    descriptor_to_resource_.erase(desc_it->first);
+    desc_it->second.descriptor.Release();
+    descriptors.erase(desc_it);
+
+    DLOG_F(4, "remove cache entry");
+    // Use std::erase_if to efficiently find and remove the matching cache entry
+    size_t erased_count = std::erase_if(view_cache_, [&resource, &view](const auto& cache_pair) {
+        return cache_pair.first.resource == resource && cache_pair.second.view_object == view;
+    });
+    DCHECK_EQ_F(erased_count, 1, "Cache entry not found for resource {} and view {}",
+         nostd::to_string(resource), nostd::to_string(view));
 }
 
-void ResourceRegistry::UnRegisterViews(const NativeObject& resource)
+void ResourceRegistry::UnRegisterResource(const NativeObject& resource)
 {
     std::lock_guard lock(registry_mutex_);
-    DLOG_F(2, "UnRegisterViews: removing all views for resource {}",
-         nostd::to_string(resource));
-    UnRegisterViewsInternal(resource);
+    auto it = resources_.find(resource);
+    if (it == resources_.end()) {
+        DLOG_F(3, "UnRegisterResource: resource {} not found (already unregistered)", nostd::to_string(resource));
+        return;
+    }
+    DLOG_F(2, "UnRegisterResource: removing resource {} and all its views", nostd::to_string(resource));
+    UnRegisterResourceViewsNoLock(resource);
+    resources_.erase(it);
+    DLOG_F(3, "UnRegisterResource: resource {} removed", nostd::to_string(resource));
+}
+
+void ResourceRegistry::UnRegisterResourceViews(const NativeObject& resource)
+{
+    LOG_SCOPE_F(2, fmt::format("Unregister all views for resource `{}`", nostd::to_string(resource)).c_str());
+    std::lock_guard lock(registry_mutex_);
+    UnRegisterResourceViewsNoLock(resource);
 }
 
 // Private helper to avoid lock duplication
-void ResourceRegistry::UnRegisterViewsInternal(const NativeObject& resource)
+void ResourceRegistry::UnRegisterResourceViewsNoLock(const NativeObject& resource)
 {
+    LOG_SCOPE_F(3, "Unregister all views for resource");
+    DLOG_F(3, "resource: {}", nostd::to_string(resource));
+
     auto it = resources_.find(resource);
     if (it == resources_.end()) {
-        DLOG_F(3, "UnRegisterViewsInternal: resource {} not found",
-            nostd::to_string(resource));
+        DLOG_F(3, "resource not found -> nothing to unregister");
         return;
     }
 
-    // Get descriptors to release
-    auto& descriptors = it->second.descriptors;
-
-    // Release all descriptors
-    for (auto& [index, view_entry] : descriptors) {
-        DLOG_F(4, "Releasing descriptor {} for resource {}", index,
-             nostd::to_string(resource));
-        descriptor_to_resource_.erase(index);
-        view_entry.descriptor.Release();
+    auto& resource_entry = it->second;
+    auto& descriptors = resource_entry.descriptors;
+    if (descriptors.empty()) {
+        DLOG_F(4, "no views to unregister");
+        return;
     }
 
-    // Clear the descriptors
-    descriptors.clear();
+    size_t view_count = descriptors.size();
+    DLOG_F(4, "{} view{} to unregister", view_count, view_count == 1 ? "" : "s");
 
-    // Remove all view cache entries for this resource
-    auto cache_it = view_cache_.begin();
-    while (cache_it != view_cache_.end()) {
-        if (cache_it->first.resource == resource) {
-            DLOG_F(4, "Removing view cache entry for resource {} (desc hash {})",
-                nostd::to_string(resource), cache_it->first.hash);
-            cache_it = view_cache_.erase(cache_it);
-        } else {
-            ++cache_it;
+    // Release all descriptors and remove from descriptor_to_resource_ map
+    for (auto& [index, view_entry] : descriptors) {
+        DLOG_F(4, "view for index {}", view_entry.descriptor.GetIndex());
+        if (view_entry.descriptor.IsValid()) {
+            view_entry.descriptor.Release();
+            descriptor_to_resource_.erase(index);
         }
     }
-    DLOG_F(3, "UnRegisterViewsInternal: all views removed for resource {}",
-        nostd::to_string(resource));
+
+    // Remove all relevant entries from view_cache in a single pass
+    std::erase_if(view_cache_, [&resource](const auto& cache_entry) {
+        return cache_entry.first.resource == resource;
+    });
+
+    // Clear descriptors map
+    descriptors.clear();
 }
