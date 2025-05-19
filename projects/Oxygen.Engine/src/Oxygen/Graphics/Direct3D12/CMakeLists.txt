@@ -101,6 +101,13 @@ target_sources(
     "Shaders/EngineShaders.h"
     "Shaders/ShaderCompiler.cpp"
     "Shaders/ShaderCompiler.h"
+    "Bindless/D3D12HeapAllocationStrategy.h"
+    "Bindless/D3D12HeapAllocationStrategy.cpp"
+    "Bindless/DescriptorHeapSegment.h"
+    "Bindless/DescriptorHeapSegment.cpp"
+    "Bindless/DescriptorAllocator.h"
+    "Bindless/DescriptorAllocator.cpp"
+
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -154,8 +161,7 @@ add_custom_command(
   TARGET ${META_MODULE_TARGET}
   POST_BUILD
   COMMAND
-    ${CMAKE_COMMAND} -E copy_if_different
-    "${dxc_bin_path}/dxcompiler.dll"
+    ${CMAKE_COMMAND} -E copy_if_different "${dxc_bin_path}/dxcompiler.dll"
     "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
 )
 
@@ -222,9 +228,9 @@ endforeach()
 # Tests
 # ------------------------------------------------------------------------------
 
-#if(OXYGEN_BUILD_TESTS)
-#  add_subdirectory("Test")
-#endif()
+if(OXYGEN_BUILD_TESTS)
+ add_subdirectory("Test")
+endif()
 
 # ==============================================================================
 # Deployment instructions
