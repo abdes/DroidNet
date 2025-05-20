@@ -41,7 +41,7 @@ namespace d3d12 {
         [[nodiscard]] auto GetUsage() const noexcept -> BufferUsage override;
         [[nodiscard]] auto GetMemoryType() const noexcept -> BufferMemory override;
         [[nodiscard]] auto IsMapped() const noexcept -> bool override;
-        [[nodiscard]] auto GetDesc() const noexcept -> BufferDesc override;
+        [[nodiscard]] auto GetDescriptor() const noexcept -> BufferDesc override;
         [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
         void SetName(std::string_view name) noexcept override;
 

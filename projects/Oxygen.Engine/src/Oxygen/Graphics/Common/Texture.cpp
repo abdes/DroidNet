@@ -93,3 +93,7 @@ auto TextureSubResourceSet::IsEntireTexture(const TextureDesc& desc) const -> bo
         return true;
     }
 }
+
+oxygen::graphics::Texture::~Texture()
+{
+}

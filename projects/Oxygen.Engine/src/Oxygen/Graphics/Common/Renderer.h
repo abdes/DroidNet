@@ -152,11 +152,6 @@ namespace graphics {
             return per_frame_resource_manager_;
         }
 
-        [[nodiscard]] auto GetTextureViewsCache() const -> ViewCache<Texture, TextureBindingKey>&
-        {
-            return texture_views_cache_;
-        }
-
         [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTexture(graphics::TextureDesc desc) const
             -> std::shared_ptr<graphics::Texture>
             = 0;
@@ -207,7 +202,6 @@ namespace graphics {
         uint32_t current_frame_index_ { 0 };
 
         mutable detail::PerFrameResourceManager per_frame_resource_manager_;
-        mutable DefaultViewCache<Texture, TextureBindingKey> texture_views_cache_;
     };
 
 } // namespace graphics

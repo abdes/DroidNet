@@ -47,7 +47,6 @@ m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
 m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
 m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
 m_gtest_program(BufferStateTracking SOURCES "BufferStateTracking_test.cpp")
-m_gtest_program(ViewCache SOURCES "ViewCache_test.cpp")
 m_gtest_program(DescriptorHandle SOURCES "Bindless/DescriptorHandle_test.cpp")
 m_gtest_program(IndexRange SOURCES "Bindless/IndexRange_test.cpp")
 m_gtest_program(

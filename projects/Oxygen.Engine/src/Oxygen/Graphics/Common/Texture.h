@@ -19,7 +19,7 @@
 #include <Oxygen/Graphics/Common/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/ViewCache.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 namespace oxygen::graphics {
 
@@ -175,6 +175,17 @@ struct TextureSubResourceSet {
     //! Number of array slices to include (1 means just the base slice).
     ArraySlice num_array_slices = 1;
 
+    //! Returns a TextureSubResourceSet that represents the entire texture.
+    static constexpr auto EntireTexture() -> TextureSubResourceSet
+    {
+        return {
+            .base_mip_level = 0,
+            .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
+            .base_array_slice = 0,
+            .num_array_slices = TextureSubResourceSet::kAllArraySlices
+        };
+    }
+
     //! Resolves any special values to concrete ranges based on the texture
     //! description.
     /*!
@@ -207,48 +218,42 @@ struct TextureSubResourceSet {
 
 //! Describes a texture binding used to manage SRV/VkImageView per texture.
 /*!
- TextureBindingKey extends TextureSubResourceSet with additional information
+ TextureViewKey contains a TextureSubResourceSet with additional information
  needed to create appropriate texture view objects in different graphics APIs.
 
  This struct acts as a key for caching texture views, allowing the engine to
  reuse existing views when the same texture is bound with identical parameters
  multiple times, improving performance and reducing resource overhead.
 */
-struct TextureBindingKey : TextureSubResourceSet {
+struct TextureViewKey {
+    //! The binding type (SRV, UAV, etc.).
+    ResourceViewType binding_type { ResourceViewType::kNone };
+
+    //! The sub-resource set defining which parts of the texture are accessed
+    TextureSubResourceSet sub_resources {};
+
     //! Format to use when creating the view (can differ from the texture's
     //! native format).
     Format format { Format::kUnknown };
+
+    //! Dimension of the view (can differ from texture's dimension)
+    TextureDimension dimension { TextureDimension::kUnknown };
 
     //! Indicates if this is a read-only depth-stencil view.
     //! Used in APIs like D3D12 that have separate read-only DSV states.
     bool is_read_only_dsv { false };
 
-    //! Dimension of the view (can differ from texture's dimension)
-    TextureDimension dimension { TextureDimension::kUnknown };
-
-    TextureBindingKey() = default;
-
-    TextureBindingKey(
-        const TextureSubResourceSet& b,
-        const Format _format,
-        const TextureDimension _dimension = TextureDimension::kUnknown,
-        const bool _is_read_only_dsv = false)
-        : TextureSubResourceSet(b)
-        , format(_format)
-        , is_read_only_dsv(_is_read_only_dsv)
-        , dimension(_dimension)
+    auto operator==(const TextureViewKey& other) const -> bool
     {
-    }
-
-    auto operator==(const TextureBindingKey& other) const -> bool
-    {
-        return format == other.format
-            && static_cast<const TextureSubResourceSet&>(*this) == other
+        return binding_type == other.binding_type
+            && format == other.format
+            && sub_resources == other.sub_resources
             && is_read_only_dsv == other.is_read_only_dsv
             && dimension == other.dimension;
     }
 };
-}
+
+} // namespace oxygen::graphics
 
 //! Hash specialization for TextureSubResourceSet.
 /*!
@@ -271,48 +276,37 @@ struct std::hash<oxygen::graphics::TextureSubResourceSet> {
     }
 };
 
-//! Hash specialization for TextureBindingKey.
+//! Hash specialization for TextureViewKey.
 /*!
- Enables TextureBindingKey to be used as key in hash-based containers like
+ Enables TextureViewKey to be used as key in hash-based containers like
  std::unordered_map or std::unordered_set.
 
- Combines hashes of the TextureBindingKey format, its base TextureSubResourceSet
- (using its hash specialization), and the read-only DSV flag using XOR
- operations to produce a well-distributed hash value.
+ Combines hashes of all the TextureViewKey members using the HashCombine
+ function to generate a consistent, well-distributed hash value.
 */
 template <>
-struct std::hash<oxygen::graphics::TextureBindingKey> {
-    auto operator()(oxygen::graphics::TextureBindingKey const& s) const noexcept -> std::size_t
+struct std::hash<oxygen::graphics::TextureViewKey> {
+    auto operator()(oxygen::graphics::TextureViewKey const& s) const noexcept -> std::size_t
     {
-        return std::hash<oxygen::graphics::Format>()(s.format)
-            ^ std::hash<oxygen::graphics::TextureSubResourceSet>()(s)
-            ^ std::hash<bool>()(s.is_read_only_dsv);
+        size_t hash = std::hash<oxygen::graphics::TextureSubResourceSet>()(s.sub_resources);
+        oxygen::HashCombine(hash, s.binding_type);
+        oxygen::HashCombine(hash, s.format);
+        oxygen::HashCombine(hash, s.dimension);
+        oxygen::HashCombine(hash, s.is_read_only_dsv);
+        return hash;
     }
 };
 
 namespace oxygen::graphics {
+
 class Texture : public Composition, public Named, public std::enable_shared_from_this<Texture> {
 public:
-    //! Predefined constant representing all sub-resources in a texture
-    static constexpr TextureSubResourceSet kAllSubResources = {
-        .base_mip_level = 0,
-        .num_mip_levels = TextureSubResourceSet::kAllMipLevels,
-        .base_array_slice = 0,
-        .num_array_slices = TextureSubResourceSet::kAllArraySlices
-    };
-
-    explicit Texture(
-        std::string_view name,
-        ViewCache<Texture, TextureBindingKey>& view_cache)
-        : view_cache_(&view_cache)
+    explicit Texture(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
     }
 
-    ~Texture() override
-    {
-        view_cache_->RemoveAll(*this);
-    }
+    OXYGEN_GFX_API ~Texture() override;
 
     OXYGEN_MAKE_NON_COPYABLE(Texture)
     OXYGEN_DEFAULT_MOVABLE(Texture)
@@ -324,71 +318,31 @@ public:
     [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
 
     //! Gets a shader resource view for the texture.
-    [[nodiscard]] auto GetShaderResourceView(
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateShaderResourceView(
         Format format,
-        TextureSubResourceSet sub_resources,
-        TextureDimension dimension) const -> NativeObject
-    {
-        const TextureBindingKey key(sub_resources, format, dimension);
-        auto view = view_cache_->Find(*this, key);
-
-        if (!view.IsValid()) {
-            view = CreateShaderResourceView(format, dimension, sub_resources);
-            view_cache_->Store(this->shared_from_this(), key, view);
-        }
-
-        return view;
-    }
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
 
     //! Gets an unordered access view for the texture.
-    [[nodiscard]] auto GetUnorderedAccessView(
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateUnorderedAccessView(
         Format format,
-        TextureSubResourceSet sub_resources,
-        TextureDimension dimension) const -> NativeObject
-    {
-        const TextureBindingKey key(sub_resources, format, dimension);
-        auto view = view_cache_->Find(*this, key);
-
-        if (!view.IsValid()) {
-            view = CreateUnorderedAccessView(format, dimension, sub_resources);
-            view_cache_->Store(this->shared_from_this(), key, view);
-        }
-
-        return view;
-    }
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
 
     //! Gets a render target view for the texture.
-    [[nodiscard]] auto GetRenderTargetView(
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateRenderTargetView(
         Format format,
         TextureSubResourceSet sub_resources) const -> NativeObject
-    {
-        const TextureBindingKey key(sub_resources, format);
-        auto view = view_cache_->Find(*this, key);
-
-        if (!view.IsValid()) {
-            view = CreateRenderTargetView(format, sub_resources);
-            view_cache_->Store(this->shared_from_this(), key, view);
-        }
-
-        return view;
-    }
+        = 0;
 
     //! Gets a depth stencil view for the texture.
-    [[nodiscard]] auto GetDepthStencilView(
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateDepthStencilView(
         Format format,
         TextureSubResourceSet sub_resources,
         bool is_read_only) const -> NativeObject
-    {
-        const TextureBindingKey key(sub_resources, format, TextureDimension::kUnknown, is_read_only);
-        auto view = view_cache_->Find(*this, key);
-
-        if (!view.IsValid()) {
-            view = CreateDepthStencilView(format, sub_resources, is_read_only);
-            view_cache_->Store(this->shared_from_this(), key, view);
-        }
-
-        return view;
-    }
+        = 0;
 
     //! Gets the name of the texture.
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -401,38 +355,6 @@ public:
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
-
-protected:
-    //! Creates a shader resource view for the texture.
-    [[nodiscard]] virtual auto CreateShaderResourceView(
-        Format format,
-        TextureDimension dimension,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Creates an unordered access view for the texture.
-    [[nodiscard]] virtual auto CreateUnorderedAccessView(
-        Format format,
-        TextureDimension dimension,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Creates a render target view for the texture.
-    [[nodiscard]] virtual auto CreateRenderTargetView(
-        Format format,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Creates a depth stencil view for the texture.
-    [[nodiscard]] virtual auto CreateDepthStencilView(
-        Format format,
-        TextureSubResourceSet sub_resources,
-        bool is_read_only) const -> NativeObject
-        = 0;
-
-private:
-    // Single view cache for all view types
-    ViewCache<Texture, TextureBindingKey>* view_cache_ { nullptr };
 };
 
 } // namespace oxygen::graphics

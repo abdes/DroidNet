@@ -7,7 +7,6 @@
 #pragma once
 
 #include <Oxygen/Graphics/Common/Renderer.h>
-#include <Oxygen/Graphics/Common/ViewCache.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
