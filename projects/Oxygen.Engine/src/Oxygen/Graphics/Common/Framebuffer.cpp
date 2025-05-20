@@ -5,8 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/FrameBuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+
+using oxygen::graphics::CommandRecorder;
 
 using oxygen::graphics::FramebufferInfo;
+using oxygen::graphics::Framebuffer;
 
 FramebufferInfo::FramebufferInfo(const FramebufferDesc& desc)
 {
@@ -26,5 +31,22 @@ FramebufferInfo::FramebufferInfo(const FramebufferDesc& desc)
         const TextureDesc& texture_desc = desc.color_attachments[0].texture->GetDescriptor();
         sample_count_ = texture_desc.sample_count;
         sample_quality_ = texture_desc.sample_quality;
+    }
+}
+
+void Framebuffer::PrepareForRender(CommandRecorder& recorder)
+{
+    const auto& desc = GetDescriptor();
+    for (const auto& attachment : desc.color_attachments) {
+        if (attachment.texture) {
+        recorder.BeginTrackingResourceState(*attachment.texture, ResourceStates::kPresent, true);
+        recorder.RequireResourceState(*attachment.texture, ResourceStates::kRenderTarget);
+        }
+    }
+
+    if (desc.depth_attachment.IsValid()) {
+        recorder.BeginTrackingResourceState(*desc.depth_attachment.texture, ResourceStates::kUndefined, false);
+        recorder.RequireResourceStateFinal(*desc.depth_attachment.texture,
+            ResourceStates::kDepthRead | ResourceStates::kDepthWrite);
     }
 }

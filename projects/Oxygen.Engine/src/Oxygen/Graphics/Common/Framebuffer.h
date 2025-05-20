@@ -159,6 +159,8 @@ private:
     uint32_t sample_quality_ = 0;
 };
 
+class CommandRecorder;
+
 //! Graphics backend agnostic framebuffer, which defines the set of attachments
 //! used as rendering targets during a render pass.
 /*
@@ -200,6 +202,8 @@ public:
 
     [[nodiscard]] virtual auto GetDescriptor() const -> const FramebufferDesc& = 0;
     [[nodiscard]] virtual auto GetFramebufferInfo() const -> const FramebufferInfo& = 0;
+
+    OXYGEN_GFX_API virtual void PrepareForRender(CommandRecorder& crecorder);
 };
 
 } // namespace oxygen::graphics
