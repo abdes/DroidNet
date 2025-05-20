@@ -32,14 +32,14 @@ public:
     void SetScissors(const Scissors& scissors) override;
 
     void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) override;
-    void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
+    void SetVertexBuffers(uint32_t num, const std::shared_ptr<graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
-    void InitResourceStatesFromFramebuffer(const Framebuffer& framebuffer) override;
-    void BindFrameBuffer(const Framebuffer& framebuffer) override;
+    void InitResourceStatesFromFramebuffer(const graphics::Framebuffer& framebuffer) override;
+    void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
 
-    void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
+    void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
 
 protected:
     void ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers) override;
