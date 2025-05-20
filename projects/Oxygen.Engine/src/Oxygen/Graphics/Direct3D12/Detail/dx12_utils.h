@@ -20,21 +20,35 @@
 
 namespace oxygen::graphics::d3d12 {
 
-inline void NameObject(ID3D12Object* const object, std::string_view name)
+inline void NameObject(ID3D12Object* const object, const std::string& name)
 {
-#ifdef _DEBUG
     DCHECK_F(name.size() < std::numeric_limits<UINT>::max());
+    // Store the name including the null terminator
     windows::ThrowOnFailed(object->SetPrivateData(
         WKPDID_D3DDebugObjectName,
-        static_cast<UINT>(name.size()),
+        static_cast<UINT>(name.size() + 1),
         name.data()));
     LOG_F(3, "+D3D12 named object created: {}", name);
-#endif
 }
 
-inline std::string GetObjectName(ID3D12Object* const object, std::string_view fallback_name)
+inline void NameObject(ID3D12Object* const object, const std::string_view name)
 {
-#ifdef _DEBUG
+    // Create a full string with null terminator
+    const std::string full_name(name);
+    DCHECK_F(name.size() < std::numeric_limits<UINT>::max());
+    // Store the name including the null terminator
+    windows::ThrowOnFailed(object->SetPrivateData(
+        WKPDID_D3DDebugObjectName,
+        static_cast<UINT>(name.size() + 1),
+        full_name.data()));
+    LOG_F(3, "+D3D12 named object created: {}", name);
+}
+
+inline auto GetObjectName(
+    ID3D12Object* const object,
+    const std::string_view fallback_name)
+    -> std::string
+{
     if (object == nullptr) {
         return "<null>";
     }
@@ -47,7 +61,7 @@ inline std::string GetObjectName(ID3D12Object* const object, std::string_view fa
         return std::string(fallback_name);
     }
 
-    // Allocate buffer for the name
+    // Allocate buffer for the name (including null terminator)
     std::vector<char> buffer(size);
 
     // Second call to get the actual name
@@ -57,11 +71,11 @@ inline std::string GetObjectName(ID3D12Object* const object, std::string_view fa
         return std::string(fallback_name);
     }
 
-    // Return the name as a string
-    return std::string(buffer.data(), size);
-#else
-    return std::string(fallback_name);
-#endif
+    // Remove the null terminator if present
+    if (!buffer.empty() && buffer.back() == '\0') {
+        buffer.pop_back();
+    }
+    return { buffer.begin(), buffer.end() };
 }
 
 //////////////////////////////////////////////////////////////////////////////
