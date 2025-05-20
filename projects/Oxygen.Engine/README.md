@@ -15,8 +15,11 @@ You can define _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR as an escape hatch.
 That is, if you’re seeing crashes due to null dereferences in mutex locking machinery, you’re deploying a program built with new STL headers, but without a sufficiently new msvcp140.dll, which is unsupported. You need to be (re)distributing a new STL DLL too. (If a VS 2022 17.10 VCRedist has been independently installed on the machine - then everything will happen to work.)
 
 Solve the problem based on Karel Van de Rostyne’s comment:
-The solution for this problem is:
-Download the latest Microsoft Visual C++ Redistributables and install them on the machine that gives the problem.
+
+**The solution for this problem is:**
+Download the latest Microsoft Visual C++ Redistributables and install them on
+the machine that gives the problem.
+
 On this Microsoft site you find the downloads.
 https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
 
