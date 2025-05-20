@@ -233,7 +233,7 @@ private:
     [[nodiscard]] OXYGEN_GFX_API auto Find(const NativeObject& resource, size_t key_hash) const -> NativeObject;
 
     // TODO: consider deleting these methods as I cannot find a use case
-[[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
+    [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
     [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
 
     // Core dependencies
@@ -296,3 +296,146 @@ private:
 };
 
 } // namespace oxygen::graphics
+
+/*
+================================================================================
+Resource Replacement & View Update Design Notes
+================================================================================
+
+- When replacing a resource (e.g., resizing a texture), it is critical to keep
+  the shader-visible descriptor handle (bindless index) stable, even if the
+  underlying native resource object changes.
+
+- In D3D12/Vulkan/Metal, descriptors (views) are tightly bound to the native
+  resource object. Replacing the resource invalidates all existing views; they
+  must be recreated for the new resource at the same descriptor slot.
+
+- There are two main strategies for handling view updates:
+    1. The registry automatically recreates views in-place for the new resource.
+    2. The registry clears cached views and requires the resource owner to
+       explicitly recreate or discard them.
+
+- The second approach is safer and more flexible, especially when resource
+  compatibility is not guaranteed. It avoids accidental reuse of incompatible
+  views and gives the resource owner full control.
+
+- The best practice is for the registry to provide an Update or UpdateView
+  method that takes a function (callback). The registry iterates all cached
+  views for the replaced resource and invokes the callback for each view
+  description. The resource owner decides whether to recreate, update, or
+  discard each view.
+
+- The callback should have the signature:
+      NativeObject callback(const Resource::ViewDescriptionT& desc);
+  If the returned NativeObject is valid, the view is recreated in-place at the
+  same descriptor handle. If invalid, the view is discarded.
+
+- Use a template for the callback to ensure zero-overhead, type safety, and
+  flexibility. This is preferred over std::function for performance-critical
+  engine code.
+
+================================================================================
+*/
+
+//! Replace a registered resource with a new instance, updating or discarding
+//! views as directed by a callback.
+/*!
+ This method enables resource replacement (e.g., resizing a texture) while
+ keeping shader-visible descriptor handles stable. For each cached view of the
+ old resource, the provided callback is invoked with the view description. The
+ callback must return a NativeObject representing the new native view for the
+ replacement resource, or an invalid NativeObject to indicate the view should be
+ discarded.
+
+ The callback signature must be:
+     NativeObject callback(const Resource::ViewDescriptionT& desc);
+
+ \tparam Resource The resource type (must satisfy ResourceWithViews).
+ \tparam Callback The callback type (must accept a const ViewDescriptionT& and
+         return NativeObject).
+ \param old_resource The resource to be replaced (must be registered).
+ \param new_resource The new resource instance (must be of the same type).
+ \param update_view_fn The callback invoked for each view description.
+ \throws std::runtime_error if the resource is not registered.
+
+    template <typename Resource, typename Fn>
+    concept ViewUpdateCallback =
+        requires(Fn&& fn, const typename Resource::ViewDescriptionT& desc) {
+            { fn(desc) } -> std::convertible_to<NativeObject>;
+        };
+
+    template <ResourceWithViews Resource, ViewUpdateCallback<Resource> Callback>
+    void Replace(
+        const Resource& resource,
+        std::shared_ptr<Resource> new_resource,
+        Callback&& update_fn = nullptr);
+*/
+
+/*
+================================================================================
+View Replacement & UpdateView Design Notes
+================================================================================
+
+- In modern graphics APIs, a descriptor handle (bindless index) refers to a
+  specific slot in a descriptor heap. The view object (e.g., SRV/RTV/UAV) at
+  that slot can be changed at runtime, allowing the shader to see a new view
+  without changing the index.
+
+- The UpdateView method enables replacing the native view object at a given
+  descriptor handle for a resource, while keeping the shader-visible index
+  stable. This is useful for hot-reloading, dynamic format/subresource changes,
+  or swapping views at runtime.
+
+- The new view does not need to be compatible with the old view; it can have a
+  different description, as long as the application logic ensures correctness.
+
+- This method is not for resource replacement (which invalidates all views), but
+  for updating a single view of an existing resource.
+
+- The registry updates the descriptor heap slot in-place and updates its cache
+  to point to the new view object.
+
+--------------------------------------------------------------------------------
+Signatures:
+
+Update a registered view for a resource, replacing the old view with a new one
+at the same descriptor handle.
+
+This method finds the existing view (old_view) for the given resource and
+replaces it with new_view, keeping the same descriptor handle (bindless index)
+for shader access. The new view must be compatible with the existing view
+description (e.g., format, subresources, etc.), as the descriptor slot and view
+description are not changed—only the underlying native view object is replaced.
+This is useful for scenarios such as re-creating a view after device loss,
+resource reinitialization, or hot-reloading when the view semantics remain the
+same.
+
+    template <ResourceWithViews Resource>
+    void ReplaceView(
+        Resource& resource,
+        NativeObject old_view,
+        NativeObject new_view);
+
+Update a registered view for a resource, replacing the old view with a new one
+at the same descriptor handle.
+
+This method finds the existing view (old_view) for the given resource and
+replaces it with new_view, keeping the same descriptor handle (bindless index)
+for shader access. The new view can have a different description, as long as the
+application logic ensures correctness. This is useful for hot-reloading, dynamic
+format/subresource changes, or swapping views at runtime.
+
+    template <ResourceWithViews Resource>
+    bool ReplaceView(
+        Resource& resource,
+        NativeObject old_view,
+        NativeObject new_view,
+        const typename Resource::ViewDescriptionT& desc);
+
+    // - resource: The resource whose view is being updated or registered.
+    // - old_view: The native view object to be replaced (in-place update).
+    // - new_view: The new native view object to use.
+    // - desc: The new view description (for new descriptor handle).
+
+================================================================================
+*/
