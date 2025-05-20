@@ -26,18 +26,18 @@
 #include "./Mocks/MockDescriptorHeapSegment.h"
 #include "./Mocks/TestDescriptorHandle.h"
 
+using oxygen::graphics::DefaultDescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::DescriptorHeapSegment;
-using oxygen::graphics::DefaultDescriptorAllocationStrategy;
 using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
+using oxygen::graphics::detail::DescriptorHeapSegment;
 using IndexT = DescriptorHandle::IndexT;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
+using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
 using oxygen::graphics::bindless::testing::TestDescriptorHandle;
-using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 
 // -------------------- Test Fixture --------------------
 class BaseDescriptorAllocatorBasicTest : public BaseDescriptorAllocatorTest {
@@ -237,16 +237,22 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
     public:
         using Base = oxygen::graphics::detail::BaseDescriptorAllocator;
         LocalMockAllocator(const BaseDescriptorAllocatorConfig& cfg, DescriptorHeapSegment::IndexT expected)
-            : Base(cfg), expected_base_index_(expected), checked_(false) {}
+            : Base(cfg)
+            , expected_base_index_(expected)
+            , checked_(false)
+        {
+        }
         // Implement all pure virtuals from DescriptorAllocator
         void CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&) override { throw std::logic_error("Not used in this test"); }
-        void PrepareForRendering(const oxygen::graphics::NativeObject&) override {}
+        void PrepareForRendering(const oxygen::graphics::NativeObject&) override { }
+
     protected:
         std::unique_ptr<DescriptorHeapSegment> CreateHeapSegment(
             uint32_t /*capacity*/,
             uint32_t base_index,
             ResourceViewType vt,
-            DescriptorVisibility vis) override {
+            DescriptorVisibility vis) override
+        {
             EXPECT_EQ(static_cast<DescriptorHeapSegment::IndexT>(base_index), expected_base_index_);
             checked_ = true;
             auto seg = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
@@ -259,15 +265,17 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
             EXPECT_CALL(*seg, GetCapacity()).WillRepeatedly(::testing::Return(1));
             return seg;
         }
+
     public:
         bool checked() const { return checked_; }
+
     private:
         DescriptorHeapSegment::IndexT expected_base_index_;
         bool checked_;
     };
 
     // Use the local mock allocator
-    auto allocator = std::make_unique<LocalMockAllocator>(BaseDescriptorAllocatorConfig{ .heap_strategy = strategy }, expected_base_index);
+    auto allocator = std::make_unique<LocalMockAllocator>(BaseDescriptorAllocatorConfig { .heap_strategy = strategy }, expected_base_index);
 
     // Allocate a descriptor and verify the base index was used
     auto handle = allocator->Allocate(view_type, visibility);
