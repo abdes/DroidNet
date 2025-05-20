@@ -5,9 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h>
-#include <format> // Include for std::format
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+
+using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::graphics::d3d12 {
 
@@ -17,7 +21,7 @@ DescriptorHeapSegment::DescriptorHeapSegment(
     const IndexT base_index,
     const ResourceViewType view_type,
     const DescriptorVisibility visibility,
-    const char* debug_name)
+    std::string_view debug_name)
     : FixedDescriptorHeapSegment(capacity, base_index, view_type, visibility)
     , device_(device)
     , heap_type_(D3D12HeapAllocationStrategy::GetHeapType(view_type))
@@ -29,23 +33,25 @@ DescriptorHeapSegment::DescriptorHeapSegment(
     const D3D12_DESCRIPTOR_HEAP_FLAGS flags = D3D12HeapAllocationStrategy::GetHeapFlags(visibility);
 
     // Create heap description
-    D3D12_DESCRIPTOR_HEAP_DESC desc {};
-    desc.Type = type;
-    desc.NumDescriptors = capacity;
-    desc.Flags = flags;
-    desc.NodeMask = 0;
+    const D3D12_DESCRIPTOR_HEAP_DESC desc {
+        .Type = type,
+        .NumDescriptors = capacity,
+        .Flags = flags,
+        .NodeMask = 0,
+    };
 
     // Create the heap
-    const HRESULT hr = device_->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_));
-    if (FAILED(hr)) {
-        throw std::runtime_error(std::format(
-            "Failed to create descriptor heap: type={}, flags={}, capacity={}, hr=0x{:x}",
-            static_cast<int>(type), static_cast<int>(flags), capacity, static_cast<unsigned int>(hr)));
-    }
+    ThrowOnFailed(device_->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap_)),
+        fmt::format(
+            "Failed to create descriptor heap: type={}, flags={}, capacity={}",
+            static_cast<int>(type), static_cast<int>(flags), capacity));
 
-    // Set debug name if provided
-    if (debug_name) {
-        heap_->SetName(std::wstring(debug_name, debug_name + strlen(debug_name)).c_str());
+    // Double-check the heap creation
+    DCHECK_NOTNULL_F(heap_, "ThrowOnFailed passed but heap is null");
+
+    // Set debug name if provided.
+    if (!debug_name.empty()) {
+        NameObject(heap_, debug_name);
     }
 
     // Get handles and increment size
@@ -55,8 +61,6 @@ DescriptorHeapSegment::DescriptorHeapSegment(
     // Get GPU handle if shader visible
     if (flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) {
         gpu_start_ = heap_->GetGPUDescriptorHandleForHeapStart();
-    } else {
-        gpu_start_ = D3D12_GPU_DESCRIPTOR_HANDLE { 0 };
     }
 
     // Log heap segment creation
@@ -65,44 +69,48 @@ DescriptorHeapSegment::DescriptorHeapSegment(
         static_cast<int>(desc.Flags),
         capacity,
         base_index,
-        debug_name ? std::format(" ({})", debug_name) : "");
+        !debug_name.empty() ? fmt::format(" ({})", debug_name) : "");
 }
 
-DescriptorHeapSegment::~DescriptorHeapSegment() = default;
-
-auto DescriptorHeapSegment::GetCpuHandle(const IndexT global_index) const -> D3D12_CPU_DESCRIPTOR_HANDLE
+DescriptorHeapSegment::~DescriptorHeapSegment()
 {
-    const auto local_index = GlobalToLocalIndex(global_index);
-    D3D12_CPU_DESCRIPTOR_HANDLE handle = cpu_start_;
-    handle.ptr += static_cast<SIZE_T>(local_index * handle_increment_size_);
-    return handle;
+    ObjectRelease(heap_);
 }
 
-auto DescriptorHeapSegment::GetGpuHandle(const IndexT global_index) const -> D3D12_GPU_DESCRIPTOR_HANDLE
+auto DescriptorHeapSegment::GetCpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_CPU_DESCRIPTOR_HANDLE
+{
+    const auto local_index = GlobalToLocalIndex(handle.GetIndex());
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = cpu_start_;
+    cpu_handle.ptr += static_cast<SIZE_T>(local_index * handle_increment_size_);
+    return cpu_handle;
+}
+
+auto DescriptorHeapSegment::GetGpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_GPU_DESCRIPTOR_HANDLE
 {
     if (!IsShaderVisible()) {
-        // Return a null GPU handle for CPU-only heaps
-        return D3D12_GPU_DESCRIPTOR_HANDLE { 0 };
+        throw std::runtime_error("Descriptor heap is not shader visible, cannot get GPU handle.");
     }
 
-    const auto local_index = GlobalToLocalIndex(global_index);
-    D3D12_GPU_DESCRIPTOR_HANDLE handle = gpu_start_;
-    handle.ptr += static_cast<UINT64>(local_index * handle_increment_size_);
-    return handle;
+    const auto local_index = GlobalToLocalIndex(handle.GetIndex());
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = gpu_start_;
+    gpu_handle.ptr += static_cast<UINT64>(local_index * handle_increment_size_);
+    return gpu_handle;
 }
 
 auto DescriptorHeapSegment::IsShaderVisible() const noexcept -> bool
 {
-    const D3D12_DESCRIPTOR_HEAP_DESC& desc = heap_->GetDesc();
+    const auto& desc = heap_->GetDesc();
     return (desc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) != 0;
 }
 
-auto DescriptorHeapSegment::GetHeap() const -> ID3D12DescriptorHeap*
+auto DescriptorHeapSegment::GetHeap() const -> dx::IDescriptorHeap*
 {
-    return heap_.Get();
+    return heap_;
 }
 
-auto DescriptorHeapSegment::GetD3D12HeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE
+auto DescriptorHeapSegment::GetHeapType() const -> D3D12_DESCRIPTOR_HEAP_TYPE
 {
     return heap_type_;
 }
