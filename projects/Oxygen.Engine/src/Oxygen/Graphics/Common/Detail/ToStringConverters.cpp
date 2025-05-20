@@ -36,12 +36,9 @@ auto oxygen::graphics::to_string(const oxygen::graphics::NativeObject& obj) -> s
 
 auto oxygen::graphics::to_string(const oxygen::graphics::DescriptorHandle& handle) -> std::string
 {
-    if (handle.IsValid()) {
-        return fmt::format("DescriptorHandle{{index: {}, view_type: {}, visibility: {}}}",
-            handle.GetIndex(), nostd::to_string(handle.GetViewType()), nostd::to_string(handle.GetVisibility()));
-    } else {
-        return "DescriptorHandle{invalid}";
-    }
+    return fmt::format("DescriptorHandle{}{{index: {}, view_type: {}, visibility: {}}}",
+        handle.IsValid() ? "" : " (invalid)",
+        handle.GetIndex(), nostd::to_string(handle.GetViewType()), nostd::to_string(handle.GetVisibility()));
 }
 
 auto oxygen::graphics::to_string(const QueueRole value) -> const char*
