@@ -22,7 +22,6 @@ using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
 using oxygen::graphics::bindless::testing::MockDescriptorHeapSegment;
 using oxygen::graphics::bindless::testing::TestDescriptorHandle;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 using oxygen::graphics::detail::DescriptorHeapSegment;
 
 namespace {
@@ -30,7 +29,7 @@ namespace {
 // Base fixture for descriptor handle tests
 class UnitTests : public ::testing::Test {
 protected:
-    MockDescriptorAllocator allocator_ { BaseDescriptorAllocatorConfig {} };
+    MockDescriptorAllocator allocator_ {};
 
     static constexpr auto view_type_ = ResourceViewType::kTexture_SRV;
     static constexpr auto visibility_ = DescriptorVisibility::kShaderVisible;

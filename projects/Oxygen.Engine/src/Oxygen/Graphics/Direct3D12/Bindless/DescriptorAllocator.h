@@ -40,7 +40,7 @@ public:
      The device must remain valid for the lifetime of the allocator.
     */
     OXYGEN_D3D12_API explicit DescriptorAllocator(
-        const detail::BaseDescriptorAllocatorConfig& config,
+        std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
         dx::IDevice* device);
 
     //! Destructor.

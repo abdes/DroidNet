@@ -22,7 +22,6 @@ using oxygen::graphics::NativeObject;
 using oxygen::graphics::RegisteredResource;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 using oxygen::graphics::detail::FixedDescriptorHeapSegment;
 
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
@@ -80,7 +79,7 @@ protected:
 
     void SetUp() override
     {
-        allocator_ = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>(BaseDescriptorAllocatorConfig {});
+        allocator_ = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>();
         allocator_->ext_segment_factory_ =
             [](auto capacity, auto base_index, auto view_type, auto visibility) {
                 return std::make_unique<FixedDescriptorHeapSegment>(
@@ -370,7 +369,7 @@ protected:
 
     void SetUp() override
     {
-        allocator_ = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>(BaseDescriptorAllocatorConfig {});
+        allocator_ = std::make_shared<::testing::NiceMock<MockDescriptorAllocator>>();
         allocator_->ext_segment_factory_ =
             [](auto capacity, auto base_index, auto view_type, auto visibility) {
                 return std::make_unique<FixedDescriptorHeapSegment>(

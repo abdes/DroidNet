@@ -18,10 +18,9 @@
 namespace oxygen::graphics::d3d12 {
 
 DescriptorAllocator::DescriptorAllocator(
-    const detail::BaseDescriptorAllocatorConfig& config, dx::IDevice* device)
-    : BaseDescriptorAllocator({ .heap_strategy = config.heap_strategy
-              ? config.heap_strategy
-              : std::make_shared<D3D12HeapAllocationStrategy>(device) })
+    std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
+    dx::IDevice* device)
+    : BaseDescriptorAllocator(std::move(heap_strategy))
     , device_(device)
 {
     DCHECK_NOTNULL_F(device, "D3D12 device must not be null");

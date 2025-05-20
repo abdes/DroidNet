@@ -112,14 +112,13 @@ private:
 
 class BaseDescriptorAllocatorTest : public ::testing::Test {
 protected:
-    detail::BaseDescriptorAllocatorConfig default_config_ {
-        .heap_strategy = std::make_shared<DefaultDescriptorAllocationStrategy>(),
-    };
+    std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy_;
     std::unique_ptr<::testing::NiceMock<MockDescriptorAllocator>> allocator_;
 
     void SetUp() override
     {
-        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(default_config_);
+        heap_strategy_ = std::make_shared<DefaultDescriptorAllocationStrategy>();
+        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(heap_strategy_);
     }
 
     void TearDown() override
@@ -131,9 +130,8 @@ protected:
 
     void DisableGrowth()
     {
-        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(detail::BaseDescriptorAllocatorConfig {
-            .heap_strategy = std::make_shared<NoGrowthDescriptorAllocationStrategy>(),
-        });
+        heap_strategy_ = std::make_shared<NoGrowthDescriptorAllocationStrategy>();
+        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(heap_strategy_);
     }
 };
 
