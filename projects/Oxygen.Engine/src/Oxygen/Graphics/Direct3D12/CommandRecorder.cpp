@@ -388,22 +388,6 @@ auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
     return static_cast<CommandList*>(GetCommandList()); // NOLINT(*-pro-type-static-cast-downcast)
 }
 
-void CommandRecorder::InitResourceStatesFromFramebuffer(const graphics::Framebuffer& framebuffer)
-{
-    const FramebufferDesc& desc = framebuffer.GetDescriptor();
-
-    for (const auto& attachment : desc.color_attachments) {
-        BeginTrackingResourceState(*attachment.texture, ResourceStates::kPresent, true);
-        RequireResourceState(*attachment.texture, ResourceStates::kRenderTarget);
-    }
-
-    if (desc.depth_attachment.IsValid()) {
-        BeginTrackingResourceState(*desc.depth_attachment.texture, ResourceStates::kUndefined, false);
-        RequireResourceStateFinal(*desc.depth_attachment.texture,
-            ResourceStates::kDepthRead | ResourceStates::kDepthWrite);
-    }
-}
-
 void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
 {
     const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast-downcast)

@@ -72,7 +72,6 @@ public:
     virtual void SetScissors(const Scissors& scissors) = 0;
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
-    virtual void InitResourceStatesFromFramebuffer(const Framebuffer& framebuffer) = 0;
     virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
 
     virtual void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) = 0;

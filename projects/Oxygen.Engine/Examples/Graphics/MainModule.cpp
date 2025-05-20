@@ -222,7 +222,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
     auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
 
-    recorder->InitResourceStatesFromFramebuffer(*fb);
+    fb->PrepareForRender(*recorder);
     recorder->BindFrameBuffer(*fb);
 
     ViewPort viewport {
@@ -245,7 +245,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
     recorder->ClearTextureFloat(
         fb->GetDescriptor().color_attachments[0].texture.get(),
-        graphics::Texture::kAllSubResources,
+        graphics::TextureSubResourceSet::EntireTexture(),
         graphics::Color(0.4F, 0.4F, .8f, 1.0F));
 
     CreateTriangleVertexBuffer();

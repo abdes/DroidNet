@@ -36,7 +36,6 @@ public:
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
-    void InitResourceStatesFromFramebuffer(const graphics::Framebuffer& framebuffer) override;
     void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
 
     void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
