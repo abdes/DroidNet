@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameBuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
 
 using oxygen::graphics::CommandRecorder;
 
-using oxygen::graphics::FramebufferInfo;
 using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferInfo;
 
 FramebufferInfo::FramebufferInfo(const FramebufferDesc& desc)
 {
@@ -39,8 +39,8 @@ void Framebuffer::PrepareForRender(CommandRecorder& recorder)
     const auto& desc = GetDescriptor();
     for (const auto& attachment : desc.color_attachments) {
         if (attachment.texture) {
-        recorder.BeginTrackingResourceState(*attachment.texture, ResourceStates::kPresent, true);
-        recorder.RequireResourceState(*attachment.texture, ResourceStates::kRenderTarget);
+            recorder.BeginTrackingResourceState(*attachment.texture, ResourceStates::kPresent, true);
+            recorder.RequireResourceState(*attachment.texture, ResourceStates::kRenderTarget);
         }
     }
 
