@@ -170,7 +170,7 @@ auto Buffer::IsMapped() const noexcept -> bool
     return mapped_;
 }
 
-auto Buffer::GetDesc() const noexcept -> BufferDesc
+auto Buffer::GetDescriptor() const noexcept -> BufferDesc
 {
     BufferDesc desc;
     desc.size = size_;

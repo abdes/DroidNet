@@ -17,4 +17,10 @@ constexpr uint32_t kFrameBufferCount { 3 };
 //! configured in a pipeline state.
 constexpr uint32_t kMaxRenderTargets = 8;
 
+//! Bindless layouts allow applications to attach a descriptor table to an
+//! unbound resource array in the shader. The same table can be bound to
+//! multiple register spaces on DX12, in order to access different types of
+//! resources stored in the table through different arrays.
+constexpr uint32_t kMaxRegisterSpacesToBindTable = 16;
+
 } // namespace oxygen

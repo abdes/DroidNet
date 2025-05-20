@@ -60,10 +60,7 @@ Renderer::Renderer(
 Renderer::~Renderer()
 {
     Stop();
-    {
-        LOG_SCOPE_F(INFO, "Clearing texture views cache");
-        texture_views_cache_.Clear();
-    }
+    // TODO: cleanup the resource registry and the descriptor allocator
     DLOG_F(INFO, "Renderer destroyed");
 }
 

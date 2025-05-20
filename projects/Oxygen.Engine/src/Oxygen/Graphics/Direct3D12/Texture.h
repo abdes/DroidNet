@@ -34,7 +34,6 @@ namespace d3d12 {
         OXYGEN_D3D12_API Texture(
             TextureDesc desc,
             D3D12_RESOURCE_DESC resource_desc,
-            ViewCache<graphics::Texture, TextureBindingKey>& view_cache,
             GraphicResource::ManagedPtr<ID3D12Resource> resource = nullptr,
             GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation = nullptr);
 

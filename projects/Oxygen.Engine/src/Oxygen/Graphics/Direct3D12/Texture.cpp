@@ -25,10 +25,9 @@ using oxygen::graphics::d3d12::detail::GetGraphics;
 Texture::Texture(
     TextureDesc desc,
     D3D12_RESOURCE_DESC resource_desc,
-    ViewCache<graphics::Texture, TextureBindingKey>& view_cache,
     GraphicResource::ManagedPtr<ID3D12Resource> resource,
     GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation)
-    : Base(desc.debug_name, view_cache)
+    : Base(desc.debug_name)
     , desc_(std::move(desc))
     , resource_desc_(resource_desc)
 {

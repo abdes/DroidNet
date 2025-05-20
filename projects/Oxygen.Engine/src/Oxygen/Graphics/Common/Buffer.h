@@ -25,7 +25,7 @@ enum class BufferUsage : uint32_t {
     kConstant = 1 << 2,
     kStorage = 1 << 3,
     kIndirect = 1 << 4,
-    kAccelStruct = 1 << 5, //!< For ray tracing
+    kRayTracingAccelStructures = 1 << 5, //!< For ray tracing
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsage)
 
@@ -46,6 +46,35 @@ struct BufferDesc {
     std::string debug_name = "Buffer";
 };
 
+// --- BufferRange definition ---
+struct BufferRange {
+    uint64_t byteOffset = 0;
+    uint64_t byteSize = ~0ull;
+    BufferRange() = default;
+    BufferRange(uint64_t _byteOffset, uint64_t _byteSize)
+        : byteOffset(_byteOffset)
+        , byteSize(_byteSize)
+    {
+    }
+    [[nodiscard]] BufferRange resolve(const BufferDesc& desc) const;
+    [[nodiscard]] constexpr bool isEntireBuffer(const BufferDesc& desc) const { return (byteOffset == 0) && (byteSize == ~0ull || byteSize == desc.size); }
+    constexpr bool operator==(const BufferRange& other) const { return byteOffset == other.byteOffset && byteSize == other.byteSize; }
+    constexpr BufferRange& setByteOffset(uint64_t value)
+    {
+        byteOffset = value;
+        return *this;
+    }
+    constexpr BufferRange& setByteSize(uint64_t value)
+    {
+        byteSize = value;
+        return *this;
+    }
+};
+
+struct BufferViewKey {
+    // TODO: define the buffer view key structure
+};
+
 /*!
  Buffer is a backend-agnostic abstraction for GPU buffer resources.
 
@@ -58,7 +87,7 @@ struct BufferDesc {
  Usage guidelines:
   - Always create buffers through the Renderer to ensure correct synchronization with the frame lifecycle and resource management.
   - Use Map/Unmap for CPU access to buffer memory, and Update for convenience when uploading data.
-  - Query buffer properties via GetDesc, GetSize, GetUsage, and GetMemoryType.
+  - Query buffer properties via GetDescriptor, GetSize, GetUsage, and GetMemoryType.
   - Use GetNativeResource for backend interop, but prefer backend-agnostic APIs for most operations.
 
  Implementation rationale:
@@ -108,7 +137,7 @@ public:
     [[nodiscard]] virtual auto IsMapped() const noexcept -> bool = 0;
 
     //! Returns the buffer descriptor.
-    [[nodiscard]] virtual auto GetDesc() const noexcept -> BufferDesc = 0;
+    [[nodiscard]] virtual auto GetDescriptor() const noexcept -> BufferDesc = 0;
 
     //! Returns the native backend resource handle.
     [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
@@ -124,6 +153,17 @@ public:
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
+
+    /**
+     * @brief Get a constant buffer view (CBV) for this buffer
+     *
+     * Creates or returns a cached constant buffer view for the specified range of this buffer.
+     * The returned view is suitable for binding as a constant buffer in shader programs.
+     *
+     * @param range The range of the buffer to view. Defaults to the entire buffer.
+     * @return NativeObject The constant buffer view as a native object
+     */
+    [[nodiscard]] NativeObject GetConstantBufferView(const BufferRange& range = {}) const;
 };
 
 } // namespace oxygen::graphics

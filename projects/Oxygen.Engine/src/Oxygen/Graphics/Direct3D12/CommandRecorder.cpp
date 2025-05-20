@@ -439,7 +439,7 @@ void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourc
         // commitBarriers();
 
         for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
-            D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->GetRenderTargetView(Format::kUnknown, sub_resources).AsInteger() };
+            D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->CreateRenderTargetView(Format::kUnknown, sub_resources).AsInteger() };
 
             d3d12_command_list->ClearRenderTargetView(
                 RTV,

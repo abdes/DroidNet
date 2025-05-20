@@ -165,7 +165,6 @@ auto Renderer::CreateTexture(TextureDesc desc) const
     return std::make_shared<Texture>(
         desc,
         rd,
-        GetTextureViewsCache(),
         GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, GetPerFrameResourceManager()),
         GraphicResource::WrapForDeferredRelease<D3D12MA::Allocation>(d3dmaAllocation, GetPerFrameResourceManager()));
 }
@@ -184,7 +183,6 @@ auto Renderer::CreateTextureFromNativeObject(
     return std::make_shared<Texture>(
         desc,
         resource->GetDesc(),
-        GetTextureViewsCache(),
         GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, GetPerFrameResourceManager()),
         nullptr // No allocation object for native resources
     );
