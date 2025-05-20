@@ -11,9 +11,9 @@
 // ReSharper disable once CppUnusedIncludeDirective - OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 
 namespace oxygen::graphics::detail {
 
