@@ -49,7 +49,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
         segment_count++;
         if (segment_count == 1) {
             // Setup: Create a segment that will fill up and need to grow
-            auto first_segment = std::make_unique<MockDescriptorHeapSegment>();
+            auto first_segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
             EXPECT_CALL(*first_segment, Allocate())
                 .WillOnce(testing::Return(0))
                 .WillRepeatedly(testing::Return(DescriptorHandle::kInvalidIndex)); // Second call indicates full
@@ -65,7 +65,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
         }
 
         // Second segment for growth
-        auto growth_segment = std::make_unique<MockDescriptorHeapSegment>();
+        auto growth_segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
         EXPECT_CALL(*growth_segment, Allocate()).WillOnce(testing::Return(100)); // Different index to distinguish
         EXPECT_CALL(*growth_segment, GetAvailableCount()).WillRepeatedly(testing::Return(1));
         EXPECT_CALL(*growth_segment, GetViewType()).WillRepeatedly(testing::Return(type));
@@ -194,7 +194,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ThrowsIfOutOfSpaceWithGrowthLim
     uint32_t create_count { 0 };
     IndexT last_base_index = 0;
     allocator_->segment_factory_ = [&create_count, &last_base_index](auto type, auto vis) {
-        auto segment = std::make_unique<MockDescriptorHeapSegment>();
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
         const auto base_index = last_base_index;
         last_base_index = base_index + 1; // Each segment has capacity 1
 
@@ -241,7 +241,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
     auto create_count { 0U };
     IndexT last_base_index { 0 };
     allocator_->segment_factory_ = [&create_count, &last_base_index](auto type, auto vis) {
-        auto segment = std::make_unique<MockDescriptorHeapSegment>();
+        auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
         const auto base_index = last_base_index;
         last_base_index = base_index + 1;
 
@@ -302,7 +302,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, SegmentCreationFailureDuringGro
     allocator_->segment_factory_ = [&create_count, &last_base_index](auto type, auto vis) {
         create_count++;
         if (create_count == 1) {
-            auto segment = std::make_unique<MockDescriptorHeapSegment>();
+            auto segment = std::make_unique<::testing::NiceMock<MockDescriptorHeapSegment>>();
             const uint32_t base_index = last_base_index;
             last_base_index = base_index + 1;
 
@@ -321,7 +321,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, SegmentCreationFailureDuringGro
             return segment;
         }
         // Return null to simulate segment creation failure
-        return std::unique_ptr<MockDescriptorHeapSegment> {};
+        return std::unique_ptr<::testing::NiceMock<MockDescriptorHeapSegment>> {};
     };
 
     // First allocation should succeed

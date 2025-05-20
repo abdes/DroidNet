@@ -59,7 +59,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorInitTest, ZeroInitialCapacityFailsAllocatio
     // Tests that setting an initial capacity of zero causes allocation to fail
 
     // Setup: Create a config with zero capacity for a specific type
-    const auto z_allocator = std::make_unique<MockDescriptorAllocator>(
+    const auto z_allocator = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
         BaseDescriptorAllocatorConfig {
             .heap_strategy = std::make_unique<ZeroCapacityDescriptorAllocationStrategy>(),
         });
