@@ -621,7 +621,7 @@ void log(Verbosity verbosity,
         // Catch all exceptions and log them as a fatal error.
         fprintf(stderr, "Exception caught at %s:%u: %s\n",
             file, line, ex.what());
-    } catch(...){
+    } catch (...) {
         // Catch all exceptions and log them as a fatal error.
         fprintf(stderr, "Exception caught at %s:%u: %s\n",
             file, line, errno_as_text().c_str());
