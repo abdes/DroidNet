@@ -107,7 +107,6 @@ target_sources(
     "Bindless/DescriptorHeapSegment.cpp"
     "Bindless/DescriptorAllocator.h"
     "Bindless/DescriptorAllocator.cpp"
-
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -229,7 +228,7 @@ endforeach()
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
- add_subdirectory("Test")
+  add_subdirectory("Test")
 endif()
 
 # ==============================================================================

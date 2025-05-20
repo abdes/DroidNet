@@ -34,11 +34,14 @@ public:
     //! Creates a new D3D12 descriptor allocator.
     /*!
      \param config The configuration for the allocator.
+     \param device The D3D12 device used for heap creation.
 
      Initializes the allocator with the provided D3D12 device and heap strategy.
      The device must remain valid for the lifetime of the allocator.
     */
-    OXYGEN_D3D12_API explicit DescriptorAllocator(const detail::BaseDescriptorAllocatorConfig& config, dx::IDevice* device);
+    OXYGEN_D3D12_API explicit DescriptorAllocator(
+        const detail::BaseDescriptorAllocatorConfig& config,
+        dx::IDevice* device);
 
     //! Destructor.
     OXYGEN_D3D12_API ~DescriptorAllocator() override;
@@ -54,7 +57,9 @@ public:
      Copies the descriptor from source to destination using the appropriate
      D3D12 copying mechanism depending on the descriptor types.
     */
-    OXYGEN_D3D12_API void CopyDescriptor(const DescriptorHandle& dst, const DescriptorHandle& src) override;
+    OXYGEN_D3D12_API void CopyDescriptor(
+        const DescriptorHandle& dst,
+        const DescriptorHandle& src) override;
 
     //! Prepares descriptor heaps for rendering.
     /*!
@@ -82,8 +87,6 @@ protected:
         -> std::unique_ptr<detail::DescriptorHeapSegment> override;
 
 private:
-    // Helper functions
-
     //! Gets the D3D12DescriptorHeapSegment from a handle.
     auto GetD3D12Segment(const DescriptorHandle& handle) const
         -> const DescriptorHeapSegment*;

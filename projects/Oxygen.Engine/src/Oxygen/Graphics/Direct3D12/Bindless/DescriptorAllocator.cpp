@@ -43,24 +43,24 @@ void DescriptorAllocator::CopyDescriptor(const DescriptorHandle& dst, const Desc
     }
 
     // Get D3D12 handles
-    auto dst_cpu = dst_segment->GetCpuHandle(dst.GetIndex());
-    auto src_cpu = src_segment->GetCpuHandle(src.GetIndex());
+    auto dst_cpu = dst_segment->GetCpuHandle(dst);
+    auto src_cpu = src_segment->GetCpuHandle(src);
 
     // Check if the descriptors are in the same heap type
-    if (dst_segment->GetD3D12HeapType() == src_segment->GetD3D12HeapType()) {
+    if (dst_segment->GetHeapType() == src_segment->GetHeapType()) {
         // Simple case: same heap type, can use CopyDescriptorsSimple
         // Use the device from the segment
         device_->CopyDescriptorsSimple(
             1,
             dst_cpu,
             src_cpu,
-            dst_segment->GetD3D12HeapType());
+            dst_segment->GetHeapType());
     } else {
         // Different heap types - this shouldn't happen with the current design
         throw std::runtime_error(std::format(
             "Cannot copy descriptors between different heap types: {} to {}",
-            static_cast<int>(src_segment->GetD3D12HeapType()),
-            static_cast<int>(dst_segment->GetD3D12HeapType())));
+            static_cast<int>(src_segment->GetHeapType()),
+            static_cast<int>(dst_segment->GetHeapType())));
     }
 }
 
