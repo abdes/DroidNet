@@ -115,16 +115,23 @@ protected:
     detail::BaseDescriptorAllocatorConfig default_config_ {
         .heap_strategy = std::make_shared<DefaultDescriptorAllocationStrategy>(),
     };
-    std::unique_ptr<MockDescriptorAllocator> allocator_;
+    std::unique_ptr<::testing::NiceMock<MockDescriptorAllocator>> allocator_;
 
     void SetUp() override
     {
-        allocator_ = std::make_unique<MockDescriptorAllocator>(default_config_);
+        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(default_config_);
+    }
+
+    void TearDown() override
+    {
+        // Destroy the allocator before the fixture is destroyed to avoid use
+        // after free inside mocked methods in the destructor.
+        allocator_.reset();
     }
 
     void DisableGrowth()
     {
-        allocator_ = std::make_unique<MockDescriptorAllocator>(detail::BaseDescriptorAllocatorConfig {
+        allocator_ = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(detail::BaseDescriptorAllocatorConfig {
             .heap_strategy = std::make_shared<NoGrowthDescriptorAllocationStrategy>(),
         });
     }

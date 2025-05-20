@@ -83,8 +83,8 @@ NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ReleaseFromDifferentAllocatorThr
     // Tests that attempting to release a handle from a different allocator throws
 
     // Setup: Create two allocators and a handle from the first
-    const auto allocator1 = std::make_unique<MockDescriptorAllocator>(default_config_);
-    const auto allocator2 = std::make_unique<MockDescriptorAllocator>(default_config_);
+    const auto allocator1 = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(default_config_);
+    const auto allocator2 = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(default_config_);
 
     allocator1->segment_factory_ = [](auto, auto) {
         // Create test segment for first allocator
