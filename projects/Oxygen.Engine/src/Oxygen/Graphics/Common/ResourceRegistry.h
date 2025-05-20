@@ -165,8 +165,6 @@ public:
             .IsValid();
     }
 
-    [[nodiscard]] OXYGEN_GFX_API auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
-
     template <ResourceWithViews Resource>
     [[nodiscard]] auto Contains(const Resource& resource) const -> bool
     {
@@ -181,9 +179,6 @@ public:
         auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
         return Contains(NativeObject(const_cast<Resource*>(&resource), Resource::ClassTypeId()), key);
     }
-
-    //! Get native view for a descriptor
-    [[nodiscard]] OXYGEN_GFX_API auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
 
     template <ResourceWithViews Resource>
     [[nodiscard]] auto Find(
@@ -236,6 +231,10 @@ private:
     [[nodiscard]] OXYGEN_GFX_API auto Contains(const NativeObject& resource, size_t key_hash) const -> bool;
 
     [[nodiscard]] OXYGEN_GFX_API auto Find(const NativeObject& resource, size_t key_hash) const -> NativeObject;
+
+    // TODO: consider deleting these methods as I cannot find a use case
+[[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
+    [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
 
     // Core dependencies
     std::shared_ptr<DescriptorAllocator> descriptor_allocator_;
