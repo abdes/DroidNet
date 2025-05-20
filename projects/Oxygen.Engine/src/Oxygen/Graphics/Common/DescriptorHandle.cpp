@@ -27,6 +27,17 @@ DescriptorHandle::DescriptorHandle(
     DLOG_F(4, "constructed {}", nostd::to_string(*this));
 }
 
+DescriptorHandle::DescriptorHandle(
+    const IndexT index,
+    const ResourceViewType view_type,
+    const DescriptorVisibility visibility) noexcept
+    : index_(index)
+    , view_type_(view_type)
+    , visibility_(visibility)
+{
+    DLOG_F(4, "constructed(invalid) {}", nostd::to_string(*this));
+}
+
 DescriptorHandle::~DescriptorHandle()
 {
     Release();

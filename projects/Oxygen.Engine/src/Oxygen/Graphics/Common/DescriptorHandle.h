@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <string>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -26,10 +27,10 @@ class DescriptorAllocator;
  descriptor pool.
 
  Each descriptor is associated with a specific type (CBV/SRV/UAV, Sampler, etc.)
- and exists in a specific memory visibility (shader-visible or CPU-only). The type
- determines which heap it's allocated from in D3D12 and the binding type in Vulkan.
- The visibility determines which heap it's allocated from in D3D12 and the memory
- location in Vulkan.
+ and exists in a specific memory visibility (shader-visible or CPU-only). The
+ type determines which heap it's allocated from in D3D12 and the binding type in
+ Vulkan. The visibility determines which heap it's allocated from in D3D12 and
+ the memory location in Vulkan.
 
  Has limited ownership semantics: can release its descriptor back to the
  allocator but doesn't own the underlying resource. Contains a back-reference to
@@ -122,6 +123,11 @@ public:
     OXYGEN_GFX_API void Invalidate() noexcept;
 
 protected:
+    //! No allocator constructor creates an invalid handle. Primarily useful for
+    //! unit tests.
+    OXYGEN_GFX_API DescriptorHandle(IndexT index,
+        ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
+
     //! Constructor that takes an allocator and index.
     /*!
      Creating a valid handle can only be done by the entity that allocated
