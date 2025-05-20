@@ -662,13 +662,12 @@ NOLINT_TEST(FixedDescriptorHeapSegmentTest, PolymorphicInterfaceUsage)
 // Parameterized Tests
 //===----------------------------------------------------------------------===//
 
-class AllocateUntilFullParamTest : public ::testing::TestWithParam<uint32_t> {};
+class AllocateUntilFullParamTest : public ::testing::TestWithParam<uint32_t> { };
 
 INSTANTIATE_TEST_SUITE_P(
     CapacityCases,
     AllocateUntilFullParamTest,
-    ::testing::Values(0U, 1U, 10U)
-);
+    ::testing::Values(0U, 1U, 10U));
 
 //! Allocate until full, then fail.
 NOLINT_TEST_P(AllocateUntilFullParamTest, AllocateUntilFull)
