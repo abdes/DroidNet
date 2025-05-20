@@ -27,10 +27,10 @@
 #include "./Mocks/TestDescriptorHandle.h"
 
 using oxygen::graphics::DefaultDescriptorAllocationStrategy;
+using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 using oxygen::graphics::detail::DescriptorHeapSegment;
 using IndexT = DescriptorHandle::IndexT;
 
@@ -236,8 +236,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
     class LocalMockAllocator : public oxygen::graphics::detail::BaseDescriptorAllocator {
     public:
         using Base = oxygen::graphics::detail::BaseDescriptorAllocator;
-        LocalMockAllocator(const BaseDescriptorAllocatorConfig& cfg, DescriptorHeapSegment::IndexT expected)
-            : Base(cfg)
+        LocalMockAllocator(
+            std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
+            DescriptorHeapSegment::IndexT expected)
+            : Base(std::move(heap_strategy))
             , expected_base_index_(expected)
             , checked_(false)
         {
@@ -275,7 +277,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
     };
 
     // Use the local mock allocator
-    auto allocator = std::make_unique<LocalMockAllocator>(BaseDescriptorAllocatorConfig { .heap_strategy = strategy }, expected_base_index);
+    auto allocator = std::make_unique<LocalMockAllocator>(strategy, expected_base_index);
 
     // Allocate a descriptor and verify the base index was used
     auto handle = allocator->Allocate(view_type, visibility);

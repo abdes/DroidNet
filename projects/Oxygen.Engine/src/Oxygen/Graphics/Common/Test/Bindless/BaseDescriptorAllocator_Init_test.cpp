@@ -25,9 +25,9 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorHeapSegment.h"
 
+using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
-using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
@@ -42,11 +42,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorInitTest, DefaultStrategyFallback)
     // Tests that the allocator uses a default allocation strategy when none is provided
 
     // Setup: Create a config with null heap strategy
-    BaseDescriptorAllocatorConfig null_strategy_config;
-    null_strategy_config.heap_strategy = nullptr;
+    std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy {};
 
     // Create an allocator with null strategy config
-    const auto n_allocator = std::make_unique<MockDescriptorAllocator>(null_strategy_config);
+    const auto n_allocator = std::make_unique<MockDescriptorAllocator>(heap_strategy);
 
     // This should NOT cause the process to die
     EXPECT_NO_FATAL_FAILURE({
@@ -60,9 +59,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorInitTest, ZeroInitialCapacityFailsAllocatio
 
     // Setup: Create a config with zero capacity for a specific type
     const auto z_allocator = std::make_unique<::testing::NiceMock<MockDescriptorAllocator>>(
-        BaseDescriptorAllocatorConfig {
-            .heap_strategy = std::make_unique<ZeroCapacityDescriptorAllocationStrategy>(),
-        });
+        std::make_unique<ZeroCapacityDescriptorAllocationStrategy>());
 
     // This factory should never be called since we'll fail on capacity check
     z_allocator->segment_factory_ = [](auto, auto) {

@@ -26,8 +26,8 @@ public:
         IndexT /*capacity*/, IndexT /*base_index*/, ResourceViewType, DescriptorVisibility)>;
 
     // Explicit constructor to set up default action for the mocked Allocate method
-    explicit MockDescriptorAllocator(const detail::BaseDescriptorAllocatorConfig& config)
-        : detail::BaseDescriptorAllocator(config)
+    explicit MockDescriptorAllocator(std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy = nullptr)
+        : detail::BaseDescriptorAllocator(std::move(heap_strategy))
     {
         ON_CALL(*this, Allocate(::testing::_, ::testing::_))
             .WillByDefault(::testing::Invoke(

@@ -28,6 +28,7 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorHeapSegment.h"
 
+using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
@@ -98,10 +99,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
 
     // Setup: Track the requested segment sizes
     std::vector<size_t> requested_sizes;
-    const auto key = default_config_.heap_strategy->GetHeapKey(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    const auto initial_capacity = default_config_.heap_strategy->GetHeapDescription(key).shader_visible_capacity;
-    const auto growth_factor = default_config_.heap_strategy->GetHeapDescription(key).growth_factor;
-    const auto max_growth_iterations = default_config_.heap_strategy->GetHeapDescription(key).max_growth_iterations;
+    const auto key = heap_strategy_->GetHeapKey(ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const auto initial_capacity = heap_strategy_->GetHeapDescription(key).shader_visible_capacity;
+    const auto growth_factor = heap_strategy_->GetHeapDescription(key).growth_factor;
+    const auto max_growth_iterations = heap_strategy_->GetHeapDescription(key).max_growth_iterations;
 
     // Setup factory to track the sizes that would be used for segment creation
     IndexT base_index { 0 };
@@ -214,9 +215,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ThrowsIfOutOfSpaceWithGrowthLim
     };
 
     // Action & Verify: Should succeed for maxGrowthIterations + 1 allocations, then throw
-    const auto key = default_config_.heap_strategy->GetHeapKey(
+    const auto key = heap_strategy_->GetHeapKey(
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-    const auto max_growth_iterations = default_config_.heap_strategy->GetHeapDescription(key).max_growth_iterations;
+    const auto max_growth_iterations = heap_strategy_->GetHeapDescription(key).max_growth_iterations;
 
     std::vector<DescriptorHandle> handles;
     for (auto i = 0U; i < max_growth_iterations + 1; ++i) {
@@ -346,8 +347,8 @@ public:
     ResourceViewType last_type_ = ResourceViewType::kNone;
     DescriptorVisibility last_vis_ = DescriptorVisibility::kNone;
 
-    explicit GrowthTestAllocator(const oxygen::graphics::detail::BaseDescriptorAllocatorConfig& config)
-        : BaseDescriptorAllocator(config)
+    explicit GrowthTestAllocator(std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy)
+        : BaseDescriptorAllocator(std::move(heap_strategy))
     {
     }
 
@@ -400,7 +401,6 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthCapacityClampedToMaxIndex
 {
     using oxygen::graphics::DescriptorAllocationStrategy;
     using oxygen::graphics::HeapDescription;
-    using oxygen::graphics::detail::BaseDescriptorAllocatorConfig;
 
     // Custom heap strategy with a huge growth factor to force overflow
     struct HugeGrowthStrategy : DescriptorAllocationStrategy {
@@ -430,14 +430,12 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthCapacityClampedToMaxIndex
         }
     };
 
-    const BaseDescriptorAllocatorConfig config {
-        .heap_strategy = std::make_shared<HugeGrowthStrategy>(),
-    };
-    GrowthTestAllocator allocator(config);
+    auto heap_strategy = std::make_shared<HugeGrowthStrategy>();
+    GrowthTestAllocator allocator(heap_strategy);
 
     // Patch the internal state to simulate a segment with large capacity
     // so that growth will overflow
-    auto key = config.heap_strategy->GetHeapKey(
+    auto key = heap_strategy->GetHeapKey(
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
     // Allocate once to create the initial segment

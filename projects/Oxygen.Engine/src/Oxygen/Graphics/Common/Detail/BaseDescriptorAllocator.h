@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -28,17 +29,6 @@
 
 namespace oxygen::graphics::detail {
 
-//! Configuration for descriptor allocator initialization.
-/*!
- Defines the initial sizes and growth parameters for descriptor heaps.
- Different view types and visibility options can have different allocation
- strategies.
-*/
-struct BaseDescriptorAllocatorConfig {
-    //! Heap mapping strategy (application/backend provided, must outlive allocator construction)
-    std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy;
-};
-
 //! Base implementation of descriptor allocation and management.
 /*!
  Provides common functionality for descriptor allocation, tracking, and recycling
@@ -55,13 +45,12 @@ struct BaseDescriptorAllocatorConfig {
 class BaseDescriptorAllocator : public DescriptorAllocator, public oxygen::Object {
     OXYGEN_TYPED(BaseDescriptorAllocator)
 public:
-    explicit BaseDescriptorAllocator(BaseDescriptorAllocatorConfig config)
-        : config_(std::move(config))
+    explicit BaseDescriptorAllocator(
+        std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy = nullptr)
+        : heap_strategy_(heap_strategy
+                  ? std::move(heap_strategy)
+                  : std::make_shared<DefaultDescriptorAllocationStrategy>())
     {
-        if (!config_.heap_strategy) {
-            static DefaultDescriptorAllocationStrategy default_strategy;
-            config_.heap_strategy = std::make_shared<DefaultDescriptorAllocationStrategy>();
-        }
         PrecomputeHeapKeys();
         DLOG_F(INFO, "Descriptor Allocator created; {} heaps configured in allocation strategy.",
             heaps_.size());
@@ -304,7 +293,7 @@ protected:
         DCHECK_F(heap_key != "__Unknown__:__Unknown__", "Heap key in the heaps_ table should never be unknown");
 
         try {
-            const auto& desc = config_.heap_strategy->GetHeapDescription(heap_key);
+            const auto& desc = heap_strategy_->GetHeapDescription(heap_key);
             return (visibility == DescriptorVisibility::kShaderVisible)
                 ? desc.shader_visible_capacity
                 : desc.cpu_visible_capacity;
@@ -318,8 +307,8 @@ protected:
 
     auto GetAllocationStrategy() const noexcept -> const graphics::DescriptorAllocationStrategy&
     {
-        DCHECK_NOTNULL_F(config_.heap_strategy);
-        return *config_.heap_strategy;
+        DCHECK_NOTNULL_F(heap_strategy_, "Heap strategy should never be null");
+        return *heap_strategy_;
     }
 
     //! Gets the segment for a given descriptor handle.
@@ -422,10 +411,10 @@ private:
                 const auto view_type = static_cast<ResourceViewType>(t);
                 const auto visibility = static_cast<DescriptorVisibility>(v);
                 const size_t idx = HeapIndex(view_type, visibility);
-                auto key = config_.heap_strategy->GetHeapKey(view_type, visibility);
+                auto key = heap_strategy_->GetHeapKey(view_type, visibility);
                 heaps_[idx] = HeapInfo {
                     .key = key,
-                    .description = &config_.heap_strategy->GetHeapDescription(key),
+                    .description = &heap_strategy_->GetHeapDescription(key),
                 };
             }
         }
@@ -447,7 +436,7 @@ private:
     }
 
     //! Configuration for the allocator.
-    BaseDescriptorAllocatorConfig config_;
+    std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy_;
 
     static constexpr size_t kNumResourceViewTypes = static_cast<size_t>(ResourceViewType::kMaxResourceViewType);
     static constexpr size_t kNumVisibilities = static_cast<size_t>(DescriptorVisibility::kMaxDescriptorVisibility);
