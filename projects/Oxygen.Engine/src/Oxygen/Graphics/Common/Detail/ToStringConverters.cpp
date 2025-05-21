@@ -86,6 +86,8 @@ auto oxygen::graphics::to_string(const QueueSharingPreference value) -> const ch
 auto oxygen::graphics::to_string(const ShaderType value) -> const char*
 {
     switch (value) {
+    case ShaderType::kUnknown:
+        return "Unknown";
     case ShaderType::kVertex:
         return "Vertex Shader";
     case ShaderType::kPixel:
@@ -184,7 +186,7 @@ auto oxygen::graphics::to_string(const ResourceStateTrackingMode value) -> const
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(ResourceAccessMode value) -> const char*
+auto oxygen::graphics::to_string(const ResourceAccessMode value) -> const char*
 {
     switch (value) {
     case ResourceAccessMode::kInvalid:
@@ -204,9 +206,11 @@ auto oxygen::graphics::to_string(ResourceAccessMode value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(TextureDimension value) -> const char*
+auto oxygen::graphics::to_string(const TextureDimension value) -> const char*
 {
     switch (value) {
+    case TextureDimension::kUnknown:
+        return "Unknown";
     case TextureDimension::kTexture1DArray:
         return "1D Array";
     case TextureDimension::kTexture1D:
@@ -219,9 +223,9 @@ auto oxygen::graphics::to_string(TextureDimension value) -> const char*
         return "Cube";
     case TextureDimension::kTextureCubeArray:
         return "Cube Array";
-    case TextureDimension::kTexture2DMS:
+    case TextureDimension::kTexture2DMultiSample:
         return "2D MS";
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSampleArray:
         return "2D MS Array";
     case TextureDimension::kTexture3D:
         return "3D";
@@ -270,7 +274,7 @@ auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(DescriptorVisibility value) -> const char*
+auto oxygen::graphics::to_string(const DescriptorVisibility value) -> const char*
 {
     switch (value) {
     case DescriptorVisibility::kNone:
@@ -279,6 +283,8 @@ auto oxygen::graphics::to_string(DescriptorVisibility value) -> const char*
         return "Shader Visible";
     case DescriptorVisibility::kCpuOnly:
         return "CPU Only";
+    case DescriptorVisibility::kMaxDescriptorVisibility:
+        return "__Max__";
     }
 
     return "__NotSupported__";

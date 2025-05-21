@@ -61,7 +61,7 @@ namespace graphics {
      Work coordination between the application and the renderer is handled
      through a producer-consumer model. The application acts as the producer,
      submitting frame tasks, while the render thread is the consumer, executing
-     these tasks in order. The render thread enforces backpressure by limiting
+     these tasks in order. The render thread enforces back-pressure by limiting
      the queue size to the number of frames in flight, ensuring the application
      cannot get too far ahead of the GPU. Synchronization primitives and
      per-frame tracking structures ensure that resources are only released when
@@ -118,7 +118,7 @@ namespace graphics {
      and deferred batching.
 
      EndFrame() always calls FlushPendingCommandLists(), ensuring that no
-     command lists are left unsubmitted and maintaining correct timeline
+     command lists are left un-submitted and maintaining correct timeline
      synchronization and resource management.
     */
     class Renderer
@@ -165,9 +165,7 @@ namespace graphics {
             -> std::shared_ptr<graphics::Framebuffer>
             = 0;
 
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateBuffer(
-            const BufferDesc& desc,
-            const void* initial_data = nullptr) const
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateBuffer(const BufferDesc& desc) const
             -> std::shared_ptr<Buffer>
             = 0;
 

@@ -179,12 +179,13 @@ void MainModule::CreateTriangleVertexBuffer()
     if (vertex_buffer_)
         return;
     graphics::BufferDesc vb_desc;
-    vb_desc.size = sizeof(triangle_vertices);
+    vb_desc.size_bytes = sizeof(triangle_vertices);
     vb_desc.usage = graphics::BufferUsage::kVertex;
     vb_desc.memory = graphics::BufferMemory::kUpload;
-    vb_desc.stride = sizeof(Vertex);
-    vertex_buffer_ = renderer_->CreateBuffer(vb_desc, triangle_vertices);
+    // TODO: vb_desc.stride = sizeof(Vertex);
+    vertex_buffer_ = renderer_->CreateBuffer(vb_desc);
     vertex_buffer_->SetName("Triangle Vertex Buffer");
+    // TODO: Handle upload of initial data
 }
 
 void MainModule::SetupFramebuffers()
@@ -248,7 +249,7 @@ auto MainModule::RenderScene() -> co::Co<>
         graphics::TextureSubResourceSet::EntireTexture(),
         graphics::Color(0.4F, 0.4F, .8f, 1.0F));
 
-    CreateTriangleVertexBuffer();
+    // CreateTriangleVertexBuffer();
 
     co_return;
 }

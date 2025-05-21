@@ -1,19 +1,36 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
+#include <concepts>
 #include <functional>
+#include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 
 namespace oxygen::graphics::detail {
+
+//! Concept that checks if a type has a GetName method that returns something
+//! convertible to std::string_view
+template <typename T>
+concept HasGetNameMethod = requires(T t) {
+    { t.GetName() } -> std::convertible_to<std::string_view>;
+};
+
+//! Concept that checks if a type has an instance GetTypeName method that returns
+//! something convertible to std::string_view
+template <typename T>
+concept HasGetTypeName = requires(T t) {
+    { t.GetTypeName() } -> std::convertible_to<std::string_view>;
+};
 
 //! Tracks resources allocated during the rendering of a frame and releases
 //! them when no longer used by the GPU (i.e., at the beginning of the new
@@ -40,6 +57,7 @@ public:
         auto& frame_resources = deferred_releases_[current_frame_index_];
         frame_resources.emplace_back(
             [resource = std::move(resource)]() mutable {
+                LogRelease(resource.get());
                 resource->Release();
                 resource.reset();
             });
@@ -58,6 +76,7 @@ public:
         auto& frame_resources = deferred_releases_[current_frame_index_];
         frame_resources.emplace_back(
             [resource = std::move(resource)]() mutable {
+                LogRelease(resource.get());
                 resource.reset();
             });
     }
@@ -73,6 +92,7 @@ public:
         frame_resources.emplace_back(
             [resource]() mutable {
                 if (resource) {
+                    LogRelease(resource);
                     resource->Release();
                 }
             });
@@ -91,6 +111,28 @@ public:
 private:
     //! Releases all deferred resources from the previous render of the frame.
     void ReleaseDeferredResources(uint32_t frame_index);
+
+    //! Logs the release of a resource.
+    template <typename T>
+    static void LogRelease(const T* resource)
+    {
+#if !defined(NDEBUG)
+        if (!resource)
+            return;
+
+        std::string_view type_name { "(no type info)" };
+        std::string_view name { "(unnamed)" };
+
+        if constexpr (HasGetTypeName<T>) {
+            type_name = resource->GetTypeName();
+        }
+        if constexpr (HasGetNameMethod<T>) {
+            name = resource->GetName();
+        }
+
+        DLOG_F(3, "Releasing {} resource: {}", type_name, name);
+#endif
+    }
 
     //! The current frame index.
     uint32_t current_frame_index_ { 0 };

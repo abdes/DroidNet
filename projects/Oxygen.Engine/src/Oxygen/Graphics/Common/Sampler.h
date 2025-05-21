@@ -4,20 +4,18 @@
 // SPDX-License: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-/**
- * @file Sampler.h
- * @brief Backend-agnostic sampler implementation for 3D rendering.
- *
- * This file provides a unified interface for texture sampling operations across different
- * graphics backends (DirectX, Vulkan, etc).
- */
-
 #pragma once
 
 #include <cstdint>
 
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Named.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Format.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 namespace oxygen::graphics {
 
@@ -67,48 +65,40 @@ struct SamplerDesc {
  * This class wraps the backend-specific sampler implementation and provides
  * a consistent interface across different graphics APIs.
  */
-class Sampler {
+class Sampler : public Composition, public Named, public std::enable_shared_from_this<Sampler> {
 public:
-    /**
-     * @brief Create a sampler with the specified parameters
-     * @param desc The sampler description
-     */
-    explicit Sampler(const SamplerDesc& desc);
+    explicit Sampler(std::string_view name)
+    {
+        AddComponent<ObjectMetaData>(name);
+    }
 
-    /**
-     * @brief Create a sampler from native handle
-     * @param native_handle Backend-specific native handle
-     * @param desc The sampler description
-     */
-    Sampler(NativeObject native_handle, const SamplerDesc& desc);
+    OXYGEN_GFX_API virtual ~Sampler() override = default;
 
-    /**
-     * @brief Destructor
-     */
-    ~Sampler();
+    OXYGEN_MAKE_NON_COPYABLE(Sampler)
+    OXYGEN_DEFAULT_MOVABLE(Sampler)
 
-    /**
-     * @brief Get the sampler description
-     * @return The sampler description
-     */
-    [[nodiscard]] const SamplerDesc& GetDesc() const noexcept { return desc_; }
+    //! Gets the native resource handle for the texture.
+    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
 
-    /**
-     * @brief Get the native resource handle
-     * @return The native resource handle
-     */
-    [[nodiscard]] const NativeObject& GetNativeResource() const noexcept { return native_; }
+    //! Gets the descriptor for this texture.
+    [[nodiscard]] virtual auto GetDescriptor() const -> const SamplerDesc& = 0;
 
-    /**
-     * @brief Check if the sampler is valid
-     * @return True if valid, false otherwise
-     */
-    [[nodiscard]] bool IsValid() const noexcept { return native_.IsValid(); }
+    //! Gets the name of the texture.
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
+        return GetComponent<ObjectMetaData>().GetName();
+    }
 
-private:
-    NativeObject native_ {};
-    SamplerDesc desc_;
+    //! Sets the name of the texture.
+    void SetName(const std::string_view name) noexcept override
+    {
+        GetComponent<ObjectMetaData>().SetName(name);
+    }
 };
+
+// Ensure Sampler satisfies ResourceWithViews
+static_assert(oxygen::graphics::SupportedResource<oxygen::graphics::Sampler>,
+    "Sampler must satisfy ResourceWithViews");
 
 // Common predefined samplers
 namespace Samplers {

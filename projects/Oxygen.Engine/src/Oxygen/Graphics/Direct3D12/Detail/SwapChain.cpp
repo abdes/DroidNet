@@ -11,7 +11,6 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
@@ -35,9 +34,6 @@ auto ToNonSrgb(const DXGI_FORMAT format) -> DXGI_FORMAT
 
 using oxygen::windows::ThrowOnFailed;
 
-using oxygen::graphics::d3d12::NameObject;
-using oxygen::graphics::d3d12::Renderer;
-using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::d3d12::detail::SwapChain;
 
 SwapChain::~SwapChain() noexcept
@@ -73,7 +69,6 @@ void SwapChain::CreateSwapChain()
         .Format = ToNonSrgb(format_),
         .Stereo = FALSE,
         .SampleDesc = { 1, 0 }, // Always like this for D3D12
-        // TODO(abdes): For now, we will use the back buffer as a render target, maybe later render to buffer and copy
         .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER,
         .BufferCount = kFrameBufferCount,
         .Scaling = DXGI_SCALING_STRETCH,
@@ -178,9 +173,7 @@ void SwapChain::CreateRenderTargets()
                 .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
                 .initial_state = ResourceStates::kPresent,
             },
-            back_buffer->GetDesc(),
-            GraphicResource::WrapForImmediateRelease<ID3D12Resource>(back_buffer),
-            nullptr);
+            NativeObject(back_buffer, ClassTypeId()));
     }
 }
 
