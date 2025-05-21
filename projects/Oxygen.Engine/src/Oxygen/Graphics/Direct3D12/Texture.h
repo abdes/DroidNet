@@ -13,10 +13,10 @@
 
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics {
+class DescriptorHandle;
 
 namespace detail {
     class PerFrameResourceManager;
@@ -44,62 +44,66 @@ namespace d3d12 {
         OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto GetNativeResource() const -> NativeObject override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetNativeView(
+            const DescriptorHandle& view_handle,
+            const TextureViewDescription& view_desc) const
+            -> NativeObject override;
+
         [[nodiscard]] OXYGEN_D3D12_API auto GetDescriptor() const -> const TextureDesc& override { return desc_; }
 
+    protected:
         // Abstract method implementations from base class
         [[nodiscard]] OXYGEN_D3D12_API auto CreateShaderResourceView(
+            const DescriptorHandle& view_handle,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const -> NativeObject override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateUnorderedAccessView(
+            const DescriptorHandle& view_handle,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const -> NativeObject override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateRenderTargetView(
+            const DescriptorHandle& view_handle,
             Format format,
             TextureSubResourceSet sub_resources) const -> NativeObject override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateDepthStencilView(
+            const DescriptorHandle& view_handle,
             Format format,
             TextureSubResourceSet sub_resources,
             bool is_read_only) const -> NativeObject override;
 
-        // Internal helper methods that create views with provided descriptor handles
-        // TODO: use descriptor allocator and registry
-        OXYGEN_D3D12_API void CreateShaderResourceView(
-            detail::DescriptorHandle& dh,
+    private:
+        // Abstract method implementations from base class
+        [[nodiscard]] OXYGEN_D3D12_API void CreateShaderResourceView(
+            D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const;
 
-        OXYGEN_D3D12_API void CreateUnorderedAccessView(
-            detail::DescriptorHandle& dh,
+        [[nodiscard]] OXYGEN_D3D12_API void CreateUnorderedAccessView(
+            D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const;
 
-        OXYGEN_D3D12_API void CreateRenderTargetView(
-            detail::DescriptorHandle& dh,
+        [[nodiscard]] OXYGEN_D3D12_API void CreateRenderTargetView(
+            D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureSubResourceSet sub_resources) const;
 
-        OXYGEN_D3D12_API void CreateDepthStencilView(
-            detail::DescriptorHandle& dh,
+        [[nodiscard]] OXYGEN_D3D12_API void CreateDepthStencilView(
+            D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureSubResourceSet sub_resources,
-            bool is_read_only = false) const;
+            bool is_read_only) const;
 
-        OXYGEN_D3D12_API auto GetClearMipLevelUnorderedAccessView(uint32_t mip_level)
-            -> const detail::DescriptorHandle&;
-
-    private:
         TextureDesc desc_;
         D3D12_RESOURCE_DESC resource_desc_;
         uint8_t plane_count_ = 1;
-
-        std::vector<detail::DescriptorHandle> clear_mip_level_uav_cache_;
     };
 
 } // namespace d3d12

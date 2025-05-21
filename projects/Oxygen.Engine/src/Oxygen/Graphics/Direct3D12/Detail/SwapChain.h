@@ -21,7 +21,6 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 namespace oxygen::graphics::d3d12 {

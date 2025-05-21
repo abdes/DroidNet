@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
@@ -410,12 +411,18 @@ private:
             for (size_t t = 1; t < kNumResourceViewTypes; ++t) {
                 const auto view_type = static_cast<ResourceViewType>(t);
                 const auto visibility = static_cast<DescriptorVisibility>(v);
-                const size_t idx = HeapIndex(view_type, visibility);
-                auto key = heap_strategy_->GetHeapKey(view_type, visibility);
-                heaps_[idx] = HeapInfo {
-                    .key = key,
-                    .description = &heap_strategy_->GetHeapDescription(key),
-                };
+                try {
+                    const size_t idx = HeapIndex(view_type, visibility);
+                    auto key = heap_strategy_->GetHeapKey(view_type, visibility);
+                    heaps_[idx] = HeapInfo {
+                        .key = key,
+                        .description = &heap_strategy_->GetHeapDescription(key),
+                    };
+                } catch (const std::exception& ex) {
+                    DLOG_F(2, "combination ({}, {}) not supported by strategy: {}",
+                        nostd::to_string(view_type), nostd::to_string(visibility), ex.what());
+                    // Not an error, continue to next combination
+                }
             }
         }
     }

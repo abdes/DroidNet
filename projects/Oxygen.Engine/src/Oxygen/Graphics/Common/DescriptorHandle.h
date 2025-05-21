@@ -115,6 +115,12 @@ public:
         return visibility_;
     }
 
+    //! Gets the allocator that created this descriptor.
+    [[nodiscard]] constexpr auto GetAllocator() const noexcept
+    {
+        return allocator_;
+    }
+
     //! Explicitly releases the descriptor back to its allocator, and
     //! invalidates the handle.
     OXYGEN_GFX_API void Release() noexcept;

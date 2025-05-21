@@ -6,45 +6,58 @@
 
 #pragma once
 
+#include <memory>
+#include <span>
+
+#include <d3d12.h>
+
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
-namespace oxygen::graphics::d3d12 {
 
-class Framebuffer final : public graphics::Framebuffer {
-    using Base = graphics::Framebuffer;
+namespace oxygen::graphics {
 
-public:
-    explicit Framebuffer(FramebufferDesc desc);
-    ~Framebuffer() override = default;
+    class Renderer;
+    class Texture;
 
-    OXYGEN_MAKE_NON_COPYABLE(Framebuffer)
-    OXYGEN_DEFAULT_MOVABLE(Framebuffer)
+namespace d3d12 {
 
-    [[nodiscard]] auto GetDescriptor() const -> const FramebufferDesc& override { return desc_; }
-    [[nodiscard]] auto GetFramebufferInfo() const -> const FramebufferInfo& override;
+    class Framebuffer final : public graphics::Framebuffer {
+        using Base = graphics::Framebuffer;
 
-    [[nodiscard]] auto GetRenderTargetViews() const -> std::span<const detail::DescriptorHandle>
-    {
-        return rtvs_;
-    }
+    public:
+         Framebuffer(std::shared_ptr<graphics::Renderer> renderer, FramebufferDesc desc);
+        ~Framebuffer() override;
 
-    [[nodiscard]] auto GetDepthStencilView() const -> const detail::DescriptorHandle&
-    {
-        return dsv_;
-    }
+        OXYGEN_MAKE_NON_COPYABLE(Framebuffer)
+        OXYGEN_DEFAULT_MOVABLE(Framebuffer)
 
-private:
-    FramebufferDesc desc_;
+        [[nodiscard]] auto GetDescriptor() const -> const FramebufferDesc& override { return desc_; }
+        [[nodiscard]] auto GetFramebufferInfo() const -> const FramebufferInfo& override;
 
-    StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets + 1> textures_;
-    StaticVector<detail::DescriptorHandle, kMaxRenderTargets> rtvs_;
-    detail::DescriptorHandle dsv_;
+        [[nodiscard]] auto GetRenderTargetViews() const
+        {
+            return std::span(rtvs_.data(), rtvs_.size());
+        }
 
-    uint32_t rt_width { 0 };
-    uint32_t rt_height { 0 };
-};
+        [[nodiscard]] auto GetDepthStencilView() const -> SIZE_T
+        {
+            return dsv_;
+        }
 
-} // namespace oxygen::graphics::d3d12
+    private:
+        FramebufferDesc desc_;
+        std::shared_ptr<graphics::Renderer> renderer_;
+
+        StaticVector<std::shared_ptr<graphics::Texture>, kMaxRenderTargets> textures_ {};
+        StaticVector<SIZE_T, kMaxRenderTargets> rtvs_ {};
+        SIZE_T dsv_ {};
+
+        uint32_t rt_width { 0 };
+        uint32_t rt_height { 0 };
+    };
+
+} // namespace d3d12
+
+} // namespace oxygen::graphics

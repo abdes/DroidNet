@@ -90,9 +90,9 @@ public:
         std::string_view command_list_name)
         -> std::shared_ptr<graphics::CommandList>;
 
-    [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
-        -> std::unique_ptr<imgui::ImguiModule>
-        = 0;
+    // [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
+    //     -> std::unique_ptr<imgui::ImguiModule>
+    //     = 0;
 
     [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
         std::weak_ptr<platform::Window> window_weak,

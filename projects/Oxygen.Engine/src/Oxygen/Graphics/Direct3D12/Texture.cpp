@@ -8,21 +8,20 @@
 
 #include <Oxygen/Base/logging.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::TextureDimension;
+using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::Texture;
 using oxygen::graphics::d3d12::detail::ConvertResourceStates;
-using oxygen::graphics::d3d12::detail::DescriptorHandle;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::detail::FormatInfo;
@@ -146,10 +145,6 @@ Texture::Texture(TextureDesc desc)
         GraphicResource::WrapForImmediateRelease<ID3D12Resource>(resource),
         GraphicResource::WrapForImmediateRelease<D3D12MA::Allocation>(d3dmaAllocation));
 
-    if (desc_.is_uav) {
-        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
-    }
-
     resource_desc_ = resource->GetDesc();
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
@@ -168,10 +163,6 @@ Texture::Texture(TextureDesc desc, NativeObject native)
         nullptr // No allocation object for native resources
     );
 
-    if (desc_.is_uav) {
-        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
-    }
-
     resource_desc_ = resource->GetDesc();
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
@@ -189,10 +180,6 @@ Texture::Texture(
         desc_.debug_name,
         GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
         GraphicResource::WrapForDeferredRelease<D3D12MA::Allocation>(d3dmaAllocation, resource_manager));
-
-    if (desc_.is_uav) {
-        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
-    }
 
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
@@ -219,17 +206,12 @@ Texture::Texture(
         nullptr // No allocation object for native resources
     );
 
-    if (desc_.is_uav) {
-        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
-    }
-
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
 
 Texture::~Texture()
 {
     DLOG_F(1, "destroying texture: {}", Base::GetName());
-    clear_mip_level_uav_cache_.clear();
 }
 
 // ReSharper disable CppClangTidyBugproneUseAfterMove
@@ -238,10 +220,7 @@ Texture::Texture(Texture&& other) noexcept
     , desc_(std::move(other.desc_))
     , resource_desc_(std::exchange(other.resource_desc_, {})) // Reset to default
     , plane_count_(std::exchange(other.plane_count_, 1)) // Reset to default
-    , clear_mip_level_uav_cache_(std::move(other.clear_mip_level_uav_cache_))
 {
-    // Leave the moved-from object in a valid state
-    other.clear_mip_level_uav_cache_.clear();
 }
 
 auto Texture::operator=(Texture&& other) noexcept -> Texture&
@@ -251,11 +230,6 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
         desc_ = std::move(other.desc_);
         resource_desc_ = std::exchange(other.resource_desc_, {}); // Reset to default
         plane_count_ = std::exchange(other.plane_count_, 1); // Reset to default
-
-        clear_mip_level_uav_cache_ = std::move(other.clear_mip_level_uav_cache_);
-
-        // Leave the moved-from object in a valid state
-        other.clear_mip_level_uav_cache_.clear();
     }
     return *this;
 }
@@ -272,47 +246,110 @@ auto Texture::GetNativeResource() const -> NativeObject
     return { GetComponent<GraphicResource>().GetResource(), ClassTypeId() };
 }
 
+auto Texture::GetNativeView(
+    const DescriptorHandle& view_handle,
+    const TextureViewDescription& view_desc) const
+    -> NativeObject
+{
+    using oxygen::graphics::ResourceViewType;
+
+    switch (view_desc.view_type) {
+    case ResourceViewType::kTexture_SRV:
+        return CreateShaderResourceView(
+            view_handle,
+            view_desc.format,
+            view_desc.dimension,
+            view_desc.sub_resources);
+    case ResourceViewType::kTexture_UAV:
+        return CreateUnorderedAccessView(
+            view_handle,
+            view_desc.format,
+            view_desc.dimension,
+            view_desc.sub_resources);
+    case ResourceViewType::kTexture_RTV:
+        return CreateRenderTargetView(
+            view_handle,
+            view_desc.format,
+            view_desc.sub_resources);
+    case ResourceViewType::kTexture_DSV:
+        return CreateDepthStencilView(
+            view_handle,
+            view_desc.format,
+            view_desc.sub_resources,
+            view_desc.is_read_only_dsv);
+    default:
+        // Unknown or unsupported view type
+        return {};
+    }
+}
+
 auto Texture::CreateShaderResourceView(
+    const DescriptorHandle& view_handle,
     const Format format,
     const TextureDimension dimension,
     const TextureSubResourceSet sub_resources) const -> NativeObject
 {
-    auto handle = GetGraphics().Descriptors().SrvHeap().Allocate();
-    CreateShaderResourceView(handle, format, dimension, sub_resources);
-    return { handle.gpu.ptr, ClassTypeId() };
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    CreateShaderResourceView(cpu_handle, format, dimension, sub_resources);
+    auto gpu_handle = allocator->GetGpuHandle(view_handle);
+    return { gpu_handle.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateUnorderedAccessView(
+    const DescriptorHandle& view_handle,
     const Format format,
     const TextureDimension dimension,
     const TextureSubResourceSet sub_resources) const -> NativeObject
 {
-    auto handle = GetGraphics().Descriptors().UavHeap().Allocate();
-    CreateUnorderedAccessView(handle, format, dimension, sub_resources);
-    return { handle.gpu.ptr, ClassTypeId() };
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    CreateUnorderedAccessView(cpu_handle, format, dimension, sub_resources);
+    auto gpu_handle = allocator->GetGpuHandle(view_handle);
+    return { gpu_handle.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateRenderTargetView(
+    const DescriptorHandle& view_handle,
     const Format format,
     const TextureSubResourceSet sub_resources) const -> NativeObject
 {
-    auto handle = GetGraphics().Descriptors().RtvHeap().Allocate();
-    CreateRenderTargetView(handle, format, sub_resources);
-    return { handle.cpu.ptr, ClassTypeId() };
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    CreateRenderTargetView(cpu_handle, format, sub_resources);
+    return { cpu_handle.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateDepthStencilView(
+    const DescriptorHandle& view_handle,
     const Format format,
     const TextureSubResourceSet sub_resources,
     const bool is_read_only) const -> NativeObject
 {
-    auto handle = GetGraphics().Descriptors().DsvHeap().Allocate();
-    CreateDepthStencilView(handle, format, sub_resources, is_read_only);
-    return { handle.cpu.ptr, ClassTypeId() };
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    CreateDepthStencilView(cpu_handle, format, sub_resources, is_read_only);
+    return { cpu_handle.ptr, ClassTypeId() };
 }
 
 void Texture::CreateShaderResourceView(
-    DescriptorHandle& dh,
+    D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     Format format,
     TextureDimension dimension,
     TextureSubResourceSet sub_resources) const
@@ -391,11 +428,11 @@ void Texture::CreateShaderResourceView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateShaderResourceView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh_cpu);
 }
 
 void Texture::CreateUnorderedAccessView(
-    DescriptorHandle& dh,
+    D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     Format format,
     TextureDimension dimension,
     TextureSubResourceSet sub_resources) const
@@ -451,11 +488,11 @@ void Texture::CreateUnorderedAccessView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &uav_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &uav_desc, dh_cpu);
 }
 
 void Texture::CreateRenderTargetView(
-    DescriptorHandle& dh,
+    D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     Format format,
     TextureSubResourceSet sub_resources) const
 {
@@ -509,11 +546,11 @@ void Texture::CreateRenderTargetView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateRenderTargetView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh.cpu);
+        GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh_cpu);
 }
 
 void Texture::CreateDepthStencilView(
-    DescriptorHandle& dh,
+    D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
     Format format,
     TextureSubResourceSet sub_resources,
     bool is_read_only) const
@@ -575,35 +612,5 @@ void Texture::CreateDepthStencilView(
     }
 
     GetGraphics().GetCurrentDevice()->CreateDepthStencilView(
-        GetNativeResource().AsPointer<ID3D12Resource>(), &dsv_desc, dh.cpu);
-}
-
-auto Texture::GetClearMipLevelUnorderedAccessView(const uint32_t mip_level) -> const DescriptorHandle&
-{
-    DCHECK_F(desc_.is_uav, "Mip level UAVs are only supported for UAV textures.");
-
-    // Check if the mip level UAV is already cached
-    if (mip_level < clear_mip_level_uav_cache_.size()) {
-        if (const auto& handle = clear_mip_level_uav_cache_[mip_level]; handle.IsValid()) {
-            return handle;
-        }
-    }
-
-    // Create a new UAV for the mip level
-    auto handle = GetGraphics().Descriptors().SrvHeap().Allocate();
-    const TextureSubResourceSet sub_resources {
-        .base_mip_level = mip_level,
-        .num_mip_levels = 1,
-        .base_array_slice = 0,
-        .num_array_slices = TextureSubResourceSet::kAllArraySlices
-    };
-    CreateUnorderedAccessView(handle, Format::kUnknown, TextureDimension::kUnknown, sub_resources);
-
-    // Ensure the cache is large enough and store the handle
-    if (mip_level >= clear_mip_level_uav_cache_.size()) {
-        clear_mip_level_uav_cache_.resize(mip_level + 1);
-    }
-    clear_mip_level_uav_cache_[mip_level] = std::move(handle);
-
-    return clear_mip_level_uav_cache_[mip_level];
+        GetNativeResource().AsPointer<ID3D12Resource>(), &dsv_desc, dh_cpu);
 }

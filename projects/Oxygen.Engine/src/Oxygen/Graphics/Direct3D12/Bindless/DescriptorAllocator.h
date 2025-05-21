@@ -29,11 +29,12 @@ class DescriptorHeapSegment;
  - Efficiently copies descriptors between heaps when needed
  - Prepares shader-visible descriptor heaps for rendering
 */
-class DescriptorAllocator final : public detail::BaseDescriptorAllocator {
+class DescriptorAllocator final : public graphics::detail::BaseDescriptorAllocator {
 public:
     //! Creates a new D3D12 descriptor allocator.
     /*!
-     \param config The configuration for the allocator.
+     \param heap_strategy The strategy for allocating descriptor heaps. If
+            nullptr, a default strategy will be used.
      \param device The D3D12 device used for heap creation.
 
      Initializes the allocator with the provided D3D12 device and heap strategy.
@@ -48,6 +49,14 @@ public:
 
     OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocator)
     OXYGEN_DEFAULT_MOVABLE(DescriptorAllocator)
+
+    //! Gets the D3D12 CPU descriptor handle for a given descriptor handle.
+    [[nodiscard]] OXYGEN_D3D12_API auto GetCpuHandle(const DescriptorHandle& handle) const
+        -> D3D12_CPU_DESCRIPTOR_HANDLE;
+
+    //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
+    [[nodiscard]] OXYGEN_D3D12_API auto GetGpuHandle(const DescriptorHandle& handle) const
+        -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
     //! Copies a descriptor from source to destination.
     /*!
@@ -84,7 +93,7 @@ protected:
         uint32_t base_index,
         ResourceViewType view_type,
         DescriptorVisibility visibility)
-        -> std::unique_ptr<detail::DescriptorHeapSegment> override;
+        -> std::unique_ptr<graphics::detail::DescriptorHeapSegment> override;
 
 private:
     //! Gets the D3D12DescriptorHeapSegment from a handle.

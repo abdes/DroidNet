@@ -11,16 +11,19 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 
+
+using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
 using oxygen::graphics::d3d12::detail::GetGraphics;
@@ -224,14 +227,53 @@ void Buffer::SetName(const std::string_view name) noexcept
     GetComponent<GraphicResource>().SetName(name);
 }
 
-auto Buffer::CreateConstantBufferView(const BufferRange& range) const -> NativeObject
+auto Buffer::GetNativeView(
+    const DescriptorHandle& view_handle,
+    const BufferViewDescription& view_desc) const
+    -> NativeObject
 {
+    using oxygen::graphics::ResourceViewType;
+
+    switch (view_desc.view_type) {
+    case ResourceViewType::kConstantBuffer:
+        return CreateConstantBufferView(
+            view_handle,
+            view_desc.range);
+    case ResourceViewType::kRawBuffer_SRV:
+    case ResourceViewType::kTypedBuffer_SRV:
+    case ResourceViewType::kStructuredBuffer_SRV:
+        return CreateShaderResourceView(
+            view_handle,
+            view_desc.format,
+            view_desc.range,
+            view_desc.stride);
+    case ResourceViewType::kRawBuffer_UAV:
+    case ResourceViewType::kTypedBuffer_UAV:
+    case ResourceViewType::kStructuredBuffer_UAV:
+        return CreateUnorderedAccessView(
+            view_handle,
+            view_desc.format,
+            view_desc.range,
+            view_desc.stride);
+    default:
+        // Unknown or unsupported view type
+        return {};
+    }
+}
+
+auto Buffer::CreateConstantBufferView(
+    const DescriptorHandle& view_handle,
+    const BufferRange& range) const -> NativeObject
+{
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
     if ((desc_.usage & BufferUsage::kConstant) != BufferUsage::kConstant) {
         LOG_F(WARNING, "Creating constant buffer view for buffer {} without kConstant usage flag", Base::GetName());
     }
 
-    // Allocate a descriptor from the CBV/SRV/UAV heap
-    const auto handle = GetGraphics().Descriptors().SrvHeap().Allocate();
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
 
     // Prepare CBV description
     const BufferRange resolved = range.Resolve(desc_);
@@ -241,19 +283,27 @@ auto Buffer::CreateConstantBufferView(const BufferRange& range) const -> NativeO
         .SizeInBytes = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) + 255) & ~255u,
     };
 
-    GetGraphics().GetCurrentDevice()->CreateConstantBufferView(&cbv_desc, handle.cpu);
+    GetGraphics().GetCurrentDevice()->CreateConstantBufferView(&cbv_desc, cpu_handle);
 
-    return { handle.gpu.ptr, ClassTypeId() };
+    auto gpu_handle = allocator->GetGpuHandle(view_handle);
+    return { gpu_handle.ptr, ClassTypeId() };
 }
 
-auto Buffer::CreateShaderResourceView(Format format, BufferRange range, uint32_t stride) const -> NativeObject
+auto Buffer::CreateShaderResourceView(
+    const DescriptorHandle& view_handle,
+    Format format, BufferRange range, uint32_t stride) const -> NativeObject
 {
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
     // Validate parameters
     if (stride > 0 && format != Format::kUnknown) {
         LOG_F(WARNING, "Buffer {}: Both format and stride specified for SRV; format will be ignored", Base::GetName());
     }
 
-    auto handle = GetGraphics().Descriptors().SrvHeap().Allocate();
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
     BufferRange resolved = range.Resolve(desc_);
@@ -294,17 +344,24 @@ auto Buffer::CreateShaderResourceView(Format format, BufferRange range, uint32_t
     }
 
     try {
-        GetGraphics().GetCurrentDevice()->CreateShaderResourceView(GetResource(), &srv_desc, handle.cpu);
+        GetGraphics().GetCurrentDevice()->CreateShaderResourceView(GetResource(), &srv_desc, cpu_handle);
+
+        auto gpu_handle = allocator->GetGpuHandle(view_handle);
+        return { gpu_handle.ptr, ClassTypeId() };
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to create SRV for buffer {}: {}", Base::GetName(), e.what());
         throw;
     }
-
-    return { handle.gpu.ptr, ClassTypeId() };
 }
 
-auto Buffer::CreateUnorderedAccessView(Format format, BufferRange range, uint32_t stride) const -> NativeObject
+auto Buffer::CreateUnorderedAccessView(
+    const DescriptorHandle& view_handle,
+    Format format, BufferRange range, uint32_t stride) const -> NativeObject
 {
+    if (!view_handle.IsValid()) {
+        throw std::runtime_error("Invalid view handle");
+    }
+
     // Validate buffer has UAV usage flag
     if ((desc_.usage & BufferUsage::kStorage) != BufferUsage::kStorage) {
         LOG_F(WARNING, "Creating UAV for buffer {} without kStorage usage flag", Base::GetName());
@@ -315,7 +372,8 @@ auto Buffer::CreateUnorderedAccessView(Format format, BufferRange range, uint32_
         LOG_F(WARNING, "Buffer {}: Both format and stride specified for UAV; format will be ignored", Base::GetName());
     }
 
-    auto handle = GetGraphics().Descriptors().UavHeap().Allocate();
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    auto cpu_handle = allocator->GetCpuHandle(view_handle);
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
     BufferRange resolved = range.Resolve(desc_);
@@ -356,13 +414,13 @@ auto Buffer::CreateUnorderedAccessView(Format format, BufferRange range, uint32_
     }
 
     try {
-        GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(GetResource(), nullptr, &uav_desc, handle.cpu);
+        GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(GetResource(), nullptr, &uav_desc, cpu_handle);
+        auto gpu_handle = allocator->GetGpuHandle(view_handle);
+        return { gpu_handle.ptr, ClassTypeId() };
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to create UAV for buffer {}: {}", Base::GetName(), e.what());
         throw;
     }
-
-    return { handle.gpu.ptr, ClassTypeId() };
 }
 
 } // namespace oxygen::graphics::d3d12

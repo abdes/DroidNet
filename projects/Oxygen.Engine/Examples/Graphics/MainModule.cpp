@@ -244,10 +244,11 @@ auto MainModule::RenderScene() -> co::Co<>
         graphics::ResourceStates::kRenderTarget);
     recorder->FlushBarriers();
 
-    recorder->ClearTextureFloat(
-        fb->GetDescriptor().color_attachments[0].texture.get(),
-        graphics::TextureSubResourceSet::EntireTexture(),
-        graphics::Color(0.4F, 0.4F, .8f, 1.0F));
+    recorder->ClearFramebuffer(
+        *fb,
+        std::vector<std::optional<graphics::Color>> { graphics::Color { 0.09f, 0.48f, 0.38f, 1.0f } },
+        std::nullopt,
+        std::nullopt);
 
     // CreateTriangleVertexBuffer();
 

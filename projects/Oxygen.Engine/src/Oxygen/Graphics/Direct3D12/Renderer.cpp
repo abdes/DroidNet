@@ -10,15 +10,21 @@
 #include <type_traits>
 #include <utility>
 
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
+#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 
 using oxygen::graphics::TextureDesc;
+using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::Renderer;
+using oxygen::graphics::detail::Bindless;
+using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
 
 Renderer::Renderer(
     const std::string_view name,
@@ -27,6 +33,22 @@ Renderer::Renderer(
     const uint32_t frames_in_flight)
     : graphics::Renderer(name, std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
 {
+    auto allocator = std::make_unique<DescriptorAllocator>(
+        std::make_shared<D3D12HeapAllocationStrategy>(),
+        GetGraphics().GetCurrentDevice());
+    AddComponent<Bindless>(std::move(allocator)); // TODO: make strategy configurable
+}
+
+auto Renderer::GetGraphics() -> d3d12::Graphics&
+{
+    // Hides base GetGraphics(), returns d3d12::Graphics&
+    return static_cast<d3d12::Graphics&>(Base::GetGraphics());
+}
+
+auto Renderer::GetGraphics() const -> const d3d12::Graphics&
+{
+    // Hides base GetGraphics(), returns d3d12::Graphics&
+    return static_cast<const d3d12::Graphics&>(Base::GetGraphics());
 }
 
 auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
@@ -47,10 +69,10 @@ auto Renderer::CreateTextureFromNativeObject(TextureDesc desc, NativeObject nati
     return std::make_shared<Texture>(desc, native, GetPerFrameResourceManager());
 }
 
-auto Renderer::CreateFramebuffer(FramebufferDesc desc) const
+auto Renderer::CreateFramebuffer(FramebufferDesc desc)
     -> std::shared_ptr<graphics::Framebuffer>
 {
-    return std::make_shared<Framebuffer>(desc);
+    return std::make_shared<Framebuffer>(shared_from_this(), desc);
 }
 
 auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<graphics::Buffer>

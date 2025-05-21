@@ -13,14 +13,16 @@
 
 namespace oxygen::graphics::d3d12 {
 
+class Graphics;
+
 namespace detail {
     class DescriptorHeap;
     class PerFrameResourceManager;
 } // namespace detail
 
-class Renderer final
-    : public graphics::Renderer,
-      public std::enable_shared_from_this<Renderer> {
+class Renderer final : public graphics::Renderer {
+    using Base = graphics::Renderer;
+
 public:
     Renderer(
         std::weak_ptr<oxygen::Graphics> gfx_weak,
@@ -42,6 +44,12 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Renderer);
     OXYGEN_MAKE_NON_MOVABLE(Renderer);
 
+    // Hides base GetGraphics(), returns d3d12::Graphics&
+    [[nodiscard]] auto GetGraphics() -> d3d12::Graphics&;
+
+    // Hides base GetGraphics(), returns d3d12::Graphics&
+    [[nodiscard]] auto GetGraphics() const -> const d3d12::Graphics&;
+
     // auto GetCommandRecorder() const -> CommandRecorderPtr override;
 
     // [[nodiscard]] OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
@@ -59,14 +67,16 @@ public:
         TextureDesc desc, NativeObject native) const
         -> std::shared_ptr<graphics::Texture> override;
 
-    [[nodiscard]] auto CreateFramebuffer(FramebufferDesc desc) const
+    [[nodiscard]] auto CreateFramebuffer(FramebufferDesc desc)
         -> std::shared_ptr<graphics::Framebuffer> override;
 
     [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
 protected:
-    [[nodiscard]] auto CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(
+        graphics::CommandList* command_list,
+        graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
 };
 

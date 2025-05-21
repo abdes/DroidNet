@@ -20,13 +20,44 @@ namespace oxygen::graphics::d3d12 {
 DescriptorAllocator::DescriptorAllocator(
     std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
     dx::IDevice* device)
-    : BaseDescriptorAllocator(std::move(heap_strategy))
+    : BaseDescriptorAllocator(heap_strategy
+              ? std::move(heap_strategy)
+              : std::make_shared<D3D12HeapAllocationStrategy>())
     , device_(device)
 {
     DCHECK_NOTNULL_F(device, "D3D12 device must not be null");
 }
 
 DescriptorAllocator::~DescriptorAllocator() = default;
+
+auto DescriptorAllocator::GetCpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_CPU_DESCRIPTOR_HANDLE
+{
+    if (!handle.IsValid()) {
+        throw std::runtime_error("Invalid descriptor handle passed to GetCpuHandle");
+    }
+    // Find the segment for the handle
+    const auto* segment = GetD3D12Segment(handle);
+    if (!segment) {
+        throw std::runtime_error("Failed to find D3D12 segment for handle");
+    }
+    return segment->GetCpuHandle(handle);
+}
+
+auto DescriptorAllocator::GetGpuHandle(const DescriptorHandle& handle) const
+    -> D3D12_GPU_DESCRIPTOR_HANDLE
+{
+    // TODO: check if handle is shader visible and throw if not
+    if (!handle.IsValid()) {
+        throw std::runtime_error("Invalid descriptor handle passed to GetGpuHandle");
+    }
+    // Find the segment for the handle
+    const auto* segment = GetD3D12Segment(handle);
+    if (!segment) {
+        throw std::runtime_error("Failed to find D3D12 segment for handle");
+    }
+    return segment->GetGpuHandle(handle);
+}
 
 void DescriptorAllocator::CopyDescriptor(const DescriptorHandle& dst, const DescriptorHandle& src)
 {

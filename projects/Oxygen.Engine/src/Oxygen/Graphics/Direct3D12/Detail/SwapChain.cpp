@@ -13,7 +13,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 
 namespace {
 

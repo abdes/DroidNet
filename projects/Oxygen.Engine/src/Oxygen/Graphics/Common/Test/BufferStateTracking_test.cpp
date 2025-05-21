@@ -7,6 +7,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -20,6 +21,8 @@ using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::ResourceStateTracker;
+using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::BufferViewDescription;
 
 namespace {
 
@@ -41,10 +44,11 @@ public:
     auto IsMapped() const noexcept -> bool override { return false; }
     auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
     void SetName(std::string_view /*name*/) noexcept override { }
-    NativeObject CreateConstantBufferView(const BufferRange& /*range*/ = {}) const override { return {}; }
-    NativeObject CreateShaderResourceView(Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
-    NativeObject CreateUnorderedAccessView(Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
+    NativeObject CreateConstantBufferView(const DescriptorHandle& /*view_handle*/, const BufferRange& /*range*/ = {}) const override { return {}; }
+    NativeObject CreateShaderResourceView(const DescriptorHandle& /*view_handle*/, Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
+    NativeObject CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/, Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
 
+    auto GetNativeView(const DescriptorHandle& /*view_handle*/, const BufferViewDescription& /*view_desc*/) const -> NativeObject override { return {}; }
 private:
     NativeObject native_;
 };

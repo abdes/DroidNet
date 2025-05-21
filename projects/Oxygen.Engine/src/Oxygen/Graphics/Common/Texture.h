@@ -25,6 +25,8 @@
 
 namespace oxygen::graphics {
 
+    class DescriptorHandle;
+
 enum class TextureDimension : uint8_t {
     kUnknown,
     kTexture1D,
@@ -311,37 +313,15 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Texture)
     OXYGEN_DEFAULT_MOVABLE(Texture)
 
-    //! Gets the native resource handle for the texture.
-    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
-
     //! Gets the descriptor for this texture.
     [[nodiscard]] virtual auto GetDescriptor() const -> const TextureDesc& = 0;
 
-    //! Gets a shader resource view for the texture.
-    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateShaderResourceView(
-        Format format,
-        TextureDimension dimension,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Gets an unordered access view for the texture.
-    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateUnorderedAccessView(
-        Format format,
-        TextureDimension dimension,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Gets a render target view for the texture.
-    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateRenderTargetView(
-        Format format,
-        TextureSubResourceSet sub_resources) const -> NativeObject
-        = 0;
-
-    //! Gets a depth stencil view for the texture.
-    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateDepthStencilView(
-        Format format,
-        TextureSubResourceSet sub_resources,
-        bool is_read_only) const -> NativeObject
+    //! Gets the native resource handle for the texture.
+    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
+    [[nodiscard]] virtual auto GetNativeView(
+        const DescriptorHandle& view_handle,
+        const TextureViewDescription& view_desc) const
+        -> NativeObject
         = 0;
 
     //! Gets the name of the texture.
@@ -355,6 +335,38 @@ public:
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
+
+protected:
+    //! Gets a shader resource view for the texture.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateShaderResourceView(
+        const DescriptorHandle& view_handle,
+        Format format,
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Gets an unordered access view for the texture.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateUnorderedAccessView(
+        const DescriptorHandle& view_handle,
+        Format format,
+        TextureDimension dimension,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Gets a render target view for the texture.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateRenderTargetView(
+        const DescriptorHandle& view_handle,
+        Format format,
+        TextureSubResourceSet sub_resources) const -> NativeObject
+        = 0;
+
+    //! Gets a depth stencil view for the texture.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto CreateDepthStencilView(
+        const DescriptorHandle& view_handle,
+        Format format,
+        TextureSubResourceSet sub_resources,
+        bool is_read_only) const -> NativeObject
+        = 0;
 };
 
 // Ensure Texture satisfies ResourceWithViews

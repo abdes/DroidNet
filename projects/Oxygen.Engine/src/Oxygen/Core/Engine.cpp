@@ -124,8 +124,10 @@ void Engine::InitializeImGui()
     const auto gfx = graphics_.lock();
     if (gfx && props_.enable_imgui_layer) {
         // Initialize ImGui if required
-        imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
-        imgui_module_->Initialize(gfx.get());
+
+        // FIXME: fis ImGui module to use descriptor allocator
+        // imgui_module_ = gfx->CreateImGuiModule(shared_from_this(), props_.main_window_id);
+        // imgui_module_->Initialize(gfx.get());
     }
 }
 

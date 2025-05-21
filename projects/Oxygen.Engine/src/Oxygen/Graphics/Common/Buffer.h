@@ -21,6 +21,8 @@
 
 namespace oxygen::graphics {
 
+class DescriptorHandle;
+
 //! Specifies the intended usage(s) of a buffer resource.
 enum class BufferUsage : uint32_t { // NOLINT(performance-enum-size)
     kNone = 0,
@@ -158,6 +160,18 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Buffer)
     OXYGEN_DEFAULT_MOVABLE(Buffer)
 
+    //! Returns the buffer descriptor.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto GetDescriptor() const noexcept -> BufferDesc = 0;
+
+    //! Returns the native backend resource handle.
+    [[nodiscard]] OXYGEN_GFX_API virtual auto GetNativeResource() const -> NativeObject = 0;
+
+    [[nodiscard]] OXYGEN_GFX_API virtual auto GetNativeView(
+        const DescriptorHandle& view_handle,
+        const BufferViewDescription& view_desc) const
+        -> NativeObject
+        = 0;
+
     //! Maps the buffer memory for CPU access.
     /*! \param offset Byte offset to start mapping.
         \param size Number of bytes to map (0 = entire buffer).
@@ -187,12 +201,6 @@ public:
     //! Returns true if the buffer is currently mapped.
     [[nodiscard]] virtual auto IsMapped() const noexcept -> bool = 0;
 
-    //! Returns the buffer descriptor.
-    [[nodiscard]] virtual auto GetDescriptor() const noexcept -> BufferDesc = 0;
-
-    //! Returns the native backend resource handle.
-    [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
-
     //! Returns the buffer's name.
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
     {
@@ -205,6 +213,7 @@ public:
         GetComponent<ObjectMetaData>().SetName(name);
     }
 
+protected:
     /**
      * @brief Get a constant buffer view (CBV) for this buffer
      *
@@ -215,11 +224,13 @@ public:
      * @return NativeObject The constant buffer view as a native object
      */
     [[nodiscard]] virtual auto CreateConstantBufferView(
+        const DescriptorHandle& view_handle,
         const BufferRange& range = {}) const -> NativeObject
         = 0;
 
     //! Returns a shader resource view (SRV) for this buffer.
     [[nodiscard]] virtual auto CreateShaderResourceView(
+        const DescriptorHandle& view_handle,
         Format format,
         BufferRange range = {},
         uint32_t stride = 0) const -> NativeObject
@@ -227,6 +238,7 @@ public:
 
     //! Returns an unordered access view (UAV) for this buffer.
     [[nodiscard]] virtual auto CreateUnorderedAccessView(
+        const DescriptorHandle& view_handle,
         Format format,
         BufferRange range = {},
         uint32_t stride = 0) const -> NativeObject

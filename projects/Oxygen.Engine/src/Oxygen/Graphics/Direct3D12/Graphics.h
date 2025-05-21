@@ -23,10 +23,6 @@ class SynchronizationCounter;
 
 namespace d3d12 {
 
-    namespace detail {
-        class DescriptorHeaps;
-    } // namespace detail
-
     // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
 
     class Graphics final : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
@@ -40,10 +36,10 @@ namespace d3d12 {
         OXYGEN_MAKE_NON_COPYABLE(Graphics);
         OXYGEN_MAKE_NON_MOVABLE(Graphics);
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
-            EngineWeakPtr engine,
-            platform::WindowIdType window_id)
-            const -> std::unique_ptr<imgui::ImguiModule> override;
+        // [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
+        //     EngineWeakPtr engine,
+        //     platform::WindowIdType window_id)
+        //     const -> std::unique_ptr<imgui::ImguiModule> override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
             std::weak_ptr<platform::Window> window_weak,
@@ -56,8 +52,6 @@ namespace d3d12 {
         [[nodiscard]] auto GetCurrentDevice() const -> dx::IDevice*;
         [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
         //! @}
-
-        [[nodiscard]] OXYGEN_D3D12_API auto Descriptors() const -> const detail::DescriptorHeaps&;
 
         [[nodiscard]] auto GetShader(std::string_view unique_id) const
             -> std::shared_ptr<IShaderByteCode> override;

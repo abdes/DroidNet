@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
