@@ -20,17 +20,82 @@ None
 
 None
 
-**Files Created/Modified:**
+## Detailed Flow: Resource Creation/Replacement → Registration/Update → View Creation/Replacement → Registration/Update → Bindless Table Update → Rendering
 
-- `src/Oxygen/Graphics/Common/Types/DescriptorVisibility.h` - Defines memory residence for descriptors
-- `src/Oxygen/Graphics/Common/Types/IndexRange.h` - Defines mapping between local and global index spaces
-- `src/Oxygen/Graphics/Common/DescriptorHandle.h` - Defines descriptor handle type
-- `src/Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h` - Defines `DescriptorHeapSegment` interface and `FixedDescriptorHeapSegment` implementation.
-- `src/Oxygen/Graphics/Common/DescriptorAllocator.h` - Defines allocator interface
-- `src/Oxygen/Graphics/Common/ResourceRegistry.h` - Defines resource registry
-- `src/Oxygen/Graphics/Common/CMakeLists.txt` - Added new files
-- `src/Oxygen/Graphics/Common/Test/DescriptorHeapSegment_test.cpp` - Unit tests for `DescriptorHeapSegment` implementations.
-- `design/WU1_CoreTypesAndInterfaces.md` - This design document, updated with `DescriptorHeapSegment` details.
+1. **Resource Creation / Replacement**
+   - The application creates a graphics resource (e.g., a texture or buffer) using the appropriate API (e.g., `std::make_shared<Texture>(...)`).
+   - If a resource needs to be replaced (e.g., resizing a texture), a new resource instance is created.
+
+2. **Resource Registration / Update**
+   - The application registers the resource with the `ResourceRegistry` using `registry.Register(resource)`.
+   - The registry keeps a strong reference to the resource and tracks it for view management.
+   - If replacing a resource, the registry provides (or will provide) an API to update or replace the resource while keeping descriptor indices stable.
+
+3. **View Creation / Replacement**
+   - The application creates a view description (e.g., `TextureViewDesc`) specifying format, subresources, dimension, etc.
+   - The resource provides a method (e.g., `GetNativeView(desc)`) to create a native view object for the given description.
+   - If a view needs to be replaced (e.g., after resource replacement or hot-reload), a new native view is created for the same description.
+
+4. **View Registration / Update**
+   - The application registers the view with the `ResourceRegistry` using `registry.RegisterView(resource, desc)` or `registry.RegisterView(resource, native_view, desc)`.
+   - The registry checks for existing views with the same description:
+     - If not present, it allocates a descriptor handle and caches the view.
+     - If present, it throws or returns the cached view.
+   - For view replacement, the registry (future enhancement) will provide an API to update the view in-place, keeping the descriptor handle (bindless index) stable.
+
+5. **Bindless Table Update**
+   - When a new view is registered or an existing view is updated, the registry (and underlying allocator) ensures the descriptor heap or bindless table is updated with the new view at the correct index.
+   - The descriptor handle (bindless index) remains stable for the resource/view, allowing shaders to access the correct descriptor.
+
+6. **Rendering**
+   - During rendering, the application or engine uses the bindless index (from the `DescriptorHandle` or `NativeObject`) to access the resource in shaders.
+   - The descriptor allocator ensures all necessary descriptor heaps are bound before rendering.
+   - The rendering pipeline uses the up-to-date bindless table for resource access, supporting dynamic resource/view replacement and efficient descriptor management.
+
+## Implementation Notes
+
+- The API is unified and generic; there are no explicit typed handles for each view type.
+- View caching is integrated into `ResourceRegistry`.
+- View update and replacement is supported by design (see comments in `ResourceRegistry.h`), but not yet implemented.
+- Heap allocation strategy is string-keyed and maps to backend-specific heap/segment concepts (see D3D12 implementation).
+- Thread safety is enforced via a global mutex per allocator/registry.
+- Testing covers handles, segments, registry, and concurrency.
+- Default resources and debugging/validation tools are future considerations.
+
+## Implementation layout
+
+- `src/Oxygen/Graphics/Common/Types/DescriptorVisibility.h`
+  *Defines the DescriptorVisibility enum, representing whether a descriptor heap/pool is shader-visible (GPU) or CPU-only.*
+
+- `src/Oxygen/Graphics/Common/Types/IndexRange.h`
+  *Defines the IndexRange class for mapping between local and global descriptor indices.*
+
+- `src/Oxygen/Graphics/Common/Types/ResourceViewType.h`
+  *Defines the ResourceViewType enum, enumerating all supported resource view types (SRV, UAV, CBV, etc.).*
+
+- `src/Oxygen/Graphics/Common/DescriptorHandle.h`
+  *Defines DescriptorHandle, a type that encapsulates a stable index for a descriptor in a bindless table, with ownership and lifetime semantics.*
+
+- `src/Oxygen/Graphics/Common/Detail/DescriptorHeapSegment.h`
+  *Declares the DescriptorHeapSegment interface for managing a contiguous range of descriptor indices within a heap, and describes the contract for allocation, release, and state tracking.*
+
+- `src/Oxygen/Graphics/Common/Detail/FixedDescriptorHeapSegment.h`
+  *Implements a fixed-capacity, LIFO-recycling descriptor heap segment.*
+
+- `src/Oxygen/Graphics/Common/Detail/StaticDescriptorHeapSegment.h`
+  *Implements a static, compile-time capacity descriptor heap segment for testing and specialized use.*
+
+- `src/Oxygen/Graphics/Common/DescriptorAllocator.h`
+  *Declares the DescriptorAllocator interface and heap allocation strategy classes for managing descriptor heaps and allocation policies.*
+
+- `src/Oxygen/Graphics/Common/ResourceRegistry.h`
+  *Defines the ResourceRegistry, which manages registration, lookup, and caching of resources and their views for bindless rendering, including design notes for resource/view replacement and update.*
+
+- `src/Oxygen/Graphics/Common/NativeObject.h`
+  *Defines NativeObject, a generic wrapper for native resource/view handles and type information.*
+
+- `design/WU1_CoreTypesAndInterfaces.md`
+  *This design document.*
 
 ## Detailed Specifications
 
@@ -60,15 +125,21 @@ None
 
 ### 3. ✓ DescriptorHandle
 
-   - Represents an allocated descriptor slot with stable index for shader reference
-   - Has limited ownership semantics - can release its descriptor back to the allocator
-     but doesn't own the underlying resource
+   - Represents an allocated descriptor slot with stable index for shader
+     reference
+   - Has limited ownership semantics - can release its descriptor back to the
+     allocator but doesn't own the underlying resource
    - Contains back-reference to allocator for lifetime management
    - Non-copyable, movable semantics to enforce ownership rules
-   - Clear RAII behavior with automatic release in destructor and explicit Release() method
-   - Stores ResourceViewType and DescriptorVisibility to track descriptor type and memory location
-   - Provides GetIndex(), GetViewType(), GetVisibility() and IsValid() inspection methods
-   - Does not directly expose platform-specific handles - these are accessed through the DescriptorAllocator
+   - Clear RAII behavior with automatic release in destructor and explicit
+     Release() method
+   - Stores ResourceViewType and DescriptorVisibility to track descriptor type
+     and memory location
+   - Provides GetIndex(), GetViewType(), GetVisibility() and IsValid()
+     inspection methods
+   - Does not directly expose platform-specific handles - these are
+     implementation details, accessed through the DescriptorAllocator /
+     DescriptorHeapSegment
 
 ### 4. ✓ DescriptorHeapSegment
 
@@ -105,8 +176,9 @@ None
      - **Sequential Allocation Fallback**: If the `free_list_` is empty, new
        descriptors are allocated sequentially by incrementing an internal
        counter (`next_index_`).
-     - **Efficient State Tracking**: Uses a vector of boolean flags to track which
-       indices have been released, allowing quick validation during release operations.
+     - **Efficient State Tracking**: Uses a vector of boolean flags to track
+       which indices have been released, allowing quick validation during
+       release operations.
 
    - **Relationship with `DescriptorAllocator`**: `DescriptorAllocator`
      implementations will typically manage collections of
@@ -136,17 +208,19 @@ None
        `CopyDescriptor` method.
      - Exposes methods to get associated platform-specific handles/pointers for
        descriptors via `GetNativeHandle`.
-     - Prepares resources for rendering via `PrepareForRendering` by ensuring necessary
-       heaps/sets are bound.
-     - Provides utility methods like `GetRemainingDescriptorsCount`, `GetAllocatedDescriptorsCount`,
-       and `Contains` for descriptor management.
+     - Prepares resources for rendering via `PrepareForRendering` by ensuring
+       necessary heaps/sets are bound.
+     - Provides utility methods like `GetRemainingDescriptorsCount`,
+       `GetAllocatedDescriptorsCount`, and `Contains` for descriptor management.
      - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
        etc.) when interacting with segments.
 
    - **Ownership Model**:
       - Owns the descriptor heaps/pools
       - Creates descriptor handles that reference it for lifecycle management
-      - Does not own the resources being described (textures, buffers, etc.)
+      - Does not own the resources nor their views (textures, buffers, etc.),
+        but keeps a strong reference to the registered resources. This requires
+        the resource owner to **UnRegister the resource before destroying it**.
       - Manages descriptor lifecycle, not resource lifecycle
 
    - **Lifetime**:
@@ -251,35 +325,7 @@ None
    - Use a pool-of-pools architecture for efficient memory management
    - Consider resource binding tiers supported by the device
 
-## Key Features from Leading Engines
-
-1. **Tiered Resource Access**
-   - Fast paths for frequently accessed resources (engine defaults, etc.)
-   - Placement at the beginning of descriptor arrays for better cache behavior
-   - Special handling for common resources (shadow maps, environment probes, etc.)
-
-2. **Smart Batching**
-   - Coalescing descriptor updates to minimize API calls
-   - Tracking dirty states to avoid redundant updates
-   - Pipeline optimizations to reduce GPU stalls during updates
-
-3. **Default Resources**
-   - Engine-provided fallbacks (white texture, identity normal map)
-   - Automatic substitution when accessing invalid indices
-   - Debug visualizations for invalid resources
-
-4. **Debug Validation**
-   - Resource annotations and debug names
-   - Validation of descriptor access patterns
-   - Tracking resource versioning to detect stale descriptors
-   - Usage statistics and performance analysis tools
-
-5. **Memory Management**
-   - Descriptor recycling with generational indices
-   - Efficient free list implementation
-   - Deferred resource cleanup with frame-based lifetime tracking
-
-## 5. ResourceRegistry
+## 5. ✓ ResourceRegistry
 
    - Higher-level abstraction with integrated view caching
    - Manages mapping between resources and indices
@@ -288,8 +334,7 @@ None
    - Creates optimized descriptor update path for resources
    - Features:
      - Thread-safe for multi-threaded resource registration
-     - Name-based resource lookup for engine convenience
-     - Lazy creation of views only when needed
+     - TODO: Name-based resource lookup for engine convenience
      - Type-safe handle system for shader indices
      - Efficient descriptor recycling
 
@@ -318,201 +363,109 @@ on separate view caches. This design decision offers several advantages:
    - Clearer deferred deletion patterns
    - Simplified stale reference detection
 
-5. **Implementation Flow**
-   ```
-   Resource → ResourceRegistry → View Creation → Descriptor Update → Shader Index
-   ```
-   (compared to previous flow)
-   ```
-   Resource → DefaultViewCache → Views → ResourceRegistry → Shader Indices
-   ```
-
 ## Example API Using Descriptor Structs
 
+> **Note:** The actual implementation uses a unified, generic API based on
+> `NativeObject` and `DescriptorHandle`. Registration is performed via templated
+> methods on `ResourceRegistry`, and handles are not strongly typed per view
+> type. The application is responsible for explicit resource and view creation
+> and registration.
+
 ```cpp
-// View descriptor structs with defaults
+// Example: View description struct for a resource
 struct TextureViewDesc {
-    Format format = Format::kUnknown;  // Default to texture's native format
-    TextureSubResourceSet subResources = TextureSubResourceSet::EntireTexture();
-    TextureDimension dimension = TextureDimension::kUnknown;  // Default to texture's dimension
-    std::string debugName;  // Optional name for lookup
-    bool readOnly = true;   // Read-only access (SRV vs UAV)
-};
-
-struct BufferViewDesc {
     Format format = Format::kUnknown;
-    BufferRange range = {};  // Default to entire buffer
-    uint32_t stride = 0;     // For structured buffers
-    std::string debugName;   // Optional name for lookup
-    bool readOnly = true;    // Read-only access (SRV vs UAV)
+    TextureSubResourceSet subResources = TextureSubResourceSet::EntireTexture();
+    TextureDimension dimension = TextureDimension::kUnknown;
+    bool readOnly = true;
+    // ...other fields...
 };
 
-struct SamplerViewDesc {
-    SamplerDesc samplerDesc = {};  // Default sampler parameters
-    std::string debugName;         // Optional name for lookup
-};
+// ResourceRegistry usage (generic, templated API)
+ResourceRegistry registry;
 
-// Resource registry with explicit methods and descriptors
-class ResourceRegistry {
-public:
-    // Texture registration with explicit view type in method name
-    TextureSrvHandle RegisterTextureSRV(
-        const std::shared_ptr<Texture>& texture,
-        const TextureViewDesc& desc = {});
+// Register a resource (keeps a strong reference)
+registry.Register(std::shared_ptr<Texture>(...));
 
-    TextureUavHandle RegisterTextureUAV(
-        const std::shared_ptr<Texture>& texture,
-        const TextureViewDesc& desc = {});
+// Register a view for a resource (returns a NativeObject handle)
+TextureViewDesc desc = { .format = Format::kR8G8B8A8_UNORM, .readOnly = true };
+NativeObject view_handle = registry.RegisterView(*texture, desc);
 
-    // Buffer registration with explicit view type in method name
-    RawBufferSrvHandle RegisterBufferSRV(
-        const std::shared_ptr<Buffer>& buffer,
-        const BufferViewDesc& desc = {});
+// Find a view by description
+if (registry.Contains(*texture, desc)) {
+    NativeObject found = registry.Find(*texture, desc);
+}
 
-    RawBufferUavHandle RegisterBufferUAV(
-        const std::shared_ptr<Buffer>& buffer,
-        const BufferViewDesc& desc = {});
-
-    // Sampler registration
-    SamplerHandle RegisterSampler(
-        const SamplerDesc& samplerDesc,
-        const SamplerViewDesc& desc = {});
-
-    // Resource lookup by name
-    TextureSrvHandle FindTextureSRVByName(const std::string& name);
-    TextureUavHandle FindTextureUAVByName(const std::string& name);
-
-    // Update existing bindings
-    void UpdateTexture(TextureSrvHandle handle, const std::shared_ptr<Texture>& newTexture);
-    void UpdateBuffer(RawBufferSrvHandle handle, const std::shared_ptr<Buffer>& newBuffer);
-
-    // Unregister resources
-    void Unregister(TextureSrvHandle handle);
-    void Unregister(RawBufferSrvHandle handle);
-    // Additional type-safe unregister overloads for each handle type
-};
+// Unregister a view or resource
+registry.UnRegisterView(*texture, view_handle);
+registry.UnRegisterResource(*texture);
 ```
 
-## Usage Examples
-
-```cpp
-// Minimal case - register texture SRV with defaults
-auto albedoHandle = registry.RegisterTextureSRV(albedoTexture);
-
-// Named registration with default view parameters
-auto normalHandle = registry.RegisterTextureSRV(normalTexture, {
-    .debugName = "material/metal/normal"
-});
-
-// Fully specified UAV registration
-auto heightfieldHandle = registry.RegisterTextureUAV(heightfieldTexture, {
-    .format = Format::kR32_FLOAT,
-    .subResources = {0, 1, 0, 1},  // Just base mip
-    .dimension = TextureDimension::kTexture2D,
-    .debugName = "terrain/heightfield_data",
-    .readOnly = false  // Explicit UAV
-});
-
-// Use handle in material parameters
-MaterialConstants materialData;
-materialData.albedoTextureIndex = albedoHandle.GetIndex();
-materialData.normalTextureIndex = normalHandle.GetIndex();
-
-// Later, update a texture without changing its index
-registry.UpdateTexture(albedoHandle, newAlbedoTexture);
-
-// Look up by name when needed
-auto terrainHeightfield = registry.FindTextureUAVByName("terrain/heightfield_data");
-```
-
-## Implementation Notes
-
-1. **Backend Abstraction**:
-   - Backend-specific view creation now happens within the ResourceRegistry implementations
-   - Default implementations to provide a common base
-   - Each backend specializes for optimal performance
-
-2. **Resource Tracking**:
-   - Registry tracks resource versions and handles
-   - Weak references to resources for proper lifecycle management
-   - Thread-safe reference counting for concurrent registration
-
-3. **Memory Management**:
-   - Reference-counted view and descriptor objects
-   - Pooled allocators for descriptor handles
-   - Recycling of slots from deleted resources
-
-4. **API Balance**:
-   - Low-level API still available when needed
-   - Helper functions for common scenarios
-   - Typed handle approach prevents errors
-
-## Additional notes
-
-1. Thread-Safety Boundaries: Be explicit about which operations are thread-safe
-   and which are not. Particularly, descriptor allocation may be thread-safe,
-   but resources should only be bound from the render thread.
-2. Default Resources: Consider implementing a system for "default" resources
-   (white texture, identity normal map, etc.) to handle missing or invalid
-   resources gracefully.
-3. Update Batching: Be explicit about how update batching works in the API and
-   documentation.
-4. Resource Versioning: Consider adding an explicit resource versioning
-   mechanism to detect when resources have been updated.
-5. Debugging Tools: Plan for debugging tools like descriptor validation and
-   GPU-based resource debugging from the start.
-6. Documentation Format: Use consistent doxygen formatting for all public APIs
-   to ensure comprehensive documentation.
-7. Memory Management: Be explicit about the deferred resource cleanup mechanism
-   and how it integrates with the per-frame resource manager.
+- All registration and lookup is performed via generic, type-safe templated methods.
+- `NativeObject` encapsulates the native view or resource handle.
+- `DescriptorHandle` encapsulates the shader-visible index for bindless access.
+- The application is responsible for creating resources and view descriptions.
 
 ## Testing Implemented
 
-- `src/Oxygen/Graphics/Common/Test/DescriptorHandle_test.cpp` - Tests handle creation, movement, validity, and RAII behavior
-  - Tests resource type tracking using ResourceViewType
-  - Tests visibility tracking using DescriptorVisibility
-  - Tests move semantics and ownership transfer
-  - Tests proper release behavior in destructors
-- `src/Oxygen/Graphics/Common/Test/DescriptorHeapSegment_test.cpp` - Comprehensive tests for descriptor heap segments, covering:
-  - Construction, initial state, and core accessor methods.
-  - Sequential allocation until segment is full.
-  - Allocation from empty segment and full segment (expecting sentinel).
-  - Single descriptor release and immediate reallocation (LIFO for `FixedDescriptorHeapSegment`).
-  - Multiple descriptor releases and subsequent reallocations.
-  - Releasing unallocated indices (never allocated, or beyond current `next_index_`).
-  - Releasing already released indices (double release).
-  - Releasing indices out of the segment's bounds.
-  - Behavior with zero-capacity segments (where applicable).
-  - Typed tests to ensure consistent behavior across different configurations.
-- `src/Oxygen/Graphics/Common/Test/ResourceRegistry_test.cpp` - Integrated view cache functionality
-- `src/Oxygen/Graphics/Common/Test/CMakeLists.txt` - Added tests to build system
-- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Basic_test.cpp` - Core allocation tests:
-  - Segment creation on first allocation
-  - Reuse of existing segments for subsequent allocations
-  - Descriptor recycling and handle reuse
-  - Multiple visibility and view type combinations
-  - Descriptor copying between visibility spaces
-  - Error handling for invalid releases
+- `src/Oxygen/Graphics/Common/Test/DescriptorHandle_test.cpp`
+  *Unit tests for DescriptorHandle, covering creation, movement, validity, and RAII behavior.*
 
-- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Concurrency_test.cpp` - Multi-threaded stress testing:
-  - Allocations and releases from multiple concurrent threads
-  - Thread safety verification with different resource types
-  - Resource index verification across thread boundaries
-  - Race condition detection
-  - Proper state management when multiple threads operate on the same heap
+- `src/Oxygen/Graphics/Common/Test/DescriptorHeapSegment_test.cpp`
+  *Unit tests for descriptor heap segments, covering allocation, release, recycling, and error conditions.*
+
+- `src/Oxygen/Graphics/Common/Test/Bindless/StaticDescriptorHeapSegment_test.cpp`
+  *Unit tests for StaticDescriptorHeapSegment, covering all supported ResourceViewTypes.*
+
+- `src/Oxygen/Graphics/Common/Test/ResourceRegistry_test.cpp`
+  *Unit tests for ResourceRegistry, covering registration, view caching, error handling, concurrency, and lifecycle.*
+
+- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Basic_test.cpp`
+  *Unit tests for basic allocation and recycling behavior of the base descriptor allocator.*
+
+- `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Concurrency_test.cpp`
+  *Unit tests for multi-threaded allocation and release in the base descriptor allocator.*
+
+- `src/Oxygen/Graphics/Common/CMakeLists.txt`
+  *Build configuration for the common graphics module and its tests.*
+
+- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h`
+  *Declares the D3D12-specific DescriptorHeapSegment, managing a segment of a D3D12 descriptor heap.*
+
+- `src/Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.cpp`
+  *Implements the D3D12 DescriptorHeapSegment, including heap creation, handle translation, and resource management.*
+
+- `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h`
+  *Declares the D3D12 heap allocation strategy, mapping view types and visibilities to D3D12 heap types and configurations.*
+
+- `src/Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.cpp`
+  *Implements the D3D12 heap allocation strategy, including heap key construction and capacity management.*
+
+- `src/Oxygen/Graphics/Direct3D12/Test/DescriptorHeapSegment_test.cpp`
+  *Unit tests for the D3D12 DescriptorHeapSegment implementation.*
+
+- `src/Oxygen/Graphics/Direct3D12/Test/Bindless/D3D12HeapAllocationStrategy_test.cpp`
+  *Unit tests for the D3D12 heap allocation strategy.*
 
 ## Thread Safety Design
 
 The `BaseDescriptorAllocator` ensures thread safety through several mechanisms:
 
-- **Synchronized Core Operations**: All allocation and release operations are protected by a mutex to prevent race conditions when multiple threads access the same descriptor heap.
-- **Safe Index Management**: The implementation ensures that indices are uniquely allocated and properly tracked even under concurrent access.
-- **Atomic State Management**: Segment state changes are atomic operations to prevent partial updates.
-- **Fail-Fast Error Handling**: Any thread-safety violations result in clear error messages rather than undefined behavior.
+- **Synchronized Core Operations**: All allocation and release operations are
+  protected by a mutex to prevent race conditions when multiple threads access
+  the same descriptor heap.
+- **Safe Index Management**: The implementation ensures that indices are
+  uniquely allocated and properly tracked even under concurrent access.
+- **Atomic State Management**: Segment state changes are atomic operations to
+  prevent partial updates.
+- **Fail-Fast Error Handling**: Any thread-safety violations result in clear
+  error messages rather than undefined behavior.
 
-These protections allow descriptors to be safely allocated and released from any thread in the engine, enabling parallel processing of resource loading and view creation.
+These protections allow descriptors to be safely allocated and released from any
+thread in the engine, enabling parallel processing of resource loading and view
+creation.
 
-## Design Evolution and Alternatives Considered
+## Alternatives Considered
 
 Throughout the implementation, several design alternatives were considered:
 
@@ -535,3 +488,55 @@ Throughout the implementation, several design alternatives were considered:
    - **Adopted**: LIFO recycling for better cache locality
    - **Alternative**: More complex strategies like defragmentation or best-fit
    - **Rationale**: LIFO provides good performance characteristics while maintaining simplicity
+
+## Future Enhancements & Considerations
+
+- **Default Resources**: Implement a system for default/fallback resources
+  (e.g., white texture, identity normal map) to handle missing or invalid
+  resources gracefully.
+- **View Update/Replacement**: Implement the `UpdateView` and resource
+  replacement APIs to allow in-place view updates and resource hot-swapping
+  while keeping descriptor indices stable.
+- **Debugging & Validation Tools**: Integrate tools for descriptor validation,
+  resource versioning, and GPU-based resource debugging.
+- **Resource Versioning**: Add explicit resource versioning to detect when
+  resources or views have been updated or replaced.
+- **Update Batching**: Provide explicit API/documentation for update batching
+  and efficient descriptor copy operations.
+- **Fine-grained Locking**: Optionally support fine-grained locking per segment
+  for applications with extreme thread contention.
+- **Memory Management Enhancements**: Consider more advanced memory management
+  strategies such as generational indices, defragmentation, or best-fit
+  allocation.
+- **API Extensions**: Consider adding higher-level helpers or more ergonomic
+  APIs for common scenarios, while keeping the core API generic and explicit.
+- **Backend-specific Optimizations**: Continue to refine backend abstractions
+  and optimize for D3D12/Vulkan/other APIs as needed.
+
+## Key Features from Leading Engines
+
+1. **Tiered Resource Access**
+   - Fast paths for frequently accessed resources (engine defaults, etc.)
+   - Placement at the beginning of descriptor arrays for better cache behavior
+   - Special handling for common resources (shadow maps, environment probes, etc.)
+
+2. **Smart Batching**
+   - Coalescing descriptor updates to minimize API calls
+   - Tracking dirty states to avoid redundant updates
+   - Pipeline optimizations to reduce GPU stalls during updates
+
+3. **Default Resources**
+   - Engine-provided fallbacks (white texture, identity normal map)
+   - Automatic substitution when accessing invalid indices
+   - Debug visualizations for invalid resources
+
+4. **Debug Validation**
+   - Resource annotations and debug names
+   - Validation of descriptor access patterns
+   - Tracking resource versioning to detect stale descriptors
+   - Usage statistics and performance analysis tools
+
+5. **Memory Management**
+   - Descriptor recycling with generational indices
+   - Efficient free list implementation
+   - Deferred resource cleanup with frame-based lifetime tracking
