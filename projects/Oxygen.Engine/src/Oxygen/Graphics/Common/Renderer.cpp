@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -24,7 +25,9 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 
+
 using oxygen::graphics::Renderer;
+using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;
 
 //! Default constructor, sets the object name.
@@ -62,6 +65,37 @@ Renderer::~Renderer()
     Stop();
     // TODO: cleanup the resource registry and the descriptor allocator
     DLOG_F(INFO, "Renderer destroyed");
+}
+
+auto Renderer::GetGraphics() -> Graphics&
+{
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    return *gfx_weak_.lock();
+}
+
+auto Renderer::GetGraphics() const -> const Graphics&
+{
+    return const_cast<Renderer*>(this)->GetGraphics();
+}
+
+auto Renderer::GetDescriptorAllocator() -> DescriptorAllocator&
+{
+    return GetComponent<Bindless>().GetAllocator();
+}
+
+auto Renderer::GetDescriptorAllocator() const -> const DescriptorAllocator&
+{
+    return const_cast<Renderer*>(this)->GetDescriptorAllocator();
+}
+
+auto Renderer::GetResourceRegistry() -> ResourceRegistry&
+{
+    return GetComponent<Bindless>().GetRegistry();
+}
+
+auto Renderer::GetResourceRegistry() const -> const ResourceRegistry&
+{
+    return const_cast<Renderer*>(this)->GetResourceRegistry();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

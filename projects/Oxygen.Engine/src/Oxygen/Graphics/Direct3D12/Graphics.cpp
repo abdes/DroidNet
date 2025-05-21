@@ -16,9 +16,8 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
+// #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
@@ -78,7 +77,6 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 // The Graphics class methods
 
 using oxygen::graphics::d3d12::Graphics;
-using oxygen::graphics::d3d12::detail::DescriptorHeaps;
 
 auto Graphics::GetFactory() const -> dx::IFactory*
 {
@@ -121,12 +119,6 @@ Graphics::Graphics(const SerializedBackendConfig& config)
 
     AddComponent<DeviceManager>(desc);
     AddComponent<EngineShaders>();
-    AddComponent<DescriptorHeaps>();
-}
-
-auto Graphics::Descriptors() const -> const DescriptorHeaps&
-{
-    return GetComponent<DescriptorHeaps>();
 }
 
 auto Graphics::CreateCommandQueue(
@@ -176,10 +168,10 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
     return plane_count;
 }
 
-auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
-{
-    return std::make_unique<ImGuiModule>(std::move(engine), window_id);
-}
+// auto Graphics::CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const -> std::unique_ptr<imgui::ImguiModule>
+// {
+//     return std::make_unique<ImGuiModule>(std::move(engine), window_id);
+// }
 
 auto Graphics::CreateSurface(
     std::weak_ptr<platform::Window> window_weak,

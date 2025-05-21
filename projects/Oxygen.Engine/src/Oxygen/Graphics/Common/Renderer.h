@@ -26,12 +26,15 @@ class Graphics;
 
 namespace graphics {
 
-    class Surface;
+    class Buffer;
     class CommandList;
     class CommandQueue;
     class CommandRecorder;
+    class DescriptorAllocator;
+    class ResourceRegistry;
+    class DescriptorAllocationStrategy;
+    class Surface;
     struct BufferDesc;
-    class Buffer;
 
     //! Orchestrates the frame render loop.
     /*!
@@ -136,6 +139,15 @@ namespace graphics {
         OXYGEN_MAKE_NON_COPYABLE(Renderer)
         OXYGEN_DEFAULT_MOVABLE(Renderer)
 
+        OXYGEN_GFX_API auto GetGraphics() -> Graphics&;
+        OXYGEN_GFX_API auto GetGraphics() const -> const Graphics&;
+
+        OXYGEN_GFX_API auto GetDescriptorAllocator() -> DescriptorAllocator&;
+        OXYGEN_GFX_API auto GetDescriptorAllocator() const -> const DescriptorAllocator&;
+
+        OXYGEN_GFX_API auto GetResourceRegistry() -> ResourceRegistry&;
+        OXYGEN_GFX_API auto GetResourceRegistry() const -> const ResourceRegistry&;
+
         OXYGEN_GFX_API void Submit(FrameRenderTask task);
         OXYGEN_GFX_API void Stop();
 
@@ -161,7 +173,7 @@ namespace graphics {
             -> std::shared_ptr<graphics::Texture>
             = 0;
 
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateFramebuffer(graphics::FramebufferDesc desc) const
+        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateFramebuffer(graphics::FramebufferDesc desc)
             -> std::shared_ptr<graphics::Framebuffer>
             = 0;
 

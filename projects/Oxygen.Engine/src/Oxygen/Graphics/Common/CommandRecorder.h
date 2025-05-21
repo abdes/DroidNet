@@ -6,14 +6,16 @@
 
 #pragma once
 
-#include <Oxygen/Base/VariantHelpers.h> // For always_false_v
 #include <memory>
+#include <optional>
 #include <span>
+#include <vector>
 
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/VariantHelpers.h> // For always_false_v
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -73,6 +75,35 @@ public:
     virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
     virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
+
+    //! Clears color and depth/stencil (DSV) attachments of the specified
+    //! framebuffer.
+    /*!
+     For each color attachment, if a clear value is provided in \p
+     color_clear_values, it is used. Otherwise, if the attached texture's
+     descriptor has \c use_clear_value set to true, the texture's \c clear_value
+     is used. If neither is specified, a default value (typically black or zero)
+     is used.
+
+     For depth and stencil, if \p depth_clear_value or \p stencil_clear_value
+     are provided, they are used. Otherwise, if the depth texture's descriptor
+     has \c use_clear_value set to true, its \c clear_value is used for depth.
+
+     \param framebuffer The framebuffer whose attachments will be cleared.
+     \param color_clear_values Optional vector of per-attachment clear colors.
+     Each entry corresponds to a color attachment. If not set or if an entry is
+     std::nullopt, the texture's clear value is used if available.
+     \param depth_clear_value Optional clear value for the depth buffer. If not
+     set, the texture's clear value is used if available.
+     \param stencil_clear_value Optional clear value for the stencil buffer. If
+     not set, the texture's clear value is used if available.
+    */
+    virtual void ClearFramebuffer(
+        const Framebuffer& framebuffer,
+        std::optional<std::vector<std::optional<Color>>> color_clear_values = std::nullopt,
+        std::optional<float> depth_clear_value = std::nullopt,
+        std::optional<uint8_t> stencil_clear_value = std::nullopt)
+        = 0;
 
     virtual void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) = 0;
 

@@ -90,13 +90,10 @@ target_sources(
     "Devices/DebugLayer.cpp"
     "Devices/DebugLayer.h"
     "Devices/DeviceManager.cpp"
-    "ImGui/ImGuiModule.cpp"
+    # "ImGui/ImGuiModule.cpp"
     "ImGui/imgui_impl_dx12.cpp"
     "ImGui/imgui_impl_dx12.h"
     "Resources/Buffer.cpp"
-    "Resources/DescriptorHeap.cpp"
-    "Resources/DescriptorHeap.h"
-    "Resources/DescriptorHeaps.cpp"
     "Shaders/EngineShaders.cpp"
     "Shaders/EngineShaders.h"
     "Shaders/ShaderCompiler.cpp"
@@ -107,6 +104,7 @@ target_sources(
     "Bindless/DescriptorHeapSegment.cpp"
     "Bindless/DescriptorAllocator.h"
     "Bindless/DescriptorAllocator.cpp"
+
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -124,8 +122,7 @@ target_sources(
       "Resources/Buffer.h"
       "Allocator/D3D12MemAlloc.h"
       "Devices/DeviceManager.h"
-      "ImGui/ImGuiModule.h"
-      "Resources/DescriptorHeaps.h"
+      # "ImGui/ImGuiModule.h"
       "Resources/GraphicResource.h"
 )
 

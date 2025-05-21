@@ -24,7 +24,8 @@ namespace oxygen::graphics {
 //! Registry for graphics resources and their views, supporting bindless rendering.
 class ResourceRegistry {
 public:
-    OXYGEN_GFX_API explicit ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocator);
+    OXYGEN_GFX_API explicit ResourceRegistry(
+        std::string_view debug_name);
 
     OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
 
@@ -56,14 +57,16 @@ public:
     template <ResourceWithViews Resource>
     auto RegisterView(
         Resource& resource,
+        DescriptorHandle view_handle,
         const typename Resource::ViewDescriptionT& desc)
-        -> NativeObject
+        -> NativeObject // TODO: make it noexcept
     {
-        auto view = resource.GetNativeView(desc);
+        auto view = resource.GetNativeView(view_handle, desc);
         auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
         return RegisterView(
             NativeObject { &resource, Resource::ClassTypeId() },
             std::move(view),
+            std::move(view_handle),
             std::any(desc),
             key,
             desc.view_type,
@@ -95,7 +98,7 @@ public:
              during the view registration.
     */
     template <ResourceWithViews Resource>
-    auto RegisterView(Resource& resource, NativeObject view,
+    auto RegisterView(Resource& resource, NativeObject view, DescriptorHandle view_handle,
         const typename Resource::ViewDescriptionT& desc) -> bool
     {
         auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
@@ -103,6 +106,7 @@ public:
             NativeObject { &resource, Resource::ClassTypeId() },
             std::move(view),
             std::any(desc),
+            std::move(view_handle),
             key,
             desc.view_type,
             desc.visibility)
@@ -157,7 +161,7 @@ private:
     OXYGEN_GFX_API void Register(std::shared_ptr<void> resource, TypeId type_id);
 
     OXYGEN_GFX_API auto RegisterView(
-        NativeObject resource, NativeObject view,
+        NativeObject resource, NativeObject view, DescriptorHandle view_handle,
         std::any view_description_for_cache,
         size_t key,
         ResourceViewType view_type, DescriptorVisibility visibility)
@@ -179,9 +183,6 @@ private:
     // TODO: consider deleting these methods as I cannot find a use case
     [[nodiscard]] auto Contains(const DescriptorHandle& descriptor) const -> NativeObject;
     [[nodiscard]] auto Find(const DescriptorHandle& descriptor) const -> NativeObject;
-
-    // Core dependencies
-    std::shared_ptr<DescriptorAllocator> descriptor_allocator_;
 
     // Thread safety
     mutable std::mutex registry_mutex_;
@@ -237,6 +238,8 @@ private:
 
     //! A unified view cache for all resources and view types.
     std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
+
+    std::string debug_name_; //!< Debug name for the registry.
 };
 
 } // namespace oxygen::graphics
@@ -383,3 +386,10 @@ format/sub-resource changes, or swapping views at runtime.
 
 ================================================================================
 */
+
+// // Allocate a descriptor
+// DescriptorHandle descriptor = descriptor_allocator_->Allocate(view_type, visibility);
+// if (!descriptor.IsValid()) {
+//     LOG_F(ERROR, "failed: no descriptor available");
+//     return {};
+// }

@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics {
 
@@ -32,28 +33,39 @@ namespace d3d12 {
         OXYGEN_MAKE_NON_COPYABLE(Buffer)
         OXYGEN_MAKE_NON_MOVABLE(Buffer)
 
-        [[nodiscard]] auto GetResource() const -> ID3D12Resource*;
-        [[nodiscard]] auto Map(size_t offset = 0, size_t size = 0) -> void* override;
-        void UnMap() override;
-        void Update(const void* data, size_t size, size_t offset = 0) override;
-        [[nodiscard]] auto GetSize() const noexcept -> size_t override;
-        [[nodiscard]] auto GetUsage() const noexcept -> BufferUsage override;
-        [[nodiscard]] auto GetMemoryType() const noexcept -> BufferMemory override;
-        [[nodiscard]] auto IsMapped() const noexcept -> bool override;
-        [[nodiscard]] auto GetDescriptor() const noexcept -> BufferDesc override;
-        [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
-        void SetName(std::string_view name) noexcept override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetDescriptor() const noexcept -> BufferDesc override;
 
+        [[nodiscard]] OXYGEN_D3D12_API auto GetNativeResource() const -> NativeObject override;
+
+        [[nodiscard]] OXYGEN_D3D12_API auto GetNativeView(
+            const DescriptorHandle& view_handle,
+            const BufferViewDescription& view_desc) const
+            -> NativeObject override;
+
+        [[nodiscard]] OXYGEN_D3D12_API auto GetResource() const -> ID3D12Resource*;
+        [[nodiscard]] OXYGEN_D3D12_API auto Map(size_t offset = 0, size_t size = 0) -> void* override;
+        OXYGEN_D3D12_API void UnMap() override;
+        OXYGEN_D3D12_API void Update(const void* data, size_t size, size_t offset = 0) override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetSize() const noexcept -> size_t override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetUsage() const noexcept -> BufferUsage override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetMemoryType() const noexcept -> BufferMemory override;
+        [[nodiscard]] OXYGEN_D3D12_API auto IsMapped() const noexcept -> bool override;
+        OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
+
+    protected:
         // --- New view creation methods ---
         [[nodiscard]] auto CreateConstantBufferView(
+            const DescriptorHandle& view_handle,
             const BufferRange& range = {}) const -> NativeObject override;
 
         [[nodiscard]] auto CreateShaderResourceView(
+            const DescriptorHandle& view_handle,
             Format format,
             BufferRange range = {},
             uint32_t stride = 0) const -> NativeObject override;
 
         [[nodiscard]] auto CreateUnorderedAccessView(
+            const DescriptorHandle& view_handle,
             Format format,
             BufferRange range = {},
             uint32_t stride = 0) const -> NativeObject override;

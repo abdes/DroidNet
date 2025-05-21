@@ -11,12 +11,10 @@
 
 using oxygen::graphics::ResourceRegistry;
 
-ResourceRegistry::ResourceRegistry(std::shared_ptr<DescriptorAllocator> allocator)
-    : descriptor_allocator_(std::move(allocator))
+ResourceRegistry::ResourceRegistry(std::string_view debug_name)
+    : debug_name_(debug_name)
 {
-    DCHECK_NOTNULL_F(descriptor_allocator_, "Descriptor allocator must not be null");
-
-    DLOG_F(INFO, "ResourceRegistry created.");
+    DLOG_F(INFO, "ResourceRegistry `{}` created.", debug_name_);
 }
 
 ResourceRegistry::~ResourceRegistry() noexcept
@@ -76,26 +74,38 @@ void ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
     DLOG_F(3, "resource: {}, type id: {}", fmt::ptr(resource.get()), nostd::to_string(type_id));
 
     const NativeObject key { resource.get(), type_id };
-    ResourceEntry entry;
-    entry.resource = std::move(resource);
-    resources_[key] = std::move(entry);
+    if (const auto cache_it = resources_.find(key); cache_it != resources_.end()) {
+        DLOG_F(4, "cache hit ({})-> ", fmt::ptr(resource.get()));
+        DLOG_F(4, "resource already registered, "
+                  "use Replace() to replace the resource and its views");
+        throw std::runtime_error("Resource already registered");
+    }
+
+    ResourceEntry entry {
+        .resource = std::move(resource),
+        .descriptors = {} // Initialize with empty descriptors
+    };
+    resources_.emplace(key, std::move(entry));
+    DLOG_F(3, "{} resources in registry", resources_.size());
 }
 
 auto ResourceRegistry::RegisterView(
-    NativeObject resource, NativeObject view,
-    std::any view_description_for_cache, // Added
+    NativeObject resource, NativeObject view, DescriptorHandle view_handle,
+    std::any view_description,
     size_t key_hash,
     ResourceViewType view_type, DescriptorVisibility visibility)
     -> NativeObject
 {
-    DCHECK_F(view_description_for_cache.has_value(), "View description must be valid");
-    DCHECK_F(key_hash != 0, "Key hash must be valid");
+    CHECK_F(view_description.has_value(), "View description must be valid");
+    CHECK_F(key_hash != 0, "Key hash must be valid");
+    CHECK_F(view_handle.IsValid(), "View handle must be valid");
 
     std::lock_guard lock(registry_mutex_);
 
     LOG_SCOPE_F(INFO, "Register view");
     DLOG_F(INFO, "resource: {}", nostd::to_string(resource));
     DLOG_F(INFO, "view: {}", nostd::to_string(view));
+    DLOG_F(INFO, "view handle: {}", nostd::to_string(view_handle));
     DLOG_F(3, "view type: {}, visibility: {}", nostd::to_string(view_type), nostd::to_string(visibility));
     DLOG_F(3, "key hash: {}", key_hash);
 
@@ -124,21 +134,14 @@ auto ResourceRegistry::RegisterView(
         throw std::runtime_error("View already registered");
     }
 
-    // Allocate a descriptor
-    DescriptorHandle descriptor = descriptor_allocator_->Allocate(view_type, visibility);
-    if (!descriptor.IsValid()) {
-        LOG_F(ERROR, "failed: no descriptor available");
-        return {};
-    }
-
     // Store in maps
-    auto index = descriptor.GetIndex();
+    auto index = view_handle.GetIndex();
     auto& descriptors = resource_it->second.descriptors;
     auto [desc_it, inserted] = descriptors.emplace(
         index,
         ResourceEntry::ViewEntry {
             .view_object = view,
-            .descriptor = std::move(descriptor) });
+            .descriptor = std::move(view_handle) });
     DLOG_F(4, "updated descriptors map with index {} ({})",
         index, inserted ? "inserted" : "reused");
     descriptor_to_resource_[index] = resource;
@@ -146,7 +149,7 @@ auto ResourceRegistry::RegisterView(
     // Store in view cache
     ViewCacheEntry cache_entry {
         .view_object = view,
-        .view_description = std::move(view_description_for_cache) // Store the original description
+        .view_description = std::move(view_description) // Store the original description
     };
     view_cache_[cache_key] = std::move(cache_entry);
     DLOG_F(4, "updated cache");

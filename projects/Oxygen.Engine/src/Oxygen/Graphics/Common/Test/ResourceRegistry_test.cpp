@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 
+using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::RegisteredResource;
@@ -48,7 +49,9 @@ public:
     using ViewDescriptionT = TestViewDesc;
 
     // Required by resource registry
-    [[maybe_unused]] auto GetNativeView(const ViewDescriptionT& desc) -> NativeObject
+    [[maybe_unused]] auto GetNativeView(
+        const DescriptorHandle& /*view_handle*/,
+        const ViewDescriptionT& desc) -> NativeObject
     {
         // Use the resource pointer and view id to make each view unique per resource and description
         const uint64_t ptr = reinterpret_cast<uint64_t>(this);
@@ -87,7 +90,7 @@ protected:
                     view_type, visibility);
             };
 
-        registry_ = std::make_unique<ResourceRegistry>(allocator_);
+        registry_ = std::make_unique<ResourceRegistry>("Test Registry");
         resource_ = std::make_shared<TestResource>();
         registry_->Register(resource_);
     }
@@ -98,6 +101,17 @@ protected:
         resource_.reset();
         registry_.reset();
         allocator_.reset();
+    }
+
+    auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeObject
+    {
+        // Allocate a descriptor
+        DescriptorHandle descriptor = allocator_->Allocate(desc.view_type, desc.visibility);
+        if (!descriptor.IsValid()) {
+            ADD_FAILURE() << "failed to allocate descriptor";
+            return {};
+        }
+        return registry_->RegisterView(resource, std::move(descriptor), desc);
     }
 };
 
@@ -131,13 +145,13 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewAlreadyRegistered)
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 42
     };
-    const auto view1 = registry_->RegisterView(*resource_, desc);
+    const auto view1 = RegisterView(*resource_, desc);
     EXPECT_TRUE(view1.IsValid());
     EXPECT_TRUE(registry_->Contains(*resource_, desc));
 
     // Registering the same view again should throw a runtime error
     EXPECT_THROW(
-        registry_->RegisterView(*resource_, desc),
+        RegisterView(*resource_, desc),
         std::runtime_error)
         << "Registering the same view again should throw a runtime error";
 }
@@ -154,8 +168,8 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewDifferentDescriptions)
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 2
     };
-    const auto view1 = registry_->RegisterView(*resource_, desc1);
-    const auto view2 = registry_->RegisterView(*resource_, desc2);
+    const auto view1 = RegisterView(*resource_, desc1);
+    const auto view2 = RegisterView(*resource_, desc2);
     EXPECT_TRUE(view1.IsValid());
     EXPECT_TRUE(view2.IsValid());
     EXPECT_NE(view1, view2) << "Different descriptions should yield different views";
@@ -168,12 +182,12 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewCacheEviction)
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 77
     };
-    const auto view1 = registry_->RegisterView(*resource_, desc);
+    const auto view1 = RegisterView(*resource_, desc);
     registry_->UnRegisterViews(*resource_);
     // Allocate a new resource to guarantee a new pointer
     const auto resource2 = std::make_shared<TestResource>();
     registry_->Register(resource2);
-    const auto view2 = registry_->RegisterView(*resource2, desc);
+    const auto view2 = RegisterView(*resource2, desc);
     EXPECT_TRUE(view2.IsValid());
     EXPECT_NE(view1, view2) << "Cache should be cleared after UnRegisterViews, "
                                "new view should be created for new resource instance";
@@ -191,8 +205,8 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewMultipleResources)
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 123
     };
-    const auto view1 = registry_->RegisterView(*resource_, desc);
-    const auto view2 = registry_->RegisterView(*resource2, desc);
+    const auto view1 = RegisterView(*resource_, desc);
+    const auto view2 = RegisterView(*resource2, desc);
     EXPECT_TRUE(view1.IsValid());
     EXPECT_TRUE(view2.IsValid());
     EXPECT_NE(view1, view2) << "Same description on different resources should yield different views";
@@ -208,12 +222,12 @@ NOLINT_TEST_F(ResourceRegistryViewCacheTest, RegisterViewAfterUnregisterResource
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 55
     };
-    const auto view1 = registry_->RegisterView(*resource_, desc);
+    const auto view1 = RegisterView(*resource_, desc);
     registry_->UnRegisterResource(*resource_);
     // Allocate a new resource to guarantee a new pointer
     resource_ = std::make_shared<TestResource>();
     registry_->Register(resource_);
-    const auto view2 = registry_->RegisterView(*resource_, desc);
+    const auto view2 = RegisterView(*resource_, desc);
     EXPECT_TRUE(view2.IsValid());
     EXPECT_NE(view1, view2) << "Re-registering with a new resource instance should not return stale view";
 }
@@ -229,7 +243,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewForUnregisteredResource)
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 99
     };
-    const auto view_object = registry_->RegisterView(*unregistered_resource, desc);
+    const auto view_object = RegisterView(*unregistered_resource, desc);
     EXPECT_FALSE(view_object.IsValid());
 }
 
@@ -256,7 +270,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, DescriptorAllocatorFailure)
         .id = 101
     };
 
-    const auto view_object = registry_->RegisterView(*resource_, desc);
+    const auto view_object = RegisterView(*resource_, desc);
     EXPECT_FALSE(view_object.IsValid());
 }
 
@@ -293,7 +307,7 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest, ConcurrentRegisterAndUnregister)
                     .visibility = DescriptorVisibility::kShaderVisible,
                     .id = i
                 };
-                auto view = registry_->RegisterView(*resources[t], desc);
+                auto view = RegisterView(*resources[t], desc);
                 EXPECT_TRUE(view.IsValid());
                 registry_->UnRegisterResource(*resources[t]);
             }
@@ -323,8 +337,8 @@ protected:
     void SetUp() override
     {
         ResourceRegistryTest::SetUp();
-        view1_ = registry_->RegisterView(*resource_, desc1_);
-        view2_ = registry_->RegisterView(*resource_, desc2_);
+        view1_ = RegisterView(*resource_, desc1_);
+        view2_ = RegisterView(*resource_, desc2_);
     }
 };
 
@@ -376,7 +390,7 @@ protected:
                     capacity, base_index,
                     view_type, visibility);
             };
-        registry_ = std::make_unique<ResourceRegistry>(allocator_);
+        registry_ = std::make_unique<ResourceRegistry>("Test Registry");
         resource1_ = std::make_shared<TestResource>();
         resource2_ = std::make_shared<TestResource>();
         registry_->Register(resource1_);
@@ -390,6 +404,17 @@ protected:
         resource2_.reset();
         registry_.reset();
         allocator_.reset();
+    }
+
+    auto RegisterView(TestResource& resource, TestViewDesc desc) -> NativeObject
+    {
+        // Allocate a descriptor
+        DescriptorHandle descriptor = allocator_->Allocate(desc.view_type, desc.visibility);
+        if (!descriptor.IsValid()) {
+            ADD_FAILURE() << "failed to allocate descriptor";
+            return {};
+        }
+        return registry_->RegisterView(resource, std::move(descriptor), desc);
     }
 };
 
@@ -411,7 +436,7 @@ NOLINT_TEST_F(ResourceRegistryLifecycleTest, UnregisterViewsDoesNotRemoveResourc
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 5
     };
-    registry_->RegisterView(*resource1_, desc);
+    RegisterView(*resource1_, desc);
     EXPECT_TRUE(registry_->Contains(*resource1_));
 
     registry_->UnRegisterViews(*resource1_);

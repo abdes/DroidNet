@@ -8,12 +8,11 @@
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 
 #include <wrl/client.h>
 
 namespace oxygen::graphics::d3d12 {
-
-class RenderTarget;
 
 class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
@@ -37,6 +36,11 @@ public:
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
     void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
+    virtual void ClearFramebuffer(
+        const oxygen::graphics::Framebuffer& framebuffer,
+        std::optional<std::vector<std::optional<Color>>> color_clear_values = std::nullopt,
+        std::optional<float> depth_clear_value = std::nullopt,
+        std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
 
     void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
 

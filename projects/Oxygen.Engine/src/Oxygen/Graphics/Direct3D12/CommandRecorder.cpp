@@ -27,7 +27,6 @@
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
 
 using oxygen::graphics::d3d12::CommandRecorder;
 using oxygen::graphics::d3d12::detail::GetGraphics;
@@ -393,12 +392,12 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
     const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast-downcast)
     StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
     for (const auto& rtv : fb.GetRenderTargetViews()) {
-        rtvs.push_back(rtv.cpu);
+        rtvs.emplace_back(rtv);
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
     if (fb.GetDescriptor().depth_attachment.IsValid()) {
-        dsv = fb.GetDepthStencilView().cpu;
+        dsv.ptr = fb.GetDepthStencilView();
     }
 
     auto* command_list_impl = GetConcreteCommandList();
@@ -413,7 +412,10 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
         fb.GetDescriptor().depth_attachment.IsValid() ? &dsv : nullptr);
 }
 
-void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor)
+void CommandRecorder::ClearTextureFloat(
+    graphics::Texture* _t,
+    TextureSubResourceSet sub_resources,
+    const Color& clearColor)
 {
     auto* t = static_cast<Texture*>(_t); // NOLINT(*-pro-type-static-cast-downcast)
     const auto& desc = t->GetDescriptor();
@@ -431,6 +433,8 @@ void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourc
     auto* d3d12_command_list = command_list_impl->GetCommandList();
     DCHECK_NOTNULL_F(d3d12_command_list);
 
+    // TODO: use the registry cache for the views
+
     if (desc.is_render_target) {
         // if (m_EnableAutomaticBarriers)
         //{
@@ -438,14 +442,20 @@ void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourc
         // }
         // commitBarriers();
 
-        for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
-            D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->CreateRenderTargetView(Format::kUnknown, sub_resources).AsInteger() };
+        // TextureViewDescription rtv_desc {
+        //     .view_type = ResourceViewType::kTexture_RTV,
+        //     .visibility = DescriptorVisibility::kCpuOnly,
+        //     .format = Format::kUnknown,
+        //     .dimension = desc.dimension,
+        //     .sub_resources = sub_resources,
+        // };
 
-            d3d12_command_list->ClearRenderTargetView(
-                RTV,
-                &clearColor.r,
-                0, nullptr);
-        }
+        // D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->GetNativeView(rtv_desc).AsInteger() };
+
+        // d3d12_command_list->ClearRenderTargetView(
+        //     RTV,
+        //     &clearColor.r,
+        //     0, nullptr);
     } else {
         // if (m_EnableAutomaticBarriers)
         //{
@@ -455,14 +465,78 @@ void CommandRecorder::ClearTextureFloat(graphics::Texture* _t, TextureSubResourc
 
         // commitDescriptorHeaps();
 
-        for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
-            const auto& desc_handle = t->GetClearMipLevelUnorderedAccessView(mipLevel);
-            assert(desc_handle.IsValid());
-            d3d12_command_list->ClearUnorderedAccessViewFloat(
-                desc_handle.gpu,
-                desc_handle.cpu,
-                t->GetNativeResource().AsPointer<ID3D12Resource>(),
-                &clearColor.r,
+        // for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
+        //     const auto& desc_handle = t->GetClearMipLevelUnorderedAccessView(mipLevel);
+        //     assert(desc_handle.IsValid());
+        //     d3d12_command_list->ClearUnorderedAccessViewFloat(
+        //         desc_handle.gpu,
+        //         desc_handle.cpu,
+        //         t->GetNativeResource().AsPointer<ID3D12Resource>(),
+        //         &clearColor.r,
+        //         0,
+        //         nullptr);
+        // }
+    }
+}
+
+void CommandRecorder::ClearFramebuffer(
+    const graphics::Framebuffer& framebuffer,
+    std::optional<std::vector<std::optional<Color>>> color_clear_values,
+    std::optional<float> depth_clear_value,
+    std::optional<uint8_t> stencil_clear_value)
+{
+    using oxygen::graphics::d3d12::Framebuffer;
+    using oxygen::graphics::detail::GetFormatInfo;
+
+    const auto& fb = static_cast<const Framebuffer&>(framebuffer);
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    const auto& desc = fb.GetDescriptor();
+
+    // Clear color attachments
+    auto rtvs = fb.GetRenderTargetViews();
+    for (size_t i = 0; i < rtvs.size(); ++i) {
+        const auto& attachment = desc.color_attachments[i];
+        const auto& format_info = GetFormatInfo(attachment.format);
+        if (format_info.has_depth || format_info.has_stencil) {
+            continue;
+        }
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = {};
+        rtv_handle.ptr = rtvs[i];
+        Color clear_color = attachment.ResolveClearColor(
+            color_clear_values && i < color_clear_values->size() ? (*color_clear_values)[i] : std::nullopt
+        );
+        const float color[4] = {clear_color.r, clear_color.g, clear_color.b, clear_color.a};
+        d3d12_command_list->ClearRenderTargetView(rtv_handle, color, 0, nullptr);
+    }
+
+    // Clear depth/stencil attachment
+    if (desc.depth_attachment.IsValid()) {
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle = {};
+        dsv_handle.ptr = fb.GetDepthStencilView();
+        const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
+
+        auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(
+            depth_clear_value, stencil_clear_value, desc.depth_attachment.format
+        );
+
+        D3D12_CLEAR_FLAGS clear_flags = static_cast<D3D12_CLEAR_FLAGS>(0);
+        if (depth_format_info.has_depth) {
+            clear_flags = static_cast<D3D12_CLEAR_FLAGS>(clear_flags | D3D12_CLEAR_FLAG_DEPTH);
+        }
+        if (depth_format_info.has_stencil) {
+            clear_flags = static_cast<D3D12_CLEAR_FLAGS>(clear_flags | D3D12_CLEAR_FLAG_STENCIL);
+        }
+
+        if (clear_flags != 0) {
+            d3d12_command_list->ClearDepthStencilView(
+                dsv_handle,
+                clear_flags,
+                depth,
+                stencil,
                 0,
                 nullptr);
         }

@@ -4,58 +4,132 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeap.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/DescriptorHeaps.h>
+
 
 using oxygen::graphics::FramebufferDesc;
+using oxygen::graphics::Renderer;
+using oxygen::graphics::Texture;
 using oxygen::graphics::d3d12::Framebuffer;
-using oxygen::graphics::d3d12::detail::DescriptorHandle;
-using oxygen::graphics::d3d12::detail::GetGraphics;
 
-Framebuffer::Framebuffer(FramebufferDesc desc)
-    : desc_(std::move(desc))
+Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, FramebufferDesc desc)
+    : renderer_(std::move(renderer))
+    , desc_(std::move(desc))
 {
+    DCHECK_NOTNULL_F(renderer_, "Renderer must not be null");
+
+    DCHECK_F(!desc_.color_attachments.empty() || desc_.depth_attachment.IsValid(),
+        "Framebuffer must have at least one color or depth attachment");
+    DCHECK_F(desc_.color_attachments.size() <= kMaxRenderTargets,
+        "Framebuffer can have at most {} color attachments", kMaxRenderTargets);
+
     // The framebuffer must have a consistent size across all attachments. We
     // will use the size of the first color attachment, or if none is provided,
     // the depth attachment.
     if (!desc_.color_attachments.empty()) {
-        const auto texture = static_pointer_cast<Texture>(desc_.color_attachments[0].texture);
+        const auto texture = desc_.color_attachments[0].texture;
         rt_width = texture->GetDescriptor().width;
         rt_height = texture->GetDescriptor().height;
     } else if (desc_.depth_attachment.IsValid()) {
-        const auto texture = static_pointer_cast<Texture>(desc_.depth_attachment.texture);
+        const auto texture = desc_.depth_attachment.texture;
         rt_width = texture->GetDescriptor().width;
         rt_height = texture->GetDescriptor().height;
     }
 
+    auto& resource_registry = renderer_->GetResourceRegistry();
+
     for (const auto& attachment : desc_.color_attachments) {
-        auto texture = static_pointer_cast<Texture>(desc_.color_attachments[0].texture);
-        assert(texture->GetDescriptor().width == rt_width);
-        assert(texture->GetDescriptor().height == rt_height);
+        auto texture = attachment.texture;
 
-        DescriptorHandle rtv = GetGraphics().Descriptors().RtvHeap().Allocate();
-        texture->CreateRenderTargetView(rtv, attachment.format, attachment.sub_resources);
+        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width,
+            "Framebuffer {}: width mismatch between attachments", texture->GetName());
+        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height,
+            "Framebuffer {}: height mismatch between attachments", texture->GetName());
 
-        rtvs_.push_back(std::move(rtv));
+        DescriptorHandle rtv_handle = renderer_->GetDescriptorAllocator().Allocate(
+            ResourceViewType::kTexture_RTV,
+            DescriptorVisibility::kCpuOnly);
+        if (!rtv_handle.IsValid()) {
+            throw std::runtime_error(fmt::format("Failed to allocate RTV handle for color attachment in texture `{}`",
+                texture->GetName()));
+        }
+
+        resource_registry.Register(texture);
+
+        TextureViewDescription view_desc {
+            .view_type = ResourceViewType::kTexture_RTV,
+            .visibility = DescriptorVisibility::kCpuOnly,
+            .format = attachment.format,
+            .dimension = texture->GetDescriptor().dimension,
+            .sub_resources = attachment.sub_resources,
+        };
+
+        auto rtv = resource_registry.RegisterView(*texture, std::move(rtv_handle), view_desc);
+        if (!rtv.IsValid()) {
+            resource_registry.UnRegisterResource(*texture);
+            throw std::runtime_error(fmt::format("Failed to register RTV view for texture `{}`",
+                texture->GetName()));
+        }
+        rtvs_.push_back(std::move(rtv.AsInteger()));
         textures_.push_back(std::move(texture));
     }
 
-    if (desc_.depth_attachment.IsValid()) {
-        auto texture = static_pointer_cast<Texture>(desc_.depth_attachment.texture);
-        assert(texture->GetDescriptor().width == rt_width);
-        assert(texture->GetDescriptor().height == rt_height);
+    if (auto& depth_attachment = desc_.depth_attachment; depth_attachment.IsValid()) {
+        auto texture = depth_attachment.texture;
+        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width,
+            "Framebuffer {}: width mismatch between attachments", texture->GetName());
+        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height,
+            "Framebuffer {}: height mismatch between attachments", texture->GetName());
 
-        dsv_ = GetGraphics().Descriptors().DsvHeap().Allocate();
-        texture->CreateDepthStencilView(
-            dsv_,
-            desc_.depth_attachment.format,
-            desc_.depth_attachment.sub_resources,
-            desc_.depth_attachment.is_read_only);
+        DescriptorHandle dsv_handle = renderer->GetDescriptorAllocator().Allocate(
+            ResourceViewType::kTexture_DSV,
+            DescriptorVisibility::kCpuOnly);
+        if (!dsv_handle.IsValid()) {
+            throw std::runtime_error(fmt::format("Failed to allocate DSV handle for color attachment in texture `{}`",
+                texture->GetName()));
+        }
+
+        resource_registry.Register(texture);
+
+        TextureViewDescription view_desc {
+            .view_type = ResourceViewType::kTexture_DSV,
+            .visibility = DescriptorVisibility::kCpuOnly,
+            .format = depth_attachment.format,
+            .dimension = texture->GetDescriptor().dimension,
+            .sub_resources = depth_attachment.sub_resources,
+        };
+
+        auto dsv = resource_registry.RegisterView(*texture, std::move(dsv_handle), view_desc);
+        if (!dsv.IsValid()) {
+            resource_registry.UnRegisterResource(*texture);
+            throw std::runtime_error(fmt::format("Failed to register DSV view for texture `{}`",
+                texture->GetName()));
+        }
+        dsv_ = dsv.AsInteger();
 
         textures_.push_back(std::move(texture));
     }
+}
+
+Framebuffer::~Framebuffer()
+{
+    DCHECK_NOTNULL_F(renderer_, "Renderer must not be null");
+
+    LOG_SCOPE_F(1, "Destroying framebuffer");
+    auto& resource_registry = renderer_->GetResourceRegistry();
+    for (const auto& texture : textures_) {
+        DCHECK_NOTNULL_F(texture, "Texture must not be null");
+        DLOG_F(1, "for texture {}", texture->GetName());
+        resource_registry.UnRegisterResource(*texture);
+    }
+    textures_.clear();
+    rtvs_.clear();
 }
 
 auto Framebuffer::GetFramebufferInfo() const -> const FramebufferInfo&
