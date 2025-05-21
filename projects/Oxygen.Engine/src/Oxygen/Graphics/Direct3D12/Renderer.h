@@ -9,6 +9,8 @@
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
+// ReSharper disable CppRedundantQualifier
+
 namespace oxygen::graphics::d3d12 {
 
 namespace detail {
@@ -57,10 +59,10 @@ public:
         TextureDesc desc, NativeObject native) const
         -> std::shared_ptr<graphics::Texture> override;
 
-    [[nodiscard]] auto CreateFramebuffer(graphics::FramebufferDesc desc) const
+    [[nodiscard]] auto CreateFramebuffer(FramebufferDesc desc) const
         -> std::shared_ptr<graphics::Framebuffer> override;
 
-    [[nodiscard]] auto CreateBuffer(const graphics::BufferDesc& desc, const void* initial_data = nullptr) const
+    [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
 protected:

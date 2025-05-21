@@ -57,7 +57,7 @@ auto TextureSubResourceSet::Resolve(
     case TextureDimension::kTexture2DArray:
     case TextureDimension::kTextureCube:
     case TextureDimension::kTextureCubeArray:
-    case TextureDimension::kTexture2DMSArray: {
+    case TextureDimension::kTexture2DMultiSampleArray: {
         ret.base_array_slice = base_array_slice;
         const auto last_array_slice_plus_one = std::min(base_array_slice + num_array_slices, desc.array_size);
         ret.num_array_slices = static_cast<ArraySlice>(std::max(0u, last_array_slice_plus_one - base_array_slice));
@@ -84,7 +84,7 @@ auto TextureSubResourceSet::IsEntireTexture(const TextureDesc& desc) const -> bo
     case TextureDimension::kTexture2DArray:
     case TextureDimension::kTextureCube:
     case TextureDimension::kTextureCubeArray:
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSampleArray:
         if (base_array_slice > 0u || base_array_slice + num_array_slices < desc.array_size) {
             return false;
         }

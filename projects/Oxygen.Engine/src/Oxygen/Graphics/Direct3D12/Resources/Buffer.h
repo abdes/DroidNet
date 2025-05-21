@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-License: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #pragma once
@@ -26,16 +26,15 @@ namespace d3d12 {
     public:
         Buffer(
             graphics::detail::PerFrameResourceManager& resource_manager,
-            const BufferDesc& desc,
-            const void* initial_data = nullptr);
+            const BufferDesc& desc);
         ~Buffer() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(Buffer);
-        OXYGEN_MAKE_NON_MOVABLE(Buffer);
+        OXYGEN_MAKE_NON_COPYABLE(Buffer)
+        OXYGEN_MAKE_NON_MOVABLE(Buffer)
 
         [[nodiscard]] auto GetResource() const -> ID3D12Resource*;
         [[nodiscard]] auto Map(size_t offset = 0, size_t size = 0) -> void* override;
-        void Unmap() override;
+        void UnMap() override;
         void Update(const void* data, size_t size, size_t offset = 0) override;
         [[nodiscard]] auto GetSize() const noexcept -> size_t override;
         [[nodiscard]] auto GetUsage() const noexcept -> BufferUsage override;
@@ -45,16 +44,22 @@ namespace d3d12 {
         [[nodiscard]] auto GetNativeResource() const -> NativeObject override;
         void SetName(std::string_view name) noexcept override;
 
-    private:
-        void CreateBufferResource(
-            graphics::detail::PerFrameResourceManager& resource_manager,
-            const BufferDesc& desc,
-            const void* initial_data);
+        // --- New view creation methods ---
+        [[nodiscard]] auto CreateConstantBufferView(
+            const BufferRange& range = {}) const -> NativeObject override;
 
-        size_t size_ { 0 };
-        BufferUsage usage_ { BufferUsage::kNone };
-        BufferMemory memory_ { BufferMemory::kDeviceLocal };
-        uint32_t stride_ { 0 };
+        [[nodiscard]] auto CreateShaderResourceView(
+            Format format,
+            BufferRange range = {},
+            uint32_t stride = 0) const -> NativeObject override;
+
+        [[nodiscard]] auto CreateUnorderedAccessView(
+            Format format,
+            BufferRange range = {},
+            uint32_t stride = 0) const -> NativeObject override;
+
+    private:
+        BufferDesc desc_ {}; // Store the full descriptor
         bool mapped_ { false };
     };
 

@@ -9,54 +9,17 @@
 #include <any>
 #include <memory>
 #include <mutex>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
-
-class Texture;
-struct TextureViewKey;
-
-class Buffer;
-struct BufferViewKey;
-
-struct RegisteredResource { };
-
-template <typename T>
-concept TextureResource = std::is_base_of_v<Texture, std::remove_cvref_t<T>>;
-
-template <typename T>
-concept BufferResource = std::is_base_of_v<Buffer, std::remove_cvref_t<T>>;
-
-template <typename T>
-concept AnyResource = std::is_base_of_v<RegisteredResource, std::remove_cvref_t<T>>;
-
-template <typename T>
-concept ViewDescription = std::equality_comparable<T>
-    && requires(T vk) {
-           { std::hash<T> {}(vk) } -> std::convertible_to<std::size_t>;
-           { vk.view_type } -> std::convertible_to<ResourceViewType>;
-           { vk.visibility } -> std::convertible_to<DescriptorVisibility>;
-       };
-
-template <typename T>
-concept SupportedResource
-    = (TextureResource<T>
-          || BufferResource<T>
-          || AnyResource<T>)
-    && requires { { T::ClassTypeId() } -> std::convertible_to<TypeId>; };
-
-template <typename T>
-concept ResourceWithViews = SupportedResource<T>
-    && requires { typename T::ViewDescriptionT; }
-    && ViewDescription<typename T::ViewDescriptionT>;
 
 //! Registry for graphics resources and their views, supporting bindless rendering.
 class ResourceRegistry {
@@ -70,44 +33,25 @@ public:
 
     // TODO: provide API to update a view registration with a new native object, keeping the same descriptor handle.
 
-    //! Register a graphics resource, such as textures and buffers.
+    //! Register a graphics resource, such as textures, buffers, and samplers.
     /*!
      The registry will keep a strong reference to the resource until it is
-     unregistered. Therefore, the recommended lifetime management process is to
-     unregister the resource when it is no longer necessary, which will also
-     release all views associated with it. Only then can the resource be really
-     released.
+     unregistered. For resources with views (textures, buffers), views can be
+     registered and managed for bindless rendering. For simple resources like
+     samplers, only the resource itself is registered and tracked.
     */
     template <SupportedResource Resource>
-    void Register(std::shared_ptr<Resource> resource)
+    void Register(const std::shared_ptr<Resource>& resource)
     {
         Register(
             std::static_pointer_cast<void>(resource),
             Resource::ClassTypeId());
     }
 
-    //! Register a view for a graphics resource, such as textures and buffers,
-    //! making it available for bindless rendering and for cached resource
-    //! lookups.
+    //! Register a view for a graphics resource, such as textures and buffers.
     /*!
-     Use this method when you are certain that the view description is unique
-     and does not conflict with any existing views. If no cached view is found,
-     a new view and a corresponding descriptor handle will be created. The view
-     is then registered for bindless rendering and cached for future use. If a
-     view with a compatible descriptor is already registered for the resource,
-     this method will do nothing and throw and exception to prevent accidental
-     overwriting of existing views.
-
-     \note This method is thread-safe.
-
-     \param resource The resource to register the view for. Must be already
-            registered in the registry.
-     \param desc The view description, which must be hashable and comparable.
-     \return A handle to the native view, newly created or from the cache.
-
-     \throws std::runtime_error if the resource is not registered, a view with a
-             compatible descriptor exists in the cache, or an error occurs
-             during the view creation or registration.
+     Only enabled for resources that satisfy ResourceWithViews. For simple
+     resources like samplers, view registration is not supported or required.
     */
     template <ResourceWithViews Resource>
     auto RegisterView(
@@ -383,7 +327,7 @@ View Replacement & UpdateView Design Notes
 
 - The UpdateView method enables replacing the native view object at a given
   descriptor handle for a resource, while keeping the shader-visible index
-  stable. This is useful for hot-reloading, dynamic format/subresource changes,
+  stable. This is useful for hot-reloading, dynamic format/sub-resource changes,
   or swapping views at runtime.
 
 - The new view does not need to be compatible with the old view; it can have a
@@ -404,7 +348,7 @@ at the same descriptor handle.
 This method finds the existing view (old_view) for the given resource and
 replaces it with new_view, keeping the same descriptor handle (bindless index)
 for shader access. The new view must be compatible with the existing view
-description (e.g., format, subresources, etc.), as the descriptor slot and view
+description (e.g., format, sub-resources, etc.), as the descriptor slot and view
 description are not changed—only the underlying native view object is replaced.
 This is useful for scenarios such as re-creating a view after device loss,
 resource reinitialization, or hot-reloading when the view semantics remain the
@@ -423,7 +367,7 @@ This method finds the existing view (old_view) for the given resource and
 replaces it with new_view, keeping the same descriptor handle (bindless index)
 for shader access. The new view can have a different description, as long as the
 application logic ensures correctness. This is useful for hot-reloading, dynamic
-format/subresource changes, or swapping views at runtime.
+format/sub-resource changes, or swapping views at runtime.
 
     template <ResourceWithViews Resource>
     bool ReplaceView(

@@ -13,12 +13,16 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/Format.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 namespace oxygen::graphics {
 
 //! Specifies the intended usage(s) of a buffer resource.
-enum class BufferUsage : uint32_t {
+enum class BufferUsage : uint32_t { // NOLINT(performance-enum-size)
     kNone = 0,
     kVertex = 1 << 0,
     kIndex = 1 << 1,
@@ -30,7 +34,7 @@ enum class BufferUsage : uint32_t {
 OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsage)
 
 //! Specifies the memory domain for a buffer resource.
-enum class BufferMemory : uint32_t {
+enum class BufferMemory : uint32_t { // NOLINT(performance-enum-size)
     kDeviceLocal = 0, //!< GPU only
     kUpload = 1, //!< CPU to GPU
     kReadBack = 2, //!< GPU to CPU
@@ -38,65 +42,112 @@ enum class BufferMemory : uint32_t {
 
 //! Describes the properties of a buffer resource.
 struct BufferDesc {
-    size_t size = 0;
+    size_t size_bytes = 0;
     BufferUsage usage = BufferUsage::kNone;
     BufferMemory memory = BufferMemory::kDeviceLocal;
-    uint32_t stride = 0; //!< For structured buffers
 
     std::string debug_name = "Buffer";
 };
 
 // --- BufferRange definition ---
 struct BufferRange {
-    uint64_t byteOffset = 0;
-    uint64_t byteSize = ~0ull;
+    uint64_t offset_bytes = 0;
+    uint64_t size_bytes = ~0ull;
+
     BufferRange() = default;
-    BufferRange(uint64_t _byteOffset, uint64_t _byteSize)
-        : byteOffset(_byteOffset)
-        , byteSize(_byteSize)
+
+    BufferRange(const uint64_t _offset_bytes, const uint64_t _size_bytes)
+        : offset_bytes(_offset_bytes)
+        , size_bytes(_size_bytes)
     {
     }
-    [[nodiscard]] BufferRange resolve(const BufferDesc& desc) const;
-    [[nodiscard]] constexpr bool isEntireBuffer(const BufferDesc& desc) const { return (byteOffset == 0) && (byteSize == ~0ull || byteSize == desc.size); }
-    constexpr bool operator==(const BufferRange& other) const { return byteOffset == other.byteOffset && byteSize == other.byteSize; }
-    constexpr BufferRange& setByteOffset(uint64_t value)
+
+    [[nodiscard]] auto Resolve(const BufferDesc& desc) const -> BufferRange
     {
-        byteOffset = value;
-        return *this;
+        BufferRange result;
+        result.offset_bytes = std::min(offset_bytes, desc.size_bytes);
+        if (size_bytes == 0) {
+            result.size_bytes = desc.size_bytes - result.offset_bytes;
+        } else {
+            result.size_bytes = std::min(size_bytes, desc.size_bytes - result.offset_bytes);
+        }
+        return result;
     }
-    constexpr BufferRange& setByteSize(uint64_t value)
+
+    [[nodiscard]] constexpr auto IsEntireBuffer(const BufferDesc& desc) const -> bool
     {
-        byteSize = value;
-        return *this;
+        return (offset_bytes == 0) && (size_bytes == ~0ull || size_bytes == desc.size_bytes);
+    }
+
+    constexpr auto operator==(const BufferRange& other) const -> bool
+    {
+        return offset_bytes == other.offset_bytes && size_bytes == other.size_bytes;
     }
 };
 
-struct BufferViewKey {
-    // TODO: define the buffer view key structure
+struct BufferViewDescription {
+    ResourceViewType view_type { ResourceViewType::kConstantBuffer };
+    DescriptorVisibility visibility { DescriptorVisibility::kShaderVisible };
+    Format format { Format::kUnknown };
+    BufferRange range {};
+    uint32_t stride = 0;
+    auto operator==(const BufferViewDescription&) const -> bool = default;
+
+    // Returns true if this view describes a typed buffer (format != kUnknown)
+    [[nodiscard]] auto IsTypedBuffer() const noexcept -> bool
+    {
+        return format != Format::kUnknown;
+    }
+
+    // Returns true if this view describes a structured buffer (stride != 0)
+    [[nodiscard]] auto IsStructuredBuffer() const noexcept -> bool
+    {
+        return stride != 0;
+    }
+
+    // Returns true if this view describes a raw buffer (format == kUnknown && stride == 0)
+    [[nodiscard]] auto IsRawBuffer() const noexcept -> bool
+    {
+        return format == Format::kUnknown && stride == 0;
+    }
 };
+
+} // namespace oxygen::graphics
+
+// Hash specialization for BufferViewDescription.
+template <>
+struct std::hash<oxygen::graphics::BufferViewDescription> {
+    auto operator()(const oxygen::graphics::BufferViewDescription& s) const noexcept -> std::size_t
+    {
+        size_t hash = 0;
+        oxygen::HashCombine(hash, s.view_type);
+        oxygen::HashCombine(hash, s.visibility);
+        oxygen::HashCombine(hash, s.format);
+        oxygen::HashCombine(hash, s.range.offset_bytes);
+        oxygen::HashCombine(hash, s.range.size_bytes);
+        oxygen::HashCombine(hash, s.stride);
+        return hash;
+    }
+};
+
+namespace oxygen::graphics {
 
 /*!
  Buffer is a backend-agnostic abstraction for GPU buffer resources.
 
  Key concepts:
-  - Buffers are created and managed by the Renderer, and are intended to be used in a bindless, modern rendering pipeline.
-  - Usage is specified via BufferUsage flags, allowing a single class to represent vertex, index, constant, storage, and other buffer types.
-  - Memory domain is controlled by BufferMemory, supporting device-local, upload, and readback buffers for efficient data transfer.
-  - The API is designed for per-frame resource management and is compatible with D3D12 and Vulkan, leveraging modern GPU features.
-
- Usage guidelines:
-  - Always create buffers through the Renderer to ensure correct synchronization with the frame lifecycle and resource management.
-  - Use Map/Unmap for CPU access to buffer memory, and Update for convenience when uploading data.
-  - Query buffer properties via GetDescriptor, GetSize, GetUsage, and GetMemoryType.
-  - Use GetNativeResource for backend interop, but prefer backend-agnostic APIs for most operations.
-
- Implementation rationale:
-  - Unified buffer abstraction simplifies resource management and aligns with modern graphics APIs.
-  - Enum flags and descriptors provide flexibility and extensibility for future buffer types and usages.
-  - Consistent naming and API surface with Texture and other resource classes for ease of use and maintainability.
+  - Buffers are created and managed by the Renderer, and are intended to be used
+    in a bindless, modern rendering pipeline.
+  - Usage is specified via BufferUsage flags, allowing a single class to
+    represent vertex, index, constant, storage, and other buffer types.
+  - Memory domain is controlled by BufferMemory, supporting device-local,
+    upload, and read-back buffers for efficient data transfer.
+  - The API is designed for per-frame resource management.
 */
 class Buffer : public Composition, public Named {
 public:
+    using ViewDescriptionT = BufferViewDescription;
+
     explicit Buffer(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
@@ -114,8 +165,8 @@ public:
     */
     virtual auto Map(size_t offset = 0, size_t size = 0) -> void* = 0;
 
-    //! Unmaps the buffer memory from CPU access.
-    virtual void Unmap() = 0;
+    //! Un-maps the buffer memory from CPU access.
+    virtual void UnMap() = 0;
 
     //! Updates the buffer contents from CPU memory.
     /*! \param data Pointer to source data.
@@ -149,7 +200,7 @@ public:
     }
 
     //! Sets the buffer's name.
-    void SetName(std::string_view name) noexcept override
+    void SetName(const std::string_view name) noexcept override
     {
         GetComponent<ObjectMetaData>().SetName(name);
     }
@@ -163,7 +214,27 @@ public:
      * @param range The range of the buffer to view. Defaults to the entire buffer.
      * @return NativeObject The constant buffer view as a native object
      */
-    [[nodiscard]] NativeObject GetConstantBufferView(const BufferRange& range = {}) const;
+    [[nodiscard]] virtual auto CreateConstantBufferView(
+        const BufferRange& range = {}) const -> NativeObject
+        = 0;
+
+    //! Returns a shader resource view (SRV) for this buffer.
+    [[nodiscard]] virtual auto CreateShaderResourceView(
+        Format format,
+        BufferRange range = {},
+        uint32_t stride = 0) const -> NativeObject
+        = 0;
+
+    //! Returns an unordered access view (UAV) for this buffer.
+    [[nodiscard]] virtual auto CreateUnorderedAccessView(
+        Format format,
+        BufferRange range = {},
+        uint32_t stride = 0) const -> NativeObject
+        = 0;
 };
+
+// Ensure Buffer satisfies ResourceWithViews
+static_assert(oxygen::graphics::ResourceWithViews<oxygen::graphics::Buffer>,
+    "Buffer must satisfy ResourceWithViews");
 
 } // namespace oxygen::graphics

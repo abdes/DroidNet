@@ -13,7 +13,9 @@
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
+using oxygen::graphics::Format;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
@@ -30,15 +32,18 @@ public:
     {
     }
     auto GetNativeResource() const -> NativeObject override { return native_; }
-    auto Map(size_t, size_t) -> void* override { return nullptr; }
-    void Unmap() override { }
-    void Update(const void*, size_t, size_t) override { }
+    auto Map(size_t /*offset*/, size_t /*size*/) -> void* override { return nullptr; }
+    void UnMap() override { }
+    void Update(const void* /*data*/, size_t /*size*/, size_t /*offset*/) override { }
     auto GetSize() const noexcept -> size_t override { return 0; }
     auto GetUsage() const noexcept -> BufferUsage override { return BufferUsage::kNone; }
     auto GetMemoryType() const noexcept -> BufferMemory override { return BufferMemory::kDeviceLocal; }
     auto IsMapped() const noexcept -> bool override { return false; }
     auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
-    void SetName(std::string_view) noexcept override { }
+    void SetName(std::string_view /*name*/) noexcept override { }
+    NativeObject CreateConstantBufferView(const BufferRange& /*range*/ = {}) const override { return {}; }
+    NativeObject CreateShaderResourceView(Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
+    NativeObject CreateUnorderedAccessView(Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
 
 private:
     NativeObject native_;

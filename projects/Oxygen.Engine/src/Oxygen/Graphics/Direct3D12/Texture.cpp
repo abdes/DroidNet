@@ -7,7 +7,8 @@
 #include <utility>
 
 #include <Oxygen/Base/logging.h>
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -16,25 +17,207 @@
 #include <Oxygen/Graphics/Direct3D12/Resources/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
+using oxygen::graphics::TextureDesc;
+using oxygen::graphics::TextureDimension;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::Texture;
+using oxygen::graphics::d3d12::detail::ConvertResourceStates;
 using oxygen::graphics::d3d12::detail::DescriptorHandle;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
 using oxygen::graphics::d3d12::detail::GetGraphics;
+using oxygen::graphics::detail::FormatInfo;
+using oxygen::graphics::detail::GetFormatInfo;
+
+namespace {
+
+auto ConvertTextureDesc(const TextureDesc& d) -> D3D12_RESOURCE_DESC
+{
+    const auto& format_mapping = GetDxgiFormatMapping(d.format);
+    const FormatInfo& format_info = GetFormatInfo(d.format);
+
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Width = d.width;
+    desc.Height = d.height;
+    desc.MipLevels = static_cast<UINT16>(d.mip_levels);
+    desc.Format = d.is_typeless ? format_mapping.resource_format : format_mapping.rtv_format;
+    desc.SampleDesc.Count = d.sample_count;
+    desc.SampleDesc.Quality = d.sample_quality;
+
+    switch (d.dimension) {
+    case TextureDimension::kTexture1D:
+    case TextureDimension::kTexture1DArray:
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+        desc.DepthOrArraySize = static_cast<UINT16>(d.array_size);
+        break;
+    case TextureDimension::kTexture2D:
+    case TextureDimension::kTexture2DArray:
+    case TextureDimension::kTextureCube:
+    case TextureDimension::kTextureCubeArray:
+    case TextureDimension::kTexture2DMultiSample:
+    case TextureDimension::kTexture2DMultiSampleArray:
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        desc.DepthOrArraySize = static_cast<UINT16>(d.array_size);
+        break;
+    case TextureDimension::kTexture3D:
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+        desc.DepthOrArraySize = static_cast<UINT16>(d.depth);
+        break;
+    case TextureDimension::kUnknown:
+        ABORT_F("Invalid texture dimension: {}", nostd::to_string(d.dimension));
+    }
+
+    if (!d.is_shader_resource) {
+        desc.Flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
+    }
+
+    if (d.is_render_target) {
+        if (format_info.has_depth || format_info.has_stencil) {
+            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        } else {
+            desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        }
+    }
+
+    if (d.is_uav) {
+        desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+
+    return desc;
+}
+
+auto ConvertTextureClearValue(const TextureDesc& d) -> D3D12_CLEAR_VALUE
+{
+    const auto& format_mapping = GetDxgiFormatMapping(d.format);
+    const FormatInfo& format_info = GetFormatInfo(d.format);
+
+    D3D12_CLEAR_VALUE cv = {};
+    cv.Format = format_mapping.rtv_format;
+    if (format_info.has_depth || format_info.has_stencil) {
+        cv.DepthStencil.Depth = d.clear_value.r;
+        cv.DepthStencil.Stencil = static_cast<UINT8>(d.clear_value.g);
+    } else {
+        cv.Color[0] = d.clear_value.r;
+        cv.Color[1] = d.clear_value.g;
+        cv.Color[2] = d.clear_value.b;
+        cv.Color[3] = d.clear_value.a;
+    }
+
+    return cv;
+}
+
+auto CreateTextureResource(const TextureDesc& desc)
+    -> std::pair<ID3D12Resource*, D3D12MA::Allocation*>
+{
+    const D3D12_RESOURCE_DESC rd = ConvertTextureDesc(desc);
+    const D3D12_CLEAR_VALUE clear_value = ConvertTextureClearValue(desc);
+
+    constexpr D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+    D3D12MA::ALLOCATION_DESC alloc_desc = {};
+    alloc_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+    alloc_desc.ExtraHeapFlags = heap_flags;
+    alloc_desc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
+
+    D3D12MA::Allocation* d3dma_allocation { nullptr };
+    ID3D12Resource* resource { nullptr };
+    const HRESULT hr = GetGraphics().GetAllocator()->CreateResource(
+        &alloc_desc,
+        &rd,
+        ConvertResourceStates(desc.initial_state),
+        desc.use_clear_value ? &clear_value : nullptr,
+        &d3dma_allocation,
+        IID_PPV_ARGS(&resource));
+    if (FAILED(hr)) {
+        LOG_F(ERROR, "Failed to create texture `{}` with error {:#010X}", desc.debug_name, hr);
+        throw std::runtime_error("Failed to create texture resource");
+    }
+    return { resource, d3dma_allocation };
+}
+
+} // namespace
+
+Texture::Texture(TextureDesc desc)
+    : Base(desc.debug_name)
+    , desc_(std::move(desc))
+{
+    auto [resource, d3dmaAllocation] = CreateTextureResource(desc_);
+
+    AddComponent<GraphicResource>(
+        desc_.debug_name,
+        GraphicResource::WrapForImmediateRelease<ID3D12Resource>(resource),
+        GraphicResource::WrapForImmediateRelease<D3D12MA::Allocation>(d3dmaAllocation));
+
+    if (desc_.is_uav) {
+        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
+    }
+
+    resource_desc_ = resource->GetDesc();
+    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
+}
+
+Texture::Texture(TextureDesc desc, NativeObject native)
+    : Base(desc.debug_name)
+    , desc_(std::move(desc))
+{
+    static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
+    auto* resource = native.AsPointer<ID3D12Resource>();
+    CHECK_NOTNULL_F(resource, "Invalid native object");
+
+    AddComponent<GraphicResource>(
+        desc_.debug_name,
+        GraphicResource::WrapForImmediateRelease<ID3D12Resource>(resource),
+        nullptr // No allocation object for native resources
+    );
+
+    if (desc_.is_uav) {
+        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
+    }
+
+    resource_desc_ = resource->GetDesc();
+    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
+}
 
 Texture::Texture(
     TextureDesc desc,
-    D3D12_RESOURCE_DESC resource_desc,
-    GraphicResource::ManagedPtr<ID3D12Resource> resource,
-    GraphicResource::ManagedPtr<D3D12MA::Allocation> allocation)
+    graphics::detail::PerFrameResourceManager& resource_manager)
     : Base(desc.debug_name)
     , desc_(std::move(desc))
-    , resource_desc_(resource_desc)
+{
+    auto [resource, d3dmaAllocation] = CreateTextureResource(desc_);
+    resource_desc_ = resource->GetDesc();
+
+    AddComponent<GraphicResource>(
+        desc_.debug_name,
+        GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
+        GraphicResource::WrapForDeferredRelease<D3D12MA::Allocation>(d3dmaAllocation, resource_manager));
+
+    if (desc_.is_uav) {
+        clear_mip_level_uav_cache_.resize(desc_.mip_levels);
+    }
+
+    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
+}
+
+Texture::Texture(
+    TextureDesc desc,
+    NativeObject native,
+    graphics::detail::PerFrameResourceManager& resource_manager)
+    : Base(desc.debug_name)
+    , desc_(std::move(desc))
 {
     static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
-    DCHECK_NOTNULL_F(resource);
+    auto* resource = native.AsPointer<ID3D12Resource>();
+    CHECK_NOTNULL_F(resource, "Invalid native object");
 
-    AddComponent<GraphicResource>(desc_.debug_name, std::move(resource), std::move(allocation));
+    // Increment the reference count since we're creating a new owner
+    resource->AddRef();
+
+    resource_desc_ = resource->GetDesc();
+
+    AddComponent<GraphicResource>(
+        desc_.debug_name,
+        GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
+        nullptr // No allocation object for native resources
+    );
 
     if (desc_.is_uav) {
         clear_mip_level_uav_cache_.resize(desc_.mip_levels);
@@ -45,6 +228,7 @@ Texture::Texture(
 
 Texture::~Texture()
 {
+    DLOG_F(1, "destroying texture: {}", Base::GetName());
     clear_mip_level_uav_cache_.clear();
 }
 
@@ -85,7 +269,7 @@ void Texture::SetName(const std::string_view name) noexcept
 
 auto Texture::GetNativeResource() const -> NativeObject
 {
-    return NativeObject(GetComponent<GraphicResource>().GetResource(), ClassTypeId());
+    return { GetComponent<GraphicResource>().GetResource(), ClassTypeId() };
 }
 
 auto Texture::CreateShaderResourceView(
@@ -95,7 +279,7 @@ auto Texture::CreateShaderResourceView(
 {
     auto handle = GetGraphics().Descriptors().SrvHeap().Allocate();
     CreateShaderResourceView(handle, format, dimension, sub_resources);
-    return NativeObject(handle.gpu.ptr, ClassTypeId());
+    return { handle.gpu.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateUnorderedAccessView(
@@ -105,7 +289,7 @@ auto Texture::CreateUnorderedAccessView(
 {
     auto handle = GetGraphics().Descriptors().UavHeap().Allocate();
     CreateUnorderedAccessView(handle, format, dimension, sub_resources);
-    return NativeObject(handle.gpu.ptr, ClassTypeId());
+    return { handle.gpu.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateRenderTargetView(
@@ -114,7 +298,7 @@ auto Texture::CreateRenderTargetView(
 {
     auto handle = GetGraphics().Descriptors().RtvHeap().Allocate();
     CreateRenderTargetView(handle, format, sub_resources);
-    return NativeObject(handle.cpu.ptr, ClassTypeId());
+    return { handle.cpu.ptr, ClassTypeId() };
 }
 
 auto Texture::CreateDepthStencilView(
@@ -123,8 +307,8 @@ auto Texture::CreateDepthStencilView(
     const bool is_read_only) const -> NativeObject
 {
     auto handle = GetGraphics().Descriptors().DsvHeap().Allocate();
-    CreateDepthStencilView(handle, sub_resources, is_read_only);
-    return NativeObject(handle.cpu.ptr, ClassTypeId());
+    CreateDepthStencilView(handle, format, sub_resources, is_read_only);
+    return { handle.cpu.ptr, ClassTypeId() };
 }
 
 void Texture::CreateShaderResourceView(
@@ -187,10 +371,10 @@ void Texture::CreateShaderResourceView(
         srv_desc.TextureCubeArray.MostDetailedMip = sub_resources.base_mip_level;
         srv_desc.TextureCubeArray.MipLevels = sub_resources.num_mip_levels;
         break;
-    case TextureDimension::kTexture2DMS:
+    case TextureDimension::kTexture2DMultiSample:
         srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
         break;
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSampleArray:
         srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
         srv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
         srv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
@@ -255,8 +439,8 @@ void Texture::CreateUnorderedAccessView(
         uav_desc.Texture3D.WSize = desc_.depth;
         uav_desc.Texture3D.MipSlice = sub_resources.base_mip_level;
         break;
-    case TextureDimension::kTexture2DMS:
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSample:
+    case TextureDimension::kTexture2DMultiSampleArray:
         DLOG_F(ERROR, "Texture `{}` has unsupported dimension `{}` for UAV",
             GetName(), nostd::to_string(dimension));
         return;
@@ -304,10 +488,10 @@ void Texture::CreateRenderTargetView(
         rtv_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
         rtv_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
         break;
-    case TextureDimension::kTexture2DMS:
+    case TextureDimension::kTexture2DMultiSample:
         rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
         break;
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSampleArray:
         rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
         rtv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
         rtv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;
@@ -330,6 +514,7 @@ void Texture::CreateRenderTargetView(
 
 void Texture::CreateDepthStencilView(
     DescriptorHandle& dh,
+    Format format,
     TextureSubResourceSet sub_resources,
     bool is_read_only) const
 {
@@ -337,7 +522,7 @@ void Texture::CreateDepthStencilView(
 
     D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
 
-    dsv_desc.Format = GetDxgiFormatMapping(desc_.format).rtv_format;
+    dsv_desc.Format = GetDxgiFormatMapping(format).rtv_format;
 
     if (is_read_only) {
         dsv_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_DEPTH;
@@ -370,10 +555,10 @@ void Texture::CreateDepthStencilView(
         dsv_desc.Texture2DArray.FirstArraySlice = sub_resources.base_array_slice;
         dsv_desc.Texture2DArray.MipSlice = sub_resources.base_mip_level;
         break;
-    case TextureDimension::kTexture2DMS:
+    case TextureDimension::kTexture2DMultiSample:
         dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
         break;
-    case TextureDimension::kTexture2DMSArray:
+    case TextureDimension::kTexture2DMultiSampleArray:
         dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
         dsv_desc.Texture2DMSArray.FirstArraySlice = sub_resources.base_array_slice;
         dsv_desc.Texture2DMSArray.ArraySize = sub_resources.num_array_slices;

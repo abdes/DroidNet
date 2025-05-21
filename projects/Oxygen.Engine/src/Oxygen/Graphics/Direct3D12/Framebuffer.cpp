@@ -42,13 +42,18 @@ Framebuffer::Framebuffer(FramebufferDesc desc)
         textures_.push_back(std::move(texture));
     }
 
-    if (desc.depth_attachment.IsValid()) {
+    if (desc_.depth_attachment.IsValid()) {
         auto texture = static_pointer_cast<Texture>(desc_.depth_attachment.texture);
         assert(texture->GetDescriptor().width == rt_width);
         assert(texture->GetDescriptor().height == rt_height);
 
         dsv_ = GetGraphics().Descriptors().DsvHeap().Allocate();
-        texture->CreateDepthStencilView(dsv_, desc.depth_attachment.sub_resources, desc.depth_attachment.is_read_only);
+        texture->CreateDepthStencilView(
+            dsv_,
+            desc_.depth_attachment.format,
+            desc_.depth_attachment.sub_resources,
+            desc_.depth_attachment.is_read_only);
+
         textures_.push_back(std::move(texture));
     }
 }

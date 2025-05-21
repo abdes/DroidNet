@@ -14,8 +14,10 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -31,8 +33,8 @@ enum class TextureDimension : uint8_t {
     kTexture2DArray,
     kTextureCube,
     kTextureCubeArray,
-    kTexture2DMS,
-    kTexture2DMSArray,
+    kTexture2DMultiSample,
+    kTexture2DMultiSampleArray,
     kTexture3D
 };
 
@@ -216,41 +218,36 @@ struct TextureSubResourceSet {
     auto operator!=(const TextureSubResourceSet& other) const -> bool { return !(*this == other); }
 };
 
-//! Describes a texture binding used to manage SRV/VkImageView per texture.
+//! Describes a texture view for bindless rendering.
 /*!
- TextureViewKey contains a TextureSubResourceSet with additional information
- needed to create appropriate texture view objects in different graphics APIs.
-
- This struct acts as a key for caching texture views, allowing the engine to
- reuse existing views when the same texture is bound with identical parameters
- multiple times, improving performance and reducing resource overhead.
+ TextureViewDescription contains all the necessary information to create a native view
+ for a texture, including view type, visibility, format, dimension, and sub-resource set.
 */
-struct TextureViewKey {
-    //! The binding type (SRV, UAV, etc.).
-    ResourceViewType binding_type { ResourceViewType::kNone };
+struct TextureViewDescription {
+    //! The type of view to create (SRV, UAV, RTV, DSV).
+    ResourceViewType view_type { ResourceViewType::kTexture_SRV };
 
-    //! The sub-resource set defining which parts of the texture are accessed
-    TextureSubResourceSet sub_resources {};
+    //! The visibility of the view (shader visible, etc.).
+    DescriptorVisibility visibility { DescriptorVisibility::kShaderVisible };
 
-    //! Format to use when creating the view (can differ from the texture's
-    //! native format).
+    //! The format of the texture view (e.g., RGBA8, D24S8).
+    //! This may differ from the texture format in some cases (e.g., typeless
+    //! textures).
     Format format { Format::kUnknown };
 
-    //! Dimension of the view (can differ from texture's dimension)
+    //! The dimension of the texture (1D, 2D, 3D, etc.).
+    //! This may differ from the texture dimension in some cases (e.g., typeless
+    //! textures).
     TextureDimension dimension { TextureDimension::kUnknown };
 
-    //! Indicates if this is a read-only depth-stencil view.
-    //! Used in APIs like D3D12 that have separate read-only DSV states.
+    //! The sub-resource set to use for the view.
+    //! This defines which mip levels and array slices to include in the view.
+    TextureSubResourceSet sub_resources { TextureSubResourceSet::EntireTexture() };
+
+    //! Indicates if the view is read-only (for DSVs).
     bool is_read_only_dsv { false };
 
-    auto operator==(const TextureViewKey& other) const -> bool
-    {
-        return binding_type == other.binding_type
-            && format == other.format
-            && sub_resources == other.sub_resources
-            && is_read_only_dsv == other.is_read_only_dsv
-            && dimension == other.dimension;
-    }
+    auto operator==(const TextureViewDescription&) const -> bool = default;
 };
 
 } // namespace oxygen::graphics
@@ -276,20 +273,21 @@ struct std::hash<oxygen::graphics::TextureSubResourceSet> {
     }
 };
 
-//! Hash specialization for TextureViewKey.
+//! Hash specialization for TextureViewDescription.
 /*!
- Enables TextureViewKey to be used as key in hash-based containers like
+ Enables TextureViewDescription to be used as key in hash-based containers like
  std::unordered_map or std::unordered_set.
 
- Combines hashes of all the TextureViewKey members using the HashCombine
+ Combines hashes of all the TextureViewDescription members using the HashCombine
  function to generate a consistent, well-distributed hash value.
 */
 template <>
-struct std::hash<oxygen::graphics::TextureViewKey> {
-    auto operator()(oxygen::graphics::TextureViewKey const& s) const noexcept -> std::size_t
+struct std::hash<oxygen::graphics::TextureViewDescription> {
+    auto operator()(oxygen::graphics::TextureViewDescription const& s) const noexcept -> std::size_t
     {
         size_t hash = std::hash<oxygen::graphics::TextureSubResourceSet>()(s.sub_resources);
-        oxygen::HashCombine(hash, s.binding_type);
+        oxygen::HashCombine(hash, s.view_type);
+        oxygen::HashCombine(hash, s.visibility);
         oxygen::HashCombine(hash, s.format);
         oxygen::HashCombine(hash, s.dimension);
         oxygen::HashCombine(hash, s.is_read_only_dsv);
@@ -301,6 +299,8 @@ namespace oxygen::graphics {
 
 class Texture : public Composition, public Named, public std::enable_shared_from_this<Texture> {
 public:
+    using ViewDescriptionT = TextureViewDescription;
+
     explicit Texture(std::string_view name)
     {
         AddComponent<ObjectMetaData>(name);
@@ -356,5 +356,9 @@ public:
         GetComponent<ObjectMetaData>().SetName(name);
     }
 };
+
+// Ensure Texture satisfies ResourceWithViews
+static_assert(oxygen::graphics::ResourceWithViews<oxygen::graphics::Texture>,
+    "Texture must satisfy ResourceWithViews");
 
 } // namespace oxygen::graphics

@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 
+// ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 class Allocation; // NOLINT(*-virtual-class-destructor)
 } // namespace D3D12MA
@@ -31,7 +32,7 @@ namespace detail {
 
 namespace d3d12 {
 
-    class GraphicResource : public Component {
+    class GraphicResource final : public Component {
         OXYGEN_COMPONENT(GraphicResource)
 
     public:
