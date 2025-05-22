@@ -9,6 +9,7 @@
 #include <span>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 
@@ -40,8 +41,12 @@ class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
-    CommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue);
-    ~CommandRecorder() override = default;
+    CommandRecorder(
+        graphics::detail::PerFrameResourceManager* resource_manager,
+        graphics::CommandList* command_list,
+        graphics::CommandQueue* target_queue);
+
+    OXYGEN_D3D12_API ~CommandRecorder() override;
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
     OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
@@ -80,8 +85,9 @@ private:
 
     void CreateRootSignature();
 
-    Microsoft::WRL::ComPtr<ID3D12PipelineState> pipeline_state_;
-    Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
+    graphics::detail::PerFrameResourceManager* resource_manager_;
+    std::unique_ptr<ID3D12PipelineState> pipeline_state_ {};
+    std::unique_ptr<ID3D12RootSignature> root_signature_ {};
 };
 
 } // namespace oxygen::graphics::d3d12

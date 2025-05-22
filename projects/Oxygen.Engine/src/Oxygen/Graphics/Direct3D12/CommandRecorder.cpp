@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
+using oxygen::graphics::DeferredObjectRelease;
 using oxygen::graphics::d3d12::CommandRecorder;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::detail::Barrier;
@@ -150,10 +151,23 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 
 } // anonymous namespace
 
-CommandRecorder::CommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
+CommandRecorder::CommandRecorder(
+    graphics::detail::PerFrameResourceManager* resource_manager,
+    graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     : Base(command_list, target_queue)
+    , resource_manager_(resource_manager)
 {
+    DCHECK_NOTNULL_F(resource_manager, "Resource manager cannot be null");
+
     CreateRootSignature();
+}
+
+CommandRecorder::~CommandRecorder()
+{
+    if (resource_manager_ != nullptr) {
+        DeferredObjectRelease(root_signature_, *resource_manager_);
+        DeferredObjectRelease(pipeline_state_, *resource_manager_);
+    }
 }
 
 void CommandRecorder::Begin()
@@ -313,13 +327,19 @@ void CommandRecorder::CreateRootSignature()
         throw std::runtime_error("Failed to serialize root signature");
     }
 
+    // Create raw pointer first
+    ID3D12RootSignature* raw_ptr = nullptr;
+    // Use IID_PPV_ARGS with the raw pointer
     hr = GetGraphics().GetCurrentDevice()->CreateRootSignature(
         0,
         signature_blob->GetBufferPointer(),
-        signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature_));
+        signature_blob->GetBufferSize(),
+        IID_PPV_ARGS(&raw_ptr));
     if (FAILED(hr)) {
         throw std::runtime_error("Failed to create root signature");
     }
+    // Reset the unique_ptr with the raw pointer
+    root_signature_.reset(raw_ptr);
 }
 // void CommandRecorder::SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target)
 // {
@@ -355,10 +375,9 @@ void CommandRecorder::SetPipelineState(
     DCHECK_NOTNULL_F(command_list);
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-    pso_desc.pRootSignature = root_signature_.Get();
+    pso_desc.pRootSignature = root_signature_.get();
     pso_desc.VS = { .pShaderBytecode = vertex_shader->Data(), .BytecodeLength = vertex_shader->Size() };
-    pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };
-    pso_desc.BlendState = kBlendState.disabled;
+    pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };    pso_desc.BlendState = kBlendState.disabled;
     pso_desc.SampleMask = UINT_MAX;
     pso_desc.RasterizerState = kRasterizerState.no_cull;
     pso_desc.DepthStencilState = kDepthState.disabled;
@@ -368,13 +387,20 @@ void CommandRecorder::SetPipelineState(
     pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
     pso_desc.SampleDesc.Count = 1;
 
-    HRESULT hr = GetGraphics().GetCurrentDevice()->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state_));
+    // Create raw pointer first
+    ID3D12PipelineState* raw_pso = nullptr;
+    // Use IID_PPV_ARGS with the raw pointer
+    HRESULT hr = GetGraphics().GetCurrentDevice()->CreateGraphicsPipelineState(
+        &pso_desc,
+        IID_PPV_ARGS(&raw_pso));
     if (FAILED(hr)) {
         throw std::runtime_error("Failed to create pipeline state object");
     }
+    // Reset the unique_ptr with the raw pointer
+    pipeline_state_.reset(raw_pso);
 
-    command_list->GetCommandList()->SetPipelineState(pipeline_state_.Get());
-    command_list->GetCommandList()->SetGraphicsRootSignature(root_signature_.Get());
+    command_list->GetCommandList()->SetPipelineState(pipeline_state_.get());
+    command_list->GetCommandList()->SetGraphicsRootSignature(root_signature_.get());
 }
 
 void CommandRecorder::ResetState()

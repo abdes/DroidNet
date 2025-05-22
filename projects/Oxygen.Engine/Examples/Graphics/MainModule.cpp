@@ -12,6 +12,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
@@ -22,6 +23,7 @@ using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 using oxygen::graphics::Scissors;
+using oxygen::graphics::ShaderType;
 using oxygen::graphics::ViewPort;
 
 namespace {
@@ -68,11 +70,11 @@ MainModule::~MainModule()
 void MainModule::Run()
 {
     DCHECK_NOTNULL_F(nursery_);
-
     SetupCommandQueues();
     SetupMainWindow();
     SetupSurface();
     SetupRenderer();
+    SetupShaders();
     surface_->AttachRenderer(renderer_);
 
     nursery_->Start([this]() -> co::Co<> {
@@ -182,10 +184,16 @@ void MainModule::CreateTriangleVertexBuffer()
     vb_desc.size_bytes = sizeof(triangle_vertices);
     vb_desc.usage = graphics::BufferUsage::kVertex;
     vb_desc.memory = graphics::BufferMemory::kUpload;
-    // TODO: vb_desc.stride = sizeof(Vertex);
+    vb_desc.debug_name = "Triangle Vertex Buffer";
     vertex_buffer_ = renderer_->CreateBuffer(vb_desc);
     vertex_buffer_->SetName("Triangle Vertex Buffer");
-    // TODO: Handle upload of initial data
+
+    // Upload the vertex data to the buffer
+    void* mapped_data = vertex_buffer_->Map(0, sizeof(triangle_vertices));
+    if (mapped_data) {
+        std::memcpy(mapped_data, triangle_vertices, sizeof(triangle_vertices));
+        vertex_buffer_->UnMap();
+    }
 }
 
 void MainModule::SetupFramebuffers()
@@ -204,6 +212,29 @@ void MainModule::SetupFramebuffers()
     }
 }
 
+void MainModule::SetupShaders()
+{
+    if (vertex_shader_ && pixel_shader_)
+        return;
+
+    CHECK_F(!gfx_weak_.expired());
+    auto gfx = gfx_weak_.lock();
+
+    // Load the engine shaders using the Graphics backend
+    vertex_shader_ = gfx->GetShader(graphics::MakeShaderIdentifier(
+        graphics::ShaderType::kVertex,
+        "FullScreenTriangle.hlsl"));
+
+    pixel_shader_ = gfx->GetShader(graphics::MakeShaderIdentifier(
+        graphics::ShaderType::kPixel,
+        "FullScreenTriangle.hlsl"));
+
+    CHECK_NOTNULL_F(vertex_shader_, "Failed to load FullScreenTriangle vertex shader");
+    CHECK_NOTNULL_F(pixel_shader_, "Failed to load FullScreenTriangle pixel shader");
+
+    LOG_F(INFO, "Engine shaders loaded successfully");
+}
+
 auto MainModule::RenderScene() -> co::Co<>
 {
     if (gfx_weak_.expired()) {
@@ -214,9 +245,7 @@ auto MainModule::RenderScene() -> co::Co<>
         SetupFramebuffers();
     }
 
-    DLOG_F(1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());
-
-    auto gfx = gfx_weak_.lock();
+    DLOG_F(1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());    auto gfx = gfx_weak_.lock();
     auto recorder = renderer_->AcquireCommandRecorder(
         graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
@@ -242,15 +271,26 @@ auto MainModule::RenderScene() -> co::Co<>
     recorder->RequireResourceState(
         *fb->GetDescriptor().color_attachments[0].texture,
         graphics::ResourceStates::kRenderTarget);
-    recorder->FlushBarriers();
-
-    recorder->ClearFramebuffer(
+    recorder->FlushBarriers();    recorder->ClearFramebuffer(
         *fb,
         std::vector<std::optional<graphics::Color>> { graphics::Color { 0.09f, 0.48f, 0.38f, 1.0f } },
         std::nullopt,
         std::nullopt);
 
+    // Create our triangle vertex buffer if it doesn't exist
     CreateTriangleVertexBuffer();
+
+    // Set the pipeline state with our shaders
+    recorder->SetPipelineState(vertex_shader_, pixel_shader_);
+
+    // Bind the vertex buffer
+    graphics::BufferPtr vertex_buffers[] = { vertex_buffer_ };
+    uint32_t strides[] = { sizeof(Vertex) };
+    uint32_t offsets[] = { 0 };
+    recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets);
+
+    // Draw the triangle
+    recorder->Draw(3, 1, 0, 0);
 
     co_return;
 }
