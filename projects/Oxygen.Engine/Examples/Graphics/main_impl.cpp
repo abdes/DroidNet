@@ -63,7 +63,7 @@ void EventLoopRun(const MyEngine& engine)
 
         // Physics
         // Sleep for a while to simulate physics
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         // Input Events
         engine.platform->Async().PollOne();
@@ -71,11 +71,11 @@ void EventLoopRun(const MyEngine& engine)
 
         // Game logic
         // Sleep for a while to simulate game logic updates
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-        // Render (only if at least 1 second has passed since the last render)
+        // Render (only if at least 20 milliseconds has passed since the last render)
         auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_render_time).count() >= 1) {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_render_time).count() >= 20) {
             try {
                 gfx->Render();
                 last_render_time = now;

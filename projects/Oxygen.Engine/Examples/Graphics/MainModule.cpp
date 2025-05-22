@@ -6,6 +6,9 @@
 
 #include <type_traits>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -31,11 +34,35 @@ struct Vertex {
     float position[3];
     float color[3];
 };
-constexpr Vertex triangle_vertices[] = {
-    { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } }, // Top
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } }, // Right
-    { { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } } // Left
-};
+
+constexpr float kTriangleHeight = 0.75f;
+constexpr float kTriangleCenterX = 0.0f;
+constexpr float kTriangleCenterY = 0.0f;
+
+// Helper to compute equilateral triangle vertices in NDC, centered at (cx, cy), with given height and rotation
+inline void ComputeEquilateralTriangle(Vertex (&out_vertices)[3], float cx, float cy, float height, float angle_rad)
+{
+    // Equilateral triangle: side = height * 2 / sqrt(3)
+    float r = height / std::sqrt(3.0f); // Distance from centroid to vertex
+    for (int i = 0; i < 3; ++i) {
+        float theta = angle_rad + i * 2.0f * glm::pi<float>() / 3.0f;
+        out_vertices[i].position[0] = cx + r * std::sin(theta);
+        out_vertices[i].position[1] = cy - r * std::cos(theta);
+        out_vertices[i].position[2] = 0.0f;
+    }
+    // Assign colors (RGB)
+    out_vertices[0].color[0] = 1.0f;
+    out_vertices[0].color[1] = 0.0f;
+    out_vertices[0].color[2] = 0.0f;
+    out_vertices[1].color[0] = 0.0f;
+    out_vertices[1].color[1] = 1.0f;
+    out_vertices[1].color[2] = 0.0f;
+    out_vertices[2].color[0] = 0.0f;
+    out_vertices[2].color[1] = 0.0f;
+    out_vertices[2].color[2] = 1.0f;
+}
+
+Vertex triangle_vertices[3];
 }
 
 MainModule::MainModule(
@@ -114,7 +141,7 @@ void MainModule::SetupMainWindow()
 {
     // Set up the main window
     WindowProps props("Oxygen Graphics Example");
-    props.extent = { .width = 800, .height = 600 };
+    props.extent = { .width = 800, .height = 800 };
     props.flags = {
         .hidden = false,
         .always_on_top = false,
@@ -180,6 +207,10 @@ void MainModule::CreateTriangleVertexBuffer()
 {
     if (vertex_buffer_)
         return;
+
+    // Initialize with unrotated equilateral triangle
+    ComputeEquilateralTriangle(triangle_vertices, kTriangleCenterX, kTriangleCenterY, kTriangleHeight, 0.0f);
+
     graphics::BufferDesc vb_desc;
     vb_desc.size_bytes = sizeof(triangle_vertices);
     vb_desc.usage = graphics::BufferUsage::kVertex;
@@ -188,7 +219,6 @@ void MainModule::CreateTriangleVertexBuffer()
     vertex_buffer_ = renderer_->CreateBuffer(vb_desc);
     vertex_buffer_->SetName("Triangle Vertex Buffer");
 
-    // Upload the vertex data to the buffer
     void* mapped_data = vertex_buffer_->Map(0, sizeof(triangle_vertices));
     if (mapped_data) {
         std::memcpy(mapped_data, triangle_vertices, sizeof(triangle_vertices));
@@ -245,7 +275,8 @@ auto MainModule::RenderScene() -> co::Co<>
         SetupFramebuffers();
     }
 
-    DLOG_F(1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());    auto gfx = gfx_weak_.lock();
+    DLOG_F(1, "Rendering scene in frame index {}", renderer_->CurrentFrameIndex());
+    auto gfx = gfx_weak_.lock();
     auto recorder = renderer_->AcquireCommandRecorder(
         graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
@@ -271,14 +302,25 @@ auto MainModule::RenderScene() -> co::Co<>
     recorder->RequireResourceState(
         *fb->GetDescriptor().color_attachments[0].texture,
         graphics::ResourceStates::kRenderTarget);
-    recorder->FlushBarriers();    recorder->ClearFramebuffer(
+    recorder->FlushBarriers();
+    recorder->ClearFramebuffer(
         *fb,
         std::vector<std::optional<graphics::Color>> { graphics::Color { 0.09f, 0.48f, 0.38f, 1.0f } },
         std::nullopt,
-        std::nullopt);
+        std::nullopt); // Create our triangle vertex buffer if it doesn't exist
+    CreateTriangleVertexBuffer(); // Update the triangle vertices for rotation
+    UpdateRotatingTriangle();
 
-    // Create our triangle vertex buffer if it doesn't exist
-    CreateTriangleVertexBuffer();
+    // Update the vertex buffer with the new vertex positions
+    if (vertex_buffer_) {
+        void* mapped_data = vertex_buffer_->Map(0, sizeof(triangle_vertices));
+        if (mapped_data) {
+            std::memcpy(mapped_data, triangle_vertices, sizeof(triangle_vertices));
+            vertex_buffer_->UnMap();
+        } else {
+            LOG_F(ERROR, "Failed to map vertex buffer for updating!");
+        }
+    }
 
     // Set the pipeline state with our shaders
     recorder->SetPipelineState(vertex_shader_, pixel_shader_);
@@ -287,10 +329,19 @@ auto MainModule::RenderScene() -> co::Co<>
     graphics::BufferPtr vertex_buffers[] = { vertex_buffer_ };
     uint32_t strides[] = { sizeof(Vertex) };
     uint32_t offsets[] = { 0 };
-    recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets);
-
-    // Draw the triangle
+    recorder->SetVertexBuffers(1, vertex_buffers, strides, offsets); // Draw the triangle
     recorder->Draw(3, 1, 0, 0);
 
     co_return;
+}
+
+void MainModule::UpdateRotatingTriangle()
+{
+    // Increment rotation angle (in radians)
+    rotation_angle_ += 0.03f;
+    if (rotation_angle_ > glm::two_pi<float>()) {
+        rotation_angle_ -= glm::two_pi<float>();
+    }
+    // Compute rotated equilateral triangle
+    ComputeEquilateralTriangle(triangle_vertices, kTriangleCenterX, kTriangleCenterY, kTriangleHeight, rotation_angle_);
 }

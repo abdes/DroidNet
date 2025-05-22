@@ -20,6 +20,7 @@ namespace platform {
 } // namespace platform
 class Graphics;
 namespace graphics {
+    class CommandRecorder;
     class RenderTarget;
     class Renderer;
     class Surface;
@@ -53,7 +54,8 @@ private:
     void SetupCommandQueues() const;
     void SetupMainWindow();
     void SetupSurface();
-    void SetupRenderer();    void SetupFramebuffers();
+    void SetupRenderer();
+    void SetupFramebuffers();
     void SetupShaders();
 
     auto RenderScene() -> co::Co<>;
@@ -69,8 +71,9 @@ private:
     std::shared_ptr<graphics::IShaderByteCode> pixel_shader_;
 
     co::Nursery* nursery_ { nullptr };
-
+    float rotation_angle_ { 0.0f };
     void CreateTriangleVertexBuffer();
+    void UpdateRotatingTriangle();
 };
 
 } // namespace oxygen::examples
