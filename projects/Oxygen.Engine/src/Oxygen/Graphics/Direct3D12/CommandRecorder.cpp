@@ -341,31 +341,6 @@ void CommandRecorder::CreateRootSignature()
     // Reset the unique_ptr with the raw pointer
     root_signature_.reset(raw_ptr);
 }
-// void CommandRecorder::SetRenderTarget(std::unique_ptr<graphics::RenderTarget> render_target)
-// {
-//     auto* command_list = GetConcreteCommandList();
-//     DCHECK_NOTNULL_F(command_list);
-//     DCHECK_NOTNULL_F(render_target, "Invalid render target pointer");
-
-//     current_render_target_ = std::unique_ptr<RenderTarget>(
-//         static_cast<RenderTarget*>(render_target.release()));
-//     CHECK_NOTNULL_F(current_render_target_, "unexpected failed dynamic cast");
-
-//     // Indicate that the back buffer will be used as a render target.
-//     const D3D12_RESOURCE_BARRIER barrier {
-//         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-//         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-//         .Transition = {
-//             .pResource = current_render_target_->GetResource(),
-//             .Subresource = 0,
-//             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
-//             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET }
-//     };
-//     command_list->GetCommandList()->ResourceBarrier(1, &barrier);
-
-//     const D3D12_CPU_DESCRIPTOR_HANDLE render_target_views[1] = { current_render_target_->Rtv().cpu };
-//     command_list->GetCommandList()->OMSetRenderTargets(1, render_target_views, FALSE, nullptr);
-// }
 
 void CommandRecorder::SetPipelineState(
     const std::shared_ptr<IShaderByteCode>& vertex_shader,
@@ -377,11 +352,17 @@ void CommandRecorder::SetPipelineState(
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
     pso_desc.pRootSignature = root_signature_.get();
     pso_desc.VS = { .pShaderBytecode = vertex_shader->Data(), .BytecodeLength = vertex_shader->Size() };
-    pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };    pso_desc.BlendState = kBlendState.disabled;
+    pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };
+    pso_desc.BlendState = kBlendState.disabled;
     pso_desc.SampleMask = UINT_MAX;
     pso_desc.RasterizerState = kRasterizerState.no_cull;
     pso_desc.DepthStencilState = kDepthState.disabled;
-    pso_desc.InputLayout = { .pInputElementDescs = nullptr, .NumElements = 0 }; // Assuming no input layout for full-screen triangle
+    // Define the input layout for POSITION and COLOR
+    static const D3D12_INPUT_ELEMENT_DESC input_layout[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "COLOR",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+    };
+    pso_desc.InputLayout = { input_layout, 2 };
     pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     pso_desc.NumRenderTargets = 1;
     pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
