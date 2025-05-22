@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <type_traits> // Required for std::underlying_type_t used by the macro
 
 #include <Oxygen/Base/Macros.h>
@@ -95,7 +96,7 @@ enum class ResourceStates : uint32_t {
 OXYGEN_DEFINE_FLAGS_OPERATORS(ResourceStates)
 
 //! String representation of enum values in `QueueFamilyType`.
-OXYGEN_GFX_API auto to_string(ResourceStates value) -> const char*;
+OXYGEN_GFX_API auto to_string(ResourceStates value) -> std::string;
 
 //! Specifies the tracking mode for resource state transitions managed by the
 //! `CommandList`.

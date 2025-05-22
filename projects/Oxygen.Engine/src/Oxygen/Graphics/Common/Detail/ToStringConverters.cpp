@@ -112,7 +112,7 @@ auto oxygen::graphics::to_string(const ShaderType value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(const ResourceStates value) -> const char*
+auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
 {
     if (value == ResourceStates::kUnknown) {
         return "Unknown";

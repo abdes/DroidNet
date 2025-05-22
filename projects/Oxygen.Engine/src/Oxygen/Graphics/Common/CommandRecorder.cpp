@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
@@ -63,6 +64,8 @@ void CommandRecorder::FlushBarriers()
         return;
     }
 
+    LOG_SCOPE_F(4, "Flushing barriers");
+
     // Execute the pending barriers by calling an abstract method to be
     // implemented by the backend-specific Commander
     ExecuteBarriers(resource_state_tracker_->GetPendingBarriers());
@@ -79,6 +82,9 @@ void CommandRecorder::DoBeginTrackingResourceState(
     const ResourceStates initial_state,
     const bool keep_initial_state)
 {
+    LOG_F(4, "buffer: begin tracking state 0x{} initial={} {}",
+        nostd::to_string(resource.GetNativeResource()),
+        nostd::to_string(initial_state), keep_initial_state ? " (preserve it)" : "");
     resource_state_tracker_->BeginTrackingResourceState(resource, initial_state, keep_initial_state);
 }
 
@@ -114,6 +120,9 @@ void CommandRecorder::DoBeginTrackingResourceState(
     const ResourceStates initial_state,
     const bool keep_initial_state)
 {
+    LOG_F(4, "texture: begin tracking state 0x{} initial={} {}",
+        nostd::to_string(resource.GetNativeResource()),
+        nostd::to_string(initial_state), keep_initial_state ? " (preserve it)" : "");
     resource_state_tracker_->BeginTrackingResourceState(resource, initial_state, keep_initial_state);
 }
 

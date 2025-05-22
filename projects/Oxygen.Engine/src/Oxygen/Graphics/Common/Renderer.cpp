@@ -163,17 +163,17 @@ auto Renderer::AcquireCommandRecorder(
                         target_queue->Submit(*completed_cmd);
                         rec->OnSubmitted();
                         const uint64_t timeline_value = target_queue->Signal();
-                            const uint32_t frame_idx = renderer->CurrentFrameIndex();
-                            auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
-                            timeline_values[queue] = timeline_value;
-                            pending_command_lists.emplace_back(cmd_list, queue);
+                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
+                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
+                        timeline_values[queue] = timeline_value;
+                        pending_command_lists.emplace_back(cmd_list, queue);
                     }
                 } else {
                     // Deferred: just end, don't submit. Add to pending_command_lists for later flush.
                     if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-                            const uint32_t frame_idx = renderer->CurrentFrameIndex();
-                            auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
-                            pending_command_lists.emplace_back(cmd_list, queue);
+                        const uint32_t frame_idx = renderer->CurrentFrameIndex();
+                        auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
+                        pending_command_lists.emplace_back(cmd_list, queue);
                     }
                 }
             } catch (const std::exception& ex) {
