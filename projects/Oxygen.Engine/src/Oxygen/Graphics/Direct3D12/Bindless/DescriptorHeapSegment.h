@@ -28,7 +28,7 @@ namespace d3d12 {
      within that heap, corresponding to a particular ResourceViewType and
      DescriptorVisibility.
     */
-    class DescriptorHeapSegment final : public detail::FixedDescriptorHeapSegment {
+    class DescriptorHeapSegment final : public graphics::detail::FixedDescriptorHeapSegment {
     public:
         OXYGEN_D3D12_API DescriptorHeapSegment(
             dx::IDevice* device,
@@ -70,6 +70,9 @@ namespace d3d12 {
 
         //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
         [[nodiscard]] OXYGEN_D3D12_API auto GetGpuHandle(const DescriptorHandle& handle) const
+            -> D3D12_GPU_DESCRIPTOR_HANDLE;
+
+        [[nodiscard]] OXYGEN_D3D12_API auto GetGpuDescriptorTableStart() const
             -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
     private:

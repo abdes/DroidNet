@@ -99,6 +99,15 @@ auto DescriptorHeapSegment::GetGpuHandle(const DescriptorHandle& handle) const
     return gpu_handle;
 }
 
+auto DescriptorHeapSegment::GetGpuDescriptorTableStart() const
+    -> D3D12_GPU_DESCRIPTOR_HANDLE
+{
+    if (!IsShaderVisible()) {
+        throw std::runtime_error("Descriptor heap is not shader visible, cannot get GPU handle.");
+    }
+    return gpu_start_;
+}
+
 auto DescriptorHeapSegment::IsShaderVisible() const noexcept -> bool
 {
     const auto& desc = heap_->GetDesc();

@@ -19,6 +19,7 @@
 namespace oxygen::graphics {
 
 class NativeObject;
+class CommandRecorder;
 
 //! Describes the properties of a descriptor heap or pool.
 struct HeapDescription {
@@ -269,14 +270,36 @@ public:
         const DescriptorHandle& source, const DescriptorHandle& destination)
         = 0;
 
-    //! Prepares descriptors for rendering, binding necessary heaps.
+    //! Prepares and binds all necessary descriptor resources for rendering.
     /*!
-     \param command_list The command list to bind to (passed as NativeObject).
+     This method must be called before issuing any draw or dispatch commands
+     that use descriptors allocated by this allocator. It ensures that all
+     required descriptor resources (such as descriptor heaps in Direct3D 12 or
+     descriptor sets in Vulkan) are properly bound to the provided command
+     recorder's underlying command list or command buffer.
 
-     This method is called before rendering to ensure all necessary descriptor
-     heaps are properly bound to the command list or command buffer.
+     \note This method does not allocate or update descriptors; it only ensures
+           that the correct resources are bound for GPU access during rendering.
+
+     Only graphics or compute command lists/buffers are valid for binding
+     descriptor resources; copy command lists/buffers are not supported and must
+     not be used. Descriptor bindings are local to each command list or buffer
+     and must be set on every command list or buffer that will use bindless or
+     descriptor-based resources. Bindings do not persist across command lists,
+     command buffers, or frames.
+
+     Good practice is to call this method once per frame for each command list
+     or buffer that will issue rendering or compute work using descriptors
+     managed by this allocator.
+
+     \param recorder The command recorder whose command list or buffer will be
+            prepared for rendering with the appropriate descriptor resources
+            bound.
+
+     \throws std::runtime_error if the command list or buffer is invalid
+             or of an unsupported type.
     */
-    virtual void PrepareForRendering(const NativeObject& command_list) = 0;
+    virtual void PrepareForRender(CommandRecorder& recorder) = 0;
 
     //! Returns the number of descriptors remaining of a specific view type in a
     //! specific visibility.
@@ -286,7 +309,8 @@ public:
      \return The number of descriptors remaining.
     */
     [[nodiscard]] virtual auto GetRemainingDescriptorsCount(
-        ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
+        ResourceViewType view_type, DescriptorVisibility visibility) const
+        -> IndexT
         = 0;
 
     //! Checks if this allocator owns the given descriptor handle.
