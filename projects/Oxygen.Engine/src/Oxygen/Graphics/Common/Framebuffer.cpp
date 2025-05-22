@@ -94,4 +94,7 @@ void Framebuffer::PrepareForRender(CommandRecorder& recorder)
     // that subsequent state transitions triggered by the frame rendering task
     // (application) are executed in a separate batch.
     recorder.FlushBarriers();
+
+    // Set the framebuffer as the render target.
+    recorder.BindFrameBuffer(*this);
 }
