@@ -149,6 +149,12 @@ auto Renderer::AcquireCommandRecorder(
             if (rec == nullptr) {
                 return;
             }
+            if (self_weak.expired()) {
+                LOG_F(ERROR, "Renderer is no longer valid");
+                delete rec;
+                return;
+            }
+            auto renderer = self_weak.lock();
             try {
                 if (immediate_submission) {
                     if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
@@ -157,21 +163,17 @@ auto Renderer::AcquireCommandRecorder(
                         target_queue->Submit(*completed_cmd);
                         rec->OnSubmitted();
                         const uint64_t timeline_value = target_queue->Signal();
-                        if (const auto renderer = self_weak.lock()) {
                             const uint32_t frame_idx = renderer->CurrentFrameIndex();
                             auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
                             timeline_values[queue] = timeline_value;
                             pending_command_lists.emplace_back(cmd_list, queue);
-                        }
                     }
                 } else {
                     // Deferred: just end, don't submit. Add to pending_command_lists for later flush.
                     if (auto* completed_cmd = rec->End(); completed_cmd != nullptr) {
-                        if (const auto renderer = self_weak.lock()) {
                             const uint32_t frame_idx = renderer->CurrentFrameIndex();
                             auto& [timeline_values, pending_command_lists] = renderer->frames_[frame_idx];
                             pending_command_lists.emplace_back(cmd_list, queue);
-                        }
                     }
                 }
             } catch (const std::exception& ex) {

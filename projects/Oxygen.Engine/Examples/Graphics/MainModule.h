@@ -53,8 +53,8 @@ private:
     void SetupCommandQueues() const;
     void SetupMainWindow();
     void SetupSurface();
-    void SetupRenderer();
-    void SetupFramebuffers();
+    void SetupRenderer();    void SetupFramebuffers();
+    void SetupShaders();
 
     auto RenderScene() -> co::Co<>;
 
@@ -65,6 +65,8 @@ private:
     std::shared_ptr<graphics::Renderer> renderer_;
     StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_;
     std::shared_ptr<graphics::Buffer> vertex_buffer_;
+    std::shared_ptr<graphics::IShaderByteCode> vertex_shader_;
+    std::shared_ptr<graphics::IShaderByteCode> pixel_shader_;
 
     co::Nursery* nursery_ { nullptr };
 

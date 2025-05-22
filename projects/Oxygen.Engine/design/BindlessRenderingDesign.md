@@ -406,6 +406,106 @@ registry.UnRegisterResource(*texture);
 - `DescriptorHandle` encapsulates the shader-visible index for bindless access.
 - The application is responsible for creating resources and view descriptions.
 
+## Root state and descriptor tables setup
+
+### Automatic Bindless Setup Flow
+
+The Oxygen Engine employs an automatic setup flow for bindless rendering that's
+transparently handled when acquiring a command recorder. This design decouples
+the application code from the specifics of the rendering backend while ensuring
+optimal descriptor management.
+
+Bindless rendering is implemented as component of `Renderer` and uses the
+`DescriptorAllocator` and `ResourceRegistry`. When the application calls
+`Renderer::AcquireCommandRecorder()`, the renderer creates a backend-specific
+command recorder and sets it up already for bindless rendering of the current
+frame. The actual setup of the descriptor tables, the registers for the shaders
+access, etc. is delegated to the backend-specific implementation of the
+`DescriptorAllocator`.
+
+Backend implementations always ensure that the constraints and invariants of the
+underlying graphics API are respected, such as for D3D12, only one shader
+visible heap of each type (CBV/SRV/UAV and Sampler) will be mapped. For D3D12,
+it is also guaranteed that register `0` will be pointed at the GPU heap start
+for texture CBV/SRV/UAV heap, and register `1` will be pointed at the Samplers
+heap.
+
+Shaders can then access any descriptor in these heaps using indices. Such
+indices should be exactly as they are in the `ResourceRegistry`.
+
+The sequence diagram below illustrates the precise flow of control and method
+calls when setting up the bindless infrastructure:
+
+```
+┌───────────┐          ┌──────────┐         ┌───────────┐      ┌───────────────────┐       ┌───────────────┐
+│Application│          │ Renderer │         │ Bindless  │      │DescriptorAllocator│       │CommandRecorder│
+└─────┬─────┘          └────┬─────┘         └─────┬─────┘      └──────────┬────────┘       └──────┬────────┘
+      │                     │                     │                       │                       │
+      │ AcquireCommandRecorder()                  │                       │                       │
+      │────────────────────>│                     │                       │                       │
+      │                     │                     │                       │                       │
+      │                     │ CreateCommandRecorder()                     │                       │
+      │                     │────────────────────────────────────────────────────────────────────>│
+      │                     │                     │                       │                       │
+      │                     │ Begin()             │                       │                       │
+      │                     │────────────────────────────────────────────────────────────────────>│
+      │                     │                     │                       │                       │
+      │                     │ PrepareForRender(*recorder)                 │                       │
+      │                     │─────────────────────>                       │                       │
+      │                     │                     │                       │                       │
+      │                     │                     │ PrepareForRender(recorder)                    │
+      │                     │                     │───────────────────────>                       │
+      │                     │                     │                       │                       │
+      │                     │                     │                       │ SetupDescriptorTables()
+      │                     │                     │                       │──────────────────────>│
+      │                     │                     │                       │                       │
+      │                     │                     │                       │                       │
+      │                     │                     │                       │                       │
+      │ CommandRecorder     │                     │                       │                       │
+      │<────────────────────│                     │                       │                       │
+┌─────┴─────┐          ┌────┴─────┐         ┌─────┴─────┐        ┌────────┴──────────┐     ┌──────┴────────┐
+│Application│          │ Renderer │         │ Bindless  │        │DescriptorAllocator│     │CommandRecorder│
+└───────────┘          └──────────┘         └───────────┘        └───────────────────┘     └───────────────┘
+```
+
+### D3D12 Implementation Details
+
+The Direct3D 12 implementation of this architecture leverages descriptor tables
+and root signatures to efficiently bind large numbers of resources:
+
+1. **Root Signature Design**
+   - Root signatures contain two descriptor tables: one for CBV/SRV/UAV
+     resources and one for Samplers
+   - Root parameters use appropriate shader visibility flags to optimize
+     descriptor access
+   - Tables are configured at fixed root parameter indices for consistent shader
+     access
+
+2. **Descriptor Table Organization**
+   - `kRootIndex_CBV_SRV_UAV = 0` for textures, buffers, and constant buffers
+   - `kRootIndex_Sampler = 1` for sampler states
+   - Each table maps to a D3D12 descriptor heap with
+     D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+
+3. **Command List Binding Process**
+   - `DescriptorAllocator::PrepareForRender()` collects all shader-visible heaps
+     into `ShaderVisibleHeapInfo` structures
+   - `CommandRecorder::SetupDescriptorTables()` binds these heaps to the D3D12
+     command list using `SetDescriptorHeaps()`
+   - Root descriptor tables are set using either
+     `SetGraphicsRootDescriptorTable()` or `SetComputeRootDescriptorTable()`
+   - GPU descriptor handles point to the base of each descriptor heap
+
+4. **Shader Resource Access**
+   - Shaders access resources using resource indices (uint values)
+   - HLSL syntax: `resources[resourceIndex].Load(...)` or
+     `samplers[samplerIndex].Sample(...)`
+   - These indices correspond to offsets from the base GPU descriptor handle
+
+This approach minimizes state changes between draw calls and allows for
+efficient dynamic resource binding, significantly reducing API overhead in
+complex scenes.
+
 ## Testing Implemented
 
 - `src/Oxygen/Graphics/Common/Test/DescriptorHandle_test.cpp`

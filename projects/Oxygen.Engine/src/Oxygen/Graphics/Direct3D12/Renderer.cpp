@@ -55,7 +55,7 @@ auto Renderer::GetGraphics() const -> const d3d12::Graphics&
 auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     -> std::unique_ptr<graphics::CommandRecorder>
 {
-    return std::make_unique<CommandRecorder>(command_list, target_queue);
+    return std::make_unique<CommandRecorder>(&GetPerFrameResourceManager(), command_list, target_queue);
 }
 
 auto Renderer::CreateTexture(TextureDesc desc) const
