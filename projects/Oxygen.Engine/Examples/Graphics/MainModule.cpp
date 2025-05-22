@@ -35,18 +35,26 @@ struct Vertex {
     float color[3];
 };
 
-constexpr float kTriangleHeight = 0.5f;
+constexpr float kTriangleHeight = 0.8f;
 
 // Helper to compute a simple upright triangle in NDC, centered at (cx, cy), with given height (NDC units, 1.0 = full framebuffer height) and rotation
 inline void ComputeEquilateralTriangle(Vertex (&out_vertices)[3], float cx, float cy, float height, float angle_rad)
 {
-    // Simple upright triangle: top at (cx, cy + height/2), base at (cx - base/2, cy - height/2) and (cx + base/2, cy - height/2)
-    float half_height = height / 2.0f;
-    float base = height; // For a simple triangle, base = height (not equilateral, but fills NDC)
+    // Defines an equilateral triangle with total height 'height', centered (centroid) at (cx, cy).
+    // The centroid of an equilateral triangle is 2/3 of the total height from the apex (top vertex),
+    // and 1/3 of the total height from the midpoint of the base.
+    float y_dist_centroid_to_apex = (2.0f / 3.0f) * height;
+    float y_dist_centroid_to_base = (1.0f / 3.0f) * height;
+
+    // For an equilateral triangle of total height 'h', the side length 's' (which is also the base width)
+    // is s = h * (2 / sqrt(3)).
+    float base_width = height * 2.0f / std::sqrt(3.0f);
+    float half_base_width = base_width / 2.0f;
+
     glm::vec2 verts[3] = {
-        { cx, cy + half_height }, // top
-        { cx - base / 2.0f, cy - half_height }, // bottom left
-        { cx + base / 2.0f, cy - half_height } // bottom right
+        { cx, cy + y_dist_centroid_to_apex },                // Apex (top vertex)
+        { cx - half_base_width, cy - y_dist_centroid_to_base }, // Bottom-left vertex
+        { cx + half_base_width, cy - y_dist_centroid_to_base }  // Bottom-right vertex
     };
     float cos_a = std::cos(angle_rad);
     float sin_a = std::sin(angle_rad);
@@ -303,7 +311,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
     recorder->ClearFramebuffer(
         *fb,
-        std::vector<std::optional<graphics::Color>> { graphics::Color { 0.09f, 0.48f, 0.38f, 1.0f } },
+        std::vector<std::optional<graphics::Color>> { graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f } },
         std::nullopt,
         std::nullopt);
 
