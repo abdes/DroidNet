@@ -68,6 +68,7 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "Buffer.cpp"
     "CommandList.cpp"
     "CommandQueue.cpp"
     "CommandRecorder.cpp"
@@ -93,7 +94,6 @@ target_sources(
     # "ImGui/ImGuiModule.cpp"
     "ImGui/imgui_impl_dx12.cpp"
     "ImGui/imgui_impl_dx12.h"
-    "Resources/Buffer.cpp"
     "Shaders/EngineShaders.cpp"
     "Shaders/EngineShaders.h"
     "Shaders/ShaderCompiler.cpp"
@@ -110,20 +110,20 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
+      "Buffer.h"
       "CommandList.h"
       "CommandQueue.h"
       "CommandRecorder.h"
       "Constants.h"
       "Framebuffer.h"
+      "GraphicResource.h"
       "Graphics.h"
       "MemoryBlock.h"
       "Renderer.h"
       "Texture.h"
-      "Resources/Buffer.h"
       "Allocator/D3D12MemAlloc.h"
       "Devices/DeviceManager.h"
       # "ImGui/ImGuiModule.h"
-      "Resources/GraphicResource.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

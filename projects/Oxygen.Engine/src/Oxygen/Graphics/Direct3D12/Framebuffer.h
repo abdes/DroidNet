@@ -15,11 +15,10 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 
-
 namespace oxygen::graphics {
 
-    class Renderer;
-    class Texture;
+class Renderer;
+class Texture;
 
 namespace d3d12 {
 
@@ -27,7 +26,7 @@ namespace d3d12 {
         using Base = graphics::Framebuffer;
 
     public:
-         Framebuffer(std::shared_ptr<graphics::Renderer> renderer, FramebufferDesc desc);
+        Framebuffer(std::shared_ptr<graphics::Renderer> renderer, FramebufferDesc desc);
         ~Framebuffer() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Framebuffer)

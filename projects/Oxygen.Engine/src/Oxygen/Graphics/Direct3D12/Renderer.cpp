@@ -10,21 +10,22 @@
 #include <type_traits>
 #include <utility>
 
-#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/Bindless.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Renderer.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
-#include <Oxygen/Graphics/Common/Detail/Bindless.h>
 
 using oxygen::graphics::TextureDesc;
+using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
 using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::Renderer;
 using oxygen::graphics::detail::Bindless;
-using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
 
 Renderer::Renderer(
     const std::string_view name,

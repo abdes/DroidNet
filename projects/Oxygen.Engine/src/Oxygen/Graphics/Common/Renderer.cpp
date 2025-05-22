@@ -25,7 +25,6 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 
-
 using oxygen::graphics::Renderer;
 using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;

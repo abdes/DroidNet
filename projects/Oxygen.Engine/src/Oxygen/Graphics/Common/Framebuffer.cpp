@@ -9,7 +9,6 @@
 #include <Oxygen/Graphics/Common/FrameBuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
-
 using oxygen::graphics::CommandRecorder;
 
 using oxygen::graphics::Color;

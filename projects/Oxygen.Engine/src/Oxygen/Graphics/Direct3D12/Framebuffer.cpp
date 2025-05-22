@@ -12,7 +12,6 @@
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
-
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::Renderer;
 using oxygen::graphics::Texture;
