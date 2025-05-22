@@ -28,6 +28,7 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorHeapSegment.h"
 
+using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
@@ -394,7 +395,7 @@ protected:
 
 public:
     void CopyDescriptor(const DescriptorHandle& /*source*/, const DescriptorHandle& /*destination*/) override { }
-    void PrepareForRendering(const oxygen::graphics::NativeObject& /*command_list*/) override { }
+    void PrepareForRender(CommandRecorder& /*command_list*/) override { }
 };
 
 NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthCapacityClampedToMaxIndexT)

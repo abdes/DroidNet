@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <span>
+
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
@@ -13,6 +15,26 @@
 #include <wrl/client.h>
 
 namespace oxygen::graphics::d3d12 {
+
+namespace detail {
+
+    struct ShaderVisibleHeapInfo {
+        D3D12_DESCRIPTOR_HEAP_TYPE heap_type;
+        ID3D12DescriptorHeap* heap;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
+
+        ShaderVisibleHeapInfo(
+            D3D12_DESCRIPTOR_HEAP_TYPE type,
+            ID3D12DescriptorHeap* heap,
+            D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
+            : heap_type(type)
+            , heap(heap)
+            , gpu_handle(gpu_handle)
+        {
+        }
+    };
+
+} // namespace detail
 
 class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
@@ -43,6 +65,10 @@ public:
         std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
 
     void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
+
+    //! Binds the provided shader-visible descriptor heaps to the underlying
+    //! D3D12 command list.
+    void SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps);
 
 protected:
     void ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers) override;

@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorHeapSegment.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -94,45 +95,57 @@ void DescriptorAllocator::CopyDescriptor(const DescriptorHandle& dst, const Desc
     }
 }
 
-// TODO: this will most likely be significantly refactored in the future
-void DescriptorAllocator::PrepareForRendering(const NativeObject& command_list_obj)
+void DescriptorAllocator::UpdateShaderVisibleHeapsSet() const
 {
-    if (!command_list_obj.IsValid()) {
-        LOG_F(WARNING, "Invalid command list object passed to PrepareForRendering");
-        return;
-    }
+    DLOG_F(1, "updating shader visible heaps set");
+    shader_visible_heaps_.clear();
 
-    ID3D12GraphicsCommandList* command_list;
-    try {
-        command_list = command_list_obj.AsPointer<ID3D12GraphicsCommandList>();
-    } catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to get ID3D12GraphicsCommandList pointer from NativeObject: {}", e.what());
-        return;
-    }
-
-    if (!command_list) {
-        LOG_F(ERROR, "Failed to get ID3D12GraphicsCommandList pointer from NativeObject");
-        return;
-    }
-
-    // Collect all unique shader-visible heaps from segments using Heaps()
-    std::vector<ID3D12DescriptorHeap*> heaps;
-    for (const auto& [_, segments] : Heaps()) {
-        for (const auto& segment_ptr : segments) {
-            auto* d3d12_segment = static_cast<const DescriptorHeapSegment*>(segment_ptr.get()); // NOLINT(*-static-cast-downcast)
+    // Filter for shader-visible heaps and transform directly to ID3D12DescriptorHeap*
+    for (const auto& heap_view : Heaps()) {
+        for (const auto& segment_ptr : heap_view.segments) {
+            auto* d3d12_segment = static_cast<const DescriptorHeapSegment*>(segment_ptr.get());
             if (d3d12_segment->IsShaderVisible()) {
-                ID3D12DescriptorHeap* heap = d3d12_segment->GetHeap();
-                // Assert no duplicates in debug builds
-                DCHECK_F(std::ranges::find(heaps, heap) == heaps.end(),
-                    "Duplicate ID3D12DescriptorHeap detected in PrepareForRendering");
-                heaps.push_back(heap);
+                // Debug check: Our allocation strategy ensures only one shader-visible
+                // heap per type - check that the heap being added is not already in the set.
+                DCHECK_F(
+                    std::find_if(shader_visible_heaps_.begin(), shader_visible_heaps_.end(),
+                        [&](const detail::ShaderVisibleHeapInfo& info) {
+                            return info.heap == d3d12_segment->GetHeap();
+                        })
+                        == shader_visible_heaps_.end(),
+                    "Multiple shader-visible heaps of the same type detected.");
+
+                shader_visible_heaps_.emplace_back(
+                    d3d12_segment->GetHeapType(),
+                    d3d12_segment->GetHeap(),
+                    d3d12_segment->GetGpuDescriptorTableStart());
             }
         }
     }
+}
 
-    if (!heaps.empty()) {
-        command_list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+void DescriptorAllocator::PrepareForRender(graphics::CommandRecorder& recorder)
+{
+    // Check if we need to update the shader visible heaps set
+    if (needs_update_shader_visible_heaps_) {
+        UpdateShaderVisibleHeapsSet();
+        needs_update_shader_visible_heaps_ = false;
     }
+
+    if (shader_visible_heaps_.empty()) {
+        DLOG_F(1, "descriptor allocator -> no shader visible heaps");
+        return;
+    }
+
+    // cast the command recorder to a D3D12 command recorder
+    auto& d3d12_recorder = static_cast<CommandRecorder&>(recorder);
+
+    DLOG_F(1, "descriptor allocator -> {} shader visible heaps", shader_visible_heaps_.size());
+
+    // Bind the shader visible heaps to the command list and set root descriptor
+    // tables. The command recorder will take care of doing what is needed based
+    // on the command list type being recorded.
+    d3d12_recorder.SetupDescriptorTables(shader_visible_heaps_);
 }
 
 auto DescriptorAllocator::CreateHeapSegment(
@@ -140,7 +153,7 @@ auto DescriptorAllocator::CreateHeapSegment(
     uint32_t base_index,
     ResourceViewType view_type,
     DescriptorVisibility visibility)
-    -> std::unique_ptr<detail::DescriptorHeapSegment>
+    -> std::unique_ptr<graphics::detail::DescriptorHeapSegment>
 {
     // For D3D12, each segment maps directly to a single D3D12 descriptor heap
     // Create a unique name for debugging
@@ -157,6 +170,11 @@ auto DescriptorAllocator::CreateHeapSegment(
         visibility,
         heap_name.c_str());
 
+    // Mark the shader visible heaps set for update.
+    // NB: DO NOT call UpdateShaderVisibleHeapsSet() here, as it will
+    // deadlock due to the heaps mutex being already held when we are
+    // creating a new segment.
+    needs_update_shader_visible_heaps_ = true;
     return segment;
 }
 

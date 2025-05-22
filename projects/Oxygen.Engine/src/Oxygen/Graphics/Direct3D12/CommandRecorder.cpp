@@ -185,6 +185,55 @@ auto CommandRecorder::End() -> graphics::CommandList*
     return graphics::CommandRecorder::End();
 }
 
+void CommandRecorder::SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps)
+{
+    auto* d3d12_command_list = GetConcreteCommandList()->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    auto queue_role = GetCommandList()->GetQueueRole();
+    DCHECK_F(queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
+        "Invalid command list type for SetupDescriptorTables. Expected Graphics or Compute, got: {}",
+        static_cast<int>(queue_role));
+
+    constexpr UINT kRootIndex_CBV_SRV_UAV = 0;
+    constexpr UINT kRootIndex_Sampler = 1;
+
+    auto set_table = [this, d3d12_command_list, queue_role](
+                         UINT root_index, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
+        if (queue_role == QueueRole::kGraphics) {
+            d3d12_command_list->SetGraphicsRootDescriptorTable(root_index, gpu_handle);
+        } else if (queue_role == QueueRole::kCompute) {
+            d3d12_command_list->SetComputeRootDescriptorTable(root_index, gpu_handle);
+        }
+    };
+
+    // Prepare the descriptor heaps for the command list, and set the root
+    // descriptor tables as we go.
+
+    std::vector<ID3D12DescriptorHeap*> heaps_ptrs(heaps.size());
+    for (const auto& heap_info : heaps) {
+        DCHECK_NOTNULL_F(heap_info.heap, "Heap pointer cannot be null");
+
+        UINT root_index;
+        // Set the root descriptor table for that heap type
+        if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            root_index = kRootIndex_CBV_SRV_UAV;
+        } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
+            root_index = kRootIndex_Sampler;
+        } else {
+            DLOG_F(WARNING, "Unsupported descriptor heap type: {}",
+                static_cast<std::underlying_type_t<D3D12_DESCRIPTOR_HEAP_TYPE>>(heap_info.heap_type));
+            continue;
+        }
+
+        heaps_ptrs[root_index] = heap_info.heap;
+        set_table(root_index, heap_info.gpu_handle);
+    }
+
+    // Set the descriptor heaps for the command list
+    d3d12_command_list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps_ptrs.data());
+}
+
 void CommandRecorder::SetViewport(const ViewPort& viewport)
 {
     auto* command_list = GetConcreteCommandList();

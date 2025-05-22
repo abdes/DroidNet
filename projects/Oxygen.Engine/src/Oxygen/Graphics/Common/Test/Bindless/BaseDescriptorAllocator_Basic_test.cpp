@@ -26,6 +26,7 @@
 #include "./Mocks/MockDescriptorHeapSegment.h"
 #include "./Mocks/TestDescriptorHandle.h"
 
+using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DefaultDescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorAllocationStrategy;
 using oxygen::graphics::DescriptorHandle;
@@ -236,6 +237,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
     class LocalMockAllocator : public oxygen::graphics::detail::BaseDescriptorAllocator {
     public:
         using Base = oxygen::graphics::detail::BaseDescriptorAllocator;
+
         LocalMockAllocator(
             std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy,
             DescriptorHeapSegment::IndexT expected)
@@ -246,7 +248,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, FirstSegmentUsesStrategyBaseInde
         }
         // Implement all pure virtuals from DescriptorAllocator
         void CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&) override { throw std::logic_error("Not used in this test"); }
-        void PrepareForRendering(const oxygen::graphics::NativeObject&) override { }
+        void PrepareForRender(CommandRecorder&) override { }
 
     protected:
         std::unique_ptr<DescriptorHeapSegment> CreateHeapSegment(

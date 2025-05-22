@@ -24,8 +24,7 @@ namespace oxygen::graphics {
 //! Registry for graphics resources and their views, supporting bindless rendering.
 class ResourceRegistry {
 public:
-    OXYGEN_GFX_API explicit ResourceRegistry(
-        std::string_view debug_name);
+    OXYGEN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
 
     OXYGEN_GFX_API virtual ~ResourceRegistry() noexcept;
 
@@ -59,7 +58,7 @@ public:
         Resource& resource,
         DescriptorHandle view_handle,
         const typename Resource::ViewDescriptionT& desc)
-        -> NativeObject // TODO: make it noexcept
+        -> NativeObject // TODO: document exceptions
     {
         auto view = resource.GetNativeView(view_handle, desc);
         auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
@@ -155,6 +154,11 @@ public:
     void UnRegisterViews(const Resource& resource)
     {
         UnRegisterResourceViews(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+    }
+
+    virtual void PrepareForRender(CommandRecorder& recorder)
+    {
+        // TODO: implement this method
     }
 
 private:

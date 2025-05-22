@@ -110,7 +110,10 @@ void Renderer::Submit(FrameRenderTask task)
     GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const std::string_view command_list_name, bool immediate_submission)
+auto Renderer::AcquireCommandRecorder(
+    const std::string_view queue_name,
+    const std::string_view command_list_name,
+    bool immediate_submission)
     -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
     CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
@@ -135,11 +138,14 @@ auto Renderer::AcquireCommandRecorder(const std::string_view queue_name, const s
     }
     recorder->Begin();
 
-    std::weak_ptr<Renderer> self_weak = weak_from_this();
+    // Prepare the command list for bindless rendering
+    GetComponent<Bindless>().PrepareForRender(*recorder);
 
     return {
         recorder.release(),
-        [self_weak, cmd_list = std::move(cmd_list), queue = queue.get(), immediate_submission](CommandRecorder* rec) mutable {
+        [self_weak = weak_from_this(),
+            cmd_list = std::move(cmd_list),
+            queue = queue.get(), immediate_submission](CommandRecorder* rec) mutable {
             if (rec == nullptr) {
                 return;
             }

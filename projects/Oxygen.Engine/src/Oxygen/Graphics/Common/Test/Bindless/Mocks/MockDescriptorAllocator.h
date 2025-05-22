@@ -46,7 +46,7 @@ public:
     // Google Mock for DescriptorAllocator interface
     MOCK_METHOD(DescriptorHandle, Allocate, (ResourceViewType view_type, DescriptorVisibility visibility), (override));
     MOCK_METHOD(void, CopyDescriptor, (const DescriptorHandle&, const DescriptorHandle&), (override));
-    MOCK_METHOD(void, PrepareForRendering, (const NativeObject&), (override));
+    MOCK_METHOD(void, PrepareForRender, (CommandRecorder&), (override));
 
     // Helper method to call the real base implementation for the mock's default action.
     // This method is invoked by the ON_CALL setup.

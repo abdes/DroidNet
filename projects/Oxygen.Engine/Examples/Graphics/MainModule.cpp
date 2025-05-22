@@ -250,7 +250,7 @@ auto MainModule::RenderScene() -> co::Co<>
         std::nullopt,
         std::nullopt);
 
-    // CreateTriangleVertexBuffer();
+    CreateTriangleVertexBuffer();
 
     co_return;
 }

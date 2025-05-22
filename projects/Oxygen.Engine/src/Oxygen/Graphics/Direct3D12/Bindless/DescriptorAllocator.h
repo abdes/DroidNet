@@ -10,6 +10,7 @@
 
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -77,7 +78,7 @@ public:
      Binds all necessary shader-visible descriptor heaps to the command list
      for rendering.
     */
-    OXYGEN_D3D12_API void PrepareForRendering(const NativeObject& command_list_obj) override;
+    OXYGEN_D3D12_API void PrepareForRender(graphics::CommandRecorder&) override;
 
 protected:
     //! Creates a D3D12-specific descriptor heap segment.
@@ -97,8 +98,25 @@ protected:
 
 private:
     //! Gets the D3D12DescriptorHeapSegment from a handle.
-    auto GetD3D12Segment(const DescriptorHandle& handle) const
+    [[nodiscard]] auto GetD3D12Segment(const DescriptorHandle& handle) const
         -> const DescriptorHeapSegment*;
+
+    //! Updates the set of shader visible heaps.
+    /*!
+     This method is called to refresh the list of shader visible heaps whenever
+     a new segment is created or an existing one is modified. To avoid
+     deadlocks, it is not called immediately when a segment is created. Instead,
+     we mark the needs_update_shader_visible_heaps_ flag and call this method
+     from the PrepareForRender() when the Heaps() mutex is not held.
+    */
+    void UpdateShaderVisibleHeapsSet() const;
+
+    //! The D3D12 descriptor heaps that are shader visible.
+    mutable std::vector<detail::ShaderVisibleHeapInfo> shader_visible_heaps_;
+
+    //! Flag to indicate if the collection of shader visible heaps needs to be
+    //! updated.
+    bool needs_update_shader_visible_heaps_ { false };
 
     dx::IDevice* device_; //!< The D3D12 device used for heap creation.
 };

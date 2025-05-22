@@ -42,6 +42,13 @@ namespace detail {
         [[nodiscard]] auto GetRegistry() const -> const ResourceRegistry& { return *registry_; }
         [[nodiscard]] auto GetRegistry() -> ResourceRegistry& { return *registry_; }
 
+        void PrepareForRender(CommandRecorder& recorder)
+        {
+            LOG_SCOPE_F(INFO, "Preparing for bindless render");
+            // Prepare the descriptor allocator for rendering
+            allocator_->PrepareForRender(recorder);
+        }
+
     protected:
         void UpdateDependencies(const Composition& composition) override
         {
