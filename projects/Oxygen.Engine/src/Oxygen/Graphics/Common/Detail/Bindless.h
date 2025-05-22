@@ -53,7 +53,7 @@ namespace detail {
 
     private:
         std::unique_ptr<DescriptorAllocator> allocator_;
-        std::unique_ptr<ResourceRegistry> registry_{};
+        std::unique_ptr<ResourceRegistry> registry_ {};
     };
 
 } // namespace detail

@@ -5,9 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -16,13 +16,13 @@ using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
+using oxygen::graphics::BufferViewDescription;
+using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::Format;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::ResourceStateTracker;
-using oxygen::graphics::DescriptorHandle;
-using oxygen::graphics::BufferViewDescription;
 
 namespace {
 
@@ -49,6 +49,7 @@ public:
     NativeObject CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/, Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
 
     auto GetNativeView(const DescriptorHandle& /*view_handle*/, const BufferViewDescription& /*view_desc*/) const -> NativeObject override { return {}; }
+
 private:
     NativeObject native_;
 };

@@ -22,11 +22,12 @@
 #include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Resources/Buffer.h>
 
 using oxygen::graphics::d3d12::CommandRecorder;
 using oxygen::graphics::d3d12::detail::GetGraphics;
@@ -507,9 +508,8 @@ void CommandRecorder::ClearFramebuffer(
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = {};
         rtv_handle.ptr = rtvs[i];
         Color clear_color = attachment.ResolveClearColor(
-            color_clear_values && i < color_clear_values->size() ? (*color_clear_values)[i] : std::nullopt
-        );
-        const float color[4] = {clear_color.r, clear_color.g, clear_color.b, clear_color.a};
+            color_clear_values && i < color_clear_values->size() ? (*color_clear_values)[i] : std::nullopt);
+        const float color[4] = { clear_color.r, clear_color.g, clear_color.b, clear_color.a };
         d3d12_command_list->ClearRenderTargetView(rtv_handle, color, 0, nullptr);
     }
 
@@ -520,8 +520,7 @@ void CommandRecorder::ClearFramebuffer(
         const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
 
         auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(
-            depth_clear_value, stencil_clear_value, desc.depth_attachment.format
-        );
+            depth_clear_value, stencil_clear_value, desc.depth_attachment.format);
 
         D3D12_CLEAR_FLAGS clear_flags = static_cast<D3D12_CLEAR_FLAGS>(0);
         if (depth_format_info.has_depth) {

@@ -25,7 +25,7 @@
 
 namespace oxygen::graphics {
 
-    class DescriptorHandle;
+class DescriptorHandle;
 
 enum class TextureDimension : uint8_t {
     kUnknown,

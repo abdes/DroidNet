@@ -14,8 +14,8 @@
 
 namespace oxygen::graphics {
 
-enum class ResourceViewType: std::uint8_t;
-enum class DescriptorVisibility: std::uint8_t;
+enum class ResourceViewType : std::uint8_t;
+enum class DescriptorVisibility : std::uint8_t;
 class Texture;
 class Buffer;
 class Sampler;
