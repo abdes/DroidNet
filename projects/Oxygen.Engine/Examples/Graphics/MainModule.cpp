@@ -294,8 +294,9 @@ auto MainModule::RenderScene() -> co::Co<>
 
     auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
 
+    // Transition the framebuffer to the render target state, and bind it to the
+    // command recorder.
     fb->PrepareForRender(*recorder);
-    recorder->BindFrameBuffer(*fb);
 
     ViewPort viewport {
         .width = static_cast<float>(surface_->Width()),
