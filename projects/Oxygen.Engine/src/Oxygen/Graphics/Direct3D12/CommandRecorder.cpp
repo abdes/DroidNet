@@ -17,6 +17,7 @@
 #include <d3d12.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
@@ -106,6 +107,10 @@ auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states) -> D3
 // Static helper functions to process specific barrier types
 auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
+    DLOG_F(4, ". buffer barrier: {} {} -> {}",
+        nostd::to_string(desc.resource),
+        nostd::to_string(desc.before), nostd::to_string(desc.after));
+
     D3D12_RESOURCE_BARRIER d3d12_barrier = {};
     d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -122,6 +127,10 @@ auto ProcessBarrierDesc(const BufferBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 
 auto ProcessBarrierDesc(const TextureBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
+    DLOG_F(4, ". texture barrier: {} {} -> {}",
+        nostd::to_string(desc.resource),
+        nostd::to_string(desc.before), nostd::to_string(desc.after));
+
     D3D12_RESOURCE_BARRIER d3d12_barrier = {};
     d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -138,6 +147,8 @@ auto ProcessBarrierDesc(const TextureBarrierDesc& desc) -> D3D12_RESOURCE_BARRIE
 
 auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 {
+    DLOG_F(4, ". memory barrier: 0x{:X}", nostd::to_string(desc.resource));
+
     D3D12_RESOURCE_BARRIER d3d12_barrier = {};
     d3d12_barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
     d3d12_barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -360,7 +371,7 @@ void CommandRecorder::SetPipelineState(
     // Define the input layout for POSITION and COLOR
     static const D3D12_INPUT_ELEMENT_DESC input_layout[] = {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "COLOR",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+        { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
     };
     pso_desc.InputLayout = { input_layout, 2 };
     pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -422,6 +433,8 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
     std::vector<D3D12_RESOURCE_BARRIER> d3d12_barriers;
     d3d12_barriers.reserve(barriers.size());
+
+    DLOG_F(4, "executing {} barriers", barriers.size());
 
     for (const auto& barrier : barriers) {
         const auto& desc_variant = barrier.GetDescriptor();

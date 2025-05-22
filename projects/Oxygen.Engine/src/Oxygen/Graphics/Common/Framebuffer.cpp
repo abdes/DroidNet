@@ -89,4 +89,9 @@ void Framebuffer::PrepareForRender(CommandRecorder& recorder)
         recorder.RequireResourceStateFinal(*desc.depth_attachment.texture,
             ResourceStates::kDepthRead | ResourceStates::kDepthWrite);
     }
+
+    // Flush barriers to ensure all resource state transitions are applied and
+    // that subsequent state transitions triggered by the frame rendering task
+    // (application) are executed in a separate batch.
+    recorder.FlushBarriers();
 }

@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
@@ -152,7 +153,7 @@ concept HoldsNativeResource = requires(T obj) {
 };
 
 //! Converts a `NativeObject` to a string representation.
-auto to_string(const NativeObject& obj) -> std::string;
+OXYGEN_GFX_API auto to_string(const NativeObject& obj) -> std::string;
 
 } // namespace oxygen::graphics
 

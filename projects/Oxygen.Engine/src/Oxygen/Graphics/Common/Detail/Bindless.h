@@ -44,7 +44,7 @@ namespace detail {
 
         void PrepareForRender(CommandRecorder& recorder)
         {
-            LOG_SCOPE_F(INFO, "Preparing for bindless render");
+            LOG_SCOPE_F(4, "Preparing for bindless render");
             // Prepare the descriptor allocator for rendering
             allocator_->PrepareForRender(recorder);
         }
