@@ -259,11 +259,20 @@ change and new files to create.
 
 ### Impacted Classes and Components
 
-- **Pipeline State Abstractions (new: src/Oxygen/Graphics/Common/PipelineState.h, .cpp)**
+- ✓ **Pipeline State Abstractions (new: src/Oxygen/Graphics/Common/PipelineState.h, .cpp)**
   - Defines the data structures and interfaces for representing pipeline state
     objects and their descriptors in a backend-agnostic way.
   - Provides the means to construct, compare, and describe pipeline state
     objects, but not the orchestration or lifecycle management.
+
+- **CommandRecorder (src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp, .h)**
+  - Will use the new pipeline state abstraction for binding (setting) PSOs
+    during command recording.
+  - **Note:** CommandRecorder is not responsible for PSO creation, caching, or
+    lookup. PSO creation (including coroutine-based or deferred creation) is
+    handled by the Renderer or a dedicated pipeline manager. CommandRecorder
+    only binds already-created PSOs as part of command recording, ensuring fast
+    and predictable command buffer construction.
 
 - **Renderer (src/Oxygen/Graphics/Common/Renderer.h, .cpp)**
   - Will require updates to support new pipeline creation, caching, and lookup
@@ -291,14 +300,11 @@ change and new files to create.
     must be coordinated here, ensuring that all API-specific requirements for
     pipeline compatibility, cache usage, and resource lifetime are respected.
 
-- **CommandRecorder (src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp, .h)**
-  - Will use the new pipeline state abstraction for binding (setting) PSOs
-    during command recording.
-  - **Note:** CommandRecorder is not responsible for PSO creation, caching, or
-    lookup. PSO creation (including coroutine-based or deferred creation) is
-    handled by the Renderer or a dedicated pipeline manager. CommandRecorder
-    only binds already-created PSOs as part of command recording, ensuring fast
-    and predictable command buffer construction.
+- **D3D12 CommandRecorder (src/Oxygen/Graphics/Direct3D12/CommandRecorder.h, .cpp)**
+  - Updated to use the new pipeline state abstraction for binding PSOs during
+    command recording. No responsibility for PSO creation, caching, or lookup;
+    only binds already-created PSOs provided by the Renderer or pipeline
+    manager.
 
 - **D3D12 Renderer (src/Oxygen/Graphics/Direct3D12/Renderer.h, .cpp)**
   - Handles D3D12-specific details such as pipeline state streams, root
@@ -306,12 +312,6 @@ change and new files to create.
     orchestration or lifecycle. This class is responsible for integrating
     D3D12-specific pipeline state utilities and providing backend-specific
     pipeline management as required by the core Renderer or pipeline manager.
-
-- **D3D12 CommandRecorder (src/Oxygen/Graphics/Direct3D12/CommandRecorder.h, .cpp)**
-  - Updated to use the new pipeline state abstraction for binding PSOs during
-    command recording. No responsibility for PSO creation, caching, or lookup;
-    only binds already-created PSOs provided by the Renderer or pipeline
-    manager.
 
 - **D3D12 Pipeline State Utilities (new: src/Oxygen/Graphics/Direct3D12/PipelineStateUtils.h, .cpp)**
   - Provides translation and helper functions for creating D3D12-specific
