@@ -52,9 +52,9 @@ inline void ComputeEquilateralTriangle(Vertex (&out_vertices)[3], float cx, floa
     float half_base_width = base_width / 2.0f;
 
     glm::vec2 verts[3] = {
-        { cx, cy + y_dist_centroid_to_apex },                // Apex (top vertex)
+        { cx, cy + y_dist_centroid_to_apex }, // Apex (top vertex)
         { cx - half_base_width, cy - y_dist_centroid_to_base }, // Bottom-left vertex
-        { cx + half_base_width, cy - y_dist_centroid_to_base }  // Bottom-right vertex
+        { cx + half_base_width, cy - y_dist_centroid_to_base } // Bottom-right vertex
     };
     float cos_a = std::cos(angle_rad);
     float sin_a = std::sin(angle_rad);
