@@ -11,6 +11,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
@@ -288,4 +289,174 @@ auto oxygen::graphics::to_string(const DescriptorVisibility value) -> const char
     }
 
     return "__NotSupported__";
+}
+
+#include <Oxygen/Graphics/Common/PipelineState.h>
+#include <sstream>
+
+// Pipeline enums to_string implementations
+
+auto oxygen::graphics::to_string(FillMode mode) -> std::string
+{
+    switch (mode) {
+    case FillMode::kSolid:
+        return "Solid";
+    case FillMode::kWireframe:
+        return "Wireframe";
+    }
+
+    return "__Unsupported__";
+}
+
+auto oxygen::graphics::to_string(CullMode mode) -> std::string
+{
+    if (mode == CullMode::kNone) {
+        return "None";
+    }
+
+    std::ostringstream oss;
+    if ((mode & CullMode::kFront) != CullMode::kNone) {
+        oss << "Front";
+    }
+    if ((mode & CullMode::kBack) != CullMode::kNone) {
+        if (!oss.str().empty()) {
+            oss << "|";
+        }
+        oss << "Back";
+    }
+
+    if (oss.str().empty()) {
+        return "__Unsupported__";
+    }
+    return oss.str();
+}
+
+auto oxygen::graphics::to_string(CompareOp op) -> std::string
+{
+    switch (op) {
+    case CompareOp::kNever:
+        return "Never";
+    case CompareOp::kLess:
+        return "Less";
+    case CompareOp::kEqual:
+        return "Equal";
+    case CompareOp::kLessOrEqual:
+        return "LessEqual";
+    case CompareOp::kGreater:
+        return "Greater";
+    case CompareOp::kNotEqual:
+        return "NotEqual";
+    case CompareOp::kGreaterOrEqual:
+        return "GreaterEqual";
+    case CompareOp::kAlways:
+        return "Always";
+    }
+
+    return "__Unsupported__";
+}
+
+auto oxygen::graphics::to_string(BlendFactor v) -> std::string
+{
+    switch (v) {
+    case BlendFactor::kZero:
+        return "Zero";
+    case BlendFactor::kOne:
+        return "One";
+    case BlendFactor::kSrcColor:
+        return "SrcColor";
+    case BlendFactor::kInvSrcColor:
+        return "InvSrcColor";
+    case BlendFactor::kSrcAlpha:
+        return "SrcAlpha";
+    case BlendFactor::kInvSrcAlpha:
+        return "InvSrcAlpha";
+    case BlendFactor::kDestColor:
+        return "DestColor";
+    case BlendFactor::kInvDestColor:
+        return "InvDestColor";
+    case BlendFactor::kDestAlpha:
+        return "DestAlpha";
+    case BlendFactor::kInvDestAlpha:
+        return "InvDestAlpha";
+    }
+
+    return "__Unsupported__";
+}
+
+auto oxygen::graphics::to_string(BlendOp op) -> std::string
+{
+    switch (op) {
+    case BlendOp::kAdd:
+        return "Add";
+    case BlendOp::kSubtract:
+        return "Subtract";
+    case BlendOp::kRevSubtract:
+        return "RevSubtract";
+    case BlendOp::kMin:
+        return "Min";
+    case BlendOp::kMax:
+        return "Max";
+    }
+
+    return "__Unsupported__";
+}
+
+auto oxygen::graphics::to_string(ColorWriteMask mask) -> std::string
+{
+    if (mask == ColorWriteMask::kAll) {
+        return "All";
+    }
+    if (mask == ColorWriteMask::kNone) {
+        return "None";
+    }
+    std::ostringstream oss;
+    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kR)) != 0) {
+        oss << "R";
+    }
+    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kG)) != 0) {
+        oss << "G";
+    }
+    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kB)) != 0) {
+        oss << "B";
+    }
+    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kA)) != 0) {
+        oss << "A";
+    }
+
+    if (oss.str().empty()) {
+        return "__Unsupported__";
+    }
+    return oss.str();
+}
+
+auto oxygen::graphics::to_string(PrimitiveType t) -> std::string
+{
+    switch (t) {
+    case PrimitiveType::kPointList:
+        return "PointList";
+    case PrimitiveType::kLineList:
+        return "LineList";
+    case PrimitiveType::kLineStrip:
+        return "LineStrip";
+    case PrimitiveType::kLineStripWithRestartEnable:
+        return "LineStripWithRestart";
+    case PrimitiveType::kTriangleList:
+        return "TriangleList";
+    case PrimitiveType::kTriangleStrip:
+        return "TriangleStrip";
+    case PrimitiveType::kTriangleStripWithRestartEnable:
+        return "TriangleStripWithRestart";
+    case PrimitiveType::kPatchList:
+        return "PatchList";
+    case PrimitiveType::kLineListWithAdjacency:
+        return "LineListWithAdjacency";
+    case PrimitiveType::kLineStripWithAdjacency:
+        return "LineStripWithAdjacency";
+    case PrimitiveType::kTriangleListWithAdjacency:
+        return "TriangleListWithAdjacency";
+    case PrimitiveType::kTriangleStripWithAdjacency:
+        return "TriangleStripWithAdjacency";
+    }
+
+    return "__Unsupported__";
 }
