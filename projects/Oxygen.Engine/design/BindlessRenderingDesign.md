@@ -406,7 +406,7 @@ registry.UnRegisterResource(*texture);
 - `DescriptorHandle` encapsulates the shader-visible index for bindless access.
 - The application is responsible for creating resources and view descriptions.
 
-## Root state and descriptor tables setup
+## 6. ✓ Root state and descriptor tables setup
 
 ### Automatic Bindless Setup Flow
 
@@ -506,7 +506,7 @@ This approach minimizes state changes between draw calls and allows for
 efficient dynamic resource binding, significantly reducing API overhead in
 complex scenes.
 
-## Testing Implemented
+## 7. ✓ Testing Implemented
 
 - `src/Oxygen/Graphics/Common/Test/DescriptorHandle_test.cpp`
   *Unit tests for DescriptorHandle, covering creation, movement, validity, and RAII behavior.*
@@ -547,7 +547,7 @@ complex scenes.
 - `src/Oxygen/Graphics/Direct3D12/Test/Bindless/D3D12HeapAllocationStrategy_test.cpp`
   *Unit tests for the D3D12 heap allocation strategy.*
 
-## Thread Safety Design
+## 8. ✓ Thread Safety Design
 
 The `BaseDescriptorAllocator` ensures thread safety through several mechanisms:
 
