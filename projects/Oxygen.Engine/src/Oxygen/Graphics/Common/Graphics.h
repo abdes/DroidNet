@@ -11,8 +11,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Core/Types.h>
-#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
@@ -45,8 +43,8 @@ public:
     OXYGEN_GFX_API explicit Graphics(std::string_view name);
     OXYGEN_GFX_API ~Graphics() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(Graphics);
-    OXYGEN_DEFAULT_MOVABLE(Graphics);
+    OXYGEN_MAKE_NON_COPYABLE(Graphics)
+    OXYGEN_DEFAULT_MOVABLE(Graphics)
 
     [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started) -> co::Co<> override;
     OXYGEN_GFX_API void Run() override;
