@@ -26,13 +26,14 @@ class Renderer;
 //! Represents a rendering surface, such as a window or off-screen target.
 /*
  A Surface defines a region where rendering occurs, which may be a window, a
- texture, or any other renderable target. For off-screen rendering, the surface
- does not have an associated swapchain, and its output is not presented directly
- to the display (e.g., for shadow maps, reflection maps, or post-processing).
+ texture, or any other target that can be rendered. For off-screen rendering,
+ the surface does not have an associated swapchain, and its output is not
+ presented directly to the display (e.g., for shadow maps, reflection maps, or
+ post-processing).
 
  The surface becomes usable only after being attached to a renderer. Resource
  allocation is deferred until this attachment, ensuring that GPU resources are
- created, managed, and destroyed in sync with the renderer's frame lifecycle.
+ created, managed, and destroyed in sync with the renderer frame lifecycle.
  This design enables correct synchronization, efficient resource reuse, and
  proper cleanup.
 
@@ -43,8 +44,8 @@ class Surface : public Composition, public Named {
 public:
     OXYGEN_GFX_API ~Surface() override;
 
-    OXYGEN_DEFAULT_COPYABLE(Surface);
-    OXYGEN_DEFAULT_MOVABLE(Surface);
+    OXYGEN_DEFAULT_COPYABLE(Surface)
+    OXYGEN_DEFAULT_MOVABLE(Surface)
 
     virtual void AttachRenderer(std::shared_ptr<Renderer> renderer) = 0;
     virtual void DetachRenderer() = 0;
