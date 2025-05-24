@@ -6,10 +6,14 @@
 
 #pragma once
 
+#include <limits>
+
 namespace oxygen::graphics {
 
 struct Color {
     float r, g, b, a;
+
+    static constexpr float epsilon = std::numeric_limits<float>::epsilon() * 100;
 
     Color()
         : r(0.f)
@@ -18,14 +22,15 @@ struct Color {
         , a(0.f)
     {
     }
-    Color(float c)
+
+    explicit Color(const float c)
         : r(c)
         , g(c)
         , b(c)
         , a(c)
     {
     }
-    Color(float _r, float _g, float _b, float _a)
+    Color(const float _r, const float _g, const float _b, const float _a)
         : r(_r)
         , g(_g)
         , b(_b)
@@ -33,8 +38,17 @@ struct Color {
     {
     }
 
-    bool operator==(const Color& other) const { return r == other.r && g == other.g && b == other.b && a == other.a; }
-    bool operator!=(const Color& other) const { return !(*this == other); }
+    auto operator==(const Color& other) const -> bool
+    {
+        auto almost_equal = [](const float x, const float y) {
+            return std::abs(x - y) <= epsilon * std::max({ 1.0f, std::abs(x), std::abs(y) });
+        };
+        return almost_equal(r, other.r)
+            && almost_equal(g, other.g)
+            && almost_equal(b, other.b)
+            && almost_equal(a, other.a);
+    }
+    auto operator!=(const Color& other) const -> bool { return !(*this == other); }
 };
 
 } // namespace oxygen::graphics
