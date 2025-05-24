@@ -80,7 +80,7 @@ namespace detail::channel {
 
             void await_suspend(Handle h)
             {
-                DLOG_F(2, "    ...channel {} receive {}",
+                DLOG_F(5, "    ...channel {} receive {}",
                     fmt::ptr(&GetReader().channel_), fmt::ptr(this));
                 this->DoSuspend(h);
             }
@@ -161,7 +161,7 @@ namespace detail::channel {
 
             void await_suspend(Handle h)
             {
-                DLOG_F(2, "    ...channel {} send {}",
+                DLOG_F(5, "    ...channel {} send {}",
                     fmt::ptr(&GetWriter().channel_), fmt::ptr(this));
                 this->DoSuspend(h);
             }

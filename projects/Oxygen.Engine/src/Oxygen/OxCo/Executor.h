@@ -205,7 +205,7 @@ private:
         if (running_ == nullptr) {
 #if !defined(NDEBUG)
             LOG_SCOPE_F(2, "Executor running");
-            DLOG_F(2, "Event loop ID: {}", fmt::ptr(event_loop_id_.Get()));
+            DLOG_F(5, "Event loop ID: {}", fmt::ptr(event_loop_id_.Get()));
 #endif
             Drain();
         }

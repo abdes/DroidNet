@@ -492,7 +492,7 @@ public:
 
     auto await_suspend(detail::Handle h) -> detail::Handle
     {
-        DLOG_F(2, "    ...Nursery::start() {}", fmt::ptr(this));
+        DLOG_F(5, "    ...Nursery::start() {}", fmt::ptr(this));
         detail::PromisePtr<void> promise(std::apply(
             [this](auto&&... args) {
                 return this->nursery_->MakePromise(std::move(callable_),
@@ -601,7 +601,7 @@ inline void Nursery::RethrowException() const
 inline void Nursery::Adopt(detail::BasePromise* promise)
 {
     DCHECK_NOTNULL_F(executor_, "Nursery is closed to new arrivals");
-    DLOG_F(2, "pr {} handed to nursery {} ({} tasks total)",
+    DLOG_F(5, "pr {} handed to nursery {} ({} tasks total)",
         fmt::ptr(promise), fmt::ptr(this), task_count_ + 1);
     if (exception_) {
         promise->Cancel();
