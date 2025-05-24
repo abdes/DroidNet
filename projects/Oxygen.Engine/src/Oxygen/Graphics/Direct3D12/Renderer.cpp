@@ -72,13 +72,13 @@ void Renderer::PrepareRecorderForRender(graphics::CommandRecorder& recorder)
 auto Renderer::CreateTexture(TextureDesc desc) const
     -> std::shared_ptr<graphics::Texture>
 {
-    return std::make_shared<Texture>(desc, GetPerFrameResourceManager());
+    return std::make_shared<Texture>(desc);
 }
 
 auto Renderer::CreateTextureFromNativeObject(TextureDesc desc, NativeObject native) const
     -> std::shared_ptr<graphics::Texture>
 {
-    return std::make_shared<Texture>(desc, native, GetPerFrameResourceManager());
+    return std::make_shared<Texture>(desc, native);
 }
 
 auto Renderer::CreateFramebuffer(FramebufferDesc desc)
@@ -89,7 +89,7 @@ auto Renderer::CreateFramebuffer(FramebufferDesc desc)
 
 auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<graphics::Buffer>
 {
-    return std::make_shared<Buffer>(GetPerFrameResourceManager(), desc);
+    return std::make_shared<Buffer>(desc);
 }
 
 auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash)

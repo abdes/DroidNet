@@ -11,7 +11,6 @@
 
 #include <d3d12.h>
 
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -30,9 +29,6 @@ namespace d3d12 {
     public:
         OXYGEN_D3D12_API explicit Texture(TextureDesc desc);
         OXYGEN_D3D12_API Texture(TextureDesc desc, NativeObject native);
-
-        OXYGEN_D3D12_API Texture(TextureDesc desc, graphics::detail::PerFrameResourceManager& resource_manager);
-        OXYGEN_D3D12_API Texture(TextureDesc desc, NativeObject native, graphics::detail::PerFrameResourceManager& resource_manager);
 
         OXYGEN_D3D12_API ~Texture() override;
 

@@ -168,48 +168,6 @@ Texture::Texture(TextureDesc desc, NativeObject native)
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
 
-Texture::Texture(
-    TextureDesc desc,
-    graphics::detail::PerFrameResourceManager& resource_manager)
-    : Base(desc.debug_name)
-    , desc_(std::move(desc))
-{
-    auto [resource, d3dmaAllocation] = CreateTextureResource(desc_);
-    resource_desc_ = resource->GetDesc();
-
-    AddComponent<GraphicResource>(
-        desc_.debug_name,
-        resource,
-        d3dmaAllocation);
-
-    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
-}
-
-Texture::Texture(
-    TextureDesc desc,
-    NativeObject native,
-    graphics::detail::PerFrameResourceManager& resource_manager)
-    : Base(desc.debug_name)
-    , desc_(std::move(desc))
-{
-    static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
-    auto* resource = native.AsPointer<ID3D12Resource>();
-    CHECK_NOTNULL_F(resource, "Invalid native object");
-
-    // Increment the reference count since we're creating a new owner
-    resource->AddRef();
-
-    resource_desc_ = resource->GetDesc();
-
-    AddComponent<GraphicResource>(
-        desc_.debug_name,
-        resource,
-        nullptr // No allocation object for native resources
-    );
-
-    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
-}
-
 Texture::~Texture()
 {
     DLOG_F(1, "destroying texture: {}", Base::GetName());

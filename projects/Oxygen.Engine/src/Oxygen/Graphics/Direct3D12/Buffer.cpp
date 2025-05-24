@@ -31,9 +31,7 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace oxygen::graphics::d3d12 {
 
-Buffer::Buffer(
-    graphics::detail::PerFrameResourceManager& resource_manager,
-    const BufferDesc& desc)
+Buffer::Buffer(const BufferDesc& desc)
     : Base(desc.debug_name)
     , desc_(desc)
 {
