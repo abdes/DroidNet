@@ -322,20 +322,80 @@ change and new files to create.
   - New and updated tests for pipeline creation, caching, concurrency, and error
     handling.
 
-### New Classes/Files to Create
+## D3D12 Pipeline State Caching and Root Signature Management
 
-- `src/Oxygen/Graphics/Common/PipelineState.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/PipelineStateUtils.h` / `.cpp`
+The D3D12 backend implements a dedicated `PipelineStateCache` component
+(`src/Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h/.cpp`) to
+efficiently manage the creation and reuse of pipeline state objects (PSOs) and
+root signatures. This cache is responsible for:
 
-### Files to Change
+- Storing graphics and compute PSOs, each paired with their corresponding root
+  signature, keyed by a hash of the pipeline description.
+- Avoiding redundant PSO and root signature creation, which is expensive in D3D12.
+- Providing fast lookup and retrieval of pipeline state for rendering.
 
-- `src/Oxygen/Graphics/Common/Renderer.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/Renderer.h` / `.cpp`
-- `src/Oxygen/Graphics/Common/CommandList.h` / `.cpp`
-- `src/Oxygen/Graphics/Common/CommandRecorder.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/Renderer.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/CommandList.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/CommandRecorder.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/PipelineStateUtils.h` / `.cpp`
-- `src/Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h` / `.cpp`
-- `src/Oxygen/Graphics/Common/Test/` (add/modify unit tests)
+### Root Signature Creation
+
+The root signature defines the interface between the application and shaders,
+specifying how resources are bound. In Oxygen's D3D12 backend, the root
+signature for bindless rendering is created with the following layout:
+
+- A single descriptor table at root parameter 0.
+- Two descriptor ranges:
+  - Range 0: 1 CBV at register b0 (heap index 0).
+  - Range 1: Unbounded SRVs at register t0, space0 (heap indices 1+).
+- The flag `D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED` is set
+  to enable true bindless access.
+
+This layout is designed to match both the engine's expectations and the
+requirements of bindless rendering in D3D12. To ensure compatibility, all
+shaders intended for use with this root signature must:
+
+- Expect a single descriptor table at root parameter 0.
+- Use register b0 for the per-draw or per-frame constant buffer (CBV), which
+  will always be at heap index 0.
+- Access shader resource views (SRVs) using register t0, space0, with indices
+  corresponding to the local (shader-visible) index in the bindless descriptor
+  heap (heap indices 1 and above).
+- Not assume any other root parameters or descriptor tables are present.
+- Be compiled with the appropriate root signature definition (either via HLSL
+  `RootSignature` attribute or external `.rs` file) that matches this layout, or
+  use the D3D12 root signature reflection mechanism to validate compatibility.
+
+If a shader expects a different root signature layout (e.g., additional root
+parameters, different register assignments, or non-bindless tables), it will not
+be compatible with this engine configuration. All engine-provided shaders and
+user-authored shaders must follow these conventions to ensure correct resource
+binding and predictable behavior.
+
+The root signature is created only once per unique pipeline configuration and
+reused for all compatible PSOs.
+
+### Pipeline State Object (PSO) Creation
+
+When a new pipeline is requested, the `PipelineStateCache`:
+
+1. Computes a hash of the pipeline description (graphics or compute).
+2. Checks if a PSO/root signature pair already exists in the cache for this
+   hash.
+3. If not present, creates a new root signature (if needed) and a new PSO using
+   the D3D12 API, translating the backend-agnostic pipeline description into
+   D3D12-specific structures.
+4. Stores the resulting PSO and root signature in the cache for future reuse.
+
+This process ensures that PSO and root signature creation is performed only when
+necessary, minimizing runtime overhead and maximizing performance.
+
+### Integration
+
+- The D3D12 `Renderer` and `CommandRecorder` components interact with the
+  `PipelineStateCache` to retrieve and bind the correct PSO and root signature
+  for each draw or dispatch call.
+- The cache exposes methods to retrieve the cached pipeline descriptions for
+  debugging and inspection.
+
+### Example Workflow
+
+```
+[Request Pipeline] → [PipelineStateCache Lookup] → [Create Root Signature if needed] → [Create PSO if needed] → [Cache and Return Entry]
+```
