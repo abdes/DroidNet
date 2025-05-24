@@ -11,9 +11,9 @@
 using oxygen::graphics::detail::FixedDescriptorHeapSegment;
 
 FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
-    IndexT capacity, IndexT base_index,
-    ResourceViewType view_type,
-    DescriptorVisibility visibility)
+    const IndexT capacity, const IndexT base_index,
+    const ResourceViewType view_type,
+    const DescriptorVisibility visibility)
     : capacity_(capacity)
     , view_type_(view_type)
     , visibility_(visibility)
@@ -23,13 +23,13 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
 {
     DLOG_F(1, "constructed: heap segment ({} / {}, base index: {}, capacity: {})",
         nostd::to_string(view_type_), nostd::to_string(visibility_),
-        base_index_, GetCapacity());
+        base_index_, capacity_);
 }
 
 //! Converts a global descriptor index to a local index within the segment.
-auto FixedDescriptorHeapSegment::ToLocalIndex(IndexT global_index) const noexcept -> IndexT
+auto FixedDescriptorHeapSegment::ToLocalIndex(const IndexT global_index) const noexcept -> IndexT
 {
-    auto local_index = global_index - base_index_;
+    const auto local_index = global_index - base_index_;
     if (local_index < 0 || local_index >= GetCapacity()) {
         LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range", global_index);
         return DescriptorHandle::kInvalidIndex;
@@ -38,14 +38,16 @@ auto FixedDescriptorHeapSegment::ToLocalIndex(IndexT global_index) const noexcep
 }
 
 //! Checks if a local index is currently allocated in the segment.
-auto FixedDescriptorHeapSegment::IsAllocated(uint32_t local_index) const noexcept -> bool
+auto FixedDescriptorHeapSegment::IsAllocated(const uint32_t local_index) const noexcept -> bool
 {
-    return local_index < next_index_ && !released_flags_[local_index];
+    return std::cmp_greater_equal(local_index, 0)
+        && local_index < next_index_
+        && !released_flags_[local_index];
 }
 
 inline auto FixedDescriptorHeapSegment::FreeListSize() const -> IndexT
 {
-    size_t free_count = free_list_.size();
+    const size_t free_count = free_list_.size();
     DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
         "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
     return static_cast<IndexT>(free_count);
@@ -65,7 +67,7 @@ FixedDescriptorHeapSegment::~FixedDescriptorHeapSegment() noexcept
 
     DLOG_F(1, "destroyed: heap segment ({} / {}, base index: {}, capacity: {})",
         nostd::to_string(view_type_), nostd::to_string(visibility_),
-        base_index_, GetCapacity());
+        base_index_, capacity_);
 }
 
 auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
@@ -73,13 +75,13 @@ auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
     LOG_SCOPE_F(2, "Allocate descriptor index");
     LOG_F(2, "segment ({} / {}, base index: {}, capacity: {})",
         nostd::to_string(view_type_), nostd::to_string(visibility_),
-        base_index_, GetCapacity());
+        base_index_, capacity_);
 
     auto global_index = DescriptorHandle::kInvalidIndex;
 
     // First try to reuse a released descriptor (LIFO for better cache locality)
     if (!free_list_.empty()) {
-        auto local_index = free_list_.back();
+        const auto local_index = free_list_.back();
         free_list_.pop_back();
         released_flags_[local_index] = false;
         DLOG_F(2, "recycled descriptor with local index {} (remaining: {}/{})",
@@ -87,7 +89,7 @@ auto FixedDescriptorHeapSegment::Allocate() noexcept -> uint32_t
         global_index = base_index_ + local_index;
     } else if (next_index_ < GetCapacity()) {
         // If no freed descriptors, allocate a new one
-        auto local_index = next_index_++;
+        const auto local_index = next_index_++;
         DLOG_F(2, "allocated new local index {} (remaining: {}/{})",
             local_index, GetAvailableCount(), GetCapacity());
         global_index = base_index_ + local_index;
@@ -168,7 +170,7 @@ auto FixedDescriptorHeapSegment::GetShaderVisibleIndex(const DescriptorHandle& h
     }
 
     // Find the local index from the global index
-    auto local_index = ToLocalIndex(handle.GetIndex());
+    const auto local_index = ToLocalIndex(handle.GetIndex());
     if (local_index == DescriptorHandle::kInvalidIndex) {
         return DescriptorHandle::kInvalidIndex;
     }

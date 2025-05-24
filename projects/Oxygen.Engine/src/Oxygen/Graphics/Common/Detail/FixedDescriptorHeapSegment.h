@@ -22,7 +22,7 @@ public:
         ResourceViewType view_type,
         DescriptorVisibility visibility);
 
-    OXYGEN_GFX_API virtual ~FixedDescriptorHeapSegment() noexcept override;
+    OXYGEN_GFX_API ~FixedDescriptorHeapSegment() noexcept override;
 
     OXYGEN_MAKE_NON_COPYABLE(FixedDescriptorHeapSegment)
     OXYGEN_DEFAULT_MOVABLE(FixedDescriptorHeapSegment)
@@ -44,7 +44,7 @@ public:
      adds the released index to the free list for future reuse.
      Ensures the same descriptor cannot be released twice.
     */
-    OXYGEN_GFX_API auto Release(const IndexT index) noexcept -> bool override;
+    OXYGEN_GFX_API auto Release(IndexT index) noexcept -> bool override;
 
     //! Returns the number of descriptors currently available in this segment.
     [[nodiscard]] OXYGEN_GFX_API auto GetAvailableCount() const noexcept -> IndexT override;
@@ -69,9 +69,9 @@ protected:
     OXYGEN_GFX_API void ReleaseAll();
 
 private:
-    auto FreeListSize() const -> IndexT;
-    auto ToLocalIndex(IndexT global_index) const noexcept -> IndexT;
-    auto IsAllocated(uint32_t local_index) const noexcept -> bool;
+    [[nodiscard]] auto FreeListSize() const -> IndexT;
+    [[nodiscard]] auto ToLocalIndex(IndexT global_index) const noexcept -> IndexT;
+    [[nodiscard]] auto IsAllocated(uint32_t local_index) const noexcept -> bool;
 
     IndexT capacity_;
     ResourceViewType view_type_;
