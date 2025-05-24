@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -61,7 +62,7 @@ public:
     {
         // Release all heaps, but do a sanity check to ensure all
         // descriptors have been released.
-        for (auto& [key, desc, segments] : heaps_) {
+        for (auto& [key, segments] : heaps_) {
             auto segments_count = segments.size();
             if (segments_count == 0) {
                 continue;
@@ -98,18 +99,21 @@ public:
         const DescriptorVisibility visibility) -> DescriptorHandle override
     {
         std::lock_guard lock(mutex_);
-        auto& [_, desc, segments] = heaps_.at(HeapIndex(view_type, visibility));
+
+        auto& strategy = GetAllocationStrategy();
+        auto& key = keys_.at(HeapIndex(view_type, visibility));
+        auto& segments = heaps_[key];
 
         // If no segments exist, create initial segment
         if (segments.empty()) {
+            const auto& desc = strategy.GetHeapDescription(key);
             const auto capacity = visibility == DescriptorVisibility::kShaderVisible
-                ? desc->shader_visible_capacity
-                : desc->cpu_visible_capacity;
+                ? desc.shader_visible_capacity
+                : desc.cpu_visible_capacity;
             if (capacity == 0) {
                 throw std::runtime_error("Failed to allocate descriptor: zero capacity");
             }
             // Use the base index from the allocation strategy
-            auto& strategy = GetAllocationStrategy();
             const auto base_index = strategy.GetHeapBaseIndex(view_type, visibility);
             auto segment = CreateHeapSegment(capacity, base_index, view_type, visibility);
             if (!segment) {
@@ -130,13 +134,14 @@ public:
         }
 
         DCHECK_F(!segments.empty(), "we should have at least one segment");
-        DCHECK_NOTNULL_F(desc, "Heap descriptor in heaps_ table should never be null");
+
+        auto& desc = strategy.GetHeapDescription(key);
 
         // If we couldn't allocate from existing segments, try to create a new one
-        if (desc->allow_growth && segments.size() < (1 + desc->max_growth_iterations)) {
+        if (desc.allow_growth && segments.size() < (1 + desc.max_growth_iterations)) {
             const auto& last = segments.back();
             const auto base_index = last->GetBaseIndex() + last->GetCapacity();
-            const auto capacity = CalculateGrowthCapacity(desc->growth_factor, last->GetCapacity());
+            const auto capacity = CalculateGrowthCapacity(desc.growth_factor, last->GetCapacity());
             if (auto segment = CreateHeapSegment(capacity, base_index, view_type, visibility)) {
                 segments.push_back(std::move(segment));
                 if (const auto index = segments.back()->Allocate();
@@ -161,15 +166,17 @@ public:
         if (!handle.IsValid()) {
             return;
         }
+        if (handle.GetAllocator() != this) {
+            throw std::runtime_error("cannot release a handle that does not belong to this allocator");
+        }
 
-        // This is now safe because Allocate guarantees non-overlapping index ranges.
         std::lock_guard lock(mutex_);
         const auto view_type = handle.GetViewType();
         const auto visibility = handle.GetVisibility();
         const auto index = handle.GetIndex();
-        const auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
+        const auto& key = keys_.at(HeapIndex(view_type, visibility));
+        const auto& segments = heaps_.at(key);
         for (const auto& segment : segments) {
-            // Only release to the segment that owns the index range.
             const auto base = segment->GetBaseIndex();
             const auto capacity = segment->GetCapacity();
             if (index >= base && index < base + capacity) {
@@ -177,7 +184,7 @@ public:
                     handle.Invalidate();
                     return;
                 }
-                break; // If the owning segment fails, don't try others.
+                break;
             }
         }
         throw std::runtime_error("Failed to release descriptor: not found in any segment");
@@ -196,12 +203,17 @@ public:
         return AbortOnFailed(__func__, [&]() {
             std::lock_guard lock(mutex_);
             uint32_t total = 0;
-            const auto& [_, desc, segments] = heaps_.at(HeapIndex(view_type, visibility));
-            for (const auto& segment : segments) {
-                total += segment->GetAvailableCount();
+            const auto& key = keys_.at(HeapIndex(view_type, visibility));
+            auto it = heaps_.find(key);
+            if (it != heaps_.end()) {
+                const auto& segments = it->second;
+                for (const auto& segment : segments) {
+                    total += segment->GetAvailableCount();
+                }
             }
-            DCHECK_NOTNULL_F(desc, "Heap description in the heaps_ table should never be null");
-            if (total == 0 && desc->allow_growth) {
+            const auto& desc = heap_strategy_->GetHeapDescription(key);
+            DCHECK_NOTNULL_F(&desc, "Heap description in the heaps_ table should never be null");
+            if (total == 0 && desc.allow_growth) {
                 return GetInitialCapacity(view_type, visibility);
             }
             return total;
@@ -224,7 +236,8 @@ public:
             const auto view_type = handle.GetViewType();
             const auto visibility = handle.GetVisibility();
             const auto index = handle.GetIndex();
-            const auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
+            const auto& key = keys_.at(HeapIndex(view_type, visibility));
+            const auto& segments = heaps_.at(key);
 
             return std::ranges::any_of(segments, [&](const auto& segment) {
                 const uint32_t base_index = segment->GetBaseIndex();
@@ -247,13 +260,25 @@ public:
     {
         return AbortOnFailed(__func__, [&]() {
             std::lock_guard lock(mutex_);
+            const auto& key = keys_.at(HeapIndex(view_type, visibility));
+            const auto& segments = heaps_.at(key);
             uint32_t total = 0;
-            for (const auto& segment : heaps_.at(HeapIndex(view_type, visibility)).segments) {
+            for (const auto& segment : segments) {
                 total += segment->GetAllocatedCount();
             }
 
             return total;
         });
+    }
+
+    [[nodiscard]] auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT override
+    {
+        std::lock_guard lock(mutex_);
+        const auto segment = GetSegmentForHandleNoLock(handle);
+        if (!segment) {
+            return DescriptorHandle::kInvalidIndex;
+        }
+        return (*segment)->GetShaderVisibleIndex(handle);
     }
 
 protected:
@@ -289,7 +314,7 @@ protected:
         const ResourceViewType view_type,
         const DescriptorVisibility visibility) const -> uint32_t
     {
-        const std::string& heap_key = heaps_.at(HeapIndex(view_type, visibility)).key;
+        const std::string& heap_key = keys_.at(HeapIndex(view_type, visibility));
         DCHECK_F(!heap_key.empty(), "Heap key in the heaps_ table should never be empty");
         DCHECK_F(heap_key != "__Unknown__:__Unknown__", "Heap key in the heaps_ table should never be unknown");
 
@@ -323,16 +348,45 @@ protected:
     [[nodiscard]] auto GetSegmentForHandle(const DescriptorHandle& handle) const
         -> std::optional<const DescriptorHeapSegment*>
     {
-        if (!handle.IsValid()) {
+        std::lock_guard lock(mutex_);
+        return GetSegmentForHandleNoLock(handle);
+    }
+
+    struct HeapView {
+        const HeapDescription* description;
+        std::span<const std::unique_ptr<DescriptorHeapSegment>> segments;
+    };
+
+    //! Returns a vector of HeapView for all heaps that have at least one segment.
+    auto Heaps() const -> std::vector<HeapView>
+    {
+        std::lock_guard lock(mutex_);
+
+        const auto& strategy = GetAllocationStrategy();
+        std::vector<HeapView> result;
+        for (const auto& [key, segments] : heaps_) {
+            if (!segments.empty()) {
+                result.push_back(HeapView {
+                    &strategy.GetHeapDescription(key),
+                    std::span<const std::unique_ptr<DescriptorHeapSegment>>(segments) });
+            }
+        }
+        return result;
+    }
+
+private:
+    [[nodiscard]] auto GetSegmentForHandleNoLock(const DescriptorHandle& handle) const
+        -> std::optional<const DescriptorHeapSegment*>
+    {
+        if (!handle.IsValid() || handle.GetAllocator() != this) {
             return std::nullopt;
         }
-
-        std::lock_guard lock(mutex_);
 
         const auto view_type = handle.GetViewType();
         const auto visibility = handle.GetVisibility();
         const auto index = handle.GetIndex();
-        const auto& segments = heaps_[HeapIndex(view_type, visibility)].segments;
+        const auto& key = keys_.at(HeapIndex(view_type, visibility));
+        const auto& segments = heaps_.at(key);
 
         for (const auto& segment : segments) {
             const auto base = segment->GetBaseIndex();
@@ -345,27 +399,6 @@ protected:
         return std::nullopt;
     }
 
-    struct HeapView {
-        const HeapDescription* description;
-        std::span<const std::unique_ptr<DescriptorHeapSegment>> segments;
-    };
-
-    //! Returns a vector of HeapView for all heaps that have at least one segment.
-    auto Heaps() const -> std::vector<HeapView>
-    {
-        std::lock_guard lock(mutex_);
-        std::vector<HeapView> result;
-        for (const auto& heap : heaps_) {
-            if (!heap.segments.empty()) {
-                result.push_back(HeapView {
-                    heap.description,
-                    std::span<const std::unique_ptr<DescriptorHeapSegment>>(heap.segments) });
-            }
-        }
-        return result;
-    }
-
-private:
     /**
      * Calculates the next capacity for heap growth, rounding to the nearest integer and clamping to IndexT max if needed.
      * Logs a warning if the result would overflow IndexT.
@@ -414,10 +447,7 @@ private:
                 try {
                     const size_t idx = HeapIndex(view_type, visibility);
                     auto key = heap_strategy_->GetHeapKey(view_type, visibility);
-                    heaps_[idx] = HeapInfo {
-                        .key = key,
-                        .description = &heap_strategy_->GetHeapDescription(key),
-                    };
+                    keys_[idx] = key;
                 } catch (const std::exception& ex) {
                     DLOG_F(2, "combination ({}, {}) not supported by strategy: {}",
                         nostd::to_string(view_type), nostd::to_string(visibility), ex.what());
@@ -461,15 +491,9 @@ private:
         return static_cast<size_t>(vis) * kNumResourceViewTypes + static_cast<size_t>(type);
     }
 
-    //! Helper struct to store heap information.
-    struct HeapInfo {
-        std::string key { "__Unknown__:__Unknown__" };
-        const HeapDescription* description { nullptr };
-        std::vector<std::unique_ptr<DescriptorHeapSegment>> segments {};
-    };
-
-    //! Precomputed heap information
-    std::array<HeapInfo, kNumResourceViewTypes * kNumVisibilities> heaps_;
+    std::array<std::string, kNumResourceViewTypes * kNumVisibilities> keys_;
+    using Segments = std::vector<std::unique_ptr<DescriptorHeapSegment>>;
+    std::unordered_map<std::string, Segments> heaps_ {};
 
     //! Thread synchronization mutex.
     mutable std::mutex mutex_;

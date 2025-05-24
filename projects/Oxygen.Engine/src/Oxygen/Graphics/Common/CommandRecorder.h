@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/VariantHelpers.h> // For always_false_v
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
@@ -65,14 +66,18 @@ public:
     OXYGEN_GFX_API virtual void Begin();
     OXYGEN_GFX_API virtual auto End() -> CommandList*;
 
+    virtual void SetPipelineState(GraphicsPipelineDesc desc) = 0;
+    virtual void SetPipelineState(ComputePipelineDesc desc) = 0;
+
+    virtual void SetupBindlessRendering() = 0;
+
+    virtual void SetViewport(const ViewPort& viewport) = 0;
+    virtual void SetScissors(const Scissors& scissors) = 0;
+
     // Graphics commands
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
-
-    virtual void SetViewport(const ViewPort& viewport) = 0;
-    virtual void SetScissors(const Scissors& scissors) = 0;
-    virtual void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) = 0;
 
     virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
 
@@ -106,6 +111,12 @@ public:
         = 0;
 
     virtual void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) = 0;
+
+    virtual void CopyBuffer(
+        Buffer& dst, size_t dst_offset,
+        const Buffer& src, size_t src_offset,
+        size_t size)
+        = 0;
 
     //! @{
     //! Resource state management and barriers.

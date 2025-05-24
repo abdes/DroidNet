@@ -223,6 +223,8 @@ namespace graphics {
         OXYGEN_GFX_API virtual void BeginFrame();
         OXYGEN_GFX_API virtual void EndFrame();
 
+        virtual void PrepareRecorderForRender(CommandRecorder& recorder) = 0;
+
     private:
         void HandleSurfaceResize(Surface& surface);
 

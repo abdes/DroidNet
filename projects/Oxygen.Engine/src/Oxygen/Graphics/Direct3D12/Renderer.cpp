@@ -10,12 +10,14 @@
 #include <type_traits>
 #include <utility>
 
+#include "Renderer.h"
 #include <Oxygen/Graphics/Common/Detail/Bindless.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -32,12 +34,16 @@ Renderer::Renderer(
     std::weak_ptr<oxygen::Graphics> gfx_weak,
     std::weak_ptr<Surface> surface_weak,
     const uint32_t frames_in_flight)
-    : graphics::Renderer(name, std::move(gfx_weak), std::move(surface_weak), frames_in_flight)
+    : graphics::Renderer(name, gfx_weak, std::move(surface_weak), frames_in_flight)
 {
+    DCHECK_F(!gfx_weak.expired(), "Graphics object is expired");
+
+    auto& gfx = static_cast<d3d12::Graphics&>(*gfx_weak.lock());
     auto allocator = std::make_unique<DescriptorAllocator>(
         std::make_shared<D3D12HeapAllocationStrategy>(),
-        GetGraphics().GetCurrentDevice());
+        gfx.GetCurrentDevice());
     AddComponent<Bindless>(std::move(allocator)); // TODO: make strategy configurable
+    AddComponent<detail::PipelineStateCache>(&gfx);
 }
 
 auto Renderer::GetGraphics() -> d3d12::Graphics&
@@ -55,7 +61,12 @@ auto Renderer::GetGraphics() const -> const d3d12::Graphics&
 auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     -> std::unique_ptr<graphics::CommandRecorder>
 {
-    return std::make_unique<CommandRecorder>(&GetPerFrameResourceManager(), command_list, target_queue);
+    return std::make_unique<CommandRecorder>(this, command_list, target_queue);
+}
+
+void Renderer::PrepareRecorderForRender(graphics::CommandRecorder& recorder)
+{
+    // TODO: confirm nothing to do here
 }
 
 auto Renderer::CreateTexture(TextureDesc desc) const
@@ -79,4 +90,18 @@ auto Renderer::CreateFramebuffer(FramebufferDesc desc)
 auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<graphics::Buffer>
 {
     return std::make_shared<Buffer>(GetPerFrameResourceManager(), desc);
+}
+
+auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash)
+    -> detail::PipelineStateCache::Entry
+{
+    auto& cache = GetComponent<detail::PipelineStateCache>();
+    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
+}
+
+auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
+    -> detail::PipelineStateCache::Entry
+{
+    auto& cache = GetComponent<detail::PipelineStateCache>();
+    return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }

@@ -26,10 +26,9 @@ void DeferredObjectRelease(T*& resource,
 //! Registers a resource held by a `shared_ptr` for deferred release, and resets
 //! the pointer. The resource's reference count will stay > 0 for as long as it
 //! is waiting to be released.
-template <HasReleaseMethod T>
+template <typename T>
 void DeferredObjectRelease(std::shared_ptr<T>& resource,
     detail::PerFrameResourceManager& resource_manager) noexcept
-    requires HasReleaseMethod<T>
 {
     if (resource) {
         resource_manager.RegisterDeferredRelease(resource);

@@ -4,10 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <stdexcept>
+
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 
-auto oxygen::graphics::d3d12::detail::ConvertResourceStates(ResourceStates states)
-    -> D3D12_RESOURCE_STATES
+namespace oxygen::graphics::d3d12::detail {
+
+auto ConvertResourceStates(ResourceStates states) -> D3D12_RESOURCE_STATES
 {
     if (states == ResourceStates::kUnknown) {
         // kUnknown (0) implies no specific state, which is D3D12_RESOURCE_STATE_COMMON (0).
@@ -75,6 +78,226 @@ auto oxygen::graphics::d3d12::detail::ConvertResourceStates(ResourceStates state
     // being ORed in doesn't change the specific states.
     // If d3d_states is still 0 (D3D12_RESOURCE_STATE_COMMON) after all checks,
     // it means no specific mappable states were found (e.g., only kUndefined was set),
-    // so D3D12_RESOURCE_STATE_COMMON is the correct default.
-    return d3d_states;
+    // so D3D12_RESOURCE_STATE_COMMON is the correct default.    return d3d_states;
 }
+
+auto ConvertFillMode(FillMode mode) -> D3D12_FILL_MODE
+{
+    switch (mode) {
+    case FillMode::kSolid:
+        return D3D12_FILL_MODE_SOLID;
+    case FillMode::kWireframe:
+        return D3D12_FILL_MODE_WIREFRAME;
+    default:
+        throw std::runtime_error("Invalid fill mode");
+    }
+}
+
+auto ConvertCullMode(CullMode mode) -> D3D12_CULL_MODE
+{
+    switch (mode) {
+    case CullMode::kNone:
+        return D3D12_CULL_MODE_NONE;
+    case CullMode::kFront:
+        return D3D12_CULL_MODE_FRONT;
+    case CullMode::kBack:
+        return D3D12_CULL_MODE_BACK;
+    case CullMode::kFrontAndBack:
+        throw std::runtime_error("D3D12 doesn't support front and back face culling");
+    default:
+        throw std::runtime_error("Invalid cull mode");
+    }
+}
+
+auto ConvertCompareOp(CompareOp op) -> D3D12_COMPARISON_FUNC
+{
+    switch (op) {
+    case CompareOp::kNever:
+        return D3D12_COMPARISON_FUNC_NEVER;
+    case CompareOp::kLess:
+        return D3D12_COMPARISON_FUNC_LESS;
+    case CompareOp::kEqual:
+        return D3D12_COMPARISON_FUNC_EQUAL;
+    case CompareOp::kLessOrEqual:
+        return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    case CompareOp::kGreater:
+        return D3D12_COMPARISON_FUNC_GREATER;
+    case CompareOp::kNotEqual:
+        return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+    case CompareOp::kGreaterOrEqual:
+        return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+    case CompareOp::kAlways:
+        return D3D12_COMPARISON_FUNC_ALWAYS;
+    default:
+        throw std::runtime_error("Invalid comparison op");
+    }
+}
+
+auto ConvertBlendFactor(BlendFactor factor) -> D3D12_BLEND
+{
+    switch (factor) {
+    case BlendFactor::kZero:
+        return D3D12_BLEND_ZERO;
+    case BlendFactor::kOne:
+        return D3D12_BLEND_ONE;
+    case BlendFactor::kSrcColor:
+        return D3D12_BLEND_SRC_COLOR;
+    case BlendFactor::kInvSrcColor:
+        return D3D12_BLEND_INV_SRC_COLOR;
+    case BlendFactor::kSrcAlpha:
+        return D3D12_BLEND_SRC_ALPHA;
+    case BlendFactor::kInvSrcAlpha:
+        return D3D12_BLEND_INV_SRC_ALPHA;
+    case BlendFactor::kDestColor:
+        return D3D12_BLEND_DEST_COLOR;
+    case BlendFactor::kInvDestColor:
+        return D3D12_BLEND_INV_DEST_COLOR;
+    case BlendFactor::kDestAlpha:
+        return D3D12_BLEND_DEST_ALPHA;
+    case BlendFactor::kInvDestAlpha:
+        return D3D12_BLEND_INV_DEST_ALPHA;
+    case BlendFactor::kConstantColor:
+        return D3D12_BLEND_BLEND_FACTOR;
+    case BlendFactor::kInvConstantColor:
+        return D3D12_BLEND_INV_BLEND_FACTOR;
+    case BlendFactor::kSrc1Color:
+        return D3D12_BLEND_SRC1_COLOR;
+    case BlendFactor::kInvSrc1Color:
+        return D3D12_BLEND_INV_SRC1_COLOR;
+    case BlendFactor::kSrc1Alpha:
+        return D3D12_BLEND_SRC1_ALPHA;
+    case BlendFactor::kInvSrc1Alpha:
+        return D3D12_BLEND_INV_SRC1_ALPHA;
+    default:
+        throw std::runtime_error("Invalid blend factor");
+    }
+}
+
+auto ConvertBlendOp(BlendOp op) -> D3D12_BLEND_OP
+{
+    switch (op) {
+    case BlendOp::kAdd:
+        return D3D12_BLEND_OP_ADD;
+    case BlendOp::kSubtract:
+        return D3D12_BLEND_OP_SUBTRACT;
+    case BlendOp::kRevSubtract:
+        return D3D12_BLEND_OP_REV_SUBTRACT;
+    case BlendOp::kMin:
+        return D3D12_BLEND_OP_MIN;
+    case BlendOp::kMax:
+        return D3D12_BLEND_OP_MAX;
+    default:
+        throw std::runtime_error("Invalid blend op");
+    }
+}
+
+auto ConvertColorWriteMask(ColorWriteMask mask) -> UINT8
+{
+    UINT8 result = 0;
+    if ((mask & ColorWriteMask::kR) == ColorWriteMask::kR)
+        result |= D3D12_COLOR_WRITE_ENABLE_RED;
+    if ((mask & ColorWriteMask::kG) == ColorWriteMask::kG)
+        result |= D3D12_COLOR_WRITE_ENABLE_GREEN;
+    if ((mask & ColorWriteMask::kB) == ColorWriteMask::kB)
+        result |= D3D12_COLOR_WRITE_ENABLE_BLUE;
+    if ((mask & ColorWriteMask::kA) == ColorWriteMask::kA)
+        result |= D3D12_COLOR_WRITE_ENABLE_ALPHA;
+    return result;
+}
+
+auto ConvertPrimitiveType(PrimitiveType type) -> D3D12_PRIMITIVE_TOPOLOGY_TYPE
+{
+    switch (type) {
+    case PrimitiveType::kPointList:
+        return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+    case PrimitiveType::kLineList:
+    case PrimitiveType::kLineStrip:
+    case PrimitiveType::kLineStripWithRestartEnable:
+    case PrimitiveType::kLineListWithAdjacency:
+    case PrimitiveType::kLineStripWithAdjacency:
+        return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+    case PrimitiveType::kTriangleList:
+    case PrimitiveType::kTriangleStrip:
+    case PrimitiveType::kTriangleStripWithRestartEnable:
+    case PrimitiveType::kTriangleListWithAdjacency:
+    case PrimitiveType::kTriangleStripWithAdjacency:
+        return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    case PrimitiveType::kPatchList:
+        return D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
+    default:
+        throw std::runtime_error("Unsupported primitive topology type");
+    }
+}
+
+void TranslateRasterizerState(const RasterizerStateDesc& desc, D3D12_RASTERIZER_DESC& d3d_desc)
+{
+    d3d_desc.FillMode = ConvertFillMode(desc.fill_mode);
+    d3d_desc.CullMode = ConvertCullMode(desc.cull_mode);
+    d3d_desc.FrontCounterClockwise = desc.front_counter_clockwise;
+    d3d_desc.DepthBias = static_cast<INT>(desc.depth_bias);
+    d3d_desc.DepthBiasClamp = desc.depth_bias_clamp;
+    d3d_desc.SlopeScaledDepthBias = desc.slope_scaled_depth_bias;
+    d3d_desc.DepthClipEnable = desc.depth_clip_enable;
+    d3d_desc.MultisampleEnable = desc.multisample_enable;
+    d3d_desc.AntialiasedLineEnable = desc.antialiased_line_enable;
+    d3d_desc.ForcedSampleCount = 0;
+    d3d_desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+}
+
+void TranslateDepthStencilState(const DepthStencilStateDesc& desc, D3D12_DEPTH_STENCIL_DESC& d3d_desc)
+{
+    d3d_desc.DepthEnable = desc.depth_test_enable;
+    d3d_desc.DepthWriteMask = desc.depth_write_enable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+    d3d_desc.DepthFunc = ConvertCompareOp(desc.depth_func);
+    d3d_desc.StencilEnable = desc.stencil_enable;
+    d3d_desc.StencilReadMask = desc.stencil_read_mask;
+    d3d_desc.StencilWriteMask = desc.stencil_write_mask;
+
+    // Default stencil operations
+    d3d_desc.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+    d3d_desc.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+    d3d_desc.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+}
+
+void TranslateBlendState(const std::vector<BlendTargetDesc>& blend_targets, D3D12_BLEND_DESC& d3d_desc)
+{
+    d3d_desc.AlphaToCoverageEnable = FALSE;
+    d3d_desc.IndependentBlendEnable = TRUE;
+
+    // Initialize all render targets with default values
+    for (UINT i = 0; i < 8; ++i) {
+        d3d_desc.RenderTarget[i].BlendEnable = FALSE;
+        d3d_desc.RenderTarget[i].LogicOpEnable = FALSE;
+        d3d_desc.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
+        d3d_desc.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
+        d3d_desc.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
+        d3d_desc.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
+        d3d_desc.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
+        d3d_desc.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        d3d_desc.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
+        d3d_desc.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    }
+
+    // Update with provided blend targets
+    for (size_t i = 0; i < blend_targets.size() && i < 8; ++i) {
+        const auto& target = blend_targets[i];
+        auto& rt_blend = d3d_desc.RenderTarget[i];
+
+        rt_blend.BlendEnable = target.blend_enable;
+        rt_blend.SrcBlend = ConvertBlendFactor(target.src_blend);
+        rt_blend.DestBlend = ConvertBlendFactor(target.dest_blend);
+        rt_blend.BlendOp = ConvertBlendOp(target.blend_op);
+        rt_blend.SrcBlendAlpha = ConvertBlendFactor(target.src_blend_alpha);
+        rt_blend.DestBlendAlpha = ConvertBlendFactor(target.dest_blend_alpha);
+        rt_blend.BlendOpAlpha = ConvertBlendOp(target.blend_op_alpha);
+        rt_blend.RenderTargetWriteMask = target.write_mask ? ConvertColorWriteMask(*target.write_mask) : D3D12_COLOR_WRITE_ENABLE_ALL;
+    }
+}
+
+} // namespace oxygen::graphics::d3d12::detail

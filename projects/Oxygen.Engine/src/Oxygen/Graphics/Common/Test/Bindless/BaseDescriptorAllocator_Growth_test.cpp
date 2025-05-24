@@ -386,6 +386,7 @@ protected:
             [[nodiscard]] auto GetBaseIndex() const noexcept -> IndexT override { return 0; }
             [[nodiscard]] auto GetCapacity() const noexcept -> IndexT override { return 10; }
             [[nodiscard]] auto GetAllocatedCount() const noexcept -> IndexT override { return allocated_once ? 10 : 0; }
+            [[nodiscard]] auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT override { return 0; }
         };
         return std::make_unique<DummySegment>();
     }

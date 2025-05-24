@@ -159,8 +159,8 @@ void ResourceStateTracker::RequireTextureState(
 {
     const NativeObject native_object = texture.GetNativeResource();
 
-    LOG_F(4, "texture: require state 0x{:X} = {} {}",
-        reinterpret_cast<uintptr_t>(native_object.AsPointer<void>()),
+    LOG_F(4, "texture: require state {} = {} {}",
+        nostd::to_string(native_object),
         nostd::to_string(required_state), is_permanent ? " (permanent)" : "");
 
     auto& tracking_info = GetTrackingInfo(native_object);

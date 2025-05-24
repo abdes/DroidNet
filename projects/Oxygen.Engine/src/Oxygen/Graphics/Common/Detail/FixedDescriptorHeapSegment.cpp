@@ -26,6 +26,23 @@ FixedDescriptorHeapSegment::FixedDescriptorHeapSegment(
         base_index_, GetCapacity());
 }
 
+//! Converts a global descriptor index to a local index within the segment.
+auto FixedDescriptorHeapSegment::ToLocalIndex(IndexT global_index) const noexcept -> IndexT
+{
+    auto local_index = global_index - base_index_;
+    if (local_index < 0 || local_index >= GetCapacity()) {
+        LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range", global_index);
+        return DescriptorHandle::kInvalidIndex;
+    }
+    return local_index;
+}
+
+//! Checks if a local index is currently allocated in the segment.
+auto FixedDescriptorHeapSegment::IsAllocated(uint32_t local_index) const noexcept -> bool
+{
+    return local_index < next_index_ && !released_flags_[local_index];
+}
+
 inline auto FixedDescriptorHeapSegment::FreeListSize() const -> IndexT
 {
     size_t free_count = free_list_.size();
@@ -95,23 +112,15 @@ auto FixedDescriptorHeapSegment::Release(const IndexT index) noexcept -> bool
         nostd::to_string(view_type_), nostd::to_string(visibility_),
         base_index_, GetCapacity());
 
-    // Check if the index belongs to this segment
-    if (index < base_index_ || index >= base_index_ + GetCapacity()) {
-        LOG_F(WARNING, "index {} does not belong to me", index);
+    // Convert to local index
+    auto local_index = ToLocalIndex(index);
+    if (local_index == DescriptorHandle::kInvalidIndex) {
         return false;
     }
 
-    // Convert to local index
-    auto local_index = index - base_index_;
-    DCHECK_GE_F(local_index, 0U); // local_index should never be negative
-    DLOG_F(2, "index {} -> local index is {}", index, local_index);
-
     // Check if this index was never allocated or is beyond the currently allocated range.
-    // An index can only be released if it's < next_index_ (meaning it was allocated),
-    // AND it's not already in the free_list_ (checked by released_flags_).
-    if (local_index >= next_index_ || released_flags_[local_index]) {
-        LOG_F(WARNING, "local index is not valid ({} >= {} or already released)",
-            local_index, next_index_);
+    if (!IsAllocated(local_index)) {
+        LOG_F(WARNING, "local index {} is already released", local_index);
         return false;
     }
 
@@ -148,4 +157,28 @@ void FixedDescriptorHeapSegment::ReleaseAll()
     released_flags_.assign(capacity_, false);
     // Reset the next index to the base index
     next_index_ = 0;
+}
+
+auto FixedDescriptorHeapSegment::GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT
+{
+    // Check if the handle is valid
+    if (!handle.IsValid()) {
+        LOG_F(WARNING, "Invalid descriptor handle");
+        return DescriptorHandle::kInvalidIndex;
+    }
+
+    // Find the local index from the global index
+    auto local_index = ToLocalIndex(handle.GetIndex());
+    if (local_index == DescriptorHandle::kInvalidIndex) {
+        return DescriptorHandle::kInvalidIndex;
+    }
+
+    // Check if the descriptor is allocated
+    if (!IsAllocated(local_index)) {
+        LOG_F(WARNING, "Descriptor handle {} is not allocated", nostd::to_string(handle));
+        return DescriptorHandle::kInvalidIndex;
+    }
+
+    // Return the local index as the shader-visible index
+    return local_index;
 }

@@ -79,14 +79,11 @@ struct FramebufferAttachment {
 
      \param explicit_depth Optional explicit depth clear value.
      \param explicit_stencil Optional explicit stencil clear value.
-     \param format The format of the attachment, used to determine which clear
-            values are relevant.
      \return A pair containing the resolved depth and stencil clear values.
     */
     [[nodiscard]] OXYGEN_GFX_API auto ResolveDepthStencil(
         const std::optional<float>& explicit_depth,
-        const std::optional<uint8_t>& explicit_stencil,
-        oxygen::graphics::Format format) const
+        const std::optional<uint8_t>& explicit_stencil) const
         -> std::pair<float, uint8_t>;
 };
 

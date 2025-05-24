@@ -156,19 +156,15 @@ public:
         }
 
         // Convert to local index
-        auto local_index = index - base_index_;
-        DCHECK_GE_F(local_index, 0U); // local_index should never be negative
-
-        // Check if this index was never allocated or is beyond the currently allocated range.
-        // An index can only be released if it's < next_index_ (meaning it was allocated),
-        // AND it's not already in the free_list_ (checked by released_flags_).
-        if (local_index >= next_index_ && !released_flags_.test(local_index)) {
+        auto local_index = ToLocalIndex(index);
+        if (local_index == DescriptorHandle::kInvalidIndex) {
             return false;
         }
 
-        // Check if this index is already released
-        if (released_flags_.test(local_index)) {
-            return false; // Already released
+        // Check if this index was never allocated or is beyond the currently allocated range.
+        if (!IsAllocated(local_index)) {
+            LOG_F(WARNING, "local index {} is already released", local_index);
+            return false;
         }
 
         // Add to the free list
@@ -221,6 +217,31 @@ public:
     [[nodiscard]] auto GetAllocatedCount() const noexcept -> IndexT override
     {
         return next_index_ - FreeListSize();
+    }
+
+    [[nodiscard]] auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept
+        -> IndexT override
+    {
+        // Check if the handle is valid
+        if (!handle.IsValid()) {
+            LOG_F(WARNING, "Invalid descriptor handle");
+            return DescriptorHandle::kInvalidIndex;
+        }
+
+        // Find the local index from the global index
+        auto local_index = ToLocalIndex(handle.GetIndex());
+        if (local_index == DescriptorHandle::kInvalidIndex) {
+            return DescriptorHandle::kInvalidIndex;
+        }
+
+        // Check if the descriptor is allocated
+        if (!IsAllocated(local_index)) {
+            LOG_F(WARNING, "Descriptor handle {} is not allocated", nostd::to_string(handle));
+            return DescriptorHandle::kInvalidIndex;
+        }
+
+        // Return the local index as the shader-visible index
+        return local_index;
     }
 
 protected:
@@ -289,6 +310,24 @@ private:
         DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
             "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
         return static_cast<IndexT>(free_count);
+    }
+    auto ToLocalIndex(IndexT global_index) const noexcept -> IndexT
+    {
+        auto local_index = global_index - base_index_;
+        if (local_index < 0 || local_index >= GetCapacity()) {
+            LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range", global_index);
+            return DescriptorHandle::kInvalidIndex;
+        }
+        return local_index;
+    }
+
+    auto IsAllocated(uint32_t local_index) const noexcept -> bool
+    {
+        if (local_index < 0 || local_index >= GetCapacity()) {
+            LOG_F(WARNING, "Local index {} is out of range", local_index);
+            return false;
+        }
+        return !released_flags_[local_index];
     }
 
     DescriptorVisibility visibility_;

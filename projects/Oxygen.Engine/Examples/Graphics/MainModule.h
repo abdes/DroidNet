@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
@@ -66,14 +67,20 @@ private:
     std::shared_ptr<graphics::Surface> surface_;
     std::shared_ptr<graphics::Renderer> renderer_;
     StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_;
+
     std::shared_ptr<graphics::Buffer> vertex_buffer_;
-    std::shared_ptr<graphics::IShaderByteCode> vertex_shader_;
-    std::shared_ptr<graphics::IShaderByteCode> pixel_shader_;
+    std::shared_ptr<graphics::Buffer> constant_buffer_;
 
     co::Nursery* nursery_ { nullptr };
     float rotation_angle_ { 0.0f };
     void CreateTriangleVertexBuffer();
-    void UpdateRotatingTriangle();
+    void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder);
+    void EnsureConstantBufferForVertexSRV();
+    void EnsureVertexBufferSRV();
+    void EnsureTriangleDrawResources();
+
+    uint32_t vertex_srv_shader_visible_index_ { 1 };
+    bool recreate_cbv_ { true };
 };
 
 } // namespace oxygen::examples

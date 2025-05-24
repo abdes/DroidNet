@@ -213,6 +213,9 @@ public:
         GetComponent<ObjectMetaData>().SetName(name);
     }
 
+    /// Returns the GPU virtual address of the buffer, if supported by the API
+    [[nodiscard]] virtual uint64_t GetGPUVirtualAddress() const = 0;
+
 protected:
     /**
      * @brief Get a constant buffer view (CBV) for this buffer

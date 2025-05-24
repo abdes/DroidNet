@@ -139,7 +139,7 @@ auto Renderer::AcquireCommandRecorder(
     recorder->Begin();
 
     // Prepare the command list for bindless rendering
-    GetComponent<Bindless>().PrepareForRender(*recorder);
+    PrepareRecorderForRender(*recorder);
 
     return {
         recorder.release(),

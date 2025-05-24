@@ -29,8 +29,7 @@ auto FramebufferAttachment::ResolveClearColor(const std::optional<Color>& explic
 
 auto FramebufferAttachment::ResolveDepthStencil(
     const std::optional<float>& explicit_depth,
-    const std::optional<uint8_t>& explicit_stencil,
-    const oxygen::graphics::Format format) const
+    const std::optional<uint8_t>& explicit_stencil) const
     -> std::pair<float, uint8_t>
 {
     using oxygen::graphics::detail::FormatInfo;

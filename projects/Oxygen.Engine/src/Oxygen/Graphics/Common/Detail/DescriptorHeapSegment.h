@@ -104,6 +104,17 @@ public:
     //! Returns the current size (number of allocated descriptors) of this segment.
     [[nodiscard]] virtual auto GetAllocatedCount() const noexcept -> IndexT = 0;
 
+    //! Returns the shader-visible (local) index for a descriptor handle within
+    //! this segment.
+    /*!
+     \param handle The descriptor handle to query.
+
+     \return The local (shader-visible) index within this segment, if the handle
+             is valid, was allocated from this segment and is still allocated;
+             otherwise returns `DescriptorHandle::kInvalidIndex`.
+    */
+    [[nodiscard]] virtual auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT = 0;
+
     //! Checks if the segment is empty (i.e., no allocated descriptors).
     [[nodiscard]] auto IsEmpty() const noexcept { return GetAllocatedCount() == 0; }
 

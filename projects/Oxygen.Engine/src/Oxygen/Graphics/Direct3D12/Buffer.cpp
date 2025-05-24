@@ -101,8 +101,8 @@ Buffer::Buffer(
         // Use GraphicResource's built-in helper for deferred resource release
         AddComponent<GraphicResource>(
             Base::GetName(),
-            GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
-            GraphicResource::WrapForDeferredRelease<D3D12MA::Allocation>(allocation, resource_manager));
+            resource,
+            allocation);
     } catch (const std::exception& e) {
         ObjectRelease(resource);
         ObjectRelease(allocation);
@@ -129,6 +129,15 @@ Buffer::~Buffer()
 auto Buffer::GetResource() const -> ID3D12Resource*
 {
     return GetComponent<GraphicResource>().GetResource();
+}
+
+auto Buffer::GetGPUVirtualAddress() const -> uint64_t
+{
+    auto* resource = GetResource();
+    if (!resource) {
+        return 0;
+    }
+    return resource->GetGPUVirtualAddress();
 }
 
 auto Buffer::Map(const size_t offset, const size_t size) -> void*

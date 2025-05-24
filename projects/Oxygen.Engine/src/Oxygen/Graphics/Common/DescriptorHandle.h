@@ -165,6 +165,6 @@ private:
 };
 
 //! Converts a `DescriptorHandle` to a string representation.
-auto to_string(const DescriptorHandle& obj) -> std::string;
+OXYGEN_GFX_API auto to_string(const DescriptorHandle& obj) -> std::string;
 
 } // namespace oxygen::graphics

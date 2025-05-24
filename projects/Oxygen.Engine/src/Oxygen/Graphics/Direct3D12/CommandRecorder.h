@@ -12,6 +12,8 @@
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 #include <wrl/client.h>
 
@@ -37,12 +39,14 @@ namespace detail {
 
 } // namespace detail
 
+class Renderer;
+
 class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
     CommandRecorder(
-        graphics::detail::PerFrameResourceManager* resource_manager,
+        Renderer* renderer,
         graphics::CommandList* command_list,
         graphics::CommandQueue* target_queue);
 
@@ -54,22 +58,30 @@ public:
     void Begin() override;
     auto End() -> graphics::CommandList* override;
 
+    void SetPipelineState(GraphicsPipelineDesc desc) override;
+    void SetPipelineState(ComputePipelineDesc desc) override;
+
+    void SetupBindlessRendering() override;
+
     void SetViewport(const ViewPort& viewport) override;
     void SetScissors(const Scissors& scissors) override;
 
-    void SetPipelineState(const std::shared_ptr<IShaderByteCode>& vertex_shader, const std::shared_ptr<IShaderByteCode>& pixel_shader) override;
     void SetVertexBuffers(uint32_t num, const std::shared_ptr<graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
 
     void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
-    virtual void ClearFramebuffer(
+    void ClearFramebuffer(
         const oxygen::graphics::Framebuffer& framebuffer,
         std::optional<std::vector<std::optional<Color>>> color_clear_values = std::nullopt,
         std::optional<float> depth_clear_value = std::nullopt,
         std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
 
     void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
+    void CopyBuffer(
+        graphics::Buffer& dst, size_t dst_offset,
+        const graphics::Buffer& src, size_t src_offset,
+        size_t size) override;
 
     //! Binds the provided shader-visible descriptor heaps to the underlying
     //! D3D12 command list.
@@ -83,11 +95,10 @@ private:
 
     void ResetState();
 
-    void CreateRootSignature();
+    Renderer* renderer_;
 
-    graphics::detail::PerFrameResourceManager* resource_manager_;
-    std::unique_ptr<ID3D12PipelineState> pipeline_state_ {};
-    std::unique_ptr<ID3D12RootSignature> root_signature_ {};
+    size_t graphics_pipeline_hash_ = 0;
+    size_t compute_pipeline_hash_ = 0;
 };
 
 } // namespace oxygen::graphics::d3d12

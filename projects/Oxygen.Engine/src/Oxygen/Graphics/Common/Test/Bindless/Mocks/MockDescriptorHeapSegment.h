@@ -25,6 +25,7 @@ public:
     MOCK_METHOD(IndexT, GetBaseIndex, (), (const, override, noexcept));
     MOCK_METHOD(IndexT, GetCapacity, (), (const, override, noexcept));
     MOCK_METHOD(IndexT, GetAllocatedCount, (), (const, override, noexcept));
+    MOCK_METHOD(IndexT, GetShaderVisibleIndex, (const DescriptorHandle&), (const, override, noexcept));
 };
 
 } // namespace oxygen::graphics::bindless::testing

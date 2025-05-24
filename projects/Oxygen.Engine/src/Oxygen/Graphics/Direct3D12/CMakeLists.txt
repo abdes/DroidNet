@@ -82,6 +82,8 @@ target_sources(
     "Detail/Converters.h"
     "Detail/FormatUtils.cpp"
     "Detail/FormatUtils.h"
+    "Detail/PipelineStateCache.h"
+    "Detail/PipelineStateCache.cpp"
     "Detail/SwapChain.cpp"
     "Detail/SwapChain.h"
     "Detail/Types.h"

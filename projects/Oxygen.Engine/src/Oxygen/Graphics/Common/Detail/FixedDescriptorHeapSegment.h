@@ -52,6 +52,8 @@ public:
     //! Returns the current size (number of allocated descriptors) of this segment.
     [[nodiscard]] OXYGEN_GFX_API auto GetAllocatedCount() const noexcept -> IndexT override;
 
+    [[nodiscard]] OXYGEN_GFX_API auto GetShaderVisibleIndex(const DescriptorHandle& handle) const noexcept -> IndexT override;
+
     [[nodiscard]] auto GetCapacity() const noexcept -> IndexT override { return capacity_; }
     [[nodiscard]] auto GetBaseIndex() const noexcept -> IndexT override { return base_index_; }
     [[nodiscard]] auto GetViewType() const noexcept -> ResourceViewType override { return view_type_; }
@@ -68,6 +70,8 @@ protected:
 
 private:
     auto FreeListSize() const -> IndexT;
+    auto ToLocalIndex(IndexT global_index) const noexcept -> IndexT;
+    auto IsAllocated(uint32_t local_index) const noexcept -> bool;
 
     IndexT capacity_;
     ResourceViewType view_type_;
