@@ -113,10 +113,9 @@ Graphics::Graphics(const SerializedBackendConfig& config)
     nlohmann::json jsonConfig = nlohmann::json::parse(config.json_data, config.json_data + config.size);
 
     DeviceManagerDesc desc {};
-    if (auto& enable_debug = jsonConfig["enable_debug"]) {
-        desc.enable_debug = enable_debug.get<bool>();
+    if (jsonConfig.contains("enable_debug")) {
+        desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
     }
-
     AddComponent<DeviceManager>(desc);
     AddComponent<EngineShaders>();
 }

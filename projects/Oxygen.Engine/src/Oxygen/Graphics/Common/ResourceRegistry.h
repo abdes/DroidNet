@@ -104,8 +104,8 @@ public:
         return RegisterView(
             NativeObject { &resource, Resource::ClassTypeId() },
             std::move(view),
-            std::any(desc),
             std::move(view_handle),
+            std::any(desc),
             key,
             desc.view_type,
             desc.visibility)

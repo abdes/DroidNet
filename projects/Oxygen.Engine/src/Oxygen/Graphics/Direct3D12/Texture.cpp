@@ -143,8 +143,8 @@ Texture::Texture(TextureDesc desc)
 
     AddComponent<GraphicResource>(
         desc_.debug_name,
-        GraphicResource::WrapForImmediateRelease<ID3D12Resource>(resource),
-        GraphicResource::WrapForImmediateRelease<D3D12MA::Allocation>(d3dmaAllocation));
+        resource,
+        d3dmaAllocation);
 
     resource_desc_ = resource->GetDesc();
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
@@ -160,7 +160,7 @@ Texture::Texture(TextureDesc desc, NativeObject native)
 
     AddComponent<GraphicResource>(
         desc_.debug_name,
-        GraphicResource::WrapForImmediateRelease<ID3D12Resource>(resource),
+        resource,
         nullptr // No allocation object for native resources
     );
 
@@ -179,8 +179,8 @@ Texture::Texture(
 
     AddComponent<GraphicResource>(
         desc_.debug_name,
-        GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
-        GraphicResource::WrapForDeferredRelease<D3D12MA::Allocation>(d3dmaAllocation, resource_manager));
+        resource,
+        d3dmaAllocation);
 
     plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
 }
@@ -203,7 +203,7 @@ Texture::Texture(
 
     AddComponent<GraphicResource>(
         desc_.debug_name,
-        GraphicResource::WrapForDeferredRelease<ID3D12Resource>(resource, resource_manager),
+        resource,
         nullptr // No allocation object for native resources
     );
 

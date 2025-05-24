@@ -4,39 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <variant>
 
-#include "Detail/dx12_utils.h"
-
-#include <exception>
-#include <memory>
-#include <stdexcept>
-#include <type_traits>
-#include <vector>
-
-#include <d3d12.h>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
-#include <Oxygen/Graphics/Common/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Common/ShaderByteCode.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Renderer.h>
 
-using oxygen::graphics::DeferredObjectRelease;
+using oxygen::Overloads;
 using oxygen::graphics::d3d12::CommandRecorder;
+using oxygen::graphics::d3d12::DescriptorAllocator;
+using oxygen::graphics::d3d12::GraphicResource;
+using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
 using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::detail::Barrier;
 using oxygen::graphics::detail::BufferBarrierDesc;
+using oxygen::graphics::detail::GetFormatInfo;
 using oxygen::graphics::detail::MemoryBarrierDesc;
 using oxygen::graphics::detail::TextureBarrierDesc;
+using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
@@ -163,22 +158,17 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 } // anonymous namespace
 
 CommandRecorder::CommandRecorder(
-    graphics::detail::PerFrameResourceManager* resource_manager,
+    Renderer* renderer,
     graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     : Base(command_list, target_queue)
-    , resource_manager_(resource_manager)
+    , renderer_(renderer)
 {
-    DCHECK_NOTNULL_F(resource_manager, "Resource manager cannot be null");
-
-    CreateRootSignature();
+    DCHECK_NOTNULL_F(renderer, "Renderer cannot be null");
 }
 
 CommandRecorder::~CommandRecorder()
 {
-    if (resource_manager_ != nullptr) {
-        DeferredObjectRelease(root_signature_, *resource_manager_);
-        DeferredObjectRelease(pipeline_state_, *resource_manager_);
-    }
+    DCHECK_NOTNULL_F(renderer_, "Renderer cannot be null");
 }
 
 void CommandRecorder::Begin()
@@ -212,6 +202,11 @@ auto CommandRecorder::End() -> graphics::CommandList*
 
 void CommandRecorder::SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps)
 {
+    // Invariant: The descriptor table at root parameter 0 must match the root signature layout:
+    //   - CBV at heap index 0 (register b0)
+    //   - SRVs at heap indices 1+ (register t0, space0)
+    // The heap(s) bound here must be the same as those used to allocate CBV/SRV handles in MainModule.cpp.
+    // This ensures the shader can access resources using the indices provided in the CBV.
     auto* d3d12_command_list = GetConcreteCommandList()->GetCommandList();
     DCHECK_NOTNULL_F(d3d12_command_list);
 
@@ -220,43 +215,63 @@ void CommandRecorder::SetupDescriptorTables(std::span<detail::ShaderVisibleHeapI
         "Invalid command list type for SetupDescriptorTables. Expected Graphics or Compute, got: {}",
         static_cast<int>(queue_role));
 
-    constexpr UINT kRootIndex_CBV_SRV_UAV = 0;
-    constexpr UINT kRootIndex_Sampler = 1;
+    // Root parameter indices based on the current root signature:
+    // Root Param 0: Descriptor table for CBV (b0) and SRVs (t0...)
+    // Root Param 1 (if samplers were separate and defined in root sig): Sampler descriptor table
+    constexpr UINT kRootIndex_CBV_SRV_UAV_Table = 0;
+    constexpr UINT kRootIndex_Sampler_Table = 1; // Assuming samplers might be on a different root param (if any)
+
+    std::vector<ID3D12DescriptorHeap*> heaps_to_set;
+    // Collect all unique heaps first to call SetDescriptorHeaps once.
+    // This assumes that if CBV_SRV_UAV and Sampler heaps are different, they are distinct.
+    // If they could be the same heap object (not typical for D3D12 types), logic would need adjustment.
+    for (const auto& heap_info : heaps) {
+        bool found = false;
+        for (ID3D12DescriptorHeap* existing_heap : heaps_to_set) {
+            if (existing_heap == heap_info.heap) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            heaps_to_set.push_back(heap_info.heap);
+        }
+    }
+
+    if (!heaps_to_set.empty()) {
+        DLOG_F(4, "recorder: set {} descriptor heaps for command list: {}",
+            heaps_to_set.size(), GetConcreteCommandList()->GetName());
+        d3d12_command_list->SetDescriptorHeaps(static_cast<UINT>(heaps_to_set.size()), heaps_to_set.data());
+    }
 
     auto set_table = [this, d3d12_command_list, queue_role](
                          UINT root_index, D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
         if (queue_role == QueueRole::kGraphics) {
+            DLOG_F(4, "recorder: SetGraphicsRootDescriptorTable for command list: {}, root index={}",
+                GetConcreteCommandList()->GetName(), root_index);
             d3d12_command_list->SetGraphicsRootDescriptorTable(root_index, gpu_handle);
         } else if (queue_role == QueueRole::kCompute) {
             d3d12_command_list->SetComputeRootDescriptorTable(root_index, gpu_handle);
         }
     };
 
-    // Prepare the descriptor heaps for the command list, and set the root
-    // descriptor tables as we go.
-
-    std::vector<ID3D12DescriptorHeap*> heaps_ptrs(heaps.size());
     for (const auto& heap_info : heaps) {
-        DCHECK_NOTNULL_F(heap_info.heap, "Heap pointer cannot be null");
-
-        UINT root_index;
-        // Set the root descriptor table for that heap type
+        UINT root_idx_to_bind;
         if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
-            root_index = kRootIndex_CBV_SRV_UAV;
+            root_idx_to_bind = kRootIndex_CBV_SRV_UAV_Table; // Bind to root parameter 0
         } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {
-            root_index = kRootIndex_Sampler;
+            // This assumes samplers are on a separate root parameter if they exist.
+            // If your root signature doesn't define a sampler table at root_idx_to_bind, this will be an error.
+            // For the current root signature (only one param for CBV/SRV/UAV), this branch might not be hit
+            // or would need adjustment if samplers were part of the same table or a different root signature design.
+            root_idx_to_bind = kRootIndex_Sampler_Table;
         } else {
-            DLOG_F(WARNING, "Unsupported descriptor heap type: {}",
+            DLOG_F(WARNING, "Unsupported descriptor heap type for root table binding: {}",
                 static_cast<std::underlying_type_t<D3D12_DESCRIPTOR_HEAP_TYPE>>(heap_info.heap_type));
             continue;
         }
-
-        heaps_ptrs[root_index] = heap_info.heap;
-        set_table(root_index, heap_info.gpu_handle);
+        set_table(root_idx_to_bind, heap_info.gpu_handle);
     }
-
-    // Set the descriptor heaps for the command list
-    d3d12_command_list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps_ptrs.data());
 }
 
 void CommandRecorder::SetViewport(const ViewPort& viewport)
@@ -326,73 +341,35 @@ void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, ui
 {
 }
 
-void CommandRecorder::CreateRootSignature()
+void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
 {
-    D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-    root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-    Microsoft::WRL::ComPtr<ID3DBlob> signature_blob;
-    Microsoft::WRL::ComPtr<ID3DBlob> error_blob;
-    HRESULT hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature_blob, &error_blob);
-    if (FAILED(hr)) {
-        throw std::runtime_error("Failed to serialize root signature");
-    }
-
-    // Create raw pointer first
-    ID3D12RootSignature* raw_ptr = nullptr;
-    // Use IID_PPV_ARGS with the raw pointer
-    hr = GetGraphics().GetCurrentDevice()->CreateRootSignature(
-        0,
-        signature_blob->GetBufferPointer(),
-        signature_blob->GetBufferSize(),
-        IID_PPV_ARGS(&raw_ptr));
-    if (FAILED(hr)) {
-        throw std::runtime_error("Failed to create root signature");
-    }
-    // Reset the unique_ptr with the raw pointer
-    root_signature_.reset(raw_ptr);
-}
-
-void CommandRecorder::SetPipelineState(
-    const std::shared_ptr<IShaderByteCode>& vertex_shader,
-    const std::shared_ptr<IShaderByteCode>& pixel_shader)
-{
+    graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
+    // Use stored renderer_
+    DCHECK_NOTNULL_F(renderer_);
+    auto [pipeline_state, root_signature] = renderer_->GetOrCreateGraphicsPipeline(std::move(desc), graphics_pipeline_hash_);
+    auto* d3d12_command_list = command_list->GetCommandList();
+    d3d12_command_list->SetGraphicsRootSignature(root_signature);
+    d3d12_command_list->SetPipelineState(pipeline_state);
+}
 
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-    pso_desc.pRootSignature = root_signature_.get();
-    pso_desc.VS = { .pShaderBytecode = vertex_shader->Data(), .BytecodeLength = vertex_shader->Size() };
-    pso_desc.PS = { .pShaderBytecode = pixel_shader->Data(), .BytecodeLength = pixel_shader->Size() };
-    pso_desc.BlendState = kBlendState.disabled;
-    pso_desc.SampleMask = UINT_MAX;
-    pso_desc.RasterizerState = kRasterizerState.no_cull;
-    pso_desc.DepthStencilState = kDepthState.disabled;
-    // Define the input layout for POSITION and COLOR
-    static const D3D12_INPUT_ELEMENT_DESC input_layout[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-    };
-    pso_desc.InputLayout = { input_layout, 2 };
-    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    pso_desc.NumRenderTargets = 1;
-    pso_desc.RTVFormats[0] = kDefaultBackBufferFormat;
-    pso_desc.SampleDesc.Count = 1;
+void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
+{
+    compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    // Use stored renderer_
+    DCHECK_NOTNULL_F(renderer_);
+    auto [pipeline_state, root_signature] = renderer_->GetOrCreateComputePipeline(std::move(desc), compute_pipeline_hash_);
+    auto* d3d12_command_list = command_list->GetCommandList();
+    d3d12_command_list->SetPipelineState(pipeline_state);
+    d3d12_command_list->SetComputeRootSignature(root_signature);
+}
 
-    // Create raw pointer first
-    ID3D12PipelineState* raw_pso = nullptr;
-    // Use IID_PPV_ARGS with the raw pointer
-    HRESULT hr = GetGraphics().GetCurrentDevice()->CreateGraphicsPipelineState(
-        &pso_desc,
-        IID_PPV_ARGS(&raw_pso));
-    if (FAILED(hr)) {
-        throw std::runtime_error("Failed to create pipeline state object");
-    }
-    // Reset the unique_ptr with the raw pointer
-    pipeline_state_.reset(raw_pso);
-
-    command_list->GetCommandList()->SetPipelineState(pipeline_state_.get());
-    command_list->GetCommandList()->SetGraphicsRootSignature(root_signature_.get());
+void CommandRecorder::SetupBindlessRendering()
+{
+    renderer_->GetDescriptorAllocator().PrepareForRender(*this);
 }
 
 void CommandRecorder::ResetState()
@@ -589,14 +566,14 @@ void CommandRecorder::ClearFramebuffer(
         const auto& depth_format_info = GetFormatInfo(desc.depth_attachment.format);
 
         auto [depth, stencil] = desc.depth_attachment.ResolveDepthStencil(
-            depth_clear_value, stencil_clear_value, desc.depth_attachment.format);
+            depth_clear_value, stencil_clear_value);
 
         D3D12_CLEAR_FLAGS clear_flags = static_cast<D3D12_CLEAR_FLAGS>(0);
         if (depth_format_info.has_depth) {
-            clear_flags = static_cast<D3D12_CLEAR_FLAGS>(clear_flags | D3D12_CLEAR_FLAG_DEPTH);
+            clear_flags = clear_flags | D3D12_CLEAR_FLAG_DEPTH;
         }
         if (depth_format_info.has_stencil) {
-            clear_flags = static_cast<D3D12_CLEAR_FLAGS>(clear_flags | D3D12_CLEAR_FLAG_STENCIL);
+            clear_flags = clear_flags | D3D12_CLEAR_FLAG_STENCIL;
         }
 
         if (clear_flags != 0) {
@@ -609,4 +586,47 @@ void CommandRecorder::ClearFramebuffer(
                 nullptr);
         }
     }
+}
+
+void CommandRecorder::CopyBuffer(
+    graphics::Buffer& dst, size_t dst_offset,
+    const graphics::Buffer& src, size_t src_offset,
+    size_t size)
+{
+    // Expectations:
+    // - src must be in D3D12_RESOURCE_STATE_COPY_SOURCE
+    // - dst must be in D3D12_RESOURCE_STATE_COPY_DEST
+    // The caller is responsible for ensuring correct resource states.
+
+    auto* dst_buffer = static_cast<Buffer*>(&dst);
+    auto* src_buffer = static_cast<const Buffer*>(&src);
+
+    DCHECK_NOTNULL_F(dst_buffer);
+    DCHECK_NOTNULL_F(src_buffer);
+
+    auto* dst_resource = dst_buffer->GetResource();
+    auto* src_resource = src_buffer->GetResource();
+
+    DCHECK_NOTNULL_F(dst_resource, "Destination buffer resource is null");
+    DCHECK_NOTNULL_F(src_resource, "Source buffer resource is null");
+
+    // D3D12 requires that the copy region does not exceed the buffer bounds.
+    DCHECK_F(dst_offset + size <= dst_buffer->GetSize(),
+        "CopyBuffer: dst_offset + size ({}) exceeds destination buffer size ({})",
+        dst_offset + size, dst_buffer->GetSize());
+    DCHECK_F(src_offset + size <= src_buffer->GetSize(),
+        "CopyBuffer: src_offset + size ({}) exceeds source buffer size ({})",
+        src_offset + size, src_buffer->GetSize());
+
+    auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    auto* d3d12_command_list = command_list->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    d3d12_command_list->CopyBufferRegion(
+        dst_resource,
+        dst_offset,
+        src_resource,
+        src_offset,
+        size);
 }

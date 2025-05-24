@@ -52,6 +52,9 @@ namespace d3d12 {
         [[nodiscard]] OXYGEN_D3D12_API auto IsMapped() const noexcept -> bool override;
         OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
+        // Implementation of the GPU virtual address getter
+        [[nodiscard]] OXYGEN_D3D12_API uint64_t GetGPUVirtualAddress() const override;
+
     protected:
         // --- New view creation methods ---
         [[nodiscard]] auto CreateConstantBufferView(

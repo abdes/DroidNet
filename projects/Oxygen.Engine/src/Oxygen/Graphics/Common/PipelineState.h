@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Types/Format.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -451,3 +452,76 @@ private:
 };
 
 } // namespace oxygen::graphics
+
+namespace std {
+template <>
+struct hash<oxygen::graphics::GraphicsPipelineDesc> {
+    size_t operator()(const oxygen::graphics::GraphicsPipelineDesc& desc) const
+    {
+        size_t seed = 0;
+        using oxygen::HashCombine;
+        // Hash all relevant fields
+        if (desc.VertexShader())
+            HashCombine(seed, desc.VertexShader()->shader);
+        if (desc.PixelShader())
+            HashCombine(seed, desc.PixelShader()->shader);
+        if (desc.GeometryShader())
+            HashCombine(seed, desc.GeometryShader()->shader);
+        if (desc.HullShader())
+            HashCombine(seed, desc.HullShader()->shader);
+        if (desc.DomainShader())
+            HashCombine(seed, desc.DomainShader()->shader);
+        HashCombine(seed, static_cast<int>(desc.PrimitiveTopology()));
+        // RasterizerStateDesc
+        HashCombine(seed, static_cast<int>(desc.RasterizerState().fill_mode));
+        HashCombine(seed, static_cast<int>(desc.RasterizerState().cull_mode));
+        HashCombine(seed, desc.RasterizerState().front_counter_clockwise);
+        HashCombine(seed, desc.RasterizerState().depth_bias);
+        HashCombine(seed, desc.RasterizerState().depth_bias_clamp);
+        HashCombine(seed, desc.RasterizerState().slope_scaled_depth_bias);
+        HashCombine(seed, desc.RasterizerState().depth_clip_enable);
+        HashCombine(seed, desc.RasterizerState().multisample_enable);
+        HashCombine(seed, desc.RasterizerState().antialiased_line_enable);
+        // DepthStencilStateDesc
+        HashCombine(seed, desc.DepthStencilState().depth_test_enable);
+        HashCombine(seed, desc.DepthStencilState().depth_write_enable);
+        HashCombine(seed, static_cast<int>(desc.DepthStencilState().depth_func));
+        HashCombine(seed, desc.DepthStencilState().stencil_enable);
+        HashCombine(seed, desc.DepthStencilState().stencil_read_mask);
+        HashCombine(seed, desc.DepthStencilState().stencil_write_mask);
+        // BlendState
+        for (const auto& blend : desc.BlendState()) {
+            HashCombine(seed, blend.blend_enable);
+            HashCombine(seed, static_cast<int>(blend.src_blend));
+            HashCombine(seed, static_cast<int>(blend.dest_blend));
+            HashCombine(seed, static_cast<int>(blend.blend_op));
+            HashCombine(seed, static_cast<int>(blend.src_blend_alpha));
+            HashCombine(seed, static_cast<int>(blend.dest_blend_alpha));
+            HashCombine(seed, static_cast<int>(blend.blend_op_alpha));
+            if (blend.write_mask)
+                HashCombine(seed, static_cast<int>(*blend.write_mask));
+        }
+        // FramebufferLayoutDesc
+        for (const auto& fmt : desc.FramebufferLayout().color_target_formats) {
+            HashCombine(seed, static_cast<int>(fmt));
+        }
+        if (desc.FramebufferLayout().depth_stencil_format) {
+            HashCombine(seed, static_cast<int>(*desc.FramebufferLayout().depth_stencil_format));
+        }
+        HashCombine(seed, desc.FramebufferLayout().sample_count);
+        return seed;
+    }
+};
+template <>
+struct hash<oxygen::graphics::ComputePipelineDesc> {
+    size_t operator()(const oxygen::graphics::ComputePipelineDesc& desc) const
+    {
+        size_t seed = 0;
+        using oxygen::HashCombine;
+        HashCombine(seed, desc.ComputeShader().shader);
+        if (desc.ComputeShader().entry_point_name)
+            HashCombine(seed, *desc.ComputeShader().entry_point_name);
+        return seed;
+    }
+};
+}

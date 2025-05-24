@@ -23,12 +23,14 @@
 auto oxygen::graphics::to_string(const oxygen::graphics::NativeObject& obj) -> std::string
 {
     if (obj.IsValid()) {
-        try {
+        if (obj.IsPointerHandle()) {
             auto* pointer = obj.AsPointer<void*>();
             // format pointer as 0x00000000
-            return fmt::format("NativeObject{{type_id: {}, pointer: {:p}}}", static_cast<uint64_t>(obj.OwnerTypeId()), fmt::ptr(pointer));
-        } catch (const std::exception&) {
-            return fmt::format("NativeObject{{type_id: {}, handle: {}}}", static_cast<uint64_t>(obj.OwnerTypeId()), obj.AsInteger());
+            return fmt::format("NativeObject{{type_id: {}, pointer: {:p}}}",
+                static_cast<uint64_t>(obj.OwnerTypeId()), fmt::ptr(pointer));
+        } else if (obj.IsIntegerHandle()) {
+            return fmt::format("NativeObject{{type_id: {}, handle: {}}}",
+                static_cast<uint64_t>(obj.OwnerTypeId()), obj.AsInteger());
         }
     } else {
         return "NativeObject{invalid}";

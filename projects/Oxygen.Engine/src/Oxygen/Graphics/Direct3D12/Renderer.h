@@ -6,7 +6,12 @@
 
 #pragma once
 
+#include <utility>
+
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 // ReSharper disable CppRedundantQualifier
@@ -73,11 +78,18 @@ public:
     [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
+    [[nodiscard]] auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash)
+        -> detail::PipelineStateCache::Entry;
+    [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
+        -> detail::PipelineStateCache::Entry;
+
 protected:
     [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(
         graphics::CommandList* command_list,
         graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
+
+    OXYGEN_D3D12_API void PrepareRecorderForRender(graphics::CommandRecorder& recorder) override;
 };
 
 } // namespace oxygen::graphics::d3d12

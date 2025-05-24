@@ -17,6 +17,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 
 // ReSharper disable once CppInconsistentNaming
@@ -26,51 +27,28 @@ class Allocation; // NOLINT(*-virtual-class-destructor)
 
 namespace oxygen::graphics {
 
-namespace detail {
-    class PerFrameResourceManager;
-} // namespace detail
-
 namespace d3d12 {
 
     class GraphicResource final : public Component {
         OXYGEN_COMPONENT(GraphicResource)
 
     public:
-        template <HasReleaseMethod T>
-        using ManagedPtrDeleter = std::function<void(T*)>;
-
-        template <HasReleaseMethod T>
-        using ManagedPtr = std::unique_ptr<T, ManagedPtrDeleter<T>>;
-
-        template <HasReleaseMethod T>
-        static auto WrapForImmediateRelease(T* obj) noexcept
-        {
-            return ManagedPtr<T>(obj, [](T* wrapped) {
-                ObjectRelease(wrapped);
-            });
-        }
-
-        template <HasReleaseMethod T>
-        static auto WrapForDeferredRelease(T* obj,
-            graphics::detail::PerFrameResourceManager& resource_manager) noexcept
-        {
-            return ManagedPtr<T>(obj, [&resource_manager](T* deferred) {
-                DeferredObjectRelease(deferred, resource_manager);
-            });
-        }
-
         explicit GraphicResource(
             const std::string_view debug_name,
-            ManagedPtr<ID3D12Resource> resource,
-            ManagedPtr<D3D12MA::Allocation> allocation = nullptr)
-            : resource_(std::move(resource))
-            , allocation_(std::move(allocation))
+            ID3D12Resource* resource,
+            D3D12MA::Allocation* allocation = nullptr)
+            : resource_(resource)
+            , allocation_(allocation)
         {
             assert(resource_);
             SetName(debug_name);
         }
 
-        ~GraphicResource() noexcept override = default;
+        ~GraphicResource() noexcept override
+        {
+            ObjectRelease(resource_);
+            ObjectRelease(allocation_);
+        }
 
         OXYGEN_MAKE_NON_COPYABLE(GraphicResource)
 
@@ -92,12 +70,12 @@ namespace d3d12 {
         }
         // NOLINTEND(bugprone-use-after-move)
 
-        [[nodiscard]] auto GetResource() const { return resource_.get(); }
+        [[nodiscard]] auto GetResource() const { return resource_; }
 
         // ReSharper disable once CppMemberFunctionMayBeConst
         void SetName(const std::string_view name) noexcept
         {
-            NameObject(resource_.get(), name);
+            NameObject(resource_, name);
         }
 
     private:
@@ -112,8 +90,8 @@ namespace d3d12 {
 
         friend void swap(GraphicResource& lhs, GraphicResource& rhs) noexcept;
 
-        ManagedPtr<ID3D12Resource> resource_;
-        ManagedPtr<D3D12MA::Allocation> allocation_;
+        ID3D12Resource* resource_;
+        D3D12MA::Allocation* allocation_;
     };
 
     // Non-member swap function for ADL

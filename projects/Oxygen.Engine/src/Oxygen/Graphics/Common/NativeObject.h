@@ -92,6 +92,12 @@ public:
     //! Checks if the `NativeObject` holds a valid handle or pointer.
     [[nodiscard]] constexpr auto IsValid() const noexcept { return integer != kInvalidHandle; }
 
+    //! Checks if the `NativeObject` was created with an integer handle.
+    [[nodiscard]] constexpr auto IsIntegerHandle() const noexcept { return !is_pointer_; }
+
+    //! Checks if the `NativeObject` was created with a pointer.
+    [[nodiscard]] constexpr auto IsPointerHandle() const noexcept { return is_pointer_; }
+
     //! Retrieves the integer handle of the native object.
     [[nodiscard]] constexpr auto AsInteger() const noexcept { return integer; }
 

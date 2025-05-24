@@ -49,6 +49,7 @@ public:
     NativeObject CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/, Format /*format*/, BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const override { return {}; }
 
     auto GetNativeView(const DescriptorHandle& /*view_handle*/, const BufferViewDescription& /*view_desc*/) const -> NativeObject override { return {}; }
+    auto GetGPUVirtualAddress() const -> uint64_t override { return 0ULL; }
 
 private:
     NativeObject native_;
