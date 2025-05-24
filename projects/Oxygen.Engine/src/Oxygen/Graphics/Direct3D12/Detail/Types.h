@@ -23,6 +23,8 @@ namespace dx {
     using IDescriptorHeap = ID3D12DescriptorHeap;
     using IFence = ID3D12Fence;
     using IDebug = ID3D12Debug6;
+    using IPipelineState = ID3D12PipelineState;
+    using IRootSignature = ID3D12RootSignature;
 } // namespace dx
 
 namespace dxgi {
