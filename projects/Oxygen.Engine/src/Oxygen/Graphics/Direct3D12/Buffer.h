@@ -25,9 +25,7 @@ namespace d3d12 {
         using Base = graphics::Buffer;
 
     public:
-        Buffer(
-            graphics::detail::PerFrameResourceManager& resource_manager,
-            const BufferDesc& desc);
+        Buffer(const BufferDesc& desc);
         ~Buffer() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Buffer)
