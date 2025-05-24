@@ -54,8 +54,9 @@ public:
         Deferred
     };
 
-    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode = SubmissionMode::Immediate);
+    //=== Lifecycle ===-------------------------------------------------------//
 
+    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode = SubmissionMode::Immediate);
     OXYGEN_GFX_API virtual ~CommandRecorder(); // Definition moved to .cpp
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
@@ -63,23 +64,73 @@ public:
 
     [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
 
+    //=== Command List Control ===--------------------------------------------//
+
     OXYGEN_GFX_API virtual void Begin();
     OXYGEN_GFX_API virtual auto End() -> CommandList*;
 
+    //=== Pipeline State and Bindless Setup ===-------------------------------//
+
+    //! Sets the graphics pipeline state for subsequent draw calls.
+    /*!
+     Call this before issuing any draw commands to ensure the correct shaders,
+     input layout, and fixed-function state are bound. The provided pipeline
+     description must match the resources and framebuffer formats in use.
+
+     Best Practices:
+      - Always set the pipeline state after binding the framebuffer and before
+        drawing.
+      - Ensure the descriptor layout and shader expectations match the pipeline
+        description.
+      - Avoid redundant state changes for performance.
+
+     \param desc The graphics pipeline state description to bind.
+    */
     virtual void SetPipelineState(GraphicsPipelineDesc desc) = 0;
+
+    //! Sets the compute pipeline state for subsequent dispatch calls.
+    /*!
+     Call this before issuing any compute dispatch commands to ensure the
+     correct compute shader and state are bound. The pipeline description must
+     match the resources expected by the compute shader.
+
+     \param desc The compute pipeline state description to bind.
+    */
     virtual void SetPipelineState(ComputePipelineDesc desc) = 0;
 
+    //! Prepares the command list for bindless rendering.
+    /*!
+     Call this after setting the pipeline state and before issuing draw or
+     dispatch commands that use bindless resources. This sets up descriptor
+     tables or root parameters as required by the backend for bindless access.
+
+     Best Practices:
+      - Call after setting the pipeline state (which binds the correct root
+        signature).
+      - Ensure all resources and views are registered and up-to-date in the
+        resource registry.
+      - The pipeline and shaders must be designed for bindless access (see
+        engine and backend documentation).
+
+     \note Calling this before setting the pipeline state may result in driver
+     crashes, as the root signature required for bindless setup is not yet
+     bound.
+    */
     virtual void SetupBindlessRendering() = 0;
+
+    //=== Render State ===----------------------------------------------------//
 
     virtual void SetViewport(const ViewPort& viewport) = 0;
     virtual void SetScissors(const Scissors& scissors) = 0;
 
-    // Graphics commands
+    //=== Draw and Resource Binding Commands ===------------------------------//
+
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
-
     virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
+
+    //=== Framebuffer and Resource Operations ===-----------------------------//
 
     //! Clears color and depth/stencil (DSV) attachments of the specified
     //! framebuffer.
@@ -117,6 +168,8 @@ public:
         const Buffer& src, size_t src_offset,
         size_t size)
         = 0;
+
+    //=== Resource State Management and Barriers (Templates) ===--------------//
 
     //! @{
     //! Resource state management and barriers.
