@@ -95,6 +95,8 @@ target_sources(
       "ObjectRelease.h"
       "Queues.h"
       "Renderer.h"
+      "RenderPass.cpp"
+      "RenderPass.h"
       "ResourceRegistry.h"
       "Sampler.h"
       "ShaderByteCode.h"
