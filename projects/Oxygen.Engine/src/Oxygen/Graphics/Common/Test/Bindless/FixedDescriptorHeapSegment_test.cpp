@@ -536,6 +536,7 @@ NOLINT_TEST(FixedDescriptorHeapSegmentTest, MoveSemantics)
 
     // Allocate about half the capacity in the original segment
     std::vector<uint32_t> allocations;
+    allocations.reserve(capacity / 2 + (capacity % 2));
     for (uint32_t i = 0; i < capacity / 2 + (capacity % 2); ++i) {
         allocations.push_back(orig.Allocate());
     }

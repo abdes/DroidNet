@@ -229,7 +229,7 @@ public:
         }
 
         // Find the local index from the global index
-        auto local_index = ToLocalIndex(handle.GetIndex());
+        const auto local_index = ToLocalIndex(handle.GetIndex());
         if (local_index == DescriptorHandle::kInvalidIndex) {
             return DescriptorHandle::kInvalidIndex;
         }
@@ -304,16 +304,17 @@ private:
         }
     }
 
-    auto FreeListSize() const -> IndexT
+    [[nodiscard]] auto FreeListSize() const -> IndexT
     {
-        size_t free_count = free_list_.size();
+        const size_t free_count = free_list_.size();
         DCHECK_LE_F(free_count, std::numeric_limits<IndexT>::max(),
             "unexpected size of free list ({}), larger than what IndexT can hold", free_count);
         return static_cast<IndexT>(free_count);
     }
-    auto ToLocalIndex(IndexT global_index) const noexcept -> IndexT
+
+    [[nodiscard]] auto ToLocalIndex(const IndexT global_index) const noexcept -> IndexT
     {
-        auto local_index = global_index - base_index_;
+        const auto local_index = global_index - base_index_;
         if (local_index < 0 || local_index >= GetCapacity()) {
             LOG_F(WARNING, "Descriptor handle, with index {}, is out of my range", global_index);
             return DescriptorHandle::kInvalidIndex;
@@ -321,13 +322,11 @@ private:
         return local_index;
     }
 
-    auto IsAllocated(uint32_t local_index) const noexcept -> bool
+    [[nodiscard]] auto IsAllocated(uint32_t local_index) const noexcept -> bool
     {
-        if (local_index < 0 || local_index >= GetCapacity()) {
-            LOG_F(WARNING, "Local index {} is out of range", local_index);
-            return false;
-        }
-        return !released_flags_[local_index];
+        return std::cmp_greater_equal(local_index, 0)
+            && local_index < next_index_
+            && !released_flags_[local_index];
     }
 
     DescriptorVisibility visibility_;

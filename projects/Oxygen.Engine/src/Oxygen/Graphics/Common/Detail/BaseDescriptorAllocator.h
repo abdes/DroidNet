@@ -101,7 +101,7 @@ public:
         std::lock_guard lock(mutex_);
 
         auto& strategy = GetAllocationStrategy();
-        auto& key = keys_.at(HeapIndex(view_type, visibility));
+        const auto& key = keys_.at(HeapIndex(view_type, visibility));
         auto& segments = heaps_[key];
 
         // If no segments exist, create initial segment
@@ -135,10 +135,9 @@ public:
 
         DCHECK_F(!segments.empty(), "we should have at least one segment");
 
-        auto& desc = strategy.GetHeapDescription(key);
-
         // If we couldn't allocate from existing segments, try to create a new one
-        if (desc.allow_growth && segments.size() < (1 + desc.max_growth_iterations)) {
+        if (auto& desc = strategy.GetHeapDescription(key);
+            desc.allow_growth && segments.size() < (1 + desc.max_growth_iterations)) {
             const auto& last = segments.back();
             const auto base_index = last->GetBaseIndex() + last->GetCapacity();
             const auto capacity = CalculateGrowthCapacity(desc.growth_factor, last->GetCapacity());
@@ -175,11 +174,10 @@ public:
         const auto visibility = handle.GetVisibility();
         const auto index = handle.GetIndex();
         const auto& key = keys_.at(HeapIndex(view_type, visibility));
-        const auto& segments = heaps_.at(key);
-        for (const auto& segment : segments) {
+        for (const auto& segments = heaps_.at(key); const auto& segment : segments) {
             const auto base = segment->GetBaseIndex();
-            const auto capacity = segment->GetCapacity();
-            if (index >= base && index < base + capacity) {
+            if (const auto capacity = segment->GetCapacity();
+                index >= base && index < base + capacity) {
                 if (segment->Release(index)) {
                     handle.Invalidate();
                     return;
@@ -204,10 +202,8 @@ public:
             std::lock_guard lock(mutex_);
             uint32_t total = 0;
             const auto& key = keys_.at(HeapIndex(view_type, visibility));
-            auto it = heaps_.find(key);
-            if (it != heaps_.end()) {
-                const auto& segments = it->second;
-                for (const auto& segment : segments) {
+            if (const auto it = heaps_.find(key); it != heaps_.end()) {
+                for (const auto& segments = it->second; const auto& segment : segments) {
                     total += segment->GetAvailableCount();
                 }
             }
@@ -367,8 +363,8 @@ protected:
         for (const auto& [key, segments] : heaps_) {
             if (!segments.empty()) {
                 result.push_back(HeapView {
-                    &strategy.GetHeapDescription(key),
-                    std::span<const std::unique_ptr<DescriptorHeapSegment>>(segments) });
+                    .description = &strategy.GetHeapDescription(key),
+                    .segments = std::span(segments) });
             }
         }
         return result;
@@ -386,12 +382,11 @@ private:
         const auto visibility = handle.GetVisibility();
         const auto index = handle.GetIndex();
         const auto& key = keys_.at(HeapIndex(view_type, visibility));
-        const auto& segments = heaps_.at(key);
 
-        for (const auto& segment : segments) {
+        for (const auto& segments = heaps_.at(key); const auto& segment : segments) {
             const auto base = segment->GetBaseIndex();
-            const auto capacity = segment->GetCapacity();
-            if (index >= base && index < base + capacity) {
+            if (const auto capacity = segment->GetCapacity();
+                index >= base && index < base + capacity) {
                 return segment.get();
             }
         }
@@ -446,7 +441,7 @@ private:
                 const auto visibility = static_cast<DescriptorVisibility>(v);
                 try {
                     const size_t idx = HeapIndex(view_type, visibility);
-                    auto key = heap_strategy_->GetHeapKey(view_type, visibility);
+                    const auto key = heap_strategy_->GetHeapKey(view_type, visibility);
                     keys_[idx] = key;
                 } catch (const std::exception& ex) {
                     DLOG_F(2, "combination ({}, {}) not supported by strategy: {}",
