@@ -11,7 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
