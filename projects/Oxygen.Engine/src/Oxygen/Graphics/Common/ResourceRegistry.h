@@ -158,7 +158,7 @@ public:
 
     virtual void PrepareForRender(CommandRecorder& recorder)
     {
-        // TODO: implement this method
+        // TODO: confirm nothing to be done here
     }
 
 private:
