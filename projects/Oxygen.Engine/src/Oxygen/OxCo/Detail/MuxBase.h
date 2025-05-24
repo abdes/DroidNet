@@ -156,7 +156,7 @@ protected:
         if (self().Size() == 0) {
             return false;
         }
-        DLOG_F(2, "   ...on Mux<{}/{}> {}", self().MinReady(), self().Size(), fmt::ptr(this));
+        DLOG_F(5, "   ...on Mux<{}/{}> {}", self().MinReady(), self().Size(), fmt::ptr(this));
         parent_ = h;
         return true;
     }
@@ -197,7 +197,7 @@ private:
         if (first_fail) {
             exception_ = ex;
         }
-        DLOG_F(2, "Mux<{}/{}> {} invocation {}{}", self().MinReady(),
+        DLOG_F(5, "Mux<{}/{}> {} invocation {}{}", self().MinReady(),
             self().Size(), fmt::ptr(this), i, ex ? " with exception" : "");
         if (i == self().Size()) {
             parent_.resume();

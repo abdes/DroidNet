@@ -204,7 +204,7 @@ namespace detail {
     public:
         ~BasePromise() override
         {
-            DLOG_F(2, "pr {} destroyed", fmt::ptr(this));
+            DLOG_F(5, "pr {} destroyed", fmt::ptr(this));
         }
 
         void SetExecutor(Executor* ex) { executor_ = ex; }
@@ -224,7 +224,7 @@ namespace detail {
         */
         void Cancel()
         {
-            DLOG_F(2, "pr {} cancellation requested", fmt::ptr(this));
+            DLOG_F(5, "pr {} cancellation requested", fmt::ptr(this));
 
             if (!HasAwaiter()) {
                 // Mark pending cancellation; coroutine will be cancelled
@@ -276,7 +276,7 @@ namespace detail {
     protected:
         BasePromise()
         {
-            DLOG_F(2, "pr {} created", fmt::ptr(this));
+            DLOG_F(5, "pr {} created", fmt::ptr(this));
         }
 
         OXYGEN_MAKE_NON_COPYABLE(BasePromise)
@@ -300,7 +300,7 @@ namespace detail {
                 return parent->Continuation(this);
             }
             ReParent(parent, caller);
-            DLOG_F(2, "pr {} started", fmt::ptr(this));
+            DLOG_F(5, "pr {} started", fmt::ptr(this));
             OnResume<&BasePromise::DoResume>();
             return ProxyHandle();
         }
@@ -377,14 +377,14 @@ namespace detail {
         //! A resume trampoline that does nothing.
         void DoNothing()
         {
-            DLOG_F(2, "pr {} already scheduled, skipping", fmt::ptr(this));
+            DLOG_F(5, "pr {} already scheduled, skipping", fmt::ptr(this));
         }
 
         //! A resume trampoline that schedules the task for execution, and what
         //! that happens, the actual promise resume function is called.
         void DoResume()
         {
-            DLOG_F(2, "pr {} scheduled", fmt::ptr(this));
+            DLOG_F(5, "pr {} scheduled", fmt::ptr(this));
             ExecutionState(Execution::kReady);
 
             // Prevent further doResume()s from scheduling the task again
@@ -394,7 +394,7 @@ namespace detail {
                 +[](void* arg) noexcept {
                     const auto h = CoroutineHandle<BasePromise>::from_address(arg);
                     BasePromise& self = h.promise();
-                    DLOG_F(2, "pr {} resumed", fmt::ptr(&self));
+                    DLOG_F(5, "pr {} resumed", fmt::ptr(&self));
                     self.ExecutionState(Execution::kRunning);
                     h.resume();
                 },
@@ -422,7 +422,7 @@ namespace detail {
         //! `await_must_resume()` returns `false`.
         void PropagateCancel()
         {
-            DLOG_F(2, "pr {} cancelled", fmt::ptr(this));
+            DLOG_F(5, "pr {} cancelled", fmt::ptr(this));
             BaseTaskParent* parent = std::exchange(parent_, nullptr);
             parent->Cancelled();
             parent->Continuation(this).resume();
@@ -441,19 +441,19 @@ namespace detail {
         auto HookAwaitSuspend(Awaiter& awaiter) -> Handle
         {
             const bool cancel_requested = CancellationState() == Cancellation::kRequested;
-            DLOG_F(2, "pr {} suspended {}", fmt::ptr(this),
+            DLOG_F(5, "pr {} suspended {}", fmt::ptr(this),
                 cancel_requested ? "(with pending cancellation) on..." : "");
             ResetControlBlock(awaiter); // this resets cancelState_
 
             if (cancel_requested) {
                 if (AwaitEarlyCancel(awaiter)) {
-                    DLOG_F(2, "    ... early-cancelled awaiter (skipped)");
+                    DLOG_F(5, "    ... early-cancelled awaiter (skipped)");
                     PropagateCancel();
                     return std::noop_coroutine();
                 }
                 OnResume<&BasePromise::DoResumeAfterCancel>();
                 if (awaiter.await_ready()) {
-                    DLOG_F(2, "    ... already-ready awaiter");
+                    DLOG_F(5, "    ... already-ready awaiter");
                     return ProxyHandle();
                 }
             } else {
@@ -464,7 +464,7 @@ namespace detail {
             try {
                 return detail::AwaitSuspend(awaiter, ProxyHandle());
             } catch (...) {
-                DLOG_F(2, "pr {}: exception thrown from await_suspend", fmt::ptr(this));
+                DLOG_F(5, "pr {}: exception thrown from await_suspend", fmt::ptr(this));
                 ExecutionState(Execution::kRunning);
                 if (cancel_requested) {
                     // ReSharper disable once CppDFAUnreachableCode
@@ -525,7 +525,7 @@ namespace detail {
         //! continuation logic.
         auto HookFinalSuspend() -> Handle
         {
-            DLOG_F(2, "pr {} finished", fmt::ptr(this));
+            DLOG_F(5, "pr {} finished", fmt::ptr(this));
             BaseTaskParent* parent = std::exchange(parent_, nullptr);
             DCHECK_NOTNULL_F(parent);
             return parent->Continuation(this);

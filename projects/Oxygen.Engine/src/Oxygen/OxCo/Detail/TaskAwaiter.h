@@ -52,7 +52,7 @@ public:
     */
     [[nodiscard]] auto await_suspend(Handle h)
     {
-        DLOG_F(2, "    ...pr {}", fmt::ptr(promise_));
+        DLOG_F(5, "    ...pr {}", fmt::ptr(promise_));
         DCHECK_NOTNULL_F(promise_);
         continuation_ = h;
         return promise_->Start(this, h);
