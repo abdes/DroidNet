@@ -4,6 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// === Bindless Rendering Contract ===
+// - The engine provides a single shader-visible CBV_SRV_UAV heap.
+// - The constant buffer (CBV) is always at heap index 0 (register b0).
+// - All other resources (SRVs, UAVs) are in the heap starting at index 1.
+// - For this shader, the vertex buffer SRV is always at heap index 1 (register
+//   t0, space0).
+// - The CBV contains a uint specifying the index of the vertex buffer SRV in
+//   the heap (should be 1 for this draw).
+// - The root signature and engine must match this layout for correct operation.
+//   See MainModule.cpp and PipelineStateCache.cpp for details.
+
 // Define vertex structure to match the CPU-side Vertex struct
 struct Vertex {
     float3 position;
@@ -41,12 +52,3 @@ float4 PS(VSOutput input) : SV_Target0 {
     // Output the interpolated color from the vertex shader
     return float4(input.color, 1.0);
 }
-
-// === Bindless Rendering Contract ===
-// - The engine provides a single shader-visible CBV_SRV_UAV heap.
-// - The constant buffer (CBV) is always at heap index 0 (register b0).
-// - All other resources (SRVs, UAVs) are in the heap starting at index 1.
-// - For this shader, the vertex buffer SRV is always at heap index 1 (register t0, space0).
-// - The CBV contains a uint specifying the index of the vertex buffer SRV in the heap (should be 1 for this draw).
-// - The root signature and engine must match this layout for correct operation.
-// See MainModule.cpp and PipelineStateCache.cpp for details.

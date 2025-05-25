@@ -22,6 +22,7 @@ file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders")
 set(dxc_optimization_debug "-Od")
 set(dxc_optimization_release "-O3")
 set(dxc_debug_symbol "-Zi")
+set(dxc_enable_advanced_features "-enable-16bit-types" "-HV 2021")
 set(
   dxc_vs_shader_model
   "-T"
@@ -62,10 +63,10 @@ foreach(HLSL_FILE ${HLSL_FILES})
       ${PS_SHADER_OUTPUT}
     # Create output directory
     COMMAND
-      ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/$<CONFIG>"
-    # Compile vertex shader with config-specific options
+      ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/$<CONFIG>"    # Compile vertex shader with config-specific options
     COMMAND
       ${dxc_exe} ${dxc_vs_shader_model} -E ${VS_ENTRY_POINT}
+      ${dxc_enable_advanced_features}
       $<$<CONFIG:Debug>:${dxc_debug_symbol}>
       $<$<CONFIG:Debug>:${dxc_optimization_debug}>
       $<$<NOT:$<CONFIG:Debug>>:${dxc_optimization_release}>
@@ -75,6 +76,7 @@ foreach(HLSL_FILE ${HLSL_FILES})
     # Compile pixel shader with config-specific options
     COMMAND
       ${dxc_exe} ${dxc_ps_shader_model} -E ${PS_ENTRY_POINT}
+      ${dxc_enable_advanced_features}
       $<$<CONFIG:Debug>:${dxc_debug_symbol}>
       $<$<CONFIG:Debug>:${dxc_optimization_debug}>
       $<$<NOT:$<CONFIG:Debug>>:${dxc_optimization_release}>

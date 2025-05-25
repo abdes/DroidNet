@@ -159,7 +159,6 @@ auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
 
     // This will try to get a cached pipeline state or create a new one if needed.
     command_recorder.SetPipelineState(last_built_pso_desc_); // It also sets the bindless root signature.
-    command_recorder.SetupBindlessRendering(); // This sets the bindless descriptor tables.
 
     try {
         const auto dsv = PrepareDepthStencilView(GetDepthTexture());
@@ -381,9 +380,9 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
     return GraphicsPipelineDesc::Builder()
         .SetVertexShader(ShaderStageDesc {
-            .shader = MakeShaderIdentifier(ShaderType::kVertex, "DepthOnlyVS.hlsl") })
+            .shader = MakeShaderIdentifier(ShaderType::kVertex, "DepthPrePass.hlsl") })
         .SetPixelShader(ShaderStageDesc {
-            .shader = MakeShaderIdentifier(ShaderType::kPixel, "MinimalPS.hlsl") })
+            .shader = MakeShaderIdentifier(ShaderType::kPixel, "DepthPrePass.hlsl") })
         .SetPrimitiveTopology(PrimitiveType::kTriangleList)
         .SetRasterizerState(raster_desc)
         .SetDepthStencilState(ds_desc)

@@ -32,14 +32,10 @@ using oxygen::examples::MainModule;
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 using oxygen::graphics::Buffer;
-using oxygen::graphics::BufferDesc;
-using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DeferredObjectRelease;
 using oxygen::graphics::Framebuffer;
-using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Scissors;
-using oxygen::graphics::ShaderType;
 using oxygen::graphics::ViewPort;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
@@ -79,25 +75,28 @@ struct Vertex {
     float color[3];
 };
 
-constexpr float kTriangleHeight = 0.8f;
-
 // Store the initial triangle vertices (CCW order for D3D12 default culling)
 Vertex initial_triangle_vertices[3] = {
-    { { -0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } }, // Bottom left (green)
-    { { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } }, // Top (red)
-    { { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } } // Bottom right (blue)
+    { .position = { -0.5f, -0.5f, 0.0f }, .color = { 0.0f, 1.0f, 0.0f } }, // Bottom left (green)
+    { .position = { 0.0f, 0.5f, 0.0f }, .color = { 1.0f, 0.0f, 0.0f } }, // Top (red)
+    { .position = { 0.5f, -0.5f, 0.0f }, .color = { 0.0f, 0.0f, 1.0f } } // Bottom right (blue)
 };
 
-// Helper to rotate a triangle in NDC, centered at (cx, cy), with given height (NDC units, 1.0 = full framebuffer height) and rotation
-inline void RotateTriangle(const Vertex (&in_vertices)[3], Vertex (&out_vertices)[3], float cx, float cy, float angle_rad)
+// Helper to rotate a triangle in NDC, centered at (cx, cy), with given height
+// (NDC units, 1.0 = full framebuffer height) and rotation
+void RotateTriangle(
+    const Vertex (&in_vertices)[3],
+    Vertex (&out_vertices)[3],
+    const float cx, const float cy,
+    const float angle_rad)
 {
-    float cos_a = std::cos(angle_rad);
-    float sin_a = std::sin(angle_rad);
+    const float cos_a = std::cos(angle_rad);
+    const float sin_a = std::sin(angle_rad);
     for (int i = 0; i < 3; ++i) {
-        float x = in_vertices[i].position[0] - cx;
-        float y = in_vertices[i].position[1] - cy;
-        float xr = x * cos_a - y * sin_a;
-        float yr = x * sin_a + y * cos_a;
+        const float x = in_vertices[i].position[0] - cx;
+        const float y = in_vertices[i].position[1] - cy;
+        const float xr = x * cos_a - y * sin_a;
+        const float yr = x * sin_a + y * cos_a;
         out_vertices[i].position[0] = cx + xr;
         out_vertices[i].position[1] = cy + yr;
         out_vertices[i].position[2] = in_vertices[i].position[2];
@@ -126,19 +125,19 @@ MainModule::~MainModule()
 
     // Flush command queues used for the surface
     if (!gfx_weak_.expired()) {
-        auto gfx = gfx_weak_.lock();
-        graphics::SingleQueueStrategy queues;
+        const auto gfx = gfx_weak_.lock();
+        const graphics::SingleQueueStrategy queues;
         gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
     }
 
-    // Unregister the vertex buffer view if it's valid
+    // Un-register the vertex buffer view if it's valid
     // (No need to release descriptor handle, ResourceRegistry manages it)
     if (vertex_buffer_ && !gfx_weak_.expired() && renderer_) {
         try {
             auto& registry = renderer_->GetResourceRegistry();
             registry.UnRegisterViews(*vertex_buffer_);
         } catch (const std::exception& e) {
-            LOG_F(ERROR, "Error while unregistering vertex buffer view: {}", e.what());
+            LOG_F(ERROR, "Error while un-registering vertex buffer view: {}", e.what());
         }
     }
 
@@ -162,7 +161,7 @@ void MainModule::Run()
 
     nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired() && !gfx_weak_.expired()) {
-            auto gfx = gfx_weak_.lock();
+            const auto gfx = gfx_weak_.lock();
             co_await gfx->OnRenderStart();
             // Submit the render task to the renderer
             renderer_->Submit([this]() -> co::Co<> {
@@ -176,7 +175,7 @@ void MainModule::SetupCommandQueues() const
 {
     CHECK_F(!gfx_weak_.expired());
 
-    auto gfx = gfx_weak_.lock();
+    const auto gfx = gfx_weak_.lock();
     gfx->CreateCommandQueues(graphics::SingleQueueStrategy());
 }
 
@@ -185,9 +184,9 @@ void MainModule::SetupSurface()
     CHECK_F(!gfx_weak_.expired());
     CHECK_F(!window_weak_.expired());
 
-    auto gfx = gfx_weak_.lock();
+    const auto gfx = gfx_weak_.lock();
 
-    graphics::SingleQueueStrategy queues;
+    const graphics::SingleQueueStrategy queues;
     surface_ = gfx->CreateSurface(window_weak_, gfx->GetCommandQueue(queues.GraphicsQueueName()));
     surface_->SetName("Main Window Surface");
     LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(), window_weak_.lock()->Id());
@@ -207,7 +206,7 @@ void MainModule::SetupMainWindow()
         .resizable = true,
         .borderless = false
     };
-    window_weak_ = std::move(platform_->Windows().MakeWindow(props));
+    window_weak_ = platform_->Windows().MakeWindow(props);
     if (const auto window = window_weak_.lock()) {
         LOG_F(INFO, "Main window {} is created", window->Id());
     }
@@ -215,7 +214,7 @@ void MainModule::SetupMainWindow()
     // Immediately accept the close request for the main window
     nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired()) {
-            auto window = window_weak_.lock();
+            const auto window = window_weak_.lock();
             co_await window->CloseRequested();
             // Stop the nursery
             if (nursery_) {
@@ -227,7 +226,7 @@ void MainModule::SetupMainWindow()
 
     nursery_->Start([this]() -> co::Co<> {
         while (!window_weak_.expired()) {
-            auto window = window_weak_.lock();
+            const auto window = window_weak_.lock();
             if (const auto [from, to] = co_await window->Events().UntilChanged();
                 to == WindowEvent::kResized) {
                 LOG_F(INFO, "Main window was resized");
@@ -254,7 +253,7 @@ void MainModule::SetupRenderer()
 {
     CHECK_F(!gfx_weak_.expired());
 
-    auto gfx = gfx_weak_.lock();
+    const auto gfx = gfx_weak_.lock();
     renderer_ = gfx->CreateRenderer("Main Window Renderer", surface_, kFrameBufferCount - 1);
     CHECK_NOTNULL_F(renderer_, "Failed to create renderer for main window");
 }
@@ -279,7 +278,7 @@ void MainModule::CreateTriangleVertexBuffer()
     recreate_cbv_ = true;
 }
 
-void MainModule::UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder)
+void MainModule::UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder) const
 {
     if (!vertex_buffer_)
         return;
@@ -331,17 +330,17 @@ void MainModule::SetupFramebuffers()
     }
 }
 
-void MainModule::SetupShaders()
+void MainModule::SetupShaders() const
 {
     CHECK_F(!gfx_weak_.expired());
-    auto gfx = gfx_weak_.lock();
+    const auto gfx = gfx_weak_.lock();
 
     // Verify that the shaders can be loaded by the Graphics backend
-    auto vertex_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
+    const auto vertex_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
         graphics::ShaderType::kVertex,
         "FullScreenTriangle.hlsl"));
 
-    auto pixel_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
+    const auto pixel_shader = gfx->GetShader(graphics::MakeShaderIdentifier(
         graphics::ShaderType::kPixel,
         "FullScreenTriangle.hlsl"));
 
@@ -359,7 +358,7 @@ void MainModule::SetupShaders()
 // - The constant buffer (CBV) contains a uint specifying the index of the vertex buffer SRV in the heap (always 1 for this draw).
 // - The root signature and shader are designed to match this layout. See PipelineStateCache.cpp and FullScreenTriangle.hlsl for details.
 
-void MainModule::EnsureVertexBufferSRV()
+void MainModule::EnsureVertexBufferSrv()
 {
     if (!recreate_cbv_) {
         return;
@@ -391,18 +390,18 @@ void MainModule::EnsureVertexBufferSRV()
     }
 
     // Actually create the native view (SRV) in the backend
-    auto view = vertex_buffer_->GetNativeView(srv_handle, srv_view_desc);
+    const auto view = vertex_buffer_->GetNativeView(srv_handle, srv_view_desc);
 
     // -1 because the first index (0) is reserved for the constant buffer (b0)
     vertex_srv_shader_visible_index_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle) - 1;
 
     // Register the view if not already registered
-    resource_registry.RegisterView(*vertex_buffer_, std::move(view), std::move(srv_handle), srv_view_desc);
+    resource_registry.RegisterView(*vertex_buffer_, view, std::move(srv_handle), srv_view_desc);
 
     LOG_F(INFO, "Vertex buffer SRV registered at index {}", vertex_srv_shader_visible_index_);
 }
 
-void MainModule::EnsureConstantBufferForVertexSRV()
+void MainModule::EnsureConstantBufferForVertexSrv()
 {
     static graphics::DescriptorHandle cbv_handle_for_b0;
 
@@ -430,13 +429,14 @@ void MainModule::EnsureConstantBufferForVertexSRV()
     }
 
     // Always update the buffer contents (SRV index may change per frame)
-    // Invariant: The value written here must match the SRV's offset within the descriptor table (not the global heap index).
-    // For this example, the vertex buffer SRV is the first in the table, so the correct index is 0.
+    // Invariant: The value written here must match the SRV offset within the
+    // descriptor table (not the global heap index). For this example, the
+    // vertex buffer SRV is the first in the table, so the correct index is 0.
     void* mapped_data = constant_buffer_->Map();
     memcpy(mapped_data, &vertex_srv_shader_visible_index_, sizeof(vertex_srv_shader_visible_index_));
     constant_buffer_->UnMap();
 
-    // Only unregister/register if the buffer was just created (not every frame)
+    // Only un-register/register if the buffer was just created (not every frame)
     if (created) {
         resource_registry.UnRegisterResource(*constant_buffer_);
         resource_registry.Register(constant_buffer_);
@@ -447,7 +447,8 @@ void MainModule::EnsureConstantBufferForVertexSRV()
     if (!cbv_handle_for_b0.IsValid()) {
         // Do this before the re-allocation to recycle the index 0
         if (!created) {
-            DLOG_F(INFO, "Unregister CBV for vertex buffer SRV index {} to recreate it", vertex_srv_shader_visible_index_);
+            DLOG_F(INFO, "Un-register CBV for vertex buffer SRV index {} to recreate it",
+                vertex_srv_shader_visible_index_);
             resource_registry.UnRegisterViews(*constant_buffer_);
         }
         DLOG_F(INFO, "Create CBV for vertex buffer SRV index {}", vertex_srv_shader_visible_index_);
@@ -478,7 +479,7 @@ void MainModule::EnsureTriangleDrawResources()
     DCHECK_F(constant_buffer_ || recreate_cbv_, "Constant buffer must be created first");
     if (!constant_buffer_) {
         try {
-            EnsureConstantBufferForVertexSRV();
+            EnsureConstantBufferForVertexSrv();
             recreate_cbv_ = true; // Set the flag after creating the CBV for the first time
         } catch (const std::exception& e) {
             LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
@@ -489,14 +490,14 @@ void MainModule::EnsureTriangleDrawResources()
     DCHECK_F(constant_buffer_ != nullptr, "Constant buffer must be created first");
     try {
         // 1. Ensure the vertex buffer SRV is allocated and registered, get its index
-        EnsureVertexBufferSRV();
+        EnsureVertexBufferSrv();
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Error while ensuring vertex buffer SRV: {}", e.what());
         throw;
     }
     try {
         // 2. Ensure the constant buffer is created, registered, and updated with the SRV index
-        EnsureConstantBufferForVertexSRV();
+        EnsureConstantBufferForVertexSrv();
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
         throw;
@@ -534,7 +535,7 @@ auto MainModule::RenderScene() -> co::Co<>
 
     // 3. Reset/Begin the command list.
     auto gfx = gfx_weak_.lock();
-    auto recorder = renderer_->AcquireCommandRecorder(
+    const auto recorder = renderer_->AcquireCommandRecorder(
         graphics::SingleQueueStrategy().GraphicsQueueName(),
         "Main Window Command List");
 
@@ -542,16 +543,16 @@ auto MainModule::RenderScene() -> co::Co<>
     UploadTriangleVertexBuffer(*recorder);
 
     // 5. Prepare framebuffer, set viewport/scissors, pipeline, bindless, clear, draw
-    auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
+    const auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
     fb->PrepareForRender(*recorder);
 
-    ViewPort viewport {
+    const ViewPort viewport {
         .width = static_cast<float>(surface_->Width()),
         .height = static_cast<float>(surface_->Height()),
     };
     recorder->SetViewport(viewport);
 
-    Scissors scissors {
+    const Scissors scissors {
         .right = static_cast<int32_t>(surface_->Width()),
         .bottom = static_cast<int32_t>(surface_->Height())
     };
@@ -581,29 +582,28 @@ auto MainModule::RenderScene() -> co::Co<>
     } // Create a complete graphics pipeline state using the builder pattern
     // This is the new API that replaces the separate SetPipelineState(vertex_shader, pixel_shader)
     // Set rasterizer state: default is back-face culling, CW is front face
-    graphics::RasterizerStateDesc rasterizerDesc = {};
-    rasterizerDesc.cull_mode = graphics::CullMode::kBack; // Restore normal back-face culling
-    rasterizerDesc.front_counter_clockwise = false; // CW is front face
+    graphics::RasterizerStateDesc rasterizer_desc = {};
+    rasterizer_desc.cull_mode = graphics::CullMode::kBack; // Restore normal back-face culling
+    rasterizer_desc.front_counter_clockwise = false; // CW is front face
 
-    auto pipelineDesc
+    const auto pipeline_desc
         = graphics::GraphicsPipelineDesc::Builder()
               .SetVertexShader(graphics::ShaderStageDesc {
-                  graphics::MakeShaderIdentifier(graphics::ShaderType::kVertex, "FullScreenTriangle.hlsl") })
+                  .shader = graphics::MakeShaderIdentifier(
+                      graphics::ShaderType::kVertex, "FullScreenTriangle.hlsl") })
               .SetPixelShader(graphics::ShaderStageDesc {
-                  graphics::MakeShaderIdentifier(graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
+                  .shader = graphics::MakeShaderIdentifier(
+                      graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
               .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-              .SetRasterizerState(rasterizerDesc)
+              .SetRasterizerState(rasterizer_desc)
               .SetFramebufferLayout(std::move(fbLayout))
               .Build();
 
     // Set the pipeline state. Should be called after framebuffer, viewport, and scissors
     // are set, and before resource binding and draw calls.
-    recorder->SetPipelineState(pipelineDesc);
+    recorder->SetPipelineState(pipeline_desc);
 
-    // 7. Setup Bindless Rendering Tables
-    recorder->SetupBindlessRendering();
-
-    // 8. Draw the triangle
+    // 7. Draw the triangle
     recorder->ClearFramebuffer(
         *fb,
         std::vector<std::optional<graphics::Color>> { graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f } },

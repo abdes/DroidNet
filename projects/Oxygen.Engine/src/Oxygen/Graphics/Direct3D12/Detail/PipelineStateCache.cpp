@@ -10,7 +10,6 @@
 #include <unordered_map>
 
 #include <d3d12.h>
-#include <wrl/client.h> // For Microsoft::WRL::ComPtr
 
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
@@ -22,9 +21,9 @@ namespace oxygen::graphics::d3d12::detail {
 
 // Helper to load shader bytecode from shader manager
 namespace {
-    auto LoadShaderBytecode(d3d12::Graphics* gfx, const ShaderStageDesc& desc) -> D3D12_SHADER_BYTECODE
+    auto LoadShaderBytecode(const Graphics* gfx, const ShaderStageDesc& desc) -> D3D12_SHADER_BYTECODE
     {
-        auto shader = gfx->GetShader(desc.shader);
+        const auto shader = gfx->GetShader(desc.shader);
         if (!shader) {
             throw std::runtime_error("Shader not found: " + desc.shader);
         }
@@ -51,90 +50,28 @@ namespace {
     }
 } // namespace
 
-#include <ranges> // Add this include for std::ranges::values
-
 PipelineStateCache::~PipelineStateCache()
 {
     // Release all pipeline states and root signatures.
 
-    for (auto& [_, entry_tuple] : graphics_pipelines_) {
-        auto& entry = std::get<1>(entry_tuple);
-        ObjectRelease(entry.pipeline_state);
-        ObjectRelease(entry.root_signature);
+    for (auto& entry_tuple : graphics_pipelines_ | std::views::values) {
+        auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
+        ObjectRelease(pipeline_state);
+        ObjectRelease(root_signature);
     }
     graphics_pipelines_.clear();
 
-    for (auto& [_, entry_tuple] : compute_pipelines_) {
-        auto& entry = std::get<1>(entry_tuple);
-        ObjectRelease(entry.pipeline_state);
-        ObjectRelease(entry.root_signature);
+    for (auto& entry_tuple : compute_pipelines_ | std::views::values) {
+        auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
+        ObjectRelease(pipeline_state);
+        ObjectRelease(root_signature);
     }
     compute_pipelines_.clear();
 }
 
-//! Create a bindless root signature for graphics or compute pipelines
-// Invariant: The root signature contains a single descriptor table with two ranges:
-//   - Range 0: 1 CBV at register b0 (heap index 0)
-//   - Range 1: Unbounded SRVs at register t0, space0 (heap indices 1+)
-// The descriptor table is always at root parameter 0.
-// The flag D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED is set for true bindless access.
-// This layout must match the expectations of both the engine and the shaders (see FullScreenTriangle.hlsl).
-auto PipelineStateCache::CreateBindlessRootSignature(bool is_graphics) -> dx::IRootSignature*
-{
-    std::vector<D3D12_ROOT_PARAMETER> root_params(1); // Single root parameter for the main descriptor table
-    std::vector<D3D12_DESCRIPTOR_RANGE> ranges(2);
-
-    // Range 0: CBV for register b0 (heap index 0)
-    ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    ranges[0].NumDescriptors = 1;
-    ranges[0].BaseShaderRegister = 0; // b0
-    ranges[0].RegisterSpace = 0;
-    ranges[0].OffsetInDescriptorsFromTableStart = 0; // This CBV is at the start of the table
-
-    // Range 1: SRVs for register t0 onwards (heap indices 1+)
-    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    ranges[1].NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Unbounded, for bindless
-    ranges[1].BaseShaderRegister = 0; // t0
-    ranges[1].RegisterSpace = 0; // Assuming SRVs are in space0
-    ranges[1].OffsetInDescriptorsFromTableStart = 1; // SRVs start after the 1 CBV descriptor
-
-    root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    root_params[0].DescriptorTable.NumDescriptorRanges = static_cast<UINT>(ranges.size());
-    root_params[0].DescriptorTable.pDescriptorRanges = ranges.data();
-    root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; // Visible to all stages that might need it
-
-    D3D12_ROOT_SIGNATURE_DESC root_sig_desc = {};
-    root_sig_desc.NumParameters = static_cast<UINT>(root_params.size());
-    root_sig_desc.pParameters = root_params.data();
-    root_sig_desc.NumStaticSamplers = 0; // Add static samplers if needed
-    root_sig_desc.pStaticSamplers = nullptr;
-    root_sig_desc.Flags = is_graphics ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT : D3D12_ROOT_SIGNATURE_FLAG_NONE;
-    // D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED enables true bindless access for all shaders.
-    root_sig_desc.Flags |= D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
-
-    Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
-    HRESULT hr = D3D12SerializeRootSignature(&root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &sig_blob, &err_blob);
-    if (FAILED(hr)) {
-        std::string error_msg = "Failed to serialize root signature: ";
-        if (err_blob) {
-            error_msg += static_cast<const char*>(err_blob->GetBufferPointer());
-        }
-        throw std::runtime_error(error_msg);
-    }
-
-    dx::IRootSignature* root_sig = nullptr;
-    auto* device = gfx_->GetCurrentDevice();
-    hr = device->CreateRootSignature(
-        0, sig_blob->GetBufferPointer(), sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig));
-    if (FAILED(hr)) {
-        throw std::runtime_error("Failed to create root signature");
-    }
-
-    return root_sig;
-}
-
 //! Get or create a graphics pipeline state object and root signature.
-auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) -> Entry
+auto PipelineStateCache::GetOrCreateGraphicsPipeline(
+    dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, size_t hash) -> Entry
 {
     auto it = graphics_pipelines_.find(hash);
     if (it != graphics_pipelines_.end()) {
@@ -144,7 +81,7 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
 
     // Create new pipeline state and root signature
     dx::IPipelineState* pso = nullptr;
-    dx::IRootSignature* root_sig = CreateBindlessRootSignature(true); // Create graphics root signature
+    dx::IRootSignature* root_sig = root_signature;
 
     // 2. Translate GraphicsPipelineDesc to D3D12_GRAPHICS_PIPELINE_STATE_DESC
     D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
@@ -197,7 +134,10 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
     SetupFramebufferFormats(fb_layout, pso_desc);
 
     // No input layout for bindless rendering (use structured/raw buffers instead)
-    pso_desc.InputLayout = { nullptr, 0 };
+    pso_desc.InputLayout = {
+        .pInputElementDescs = nullptr,
+        .NumElements = 0,
+    };
     // Create the pipeline state object
     auto* device = gfx_->GetCurrentDevice();
     HRESULT hr = device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso));
@@ -205,13 +145,16 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
         throw std::runtime_error("Failed to create graphics pipeline state");
     }
 
-    Entry entry { pso, root_sig };
+    Entry entry {
+        .pipeline_state = pso,
+        .root_signature = root_sig,
+    };
     graphics_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
     return entry;
 }
 
 //! Get or create a compute pipeline state object and root signature.
-auto PipelineStateCache::GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) -> Entry
+auto PipelineStateCache::GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, size_t hash) -> Entry
 {
     auto it = compute_pipelines_.find(hash);
     if (it != compute_pipelines_.end()) {
@@ -220,7 +163,7 @@ auto PipelineStateCache::GetOrCreateComputePipeline(ComputePipelineDesc desc, si
     }
 
     dx::IPipelineState* pso = nullptr;
-    dx::IRootSignature* root_sig = CreateBindlessRootSignature(false); // Create compute root signature
+    dx::IRootSignature* root_sig = root_signature;
 
     // 2. Create the compute pipeline state object
     D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
@@ -236,19 +179,22 @@ auto PipelineStateCache::GetOrCreateComputePipeline(ComputePipelineDesc desc, si
         throw std::runtime_error("Failed to create compute pipeline state");
     }
 
-    Entry entry { pso, root_sig };
+    Entry entry {
+        .pipeline_state = pso,
+        .root_signature = root_sig,
+    };
     compute_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
     return entry;
 }
 
 //! Get the cached graphics pipeline description for a given hash.
-auto PipelineStateCache::GetGraphicsPipelineDesc(size_t hash) const -> const GraphicsPipelineDesc&
+auto PipelineStateCache::GetGraphicsPipelineDesc(const size_t hash) const -> const GraphicsPipelineDesc&
 {
     return std::get<0>(graphics_pipelines_.at(hash));
 }
 
 //! Get the cached compute pipeline description for a given hash.
-auto PipelineStateCache::GetComputePipelineDesc(size_t hash) const -> const ComputePipelineDesc&
+auto PipelineStateCache::GetComputePipelineDesc(const size_t hash) const -> const ComputePipelineDesc&
 {
     return std::get<0>(compute_pipelines_.at(hash));
 }

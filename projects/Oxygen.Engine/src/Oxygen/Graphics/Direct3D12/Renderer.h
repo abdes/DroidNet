@@ -69,9 +69,9 @@ public:
     [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
-    [[nodiscard]] auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) const
+    [[nodiscard]] auto GetOrCreateGraphicsPipeline(dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
-    [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) const
+    [[nodiscard]] auto GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
 
     [[nodiscard]] auto CreateDepthPrePass(const DepthPrePassConfig& config)
@@ -82,8 +82,6 @@ protected:
         graphics::CommandList* command_list,
         graphics::CommandQueue* target_queue)
         -> std::unique_ptr<graphics::CommandRecorder> override;
-
-    OXYGEN_D3D12_API void PrepareRecorderForRender(graphics::CommandRecorder& recorder) override;
 };
 
 } // namespace oxygen::graphics::d3d12

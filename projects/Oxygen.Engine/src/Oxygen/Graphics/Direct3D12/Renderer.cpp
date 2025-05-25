@@ -66,11 +66,6 @@ auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphi
     return std::make_unique<CommandRecorder>(this, command_list, target_queue);
 }
 
-void Renderer::PrepareRecorderForRender(graphics::CommandRecorder& recorder)
-{
-    // TODO: confirm nothing to do here
-}
-
 auto Renderer::CreateTexture(TextureDesc desc) const
     -> std::shared_ptr<graphics::Texture>
 {
@@ -94,18 +89,18 @@ auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<gra
     return std::make_shared<Buffer>(desc);
 }
 
-auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, const size_t hash) const
+auto Renderer::GetOrCreateGraphicsPipeline(dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
+    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(root_signature, std::move(desc), hash);
 }
 
-auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, const size_t hash) const
+auto Renderer::GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
+    return cache.GetOrCreatePipeline<ComputePipelineDesc>(root_signature, std::move(desc), hash);
 }
 
 auto Renderer::CreateDepthPrePass(const DepthPrePassConfig& config) -> std::shared_ptr<RenderPass>

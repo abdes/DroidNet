@@ -57,7 +57,7 @@ private:
     void SetupSurface();
     void SetupRenderer();
     void SetupFramebuffers();
-    void SetupShaders();
+    void SetupShaders() const;
 
     auto RenderScene() -> co::Co<>;
 
@@ -66,7 +66,7 @@ private:
     std::weak_ptr<platform::Window> window_weak_;
     std::shared_ptr<graphics::Surface> surface_;
     std::shared_ptr<graphics::Renderer> renderer_;
-    StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_;
+    StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_ {};
 
     std::shared_ptr<graphics::Buffer> vertex_buffer_;
     std::shared_ptr<graphics::Buffer> constant_buffer_;
@@ -74,9 +74,9 @@ private:
     co::Nursery* nursery_ { nullptr };
     float rotation_angle_ { 0.0f };
     void CreateTriangleVertexBuffer();
-    void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder);
-    void EnsureConstantBufferForVertexSRV();
-    void EnsureVertexBufferSRV();
+    void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder) const;
+    void EnsureConstantBufferForVertexSrv();
+    void EnsureVertexBufferSrv();
     void EnsureTriangleDrawResources();
 
     uint32_t vertex_srv_shader_visible_index_ { 1 };

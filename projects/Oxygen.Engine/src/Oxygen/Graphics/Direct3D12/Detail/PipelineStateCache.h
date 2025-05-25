@@ -7,7 +7,6 @@
 #pragma once
 
 #include <concepts>
-#include <memory>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -49,17 +48,19 @@ namespace detail {
 
         /*!
          Get or create a pipeline state object and root signature for the given description and hash.
+         \param root_signature The root signature to use for the pipeline state.
          \param desc The pipeline description (graphics or compute).
          \param hash The precomputed hash of the description.
          \return Pair of pointers to the PSO and root signature.
         */
         template <typename TDesc>
-        auto GetOrCreatePipeline(TDesc desc, size_t hash) -> Entry
+        // ReSharper disable once CppNotAllPathsReturnValue
+        auto GetOrCreatePipeline(dx::IRootSignature* root_signature, TDesc desc, size_t hash) -> Entry
         {
             if constexpr (std::same_as<TDesc, GraphicsPipelineDesc>) {
-                return GetOrCreateGraphicsPipeline(std::move(desc), hash);
+                return GetOrCreateGraphicsPipeline(root_signature, std::move(desc), hash);
             } else if constexpr (std::same_as<TDesc, ComputePipelineDesc>) {
-                return GetOrCreateComputePipeline(std::move(desc), hash);
+                return GetOrCreateComputePipeline(root_signature, std::move(desc), hash);
             } else {
                 static_assert(oxygen::always_false_v<TDesc>, "Unsupported pipeline desc type");
             }
@@ -72,7 +73,8 @@ namespace detail {
          \throws std::out_of_range if not found.
         */
         template <typename TDesc>
-        auto GetPipelineDesc(size_t hash) const -> const TDesc&
+        // ReSharper disable once CppNotAllPathsReturnValue
+        auto GetPipelineDesc(const size_t hash) const -> const TDesc&
         {
             if constexpr (std::same_as<TDesc, GraphicsPipelineDesc>) {
                 return GetGraphicsPipelineDesc(hash);
@@ -85,15 +87,12 @@ namespace detail {
 
     private:
         // Main pipeline state creation methods
-        auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) -> Entry;
-        auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) -> Entry;
+        auto GetOrCreateGraphicsPipeline(dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, size_t hash) -> Entry;
+        auto GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, size_t hash) -> Entry;
 
         // Cache access methods
         auto GetGraphicsPipelineDesc(size_t hash) const -> const GraphicsPipelineDesc&;
         auto GetComputePipelineDesc(size_t hash) const -> const ComputePipelineDesc&;
-
-        // Root signature creation helpers
-        auto CreateBindlessRootSignature(bool is_graphics) -> dx::IRootSignature*;
 
         // Pipeline cache storage
         std::unordered_map<size_t, std::tuple<GraphicsPipelineDesc, Entry>> graphics_pipelines_;
