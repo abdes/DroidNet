@@ -87,6 +87,16 @@ public:
     //! D3D12 command list.
     void SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps);
 
+    // D3D12 specific commands
+    //! Clears a D3D12 Depth Stencil View.
+    OXYGEN_D3D12_API void ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle, D3D12_CLEAR_FLAGS clear_flags, float depth, uint8_t stencil);
+    //! Sets D3D12 Render Targets.
+    OXYGEN_D3D12_API void SetRenderTargets(UINT num_render_target_descriptors, const D3D12_CPU_DESCRIPTOR_HANDLE* rtv_handles, bool rts_single_handle_to_descriptor_range, const D3D12_CPU_DESCRIPTOR_HANDLE* dsv_handle);
+    //! Sets the D3D12 Input Assembler primitive topology.
+    OXYGEN_D3D12_API void IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY topology);
+    // Add other D3D12 specific methods as needed, e.g., for root arguments:
+    // OXYGEN_D3D12_API void SetGraphicsRootConstantBufferView(UINT root_parameter_index, D3D12_GPU_VIRTUAL_ADDRESS buffer_location);
+
 protected:
     void ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers) override;
 

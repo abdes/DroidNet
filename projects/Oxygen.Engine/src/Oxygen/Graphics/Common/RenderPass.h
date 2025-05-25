@@ -10,6 +10,7 @@
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
+#include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::graphics {
@@ -91,10 +92,20 @@ public:
     */
     virtual co::Co<> Execute(CommandRecorder& recorder) = 0;
 
-    //! Set the viewport for this pass.
+    //! Sets the viewport for this render pass.
+    /*!
+     The viewport is applied by backend-specific `Execute` implementations.
+
+     \param viewport The viewport dimensions and depth range.
+    */
     virtual void SetViewport(const ViewPort& viewport) = 0;
 
-    //! Set the scissors rectangle for this pass.
+    //! Sets the viewport for this render pass.
+    /*!
+     The viewport is applied by backend-specific `Execute` implementations.
+
+     \param viewport The viewport dimensions and depth range.
+    */
     virtual void SetScissors(const Scissors& scissors) = 0;
 
     //! Set the clear color for this pass's framebuffer.
@@ -107,10 +118,10 @@ public:
     virtual auto IsEnabled() const -> bool = 0;
 
     //! Get the name of this pass (from Named interface).
-    [[nodiscard]] virtual auto GetName() const noexcept -> std::string_view override;
+    [[nodiscard]] OXYGEN_GFX_API virtual auto GetName() const noexcept -> std::string_view override;
 
     //! Set the name of this pass (from Named interface).
-    virtual void SetName(std::string_view name) noexcept override;
+    virtual void OXYGEN_GFX_API SetName(std::string_view name) noexcept override;
 };
 
 } // namespace oxygen::graphics

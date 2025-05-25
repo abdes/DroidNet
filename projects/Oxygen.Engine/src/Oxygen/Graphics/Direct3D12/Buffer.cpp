@@ -233,40 +233,6 @@ void Buffer::SetName(const std::string_view name) noexcept
     GetComponent<GraphicResource>().SetName(name);
 }
 
-auto Buffer::GetNativeView(
-    const DescriptorHandle& view_handle,
-    const BufferViewDescription& view_desc) const
-    -> NativeObject
-{
-    using oxygen::graphics::ResourceViewType;
-
-    switch (view_desc.view_type) {
-    case ResourceViewType::kConstantBuffer:
-        return CreateConstantBufferView(
-            view_handle,
-            view_desc.range);
-    case ResourceViewType::kRawBuffer_SRV:
-    case ResourceViewType::kTypedBuffer_SRV:
-    case ResourceViewType::kStructuredBuffer_SRV:
-        return CreateShaderResourceView(
-            view_handle,
-            view_desc.format,
-            view_desc.range,
-            view_desc.stride);
-    case ResourceViewType::kRawBuffer_UAV:
-    case ResourceViewType::kTypedBuffer_UAV:
-    case ResourceViewType::kStructuredBuffer_UAV:
-        return CreateUnorderedAccessView(
-            view_handle,
-            view_desc.format,
-            view_desc.range,
-            view_desc.stride);
-    default:
-        // Unknown or unsupported view type
-        return {};
-    }
-}
-
 auto Buffer::CreateConstantBufferView(
     const DescriptorHandle& view_handle,
     const BufferRange& range) const -> NativeObject

@@ -343,12 +343,18 @@ void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, ui
 
 void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
 {
-    graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
+    DCHECK_NOTNULL_F(renderer_);
+
     auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
-    // Use stored renderer_
-    DCHECK_NOTNULL_F(renderer_);
+
+    graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
     auto [pipeline_state, root_signature] = renderer_->GetOrCreateGraphicsPipeline(std::move(desc), graphics_pipeline_hash_);
+
+    // Name them for debugging
+    NameObject(pipeline_state, desc.GetName() + "_PSO");
+    NameObject(root_signature, desc.GetName() + "_BindlessRS");
+
     auto* d3d12_command_list = command_list->GetCommandList();
     d3d12_command_list->SetGraphicsRootSignature(root_signature);
     d3d12_command_list->SetPipelineState(pipeline_state);
@@ -629,4 +635,44 @@ void CommandRecorder::CopyBuffer(
         src_resource,
         src_offset,
         size);
+}
+
+// D3D12 specific command implementations
+void CommandRecorder::ClearDepthStencilView(
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle,
+    D3D12_CLEAR_FLAGS clear_flags,
+    float depth,
+    uint8_t stencil)
+{
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    d3d12_command_list->ClearDepthStencilView(dsv_handle, clear_flags, depth, stencil, 0, nullptr);
+}
+
+// TODO: reuse in BindFrameBuffer
+void CommandRecorder::SetRenderTargets(
+    UINT num_render_target_descriptors,
+    const D3D12_CPU_DESCRIPTOR_HANDLE* rtv_handles,
+    bool rts_single_handle_to_descriptor_range,
+    const D3D12_CPU_DESCRIPTOR_HANDLE* dsv_handle)
+{
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    d3d12_command_list->OMSetRenderTargets(num_render_target_descriptors, rtv_handles, rts_single_handle_to_descriptor_range, dsv_handle);
+}
+
+void CommandRecorder::IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY topology)
+{
+    auto* command_list_impl = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list_impl);
+    auto* d3d12_command_list = command_list_impl->GetCommandList();
+    DCHECK_NOTNULL_F(d3d12_command_list);
+
+    d3d12_command_list->IASetPrimitiveTopology(topology);
 }

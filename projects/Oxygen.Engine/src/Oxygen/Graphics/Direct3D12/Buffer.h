@@ -35,11 +35,6 @@ namespace d3d12 {
 
         [[nodiscard]] OXYGEN_D3D12_API auto GetNativeResource() const -> NativeObject override;
 
-        [[nodiscard]] OXYGEN_D3D12_API auto GetNativeView(
-            const DescriptorHandle& view_handle,
-            const BufferViewDescription& view_desc) const
-            -> NativeObject override;
-
         [[nodiscard]] OXYGEN_D3D12_API auto GetResource() const -> ID3D12Resource*;
         [[nodiscard]] OXYGEN_D3D12_API auto Map(size_t offset = 0, size_t size = 0) -> void* override;
         OXYGEN_D3D12_API void UnMap() override;

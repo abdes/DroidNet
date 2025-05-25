@@ -40,10 +40,6 @@ namespace d3d12 {
         OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto GetNativeResource() const -> NativeObject override;
-        [[nodiscard]] OXYGEN_D3D12_API auto GetNativeView(
-            const DescriptorHandle& view_handle,
-            const TextureViewDescription& view_desc) const
-            -> NativeObject override;
 
         [[nodiscard]] OXYGEN_D3D12_API auto GetDescriptor() const -> const TextureDesc& override { return desc_; }
 

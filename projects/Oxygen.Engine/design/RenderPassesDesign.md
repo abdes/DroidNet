@@ -218,3 +218,21 @@ feed shadow data into the shading pass.)
   pass.
 - Pipeline State Objects (PSOs) are cached and bound per-pass, with root
   signature conventions enforced for bindless access.
+
+## Render Pass Orchestration and Pipeline State Ownership
+
+In Oxygen, the orchestration of render passes for each frame is handled by the
+application's `RenderScene()` function (or equivalent), which is called by the
+`RenderThread`. This function determines which passes are needed for the current
+frame, their order, and their configuration. The `Renderer` is responsible for
+the lifetime, ownership, and registration of all `RenderPass` instances, and
+provides APIs to add, remove, or query passes. The `Renderer` also ensures that
+passes are executed in the correct order and may cache or reuse passes across
+frames.
+
+Pipeline state objects (PSOs) are owned and managed by the `Renderer`, with
+backend-specific implementation (such as D3D12) provided by the
+`PipelineStateCache` component. Render passes do not create or own PSOs
+directly; instead, they request the required PSO from the `Renderer` or its
+pipeline state cache, providing a pipeline description or hash. This ensures
+efficient reuse and centralized management of pipeline state.

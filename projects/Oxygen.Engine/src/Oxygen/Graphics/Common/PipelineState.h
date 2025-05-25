@@ -251,6 +251,12 @@ public:
         return framebuffer_layout_;
     }
 
+    //! Get debug name for this pipeline.
+    [[nodiscard]] constexpr auto GetName() const noexcept -> const std::string&
+    {
+        return debug_name_;
+    }
+
 private:
     friend class Builder;
     GraphicsPipelineDesc() = default; // Only constructed by Builder.
@@ -268,6 +274,8 @@ private:
     std::vector<BlendTargetDesc> blend_state_; //!< Blend state per render target.
 
     FramebufferLayoutDesc framebuffer_layout_; //!< Framebuffer layout.
+
+    std::string debug_name_ { "GraphicsPipeline" };
 
     // TODO: allow to include an opaque handle to a pipeline cache.
 };
@@ -356,6 +364,13 @@ public:
         return std::move(*this);
     }
 
+    //! Set debug name for the pipeline.
+    auto SetDebugName(std::string name) && -> Builder&&
+    {
+        desc_.debug_name_ = std::move(name);
+        return std::move(*this);
+    }
+
     //! Build the immutable GraphicsPipelineDesc.
     /*!
      \throws std::runtime_error if required components are missing.
@@ -407,14 +422,22 @@ public:
         return compute_shader_;
     }
 
+    //! Get debug name for this compute pipeline.
+    [[nodiscard]] constexpr auto GetName() const noexcept -> const std::string&
+    {
+        return debug_name_;
+    }
+
 private:
     friend class Builder;
-    explicit ComputePipelineDesc(ShaderStageDesc shader)
+    explicit ComputePipelineDesc(ShaderStageDesc shader, std::string debug_name)
         : compute_shader_(std::move(shader))
+        , debug_name_(std::move(debug_name))
     {
     }
 
     ShaderStageDesc compute_shader_;
+    std::string debug_name_;
 };
 
 //! Builder for ComputePipelineDesc using modern C++20 patterns.
@@ -434,6 +457,13 @@ public:
         return std::move(*this);
     }
 
+    //! Set debug name for the compute pipeline.
+    auto SetDebugName(std::string name) && -> Builder&&
+    {
+        debug_name_ = std::move(name);
+        return std::move(*this);
+    }
+
     //! Build the immutable ComputePipelineDesc.
     /*!
      \throws std::runtime_error if compute shader is not set.
@@ -443,12 +473,13 @@ public:
         if (!has_compute_shader_) {
             throw std::runtime_error("ComputePipelineDesc requires a compute shader");
         }
-        return ComputePipelineDesc { std::move(compute_shader_) };
+        return ComputePipelineDesc { std::move(compute_shader_), std::move(debug_name_) };
     }
 
 private:
     ShaderStageDesc compute_shader_;
     bool has_compute_shader_ = false;
+    std::string debug_name_ { "ComputePipeline" };
 };
 
 } // namespace oxygen::graphics
