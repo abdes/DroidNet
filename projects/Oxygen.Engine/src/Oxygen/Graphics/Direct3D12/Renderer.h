@@ -55,16 +55,6 @@ public:
     // Hides base GetGraphics(), returns d3d12::Graphics&
     [[nodiscard]] auto GetGraphics() const -> const d3d12::Graphics&;
 
-    // auto GetCommandRecorder() const -> CommandRecorderPtr override;
-
-    // [[nodiscard]] OXYGEN_D3D12_API auto CreateWindowSurface(platform::WindowPtr window) const -> resources::SurfaceId override;
-
-    // OXYGEN_D3D12_API void CreateSwapChain(const resources::SurfaceId& surface_id) const override;
-    //, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) const;
-    //  TODO: Add backend independent support for format
-
-    // [[nodiscard]] auto CreateVertexBuffer(const void* data, size_t size, uint32_t stride) const -> BufferPtr override;
-
     [[nodiscard]] auto CreateTexture(TextureDesc desc) const
         -> std::shared_ptr<graphics::Texture> override;
 
@@ -82,6 +72,9 @@ public:
         -> detail::PipelineStateCache::Entry;
     [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
         -> detail::PipelineStateCache::Entry;
+
+    [[nodiscard]] auto CreateDepthPrePass(const DepthPrePassConfig& config)
+        -> std::shared_ptr<RenderPass> override;
 
 protected:
     [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandRecorder(

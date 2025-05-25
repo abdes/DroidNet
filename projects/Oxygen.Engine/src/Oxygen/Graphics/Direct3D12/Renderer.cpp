@@ -105,3 +105,8 @@ auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
     auto& cache = GetComponent<detail::PipelineStateCache>();
     return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }
+
+auto Renderer::CreateDepthPrePass(const DepthPrePassConfig& config) -> std::shared_ptr<RenderPass>
+{
+    return CreateNullRenderPass(); // TODO: Placeholder, implement actual depth pre-pass creation
+}

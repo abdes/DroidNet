@@ -169,8 +169,7 @@ public:
     [[nodiscard]] OXYGEN_GFX_API virtual auto GetNativeView(
         const DescriptorHandle& view_handle,
         const BufferViewDescription& view_desc) const
-        -> NativeObject
-        = 0;
+        -> NativeObject;
 
     //! Maps the buffer memory for CPU access.
     /*! \param offset Byte offset to start mapping.

@@ -21,11 +21,14 @@
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/RenderPass.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
+#include <Oxygen/OxCo/Co.h>
 
 using oxygen::graphics::Renderer;
+using oxygen::graphics::RenderPass;
 using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;
 
@@ -311,4 +314,40 @@ void Renderer::HandleSurfaceResize(Surface& surface)
 
     surface.Resize();
     current_frame_index_ = surface.GetCurrentBackBufferIndex();
+}
+
+namespace oxygen::graphics {
+
+// Generic no-op implementation for any render pass type.
+class NullRenderPass : public RenderPass {
+public:
+    NullRenderPass(std::string_view name = "NullRenderPass")
+        : RenderPass(name)
+    {
+    }
+
+    ~NullRenderPass() noexcept override = default;
+
+    OXYGEN_DEFAULT_COPYABLE(NullRenderPass)
+    OXYGEN_DEFAULT_MOVABLE(NullRenderPass)
+
+    co::Co<> PrepareResources(CommandRecorder&) override { co_return; }
+    co::Co<> Execute(CommandRecorder&) override { co_return; }
+    void SetViewport(const ViewPort&) override { }
+    void SetScissors(const Scissors&) override { }
+    void SetClearColor(const Color&) override { }
+    void SetEnabled(bool) override { }
+    bool IsEnabled() const override { return false; }
+    std::string_view GetName() const noexcept override { return name_; }
+    void SetName(std::string_view name) noexcept override { name_ = std::string(name); }
+
+private:
+    std::string name_;
+};
+
+} // namespace oxygen::graphics
+
+auto Renderer::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
+{
+    return std::make_shared<NullRenderPass>();
 }

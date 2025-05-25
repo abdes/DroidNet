@@ -30,11 +30,14 @@ namespace graphics {
     class CommandList;
     class CommandQueue;
     class CommandRecorder;
-    class DescriptorAllocator;
-    class ResourceRegistry;
+    class DepthPrePass;
     class DescriptorAllocationStrategy;
+    class DescriptorAllocator;
+    class RenderPass;
+    class ResourceRegistry;
     class Surface;
     struct BufferDesc;
+    struct DepthPrePassConfig;
 
     //! Orchestrates the frame render loop.
     /*!
@@ -212,6 +215,13 @@ namespace graphics {
             = 0;
 
         OXYGEN_GFX_API virtual void FlushPendingCommandLists();
+
+        virtual auto CreateDepthPrePass(const DepthPrePassConfig& config)
+            -> std::shared_ptr<RenderPass>
+            = 0;
+
+        // Returns a generic no-op render pass (NullRenderPass).
+        OXYGEN_GFX_API auto CreateNullRenderPass() -> std::shared_ptr<RenderPass>;
 
     protected:
         [[nodiscard]] virtual auto CreateCommandRecorder(

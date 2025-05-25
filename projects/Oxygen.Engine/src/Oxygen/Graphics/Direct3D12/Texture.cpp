@@ -205,43 +205,6 @@ auto Texture::GetNativeResource() const -> NativeObject
     return { GetComponent<GraphicResource>().GetResource(), ClassTypeId() };
 }
 
-auto Texture::GetNativeView(
-    const DescriptorHandle& view_handle,
-    const TextureViewDescription& view_desc) const
-    -> NativeObject
-{
-    using oxygen::graphics::ResourceViewType;
-
-    switch (view_desc.view_type) {
-    case ResourceViewType::kTexture_SRV:
-        return CreateShaderResourceView(
-            view_handle,
-            view_desc.format,
-            view_desc.dimension,
-            view_desc.sub_resources);
-    case ResourceViewType::kTexture_UAV:
-        return CreateUnorderedAccessView(
-            view_handle,
-            view_desc.format,
-            view_desc.dimension,
-            view_desc.sub_resources);
-    case ResourceViewType::kTexture_RTV:
-        return CreateRenderTargetView(
-            view_handle,
-            view_desc.format,
-            view_desc.sub_resources);
-    case ResourceViewType::kTexture_DSV:
-        return CreateDepthStencilView(
-            view_handle,
-            view_desc.format,
-            view_desc.sub_resources,
-            view_desc.is_read_only_dsv);
-    default:
-        // Unknown or unsupported view type
-        return {};
-    }
-}
-
 auto Texture::CreateShaderResourceView(
     const DescriptorHandle& view_handle,
     const Format format,

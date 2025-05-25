@@ -318,11 +318,10 @@ public:
 
     //! Gets the native resource handle for the texture.
     [[nodiscard]] virtual auto GetNativeResource() const -> NativeObject = 0;
-    [[nodiscard]] virtual auto GetNativeView(
+    [[nodiscard]] OXYGEN_GFX_API auto GetNativeView(
         const DescriptorHandle& view_handle,
         const TextureViewDescription& view_desc) const
-        -> NativeObject
-        = 0;
+        -> NativeObject;
 
     //! Gets the name of the texture.
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override
