@@ -104,12 +104,13 @@ auto ShaderCompiler::CompileFromSource(
     arguments.emplace_back(L"-Ges");
     arguments.emplace_back(L"-T");
     arguments.emplace_back(profile_name);
-#ifdef _DEBUG
-    arguments.emplace_back(L"-Od");
-    arguments.emplace_back(L"-Zi");
-#else
-    arguments.emplace_back(L"-O3");
-#endif
+#if !defined(NDEBUG)
+    arguments.emplace_back(L"-Od"); // Disable optimizations
+    arguments.emplace_back(L"-Zi"); // Enable debug information
+    arguments.emplace_back(L"-Qembed_debug"); // Embed PDB in shader container
+#else // NDEBUG
+    arguments.emplace_back(L"-O3"); // Optimization level 3
+#endif // NDEBUG
 
     std::wstring entry_point {};
     string_utils::Utf8ToWide(shader_info.entry_point, entry_point);
@@ -127,14 +128,14 @@ auto ShaderCompiler::CompileFromSource(
     //   arguments.push_back(define_str.c_str());
     // }
 
-    DxcBuffer source_buffer {};
-    source_buffer.Ptr = src_blob->GetBufferPointer();
-    source_buffer.Size = src_blob->GetBufferSize();
-    source_buffer.Encoding = DXC_CP_UTF8;
+    DxcBuffer source_buffer {
+        .Ptr = source_buffer.Ptr = src_blob->GetBufferPointer(),
+        .Size = source_buffer.Size = src_blob->GetBufferSize(),
+        .Encoding = source_buffer.Encoding = DXC_CP_UTF8,
+    };
 
-    HRESULT hr = S_OK;
     ComPtr<IDxcResult> result;
-    hr = compiler_->Compile(
+    HRESULT hr = compiler_->Compile(
         &source_buffer,
         arguments.data(),
         static_cast<uint32_t>(arguments.size()),
