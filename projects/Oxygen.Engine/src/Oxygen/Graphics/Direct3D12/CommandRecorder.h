@@ -9,13 +9,11 @@
 #include <span>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
-
-#include <wrl/client.h>
 
 namespace oxygen::graphics::d3d12 {
 
@@ -27,9 +25,9 @@ namespace detail {
         D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle;
 
         ShaderVisibleHeapInfo(
-            D3D12_DESCRIPTOR_HEAP_TYPE type,
+            const D3D12_DESCRIPTOR_HEAP_TYPE type,
             ID3D12DescriptorHeap* heap,
-            D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
+            const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle)
             : heap_type(type)
             , heap(heap)
             , gpu_handle(gpu_handle)
@@ -52,8 +50,8 @@ public:
 
     OXYGEN_D3D12_API ~CommandRecorder() override;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandRecorder);
-    OXYGEN_MAKE_NON_MOVABLE(CommandRecorder);
+    OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
+    OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
 
     void Begin() override;
     auto End() -> graphics::CommandList* override;
@@ -63,6 +61,9 @@ public:
 
     void SetupBindlessRendering() override;
 
+    OXYGEN_D3D12_API void SetRenderTargets(
+        std::span<NativeObject> rtvs,
+        std::optional<NativeObject> dsv) override;
     void SetViewport(const ViewPort& viewport) override;
     void SetScissors(const Scissors& scissors) override;
 
@@ -77,7 +78,20 @@ public:
         std::optional<float> depth_clear_value = std::nullopt,
         std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
 
+    //! Clears a depth-stencil view.
+    /*!
+     \note The \p depth value will be clamped to the range [0.0, 1.0] if
+           necessary. If the texture's descriptor has the `use_clear_value` flag
+           set, the depth and stencil values will be ignored and the clear
+           values, derived from the texture's format, will be used instead.
+     */
+    void ClearDepthStencilView(
+        const graphics::Texture& texture, const NativeObject& dsv,
+        ClearFlags clear_flags,
+        float depth, uint8_t stencil) override;
+
     void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
+
     void CopyBuffer(
         graphics::Buffer& dst, size_t dst_offset,
         const graphics::Buffer& src, size_t src_offset,
@@ -85,17 +99,7 @@ public:
 
     //! Binds the provided shader-visible descriptor heaps to the underlying
     //! D3D12 command list.
-    void SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps);
-
-    // D3D12 specific commands
-    //! Clears a D3D12 Depth Stencil View.
-    OXYGEN_D3D12_API void ClearDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle, D3D12_CLEAR_FLAGS clear_flags, float depth, uint8_t stencil);
-    //! Sets D3D12 Render Targets.
-    OXYGEN_D3D12_API void SetRenderTargets(UINT num_render_target_descriptors, const D3D12_CPU_DESCRIPTOR_HANDLE* rtv_handles, bool rts_single_handle_to_descriptor_range, const D3D12_CPU_DESCRIPTOR_HANDLE* dsv_handle);
-    //! Sets the D3D12 Input Assembler primitive topology.
-    OXYGEN_D3D12_API void IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY topology);
-    // Add other D3D12 specific methods as needed, e.g., for root arguments:
-    // OXYGEN_D3D12_API void SetGraphicsRootConstantBufferView(UINT root_parameter_index, D3D12_GPU_VIRTUAL_ADDRESS buffer_location);
+    void SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps) const;
 
 protected:
     void ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers) override;

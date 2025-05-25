@@ -11,12 +11,14 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
 
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/RenderPass.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/Scissors.h>
+#include <Oxygen/Graphics/Common/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/api_export.h>
-
-// TODO: #include <Oxygen/Graphics/Common/RenderItem.h> // Will be needed after RenderItem is defined
 
 namespace oxygen::graphics {
 
@@ -25,7 +27,8 @@ class ResourceStateTracker;
 class CommandRecorder;
 class Framebuffer;
 class PipelineState;
-class Texture; // Forward declare Texture
+class Texture;
+class Renderer;
 
 // Forward declaration for the items in the draw list
 struct RenderItem;
@@ -37,7 +40,7 @@ struct RenderItem;
  object that can provide a broader rendering context.
 */
 struct DepthPrePassConfig {
-    //! List of mesh or draw call identifiers to render in the prepass.
+    //! List of mesh or draw call identifiers to render in the pre-pass.
     /*!
      In a Forward+ rendering pipeline, this list should contain all geometry
      that needs to contribute to the depth buffer for accurate light culling.
@@ -70,24 +73,28 @@ struct DepthPrePassConfig {
      when this is `nullptr`), rendering directly to the `depth_texture`.
     */
     std::shared_ptr<const Framebuffer> framebuffer = nullptr;
+
+    //! Optional name for debugging purposes.
+    std::string debug_name { "DepthPrePass" };
 };
 
-//! Backend-agnostic interface for a depth pre-pass.
+//! Generic implementation for a depth pre-pass. Can be extended if needed with
+//! custom behavior and backend-specific logic.
 /*!
- This class defines the interface for a depth pre-pass. In traditional
- rendering, this pass populates the depth buffer efficiently before main
- shading passes to leverage early depth testing, improving performance by
- avoiding redundant shading of occluded pixels.
+ This class defines the interface for a depth pre-pass, and the default
+ implementation. In traditional rendering, this pass populates the depth buffer
+ efficiently before main shading passes to leverage early depth testing,
+ improving performance by avoiding redundant shading of occluded pixels.
 
  In a Forward+ rendering architecture, this pass serves a critical additional
  role: generating the depth information used by the light culling stage to
  determine which lights affect different parts of the scene.
 
  The DepthPrePass is configured via `DepthPrePassConfig`, which specifies the
- draw list (crucial for light culling in Forward+), the depth buffer to use,
- and an optional framebuffer. As a subclass of `RenderPass`, it integrates
- into the engine's coroutine-based render pipeline, allowing for asynchronous
- resource preparation and execution.
+ draw list (crucial for light culling in Forward+), the depth buffer to use, and
+ an optional framebuffer. As a subclass of `RenderPass`, it integrates into the
+ engine's coroutine-based render pipeline, allowing for asynchronous resource
+ preparation and execution.
 */
 class DepthPrePass : public RenderPass {
 public:
@@ -96,10 +103,19 @@ public:
 
     //! Constructor for DepthPrePass.
     /*!
-     \param name The name of this render pass.
+     The constructor creates the descriptor for the depth pre-pass pipeline
+     state and validates the configuration provided in \p `config`. These steps
+     use virtual methods to allow backend-specific implementations to customize,
+     which are not resolved in the constructor. If this class is extended,
+     derived classes must use the proper constructor, which takes a
+     `GraphicsPipelineDesc` as an argument, and must call ValidateConfig(),
+     theirs and the base class's implementation, to ensure the configuration is
+     valid out of the constructor.
+
+     \param renderer The renderer that creates this depth pre-pass.
      \param config The configuration settings for this depth pre-pass.
     */
-    OXYGEN_GFX_API explicit DepthPrePass(std::string_view name, const Config& config);
+    OXYGEN_GFX_API DepthPrePass(Renderer* renderer, const Config& config);
 
     //! Destructor.
     ~DepthPrePass() override = default;
@@ -115,18 +131,18 @@ public:
      provided `CommandRecorder`. It then flushes any pending resource barriers.
 
      Flushing barriers here is crucial to ensure the `depth_texture` is
-     definitively in the `kDepthWrite` state before any subsequent operations
-     by derived classes (e.g., clearing the texture) or later render stages.
+     definitively in the `kDepthWrite` state before any subsequent operations by
+     derived classes (e.g., clearing the texture) or later render stages.
 
      Backend-specific derived classes should call this base method and can then
      perform additional preparations, such as:
      - Interpreting `clear_color_` to derive depth and/or stencil clear values
        and applying them to the `depth_texture`.
-     - Preparing the optional `framebuffer` if it's provided in `Config` and
-       is relevant to the backend's operation (e.g., for binding or
-       coordinated transitions).
+     - Preparing the optional `framebuffer` if it's provided in `Config` and is
+       relevant to the backend operation (e.g., for binding or coordinated
+       transitions).
     */
-    OXYGEN_GFX_API co::Co<> PrepareResources(CommandRecorder& recorder) override;
+    OXYGEN_GFX_API auto PrepareResources(CommandRecorder& recorder) -> co::Co<> override;
 
     //! Execute the main rendering logic for this pass.
     /*!
@@ -138,7 +154,7 @@ public:
      - Applying the `viewport_` and `scissors_` if they have been set.
      - Issuing draw calls for the specified geometry.
     */
-    co::Co<> Execute(CommandRecorder& recorder) override = 0;
+    auto Execute(CommandRecorder& command_recorder) -> co::Co<> override;
 
     OXYGEN_GFX_API void SetViewport(const ViewPort& viewport) override;
     auto GetViewport() const -> std::optional<ViewPort> { return viewport_; }
@@ -159,10 +175,20 @@ public:
     auto GetClearColor() const -> std::optional<Color> { return clear_color_; }
     auto HasClearColor() const -> bool { return clear_color_.has_value(); }
 
-    OXYGEN_GFX_API virtual void SetEnabled(bool enabled) override;
-    OXYGEN_GFX_API virtual auto IsEnabled() const -> bool override;
+    OXYGEN_GFX_API void SetEnabled(bool enabled) override;
+    OXYGEN_GFX_API auto IsEnabled() const -> bool override;
 
 protected:
+    DepthPrePass(Renderer* renderer, const Config& config, GraphicsPipelineDesc pipeline_desc)
+        : RenderPass(config.debug_name)
+        , config_(config)
+        , renderer_(renderer)
+        , last_built_pso_desc_(std::move(pipeline_desc))
+    {
+        // No call to ValidateConfig() here, as it should be called by the
+        // derived class.
+    }
+
     //! Provides const access to the depth texture specified in the configuration.
     [[nodiscard]] auto GetDepthTexture() const -> const Texture&
     {
@@ -196,6 +222,17 @@ protected:
     */
     OXYGEN_GFX_API virtual void ValidateConfig();
 
+    virtual auto CreatePipelineStateDesc() -> GraphicsPipelineDesc;
+    virtual auto NeedRebuildPipelineState() const -> bool;
+
+    // Helper methods for Execute()
+    virtual auto PrepareDepthStencilView(const Texture& depth_texture_ref) -> NativeObject;
+    virtual void ClearDepthStencilView(CommandRecorder& command_recorder, const NativeObject& dsv_handle) const;
+    virtual void SetViewAsRenderTarget(CommandRecorder& command_recorder, const NativeObject& dsv) const;
+    virtual void SetupViewPortAndScissors(CommandRecorder& command_recorder) const;
+    virtual void IssueDrawCalls(CommandRecorder& command_recorder) const;
+
+private:
     //! Configuration for the depth pre-pass.
     Config config_;
 
@@ -210,6 +247,14 @@ protected:
 
     //! Flag indicating if the pass is enabled.
     bool enabled_ = true;
+
+    //! Pointer to the renderer that created this depth pre-pass.
+    Renderer* renderer_ { nullptr };
+
+    // Track the last built pipeline state object (PSO) description and hash, so
+    // we can properly manage their caching and retrieval.
+    GraphicsPipelineDesc last_built_pso_desc_;
+    size_t last_built_pso_hash_ { 0 };
 };
 
 } // namespace oxygen::graphics

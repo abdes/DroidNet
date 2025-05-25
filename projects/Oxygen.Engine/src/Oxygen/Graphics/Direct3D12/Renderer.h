@@ -11,7 +11,6 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 // ReSharper disable CppRedundantQualifier
@@ -30,29 +29,31 @@ class Renderer final : public graphics::Renderer {
 
 public:
     Renderer(
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
+        const std::weak_ptr<oxygen::Graphics>& gfx_weak,
         std::weak_ptr<oxygen::graphics::Surface> surface,
         const uint32_t frames_in_flight = kFrameBufferCount - 1)
-        : Renderer("D3D12 Renderer", std::move(gfx_weak), std::move(surface), frames_in_flight)
+        : Renderer("D3D12 Renderer", gfx_weak, std::move(surface), frames_in_flight)
     {
     }
 
     //! Default constructor, sets the object name.
     OXYGEN_D3D12_API Renderer(
         std::string_view name,
-        std::weak_ptr<oxygen::Graphics> gfx_weak,
+        const std::weak_ptr<oxygen::Graphics>& gfx_weak,
         std::weak_ptr<oxygen::graphics::Surface> surface_weak,
         uint32_t frames_in_flight = kFrameBufferCount - 1);
 
     OXYGEN_D3D12_API ~Renderer() override = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(Renderer);
-    OXYGEN_MAKE_NON_MOVABLE(Renderer);
+    OXYGEN_MAKE_NON_COPYABLE(Renderer)
+    OXYGEN_MAKE_NON_MOVABLE(Renderer)
 
     // Hides base GetGraphics(), returns d3d12::Graphics&
+    // ReSharper disable once CppHidingFunction
     [[nodiscard]] auto GetGraphics() -> d3d12::Graphics&;
 
     // Hides base GetGraphics(), returns d3d12::Graphics&
+    // ReSharper disable once CppHidingFunction
     [[nodiscard]] auto GetGraphics() const -> const d3d12::Graphics&;
 
     [[nodiscard]] auto CreateTexture(TextureDesc desc) const
@@ -68,9 +69,9 @@ public:
     [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
-    [[nodiscard]] auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash)
+    [[nodiscard]] auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
-    [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
+    [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
 
     [[nodiscard]] auto CreateDepthPrePass(const DepthPrePassConfig& config)

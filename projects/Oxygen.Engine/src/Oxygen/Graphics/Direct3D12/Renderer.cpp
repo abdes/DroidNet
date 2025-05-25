@@ -10,9 +10,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "Renderer.h"
+#include <Oxygen/Graphics/Common/DepthPrePass.h>
 #include <Oxygen/Graphics/Common/Detail/Bindless.h>
-#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
@@ -31,14 +30,15 @@ using oxygen::graphics::detail::Bindless;
 
 Renderer::Renderer(
     const std::string_view name,
-    std::weak_ptr<oxygen::Graphics> gfx_weak,
+    const std::weak_ptr<oxygen::Graphics>& gfx_weak,
     std::weak_ptr<Surface> surface_weak,
     const uint32_t frames_in_flight)
     : graphics::Renderer(name, gfx_weak, std::move(surface_weak), frames_in_flight)
 {
     DCHECK_F(!gfx_weak.expired(), "Graphics object is expired");
 
-    auto& gfx = static_cast<d3d12::Graphics&>(*gfx_weak.lock());
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    auto& gfx = static_cast<Graphics&>(*gfx_weak.lock());
     auto allocator = std::make_unique<DescriptorAllocator>(
         std::make_shared<D3D12HeapAllocationStrategy>(),
         gfx.GetCurrentDevice());
@@ -49,13 +49,15 @@ Renderer::Renderer(
 auto Renderer::GetGraphics() -> d3d12::Graphics&
 {
     // Hides base GetGraphics(), returns d3d12::Graphics&
-    return static_cast<d3d12::Graphics&>(Base::GetGraphics());
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    return static_cast<Graphics&>(Base::GetGraphics());
 }
 
 auto Renderer::GetGraphics() const -> const d3d12::Graphics&
 {
     // Hides base GetGraphics(), returns d3d12::Graphics&
-    return static_cast<const d3d12::Graphics&>(Base::GetGraphics());
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    return static_cast<const Graphics&>(Base::GetGraphics());
 }
 
 auto Renderer::CreateCommandRecorder(graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
@@ -92,14 +94,14 @@ auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<gra
     return std::make_shared<Buffer>(desc);
 }
 
-auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash)
+auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
     return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
 }
 
-auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
+auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
@@ -108,5 +110,5 @@ auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash)
 
 auto Renderer::CreateDepthPrePass(const DepthPrePassConfig& config) -> std::shared_ptr<RenderPass>
 {
-    return CreateNullRenderPass(); // TODO: Placeholder, implement actual depth pre-pass creation
+    return std::static_pointer_cast<RenderPass>(std::make_shared<DepthPrePass>(this, config));
 }

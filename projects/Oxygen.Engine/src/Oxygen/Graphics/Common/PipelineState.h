@@ -11,6 +11,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
@@ -21,13 +22,13 @@
 namespace oxygen::graphics {
 
 //! Fill mode for polygon rasterization.
-enum class FillMode {
+enum class FillMode : uint8_t {
     kSolid, //!< Solid fill for polygons.
-    kWireframe, //!< Wireframe rendering.
+    kWireFrame, //!< Wire-frame rendering.
 
     kMaxFillMode //!< Not a valid mode; sentinel for enum size.
 };
-OXYGEN_GFX_API std::string to_string(FillMode mode);
+OXYGEN_GFX_API auto to_string(FillMode mode) -> std::string;
 
 //! Polygon face culling mode.
 enum class CullMode : uint8_t {
@@ -39,10 +40,10 @@ enum class CullMode : uint8_t {
     kMaxCullMode = OXYGEN_FLAG(2) //!< Not a valid mode; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(CullMode)
-OXYGEN_GFX_API std::string to_string(CullMode mode);
+OXYGEN_GFX_API auto to_string(CullMode value) -> std::string;
 
 //! Comparison operation for depth/stencil tests.
-enum class CompareOp {
+enum class CompareOp : uint8_t {
     kNever, //!< Never passes.
     kLess, //!< Passes if source < dest.
     kEqual, //!< Passes if source == dest.
@@ -54,10 +55,10 @@ enum class CompareOp {
 
     kMaxCompareOp //!< Not a valid op; sentinel for enum size.
 };
-OXYGEN_GFX_API std::string to_string(CompareOp op);
+OXYGEN_GFX_API auto to_string(CompareOp value) -> std::string;
 
 //! Blend factor for color blending.
-enum class BlendFactor {
+enum class BlendFactor : uint8_t {
     kZero, //!< 0.0 blend factor.
     kOne, //!< 1.0 blend factor.
     kSrcColor, //!< Source color.
@@ -77,10 +78,10 @@ enum class BlendFactor {
 
     kMaxBlendValue //!< Not a valid value; sentinel for enum size.
 };
-OXYGEN_GFX_API std::string to_string(BlendFactor v);
+OXYGEN_GFX_API auto to_string(BlendFactor value) -> std::string;
 
 //! Blend operation for color blending.
-enum class BlendOp {
+enum class BlendOp : uint8_t {
     kAdd, //!< Add source and destination.
     kSubtract, //!< Subtract destination from source.
     kRevSubtract, //!< Subtract source from destination.
@@ -89,7 +90,7 @@ enum class BlendOp {
 
     kMaxBlendOp //!< Not a valid op; sentinel for enum size.
 };
-OXYGEN_GFX_API std::string to_string(BlendOp op);
+OXYGEN_GFX_API auto to_string(BlendOp value) -> std::string;
 
 //! Color write mask for render targets.
 enum class ColorWriteMask : uint8_t {
@@ -103,10 +104,10 @@ enum class ColorWriteMask : uint8_t {
     kMaxColorWriteMask = 0x10 //!< Not a valid mask; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ColorWriteMask)
-OXYGEN_GFX_API std::string to_string(ColorWriteMask mask);
+OXYGEN_GFX_API auto to_string(ColorWriteMask value) -> std::string;
 
 //! Primitive topology for input assembly.
-enum class PrimitiveType {
+enum class PrimitiveType : uint8_t {
     kPointList, //!< Points.
     kLineList, //!< Lines.
     kLineStrip, //!< Line strips.
@@ -122,17 +123,18 @@ enum class PrimitiveType {
 
     kMaxPrimitiveType //!< Not a valid type; sentinel for enum size.
 };
-OXYGEN_GFX_API std::string to_string(PrimitiveType t);
+OXYGEN_GFX_API auto to_string(PrimitiveType value) -> std::string;
 
 //! Describes a single programmable shader stage.
 struct ShaderStageDesc {
     std::string shader; //!< Unique string ID of the compiled shader (see ShaderManager).
-    std::optional<std::string> entry_point_name; //!< Optional: entry point for multi-entry shaders.
+    std::optional<std::string> entry_point_name {}; //!< Optional: entry point for multi-entry shaders.
 };
 
-//! Configures how primitives are rasterized, including fill mode, culling, depth bias, and multisampling options.
+//! Configures how primitives are rasterized, including fill mode, culling,
+//! depth bias, and multisampling options.
 struct RasterizerStateDesc {
-    FillMode fill_mode { FillMode::kSolid }; //!< Fill mode for polygons (solid or wireframe).
+    FillMode fill_mode { FillMode::kSolid }; //!< Fill mode for polygons (solid or wire-frame).
     CullMode cull_mode { CullMode::kBack }; //!< Face culling mode for polygons.
     bool front_counter_clockwise { false }; //!< True if front-facing polygons have counter-clockwise winding.
     float depth_bias { 0.0f }; //!< Constant depth value added to each pixel.
@@ -143,7 +145,8 @@ struct RasterizerStateDesc {
     bool antialiased_line_enable { false }; //!< Enable line antialiasing.
 };
 
-//! Controls depth buffer and stencil buffer operations, including testing, writing, and comparison functions.
+//! Controls depth buffer and stencil buffer operations, including testing,
+//! writing, and comparison functions.
 struct DepthStencilStateDesc {
     bool depth_test_enable { false }; //!< Enable depth testing.
     bool depth_write_enable { false }; //!< Enable writing to depth buffer.
@@ -151,10 +154,10 @@ struct DepthStencilStateDesc {
     bool stencil_enable { false }; //!< Enable stencil testing.
     uint8_t stencil_read_mask { 0xFF }; //!< Mask for reading from stencil buffer.
     uint8_t stencil_write_mask { 0xFF }; //!< Mask for writing to stencil buffer.
-    // Stencil ops/funcs can be extended here.
 };
 
-//! Defines color and alpha blending operations and write masks for a single render target attachment.
+//! Defines color and alpha blending operations and write masks for a single
+//! render target attachment.
 struct BlendTargetDesc {
     bool blend_enable { false }; //!< Enable blending for this render target.
     BlendFactor src_blend { BlendFactor::kOne }; //!< Source color blend factor.
@@ -166,12 +169,14 @@ struct BlendTargetDesc {
     std::optional<ColorWriteMask> write_mask { ColorWriteMask::kAll }; //!< Channel write mask.
 };
 
-//! Specifies the complete attachment layout for a framebuffer, including color formats, depth/stencil format, and MSAA configuration.
+//! Specifies the complete attachment layout for a framebuffer, including color
+//! formats, depth/stencil format, and MSAA configuration.
 struct FramebufferLayoutDesc {
     std::vector<Format> color_target_formats; //!< Array of color attachment formats, empty if using depth-only.
     std::optional<Format> depth_stencil_format; //!< Optional depth/stencil attachment format.
     uint32_t sample_count { 1 }; //!< Number of MSAA samples (1 for no multisampling).
-    // Optional: shading rate attachment, etc.
+
+    // TODO: Optional: shading rate attachment, etc.
 };
 
 // -------------------------------------------------------------------------- //
@@ -325,21 +330,23 @@ public:
     }
 
     //! Set primitive topology.
-    constexpr auto SetPrimitiveTopology(PrimitiveType type) && -> Builder&&
+    constexpr auto SetPrimitiveTopology(const PrimitiveType type) && -> Builder&&
     {
         desc_.primitive_topology_ = type;
         return std::move(*this);
     } //! Set rasterizer state.
-    auto SetRasterizerState(RasterizerStateDesc state) && -> Builder&&
+    auto SetRasterizerState(const RasterizerStateDesc& state) && -> Builder&&
     {
-        desc_.rasterizer_state_ = std::move(state);
+        static_assert(std::is_trivially_copyable_v<RasterizerStateDesc>);
+        desc_.rasterizer_state_ = state;
         return std::move(*this);
     }
 
     //! Set depth/stencil state.
-    auto SetDepthStencilState(DepthStencilStateDesc state) && -> Builder&&
+    auto SetDepthStencilState(const DepthStencilStateDesc& state) && -> Builder&&
     {
-        desc_.depth_stencil_state_ = std::move(state);
+        static_assert(std::is_trivially_copyable_v<DepthStencilStateDesc>);
+        desc_.depth_stencil_state_ = state;
         return std::move(*this);
     }
 
@@ -351,9 +358,10 @@ public:
     }
 
     //! Add blend state for a single render target.
-    auto AddBlendTarget(BlendTargetDesc target) && -> Builder&&
+    auto AddBlendTarget(const BlendTargetDesc& target) && -> Builder&&
     {
-        desc_.blend_state_.push_back(std::move(target));
+        static_assert(std::is_trivially_copyable_v<BlendTargetDesc>);
+        desc_.blend_state_.push_back(target);
         return std::move(*this);
     }
 
@@ -385,11 +393,11 @@ public:
         }
 
         // Validate framebuffer layout
-        const auto& fb = desc_.framebuffer_layout_;
-        if (fb.color_target_formats.empty() && !fb.depth_stencil_format) {
+        const auto& [color_target_formats, depth_stencil_format, sample_count] = desc_.framebuffer_layout_;
+        if (color_target_formats.empty() && !depth_stencil_format) {
             throw std::runtime_error("GraphicsPipelineDesc requires at least one render target format or depth/stencil format");
         }
-        if (fb.sample_count < 1) {
+        if (sample_count < 1) {
             throw std::runtime_error("GraphicsPipelineDesc sample count must be at least 1");
         }
 
@@ -487,7 +495,7 @@ private:
 namespace std {
 template <>
 struct hash<oxygen::graphics::GraphicsPipelineDesc> {
-    size_t operator()(const oxygen::graphics::GraphicsPipelineDesc& desc) const
+    auto operator()(const oxygen::graphics::GraphicsPipelineDesc& desc) const noexcept -> size_t
     {
         size_t seed = 0;
         using oxygen::HashCombine;
@@ -545,7 +553,7 @@ struct hash<oxygen::graphics::GraphicsPipelineDesc> {
 };
 template <>
 struct hash<oxygen::graphics::ComputePipelineDesc> {
-    size_t operator()(const oxygen::graphics::ComputePipelineDesc& desc) const
+    auto operator()(const oxygen::graphics::ComputePipelineDesc& desc) const noexcept -> size_t
     {
         size_t seed = 0;
         using oxygen::HashCombine;

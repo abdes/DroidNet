@@ -40,7 +40,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
               .SetGeometryShader({ "test_gs", "GSMain" })
               .SetPrimitiveTopology(PrimitiveType::kTriangleStrip)
               .SetRasterizerState(
-                  { .fill_mode = FillMode::kWireframe,
+                  { .fill_mode = FillMode::kWireFrame,
                       .cull_mode = CullMode::kNone,
                       .multisample_enable = true })
               .SetDepthStencilState(
@@ -72,7 +72,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
     EXPECT_EQ(pipeline.PrimitiveTopology(), PrimitiveType::kTriangleStrip);
 
     const auto& raster = pipeline.RasterizerState();
-    EXPECT_EQ(raster.fill_mode, FillMode::kWireframe);
+    EXPECT_EQ(raster.fill_mode, FillMode::kWireFrame);
     EXPECT_EQ(raster.cull_mode, CullMode::kNone);
     EXPECT_TRUE(raster.multisample_enable);
 
