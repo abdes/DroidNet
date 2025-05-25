@@ -25,9 +25,11 @@ using oxygen::graphics::d3d12::EngineShaders;
 namespace {
 // Specification of engine shaders. Each entry is a ShaderProfile corresponding
 // to one of the shaders we want to automatically compile, package and load.
-const std::array<ShaderInfo, 2> kEngineShaders = { {
+const std::array<ShaderInfo, 4> kEngineShaders = { {
     { .type = ShaderType::kPixel, .relative_path = "FullScreenTriangle.hlsl", .entry_point = "PS" },
     { .type = ShaderType::kVertex, .relative_path = "FullScreenTriangle.hlsl", .entry_point = "VS" },
+    { .type = ShaderType::kPixel, .relative_path = "DepthPrePass.hlsl", .entry_point = "PS" },
+    { .type = ShaderType::kVertex, .relative_path = "DepthPrePass.hlsl", .entry_point = "VS" },
 } };
 } // namespace
 
