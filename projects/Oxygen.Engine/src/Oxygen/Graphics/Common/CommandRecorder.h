@@ -72,6 +72,10 @@ public:
      input layout, and fixed-function state are bound. The provided pipeline
      description must match the resources and framebuffer formats in use.
 
+     Will create and set a root signature for bindless rendering, set the
+     shader visible descriptor heaps accordingly, get a cached pipeline state or
+     create a new one and set it.
+
      Best Practices:
       - Always set the pipeline state after binding the framebuffer and before
         drawing.
@@ -92,26 +96,6 @@ public:
      \param desc The compute pipeline state description to bind.
     */
     virtual void SetPipelineState(ComputePipelineDesc desc) = 0;
-
-    //! Prepares the command list for bindless rendering.
-    /*!
-     Call this after setting the pipeline state and before issuing draw or
-     dispatch commands that use bindless resources. This sets up descriptor
-     tables or root parameters as required by the backend for bindless access.
-
-     Best Practices:
-      - Call after setting the pipeline state (which binds the correct root
-        signature).
-      - Ensure all resources and views are registered and up-to-date in the
-        resource registry.
-      - The pipeline and shaders must be designed for bindless access (see
-        engine and backend documentation).
-
-     \note Calling this before setting the pipeline state may result in driver
-     crashes, as the root signature required for bindless setup is not yet
-     bound.
-    */
-    virtual void SetupBindlessRendering() = 0;
 
     //=== Render State ===----------------------------------------------------//
 

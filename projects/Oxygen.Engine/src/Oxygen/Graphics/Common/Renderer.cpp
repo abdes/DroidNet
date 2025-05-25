@@ -141,9 +141,6 @@ auto Renderer::AcquireCommandRecorder(
     }
     recorder->Begin();
 
-    // Prepare the command list for bindless rendering
-    PrepareRecorderForRender(*recorder);
-
     return {
         recorder.release(),
         [self_weak = weak_from_this(),
@@ -256,7 +253,7 @@ void Renderer::BeginFrame()
     }
 
     // Release all completed command lists and call OnExecuted
-    for (const auto& [cmd_list, queue] : pending_command_lists) {
+    for (const auto& cmd_list : pending_command_lists | std::views::keys) {
         cmd_list->OnExecuted();
     }
     pending_command_lists.clear();
@@ -302,6 +299,8 @@ void Renderer::HandleSurfaceResize(Surface& surface)
     // Only flush queues with pending work from this renderer
     if (!active_queues.empty()) {
         const auto gfx = gfx_weak_.lock();
+        // We don't really care about the order of flushing queues.
+        // NOLINTNEXTLINE(bugprone-nondeterministic-pointer-iteration-order)
         for (const auto& queue : active_queues) {
             DLOG_F(INFO, "Flushing queue '{}' during resize", queue->GetName());
             queue->Flush();
@@ -319,9 +318,9 @@ void Renderer::HandleSurfaceResize(Surface& surface)
 namespace oxygen::graphics {
 
 // Generic no-op implementation for any render pass type.
-class NullRenderPass : public RenderPass {
+class NullRenderPass final : public RenderPass {
 public:
-    NullRenderPass(std::string_view name = "NullRenderPass")
+    explicit NullRenderPass(const std::string_view name = "NullRenderPass")
         : RenderPass(name)
     {
     }
@@ -331,15 +330,15 @@ public:
     OXYGEN_DEFAULT_COPYABLE(NullRenderPass)
     OXYGEN_DEFAULT_MOVABLE(NullRenderPass)
 
-    co::Co<> PrepareResources(CommandRecorder&) override { co_return; }
-    co::Co<> Execute(CommandRecorder&) override { co_return; }
+    auto PrepareResources(CommandRecorder&) -> co::Co<> override { co_return; }
+    auto Execute(CommandRecorder&) -> co::Co<> override { co_return; }
     void SetViewport(const ViewPort&) override { }
     void SetScissors(const Scissors&) override { }
     void SetClearColor(const Color&) override { }
     void SetEnabled(bool) override { }
-    bool IsEnabled() const override { return false; }
-    std::string_view GetName() const noexcept override { return name_; }
-    void SetName(std::string_view name) noexcept override { name_ = std::string(name); }
+    auto IsEnabled() const -> bool override { return false; }
+    auto GetName() const noexcept -> std::string_view override { return name_; }
+    void SetName(const std::string_view name) noexcept override { name_ = std::string(name); }
 
 private:
     std::string name_;
@@ -347,6 +346,7 @@ private:
 
 } // namespace oxygen::graphics
 
+// ReSharper disable once CppMemberFunctionMayBeStatic
 auto Renderer::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
 {
     return std::make_shared<NullRenderPass>();

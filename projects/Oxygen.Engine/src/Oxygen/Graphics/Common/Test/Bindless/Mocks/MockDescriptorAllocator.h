@@ -11,7 +11,6 @@
 #include <gmock/gmock.h>
 
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
 
 namespace oxygen::graphics::bindless::testing {
 
@@ -27,7 +26,7 @@ public:
 
     // Explicit constructor to set up default action for the mocked Allocate method
     explicit MockDescriptorAllocator(std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy = nullptr)
-        : detail::BaseDescriptorAllocator(std::move(heap_strategy))
+        : BaseDescriptorAllocator(std::move(heap_strategy))
     {
         ON_CALL(*this, Allocate(::testing::_, ::testing::_))
             .WillByDefault(::testing::Invoke(
@@ -46,13 +45,10 @@ public:
     // Google Mock for DescriptorAllocator interface
     MOCK_METHOD(DescriptorHandle, Allocate, (ResourceViewType view_type, DescriptorVisibility visibility), (override));
     MOCK_METHOD(void, CopyDescriptor, (const DescriptorHandle&, const DescriptorHandle&), (override));
-    MOCK_METHOD(void, PrepareForRender, (CommandRecorder&), (override));
 
-    // Helper method to call the real base implementation for the mock's default action.
-    // This method is invoked by the ON_CALL setup.
-    DescriptorHandle RealAllocateForMock(ResourceViewType view_type, DescriptorVisibility visibility)
+    DescriptorHandle RealAllocateForMock(const ResourceViewType view_type, const DescriptorVisibility visibility)
     {
-        return detail::BaseDescriptorAllocator::Allocate(view_type, visibility);
+        return BaseDescriptorAllocator::Allocate(view_type, visibility);
     }
 
     // Expose GetInitialCapacity for testing
@@ -64,13 +60,13 @@ public:
 protected:
     // Manual override for heap segment creation (not mocked)
     auto CreateHeapSegment(
-        IndexT capacity,
-        IndexT base_index,
+        const IndexT capacity,
+        const IndexT base_index,
         const ResourceViewType view_type,
         const DescriptorVisibility visibility)
         -> std::unique_ptr<detail::DescriptorHeapSegment> override
     {
-        // capacity and base_index are ignored becauuse test cases will mock the
+        // capacity and base_index are ignored because test cases will mock the
         // segment methods
         return ext_segment_factory_
             ? ext_segment_factory_(capacity, base_index, view_type, visibility)

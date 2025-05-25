@@ -142,7 +142,9 @@ namespace graphics {
         OXYGEN_MAKE_NON_COPYABLE(Renderer)
         OXYGEN_DEFAULT_MOVABLE(Renderer)
 
+        // ReSharper disable once CppHiddenFunction - hidden in backend API
         OXYGEN_GFX_API auto GetGraphics() -> Graphics&;
+        // ReSharper disable once CppHiddenFunction - hidden in backend API
         OXYGEN_GFX_API auto GetGraphics() const -> const Graphics&;
 
         OXYGEN_GFX_API auto GetDescriptorAllocator() -> DescriptorAllocator&;
@@ -170,7 +172,7 @@ namespace graphics {
 
          The returned pointer uses a custom deleter that ensures the command
          recorder is properly disposed of and its command list is submitted or
-         batched according to the renderer's submission strategy. If
+         batched according to the renderer submission strategy. If
          `immediate_submission` is true, the command list is submitted as soon
          as the recorder is destroyed; otherwise, it is batched for later
          submission.
@@ -232,8 +234,6 @@ namespace graphics {
 
         OXYGEN_GFX_API virtual void BeginFrame();
         OXYGEN_GFX_API virtual void EndFrame();
-
-        virtual void PrepareRecorderForRender(CommandRecorder& recorder) = 0;
 
     private:
         void HandleSurfaceResize(Surface& surface);

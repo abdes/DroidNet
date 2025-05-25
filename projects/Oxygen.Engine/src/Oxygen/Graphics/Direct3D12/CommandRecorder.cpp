@@ -6,6 +6,8 @@
 
 #include <variant>
 
+#include <wrl/client.h> // For Microsoft::WRL::ComPtr
+
 #include <Oxygen/Base/VariantHelpers.h> // Added for Overloads
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
@@ -210,7 +212,7 @@ constexpr UINT kRootIndex_CBV_SRV_UAV_Table = 0;
 constexpr UINT kRootIndex_Sampler_Table = 1; // Assuming samplers might be on a different root param (if any)
 } // namespace
 
-void CommandRecorder::SetupDescriptorTables(const std::span<detail::ShaderVisibleHeapInfo> heaps) const
+void CommandRecorder::SetupDescriptorTables(const std::span<const detail::ShaderVisibleHeapInfo> heaps) const
 {
     // Invariant: The descriptor table at root parameter 0 must match the root signature layout:
     //   - CBV at heap index 0 (register b0)
@@ -345,23 +347,94 @@ void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, ui
 {
 }
 
+//! Create a bindless root signature for graphics or compute pipelines
+// Invariant: The root signature contains a single descriptor table with two ranges:
+//   - Range 0: 1 CBV at register b0 (heap index 0)
+//   - Range 1: Unbounded SRVs at register t0, space0 (heap indices 1+)
+// The descriptor table is always at root parameter 0.
+// The flag D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED is set for true bindless access.
+// This layout must match the expectations of both the engine and the shaders (see FullScreenTriangle.hlsl).
+auto CommandRecorder::CreateBindlessRootSignature(const bool is_graphics) const
+    -> dx::IRootSignature*
+{
+    std::vector<D3D12_ROOT_PARAMETER> root_params(1); // Single root parameter for the main descriptor table
+    std::vector<D3D12_DESCRIPTOR_RANGE> ranges(2);
+
+    // Range 0: CBV for register b0 (heap index 0)
+    ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    ranges[0].NumDescriptors = 1;
+    ranges[0].BaseShaderRegister = 0; // b0
+    ranges[0].RegisterSpace = 0;
+    ranges[0].OffsetInDescriptorsFromTableStart = 0; // This CBV is at the start of the table
+
+    // Range 1: SRVs for register t0 onwards (heap indices 1+)
+    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    ranges[1].NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Unbounded, for bindless
+    ranges[1].BaseShaderRegister = 0; // t0
+    ranges[1].RegisterSpace = 0; // Assuming SRVs are in space0
+    ranges[1].OffsetInDescriptorsFromTableStart = 1; // SRVs start after the 1 CBV descriptor
+
+    root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    root_params[0].DescriptorTable.NumDescriptorRanges = static_cast<UINT>(ranges.size());
+    root_params[0].DescriptorTable.pDescriptorRanges = ranges.data();
+    root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL; // Visible to all stages that might need it
+
+    const D3D12_ROOT_SIGNATURE_DESC root_sig_desc {
+        .NumParameters = static_cast<UINT>(root_params.size()),
+        .pParameters = root_params.data(),
+        .NumStaticSamplers = 0, // Add static samplers if needed
+        .pStaticSamplers = nullptr,
+        .Flags = (is_graphics
+                         ? D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
+                         : D3D12_ROOT_SIGNATURE_FLAG_NONE)
+            | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED, // enables true bindless access for all shaders.
+    };
+    Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
+    HRESULT hr = D3D12SerializeRootSignature(&root_sig_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &sig_blob, &err_blob);
+    if (FAILED(hr)) {
+        std::string error_msg = "Failed to serialize root signature: ";
+        if (err_blob) {
+            error_msg += static_cast<const char*>(err_blob->GetBufferPointer());
+        }
+        throw std::runtime_error(error_msg);
+    }
+
+    dx::IRootSignature* root_sig = nullptr;
+    auto* device = renderer_->GetGraphics().GetCurrentDevice();
+    hr = device->CreateRootSignature(
+        0, sig_blob->GetBufferPointer(), sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig));
+    if (FAILED(hr)) {
+        throw std::runtime_error("Failed to create root signature");
+    }
+
+    return root_sig;
+}
+
 void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
 {
     DCHECK_NOTNULL_F(renderer_);
 
     const auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
+    auto* d3d12_command_list = command_list->GetCommandList();
+
+    auto* root_signature = CreateBindlessRootSignature(true);
+    if (root_signature == nullptr) {
+        throw std::runtime_error("failed to create bindless root signature for graphics pipeline");
+    }
+    d3d12_command_list->SetGraphicsRootSignature(root_signature);
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    auto& allocator = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
+    SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
 
     const auto debug_name = desc.GetName(); // Save before moving desc
     graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
-    auto [pipeline_state, root_signature] = renderer_->GetOrCreateGraphicsPipeline(std::move(desc), graphics_pipeline_hash_);
+    auto [pipeline_state, _] = renderer_->GetOrCreateGraphicsPipeline(root_signature, std::move(desc), graphics_pipeline_hash_);
 
     // Name them for debugging
     NameObject(pipeline_state, debug_name + "_PSO");
     NameObject(root_signature, debug_name + "_BindlessRS");
 
-    auto* d3d12_command_list = command_list->GetCommandList();
-    d3d12_command_list->SetGraphicsRootSignature(root_signature);
     d3d12_command_list->SetPipelineState(pipeline_state);
 }
 
@@ -370,17 +443,22 @@ void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
     compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
     const auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
+    auto* d3d12_command_list = command_list->GetCommandList();
+
+    auto* root_signature = CreateBindlessRootSignature(false);
+    if (root_signature == nullptr) {
+        throw std::runtime_error("failed to create bindless root signature for compute pipeline");
+    }
+    d3d12_command_list->SetGraphicsRootSignature(root_signature);
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    auto& allocator = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
+    SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
+
     // Use stored renderer_
     DCHECK_NOTNULL_F(renderer_);
-    auto [pipeline_state, root_signature] = renderer_->GetOrCreateComputePipeline(std::move(desc), compute_pipeline_hash_);
-    auto* d3d12_command_list = command_list->GetCommandList();
+    auto [pipeline_state, _] = renderer_->GetOrCreateComputePipeline(root_signature, std::move(desc), compute_pipeline_hash_);
     d3d12_command_list->SetPipelineState(pipeline_state);
     d3d12_command_list->SetComputeRootSignature(root_signature);
-}
-
-void CommandRecorder::SetupBindlessRendering()
-{
-    renderer_->GetDescriptorAllocator().PrepareForRender(*this);
 }
 
 void CommandRecorder::ResetState()

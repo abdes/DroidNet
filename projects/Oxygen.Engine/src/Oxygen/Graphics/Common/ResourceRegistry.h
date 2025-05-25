@@ -89,6 +89,9 @@ public:
      \param resource The resource to register the view for. Must be already
             registered in the registry.
      \param view The native view object to register.
+     \param view_handle The descriptor handle for the view, which must be valid
+            and compatible with the resource type. Allocated from the
+            DescriptorAllocator.
      \param desc The view description, which must be hashable and comparable.
      \return A handle to the native view, newly created or from the cache.
 
@@ -154,11 +157,6 @@ public:
     void UnRegisterViews(const Resource& resource)
     {
         UnRegisterResourceViews(NativeObject { const_cast<Resource*>(&resource), Resource::ClassTypeId() });
-    }
-
-    virtual void PrepareForRender(CommandRecorder& recorder)
-    {
-        // TODO: confirm nothing to be done here
     }
 
 private:

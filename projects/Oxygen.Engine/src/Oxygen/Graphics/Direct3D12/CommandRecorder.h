@@ -59,8 +59,6 @@ public:
     void SetPipelineState(GraphicsPipelineDesc desc) override;
     void SetPipelineState(ComputePipelineDesc desc) override;
 
-    void SetupBindlessRendering() override;
-
     OXYGEN_D3D12_API void SetRenderTargets(
         std::span<NativeObject> rtvs,
         std::optional<NativeObject> dsv) override;
@@ -99,13 +97,16 @@ public:
 
     //! Binds the provided shader-visible descriptor heaps to the underlying
     //! D3D12 command list.
-    void SetupDescriptorTables(std::span<detail::ShaderVisibleHeapInfo> heaps) const;
+    void SetupDescriptorTables(std::span<const detail::ShaderVisibleHeapInfo> heaps) const;
 
 protected:
     void ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers) override;
 
 private:
     [[nodiscard]] auto GetConcreteCommandList() const -> CommandList*;
+
+    // Root signature creation helpers
+    auto CreateBindlessRootSignature(bool is_graphics) const -> dx::IRootSignature*;
 
     void ResetState();
 

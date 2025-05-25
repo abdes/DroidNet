@@ -13,7 +13,7 @@ namespace oxygen::graphics {
 // Simple vertex structure for our triangle demo
 struct Vertex {
     float position[3]; // x, y, z
-    // float color[4]; // r, g, b, a (optional for now)
+    float color[3]; // r, g, b (matches HLSL float3)
 };
 
 struct RenderItem {
