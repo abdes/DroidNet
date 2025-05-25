@@ -27,7 +27,6 @@ namespace graphics {
     class CommandRecorder;
     class IShaderByteCode;
     class PerFrameResourceManager;
-    class RenderTarget;
     class ShaderCompiler;
     class Surface;
     class SynchronizationCounter;
@@ -37,7 +36,6 @@ namespace graphics {
     using CommandListPtr = std::unique_ptr<CommandList>;
     using CommandRecorderPtr = std::shared_ptr<CommandRecorder>;
     using RendererPtr = std::weak_ptr<Renderer>;
-    using RenderTargetNoDeletePtr = const RenderTarget*;
     using WindowSurfacePtr = std::unique_ptr<WindowSurface>;
 
     using CommandLists = std::vector<CommandListPtr>;

@@ -11,14 +11,15 @@
 #include <span>
 #include <vector>
 
-#include <glm/vec4.hpp>
-
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/VariantHelpers.h> // For always_false_v
+// ReSharper disable once CppUnusedIncludeDirective - For always_false_v
+#include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
@@ -37,26 +38,20 @@ class CommandQueue;
 class IShaderByteCode;
 class Buffer;
 class Texture;
-class RenderTarget;
 class Renderer;
 class Framebuffer;
-
-enum ClearFlags : uint8_t {
-    kClearFlagsColor = (1 << 0),
-    kClearFlagsDepth = (1 << 1),
-    kClearFlagsStencil = (1 << 2),
-};
+class NativeObject;
 
 class CommandRecorder {
 public:
-    enum class SubmissionMode {
-        Immediate,
-        Deferred
+    enum class SubmissionMode : uint8_t {
+        kImmediate,
+        kDeferred
     };
 
     //=== Lifecycle ===-------------------------------------------------------//
 
-    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode = SubmissionMode::Immediate);
+    OXYGEN_GFX_API CommandRecorder(CommandList* command_list, CommandQueue* target_queue, SubmissionMode mode = SubmissionMode::kImmediate);
     OXYGEN_GFX_API virtual ~CommandRecorder(); // Definition moved to .cpp
 
     OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
@@ -120,6 +115,11 @@ public:
 
     //=== Render State ===----------------------------------------------------//
 
+    virtual void SetRenderTargets(
+        std::span<NativeObject> rtvs,
+        std::optional<NativeObject> dsv)
+        = 0;
+
     virtual void SetViewport(const ViewPort& viewport) = 0;
     virtual void SetScissors(const Scissors& scissors) = 0;
 
@@ -128,9 +128,33 @@ public:
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
-    virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
 
     //=== Framebuffer and Resource Operations ===-----------------------------//
+
+    // TODO: Legacy API to be removed when render passes are implemented.
+    virtual void BindFrameBuffer(const Framebuffer& framebuffer) = 0;
+
+    //! Clears a depth-stencil view.
+    /*!
+     \param texture The texture that the depth-stencil view is associated with.
+            This must be a valid texture with a depth-stencil attachment, which
+            format may be used to resolve the depth and stencil values if the
+            texture descriptor specifies so with the `use_clear_value` flag.
+     \param dsv A native view wrapper for the depth-stencil view to clear. Must
+            be convertible to an integer holding the CPU address of the view
+            descriptor.
+     \param clear_flags The flags indicating what to clear (depth, stencil, or
+            both).
+     \param depth The depth value to clear to. Ignored if \p clear_flags does
+            not include `ClearFlags::kDepth`.
+     \param stencil The stencil value to clear to. Ignored if \p clear_flags
+            does not include `ClearFlags::kStencil`.
+     */
+    virtual void ClearDepthStencilView(
+        const graphics::Texture& texture, const NativeObject& dsv,
+        ClearFlags clear_flags,
+        float depth, uint8_t stencil)
+        = 0;
 
     //! Clears color and depth/stencil (DSV) attachments of the specified
     //! framebuffer.
@@ -190,7 +214,7 @@ public:
         } else if constexpr (IsTexture<T>) {
             DoBeginTrackingResourceState(static_cast<const Texture&>(resource), initial_state, keep_initial_state);
         } else {
-            static_assert(always_false_v<T>, "Unsupported Trackable resource type for BeginTrackingResourceState");
+            static_assert(always_false_v<T>, "Unsupported resource type for BeginTrackingResourceState");
         }
     }
 
@@ -202,7 +226,7 @@ public:
         } else if constexpr (IsTexture<T>) {
             DoEnableAutoMemoryBarriers(static_cast<const Texture&>(resource));
         } else {
-            static_assert(always_false_v<T>, "Unsupported Trackable resource type for EnableAutoMemoryBarriers");
+            static_assert(always_false_v<T>, "Unsupported resource type for EnableAutoMemoryBarriers");
         }
     }
 
@@ -214,7 +238,7 @@ public:
         } else if constexpr (IsTexture<T>) {
             DoDisableAutoMemoryBarriers(static_cast<const Texture&>(resource));
         } else {
-            static_assert(always_false_v<T>, "Unsupported Trackable resource type for DisableAutoMemoryBarriers");
+            static_assert(always_false_v<T>, "Unsupported resource type for DisableAutoMemoryBarriers");
         }
     }
 
@@ -228,7 +252,7 @@ public:
         } else if constexpr (IsTexture<T>) {
             DoRequireResourceState(static_cast<const Texture&>(resource), state);
         } else {
-            static_assert(always_false_v<T>, "Unsupported Trackable resource type for RequireResourceState");
+            static_assert(always_false_v<T>, "Unsupported resource type for RequireResourceState");
         }
     }
 
@@ -242,7 +266,7 @@ public:
         } else if constexpr (IsTexture<T>) {
             DoRequireResourceStateFinal(static_cast<const Texture&>(resource), state);
         } else {
-            static_assert(always_false_v<T>, "Unsupported Trackable resource type for RequireResourceStateFinal");
+            static_assert(always_false_v<T>, "Unsupported resource type for RequireResourceStateFinal");
         }
     }
 
@@ -264,8 +288,8 @@ protected:
 private:
     friend class Renderer;
     OXYGEN_GFX_API virtual void OnSubmitted();
-    SubmissionMode GetSubmissionMode() const { return submission_mode_; }
-    SubmissionMode submission_mode_ { SubmissionMode::Immediate };
+    [[nodiscard]] auto GetSubmissionMode() const -> SubmissionMode { return submission_mode_; }
+    SubmissionMode submission_mode_ { SubmissionMode::kImmediate };
 
     //! @{
     //! Private non-template dispatch methods for resource state tracking and

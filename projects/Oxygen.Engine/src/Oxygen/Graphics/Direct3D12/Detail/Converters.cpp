@@ -6,6 +6,7 @@
 
 #include <stdexcept>
 
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 
 namespace oxygen::graphics::d3d12::detail {
@@ -29,13 +30,13 @@ auto ConvertResourceStates(ResourceStates states) -> D3D12_RESOURCE_STATES
     // Helper lambda to check a flag and append D3D12 state(s)
     // Captures 'states' by value and 'd3d_states' by reference.
     auto append_if_set =
-        [&d3d_states, states](ResourceStates flag_to_check, D3D12_RESOURCE_STATES d3d12_flags_to_add) {
+        [&d3d_states, states](const ResourceStates flag_to_check, const D3D12_RESOURCE_STATES d3d12_flags_to_add) {
             if ((states & flag_to_check) == flag_to_check) {
                 d3d_states |= d3d12_flags_to_add;
             }
         };
 
-    auto is_set = [states](ResourceStates flag) {
+    auto is_set = [states](const ResourceStates flag) {
         return (states & flag) == flag;
     };
 
@@ -79,23 +80,29 @@ auto ConvertResourceStates(ResourceStates states) -> D3D12_RESOURCE_STATES
     // If d3d_states is still 0 (D3D12_RESOURCE_STATE_COMMON) after all checks,
     // it means no specific mappable states were found (e.g., only kUndefined was set),
     // so D3D12_RESOURCE_STATE_COMMON is the correct default.    return d3d_states;
+
+    return d3d_states;
 }
 
-auto ConvertFillMode(FillMode mode) -> D3D12_FILL_MODE
+auto ConvertFillMode(const FillMode value) -> D3D12_FILL_MODE
 {
-    switch (mode) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case FillMode::kSolid:
         return D3D12_FILL_MODE_SOLID;
-    case FillMode::kWireframe:
+    case FillMode::kWireFrame:
         return D3D12_FILL_MODE_WIREFRAME;
-    default:
-        throw std::runtime_error("Invalid fill mode");
     }
+
+    throw std::runtime_error("Invalid fill mode");
 }
 
-auto ConvertCullMode(CullMode mode) -> D3D12_CULL_MODE
+auto ConvertCullMode(const CullMode value) -> D3D12_CULL_MODE
 {
-    switch (mode) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case CullMode::kNone:
         return D3D12_CULL_MODE_NONE;
     case CullMode::kFront:
@@ -104,14 +111,16 @@ auto ConvertCullMode(CullMode mode) -> D3D12_CULL_MODE
         return D3D12_CULL_MODE_BACK;
     case CullMode::kFrontAndBack:
         throw std::runtime_error("D3D12 doesn't support front and back face culling");
-    default:
-        throw std::runtime_error("Invalid cull mode");
     }
+
+    throw std::runtime_error("Invalid cull mode");
 }
 
-auto ConvertCompareOp(CompareOp op) -> D3D12_COMPARISON_FUNC
+auto ConvertCompareOp(const CompareOp value) -> D3D12_COMPARISON_FUNC
 {
-    switch (op) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case CompareOp::kNever:
         return D3D12_COMPARISON_FUNC_NEVER;
     case CompareOp::kLess:
@@ -128,14 +137,16 @@ auto ConvertCompareOp(CompareOp op) -> D3D12_COMPARISON_FUNC
         return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
     case CompareOp::kAlways:
         return D3D12_COMPARISON_FUNC_ALWAYS;
-    default:
-        throw std::runtime_error("Invalid comparison op");
     }
+
+    throw std::runtime_error("Invalid comparison op");
 }
 
-auto ConvertBlendFactor(BlendFactor factor) -> D3D12_BLEND
+auto ConvertBlendFactor(const BlendFactor value) -> D3D12_BLEND
 {
-    switch (factor) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case BlendFactor::kZero:
         return D3D12_BLEND_ZERO;
     case BlendFactor::kOne:
@@ -168,14 +179,16 @@ auto ConvertBlendFactor(BlendFactor factor) -> D3D12_BLEND
         return D3D12_BLEND_SRC1_ALPHA;
     case BlendFactor::kInvSrc1Alpha:
         return D3D12_BLEND_INV_SRC1_ALPHA;
-    default:
-        throw std::runtime_error("Invalid blend factor");
     }
+
+    throw std::runtime_error("Invalid blend factor");
 }
 
-auto ConvertBlendOp(BlendOp op) -> D3D12_BLEND_OP
+auto ConvertBlendOp(const BlendOp value) -> D3D12_BLEND_OP
 {
-    switch (op) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case BlendOp::kAdd:
         return D3D12_BLEND_OP_ADD;
     case BlendOp::kSubtract:
@@ -186,28 +199,34 @@ auto ConvertBlendOp(BlendOp op) -> D3D12_BLEND_OP
         return D3D12_BLEND_OP_MIN;
     case BlendOp::kMax:
         return D3D12_BLEND_OP_MAX;
-    default:
-        throw std::runtime_error("Invalid blend op");
     }
+
+    throw std::runtime_error("Invalid blend op");
 }
 
-auto ConvertColorWriteMask(ColorWriteMask mask) -> UINT8
+auto ConvertColorWriteMask(const ColorWriteMask flags) -> UINT8
 {
     UINT8 result = 0;
-    if ((mask & ColorWriteMask::kR) == ColorWriteMask::kR)
+    if ((flags & ColorWriteMask::kR) == ColorWriteMask::kR) {
         result |= D3D12_COLOR_WRITE_ENABLE_RED;
-    if ((mask & ColorWriteMask::kG) == ColorWriteMask::kG)
+    }
+    if ((flags & ColorWriteMask::kG) == ColorWriteMask::kG) {
         result |= D3D12_COLOR_WRITE_ENABLE_GREEN;
-    if ((mask & ColorWriteMask::kB) == ColorWriteMask::kB)
+    }
+    if ((flags & ColorWriteMask::kB) == ColorWriteMask::kB) {
         result |= D3D12_COLOR_WRITE_ENABLE_BLUE;
-    if ((mask & ColorWriteMask::kA) == ColorWriteMask::kA)
+    }
+    if ((flags & ColorWriteMask::kA) == ColorWriteMask::kA) {
         result |= D3D12_COLOR_WRITE_ENABLE_ALPHA;
+    }
     return result;
 }
 
-auto ConvertPrimitiveType(PrimitiveType type) -> D3D12_PRIMITIVE_TOPOLOGY_TYPE
+auto ConvertPrimitiveType(const PrimitiveType value) -> D3D12_PRIMITIVE_TOPOLOGY_TYPE
 {
-    switch (type) {
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    // ReSharper disable once CppIncompleteSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case PrimitiveType::kPointList:
         return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
     case PrimitiveType::kLineList:
@@ -224,9 +243,25 @@ auto ConvertPrimitiveType(PrimitiveType type) -> D3D12_PRIMITIVE_TOPOLOGY_TYPE
         return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     case PrimitiveType::kPatchList:
         return D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
-    default:
-        throw std::runtime_error("Unsupported primitive topology type");
     }
+
+    throw std::runtime_error("Unsupported primitive topology type");
+}
+
+auto ConvertClearFlags(const ClearFlags flags) -> D3D12_CLEAR_FLAGS
+{
+    D3D12_CLEAR_FLAGS d3d12_flags = {};
+    if ((flags & ClearFlags::kDepth) == ClearFlags::kDepth) {
+        d3d12_flags |= D3D12_CLEAR_FLAG_DEPTH;
+    }
+    if ((flags & ClearFlags::kStencil) == ClearFlags::kStencil) {
+        d3d12_flags |= D3D12_CLEAR_FLAG_STENCIL;
+    }
+
+    // Note: D3D12 does not have a specific clear flag for color.
+    // Note: any other unknown flags are ignored.
+
+    return d3d12_flags;
 }
 
 void TranslateRasterizerState(const RasterizerStateDesc& desc, D3D12_RASTERIZER_DESC& d3d_desc)
@@ -271,32 +306,34 @@ void TranslateBlendState(const std::vector<BlendTargetDesc>& blend_targets, D3D1
     d3d_desc.IndependentBlendEnable = TRUE;
 
     // Initialize all render targets with default values
-    for (UINT i = 0; i < 8; ++i) {
-        d3d_desc.RenderTarget[i].BlendEnable = FALSE;
-        d3d_desc.RenderTarget[i].LogicOpEnable = FALSE;
-        d3d_desc.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
-        d3d_desc.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
-        d3d_desc.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
-        d3d_desc.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
-        d3d_desc.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
-        d3d_desc.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        d3d_desc.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
-        d3d_desc.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    for (auto& blend_desc : d3d_desc.RenderTarget) {
+        blend_desc.BlendEnable = FALSE;
+        blend_desc.LogicOpEnable = FALSE;
+        blend_desc.SrcBlend = D3D12_BLEND_ONE;
+        blend_desc.DestBlend = D3D12_BLEND_ZERO;
+        blend_desc.BlendOp = D3D12_BLEND_OP_ADD;
+        blend_desc.SrcBlendAlpha = D3D12_BLEND_ONE;
+        blend_desc.DestBlendAlpha = D3D12_BLEND_ZERO;
+        blend_desc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        blend_desc.LogicOp = D3D12_LOGIC_OP_NOOP;
+        blend_desc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
     }
 
     // Update with provided blend targets
-    for (size_t i = 0; i < blend_targets.size() && i < 8; ++i) {
+    for (size_t i = 0; i < blend_targets.size() && i < kMaxRenderTargets; ++i) {
         const auto& target = blend_targets[i];
-        auto& rt_blend = d3d_desc.RenderTarget[i];
+        auto& blend_desc = d3d_desc.RenderTarget[i];
 
-        rt_blend.BlendEnable = target.blend_enable;
-        rt_blend.SrcBlend = ConvertBlendFactor(target.src_blend);
-        rt_blend.DestBlend = ConvertBlendFactor(target.dest_blend);
-        rt_blend.BlendOp = ConvertBlendOp(target.blend_op);
-        rt_blend.SrcBlendAlpha = ConvertBlendFactor(target.src_blend_alpha);
-        rt_blend.DestBlendAlpha = ConvertBlendFactor(target.dest_blend_alpha);
-        rt_blend.BlendOpAlpha = ConvertBlendOp(target.blend_op_alpha);
-        rt_blend.RenderTargetWriteMask = target.write_mask ? ConvertColorWriteMask(*target.write_mask) : D3D12_COLOR_WRITE_ENABLE_ALL;
+        blend_desc.BlendEnable = target.blend_enable;
+        blend_desc.SrcBlend = ConvertBlendFactor(target.src_blend);
+        blend_desc.DestBlend = ConvertBlendFactor(target.dest_blend);
+        blend_desc.BlendOp = ConvertBlendOp(target.blend_op);
+        blend_desc.SrcBlendAlpha = ConvertBlendFactor(target.src_blend_alpha);
+        blend_desc.DestBlendAlpha = ConvertBlendFactor(target.dest_blend_alpha);
+        blend_desc.BlendOpAlpha = ConvertBlendOp(target.blend_op_alpha);
+        blend_desc.RenderTargetWriteMask = target.write_mask
+            ? ConvertColorWriteMask(*target.write_mask)
+            : D3D12_COLOR_WRITE_ENABLE_ALL;
     }
 }
 

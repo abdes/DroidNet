@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
@@ -34,21 +35,21 @@ auto oxygen::graphics::to_string(const Scissors& scissors) -> std::string
         scissors.left, scissors.top, scissors.right, scissors.bottom);
 }
 
-auto oxygen::graphics::to_string(const oxygen::graphics::NativeObject& obj) -> std::string
+auto oxygen::graphics::to_string(const NativeObject& obj) -> std::string
 {
     if (obj.IsValid()) {
         if (obj.IsPointerHandle()) {
             auto* pointer = obj.AsPointer<void*>();
             // format pointer as 0x00000000
             return fmt::format("NativeObject{{type_id: {}, pointer: {:p}}}",
-                static_cast<uint64_t>(obj.OwnerTypeId()), fmt::ptr(pointer));
-        } else if (obj.IsIntegerHandle()) {
-            return fmt::format("NativeObject{{type_id: {}, handle: {}}}",
-                static_cast<uint64_t>(obj.OwnerTypeId()), obj.AsInteger());
+                obj.OwnerTypeId(), fmt::ptr(pointer));
         }
-    } else {
-        return "NativeObject{invalid}";
+        if (obj.IsIntegerHandle()) {
+            return fmt::format("NativeObject{{type_id: {}, handle: {}}}",
+                obj.OwnerTypeId(), obj.AsInteger());
+        }
     }
+    return "NativeObject{invalid}";
 }
 
 auto oxygen::graphics::to_string(const oxygen::graphics::DescriptorHandle& handle) -> std::string
@@ -149,13 +150,10 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
             }
             result << state_name;
             first = false;
-
-            // Add the state to the checked_states bitmask
             checked_states |= state;
         }
     };
 
-    // Use the helper lambda to check and append each state
     check_and_append(ResourceStates::kUndefined, "Undefined");
     check_and_append(ResourceStates::kVertexBuffer, "VertexBuffer");
     check_and_append(ResourceStates::kConstantBuffer, "ConstantBuffer");
@@ -186,7 +184,7 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
     // Return the concatenated string
     static std::string result_str;
     result_str = result.str();
-    return result_str.c_str();
+    return result_str;
 }
 
 auto oxygen::graphics::to_string(const ResourceStateTrackingMode value) -> const char*
@@ -251,7 +249,7 @@ auto oxygen::graphics::to_string(const TextureDimension value) -> const char*
     return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
+auto oxygen::graphics::to_string(const ResourceViewType value) -> const char*
 {
     switch (value) {
     case ResourceViewType::kNone:
@@ -293,63 +291,105 @@ auto oxygen::graphics::to_string(ResourceViewType value) -> const char*
 
 auto oxygen::graphics::to_string(const DescriptorVisibility value) -> const char*
 {
-    switch (value) {
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case DescriptorVisibility::kNone:
         return "None";
     case DescriptorVisibility::kShaderVisible:
-        return "Shader Visible";
+        return "ShaderVisible";
     case DescriptorVisibility::kCpuOnly:
-        return "CPU Only";
-    case DescriptorVisibility::kMaxDescriptorVisibility:
-        return "__Max__";
+        return "CPU-Only";
+    }
+    return "__NotSupported__";
+}
+
+auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
+{
+    if (value == ClearFlags::kNone) {
+        return "None";
+    }
+
+    std::ostringstream oss;
+    bool first = true;
+
+    // Bitmask to track all checked states
+    auto checked_states = ClearFlags::kNone;
+
+    // Helper to append flag string if present
+    auto check_and_append = [&](const ClearFlags flag_to_check, const char* name) {
+        if ((value & flag_to_check) == flag_to_check) {
+            if (!first) {
+                oss << "|";
+            }
+            oss << name;
+            first = false;
+            checked_states |= flag_to_check;
+        }
+    };
+
+    check_and_append(ClearFlags::kColor, "Color");
+    check_and_append(ClearFlags::kDepth, "Depth");
+    check_and_append(ClearFlags::kStencil, "Stencil");
+
+    // Validate that all bits in `value` were checked
+    DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ClearFlags value detected");
+
+    std::string result_str = oss.str();
+    return result_str;
+}
+
+auto oxygen::graphics::to_string(const FillMode mode) -> std::string
+{
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (mode) { // NOLINT(clang-diagnostic-switch)
+    case FillMode::kSolid:
+        return "Solid";
+    case FillMode::kWireFrame:
+        return "Wire-frame";
     }
 
     return "__NotSupported__";
 }
 
-#include <Oxygen/Graphics/Common/PipelineState.h>
-#include <sstream>
-
-// Pipeline enums to_string implementations
-
-auto oxygen::graphics::to_string(FillMode mode) -> std::string
+auto oxygen::graphics::to_string(const CullMode value) -> std::string
 {
-    switch (mode) {
-    case FillMode::kSolid:
-        return "Solid";
-    case FillMode::kWireframe:
-        return "Wireframe";
-    }
-
-    return "__Unsupported__";
-}
-
-auto oxygen::graphics::to_string(CullMode mode) -> std::string
-{
-    if (mode == CullMode::kNone) {
+    if (value == CullMode::kNone) {
         return "None";
     }
 
     std::ostringstream oss;
-    if ((mode & CullMode::kFront) != CullMode::kNone) {
-        oss << "Front";
-    }
-    if ((mode & CullMode::kBack) != CullMode::kNone) {
-        if (!oss.str().empty()) {
-            oss << "|";
-        }
-        oss << "Back";
-    }
+    bool first = true;
 
-    if (oss.str().empty()) {
-        return "__Unsupported__";
-    }
-    return oss.str();
+    // Bitmask to track all checked states (following the ClearFlags pattern)
+    auto checked_states = CullMode::kNone;
+
+    auto append_flag = [&](const CullMode flag_to_check, const char* name) {
+        if ((value & flag_to_check) == flag_to_check) {
+            if (!first) {
+                oss << "|";
+            }
+            oss << name;
+            first = false;
+            checked_states |= flag_to_check;
+        }
+    };
+
+    append_flag(CullMode::kFront, "Front");
+    append_flag(CullMode::kBack, "Back");
+
+    DCHECK_EQ_F(checked_states, value, "to_string: Unchecked CullMode value detected");
+
+    std::string result_str = oss.str();
+    return result_str;
 }
 
-auto oxygen::graphics::to_string(CompareOp op) -> std::string
+auto oxygen::graphics::to_string(const CompareOp value) -> std::string
 {
-    switch (op) {
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case CompareOp::kNever:
         return "Never";
     case CompareOp::kLess:
@@ -368,12 +408,14 @@ auto oxygen::graphics::to_string(CompareOp op) -> std::string
         return "Always";
     }
 
-    return "__Unsupported__";
+    return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(BlendFactor v) -> std::string
+auto oxygen::graphics::to_string(const BlendFactor value) -> std::string
 {
-    switch (v) {
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case BlendFactor::kZero:
         return "Zero";
     case BlendFactor::kOne:
@@ -396,12 +438,14 @@ auto oxygen::graphics::to_string(BlendFactor v) -> std::string
         return "InvDestAlpha";
     }
 
-    return "__Unsupported__";
+    return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(BlendOp op) -> std::string
+auto oxygen::graphics::to_string(const BlendOp value) -> std::string
 {
-    switch (op) {
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case BlendOp::kAdd:
         return "Add";
     case BlendOp::kSubtract:
@@ -414,40 +458,51 @@ auto oxygen::graphics::to_string(BlendOp op) -> std::string
         return "Max";
     }
 
-    return "__Unsupported__";
+    return "__NotSupported__";
 }
 
-auto oxygen::graphics::to_string(ColorWriteMask mask) -> std::string
+auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
 {
-    if (mask == ColorWriteMask::kAll) {
+    if (value == ColorWriteMask::kAll) {
         return "All";
     }
-    if (mask == ColorWriteMask::kNone) {
+    if (value == ColorWriteMask::kNone) {
         return "None";
     }
-    std::ostringstream oss;
-    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kR)) != 0) {
-        oss << "R";
-    }
-    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kG)) != 0) {
-        oss << "G";
-    }
-    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kB)) != 0) {
-        oss << "B";
-    }
-    if ((static_cast<uint8_t>(mask) & static_cast<uint8_t>(ColorWriteMask::kA)) != 0) {
-        oss << "A";
-    }
 
-    if (oss.str().empty()) {
-        return "__Unsupported__";
-    }
-    return oss.str();
+    std::ostringstream oss;
+    bool first = true;
+
+    // Bitmask to track all checked states (following the ClearFlags pattern)
+    auto checked_states = ColorWriteMask::kNone;
+
+    auto append_flag = [&](const ColorWriteMask flag_to_check, const char* name) {
+        if ((value & flag_to_check) == flag_to_check) {
+            if (!first) {
+                oss << "|";
+            }
+            oss << name;
+            first = false;
+            checked_states |= flag_to_check;
+        }
+    };
+
+    append_flag(ColorWriteMask::kR, "R");
+    append_flag(ColorWriteMask::kG, "G");
+    append_flag(ColorWriteMask::kB, "B");
+    append_flag(ColorWriteMask::kA, "A");
+
+    DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ColorWriteMask value detected");
+
+    std::string result_str = oss.str();
+    return result_str;
 }
 
-auto oxygen::graphics::to_string(PrimitiveType t) -> std::string
+auto oxygen::graphics::to_string(const PrimitiveType value) -> std::string
 {
-    switch (t) {
+    // ReSharper disable once CppIncompleteSwitchStatement
+    // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
+    switch (value) { // NOLINT(clang-diagnostic-switch)
     case PrimitiveType::kPointList:
         return "PointList";
     case PrimitiveType::kLineList:
@@ -474,5 +529,5 @@ auto oxygen::graphics::to_string(PrimitiveType t) -> std::string
         return "TriangleStripWithAdjacency";
     }
 
-    return "__Unsupported__";
+    return "__NotSupported__";
 }
