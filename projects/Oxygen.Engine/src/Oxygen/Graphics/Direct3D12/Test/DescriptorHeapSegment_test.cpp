@@ -168,7 +168,7 @@ NOLINT_TEST_F(GoodHeapTest, ConstructorWithDebugNameSetsDebugName)
     // There is no way to query the debug name from the heap mock.
 }
 
-NOLINT_TEST_F(GoodHeapTest, NoGpuHandleIfNotShaderVisible)
+NOLINT_TEST_F(GoodHeapTest, GetGpuHandleThrowsIfNotShaderVisible)
 {
     using ::testing::_;
 
@@ -197,7 +197,6 @@ NOLINT_TEST_F(GoodHeapTest, NoGpuHandleIfNotShaderVisible)
         0,
         ResourceViewType::kTexture_SRV,
         DescriptorVisibility::kCpuOnly);
-
     const FakeDescriptorHandle handle(0);
     NOLINT_EXPECT_THROW([[maybe_unused]] auto gh = segment.GetGpuHandle(handle), std::runtime_error);
 }
@@ -208,7 +207,7 @@ NOLINT_TEST_F(NoHeapTest, ConstructorThrowsWhenHeapAllocationFails)
 
     EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
 
-    EXPECT_THROW(
+    NOLINT_EXPECT_THROW(
         DescriptorHeapSegment(
             &device_,
             4,
@@ -224,7 +223,7 @@ NOLINT_TEST_F(NoHeapTest, ConstructorWithDebugNameThrowsWhenHeapAllocationFails)
 
     EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
 
-    EXPECT_THROW(
+    NOLINT_EXPECT_THROW(
         DescriptorHeapSegment(
             &device_,
             8,
@@ -233,4 +232,97 @@ NOLINT_TEST_F(NoHeapTest, ConstructorWithDebugNameThrowsWhenHeapAllocationFails)
             DescriptorVisibility::kShaderVisible,
             "DebugNameTest"),
         std::runtime_error);
+}
+
+NOLINT_TEST_F(GoodHeapTest, GetGpuDescriptorTableStartThrowsIfNotShaderVisible)
+{
+    using ::testing::_;
+
+    constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 4,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+        .NodeMask = 0,
+    };
+    constexpr D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = { 4444 };
+    EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
+    EXPECT_CALL(device_, GetDescriptorHandleIncrementSize(heap_desc.Type)).WillOnce(Return(8));
+    EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart()).WillOnce(Return(cpu_handle));
+    EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
+    const DescriptorHeapSegment segment(
+        &device_,
+        heap_desc.NumDescriptors,
+        0,
+        ResourceViewType::kTexture_SRV,
+        DescriptorVisibility::kCpuOnly);
+    NOLINT_EXPECT_THROW([[maybe_unused]] auto h = segment.GetGpuDescriptorTableStart(), std::runtime_error);
+}
+
+NOLINT_TEST_F(GoodHeapTest, GetCpuDescriptorTableStartReturnsCpuHandle)
+{
+    using ::testing::_;
+
+    constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 4,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+        .NodeMask = 0,
+    };
+    constexpr D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = { 5555 };
+    EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
+    EXPECT_CALL(device_, GetDescriptorHandleIncrementSize(heap_desc.Type)).WillOnce(Return(8));
+    EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart()).WillOnce(Return(cpu_handle));
+    EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc));
+    const DescriptorHeapSegment segment(
+        &device_,
+        heap_desc.NumDescriptors,
+        0,
+        ResourceViewType::kTexture_SRV,
+        DescriptorVisibility::kCpuOnly);
+    EXPECT_EQ(segment.GetCpuDescriptorTableStart().ptr, cpu_handle.ptr);
+}
+
+NOLINT_TEST_F(GoodHeapTest, IsShaderVisibleReflectsHeapFlags)
+{
+    using ::testing::_;
+
+    constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc_visible = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 2,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+        .NodeMask = 0,
+    };
+    constexpr D3D12_DESCRIPTOR_HEAP_DESC heap_desc_cpu = {
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 2,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+        .NodeMask = 0,
+    };
+    constexpr D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = { 6666 };
+    constexpr D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle = { 7777 };
+    // Shader visible
+    EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
+    EXPECT_CALL(device_, GetDescriptorHandleIncrementSize(heap_desc_visible.Type)).WillOnce(Return(8));
+    EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart()).WillOnce(Return(cpu_handle));
+    EXPECT_CALL(heap_, GetGPUDescriptorHandleForHeapStart()).WillOnce(Return(gpu_handle));
+    EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc_visible));
+    const DescriptorHeapSegment segment_visible(
+        &device_,
+        heap_desc_visible.NumDescriptors,
+        0,
+        ResourceViewType::kTexture_SRV,
+        DescriptorVisibility::kShaderVisible);
+    EXPECT_TRUE(segment_visible.IsShaderVisible());
+    // CPU only
+    EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
+    EXPECT_CALL(device_, GetDescriptorHandleIncrementSize(heap_desc_cpu.Type)).WillOnce(Return(8));
+    EXPECT_CALL(heap_, GetCPUDescriptorHandleForHeapStart()).WillOnce(Return(cpu_handle));
+    EXPECT_CALL(heap_, GetDesc()).WillRepeatedly(Return(heap_desc_cpu));
+    const DescriptorHeapSegment segment_cpu(
+        &device_,
+        heap_desc_cpu.NumDescriptors,
+        0,
+        ResourceViewType::kTexture_SRV,
+        DescriptorVisibility::kCpuOnly);
+    EXPECT_FALSE(segment_cpu.IsShaderVisible());
 }

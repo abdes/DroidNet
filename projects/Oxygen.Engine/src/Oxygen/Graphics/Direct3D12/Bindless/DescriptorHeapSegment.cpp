@@ -108,6 +108,12 @@ auto DescriptorHeapSegment::GetGpuDescriptorTableStart() const
     return gpu_start_;
 }
 
+auto DescriptorHeapSegment::GetCpuDescriptorTableStart() const
+    -> D3D12_CPU_DESCRIPTOR_HANDLE
+{
+    return cpu_start_;
+}
+
 auto DescriptorHeapSegment::IsShaderVisible() const noexcept -> bool
 {
     const auto& desc = heap_->GetDesc();
