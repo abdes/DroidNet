@@ -24,9 +24,8 @@ namespace d3d12 {
      functionality for managing descriptor indices and mapping to D3D12 native
      descriptor handles.
 
-     Each segment is associated with a specific D3D12 descriptor heap and range
-     within that heap, corresponding to a particular ResourceViewType and
-     DescriptorVisibility.
+     Each segment is associated with a specific D3D12 descriptor heap,
+     corresponding to a particular ResourceViewType and DescriptorVisibility.
     */
     class DescriptorHeapSegment final : public graphics::detail::FixedDescriptorHeapSegment {
     public:
@@ -58,22 +57,41 @@ namespace d3d12 {
 
         //! Gets the underlying D3D12 descriptor heap.
         [[nodiscard]] OXYGEN_D3D12_API auto GetHeap() const
-            -> ID3D12DescriptorHeap*;
+            -> dx::IDescriptorHeap*;
 
         //! Gets the D3D12 descriptor heap type for this segment.
         [[nodiscard]] OXYGEN_D3D12_API auto GetHeapType() const
             -> D3D12_DESCRIPTOR_HEAP_TYPE;
 
         //! Gets the D3D12 CPU descriptor handle for a given descriptor handle.
+        //! Available for all descriptor heaps.
+        /*!
+         CPU handles are used for CPU-side operations via immediate methods on
+         the device, such as creating views on resources or copying descriptor
+         handles.
+        */
         [[nodiscard]] OXYGEN_D3D12_API auto GetCpuHandle(const DescriptorHandle& handle) const
             -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
         //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
+        //! Available only for shader-visible heaps.
+        /*!
+         GPU handles are used to access descriptors via methods on the command
+         lists, and are only valid for shader-visible heaps.
+        */
         [[nodiscard]] OXYGEN_D3D12_API auto GetGpuHandle(const DescriptorHandle& handle) const
             -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
+        //! Gets the GPU descriptor handle that represents the start of the heap.
+        /*!
+         \throws std::runtime_error if the heap is not shader-visible.
+        */
         [[nodiscard]] OXYGEN_D3D12_API auto GetGpuDescriptorTableStart() const
             -> D3D12_GPU_DESCRIPTOR_HANDLE;
+
+        //! Gets the CPU descriptor handle that represents the start of the heap.
+        [[nodiscard]] OXYGEN_D3D12_API auto GetCpuDescriptorTableStart() const
+            -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
     private:
         //! Computes a local index from a global index.
