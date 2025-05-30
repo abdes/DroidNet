@@ -12,6 +12,7 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -20,7 +21,6 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/Types/Scissors.h>
-#include <Oxygen/Graphics/Common/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Types/ViewPort.h>
 
 auto oxygen::graphics::to_string(const ViewPort& viewport) -> std::string
@@ -52,7 +52,7 @@ auto oxygen::graphics::to_string(const NativeObject& obj) -> std::string
     return "NativeObject{invalid}";
 }
 
-auto oxygen::graphics::to_string(const oxygen::graphics::DescriptorHandle& handle) -> std::string
+auto oxygen::graphics::to_string(const DescriptorHandle& handle) -> std::string
 {
     return fmt::format("DescriptorHandle{}{{index: {}, view_type: {}, visibility: {}}}",
         handle.IsValid() ? "" : " (invalid)",
@@ -106,25 +106,36 @@ auto oxygen::graphics::to_string(const ShaderType value) -> const char*
     switch (value) {
     case ShaderType::kUnknown:
         return "Unknown";
-    case ShaderType::kVertex:
-        return "Vertex Shader";
-    case ShaderType::kPixel:
-        return "Pixel Shader";
-    case ShaderType::kGeometry:
-        return "Geometry Shader";
-    case ShaderType::kHull:
-        return "Hull Shader";
-    case ShaderType::kDomain:
-        return "Domain Shader";
-    case ShaderType::kCompute:
-        return "Compute Shader";
     case ShaderType::kAmplification:
         return "Amplification Shader";
     case ShaderType::kMesh:
         return "Mesh Shader";
-
-    case ShaderType::kCount:
-        return "__count__";
+    case ShaderType::kVertex:
+        return "Vertex Shader";
+    case ShaderType::kHull:
+        return "Hull Shader";
+    case ShaderType::kDomain:
+        return "Domain Shader";
+    case ShaderType::kGeometry:
+        return "Geometry Shader";
+    case ShaderType::kPixel:
+        return "Pixel Shader";
+    case ShaderType::kCompute:
+        return "Compute Shader";
+    case ShaderType::kRayGen:
+        return "Ray Generation Shader";
+    case ShaderType::kIntersection:
+        return "Intersection Shader";
+    case ShaderType::kAnyHit:
+        return "Any-Hit Shader";
+    case ShaderType::kClosestHit:
+        return "Closest-Hit Shader";
+    case ShaderType::kMiss:
+        return "Miss Shader";
+    case ShaderType::kCallable:
+        return "Callable Shader";
+    case ShaderType::kMaxShaderType:
+        return "__Max__";
     }
 
     return "__NotSupported__";
@@ -136,7 +147,7 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
         return "Unknown";
     }
 
-    std::ostringstream result;
+    std::string result;
     bool first = true;
 
     // Bitmask to track all checked states
@@ -146,9 +157,9 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
     auto check_and_append = [&](const ResourceStates state, const char* state_name) {
         if ((value & state) == state) {
             if (!first) {
-                result << " | ";
+                result += " | ";
             }
-            result << state_name;
+            result += state_name;
             first = false;
             checked_states |= state;
         }
@@ -181,10 +192,58 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
     // Validate that all bits in `value` were checked
     DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ResourceStates value detected");
 
-    // Return the concatenated string
-    static std::string result_str;
-    result_str = result.str();
-    return result_str;
+    return result;
+}
+
+auto oxygen::graphics::to_string(const ShaderStageFlags value) -> std::string
+{
+    if (value == ShaderStageFlags::kNone) {
+        return "None";
+    }
+    if (value == ShaderStageFlags::kAll) {
+        return "All";
+    }
+    if (value == ShaderStageFlags::kAllGraphics) {
+        return "All Graphics";
+    }
+    if (value == ShaderStageFlags::kAllRayTracing) {
+        return "All Ray Tracing";
+    }
+
+    std::string result;
+    bool first = true;
+    auto checked = ShaderStageFlags::kNone;
+
+    auto check_and_append = [&](const ShaderStageFlags flag, const char* name) {
+        if ((value & flag) == flag) {
+            if (!first) {
+                result += "|";
+            }
+            result += name;
+            first = false;
+            checked |= flag;
+        }
+    };
+
+    check_and_append(ShaderStageFlags::kAmplification, "Amplification");
+    check_and_append(ShaderStageFlags::kMesh, "Mesh");
+    check_and_append(ShaderStageFlags::kVertex, "Vertex");
+    check_and_append(ShaderStageFlags::kHull, "Hull");
+    check_and_append(ShaderStageFlags::kDomain, "Domain");
+    check_and_append(ShaderStageFlags::kGeometry, "Geometry");
+    check_and_append(ShaderStageFlags::kPixel, "Pixel");
+    check_and_append(ShaderStageFlags::kCompute, "Compute");
+    check_and_append(ShaderStageFlags::kRayGen, "RayGen");
+    check_and_append(ShaderStageFlags::kIntersection, "Intersection");
+    check_and_append(ShaderStageFlags::kAnyHit, "AnyHit");
+    check_and_append(ShaderStageFlags::kClosestHit, "ClosestHit");
+    check_and_append(ShaderStageFlags::kMiss, "Miss");
+    check_and_append(ShaderStageFlags::kCallable, "Callable");
+
+    // Validate that all bits in `value` were checked
+    DCHECK_EQ_F(checked, value, "to_string: Unchecked ShaderStageFlags value detected");
+
+    return result.empty() ? "__NotSupported__" : result;
 }
 
 auto oxygen::graphics::to_string(const ResourceStateTrackingMode value) -> const char*
@@ -310,7 +369,7 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
         return "None";
     }
 
-    std::ostringstream oss;
+    std::string result;
     bool first = true;
 
     // Bitmask to track all checked states
@@ -320,9 +379,9 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
     auto check_and_append = [&](const ClearFlags flag_to_check, const char* name) {
         if ((value & flag_to_check) == flag_to_check) {
             if (!first) {
-                oss << "|";
+                result += "|";
             }
-            oss << name;
+            result += name;
             first = false;
             checked_states |= flag_to_check;
         }
@@ -335,8 +394,7 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
     // Validate that all bits in `value` were checked
     DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ClearFlags value detected");
 
-    std::string result_str = oss.str();
-    return result_str;
+    return result;
 }
 
 auto oxygen::graphics::to_string(const FillMode mode) -> std::string
@@ -359,7 +417,7 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
         return "None";
     }
 
-    std::ostringstream oss;
+    std::string result;
     bool first = true;
 
     // Bitmask to track all checked states (following the ClearFlags pattern)
@@ -368,9 +426,9 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
     auto append_flag = [&](const CullMode flag_to_check, const char* name) {
         if ((value & flag_to_check) == flag_to_check) {
             if (!first) {
-                oss << "|";
+                result += "|";
             }
-            oss << name;
+            result += name;
             first = false;
             checked_states |= flag_to_check;
         }
@@ -381,8 +439,7 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
 
     DCHECK_EQ_F(checked_states, value, "to_string: Unchecked CullMode value detected");
 
-    std::string result_str = oss.str();
-    return result_str;
+    return result;
 }
 
 auto oxygen::graphics::to_string(const CompareOp value) -> std::string
@@ -470,7 +527,7 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
         return "None";
     }
 
-    std::ostringstream oss;
+    std::string result;
     bool first = true;
 
     // Bitmask to track all checked states (following the ClearFlags pattern)
@@ -479,9 +536,9 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
     auto append_flag = [&](const ColorWriteMask flag_to_check, const char* name) {
         if ((value & flag_to_check) == flag_to_check) {
             if (!first) {
-                oss << "|";
+                result += "|";
             }
-            oss << name;
+            result += name;
             first = false;
             checked_states |= flag_to_check;
         }
@@ -494,8 +551,7 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
 
     DCHECK_EQ_F(checked_states, value, "to_string: Unchecked ColorWriteMask value detected");
 
-    std::string result_str = oss.str();
-    return result_str;
+    return result;
 }
 
 auto oxygen::graphics::to_string(const PrimitiveType value) -> std::string

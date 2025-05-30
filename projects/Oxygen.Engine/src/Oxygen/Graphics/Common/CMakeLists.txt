@@ -128,7 +128,6 @@ target_sources(
       "Types/ResourceStates.h"
       "Types/ResourceViewType.h"
       "Types/Scissors.h"
-      "Types/ShaderType.h"
       "Types/TrackableResource.h"
       "Types/ViewPort.h"
       "Types/DescriptorVisibility.h"

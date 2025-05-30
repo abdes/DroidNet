@@ -8,7 +8,6 @@
 #include <string>
 
 #include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Graphics/Common/Types/ShaderType.h>
 
 auto oxygen::graphics::MakeShaderIdentifier(
     const ShaderType shader_type,

@@ -19,7 +19,6 @@
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderCompiler.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Graphics/Common/Types/ShaderType.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCompiler.h>
 #include <type_traits>
 
