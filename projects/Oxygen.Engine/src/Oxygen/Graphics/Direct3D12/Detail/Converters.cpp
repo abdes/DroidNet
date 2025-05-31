@@ -288,7 +288,9 @@ void TranslateDepthStencilState(const DepthStencilStateDesc& desc, D3D12_DEPTH_S
     d3d_desc.StencilReadMask = desc.stencil_read_mask;
     d3d_desc.StencilWriteMask = desc.stencil_write_mask;
 
-    // Default stencil operations
+    // The translation sets the default stencil operations for FrontFace and
+    // BackFace to the typical D3D12 defaults most commonly used in 3D game
+    // engines.
     d3d_desc.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
     d3d_desc.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
     d3d_desc.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
