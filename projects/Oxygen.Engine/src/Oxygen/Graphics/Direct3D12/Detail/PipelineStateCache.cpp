@@ -459,9 +459,7 @@ template <typename T>
 concept PipelineDescType = IsGraphicPipelineDesc<T> || IsComputePipelineDesc<T>;
 
 template <PipelineDescType PipelineDesc>
-auto CreateRootSignature(
-    const PipelineDesc& desc,
-    const oxygen::graphics::d3d12::Graphics* gfx)
+auto CreateRootSignature(const PipelineDesc& desc, const Graphics* gfx)
     -> dx::IRootSignature*
 {
     using oxygen::graphics::DescriptorTableBinding;
@@ -563,7 +561,7 @@ auto CreateRootSignature(
 
 #if !defined(NDEBUG)
     // Debugging helper: dump the root signature descriptor
-    LOG_F(INFO, "{}", DumpRootSignatureDesc(root_sig_desc));
+    LOG_F(2, "{}", DumpRootSignatureDesc(root_sig_desc));
 #endif
 
     Microsoft::WRL::ComPtr<ID3DBlob> sig_blob, err_blob;
@@ -639,8 +637,13 @@ auto PipelineStateCache::CreateRootSignature(const ComputePipelineDesc& desc) co
 //! Get or create a graphics pipeline state object and root signature.
 auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) -> Entry
 {
+    LOG_SCOPE_F(2, "Pipeline State");
+    DLOG_F(2, "for descriptor {}, hash={}", desc.GetName(), hash);
     if (auto it = graphics_pipelines_.find(hash); it != graphics_pipelines_.end()) {
         const auto& [cached_desc, entry] = it->second;
+        DLOG_F(2, "cache hit: pso=0x{:04X}, rs=0x{:04X}",
+            reinterpret_cast<std::uintptr_t>(entry.pipeline_state),
+            reinterpret_cast<std::uintptr_t>(entry.root_signature));
         return entry;
     }
 
@@ -649,6 +652,10 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
     if (root_signature == nullptr) {
         throw std::runtime_error("failed to create bindless root signature for graphics pipeline");
     }
+    auto rs_name = desc.GetName() + "_BindlessRS";
+    NameObject(root_signature, rs_name);
+    DLOG_F(2, "new root signature: 0x{:04X} ({})",
+        reinterpret_cast<std::uintptr_t>(root_signature), rs_name);
 
     // Create new pipeline state
     dx::IPipelineState* pso = nullptr;
@@ -716,9 +723,10 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
     ThrowOnFailed(device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso)),
         "Failed to create graphics pipeline state");
 
-    // Name them for debugging
-    NameObject(pso, desc.GetName() + "_PSO");
-    NameObject(root_signature, desc.GetName() + "_BindlessRS");
+    auto pso_name = desc.GetName() + "_PSO";
+    NameObject(pso, pso_name);
+    DLOG_F(2, "new pso: 0x{:04X} ({})",
+        reinterpret_cast<std::uintptr_t>(pso), pso_name);
 
     Entry entry {
         .pipeline_state = pso,
