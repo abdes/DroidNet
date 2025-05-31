@@ -117,6 +117,7 @@ auto oxygen::graphics::HashGraphicsPipelineDesc(const GraphicsPipelineDesc& desc
         HashCombine(seed, static_cast<int>(*desc.FramebufferLayout().depth_stencil_format));
     }
     HashCombine(seed, desc.FramebufferLayout().sample_count);
+    HashCombine(seed, desc.FramebufferLayout().sample_quality);
     // --- Hash root bindings ---
     HashRootBindings(seed, desc.RootBindings());
     return seed;
