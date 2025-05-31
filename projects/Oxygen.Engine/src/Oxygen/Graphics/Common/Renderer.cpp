@@ -65,8 +65,6 @@ Renderer::Renderer(
 Renderer::~Renderer()
 {
     Stop();
-    // TODO: cleanup the resource registry and the descriptor allocator
-    DLOG_F(INFO, "Renderer destroyed");
 }
 
 auto Renderer::GetGraphics() -> Graphics&

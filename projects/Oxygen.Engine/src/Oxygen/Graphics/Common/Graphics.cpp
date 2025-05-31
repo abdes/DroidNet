@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -13,7 +14,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/OxCo/Co.h>
@@ -21,16 +21,13 @@
 
 using oxygen::Graphics;
 
-using oxygen::graphics::detail::RenderThread;
-
 Graphics::Graphics(const std::string_view name)
 {
     AddComponent<ObjectMetaData>(name);
 }
 
 Graphics::~Graphics()
-{
-}
+    = default;
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
@@ -56,7 +53,7 @@ void Graphics::Stop()
     // Stop all valid renderers
     auto it = renderers_.begin();
     while (it != renderers_.end()) {
-        if (auto renderer = it->lock()) {
+        if (const auto renderer = it->lock()) {
             renderer->Stop();
             ++it;
         }
@@ -83,7 +80,7 @@ void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy
     LOG_IF_F(INFO, !command_queues_.empty(), "Re-creating command queues for the graphics backend");
     command_queues_.clear();
 
-    auto queue_specs = queue_strategy.Specifications();
+    const auto queue_specs = queue_strategy.Specifications();
     std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> temp_queues;
 
     try {
@@ -103,16 +100,16 @@ void Graphics::CreateCommandQueues(const graphics::QueueStrategy& queue_strategy
 void Graphics::FlushCommandQueues()
 {
     LOG_SCOPE_F(1, "Flushing all command queues");
-    for (const auto& [name, queue] : command_queues_) {
+    for (const auto& queue : command_queues_ | std::views::values) {
         DCHECK_NOTNULL_F(queue);
         queue->Flush();
     }
 }
 
-auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<graphics::CommandQueue>
+auto Graphics::GetCommandQueue(const std::string_view name) const -> std::shared_ptr<graphics::CommandQueue>
 {
-    auto it = std::ranges::find(command_queues_, name, [](const auto& pair) { return pair.first; });
-    if (it != command_queues_.end()) {
+    if (const auto it = std::ranges::find(command_queues_, name, [](const auto& pair) { return pair.first; });
+        it != command_queues_.end()) {
         return it->second;
     }
 
@@ -120,25 +117,30 @@ auto Graphics::GetCommandQueue(std::string_view name) const -> std::shared_ptr<g
     return {};
 }
 
-auto Graphics::CreateRenderer(const std::string_view name, std::weak_ptr<graphics::Surface> surface, uint32_t frames_in_flight) -> std::shared_ptr<oxygen::graphics::Renderer>
+auto Graphics::CreateRenderer(
+    const std::string_view name,
+    std::weak_ptr<graphics::Surface> surface,
+    const uint32_t frames_in_flight)
+    -> std::shared_ptr<graphics::Renderer>
 {
     // Create the Renderer object
     auto renderer = CreateRendererImpl(name, std::move(surface), frames_in_flight);
     CHECK_NOTNULL_F(renderer, "Failed to create renderer");
 
     // Wrap the Renderer in a shared_ptr with a custom deleter
-    auto renderer_with_deleter = std::shared_ptr<oxygen::graphics::Renderer>(
+    auto renderer_with_deleter = std::shared_ptr<graphics::Renderer>(
         renderer.release(),
-        [this](oxygen::graphics::Renderer* ptr) {
+        [this](graphics::Renderer* ptr) {
             // Remove the Renderer from the renderers_ collection
-            auto it = std::remove_if(renderers_.begin(), renderers_.end(),
-                [ptr](const std::weak_ptr<oxygen::graphics::Renderer>& weak_renderer) {
-                    auto shared_renderer = weak_renderer.lock();
+            const auto it = std::ranges::remove_if(renderers_,
+                [ptr](const std::weak_ptr<graphics::Renderer>& weak_renderer) {
+                    const auto shared_renderer = weak_renderer.lock();
                     return !shared_renderer || shared_renderer.get() == ptr;
-                });
+                }).begin();
             renderers_.erase(it, renderers_.end());
 
             // Delete the Renderer
+            LOG_SCOPE_F(INFO, "Destroy Renderer");
             delete ptr;
         });
 
@@ -148,16 +150,15 @@ auto Graphics::CreateRenderer(const std::string_view name, std::weak_ptr<graphic
     return renderer_with_deleter;
 }
 
-auto Graphics::AcquireCommandList(graphics::QueueRole queue_role, std::string_view command_list_name)
+auto Graphics::AcquireCommandList(graphics::QueueRole queue_role, const std::string_view command_list_name)
     -> std::shared_ptr<graphics::CommandList>
 {
     // Acquire or create a command list
     std::unique_ptr<graphics::CommandList> cmd_list;
     {
-        std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-        auto& pool = command_list_pool_[queue_role];
+        std::lock_guard lock(command_list_pool_mutex_);
 
-        if (pool.empty()) {
+        if (auto& pool = command_list_pool_[queue_role]; pool.empty()) {
             // Create a new command list if pool is empty
             cmd_list = CreateCommandListImpl(queue_role, command_list_name);
         } else {

@@ -59,6 +59,10 @@ public:
     void SetPipelineState(GraphicsPipelineDesc desc) override;
     void SetPipelineState(ComputePipelineDesc desc) override;
 
+    void SetGraphicsRootConstantBufferView(
+        uint32_t root_parameter_index,
+        uint64_t buffer_gpu_address) override;
+
     OXYGEN_D3D12_API void SetRenderTargets(
         std::span<NativeObject> rtvs,
         std::optional<NativeObject> dsv) override;

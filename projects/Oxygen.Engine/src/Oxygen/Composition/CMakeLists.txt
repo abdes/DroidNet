@@ -51,6 +51,7 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Composition.cpp"
+    "Object.cpp"
     "TypeSystem.cpp"
     "InitializeTypeRegistry.cpp"
   PUBLIC

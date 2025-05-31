@@ -32,7 +32,6 @@ using oxygen::graphics::detail::BufferBarrierDesc;
 using oxygen::graphics::detail::GetFormatInfo;
 using oxygen::graphics::detail::MemoryBarrierDesc;
 using oxygen::graphics::detail::TextureBarrierDesc;
-using oxygen::windows::ThrowOnFailed; // TODO: review this file to check HRESULT usage
 
 namespace {
 
@@ -347,10 +346,33 @@ void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, ui
 {
 }
 
+/**
+ * @brief Describes the root signature requirements for descriptor heaps in
+ * D3D12.
+ *
+ * In Direct3D 12, root signatures define how resources are bound to the GPU
+ * pipeline. When using descriptor heaps, especially in bindless rendering
+ * scenarios, the following requirements apply:
+ *
+ * - Each root signature should contain **only one descriptor table per
+ *   descriptor heap type**. This includes:
+ *   - One descriptor table for `D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV`
+ *   - One descriptor table for `D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER`
+ *
+ * - This restriction exists because only one descriptor heap of each type can
+ *   be bound at a time using `ID3D12GraphicsCommandList::SetDescriptorHeaps`.
+ *   Having multiple descriptor tables for the same heap type in a root
+ *   signature is not allowed, as it would create ambiguity in shader resource
+ *   binding.
+ *
+ * - RTV (Render Target View) and DSV (Depth Stencil View) heaps are not
+ *   shader-visible and are not included in the root signature.
+ */
+
 //! Create a bindless root signature for graphics or compute pipelines
 // Invariant: The root signature contains a single descriptor table with two ranges:
 //   - Range 0: 1 CBV at register b0 (heap index 0)
-//   - Range 1: Unbounded SRVs at register t0, space0 (heap indices 1+)
+//   - Range 1: SRVs for register t0 onwards (heap indices 1+)
 // The descriptor table is always at root parameter 0.
 // The flag D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED is set for true bindless access.
 // This layout must match the expectations of both the engine and the shaders (see FullScreenTriangle.hlsl).
@@ -414,51 +436,57 @@ void CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc)
 {
     DCHECK_NOTNULL_F(renderer_);
 
+    const auto debug_name = desc.GetName(); // Save before moving desc
+    graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
+
+    auto [pipeline_state, root_signature] = renderer_->GetOrCreateGraphicsPipeline(std::move(desc), graphics_pipeline_hash_);
+    DCHECK_NOTNULL_F(pipeline_state);
+    DCHECK_NOTNULL_F(root_signature);
+
     const auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
     auto* d3d12_command_list = command_list->GetCommandList();
 
-    auto* root_signature = CreateBindlessRootSignature(true);
-    if (root_signature == nullptr) {
-        throw std::runtime_error("failed to create bindless root signature for graphics pipeline");
-    }
     d3d12_command_list->SetGraphicsRootSignature(root_signature);
     // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
     auto& allocator = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
     SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
-
-    const auto debug_name = desc.GetName(); // Save before moving desc
-    graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
-    auto [pipeline_state, _] = renderer_->GetOrCreateGraphicsPipeline(root_signature, std::move(desc), graphics_pipeline_hash_);
-
-    // Name them for debugging
-    NameObject(pipeline_state, debug_name + "_PSO");
-    NameObject(root_signature, debug_name + "_BindlessRS");
 
     d3d12_command_list->SetPipelineState(pipeline_state);
 }
 
 void CommandRecorder::SetPipelineState(ComputePipelineDesc desc)
 {
+    DCHECK_NOTNULL_F(renderer_);
+
+    const auto debug_name = desc.GetName(); // Save before moving desc
     compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
+
+    auto [pipeline_state, root_signature] = renderer_->GetOrCreateComputePipeline(std::move(desc), compute_pipeline_hash_);
+    DCHECK_NOTNULL_F(pipeline_state);
+    DCHECK_NOTNULL_F(root_signature);
+
     const auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
     auto* d3d12_command_list = command_list->GetCommandList();
 
-    auto* root_signature = CreateBindlessRootSignature(false);
-    if (root_signature == nullptr) {
-        throw std::runtime_error("failed to create bindless root signature for compute pipeline");
-    }
     d3d12_command_list->SetGraphicsRootSignature(root_signature);
     // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
     auto& allocator = static_cast<DescriptorAllocator&>(renderer_->GetDescriptorAllocator());
     SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
 
-    // Use stored renderer_
-    DCHECK_NOTNULL_F(renderer_);
-    auto [pipeline_state, _] = renderer_->GetOrCreateComputePipeline(root_signature, std::move(desc), compute_pipeline_hash_);
+    // Name them for debugging
+
     d3d12_command_list->SetPipelineState(pipeline_state);
-    d3d12_command_list->SetComputeRootSignature(root_signature);
+}
+
+void CommandRecorder::SetGraphicsRootConstantBufferView(uint32_t root_parameter_index, uint64_t buffer_gpu_address)
+{
+    const auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    auto* d3d12_command_list = command_list->GetCommandList();
+    d3d12_command_list->SetGraphicsRootConstantBufferView(
+        root_parameter_index, buffer_gpu_address);
 }
 
 void CommandRecorder::ResetState()
@@ -520,13 +548,13 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
 auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
 {
-    return static_cast<CommandList*>(GetCommandList()); // NOLINT(*-pro-type-static-cast-downcast)
+    return static_cast<CommandList*>(GetCommandList()); // NOLINT(*-pro-type-static-cast_downcast)
 }
 
 // TODO: legacy - should be replaced once render passes are implemented
 void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
 {
-    const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast-downcast)
+    const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast_downcast)
     StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
     for (const auto& rtv : fb.GetRenderTargetViews()) {
         rtvs.emplace_back(rtv);
@@ -554,7 +582,7 @@ void CommandRecorder::ClearTextureFloat(
     TextureSubResourceSet sub_resources,
     const Color& clearColor)
 {
-    const auto* t = static_cast<Texture*>(_t); // NOLINT(*-pro-type-static-cast-downcast)
+    const auto* t = static_cast<Texture*>(_t); // NOLINT(*-pro-type-static-cast_down_cast)
     const auto& desc = t->GetDescriptor();
 
 #ifdef _DEBUG
@@ -626,7 +654,7 @@ void CommandRecorder::ClearFramebuffer(
     using d3d12::Framebuffer;
     using graphics::detail::GetFormatInfo;
 
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
     const auto& fb = static_cast<const Framebuffer&>(framebuffer);
 
     const auto* command_list_impl = GetConcreteCommandList();
@@ -689,10 +717,10 @@ void CommandRecorder::CopyBuffer(
     // - dst must be in D3D12_RESOURCE_STATE_COPY_DEST
     // The caller is responsible for ensuring correct resource states.
 
-    // NOLINTBEGIN(*-pro-type-static-cast-downcast)
+    // NOLINTBEGIN(*-pro-type_static-cast_down_cast)
     const auto& dst_buffer = static_cast<Buffer&>(dst);
     const auto& src_buffer = static_cast<const Buffer&>(src);
-    // NOLINTEND(*-pro-type-static-cast-downcast)
+    // NOLINTEND(*-pro-type_static-cast_down_cast)
 
     auto* dst_resource = dst_buffer.GetResource();
     auto* src_resource = src_buffer.GetResource();

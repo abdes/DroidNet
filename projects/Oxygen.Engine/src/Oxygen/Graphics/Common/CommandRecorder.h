@@ -97,6 +97,13 @@ public:
     */
     virtual void SetPipelineState(ComputePipelineDesc desc) = 0;
 
+    //=== Direct Binding ===--------------------------------------------------//
+
+    virtual void SetGraphicsRootConstantBufferView(
+        uint32_t root_parameter_index,
+        uint64_t buffer_gpu_address)
+        = 0;
+
     //=== Render State ===----------------------------------------------------//
 
     virtual void SetRenderTargets(

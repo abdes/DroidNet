@@ -28,7 +28,6 @@ inline void NameObject(ID3D12Object* const object, const std::string& name)
         WKPDID_D3DDebugObjectName,
         static_cast<UINT>(name.size() + 1),
         name.data()));
-    LOG_F(3, "+D3D12 named object created: {}", name);
 }
 
 inline void NameObject(ID3D12Object* const object, const std::string_view name)
@@ -41,7 +40,6 @@ inline void NameObject(ID3D12Object* const object, const std::string_view name)
         WKPDID_D3DDebugObjectName,
         static_cast<UINT>(name.size() + 1),
         full_name.data()));
-    LOG_F(3, "+D3D12 named object created: {}", name);
 }
 
 inline auto GetObjectName(

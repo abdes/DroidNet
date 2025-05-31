@@ -163,13 +163,6 @@ namespace graphics {
          specified queue and command list name. The returned recorder is
          **ready** for recording commands for the current frame.
 
-         If the acquired command recorder is of type graphics or compute, the
-         renderer automatically prepares it for bindless rendering by calling
-         `PrepareForRender` on the appropriate descriptor allocator(s) before
-         returning the recorder. This step is essential for correctness, as
-         descriptor bindings are local to each command list or buffer and must
-         be set before issuing draw or dispatch commands that use descriptors.
-
          The returned pointer uses a custom deleter that ensures the command
          recorder is properly disposed of and its command list is submitted or
          batched according to the renderer submission strategy. If

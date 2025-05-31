@@ -38,12 +38,12 @@ Renderer::Renderer(
     DCHECK_F(!gfx_weak.expired(), "Graphics object is expired");
 
     // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-    auto& gfx = static_cast<Graphics&>(*gfx_weak.lock());
+    auto* gfx = static_cast<Graphics*>(gfx_weak.lock().get());
     auto allocator = std::make_unique<DescriptorAllocator>(
         std::make_shared<D3D12HeapAllocationStrategy>(),
-        gfx.GetCurrentDevice());
+        gfx->GetCurrentDevice());
     AddComponent<Bindless>(std::move(allocator)); // TODO: make strategy configurable
-    AddComponent<detail::PipelineStateCache>(&gfx);
+    AddComponent<detail::PipelineStateCache>(gfx);
 }
 
 auto Renderer::GetGraphics() -> d3d12::Graphics&
@@ -89,18 +89,18 @@ auto Renderer::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<gra
     return std::make_shared<Buffer>(desc);
 }
 
-auto Renderer::GetOrCreateGraphicsPipeline(dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, const size_t hash) const
+auto Renderer::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(root_signature, std::move(desc), hash);
+    return cache.GetOrCreatePipeline<GraphicsPipelineDesc>(std::move(desc), hash);
 }
 
-auto Renderer::GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, const size_t hash) const
+auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, const size_t hash) const
     -> detail::PipelineStateCache::Entry
 {
     auto& cache = GetComponent<detail::PipelineStateCache>();
-    return cache.GetOrCreatePipeline<ComputePipelineDesc>(root_signature, std::move(desc), hash);
+    return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }
 
 auto Renderer::CreateDepthPrePass(const DepthPrePassConfig& config) -> std::shared_ptr<RenderPass>

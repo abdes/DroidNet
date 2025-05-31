@@ -49,3 +49,4 @@ m_gtest_program(
     "HeapAllocationStrategy_test.cpp"
 )
 m_gtest_program(DescriptorHeapSegment SOURCES "DescriptorHeapSegment_test.cpp")
+m_gtest_program(PipelineStateCache SOURCES "PipelineStateCache_test.cpp")

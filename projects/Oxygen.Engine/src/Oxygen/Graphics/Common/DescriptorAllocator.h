@@ -300,7 +300,8 @@ public:
         ResourceViewType view_type, DescriptorVisibility visibility) const -> IndexT
         = 0;
 
-    //! Returns the shader-visible (local) index for a descriptor handle within its heap/segment.
+    //! Returns the shader-visible (local) index for a descriptor handle within
+    //! its heap/segment.
     /*!
      This is NOT the global index, but the offset relative to the start of the
      heap/segment from which the handle was allocated. This value should be used
