@@ -39,6 +39,8 @@ public:
      unregistered. For resources with views (textures, buffers), views can be
      registered and managed for bindless rendering. For simple resources like
      samplers, only the resource itself is registered and tracked.
+
+     \throws std::runtime_error if the resource is already registered.
     */
     template <SupportedResource Resource>
     void Register(const std::shared_ptr<Resource>& resource)
@@ -50,8 +52,28 @@ public:
 
     //! Register a view for a graphics resource, such as textures and buffers.
     /*!
-     Only enabled for resources that satisfy ResourceWithViews. For simple
+     Registers a view for a graphics resource (e.g., texture or buffer) and
+     returns a handle to the native view object (check GetNativeView of the
+     corresponding resource class for the native view object type). This method
+     is only enabled for resources that satisfy ResourceWithViews. For simple
      resources like samplers, view registration is not supported or required.
+
+     The registry will create the native view using the resource's GetNativeView
+     method, and then attempt to register it for view caching. The descriptor
+     handle must be valid and allocated from a compatible DescriptorAllocator.
+     The view description must be hashable and comparable.
+
+     \param resource The resource to register the view for. Must already be
+            registered in the registry.
+     \param view_handle The descriptor handle for the view. Must be valid and
+            compatible with the resource type.
+     \param desc The view description. Must be hashable and comparable.
+
+     \return A handle to the native view, newly created or from the cache.
+             Returns an invalid NativeObject if the view is invalid.
+
+     \throws std::runtime_error if the resource is not registered, or a view
+             with a compatible descriptor exists in the cache.
     */
     template <ResourceWithViews Resource>
     auto RegisterView(
@@ -73,31 +95,33 @@ public:
     }
 
     //! Register an already created view for a graphics resource, such as
-    //! textures and buffers, making it available for bindless rendering and for
-    //! cached resource lookups.
+    //! textures and buffers, making it available for for cached lookups.
     /*!
-     Use this method when complete control over the view creation is needed. The
-     view description is still required to be unique and not conflict with any
-     cached views. If no cached view is found, a corresponding descriptor handle
-     will be created. The view is then registered for bindless rendering and
-     cached for future use. If a view with a compatible descriptor is already
-     registered for the resource, this method will do nothing and throw and
-     exception to prevent accidental overwriting of existing views.
+     Registers an already created native view for a graphics resource (e.g.,
+     texture or buffer), making it available for bindless rendering and view
+     caching. This method is only enabled for resources that satisfy
+     ResourceWithViews.
 
-     \note This method is thread-safe.
+     Use this method when you need complete control over view creation. The view
+     description must be unique and not conflict with any cached views. If a
+     view with a compatible descriptor is already registered for the resource,
+     this method will throw a std::runtime_error. If the resource is not
+     registered, or the view is invalid, the method will return false. If the
+     descriptor handle is invalid, the view description is empty, or the key
+     hash is zero, the method will abort.
 
-     \param resource The resource to register the view for. Must be already
+     \param resource The resource to register the view for. Must already be
             registered in the registry.
-     \param view The native view object to register.
-     \param view_handle The descriptor handle for the view, which must be valid
-            and compatible with the resource type. Allocated from the
-            DescriptorAllocator.
-     \param desc The view description, which must be hashable and comparable.
-     \return A handle to the native view, newly created or from the cache.
+     \param view The native view object to register. Must be valid.
+     \param view_handle The descriptor handle for the view. Must be valid and
+            compatible with the resource type.
+     \param desc The view description. Must be hashable and comparable.
 
-     \throws std::runtime_error if the resource is not registered, a view with a
-             compatible descriptor exists in the cache, or an error occurs
-             during the view registration.
+     \return true if the view was registered successfully, false if the resource
+             or view is invalid.
+
+     \throws std::runtime_error if the resource is not registered, or a view
+             with a compatible descriptor exists in the cache.
     */
     template <ResourceWithViews Resource>
     auto RegisterView(Resource& resource, NativeObject view, DescriptorHandle view_handle,
@@ -388,10 +412,3 @@ format/sub-resource changes, or swapping views at runtime.
 
 ================================================================================
 */
-
-// // Allocate a descriptor
-// DescriptorHandle descriptor = descriptor_allocator_->Allocate(view_type, visibility);
-// if (!descriptor.IsValid()) {
-//     LOG_F(ERROR, "failed: no descriptor available");
-//     return {};
-// }

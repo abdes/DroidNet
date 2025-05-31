@@ -125,13 +125,15 @@ NOLINT_TEST_F(ResourceRegistryRegistrationTest, RegisterAndContains)
 
 NOLINT_TEST_F(ResourceRegistryRegistrationTest, DoubleRegisterAndUnregister)
 {
-    registry_->Register(resource_);
+    // Registering the same resource twice should throw
+    EXPECT_THROW(registry_->Register(resource_), std::runtime_error);
     EXPECT_TRUE(registry_->Contains(*resource_));
 
     registry_->UnRegisterResource(*resource_);
     EXPECT_FALSE(registry_->Contains(*resource_));
 
-    registry_->UnRegisterResource(*resource_);
+    // Unregistering again should not throw, just be a no-op
+    NOLINT_EXPECT_NO_THROW(registry_->UnRegisterResource(*resource_));
     EXPECT_FALSE(registry_->Contains(*resource_));
 }
 
@@ -259,26 +261,38 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, FindViewForUnregisteredResource)
     EXPECT_FALSE(registry_->Find(*unregistered_resource, desc).IsValid());
 }
 
-NOLINT_TEST_F(ResourceRegistryErrorTest, DescriptorAllocatorFailure)
+// Death test: RegisterView with invalid handle should abort
+NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewWithInvalidHandle)
 {
-    EXPECT_CALL(*allocator_, Allocate(::testing::_, ::testing::_))
-        .WillOnce(::testing::Return(oxygen::graphics::DescriptorHandle {}));
-
     constexpr TestViewDesc desc {
         .view_type = ResourceViewType::kConstantBuffer,
         .visibility = DescriptorVisibility::kShaderVisible,
         .id = 101
     };
-
-    const auto view_object = RegisterView(*resource_, desc);
-    EXPECT_FALSE(view_object.IsValid());
+    DescriptorHandle invalid_handle; // default constructed, invalid
+    EXPECT_DEATH(
+        registry_->RegisterView(*resource_, std::move(invalid_handle), desc),
+        "View handle must be valid");
 }
 
-NOLINT_TEST_F(ResourceRegistryErrorTest, UnRegisterNonExistentResource)
+// Death test: RegisterView with empty view_description should abort
+NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewWithEmptyViewDescription)
 {
-    const auto non_existent_resource = std::make_shared<TestResource>();
-    NOLINT_EXPECT_NO_THROW(registry_->UnRegisterResource(*non_existent_resource));
-    EXPECT_FALSE(registry_->Contains(*non_existent_resource));
+    SUCCEED() << "Cannot test empty view_description via public API (always constructed).";
+}
+
+NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterViewWithInvalidView)
+{
+    constexpr TestViewDesc desc {
+        .view_type = ResourceViewType::kConstantBuffer,
+        .visibility = DescriptorVisibility::kShaderVisible,
+        .id = 202
+    };
+    DescriptorHandle descriptor = allocator_->Allocate(desc.view_type, desc.visibility);
+    NativeObject invalid_view; // default constructed, invalid
+    // Should return false (not throw or abort)
+    bool result = registry_->RegisterView(*resource_, invalid_view, std::move(descriptor), desc);
+    EXPECT_FALSE(result);
 }
 
 // --- Concurrency Tests ---
@@ -370,6 +384,7 @@ NOLINT_TEST_F(ResourceRegistryViewUnRegisterTest, UnregisterNonExistentView)
 {
     constexpr NativeObject invalid_view {};
     EXPECT_FALSE(invalid_view.IsValid());
+    // Unregistering a non-existent view should not throw
     NOLINT_EXPECT_NO_THROW(registry_->UnRegisterView(*resource_, invalid_view));
 }
 
