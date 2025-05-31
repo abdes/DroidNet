@@ -151,6 +151,57 @@ struct RasterizerStateDesc {
     bool antialiased_line_enable { false }; //!< Enable line antialiasing.
 
     auto operator==(const RasterizerStateDesc&) const -> bool = default;
+
+    //! Static factory for no culling rasterizer state.
+    static RasterizerStateDesc NoCulling()
+    {
+        return RasterizerStateDesc {
+            .cull_mode = CullMode::kNone,
+        };
+    }
+
+    //! Static factory for back-face culling rasterizer state.
+    static RasterizerStateDesc BackFaceCulling()
+    {
+        return RasterizerStateDesc {
+            .cull_mode = CullMode::kBack,
+        };
+    }
+
+    //! Static factory for front-face culling rasterizer state.
+    static RasterizerStateDesc FrontFaceCulling()
+    {
+        return RasterizerStateDesc {
+            .cull_mode = CullMode::kFront,
+        };
+    }
+
+    //! Static factory for wireframe rasterizer state, with no culling.
+    static RasterizerStateDesc WireframeNoCulling()
+    {
+        return RasterizerStateDesc {
+            .fill_mode = FillMode::kWireFrame,
+            .cull_mode = CullMode::kNone,
+        };
+    }
+
+    //! Static factory for wireframe rasterizer state, with back-face culling.
+    static RasterizerStateDesc WireframeBackFaceCulling()
+    {
+        return RasterizerStateDesc {
+            .fill_mode = FillMode::kWireFrame,
+            .cull_mode = CullMode::kBack,
+        };
+    }
+
+    //! Static factory for wireframe rasterizer state, with front-face culling.
+    static RasterizerStateDesc WireframeFrontFaceCulling()
+    {
+        return RasterizerStateDesc {
+            .fill_mode = FillMode::kWireFrame,
+            .cull_mode = CullMode::kFront,
+        };
+    }
 };
 
 //! Controls depth buffer and stencil buffer operations, including testing,
