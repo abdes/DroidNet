@@ -37,6 +37,8 @@ using oxygen::graphics::Framebuffer;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Scissors;
 using oxygen::graphics::ViewPort;
+using oxygen::graphics::RasterizerStateDesc;
+using oxygen::graphics::DepthStencilStateDesc;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -582,12 +584,6 @@ auto MainModule::RenderScene() -> co::Co<>
             ? fb_desc.depth_attachment.format
             : fb_desc.depth_attachment.texture->GetDescriptor().format;
     }
-    // Create a complete graphics pipeline state using the builder pattern
-    // This is the new API that replaces the separate SetPipelineState(vertex_shader, pixel_shader)
-    // Set rasterizer state: default is back-face culling, CW is front face
-    graphics::RasterizerStateDesc rasterizer_desc = {};
-    rasterizer_desc.cull_mode = graphics::CullMode::kBack; // Restore normal back-face culling
-    rasterizer_desc.front_counter_clockwise = false; // CW is front face
 
     constexpr graphics::RootBindingDesc srv_table_desc {
         // t0, space0
@@ -638,7 +634,8 @@ auto MainModule::RenderScene() -> co::Co<>
                   .shader = graphics::MakeShaderIdentifier(
                       graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
               .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-              .SetRasterizerState(rasterizer_desc)
+              .SetRasterizerState(RasterizerStateDesc::NoCulling())
+              .SetDepthStencilState(DepthStencilStateDesc::Disabled())
               .SetFramebufferLayout(std::move(fb_layout))
               .AddRootBinding(graphics::RootBindingItem(srv_table_desc)) // binding 0
               .AddRootBinding(graphics::RootBindingItem(index_mapping_cbv_desc)) // binding 1
