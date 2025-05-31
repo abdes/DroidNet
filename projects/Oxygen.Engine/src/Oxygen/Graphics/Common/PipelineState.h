@@ -215,6 +215,16 @@ struct DepthStencilStateDesc {
     uint8_t stencil_write_mask { 0xFF }; //!< Mask for writing to stencil buffer.
 
     auto operator==(const DepthStencilStateDesc&) const -> bool = default;
+
+    //! Static factory for depth/stencil state with all operations disabled.
+    static DepthStencilStateDesc Disabled()
+    {
+        return DepthStencilStateDesc {
+            .depth_test_enable = false,
+            .depth_write_enable = false,
+            .stencil_enable = false
+        };
+    }
 };
 
 //! Defines color and alpha blending operations and write masks for a single
