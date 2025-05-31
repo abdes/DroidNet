@@ -353,13 +353,17 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     constexpr RasterizerStateDesc raster_desc {
         .fill_mode = FillMode::kSolid,
         .cull_mode = CullMode::kBack,
-        .front_counter_clockwise = false,
-        // D3D12_RASTERIZER_DESC::MultisampleEnable is for controlling anti-aliasing behavior on lines and edges,
-        // not strictly for enabling/disabling MSAA sample processing for a texture.
-        // The sample_count in FramebufferLayoutDesc and the texture itself dictate MSAA.
-        // It's often left false unless specific line/edge AA is needed.
-        // Let's rely on FramebufferLayoutDesc::sample_count for MSAA control.
-        .multisample_enable = false // Or depth_texture.GetDesc().sample_count > 1 if specifically needed for rasterizer stage
+        .front_counter_clockwise = true, // Default winding order for front faces
+
+        // D3D12_RASTERIZER_DESC::MultisampleEnable is for controlling
+        // anti-aliasing behavior on lines and edges, not strictly for
+        // enabling/disabling MSAA sample processing for a texture. The
+        // sample_count in FramebufferLayoutDesc and the texture itself dictate
+        // MSAA. It's often left false unless specific line/edge AA is needed.
+        //
+        // Or `depth_texture.GetDesc().sample_count > 1` if specifically needed
+        // for rasterizer stage
+        .multisample_enable = false
     };
 
     constexpr DepthStencilStateDesc ds_desc {
