@@ -100,6 +100,10 @@ auto ResourceRegistry::RegisterView(
     CHECK_F(key_hash != 0, "Key hash must be valid");
     CHECK_F(view_handle.IsValid(), "View handle must be valid");
 
+    // The resource native object is constructed from a reference to the resource
+    // and its type ID. It must be valid.
+    DCHECK_F(resource.IsValid(), "invalid resource used for view registration");
+
     std::lock_guard lock(registry_mutex_);
 
     LOG_SCOPE_F(INFO, "Register view");
@@ -109,10 +113,6 @@ auto ResourceRegistry::RegisterView(
     DLOG_F(3, "view type: {}, visibility: {}", nostd::to_string(view_type), nostd::to_string(visibility));
     DLOG_F(3, "key hash: {}", key_hash);
 
-    if (!resource.IsValid()) {
-        LOG_F(ERROR, "invalid resource used for view registration");
-        return {};
-    }
     if (!view.IsValid()) {
         LOG_F(ERROR, "invalid view used for view registration");
         return {};
