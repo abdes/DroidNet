@@ -532,6 +532,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
         { "FramebufferLayout.color_target_formats not included in hash", [](Baseline& b) { b.framebuffer.color_target_formats = { Format::kBGRA8UNorm }; } },
         { "FramebufferLayout.depth_stencil_format not included in hash", [](Baseline& b) { b.framebuffer.depth_stencil_format = Format::kDepth16; } },
         { "FramebufferLayout.sample_count not included in hash", [](Baseline& b) { b.framebuffer.sample_count = 8; } },
+        { "FramebufferLayout.sample_quality not included in hash", [](Baseline& b) { b.framebuffer.sample_quality = 8; } },
         { "RootBindings not included in hash", [](Baseline& b) { b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 }, .visibility = ShaderStageFlags::kAll, .data = PushConstantsBinding { 32 } }) }; } },
         { "RootBindings not included in hash", [](Baseline& b) { b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 }, .visibility = ShaderStageFlags::kAll, .data = DescriptorTableBinding { .view_type = ResourceViewType::kTexture_UAV, .base_index = 100, .count = 250 } }) }; } },
     };

@@ -681,7 +681,9 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
     if (desc.DomainShader()) {
         const auto& shader_desc = desc.DomainShader().value();
         pso_desc.DS = LoadShaderBytecode(gfx_, shader_desc);
-    } // Set up blend state
+    }
+
+    // Set up blend state
     D3D12_BLEND_DESC blend_desc = {};
     TranslateBlendState(desc.BlendState(), blend_desc);
     pso_desc.BlendState = blend_desc;
@@ -708,6 +710,7 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, 
         .pInputElementDescs = nullptr,
         .NumElements = 0,
     };
+
     // Create the pipeline state object
     auto* device = gfx_->GetCurrentDevice();
     ThrowOnFailed(device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pso)),

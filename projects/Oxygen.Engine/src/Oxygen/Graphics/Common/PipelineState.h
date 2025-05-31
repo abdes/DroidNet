@@ -248,8 +248,7 @@ struct FramebufferLayoutDesc {
     std::vector<Format> color_target_formats; //!< Array of color attachment formats, empty if using depth-only.
     std::optional<Format> depth_stencil_format {}; //!< Optional depth/stencil attachment format.
     uint32_t sample_count { 1 }; //!< Number of MSAA samples (1 for no multisampling).
-
-    // TODO: Optional: shading rate attachment, etc.
+    uint32_t sample_quality { 0 }; //!< MSAA quality level (0 = default/highest available).
 
     auto operator==(const FramebufferLayoutDesc&) const -> bool = default;
 };
@@ -593,7 +592,7 @@ public:
         }
 
         // Validate framebuffer layout
-        const auto& [color_target_formats, depth_stencil_format, sample_count] = desc_.framebuffer_layout_;
+        const auto& [color_target_formats, depth_stencil_format, sample_count, sample_quality] = desc_.framebuffer_layout_;
         if (color_target_formats.empty() && !depth_stencil_format) {
             throw std::runtime_error("GraphicsPipelineDesc requires at least one render target format or depth/stencil format");
         }
