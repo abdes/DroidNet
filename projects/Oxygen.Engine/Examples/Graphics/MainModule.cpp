@@ -33,12 +33,12 @@ using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::DeferredObjectRelease;
+using oxygen::graphics::DepthStencilStateDesc;
 using oxygen::graphics::Framebuffer;
+using oxygen::graphics::RasterizerStateDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Scissors;
 using oxygen::graphics::ViewPort;
-using oxygen::graphics::RasterizerStateDesc;
-using oxygen::graphics::DepthStencilStateDesc;
 
 // ===================== DEBUGGING HISTORY & CONTRACTS =====================
 //
@@ -405,23 +405,19 @@ void MainModule::EnsureVertexBufferSrv()
     LOG_F(INFO, "Vertex buffer SRV registered at index {}", vertex_srv_shader_visible_index_);
 }
 
-void MainModule::EnsureConstantBufferForVertexSrv()
+void MainModule::EnsureBindlessIndexingBuffer()
 {
-    static graphics::DescriptorHandle cbv_handle_for_b0;
-
     if (!recreate_cbv_) {
         // No need to create the constant buffer if we don't have a renderer or
         // if we don't need to recreate it
         return;
     }
 
-    auto& descriptor_allocator = renderer_->GetDescriptorAllocator();
-    auto& resource_registry = renderer_->GetResourceRegistry();
-
-    // Create the constant buffer if it doesn't exist
-    bool created = false;
+    // Only create and update the buffer. No descriptor/view registration needed
+    // for direct root CBV binding.
     if (!constant_buffer_) {
-        DLOG_F(INFO, "Creating constant buffer for vertex buffer SRV index {}", vertex_srv_shader_visible_index_);
+        DLOG_F(INFO, "Creating constant buffer for vertex buffer SRV index {}",
+            vertex_srv_shader_visible_index_);
         graphics::BufferDesc cb_desc;
         cb_desc.size_bytes = 256; // D3D12 CBV alignment
         cb_desc.usage = graphics::BufferUsage::kConstant;
@@ -429,53 +425,14 @@ void MainModule::EnsureConstantBufferForVertexSrv()
         cb_desc.debug_name = "Vertex Buffer Index Constant Buffer";
         constant_buffer_ = renderer_->CreateBuffer(cb_desc);
         constant_buffer_->SetName("Vertex Buffer Index Constant Buffer");
-        created = true;
     }
 
     // Always update the buffer contents (SRV index may change per frame)
-    // Invariant: The value written here must match the SRV offset within the
-    // descriptor table (not the global heap index). For this example, the
-    // vertex buffer SRV is the first in the table, so the correct index is 0.
     void* mapped_data = constant_buffer_->Map();
     memcpy(mapped_data, &vertex_srv_shader_visible_index_, sizeof(vertex_srv_shader_visible_index_));
     constant_buffer_->UnMap();
 
-    // Only un-register/register if the buffer was just created (not every frame)
-    if (created) {
-        resource_registry.UnRegisterResource(*constant_buffer_);
-        resource_registry.Register(constant_buffer_);
-        cbv_handle_for_b0 = {}; // force reallocation of CBV handle
-    }
-
-    // Register the CBV view only if not already registered
-    if (!cbv_handle_for_b0.IsValid()) {
-        // Do this before the re-allocation to recycle the index 0
-        if (!created) {
-            DLOG_F(INFO, "Un-register CBV for vertex buffer SRV index {} to recreate it",
-                vertex_srv_shader_visible_index_);
-            resource_registry.UnRegisterViews(*constant_buffer_);
-        }
-        DLOG_F(INFO, "Create CBV for vertex buffer SRV index {}", vertex_srv_shader_visible_index_);
-        cbv_handle_for_b0 = descriptor_allocator.Allocate(
-            graphics::ResourceViewType::kConstantBuffer,
-            graphics::DescriptorVisibility::kShaderVisible);
-
-        if (!cbv_handle_for_b0.IsValid()) {
-            LOG_F(ERROR, "Failed to allocate descriptor handle for constant buffer view (b0)!");
-            return;
-        }
-
-        graphics::BufferViewDescription cbv_view_desc;
-        cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
-        cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-        cbv_view_desc.format = graphics::Format::kUnknown;
-        cbv_view_desc.range.offset_bytes = 0;
-        cbv_view_desc.range.size_bytes = constant_buffer_->GetSize();
-
-        index_mapping_cbv_ = resource_registry.RegisterView(*constant_buffer_, std::move(cbv_handle_for_b0), cbv_view_desc);
-    }
-
-    recreate_cbv_ = false; // Reset the flag after creating the CBV
+    recreate_cbv_ = false; // Reset the flag after creating/updating the CBV
 }
 
 void MainModule::EnsureTriangleDrawResources()
@@ -483,7 +440,7 @@ void MainModule::EnsureTriangleDrawResources()
     DCHECK_F(constant_buffer_ || recreate_cbv_, "Constant buffer must be created first");
     if (!constant_buffer_) {
         try {
-            EnsureConstantBufferForVertexSrv();
+            EnsureBindlessIndexingBuffer();
             recreate_cbv_ = true; // Set the flag after creating the CBV for the first time
         } catch (const std::exception& e) {
             LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
@@ -501,7 +458,7 @@ void MainModule::EnsureTriangleDrawResources()
     }
     try {
         // 2. Ensure the constant buffer is created, registered, and updated with the SRV index
-        EnsureConstantBufferForVertexSrv();
+        EnsureBindlessIndexingBuffer();
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Error while ensuring CBV: {}", e.what());
         throw;
