@@ -392,8 +392,10 @@ void MainModule::EnsureVertexBufferSrv()
     // Actually create the native view (SRV) in the backend
     const auto view = vertex_buffer_->GetNativeView(srv_handle, srv_view_desc);
 
-    // -1 because the first index (0) is reserved for the constant buffer (b0)
-    vertex_srv_shader_visible_index_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle) - 1;
+    // Assumes that we are direct binding the SRV to the shader, and that the
+    // descriptor table is bound as a single range, including the index mapping
+    // CBV.
+    vertex_srv_shader_visible_index_ = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
 
     // Register the view if not already registered
     resource_registry.RegisterView(*vertex_buffer_, view, std::move(srv_handle), srv_view_desc);
@@ -468,7 +470,7 @@ void MainModule::EnsureConstantBufferForVertexSrv()
         cbv_view_desc.range.offset_bytes = 0;
         cbv_view_desc.range.size_bytes = constant_buffer_->GetSize();
 
-        resource_registry.RegisterView(*constant_buffer_, std::move(cbv_handle_for_b0), cbv_view_desc);
+        index_mapping_cbv_ = resource_registry.RegisterView(*constant_buffer_, std::move(cbv_handle_for_b0), cbv_view_desc);
     }
 
     recreate_cbv_ = false; // Reset the flag after creating the CBV
@@ -561,30 +563,71 @@ auto MainModule::RenderScene() -> co::Co<>
     // 6. Set the root signature and pipeline state.
 
     // Create a framebuffer layout descriptor
-    graphics::FramebufferLayoutDesc fbLayout;
+    graphics::FramebufferLayoutDesc fb_layout;
 
     // Extract formats from the current framebuffer
-    const auto& fbDesc = fb->GetDescriptor();
-    for (const auto& colorAttachment : fbDesc.color_attachments) {
-        if (colorAttachment.IsValid()) {
-            fbLayout.color_target_formats.push_back(
-                colorAttachment.format != graphics::Format::kUnknown
-                    ? colorAttachment.format
-                    : colorAttachment.texture->GetDescriptor().format);
+    const auto& fb_desc = fb->GetDescriptor();
+    for (const auto& color_attachment : fb_desc.color_attachments) {
+        if (color_attachment.IsValid()) {
+            fb_layout.color_target_formats.push_back(
+                color_attachment.format != graphics::Format::kUnknown
+                    ? color_attachment.format
+                    : color_attachment.texture->GetDescriptor().format);
         }
     }
 
     // Add depth format if present
-    if (fbDesc.depth_attachment.IsValid()) {
-        fbLayout.depth_stencil_format = fbDesc.depth_attachment.format != graphics::Format::kUnknown
-            ? fbDesc.depth_attachment.format
-            : fbDesc.depth_attachment.texture->GetDescriptor().format;
-    } // Create a complete graphics pipeline state using the builder pattern
+    if (fb_desc.depth_attachment.IsValid()) {
+        fb_layout.depth_stencil_format = fb_desc.depth_attachment.format != graphics::Format::kUnknown
+            ? fb_desc.depth_attachment.format
+            : fb_desc.depth_attachment.texture->GetDescriptor().format;
+    }
+    // Create a complete graphics pipeline state using the builder pattern
     // This is the new API that replaces the separate SetPipelineState(vertex_shader, pixel_shader)
     // Set rasterizer state: default is back-face culling, CW is front face
     graphics::RasterizerStateDesc rasterizer_desc = {};
     rasterizer_desc.cull_mode = graphics::CullMode::kBack; // Restore normal back-face culling
     rasterizer_desc.front_counter_clockwise = false; // CW is front face
+
+    constexpr graphics::RootBindingDesc srv_table_desc {
+        // t0, space0
+        .binding_slot_desc = graphics::BindingSlotDesc {
+            .register_index = 0,
+            .register_space = 0 },
+        .visibility = graphics::ShaderStageFlags::kAll,
+        .data = graphics::DescriptorTableBinding {
+            .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+            .base_index = 0, // If the CBV is bound as a range, this would start at 1 after the CBV
+            // unbounded
+        }
+    };
+
+    constexpr graphics::RootBindingDesc index_mapping_cbv_desc {
+        // b0, space0
+        .binding_slot_desc = graphics::BindingSlotDesc {
+            .register_index = 0,
+            .register_space = 0 },
+        .visibility = graphics::ShaderStageFlags::kAll,
+        .data = graphics::DirectBufferBinding {}
+    };
+
+    // We could also bind the index mapping CBV as a DescriptorTableBinding, to
+    // add a range of 1 item to the CBV_SRV_UAV table. The shader visible index
+    // of the SRV will have to account for the CBV, and become 0 (first within
+    // its range) instead of 1 though.
+    //
+    // constexpr graphics::RootBindingDesc index_mapping_cbv_desc {
+    //     // b0, space0
+    //     .binding_slot_desc = graphics::BindingSlotDesc {
+    //         .register_index = 0,
+    //         .register_space = 0 },
+    //     .visibility = graphics::ShaderStageFlags::kAll,
+    //     .data = graphics::DescriptorTableBinding {
+    //         .view_type = graphics::ResourceViewType::kConstantBuffer,
+    //         .base_index = 0,
+    //         .count = 1  // Only one CBV for the index mapping
+    //      }
+    // };
 
     const auto pipeline_desc
         = graphics::GraphicsPipelineDesc::Builder()
@@ -596,12 +639,20 @@ auto MainModule::RenderScene() -> co::Co<>
                       graphics::ShaderType::kPixel, "FullScreenTriangle.hlsl") })
               .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
               .SetRasterizerState(rasterizer_desc)
-              .SetFramebufferLayout(std::move(fbLayout))
+              .SetFramebufferLayout(std::move(fb_layout))
+              .AddRootBinding(graphics::RootBindingItem(srv_table_desc)) // binding 0
+              .AddRootBinding(graphics::RootBindingItem(index_mapping_cbv_desc)) // binding 1
               .Build();
 
     // Set the pipeline state. Should be called after framebuffer, viewport, and scissors
     // are set, and before resource binding and draw calls.
     recorder->SetPipelineState(pipeline_desc);
+
+    // Direct binding for the CBV. Not needed if we bind it as a range in the
+    // descriptor table.
+    recorder->SetGraphicsRootConstantBufferView(
+        pipeline_desc.RootBindings()[1].GetRootParameterIndex(), // binding 1 (b0, space0)
+        constant_buffer_->GetGPUVirtualAddress());
 
     // 7. Draw the triangle
     recorder->ClearFramebuffer(

@@ -67,6 +67,7 @@ target_sources(
     "DescriptorHandle.cpp"
     "Framebuffer.cpp"
     "Graphics.cpp"
+    "PipelineState.cpp"
     "RenderPass.cpp"
     "Renderer.cpp"
     "ResourceRegistry.cpp"

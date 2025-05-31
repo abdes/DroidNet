@@ -25,13 +25,13 @@ namespace d3d12 {
 
     // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
 
-    class Graphics final : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
+    class Graphics : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
         using Base = oxygen::Graphics;
 
     public:
-        explicit Graphics(const SerializedBackendConfig& config);
+        OXYGEN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
 
-        ~Graphics() override = default;
+        OXYGEN_D3D12_API ~Graphics() override = default;
 
         OXYGEN_MAKE_NON_COPYABLE(Graphics);
         OXYGEN_MAKE_NON_MOVABLE(Graphics);
@@ -48,17 +48,23 @@ namespace d3d12 {
 
         //! @{
         //! Device Manager API (module internal)
-        [[nodiscard]] auto GetFactory() const -> dx::IFactory*;
-        [[nodiscard]] auto GetCurrentDevice() const -> dx::IDevice*;
-        [[nodiscard]] auto GetAllocator() const -> D3D12MA::Allocator*;
+        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetFactory() const -> dx::IFactory*;
+        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetCurrentDevice() const -> dx::IDevice*;
+        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetAllocator() const -> D3D12MA::Allocator*;
         //! @}
 
-        [[nodiscard]] auto GetShader(std::string_view unique_id) const
+        [[nodiscard]] OXYGEN_D3D12_API auto GetShader(std::string_view unique_id) const
             -> std::shared_ptr<IShaderByteCode> override;
 
-        [[nodiscard]] auto GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t;
 
     protected:
+        // Default constructor that does not initialize the backend. Used for testing purposes.
+        Graphics()
+            : Base("Dummy Graphics Backend")
+        {
+        }
+
         [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
             std::string_view name,
             QueueRole role,
@@ -71,7 +77,7 @@ namespace d3d12 {
             uint32_t frames_in_flight)
             -> std::unique_ptr<graphics::Renderer> override;
 
-        [[nodiscard]] auto CreateCommandListImpl(
+        [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandListImpl(
             QueueRole role,
             std::string_view command_list_name)
             -> std::unique_ptr<graphics::CommandList> override;

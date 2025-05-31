@@ -28,7 +28,7 @@ class Renderer final : public graphics::Renderer {
     using Base = graphics::Renderer;
 
 public:
-    Renderer(
+    OXYGEN_D3D12_API Renderer(
         const std::weak_ptr<oxygen::Graphics>& gfx_weak,
         std::weak_ptr<oxygen::graphics::Surface> surface,
         const uint32_t frames_in_flight = kFrameBufferCount - 1)
@@ -69,9 +69,9 @@ public:
     [[nodiscard]] auto CreateBuffer(const BufferDesc& desc) const
         -> std::shared_ptr<graphics::Buffer> override;
 
-    [[nodiscard]] auto GetOrCreateGraphicsPipeline(dx::IRootSignature* root_signature, GraphicsPipelineDesc desc, size_t hash) const
+    [[nodiscard]] auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
-    [[nodiscard]] auto GetOrCreateComputePipeline(dx::IRootSignature* root_signature, ComputePipelineDesc desc, size_t hash) const
+    [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
 
     [[nodiscard]] auto CreateDepthPrePass(const DepthPrePassConfig& config)

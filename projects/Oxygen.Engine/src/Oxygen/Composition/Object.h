@@ -9,13 +9,14 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 
 class Object {
 public:
-    Object() = default;
-    virtual ~Object() = default;
+    OXYGEN_COMP_API Object();
+    OXYGEN_COMP_API virtual ~Object();
 
     // All components should implement proper copy and move semantics to handle
     // copying and moving as appropriate.

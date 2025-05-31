@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
@@ -70,6 +71,7 @@ private:
 
     std::shared_ptr<graphics::Buffer> vertex_buffer_;
     std::shared_ptr<graphics::Buffer> constant_buffer_;
+    graphics::NativeObject index_mapping_cbv_ {};
 
     co::Nursery* nursery_ { nullptr };
     float rotation_angle_ { 0.0f };

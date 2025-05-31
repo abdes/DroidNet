@@ -60,6 +60,7 @@ public:
 
     ~BaseDescriptorAllocator() override
     {
+        LOG_SCOPE_FUNCTION(INFO);
         // Release all heaps, but do a sanity check to ensure all
         // descriptors have been released.
         for (auto& [key, segments] : heaps_) {

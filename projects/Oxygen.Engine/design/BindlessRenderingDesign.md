@@ -203,13 +203,12 @@ None
        `DescriptorVisibility`.
      - Provides methods for allocation (`Allocate`) and release (`Release`) of
        `DescriptorHandle`s. These operations will typically be routed to an
-       appropriate `DescriptorHeapSegment`.
-     - Facilitates copying descriptors between visibility spaces through the
+       appropriate `DescriptorHeapSegment`.     - Facilitates copying descriptors between visibility spaces through the
        `CopyDescriptor` method.
      - Exposes methods to get associated platform-specific handles/pointers for
        descriptors via `GetNativeHandle`.
-     - Prepares resources for rendering via `PrepareForRendering` by ensuring
-       necessary heaps/sets are bound.
+     - Provides shader-visible heaps for bindless rendering via `GetShaderVisibleHeaps()`
+       which are automatically bound during pipeline state transitions.
      - Provides utility methods like `GetRemainingDescriptorsCount`,
        `GetAllocatedDescriptorsCount`, and `Contains` for descriptor management.
      - Uses `ResourceViewType` enum to identify descriptor type (SRV, UAV, CBV,
@@ -411,24 +410,23 @@ registry.UnRegisterResource(*texture);
 ### Automatic Bindless Setup Flow
 
 The Oxygen Engine employs an automatic setup flow for bindless rendering that's
-transparently handled when acquiring a command recorder. This design decouples
-the application code from the specifics of the rendering backend while ensuring
-optimal descriptor management.
+integrated into the pipeline state setting process. This design ensures that
+bindless descriptor tables are properly configured whenever a pipeline state
+is set, providing optimal descriptor management without explicit application
+intervention.
 
-Bindless rendering is implemented as component of `Renderer` and uses the
-`DescriptorAllocator` and `ResourceRegistry`. When the application calls
-`Renderer::AcquireCommandRecorder()`, the renderer creates a backend-specific
-command recorder and sets it up already for bindless rendering of the current
-frame. The actual setup of the descriptor tables, the registers for the shaders
-access, etc. is delegated to the backend-specific implementation of the
-`DescriptorAllocator`.
+Bindless rendering is implemented as a component of `Renderer` and uses the
+`DescriptorAllocator` and `ResourceRegistry`. The application calls
+`Renderer::AcquireCommandRecorder()` to obtain a command recorder, which is
+then set up for rendering by calling `recorder->Begin()`. However, the actual
+bindless setup occurs during pipeline state configuration when the application
+calls `SetPipelineState()`.
 
 Backend implementations always ensure that the constraints and invariants of the
 underlying graphics API are respected, such as for D3D12, only one shader
 visible heap of each type (CBV/SRV/UAV and Sampler) will be mapped. For D3D12,
-it is also guaranteed that register `0` will be pointed at the GPU heap start
-for texture CBV/SRV/UAV heap, and register `1` will be pointed at the Samplers
-heap.
+it is also guaranteed that root parameter `0` will be pointed at the CBV/SRV/UAV
+heap, and root parameter `1` will be pointed at the Samplers heap (if present).
 
 Shaders can then access any descriptor in these heaps using indices. Such
 indices should be exactly as they are in the `ResourceRegistry`.
@@ -437,35 +435,40 @@ The sequence diagram below illustrates the precise flow of control and method
 calls when setting up the bindless infrastructure:
 
 ```
-┌───────────┐          ┌──────────┐         ┌───────────┐      ┌───────────────────┐       ┌───────────────┐
-│Application│          │ Renderer │         │ Bindless  │      │DescriptorAllocator│       │CommandRecorder│
-└─────┬─────┘          └────┬─────┘         └─────┬─────┘      └──────────┬────────┘       └──────┬────────┘
-      │                     │                     │                       │                       │
-      │ AcquireCommandRecorder()                  │                       │                       │
-      │────────────────────>│                     │                       │                       │
-      │                     │                     │                       │                       │
-      │                     │ CreateCommandRecorder()                     │                       │
-      │                     │────────────────────────────────────────────────────────────────────>│
-      │                     │                     │                       │                       │
-      │                     │ Begin()             │                       │                       │
-      │                     │────────────────────────────────────────────────────────────────────>│
-      │                     │                     │                       │                       │
-      │                     │ PrepareForRender(*recorder)                 │                       │
-      │                     │─────────────────────>                       │                       │
-      │                     │                     │                       │                       │
-      │                     │                     │ PrepareForRender(recorder)                    │
-      │                     │                     │───────────────────────>                       │
-      │                     │                     │                       │                       │
-      │                     │                     │                       │ SetupDescriptorTables()
-      │                     │                     │                       │──────────────────────>│
-      │                     │                     │                       │                       │
-      │                     │                     │                       │                       │
-      │                     │                     │                       │                       │
-      │ CommandRecorder     │                     │                       │                       │
-      │<────────────────────│                     │                       │                       │
-┌─────┴─────┐          ┌────┴─────┐         ┌─────┴─────┐        ┌────────┴──────────┐     ┌──────┴────────┐
-│Application│          │ Renderer │         │ Bindless  │        │DescriptorAllocator│     │CommandRecorder│
-└───────────┘          └──────────┘         └───────────┘        └───────────────────┘     └───────────────┘
+┌───────────┐          ┌──────────┐         ┌───────────────────┐       ┌───────────────┐
+│MainModule │          │ Renderer │         │DescriptorAllocator│       │CommandRecorder│
+└─────┬─────┘          └────┬─────┘         └──────────┬────────┘       └──────┬────────┘
+      │                     │                          │                       │
+      │ AcquireCommandRecorder()                       │                       │
+      │────────────────────>│                          │                       │
+      │                     │                          │                       │
+      │                     │ CreateCommandRecorder()  │                       │
+      │                     │─────────────────────────────────────────────────>│
+      │                     │                          │                       │
+      │                     │ Begin()                  │                       │
+      │                     │─────────────────────────────────────────────────>│
+      │                     │                          │                       │
+      │ CommandRecorder     │                          │                       │
+      │<────────────────────│                          │                       │
+      │                     │                          │                       │
+      │ SetPipelineState(desc)                         │                       │
+      │───────────────────────────────────────────────────────────────────────>│
+      │                     │                          │                       │
+      │                     │GetOrCreate[Graphics/Compute]Pipeline()           │
+      │                     │<─────────────────────────────────────────────────│
+      │                     │                          │                       │
+      │                     │                          │ GetShaderVisibleHeaps()
+      │                     │                          │<──────────────────────│
+      │                     │                          │                       │
+      │                     │                          │ ShaderVisibleHeapInfo │
+      │                     │                          │──────────────────────>│
+      │                     │                          │                       │
+      │                     │                          │                       │ SetupDescriptorTables()
+      │                     │                          │                       │───────────────────────>│
+      │                     │                          │                       │       [internal]
+┌─────┴─────┐          ┌────┴─────┐         ┌──────────┴────────┐       ┌──────┴────────┐
+│MainModule │          │ Renderer │         │DescriptorAllocator│       │CommandRecorder│
+└───────────┘          └──────────┘         └───────────────────┘       └───────────────┘
 ```
 
 ### D3D12 Implementation Details
@@ -482,21 +485,29 @@ and root signatures to efficiently bind large numbers of resources:
      access
 
 2. **Descriptor Table Organization**
-   - `kRootIndex_CBV_SRV_UAV = 0` for textures, buffers, and constant buffers
-   - `kRootIndex_Sampler = 1` for sampler states
+   - `kRootIndex_CBV_SRV_UAV_Table = 0` for textures, buffers, and constant buffers
+   - `kRootIndex_Sampler_Table = 1` for sampler states (when present)
    - Each table maps to a D3D12 descriptor heap with
      D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
 
-3. **Command List Binding Process**
-   - `DescriptorAllocator::PrepareForRender()` collects all shader-visible heaps
-     into `ShaderVisibleHeapInfo` structures
-   - `CommandRecorder::SetupDescriptorTables()` binds these heaps to the D3D12
-     command list using `SetDescriptorHeaps()`
+3. **Pipeline State Binding Process**
+   - When `CommandRecorder::SetPipelineState()` is called, it performs the following steps:
+     1. Computes a hash of the pipeline description and calls the renderer to
+        get or create a cached graphics/compute pipeline state and root
+        signature
+     2. Sets the root signature on the D3D12 command list using `SetGraphicsRootSignature()`
+     3. Gets shader-visible heaps from `DescriptorAllocator::GetShaderVisibleHeaps()`
+     4. Calls `SetupDescriptorTables()` to bind the heaps to the command list
+     5. Sets the pipeline state object on the command list using `SetPipelineState()`
+
+4. **Command List Binding Process**
+   - `CommandRecorder::SetupDescriptorTables()` receives `ShaderVisibleHeapInfo` structures
+   - Sets descriptor heaps on the D3D12 command list using `SetDescriptorHeaps()`
    - Root descriptor tables are set using either
      `SetGraphicsRootDescriptorTable()` or `SetComputeRootDescriptorTable()`
    - GPU descriptor handles point to the base of each descriptor heap
 
-4. **Shader Resource Access**
+5. **Shader Resource Access**
    - Shaders access resources using resource indices (uint values)
    - HLSL syntax: `resources[resourceIndex].Load(...)` or
      `samplers[samplerIndex].Sample(...)`
@@ -504,7 +515,222 @@ and root signatures to efficiently bind large numbers of resources:
 
 This approach minimizes state changes between draw calls and allows for
 efficient dynamic resource binding, significantly reducing API overhead in
-complex scenes.
+complex scenes. The bindless setup is automatically triggered whenever a
+pipeline state is set, ensuring that descriptor tables are always properly
+configured for the current rendering context.
+
+The actual implementation leverages the `PipelineStateCache` to efficiently
+manage pipeline state objects and root signatures, and the `DescriptorAllocator`
+to provide shader-visible descriptor heaps that are automatically bound during
+pipeline state transitions.
+
+### Example Setup With Direct Binding of the Index Mapping CBV
+
+In this scenario, the constant buffer containing resource indices is bound
+directly to the root signature via a root descriptor (CBV), while the SRV/UAV
+resources are bound through a descriptor table. This approach uses less root
+signature space for the CBV but requires the CBV to be stable in GPU memory.
+
+```cpp
+// Root signature layout:
+// Root Parameter 0: Direct CBV binding (register b0)
+// Root Parameter 1: Descriptor table for SRV/UAV (register t0+)
+
+// 1. Create and setup pipeline state with direct CBV binding
+auto pipeline_desc = graphics::GraphicsPipelineDesc::Builder{}
+    .SetVertexShader({"FullScreenTriangle.hlsl"})
+    .SetPixelShader({"FullScreenTriangle.hlsl"})
+    .SetFramebufferLayout({.color_target_formats = {graphics::Format::kRGBA8UNorm}})
+    // Direct CBV binding at root parameter 0
+    .AddRootBinding({
+        .binding_slot_desc = {.register_index = 0, .register_space = 0},
+        .visibility = graphics::ShaderStageFlags::kVertex,
+        .data = graphics::DirectBufferBinding{}
+    })
+    // Descriptor table for SRVs at root parameter 1
+    .AddRootBinding({
+        .binding_slot_desc = {.register_index = 0, .register_space = 0},
+        .visibility = graphics::ShaderStageFlags::kAll,
+        .data = graphics::DescriptorTableBinding{
+            .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+            .base_index = 0,  // Start of SRVs in the table
+            .count = std::numeric_limits<uint32_t>::max()  // Unbounded
+        }
+    })
+    .Build();
+
+// 2. Setup resources for bindless access
+auto& descriptor_allocator = renderer->GetDescriptorAllocator();
+auto& resource_registry = renderer->GetResourceRegistry();
+
+// Create vertex buffer SRV
+auto srv_handle = descriptor_allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+
+graphics::BufferViewDescription srv_desc{
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = graphics::Format::kUnknown,
+    .stride = sizeof(Vertex)
+};
+
+auto view = vertex_buffer->GetNativeView(srv_handle, srv_desc);
+resource_registry.RegisterView(*vertex_buffer, view, std::move(srv_handle), srv_desc);
+
+// Get the shader-visible index for the SRV (this is the index the shader uses)
+uint32_t vertex_srv_index = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+
+// 3. Create constant buffer with resource indices
+graphics::BufferDesc cb_desc{
+    .size_bytes = sizeof(uint32_t),
+    .usage = graphics::BufferUsage::kConstantBuffer,
+    .memory = graphics::BufferMemory::kUpload
+};
+auto constant_buffer = renderer->CreateBuffer(cb_desc);
+
+// Write the SRV index to the constant buffer
+void* mapped = constant_buffer->Map();
+memcpy(mapped, &vertex_srv_index, sizeof(vertex_srv_index));
+constant_buffer->UnMap();
+
+// 4. Bind during rendering
+recorder.SetPipelineState(pipeline_desc);
+// Direct CBV binding to root parameter 0
+recorder.SetGraphicsRootConstantBufferView(0, constant_buffer->GetGpuAddress());
+// Descriptor table is automatically bound by SetPipelineState()
+```
+
+### Example Setup With the Index Mapping CBV as a Range in the Descriptor Table
+
+In this scenario, both the constant buffer (CBV) and shader resources (SRV/UAV)
+are bound through a single descriptor table, but with separate ranges for CBV
+and SRV bindings. This maintains the correct register mappings: CBV at register
+`b0` and SRVs at register `t0, space0`.
+
+```cpp
+// Root signature layout:
+// Root Parameter 0: Descriptor table containing two ranges:
+//   - Range 0: CBV at register b0 (heap index 0)
+//   - Range 1: SRVs at register t0, space0 (heap index 1+)
+
+// 1. Create and setup pipeline state with unified descriptor table
+auto pipeline_desc = graphics::GraphicsPipelineDesc::Builder{}
+    .SetVertexShader({"FullScreenTriangle.hlsl"})
+    .SetPixelShader({"FullScreenTriangle.hlsl"})
+    .SetFramebufferLayout({.color_target_formats = {graphics::Format::kRGBA8UNorm}})
+    // CBV range in the descriptor table (register b0)
+    .AddRootBinding({
+        .binding_slot_desc = {.register_index = 0, .register_space = 0},
+        .visibility = graphics::ShaderStageFlags::kAll,
+        .data = graphics::DescriptorTableBinding{
+            .view_type = graphics::ResourceViewType::kConstantBuffer,
+            .base_index = 0,  // CBV at heap index 0
+            .count = 1        // Only one CBV
+        }
+    })
+    // SRV range in the same descriptor table (register t0, space0)
+    .AddRootBinding({
+        .binding_slot_desc = {.register_index = 0, .register_space = 0},
+        .visibility = graphics::ShaderStageFlags::kAll,
+        .data = graphics::DescriptorTableBinding{
+            .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+            .base_index = 1,  // SRVs start at heap index 1
+            .count = std::numeric_limits<uint32_t>::max()  // Unbounded SRVs
+        }
+    })
+    .Build();
+
+// 2. Setup resources following engine invariants
+auto& descriptor_allocator = renderer->GetDescriptorAllocator();
+auto& resource_registry = renderer->GetResourceRegistry();
+
+// === CBV Setup (Always at heap index 0) ===
+auto cbv_handle = descriptor_allocator.Allocate(
+    graphics::ResourceViewType::kConstantBuffer,
+    graphics::DescriptorVisibility::kShaderVisible);
+
+// The CBV must be allocated at heap index 0 for engine compatibility
+// (This is ensured by the DescriptorAllocator implementation)
+
+graphics::BufferDesc cb_desc{
+    .size_bytes = sizeof(uint32_t),
+    .usage = graphics::BufferUsage::kConstantBuffer,
+    .memory = graphics::BufferMemory::kUpload
+};
+auto constant_buffer = renderer->CreateBuffer(cb_desc);
+
+graphics::BufferViewDescription cbv_desc{
+    .view_type = graphics::ResourceViewType::kConstantBuffer,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible
+};
+
+auto cbv_view = constant_buffer->GetNativeView(cbv_handle, cbv_desc);
+resource_registry.RegisterView(*constant_buffer, cbv_view, std::move(cbv_handle), cbv_desc);
+
+// === SRV Setup (Starting at heap index 1+) ===
+auto srv_handle = descriptor_allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+
+graphics::BufferViewDescription srv_desc{
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = graphics::Format::kUnknown,
+    .stride = sizeof(Vertex)
+};
+
+auto srv_view = vertex_buffer->GetNativeView(srv_handle, srv_desc);
+resource_registry.RegisterView(*vertex_buffer, srv_view, std::move(srv_handle), srv_desc);
+
+// Get shader-visible index (this will be >= 1 for SRVs)
+uint32_t vertex_srv_shader_index = descriptor_allocator.GetShaderVisibleIndex(srv_handle);
+
+// 3. Update constant buffer with correct SRV index
+// CRITICAL: Write the shader-visible index, not the global heap index
+// This index corresponds to the offset within the bound descriptor table
+void* mapped = constant_buffer->Map();
+memcpy(mapped, &vertex_srv_shader_index, sizeof(vertex_srv_shader_index));
+constant_buffer->UnMap();
+
+// 4. Rendering - descriptor table is automatically bound
+recorder.SetPipelineState(pipeline_desc);
+// No additional binding needed - SetPipelineState() automatically:
+// - Sets root signature with descriptor table at root parameter 0
+// - Binds shader-visible heaps via SetupDescriptorTables()
+// - Ensures CBV is at table offset 0, SRVs at table offset 1+
+
+// 5. Shader access pattern (HLSL)
+/*
+// In the vertex shader (FullScreenTriangle.hlsl):
+cbuffer IndexMappingCB : register(b0) {
+    uint vertexBufferIndex;  // Contains the SRV index
+};
+
+StructuredBuffer<Vertex> resources[] : register(t0, space0);
+
+// Access the vertex buffer using the index from the CBV:
+Vertex vertex = resources[vertexBufferIndex].Load(vertexId);
+*/
+```
+
+**Key Differences:**
+
+1. **Direct CBV Binding**: The constant buffer is bound directly via
+   `SetGraphicsRootConstantBufferView()`, requiring a stable GPU address but
+   using less root signature space.
+
+2. **Table-Based CBV**: The constant buffer is part of the descriptor table,
+   following the engine's invariant that CBVs are always at heap index 0. This
+   provides consistency but uses more descriptor table space.
+
+3. **Index Handling**: In both cases, the SRV indices written to the constant
+   buffer must match the shader-visible indices returned by
+   `GetShaderVisibleIndex()`, not global heap indices.
+
+4. **Automatic Binding**: The engine's `SetPipelineState()` automatically
+   handles descriptor table binding for the unified approach, while direct
+   binding requires explicit `SetGraphicsRootConstantBufferView()` calls.
 
 ## 7. ✓ Testing Implemented
 
