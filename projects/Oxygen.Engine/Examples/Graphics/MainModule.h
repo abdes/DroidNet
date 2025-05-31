@@ -77,7 +77,7 @@ private:
     float rotation_angle_ { 0.0f };
     void CreateTriangleVertexBuffer();
     void UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder) const;
-    void EnsureConstantBufferForVertexSrv();
+    void EnsureBindlessIndexingBuffer();
     void EnsureVertexBufferSrv();
     void EnsureTriangleDrawResources();
 
