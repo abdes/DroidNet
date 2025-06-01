@@ -74,7 +74,7 @@ public:
     [[nodiscard]] auto GetOrCreateComputePipeline(ComputePipelineDesc desc, size_t hash) const
         -> detail::PipelineStateCache::Entry;
 
-    [[nodiscard]] auto CreateDepthPrePass(const DepthPrePassConfig& config)
+    [[nodiscard]] auto CreateDepthPrePass(std::shared_ptr<DepthPrePassConfig> config)
         -> std::shared_ptr<RenderPass> override;
 
 protected:

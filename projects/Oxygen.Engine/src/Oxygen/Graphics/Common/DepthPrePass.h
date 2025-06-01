@@ -29,6 +29,7 @@ class Framebuffer;
 class PipelineState;
 class Texture;
 class Renderer;
+class Buffer;
 
 // Forward declaration for the items in the draw list
 struct RenderItem;
@@ -74,6 +75,16 @@ struct DepthPrePassConfig {
     */
     std::shared_ptr<const Framebuffer> framebuffer = nullptr;
 
+    //! The constant buffer containing scene-wide constants (e.g., camera, frame
+    //! data) for this pass.
+    /*!
+     This buffer must be provided for the depth pre-pass. It should be prepared
+     and updated by the caller before the pass executes. It is bound directly as
+     a root CBV (using its GPU virtual address) and does not require a
+     descriptor in the descriptor heap. This field is mandatory.
+    */
+    std::shared_ptr<const Buffer> scene_constants;
+
     //! Optional name for debugging purposes.
     std::string debug_name { "DepthPrePass" };
 };
@@ -115,7 +126,7 @@ public:
      \param renderer The renderer that creates this depth pre-pass.
      \param config The configuration settings for this depth pre-pass.
     */
-    OXYGEN_GFX_API DepthPrePass(Renderer* renderer, const Config& config);
+    OXYGEN_GFX_API DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config);
 
     //! Destructor.
     ~DepthPrePass() override = default;
@@ -179,9 +190,9 @@ public:
     OXYGEN_GFX_API auto IsEnabled() const -> bool override;
 
 protected:
-    DepthPrePass(Renderer* renderer, const Config& config, GraphicsPipelineDesc pipeline_desc)
-        : RenderPass(config.debug_name)
-        , config_(config)
+    DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config, GraphicsPipelineDesc pipeline_desc)
+        : RenderPass(config->debug_name)
+        , config_(std::move(config))
         , renderer_(renderer)
         , last_built_pso_desc_(std::move(pipeline_desc))
     {
@@ -192,25 +203,21 @@ protected:
     //! Provides const access to the depth texture specified in the configuration.
     [[nodiscard]] auto GetDepthTexture() const -> const Texture&
     {
-        assert(config_.depth_texture != nullptr && "Depth texture is null in GetDepthTexture");
-        return *config_.depth_texture;
+        assert(config_ && config_->depth_texture != nullptr && "Depth texture is null in GetDepthTexture");
+        return *config_->depth_texture;
     }
 
     //! Provides const access to the draw list specified in the configuration.
-    /*! \\return A span of const RenderItem pointers. The span itself is returned by value. */
     [[nodiscard]] auto GetDrawList() const -> std::span<const RenderItem*>
     {
-        return config_.draw_list;
+        assert(config_);
+        return config_->draw_list;
     }
 
     //! Provides const access to the framebuffer specified in the configuration, if any.
-    /*!
-     \\return A pointer to the const Framebuffer, or `nullptr` if no
-              framebuffer is set in the configuration.
-    */
     [[nodiscard]] auto GetFramebuffer() const -> const Framebuffer*
     {
-        return config_.framebuffer.get();
+        return config_ && config_->framebuffer ? config_->framebuffer.get() : nullptr;
     }
 
     //! Validates the current configuration.
@@ -231,10 +238,11 @@ protected:
     virtual void SetViewAsRenderTarget(CommandRecorder& command_recorder, const NativeObject& dsv) const;
     virtual void SetupViewPortAndScissors(CommandRecorder& command_recorder) const;
     virtual void IssueDrawCalls(CommandRecorder& command_recorder) const;
+    virtual void PrepareSceneConstantsBuffer(CommandRecorder& command_recorder) const;
 
 private:
     //! Configuration for the depth pre-pass.
-    Config config_;
+    std::shared_ptr<Config> config_;
 
     //! Current viewport for the pass.
     std::optional<ViewPort> viewport_ {};

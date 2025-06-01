@@ -26,12 +26,12 @@ set(dxc_enable_advanced_features "-enable-16bit-types" "-HV 2021")
 set(
   dxc_vs_shader_model
   "-T"
-  "vs_6_8"
+  "vs_6_6"
 )
 set(
   dxc_ps_shader_model
   "-T"
-  "ps_6_8"
+  "ps_6_6"
 )
 
 # Find all HLSL files in the Shaders subdirectory

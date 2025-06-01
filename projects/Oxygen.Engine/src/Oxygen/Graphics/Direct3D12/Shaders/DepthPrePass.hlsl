@@ -5,11 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 // === Bindless Rendering Contract ===
-// - The engine provides single shader-visible descriptor heaps for SRV/UAV/CBV, Samplers, etc.
-// - Root constant buffer (register b0) contains indices to access resources in bindless arrays.
-// - Resources are organized in register spaces:
-//   - space0 register t0: Vertex buffers as structured buffers (g_BindlessVertexBuffers)
-//   - (space1 register t0 could contain textures, space2 could have constants, etc.)
+// - The engine provides a single shader-visible descriptor heap for all CBV,
+//   SRV, and UAV resources.
+// - Samplers are managed in a separate heap.
+// - All resource descriptors (vertex buffers, textures, etc.) are mixed in the
+//   same heap and use the same register space (space0).
+// - The root constant buffer (register b0) contains global indices to access
+//   resources in the bindless arrays.
 // - The root signature and engine must match this layout for correct operation.
 //   See MainModule.cpp and PipelineStateCache.cpp for details.
 
@@ -22,29 +24,27 @@ struct VertexData {
     // and might be needed by the interpolators for alpha testing in a more complex depth pass.
 };
 
-// Using DXC 1.8.2502.8, implementing bindless resources with structured buffers
-// Array of StructuredBuffers for vertex data (traditional approach)
-// Using register space0 for vertex buffer access
+// Bindless resource arrays: all resources are in the same descriptor heap and use space0
 StructuredBuffer<VertexData> g_BindlessVertexBuffers[] : register(t0, space0);
-
-// Examples of other resource types for a comprehensive bindless system:
-// Texture2D g_BindlessTextures[] : register(t0, space1);
+// Example for other resource types in the same heap:
+// Texture2D g_BindlessTextures[] : register(t0, space0);
+// ByteAddressBuffer g_BindlessConstants[] : register(t0, space0);
+// (All indices are global indices into the unified heap)
+// Samplers are still declared in their own heap/space:
 // SamplerState g_BindlessSamplers[] : register(s0, space0);
-// ByteAddressBuffer g_BindlessConstants[] : register(t0, space2);
 
 // Constant buffer for bindless resource access configured by the engine.
-// Contains indices for accessing resources in the bindless arrays.
+// Contains global indices for accessing resources in the bindless arrays.
 cbuffer ResourceIndices : register(b0) {
-    uint g_VertexBufferIndex;  // Index into g_BindlessVertexBuffers array
-
-    // Reserved for future expansion as bindless system grows:
-    // uint g_TextureIndex;    // Would index into g_BindlessTextures[] in space1
-    // uint g_SamplerIndex;    // Would index into g_BindlessSamplers[] in space0
-    // uint g_MaterialIndex;   // Would index into g_BindlessConstants[] in space2
+    uint g_VertexBufferIndex;  // Global index into g_BindlessVertexBuffers array
+    // uint g_TextureIndex;    // Global index into g_BindlessTextures[]
+    // uint g_SamplerIndex;    // Index into g_BindlessSamplers[]
+    // uint g_MaterialIndex;   // Global index into g_BindlessConstants[]
 };
 
-// Constant buffer for scene-wide data. The engine must update this buffer as
-// appropriate (e.g., per-frame or per-object).
+// Constant buffer for scene-wide data. This is typically bound directly as a
+// root CBV (not indexed from the descriptor heap), allowing fast and efficient
+// updates for per-frame or per-draw constants.
 cbuffer SceneConstants : register(b1) {
     matrix worldViewProjectionMatrix;
 };
@@ -62,7 +62,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     VS_OUTPUT_DEPTH output;
 
     // Fetch the current vertex data from the bindless buffer array
-    // using the index from ResourceIndices and the system-generated vertexID.
+    // using the global index from ResourceIndices and the system-generated vertexID.
     VertexData currentVertex = g_BindlessVertexBuffers[g_VertexBufferIndex][vertexID];
 
     // Transform position from object space to clip space.
@@ -79,8 +79,10 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
 [shader("pixel")]
 void PS(VS_OUTPUT_DEPTH input) {
     // Intentionally empty.
-    // Depth writes are handled by the GPU's rasterizer and depth test unit    // based on the SV_POSITION output from the vertex shader and the
-    // depth/stencil state configured in the pipeline state object.    // If alpha testing were required for this depth pass (e.g., for foliage textures),
+    // Depth writes are handled by the GPU's rasterizer and depth test unit
+    // based on the SV_POSITION output from the vertex shader and the
+    // depth/stencil state configured in the pipeline state object.
+    // If alpha testing were required for this depth pass (e.g., for foliage textures),
     // you would implement it using the bindless system as follows:
     //
     // 1. Update VertexData to include texture coordinates:
@@ -96,15 +98,15 @@ void PS(VS_OUTPUT_DEPTH input) {
     //        float2 texCoord : TEXCOORD0;
     //    };
     //
-    // 3. Add texture indices to ResourceIndices:
+    // 3. Add texture and sampler indices to ResourceIndices:
     //    cbuffer ResourceIndices : register(b0) {
     //        uint g_VertexBufferIndex;
-    //        uint g_AlbedoTextureIndex;  // For alpha testing
+    //        uint g_AlbedoTextureIndex;  // Global index for alpha testing
     //        uint g_SamplerIndex;
     //    };
     //
-    // 4. Declare bindless textures and samplers:
-    //    Texture2D g_BindlessTextures[] : register(t0, space1);
+    // 4. Declare bindless textures and samplers (all in space0 except samplers):
+    //    Texture2D g_BindlessTextures[] : register(t0, space0);
     //    SamplerState g_BindlessSamplers[] : register(s0, space0);
     //
     // 5. Implement alpha testing in PS:
