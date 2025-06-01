@@ -143,13 +143,13 @@ struct RasterizerStateDesc {
     FillMode fill_mode { FillMode::kSolid }; //!< Fill mode for polygons (solid or wire-frame).
     CullMode cull_mode { CullMode::kBack }; //!< Face culling mode for polygons.
 
-     //!< True if front-facing polygons have counter-clockwise winding.
-     /*!
-      In graphics programming, counter-clockwise (CCW) winding order is the most
-      commonly used convention to specify the order of vertices for a polygon.
-      This means that when looking at a polygon from the front, the vertices are
-      specified in a counter-clockwise order.
-     */
+    //!< True if front-facing polygons have counter-clockwise winding.
+    /*!
+     In graphics programming, counter-clockwise (CCW) winding order is the most
+     commonly used convention to specify the order of vertices for a polygon.
+     This means that when looking at a polygon from the front, the vertices are
+     specified in a counter-clockwise order.
+    */
     bool front_counter_clockwise { true };
 
     float depth_bias { 0.0f }; //!< Constant depth value added to each pixel.

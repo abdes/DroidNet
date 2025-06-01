@@ -12,7 +12,7 @@
 #include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Platform/Platform.h>
 

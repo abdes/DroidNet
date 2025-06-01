@@ -25,7 +25,7 @@
 
 namespace oxygen::graphics::d3d12 {
 
-class Renderer;
+class RenderController;
 
 namespace detail {
     class WindowSurface;
@@ -48,7 +48,7 @@ namespace detail {
 
         [[nodiscard]] auto IsValid() const { return swap_chain_ != nullptr; }
 
-        void AttachRenderer(std::shared_ptr<graphics::Renderer> renderer);
+        void AttachRenderer(std::shared_ptr<graphics::RenderController> renderer);
         void DetachRenderer();
 
         // Present the current frame to the screen.
@@ -92,10 +92,10 @@ namespace detail {
         IDXGISwapChain4* swap_chain_ { nullptr };
 
         mutable uint32_t current_back_buffer_index_ { 0 };
-        StaticVector<std::shared_ptr<Texture>, kFrameBufferCount> render_targets_;
+        StaticVector<std::shared_ptr<Texture>, kFrameBufferCount> render_targets_ {};
 
         graphics::detail::WindowComponent* window_ { nullptr };
-        std::shared_ptr<graphics::Renderer> renderer_;
+        std::shared_ptr<RenderController> renderer_;
     };
 
 } // namespace detail

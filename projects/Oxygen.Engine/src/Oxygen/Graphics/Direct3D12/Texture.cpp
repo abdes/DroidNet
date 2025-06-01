@@ -17,14 +17,14 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
+using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::TextureDimension;
-using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::GraphicResource;
+using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::Texture;
 using oxygen::graphics::d3d12::detail::ConvertResourceStates;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
-using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;
 
@@ -105,9 +105,11 @@ auto ConvertTextureClearValue(const TextureDesc& d) -> D3D12_CLEAR_VALUE
     return cv;
 }
 
-auto CreateTextureResource(const TextureDesc& desc)
+auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
     -> std::pair<ID3D12Resource*, D3D12MA::Allocation*>
 {
+    DCHECK_NOTNULL_F(gfx, "Graphics pointer cannot be null");
+
     const D3D12_RESOURCE_DESC rd = ConvertTextureDesc(desc);
     const D3D12_CLEAR_VALUE clear_value = ConvertTextureClearValue(desc);
 
@@ -119,7 +121,7 @@ auto CreateTextureResource(const TextureDesc& desc)
 
     D3D12MA::Allocation* d3dma_allocation { nullptr };
     ID3D12Resource* resource { nullptr };
-    const HRESULT hr = GetGraphics().GetAllocator()->CreateResource(
+    const HRESULT hr = gfx->GetAllocator()->CreateResource(
         &alloc_desc,
         &rd,
         ConvertResourceStates(desc.initial_state),
@@ -133,13 +135,28 @@ auto CreateTextureResource(const TextureDesc& desc)
     return { resource, d3dma_allocation };
 }
 
+auto GetDescriptorAllocator(const DescriptorHandle& view_handle)
+{
+    using oxygen::graphics::d3d12::DescriptorAllocator;
+
+    DCHECK_F(view_handle.IsValid(), "Unexpected invalid view handle!");
+
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    DCHECK_NOTNULL_F(allocator, "Invalid descriptor allocator for handle: {}", nostd::to_string(view_handle));
+    return allocator;
+}
+
 } // namespace
 
-Texture::Texture(TextureDesc desc)
+Texture::Texture(TextureDesc desc, const Graphics* gfx)
     : Base(desc.debug_name)
+    , gfx_(gfx)
     , desc_(std::move(desc))
 {
-    auto [resource, d3dmaAllocation] = CreateTextureResource(desc_);
+    DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
+
+    auto [resource, d3dmaAllocation] = CreateTextureResource(desc_, gfx_);
 
     AddComponent<GraphicResource>(
         desc_.debug_name,
@@ -147,13 +164,16 @@ Texture::Texture(TextureDesc desc)
         d3dmaAllocation);
 
     resource_desc_ = resource->GetDesc();
-    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
+    plane_count_ = gfx_->GetFormatPlaneCount(resource_desc_.Format);
 }
 
-Texture::Texture(TextureDesc desc, NativeObject native)
+Texture::Texture(TextureDesc desc, const NativeObject& native, const Graphics* gfx)
     : Base(desc.debug_name)
+    , gfx_(gfx)
     , desc_(std::move(desc))
 {
+    DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
+
     static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());
     auto* resource = native.AsPointer<ID3D12Resource>();
     CHECK_NOTNULL_F(resource, "Invalid native object");
@@ -165,7 +185,7 @@ Texture::Texture(TextureDesc desc, NativeObject native)
     );
 
     resource_desc_ = resource->GetDesc();
-    plane_count_ = GetGraphics().GetFormatPlaneCount(resource_desc_.Format);
+    plane_count_ = gfx_->GetFormatPlaneCount(resource_desc_.Format);
 }
 
 Texture::~Texture()
@@ -205,6 +225,11 @@ auto Texture::GetNativeResource() const -> NativeObject
     return { GetComponent<GraphicResource>().GetResource(), ClassTypeId() };
 }
 
+auto Texture::CurrentDevice() const -> dx::IDevice*
+{
+    return gfx_->GetCurrentDevice();
+}
+
 auto Texture::CreateShaderResourceView(
     const DescriptorHandle& view_handle,
     const Format format,
@@ -215,7 +240,7 @@ auto Texture::CreateShaderResourceView(
         throw std::runtime_error("Invalid view handle");
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
     CreateShaderResourceView(cpu_handle, format, dimension, sub_resources);
     auto gpu_handle = allocator->GetGpuHandle(view_handle);
@@ -232,7 +257,7 @@ auto Texture::CreateUnorderedAccessView(
         throw std::runtime_error("Invalid view handle");
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
     CreateUnorderedAccessView(cpu_handle, format, dimension, sub_resources);
     auto gpu_handle = allocator->GetGpuHandle(view_handle);
@@ -248,7 +273,7 @@ auto Texture::CreateRenderTargetView(
         throw std::runtime_error("Invalid view handle");
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
     CreateRenderTargetView(cpu_handle, format, sub_resources);
     return { cpu_handle.ptr, ClassTypeId() };
@@ -264,7 +289,7 @@ auto Texture::CreateDepthStencilView(
         throw std::runtime_error("Invalid view handle");
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
     CreateDepthStencilView(cpu_handle, format, sub_resources, is_read_only);
     return { cpu_handle.ptr, ClassTypeId() };
@@ -349,7 +374,7 @@ void Texture::CreateShaderResourceView(
         ABORT_F("Unexpected texture dimension: {}", nostd::to_string(dimension));
     }
 
-    GetGraphics().GetCurrentDevice()->CreateShaderResourceView(
+    CurrentDevice()->CreateShaderResourceView(
         GetNativeResource().AsPointer<ID3D12Resource>(), &srv_desc, dh_cpu);
 }
 
@@ -409,7 +434,7 @@ void Texture::CreateUnorderedAccessView(
         ABORT_F("Unexpected texture dimension: {}", nostd::to_string(dimension));
     }
 
-    GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(
+    CurrentDevice()->CreateUnorderedAccessView(
         GetNativeResource().AsPointer<ID3D12Resource>(), nullptr, &uav_desc, dh_cpu);
 }
 
@@ -467,7 +492,7 @@ void Texture::CreateRenderTargetView(
         ABORT_F("Unexpected texture dimension: {}", nostd::to_string(desc_.dimension));
     }
 
-    GetGraphics().GetCurrentDevice()->CreateRenderTargetView(
+    CurrentDevice()->CreateRenderTargetView(
         GetNativeResource().AsPointer<ID3D12Resource>(), &rtv_desc, dh_cpu);
 }
 
@@ -533,6 +558,6 @@ void Texture::CreateDepthStencilView(
         ABORT_F("Unexpected texture dimension: {}", nostd::to_string(desc_.dimension));
     }
 
-    GetGraphics().GetCurrentDevice()->CreateDepthStencilView(
+    CurrentDevice()->CreateDepthStencilView(
         GetNativeResource().AsPointer<ID3D12Resource>(), &dsv_desc, dh_cpu);
 }

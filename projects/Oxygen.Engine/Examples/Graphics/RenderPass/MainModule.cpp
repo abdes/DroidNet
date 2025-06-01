@@ -14,13 +14,12 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
@@ -238,16 +237,16 @@ auto MainModule::RenderScene() -> co::Co<>
         "Main Window Command List");
 
     // Select the correct framebuffer for the current frame
-    size_t frame_index = renderer_->CurrentFrameIndex();
+    const size_t frame_index = renderer_->CurrentFrameIndex();
     DCHECK_F(frame_index < framebuffers_.size(), "Invalid frame index: {}", frame_index);
-    auto fb = framebuffers_[frame_index];
+    const auto fb = framebuffers_[frame_index];
 
     // 5. Prepare framebuffer, set viewport/scissors, pipeline, bindless, clear, draw
     fb->PrepareForRender(*recorder);
 
     // Update the shared config for this frame
     const auto& fb_desc = fb->GetDescriptor();
-    auto depth_tex = fb_desc.depth_attachment.texture;
+    const auto depth_tex = fb_desc.depth_attachment.texture;
     depth_pre_pass_config_->draw_list = std::span(draw_list_.data(), draw_list_.size());
     depth_pre_pass_config_->depth_texture = depth_tex;
     depth_pre_pass_config_->framebuffer = fb;
@@ -277,7 +276,8 @@ auto MainModule::RenderScene() -> co::Co<>
 void MainModule::SetupFramebuffers()
 {
     CHECK_F(!gfx_weak_.expired());
-    auto gfx = gfx_weak_.lock();
+    const auto gfx = gfx_weak_.lock();
+
     framebuffers_.clear();
 
     // Create a unique depth texture for each frame in flight
@@ -292,12 +292,12 @@ void MainModule::SetupFramebuffers()
         depth_desc.use_clear_value = true;
         depth_desc.clear_value = { 1.0f, 0.0f, 0.0f, 0.0f };
         depth_desc.initial_state = ResourceStates::kDepthWrite;
-        auto depth_tex = renderer_->CreateTexture(depth_desc);
+        const auto depth_tex = gfx->CreateTexture(depth_desc);
 
-        framebuffers_.push_back(renderer_->CreateFramebuffer(
-            graphics::FramebufferDesc {}
-                .AddColorAttachment(surface_->GetBackBuffer(i))
-                .SetDepthAttachment(depth_tex)));
+        auto desc = graphics::FramebufferDesc {}
+                        .AddColorAttachment(surface_->GetBackBuffer(i))
+                        .SetDepthAttachment(depth_tex);
+        framebuffers_.push_back(gfx->CreateFramebuffer(desc, *renderer_));
         CHECK_NOTNULL_F(framebuffers_[i], "Failed to create framebuffer for main window");
     }
 }
@@ -326,15 +326,19 @@ void MainModule::SetupRenderPasses()
         cb_desc.usage = graphics::BufferUsage::kConstant;
         cb_desc.memory = graphics::BufferMemory::kUpload;
         cb_desc.debug_name = "SceneConstantsBuffer";
-        constant_buffer_ = renderer_->CreateBuffer(cb_desc);
+
+        CHECK_F(!gfx_weak_.expired());
+        const auto gfx = gfx_weak_.lock();
+
+        constant_buffer_ = gfx->CreateBuffer(cb_desc);
         constant_buffer_->SetName("SceneConstantsBuffer");
     }
 
     // Setup shared DepthPrePassConfig
     CHECK_F(!framebuffers_.empty());
-    auto first_fb = framebuffers_[0];
+    const auto first_fb = framebuffers_[0];
     const auto& fb_desc = first_fb->GetDescriptor();
-    auto depth_tex = fb_desc.depth_attachment.texture;
+    const auto depth_tex = fb_desc.depth_attachment.texture;
     depth_pre_pass_config_ = std::make_shared<graphics::DepthPrePassConfig>();
     depth_pre_pass_config_->draw_list = std::span<const graphics::RenderItem*>(draw_list_.data(), draw_list_.size());
     depth_pre_pass_config_->depth_texture = depth_tex;

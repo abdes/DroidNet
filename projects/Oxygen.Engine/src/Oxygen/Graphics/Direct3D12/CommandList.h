@@ -15,6 +15,7 @@ namespace oxygen::graphics::d3d12 {
 
 class CommandQueue;
 class CommandRecorder;
+class Graphics;
 
 namespace detail {
     class SynchronizedCommandQueue;
@@ -24,12 +25,12 @@ class CommandList final : public graphics::CommandList {
     using Base = graphics::CommandList;
 
 public:
-    CommandList(QueueRole type, std::string_view name);
+    CommandList(std::string_view name, QueueRole type, const Graphics* gfx);
 
     ~CommandList() noexcept override;
 
-    OXYGEN_MAKE_NON_COPYABLE(CommandList);
-    OXYGEN_DEFAULT_MOVABLE(CommandList);
+    OXYGEN_MAKE_NON_COPYABLE(CommandList)
+    OXYGEN_DEFAULT_MOVABLE(CommandList)
 
     [[nodiscard]] auto GetCommandList() const { return command_list_; }
 
@@ -51,4 +52,4 @@ private:
     ID3D12CommandAllocator* command_allocator_ {};
 };
 
-} // namespace oxygen::graphics::d3d12
+}

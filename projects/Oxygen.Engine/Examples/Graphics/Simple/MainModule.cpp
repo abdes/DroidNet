@@ -18,9 +18,10 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Platform/Platform.h>
@@ -265,13 +266,16 @@ void MainModule::CreateTriangleVertexBuffer()
     if (vertex_buffer_)
         return;
 
+    CHECK_F(!gfx_weak_.expired());
+    const auto gfx = gfx_weak_.lock();
+
     graphics::BufferDesc vb_desc;
     vb_desc.size_bytes = sizeof(triangle_vertices);
     // For bindless rendering, use a structured buffer instead of vertex buffer
     vb_desc.usage = graphics::BufferUsage::kStorage;
     vb_desc.memory = graphics::BufferMemory::kDeviceLocal; // FIX: must be device local for UAV/storage
     vb_desc.debug_name = "Triangle Structured Vertex Buffer";
-    vertex_buffer_ = renderer_->CreateBuffer(vb_desc);
+    vertex_buffer_ = gfx->CreateBuffer(vb_desc);
     vertex_buffer_->SetName("Triangle Structured Vertex Buffer");
 
     auto& resource_registry = renderer_->GetResourceRegistry();
@@ -285,6 +289,9 @@ void MainModule::UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder)
     if (!vertex_buffer_)
         return;
 
+    CHECK_F(!gfx_weak_.expired());
+    const auto gfx = gfx_weak_.lock();
+
     // Create a temporary upload buffer
     graphics::BufferDesc upload_desc;
     upload_desc.size_bytes = sizeof(triangle_vertices);
@@ -292,7 +299,7 @@ void MainModule::UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder)
     upload_desc.usage = graphics::BufferUsage::kNone;
     upload_desc.memory = graphics::BufferMemory::kUpload;
     upload_desc.debug_name = "Triangle Vertex Upload Buffer";
-    auto upload_buffer = renderer_->CreateBuffer(upload_desc);
+    auto upload_buffer = gfx->CreateBuffer(upload_desc);
 
     // The initial state for vertex_buffer_ is COMMON (kCommon)
     recorder.BeginTrackingResourceState(*vertex_buffer_, ResourceStates::kCommon, true);
@@ -319,15 +326,14 @@ void MainModule::UploadTriangleVertexBuffer(graphics::CommandRecorder& recorder)
 void MainModule::SetupFramebuffers()
 {
     CHECK_F(!gfx_weak_.expired());
-
     auto gfx = gfx_weak_.lock();
 
     auto fb_desc = graphics::FramebufferDesc {}.AddColorAttachment(surface_->GetCurrentBackBuffer());
 
     for (auto i = 0U; i < kFrameBufferCount; ++i) {
-        framebuffers_.push_back(renderer_->CreateFramebuffer(
-            graphics::FramebufferDesc {}
-                .AddColorAttachment(surface_->GetBackBuffer(i))));
+        auto desc = graphics::FramebufferDesc {}
+                        .AddColorAttachment(surface_->GetBackBuffer(i));
+        framebuffers_.push_back(gfx->CreateFramebuffer(desc, *renderer_));
         CHECK_NOTNULL_F(framebuffers_[i], "Failed to create framebuffer for main window");
     }
 }
@@ -423,7 +429,11 @@ void MainModule::EnsureBindlessIndexingBuffer()
         cb_desc.usage = graphics::BufferUsage::kConstant;
         cb_desc.memory = graphics::BufferMemory::kUpload;
         cb_desc.debug_name = "Vertex Buffer Index Constant Buffer";
-        constant_buffer_ = renderer_->CreateBuffer(cb_desc);
+
+        CHECK_F(!gfx_weak_.expired());
+        const auto gfx = gfx_weak_.lock();
+
+        constant_buffer_ = gfx->CreateBuffer(cb_desc);
         constant_buffer_->SetName("Vertex Buffer Index Constant Buffer");
     }
 

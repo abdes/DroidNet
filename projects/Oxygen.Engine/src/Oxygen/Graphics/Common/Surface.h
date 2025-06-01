@@ -21,7 +21,7 @@
 namespace oxygen::graphics {
 
 class Texture;
-class Renderer;
+class RenderController;
 
 //! Represents a rendering surface, such as a window or off-screen target.
 /*
@@ -47,7 +47,7 @@ public:
     OXYGEN_DEFAULT_COPYABLE(Surface)
     OXYGEN_DEFAULT_MOVABLE(Surface)
 
-    virtual void AttachRenderer(std::shared_ptr<Renderer> renderer) = 0;
+    virtual void AttachRenderer(std::shared_ptr<RenderController> renderer) = 0;
     virtual void DetachRenderer() = 0;
 
     void ShouldResize(const bool flag) { should_resize_ = flag; }

@@ -12,7 +12,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
@@ -22,22 +21,39 @@
 #include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
+using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
-using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::graphics::detail::GetFormatInfo;
 using oxygen::windows::ThrowOnFailed;
 
+namespace {
+
+auto GetDescriptorAllocator(const DescriptorHandle& view_handle)
+{
+    using oxygen::graphics::d3d12::DescriptorAllocator;
+
+    DCHECK_F(view_handle.IsValid(), "Unexpected invalid view handle!");
+
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    DCHECK_NOTNULL_F(allocator, "Invalid descriptor allocator for handle: {}", nostd::to_string(view_handle));
+    return allocator;
+}
+
+} // namespace
+
 namespace oxygen::graphics::d3d12 {
 
-Buffer::Buffer(const BufferDesc& desc)
+Buffer::Buffer(BufferDesc desc, const Graphics* gfx)
     : Base(desc.debug_name)
-    , desc_(desc)
+    , gfx_(gfx)
+    , desc_(std::move(desc))
 {
     // Translate BufferDesc to D3D12MA::ALLOCATION_DESC and D3D12_RESOURCE_DESC
     D3D12MA::ALLOCATION_DESC alloc_desc = {};
-    switch (desc.memory) {
+    switch (desc_.memory) {
     case BufferMemory::kDeviceLocal:
         alloc_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
         break;
@@ -52,7 +68,7 @@ Buffer::Buffer(const BufferDesc& desc)
     D3D12_RESOURCE_DESC resource_desc = {
         .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
         .Alignment = 0,
-        .Width = desc.size_bytes,
+        .Width = desc_.size_bytes,
         .Height = 1,
         .DepthOrArraySize = 1,
         .MipLevels = 1,
@@ -64,23 +80,23 @@ Buffer::Buffer(const BufferDesc& desc)
 
     // Set appropriate resource flags based on buffer usage
     resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    if ((desc.usage & BufferUsage::kStorage) == BufferUsage::kStorage) {
+    if ((desc_.usage & BufferUsage::kStorage) == BufferUsage::kStorage) {
         resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     }
 
     D3D12_RESOURCE_STATES initial_state = D3D12_RESOURCE_STATE_COMMON;
-    if (desc.memory == BufferMemory::kUpload) {
+    if (desc_.memory == BufferMemory::kUpload) {
         initial_state = D3D12_RESOURCE_STATE_GENERIC_READ;
-    } else if (desc.memory == BufferMemory::kReadBack) {
+    } else if (desc_.memory == BufferMemory::kReadBack) {
         initial_state = D3D12_RESOURCE_STATE_COPY_DEST;
-    } else if ((desc.usage & BufferUsage::kConstant) == BufferUsage::kConstant
-        || (desc.usage & BufferUsage::kVertex) == BufferUsage::kVertex) {
+    } else if ((desc_.usage & BufferUsage::kConstant) == BufferUsage::kConstant
+        || (desc_.usage & BufferUsage::kVertex) == BufferUsage::kVertex) {
         initial_state = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-    } else if ((desc.usage & BufferUsage::kIndex) == BufferUsage::kIndex) {
+    } else if ((desc_.usage & BufferUsage::kIndex) == BufferUsage::kIndex) {
         initial_state = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-    } else if ((desc.usage & BufferUsage::kStorage) == BufferUsage::kStorage) {
+    } else if ((desc_.usage & BufferUsage::kStorage) == BufferUsage::kStorage) {
         initial_state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    } else if ((desc.usage & BufferUsage::kIndirect) == BufferUsage::kIndirect) {
+    } else if ((desc_.usage & BufferUsage::kIndirect) == BufferUsage::kIndirect) {
         initial_state = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
     }
 
@@ -88,7 +104,7 @@ Buffer::Buffer(const BufferDesc& desc)
     D3D12MA::Allocation* allocation { nullptr };
 
     try {
-        ThrowOnFailed(GetGraphics().GetAllocator()->CreateResource(
+        ThrowOnFailed(MemoryAllocator()->CreateResource(
             &alloc_desc,
             &resource_desc,
             initial_state,
@@ -136,6 +152,16 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
         return 0;
     }
     return resource->GetGPUVirtualAddress();
+}
+
+auto Buffer::CurrentDevice() const -> dx::IDevice*
+{
+    return gfx_->GetCurrentDevice();
+}
+
+auto Buffer::MemoryAllocator() const -> D3D12MA::Allocator*
+{
+    return gfx_->GetAllocator();
 }
 
 auto Buffer::Map(const size_t offset, const size_t size) -> void*
@@ -244,8 +270,8 @@ auto Buffer::CreateConstantBufferView(
         LOG_F(WARNING, "Creating constant buffer view for buffer {} without kConstant usage flag", Base::GetName());
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
-    auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    const auto* allocator = GetDescriptorAllocator(view_handle);
+    const auto cpu_handle = allocator->GetCpuHandle(view_handle);
 
     // Prepare CBV description
     const BufferRange resolved = range.Resolve(desc_);
@@ -255,10 +281,10 @@ auto Buffer::CreateConstantBufferView(
         .SizeInBytes = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) + 255) & ~255u,
     };
 
-    GetGraphics().GetCurrentDevice()->CreateConstantBufferView(&cbv_desc, cpu_handle);
+    CurrentDevice()->CreateConstantBufferView(&cbv_desc, cpu_handle);
 
-    auto gpu_handle = allocator->GetGpuHandle(view_handle);
-    return { gpu_handle.ptr, ClassTypeId() };
+    auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
+    return { gpu_ptr, ClassTypeId() };
 }
 
 auto Buffer::CreateShaderResourceView(
@@ -274,7 +300,7 @@ auto Buffer::CreateShaderResourceView(
         LOG_F(WARNING, "Buffer {}: Both format and stride specified for SRV; format will be ignored", Base::GetName());
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
+    const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
@@ -300,7 +326,7 @@ auto Buffer::CreateShaderResourceView(
         srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
         srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         UINT element_size = GetFormatInfo(format).bytes_per_block;
-        srv_desc.Buffer.FirstElement = static_cast<UINT64>(resolved.offset_bytes / element_size);
+        srv_desc.Buffer.FirstElement = resolved.offset_bytes / element_size;
         srv_desc.Buffer.NumElements = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) / element_size);
         srv_desc.Buffer.StructureByteStride = 0;
         srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
@@ -309,17 +335,17 @@ auto Buffer::CreateShaderResourceView(
         srv_desc.Format = DXGI_FORMAT_R32_TYPELESS;
         srv_desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
         srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srv_desc.Buffer.FirstElement = static_cast<UINT64>(resolved.offset_bytes / 4);
+        srv_desc.Buffer.FirstElement = resolved.offset_bytes / 4;
         srv_desc.Buffer.NumElements = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) / 4);
         srv_desc.Buffer.StructureByteStride = 0;
         srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
     }
 
     try {
-        GetGraphics().GetCurrentDevice()->CreateShaderResourceView(GetResource(), &srv_desc, cpu_handle);
+        CurrentDevice()->CreateShaderResourceView(GetResource(), &srv_desc, cpu_handle);
 
-        auto gpu_handle = allocator->GetGpuHandle(view_handle);
-        return { gpu_handle.ptr, ClassTypeId() };
+        auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
+        return { gpu_ptr, ClassTypeId() };
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to create SRV for buffer {}: {}", Base::GetName(), e.what());
         throw;
@@ -344,9 +370,6 @@ auto Buffer::CreateUnorderedAccessView(
         LOG_F(WARNING, "Buffer {}: Both format and stride specified for UAV; format will be ignored", Base::GetName());
     }
 
-    const auto* allocator = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
-    auto cpu_handle = allocator->GetCpuHandle(view_handle);
-
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
     BufferRange resolved = range.Resolve(desc_);
 
@@ -355,12 +378,16 @@ auto Buffer::CreateUnorderedAccessView(
     view_desc.range = range;
     view_desc.stride = stride;
 
+    auto resolved_size_bytes = (resolved.size_bytes == ~0ull
+            ? desc_.size_bytes
+            : resolved.size_bytes);
+
     if (view_desc.IsStructuredBuffer()) {
         // Structured buffer view
         uav_desc.Format = DXGI_FORMAT_UNKNOWN;
         uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-        uav_desc.Buffer.FirstElement = static_cast<UINT64>(resolved.offset_bytes / stride);
-        uav_desc.Buffer.NumElements = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) / stride);
+        uav_desc.Buffer.FirstElement = resolved.offset_bytes / stride;
+        uav_desc.Buffer.NumElements = static_cast<UINT>(resolved_size_bytes / stride);
         uav_desc.Buffer.StructureByteStride = stride;
         uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
         uav_desc.Buffer.CounterOffsetInBytes = 0;
@@ -369,8 +396,8 @@ auto Buffer::CreateUnorderedAccessView(
         uav_desc.Format = GetDxgiFormatMapping(format).srv_format;
         uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
         UINT element_size = GetFormatInfo(format).bytes_per_block;
-        uav_desc.Buffer.FirstElement = static_cast<UINT64>(resolved.offset_bytes / element_size);
-        uav_desc.Buffer.NumElements = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) / element_size);
+        uav_desc.Buffer.FirstElement = resolved.offset_bytes / element_size;
+        uav_desc.Buffer.NumElements = static_cast<UINT>(resolved_size_bytes / element_size);
         uav_desc.Buffer.StructureByteStride = 0;
         uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
         uav_desc.Buffer.CounterOffsetInBytes = 0;
@@ -378,17 +405,19 @@ auto Buffer::CreateUnorderedAccessView(
         // Raw buffer view
         uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
         uav_desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-        uav_desc.Buffer.FirstElement = static_cast<UINT64>(resolved.offset_bytes / 4);
-        uav_desc.Buffer.NumElements = static_cast<UINT>((resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes) / 4);
+        uav_desc.Buffer.FirstElement = resolved.offset_bytes / 4;
+        uav_desc.Buffer.NumElements = static_cast<UINT>(resolved_size_bytes / 4);
         uav_desc.Buffer.StructureByteStride = 0;
         uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
         uav_desc.Buffer.CounterOffsetInBytes = 0;
     }
 
     try {
-        GetGraphics().GetCurrentDevice()->CreateUnorderedAccessView(GetResource(), nullptr, &uav_desc, cpu_handle);
-        auto gpu_handle = allocator->GetGpuHandle(view_handle);
-        return { gpu_handle.ptr, ClassTypeId() };
+        const auto* allocator = GetDescriptorAllocator(view_handle);
+        auto cpu_handle = allocator->GetCpuHandle(view_handle);
+        CurrentDevice()->CreateUnorderedAccessView(GetResource(), nullptr, &uav_desc, cpu_handle);
+        auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
+        return { gpu_ptr, ClassTypeId() };
     } catch (const std::exception& e) {
         LOG_F(ERROR, "Failed to create UAV for buffer {}: {}", Base::GetName(), e.what());
         throw;

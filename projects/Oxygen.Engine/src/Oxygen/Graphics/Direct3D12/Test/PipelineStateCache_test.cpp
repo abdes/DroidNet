@@ -26,7 +26,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 #include "./Mocks/MockDevice.h"
 #include "./Mocks/MockPipelineState.h"
@@ -62,9 +62,9 @@ public:
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (std::string_view, oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
     MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
-    MOCK_METHOD(std::unique_ptr<oxygen::graphics::Renderer>, CreateRendererImpl, (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t), (override));
+    MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t), (override));
 
-    // Add GetCurrentDevice method that D3D12 Renderer constructor calls
+    // Add GetCurrentDevice method that D3D12 RenderController constructor calls
     MOCK_METHOD(dx::IDevice*, GetCurrentDevice, (), (const, override));
 };
 

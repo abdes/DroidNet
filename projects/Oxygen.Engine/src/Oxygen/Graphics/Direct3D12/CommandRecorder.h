@@ -37,14 +37,14 @@ namespace detail {
 
 } // namespace detail
 
-class Renderer;
+class RenderController;
 
 class CommandRecorder final : public graphics::CommandRecorder {
     using Base = graphics::CommandRecorder;
 
 public:
     CommandRecorder(
-        Renderer* renderer,
+        RenderController* renderer,
         graphics::CommandList* command_list,
         graphics::CommandQueue* target_queue);
 
@@ -72,14 +72,13 @@ public:
     void SetViewport(const ViewPort& viewport) override;
     void SetScissors(const Scissors& scissors) override;
 
-    void SetVertexBuffers(uint32_t num, const std::shared_ptr<graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
+    void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides) const override;
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
-    void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
     void Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z) override;
 
-    void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
+    void BindFrameBuffer(const Framebuffer& framebuffer) override;
     void ClearFramebuffer(
-        const oxygen::graphics::Framebuffer& framebuffer,
+        const Framebuffer& framebuffer,
         std::optional<std::vector<std::optional<Color>>> color_clear_values = std::nullopt,
         std::optional<float> depth_clear_value = std::nullopt,
         std::optional<uint8_t> stencil_clear_value = std::nullopt) override;
@@ -92,15 +91,13 @@ public:
            values, derived from the texture's format, will be used instead.
      */
     void ClearDepthStencilView(
-        const graphics::Texture& texture, const NativeObject& dsv,
+        const Texture& texture, const NativeObject& dsv,
         ClearFlags clear_flags,
         float depth, uint8_t stencil) override;
 
-    void ClearTextureFloat(graphics::Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) override;
-
     void CopyBuffer(
-        graphics::Buffer& dst, size_t dst_offset,
-        const graphics::Buffer& src, size_t src_offset,
+        Buffer& dst, size_t dst_offset,
+        const Buffer& src, size_t src_offset,
         size_t size) override;
 
     //! Binds the provided shader-visible descriptor heaps to the underlying
@@ -114,11 +111,9 @@ private:
     [[nodiscard]] auto GetConcreteCommandList() const -> CommandList*;
 
     // Root signature creation helpers
-    auto CreateBindlessRootSignature(bool is_graphics) const -> dx::IRootSignature*;
+    [[nodiscard]] auto CreateBindlessRootSignature(bool is_graphics) const -> dx::IRootSignature*;
 
-    void ResetState();
-
-    Renderer* renderer_;
+    RenderController* renderer_;
 
     size_t graphics_pipeline_hash_ = 0;
     size_t compute_pipeline_hash_ = 0;

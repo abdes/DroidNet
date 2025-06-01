@@ -21,19 +21,19 @@
 #include <Oxygen/Graphics/Common/Detail/PerFrameResourceManager.h>
 #include <Oxygen/Graphics/Common/Detail/RenderThread.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/RenderPass.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/RenderTask.h>
 #include <Oxygen/OxCo/Co.h>
 
-using oxygen::graphics::Renderer;
+using oxygen::graphics::RenderController;
 using oxygen::graphics::RenderPass;
 using oxygen::graphics::detail::Bindless;
 using oxygen::graphics::detail::RenderThread;
 
 //! Default constructor, sets the object name.
-Renderer::Renderer(
+RenderController::RenderController(
     std::string_view name,
     std::weak_ptr<Graphics> gfx_weak,
     std::weak_ptr<Surface> surface_weak,
@@ -43,8 +43,8 @@ Renderer::Renderer(
     , frame_count_(frames_in_flight + 1)
     , frames_(std::make_unique<Frame[]>(frame_count_))
 {
-    CHECK_F(!surface_weak_.expired(), "Renderer cannot be created with a null Surface");
-    DCHECK_F(!gfx_weak_.expired(), "Renderer cannot be created with an expired Graphics backend pointer");
+    CHECK_F(!surface_weak_.expired(), "RenderController cannot be created with a null Surface");
+    DCHECK_F(!gfx_weak_.expired(), "RenderController cannot be created with an expired Graphics backend pointer");
 
     // Initialize all frame values to 0
     for (uint32_t i = 0; i < frame_count_; ++i) {
@@ -62,62 +62,52 @@ Renderer::Renderer(
         });
 }
 
-Renderer::~Renderer()
+RenderController::~RenderController()
 {
     Stop();
 }
 
-auto Renderer::GetGraphics() -> Graphics&
+auto RenderController::GetGraphics() -> Graphics&
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
     return *gfx_weak_.lock();
 }
 
-auto Renderer::GetGraphics() const -> const Graphics&
+auto RenderController::GetGraphics() const -> const Graphics&
 {
-    return const_cast<Renderer*>(this)->GetGraphics();
+    return const_cast<RenderController*>(this)->GetGraphics();
 }
 
-auto Renderer::GetDescriptorAllocator() -> DescriptorAllocator&
+auto RenderController::GetDescriptorAllocator() const -> DescriptorAllocator&
 {
     return GetComponent<Bindless>().GetAllocator();
 }
 
-auto Renderer::GetDescriptorAllocator() const -> const DescriptorAllocator&
-{
-    return const_cast<Renderer*>(this)->GetDescriptorAllocator();
-}
-
-auto Renderer::GetResourceRegistry() -> ResourceRegistry&
+auto RenderController::GetResourceRegistry() const -> ResourceRegistry&
 {
     return GetComponent<Bindless>().GetRegistry();
 }
 
-auto Renderer::GetResourceRegistry() const -> const ResourceRegistry&
-{
-    return const_cast<Renderer*>(this)->GetResourceRegistry();
-}
-
 // ReSharper disable once CppMemberFunctionMayBeConst
-void Renderer::Stop()
+void RenderController::Stop()
 {
     GetComponent<RenderThread>().Stop();
     per_frame_resource_manager_.OnRendererShutdown();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void Renderer::Submit(FrameRenderTask task)
+void RenderController::Submit(FrameRenderTask task)
 {
     GetComponent<RenderThread>().Submit(std::move(task));
 }
 
-auto Renderer::AcquireCommandRecorder(
+auto RenderController::AcquireCommandRecorder(
     const std::string_view queue_name,
     const std::string_view command_list_name,
     bool immediate_submission)
     -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
     const auto gfx = gfx_weak_.lock();
 
     const auto queue = gfx->GetCommandQueue(queue_name);
@@ -148,7 +138,7 @@ auto Renderer::AcquireCommandRecorder(
                 return;
             }
             if (self_weak.expired()) {
-                LOG_F(ERROR, "Renderer is no longer valid");
+                LOG_F(ERROR, "RenderController is no longer valid");
                 delete rec;
                 return;
             }
@@ -182,7 +172,7 @@ auto Renderer::AcquireCommandRecorder(
     };
 }
 
-void Renderer::FlushPendingCommandLists()
+void RenderController::FlushPendingCommandLists()
 {
     auto& [timeline_values, pending_command_lists] = frames_[CurrentFrameIndex()];
     if (pending_command_lists.empty())
@@ -213,9 +203,9 @@ void Renderer::FlushPendingCommandLists()
     // Do not clear pending_command_lists or timeline_values here; this is done in BeginFrame().
 }
 
-void Renderer::BeginFrame()
+void RenderController::BeginFrame()
 {
-    CHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    CHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
 
     if (surface_weak_.expired()) {
         throw std::runtime_error("Cannot BeginFrame when surface is not valid");
@@ -258,7 +248,7 @@ void Renderer::BeginFrame()
     timeline_values.clear();
 }
 
-void Renderer::EndFrame()
+void RenderController::EndFrame()
 {
     CHECK_F(!surface_weak_.expired(), "Cannot BeginFrame when surface is not valid");
 
@@ -278,9 +268,9 @@ void Renderer::EndFrame()
     current_frame_index_ = (current_frame_index_ + 1) % frame_count_;
 }
 
-void Renderer::HandleSurfaceResize(Surface& surface)
+void RenderController::HandleSurfaceResize(Surface& surface)
 {
-    DCHECK_F(!gfx_weak_.expired(), "Unexpected use of Renderer when the Graphics backend is no longer valid");
+    DCHECK_F(!gfx_weak_.expired(), "Unexpected use of RenderController when the Graphics backend is no longer valid");
 
     // Collect all queues that have pending work across any frame
     std::unordered_set<CommandQueue*> active_queues;
@@ -345,7 +335,7 @@ private:
 } // namespace oxygen::graphics
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-auto Renderer::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
+auto RenderController::CreateNullRenderPass() -> std::shared_ptr<RenderPass>
 {
     return std::make_shared<NullRenderPass>();
 }

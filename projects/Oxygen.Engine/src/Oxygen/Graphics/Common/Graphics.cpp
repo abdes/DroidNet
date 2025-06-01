@@ -15,7 +15,8 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
@@ -121,26 +122,26 @@ auto Graphics::CreateRenderer(
     const std::string_view name,
     std::weak_ptr<graphics::Surface> surface,
     const uint32_t frames_in_flight)
-    -> std::shared_ptr<graphics::Renderer>
+    -> std::shared_ptr<graphics::RenderController>
 {
-    // Create the Renderer object
+    // Create the RenderController object
     auto renderer = CreateRendererImpl(name, std::move(surface), frames_in_flight);
     CHECK_NOTNULL_F(renderer, "Failed to create renderer");
 
-    // Wrap the Renderer in a shared_ptr with a custom deleter
-    auto renderer_with_deleter = std::shared_ptr<graphics::Renderer>(
+    // Wrap the RenderController in a shared_ptr with a custom deleter
+    auto renderer_with_deleter = std::shared_ptr<graphics::RenderController>(
         renderer.release(),
-        [this](graphics::Renderer* ptr) {
-            // Remove the Renderer from the renderers_ collection
+        [this](graphics::RenderController* ptr) {
+            // Remove the RenderController from the renderers_ collection
             const auto it = std::ranges::remove_if(renderers_,
-                [ptr](const std::weak_ptr<graphics::Renderer>& weak_renderer) {
+                [ptr](const std::weak_ptr<graphics::RenderController>& weak_renderer) {
                     const auto shared_renderer = weak_renderer.lock();
                     return !shared_renderer || shared_renderer.get() == ptr;
                 }).begin();
             renderers_.erase(it, renderers_.end());
 
-            // Delete the Renderer
-            LOG_SCOPE_F(INFO, "Destroy Renderer");
+            // Delete the RenderController
+            LOG_SCOPE_F(INFO, "Destroy RenderController");
             delete ptr;
         });
 

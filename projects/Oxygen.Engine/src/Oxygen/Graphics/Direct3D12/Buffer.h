@@ -10,22 +10,25 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
-namespace oxygen::graphics {
+// ReSharper disable once CppInconsistentNaming
+namespace D3D12MA {
+class Allocator;
+} // namespace D3D12MA
 
-namespace detail {
-    class PerFrameResourceManager;
-} // namespace detail
+namespace oxygen::graphics {
+class DescriptorHandle;
 
 namespace d3d12 {
+    class Graphics;
 
     class Buffer : public graphics::Buffer {
         using Base = graphics::Buffer;
 
     public:
-        Buffer(const BufferDesc& desc);
+        Buffer(BufferDesc desc, const Graphics* gfx);
         ~Buffer() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Buffer)
@@ -46,7 +49,7 @@ namespace d3d12 {
         OXYGEN_D3D12_API void SetName(std::string_view name) noexcept override;
 
         // Implementation of the GPU virtual address getter
-        [[nodiscard]] OXYGEN_D3D12_API uint64_t GetGPUVirtualAddress() const override;
+        [[nodiscard]] OXYGEN_D3D12_API auto GetGPUVirtualAddress() const -> uint64_t override;
 
     protected:
         // --- New view creation methods ---
@@ -67,6 +70,10 @@ namespace d3d12 {
             uint32_t stride = 0) const -> NativeObject override;
 
     private:
+        auto CurrentDevice() const -> dx::IDevice*;
+        auto MemoryAllocator() const -> D3D12MA::Allocator*;
+
+        const Graphics* gfx_ { nullptr };
         BufferDesc desc_ {}; // Store the full descriptor
         bool mapped_ { false };
     };

@@ -6,22 +6,20 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 using oxygen::graphics::FramebufferDesc;
-using oxygen::graphics::Renderer;
 using oxygen::graphics::Texture;
 using oxygen::graphics::d3d12::Framebuffer;
 
-Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, FramebufferDesc desc)
-    : renderer_(std::move(renderer))
-    , desc_(std::move(desc))
+Framebuffer::Framebuffer(FramebufferDesc desc, const RenderController* renderer)
+    : desc_(std::move(desc))
+    , renderer_(renderer)
 {
-    DCHECK_NOTNULL_F(renderer_, "Renderer must not be null");
+    DCHECK_NOTNULL_F(renderer_, "RenderController must not be null");
 
     DCHECK_F(!desc_.color_attachments.empty() || desc_.depth_attachment.IsValid(),
         "Framebuffer must have at least one color or depth attachment");
@@ -33,12 +31,12 @@ Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, Framebuff
     // the depth attachment.
     if (!desc_.color_attachments.empty()) {
         const auto texture = desc_.color_attachments[0].texture;
-        rt_width = texture->GetDescriptor().width;
-        rt_height = texture->GetDescriptor().height;
+        rt_width_ = texture->GetDescriptor().width;
+        rt_height_ = texture->GetDescriptor().height;
     } else if (desc_.depth_attachment.IsValid()) {
         const auto texture = desc_.depth_attachment.texture;
-        rt_width = texture->GetDescriptor().width;
-        rt_height = texture->GetDescriptor().height;
+        rt_width_ = texture->GetDescriptor().width;
+        rt_height_ = texture->GetDescriptor().height;
     }
 
     auto& resource_registry = renderer_->GetResourceRegistry();
@@ -46,9 +44,9 @@ Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, Framebuff
     for (const auto& attachment : desc_.color_attachments) {
         auto texture = attachment.texture;
 
-        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width,
+        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
             "Framebuffer {}: width mismatch between attachments", texture->GetName());
-        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height,
+        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height_,
             "Framebuffer {}: height mismatch between attachments", texture->GetName());
 
         DescriptorHandle rtv_handle = renderer_->GetDescriptorAllocator().Allocate(
@@ -75,15 +73,15 @@ Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, Framebuff
             throw std::runtime_error(fmt::format("Failed to register RTV view for texture `{}`",
                 texture->GetName()));
         }
-        rtvs_.push_back(std::move(rtv.AsInteger()));
+        rtvs_.push_back(rtv.AsInteger());
         textures_.push_back(std::move(texture));
     }
 
     if (auto& depth_attachment = desc_.depth_attachment; depth_attachment.IsValid()) {
         auto texture = depth_attachment.texture;
-        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width,
+        DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
             "Framebuffer {}: width mismatch between attachments", texture->GetName());
-        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height,
+        DCHECK_EQ_F(texture->GetDescriptor().height, rt_height_,
             "Framebuffer {}: height mismatch between attachments", texture->GetName());
 
         DescriptorHandle dsv_handle = renderer_->GetDescriptorAllocator().Allocate(
@@ -118,7 +116,7 @@ Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, Framebuff
 
 Framebuffer::~Framebuffer()
 {
-    DCHECK_NOTNULL_F(renderer_, "Renderer must not be null");
+    DCHECK_NOTNULL_F(renderer_, "RenderController must not be null");
 
     LOG_SCOPE_F(1, "Destroying framebuffer");
     auto& resource_registry = renderer_->GetResourceRegistry();

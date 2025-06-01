@@ -7,27 +7,39 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Types/Queues.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
-#include <Oxygen/Platform/Types.h>
 
 namespace oxygen {
 
+class Platform;
+namespace platform {
+    class Window;
+} // namespace platform
+
 namespace graphics {
-    class IShaderByteCode;
-    class CommandQueue;
+    struct BufferDesc;
+    class Buffer;
     class CommandList;
-    class Renderer;
+    class CommandQueue;
+    struct FramebufferDesc;
+    class Framebuffer;
+    class IShaderByteCode;
+    class NativeObject;
+    class QueueStrategy;
+    class RenderController;
+    class Surface;
+    struct TextureDesc;
+    class Texture;
 
     namespace detail {
         class RenderThread;
@@ -46,39 +58,49 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(Graphics)
     OXYGEN_DEFAULT_MOVABLE(Graphics)
 
-    [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started) -> co::Co<> override;
-    OXYGEN_GFX_API void Run() override;
-    [[nodiscard]] OXYGEN_GFX_API auto IsRunning() const -> bool override;
-    OXYGEN_GFX_API void Stop() override;
-
     [[nodiscard]] auto GetName() const noexcept -> std::string_view
     {
         return GetComponent<ObjectMetaData>().GetName();
     }
 
-    void Render()
-    {
-        render_.UnParkAll();
-    }
+    //=== Async operations ===------------------------------------------------//
 
-    auto OnRenderStart()
-    {
-        return render_.Park();
-    }
+    [[nodiscard]] OXYGEN_GFX_API auto ActivateAsync(co::TaskStarted<> started)
+        -> co::Co<> override;
 
-    [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(std::string_view unique_id) const
-        -> std::shared_ptr<graphics::IShaderByteCode>
+    OXYGEN_GFX_API void Run() override;
+
+    [[nodiscard]] OXYGEN_GFX_API auto IsRunning() const -> bool override;
+
+    OXYGEN_GFX_API void Stop() override;
+
+    auto OnRenderStart() { return render_.Park(); }
+
+    void Render() { render_.UnParkAll(); }
+
+    //=== Global & pooled objects ===-----------------------------------------//
+
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(
+        std::string_view name,
+        std::weak_ptr<graphics::Surface> surface,
+        uint32_t frames_in_flight)
+        -> std::shared_ptr<graphics::RenderController>;
+
+    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
+        std::weak_ptr<platform::Window> window_weak,
+        std::shared_ptr<graphics::CommandQueue> command_queue) const
+        -> std::shared_ptr<graphics::Surface>
         = 0;
 
-    //! Initialize command queues using the provided queue strategy.
+    //! Initialize command queues using the provided queue management strategy.
     /*!
-     \param queue_strategy The queue strategy to use for initializing command
-      queues.
-     \return A vector of command queues created by the backend.
+     \param queue_strategy The strategy for initializing command queues.
     */
-    OXYGEN_GFX_API void CreateCommandQueues(const graphics::QueueStrategy& queue_strategy);
+    OXYGEN_GFX_API void CreateCommandQueues(
+        const graphics::QueueStrategy& queue_strategy);
 
-    [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(std::string_view name) const
+    [[nodiscard]] OXYGEN_GFX_API auto GetCommandQueue(
+        std::string_view name) const
         -> std::shared_ptr<graphics::CommandQueue>;
 
     OXYGEN_GFX_API void FlushCommandQueues();
@@ -88,20 +110,34 @@ public:
         std::string_view command_list_name)
         -> std::shared_ptr<graphics::CommandList>;
 
-    // [[nodiscard]] virtual auto CreateImGuiModule(EngineWeakPtr engine, platform::WindowIdType window_id) const
-    //     -> std::unique_ptr<imgui::ImguiModule>
-    //     = 0;
-
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateSurface(
-        std::weak_ptr<platform::Window> window_weak,
-        std::shared_ptr<graphics::CommandQueue> command_queue) const
-        -> std::shared_ptr<graphics::Surface>
+    [[nodiscard]] virtual OXYGEN_GFX_API auto GetShader(
+        std::string_view unique_id) const
+        -> std::shared_ptr<graphics::IShaderByteCode>
         = 0;
-    [[nodiscard]] virtual OXYGEN_GFX_API auto CreateRenderer(
-        std::string_view name,
-        std::weak_ptr<graphics::Surface> surface,
-        uint32_t frames_in_flight)
-        -> std::shared_ptr<graphics::Renderer>;
+
+    //=== Rendering Resources factories ===-----------------------------------//
+
+    [[nodiscard]] virtual auto CreateFramebuffer(
+        const graphics::FramebufferDesc& desc,
+        const graphics::RenderController& renderer)
+        -> std::shared_ptr<graphics::Framebuffer>
+        = 0;
+
+    [[nodiscard]] virtual auto CreateTexture(
+        const graphics::TextureDesc& desc) const
+        -> std::shared_ptr<graphics::Texture>
+        = 0;
+
+    [[nodiscard]] virtual auto CreateTextureFromNativeObject(
+        const graphics::TextureDesc& desc,
+        const graphics::NativeObject& native) const
+        -> std::shared_ptr<graphics::Texture>
+        = 0;
+
+    [[nodiscard]] virtual auto CreateBuffer(
+        const graphics::BufferDesc& desc) const
+        -> std::shared_ptr<graphics::Buffer>
+        = 0;
 
 protected:
     //! Create a command queue for the given role and allocation preference.
@@ -139,27 +175,44 @@ protected:
         DCHECK_NOTNULL_F(nursery_);
         return *nursery_;
     }
+
     [[nodiscard]] virtual auto CreateRendererImpl(
         std::string_view name,
         std::weak_ptr<graphics::Surface> surface,
         uint32_t frames_in_flight)
-        -> std::unique_ptr<graphics::Renderer>
+        -> std::unique_ptr<graphics::RenderController>
         = 0;
 
 private:
-    PlatformPtr platform_; //< The platform abstraction layer.
+    //! The platform abstraction layer. Provided by the upper layers (e.g., the
+    //! application layer).
+    std::shared_ptr<Platform> platform_;
 
+    using CommandQueueSharedPtr = std::shared_ptr<graphics::CommandQueue>;
     //! The command queues created by the backend.
-    std::unordered_map<std::string, std::shared_ptr<graphics::CommandQueue>> command_queues_;
+    std::unordered_map<std::string, CommandQueueSharedPtr> command_queues_;
 
-    // Pool of available command lists by queue type
-    std::unordered_map<graphics::QueueRole, std::vector<std::unique_ptr<graphics::CommandList>>> command_list_pool_;
+    using CommandListUniquePtr = std::unique_ptr<graphics::CommandList>;
+    using CommandLists = std::vector<CommandListUniquePtr>;
+    //! Pool of available command lists by queue type.
+    std::unordered_map<graphics::QueueRole, CommandLists> command_list_pool_;
     std::mutex command_list_pool_mutex_;
 
-    //! Active renderers managed by this Graphics instance
-    std::vector<std::weak_ptr<graphics::Renderer>> renderers_;
+    using RendererWeakPtr = std::weak_ptr<graphics::RenderController>;
+    //! Active renderers managed by this Graphics instance.
+    /*!
+     We consider that the RenderingController is created and owned by the upper
+     layers (e.g., the application layer). Its lifetime is tied to the lifetime
+     of the application and the associated rendering context. At the graphics
+     level, we only care about the renderers while they are still alive. When
+     they are not, we just forget about them.
+    */
+    std::vector<RendererWeakPtr> renderers_;
 
+    //! The nursery for running graphics related coroutines.
     co::Nursery* nursery_ { nullptr };
+    //! A synchronization parking lot for rendering controllers to wait for the
+    //! start of the next frame rendering cycle.
     co::ParkingLot render_ {};
 };
 

@@ -52,7 +52,7 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(WindowSurface);
     OXYGEN_DEFAULT_MOVABLE(WindowSurface);
 
-    void AttachRenderer(const std::shared_ptr<graphics::Renderer> renderer) override
+    void AttachRenderer(const std::shared_ptr<graphics::RenderController> renderer) override
     {
         GetComponent<SwapChain>().AttachRenderer(renderer);
     }
