@@ -58,8 +58,11 @@ public:
 
     void SetPipelineState(GraphicsPipelineDesc desc) override;
     void SetPipelineState(ComputePipelineDesc desc) override;
-
     void SetGraphicsRootConstantBufferView(
+        uint32_t root_parameter_index,
+        uint64_t buffer_gpu_address) override;
+
+    void SetComputeRootConstantBufferView(
         uint32_t root_parameter_index,
         uint64_t buffer_gpu_address) override;
 
@@ -72,6 +75,7 @@ public:
     void SetVertexBuffers(uint32_t num, const std::shared_ptr<graphics::Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) override;
     void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) override;
     void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) override;
+    void Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z) override;
 
     void BindFrameBuffer(const graphics::Framebuffer& framebuffer) override;
     void ClearFramebuffer(

@@ -104,6 +104,11 @@ public:
         uint64_t buffer_gpu_address)
         = 0;
 
+    virtual void SetComputeRootConstantBufferView(
+        uint32_t root_parameter_index,
+        uint64_t buffer_gpu_address)
+        = 0;
+
     //=== Render State ===----------------------------------------------------//
 
     virtual void SetRenderTargets(
@@ -118,6 +123,7 @@ public:
 
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
+    virtual void Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z) = 0;
     virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
 
     //=== Framebuffer and Resource Operations ===-----------------------------//
