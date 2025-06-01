@@ -7,19 +7,21 @@
 #include <memory>
 
 #include <nlohmann/json.hpp>
-#include <wrl/client.h>
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
+#include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-// #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiModule.h>
-#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
+
+using oxygen::graphics::FramebufferDesc;
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -49,18 +51,6 @@ void DestroyBackend()
 }
 
 } // namespace
-
-//===----------------------------------------------------------------------===//
-// Implementation of the helper function for internal access to the graphics
-// backend instance.
-
-auto oxygen::graphics::d3d12::detail::GetGraphics() -> Graphics&
-{
-    auto& gfx = GetBackendInternal();
-    CHECK_NOTNULL_F(gfx,
-        "illegal access to the graphics backend before it is initialized or after it has been destroyed");
-    return *gfx;
-}
 
 //===----------------------------------------------------------------------===//
 // Public implementation of the graphics backend API.
@@ -99,11 +89,6 @@ auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
     return allocator;
 }
 
-auto Graphics::GetShader(const std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>
-{
-    return GetComponent<EngineShaders>().GetShader(unique_id);
-}
-
 Graphics::Graphics(const SerializedBackendConfig& config)
     : Base("D3D12 Backend")
 {
@@ -126,23 +111,23 @@ auto Graphics::CreateCommandQueue(
     [[maybe_unused]] QueueAllocationPreference allocation_preference)
     -> std::shared_ptr<graphics::CommandQueue>
 {
-    return std::make_shared<CommandQueue>(name, role);
+    return std::make_shared<CommandQueue>(name, role, this);
 }
 
 auto Graphics::CreateRendererImpl(
     const std::string_view name,
     std::weak_ptr<Surface> surface,
     uint32_t frames_in_flight)
-    -> std::unique_ptr<graphics::Renderer>
+    -> std::unique_ptr<graphics::RenderController>
 {
-    return std::make_unique<Renderer>(
+    return std::make_unique<RenderController>(
         name, weak_from_this(), std::move(surface), frames_in_flight);
 }
 
 auto Graphics::CreateCommandListImpl(QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList>
 {
-    return std::make_unique<CommandList>(role, command_list_name);
+    return std::make_unique<CommandList>(command_list_name, role, this);
 }
 
 auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
@@ -174,15 +159,49 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
 
 auto Graphics::CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
-    std::shared_ptr<graphics::CommandQueue> command_queue) const
+    const std::shared_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface>
 {
     DCHECK_F(!window_weak.expired());
     DCHECK_NOTNULL_F(command_queue);
     DCHECK_EQ_F(command_queue->GetTypeId(), graphics::d3d12::CommandQueue::ClassTypeId(), "Invalid command queue class");
 
-    auto* queue = static_cast<CommandQueue*>(command_queue.get());
-    auto surface = std::make_shared<detail::WindowSurface>(window_weak, queue->GetCommandQueue());
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    const auto* queue = static_cast<CommandQueue*>(command_queue.get());
+    const auto surface = std::make_shared<detail::WindowSurface>(window_weak, queue->GetCommandQueue());
     CHECK_NOTNULL_F(surface, "Failed to create surface");
     return std::static_pointer_cast<Surface>(surface);
+}
+
+auto Graphics::GetShader(const std::string_view unique_id) const -> std::shared_ptr<IShaderByteCode>
+{
+    return GetComponent<EngineShaders>().GetShader(unique_id);
+}
+
+auto Graphics::CreateFramebuffer(const FramebufferDesc& desc, const graphics::RenderController& renderer)
+    -> std::shared_ptr<graphics::Framebuffer>
+{
+    return std::make_shared<Framebuffer>(
+        desc,
+        // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+        static_cast<const RenderController*>(&renderer));
+}
+
+auto Graphics::CreateTexture(const TextureDesc& desc) const
+    -> std::shared_ptr<graphics::Texture>
+{
+    return std::make_shared<Texture>(desc, this);
+}
+
+auto Graphics::CreateTextureFromNativeObject(
+    const TextureDesc& desc,
+    const NativeObject& native) const
+    -> std::shared_ptr<graphics::Texture>
+{
+    return std::make_shared<Texture>(desc, native, this);
+}
+
+auto Graphics::CreateBuffer(const BufferDesc& desc) const -> std::shared_ptr<graphics::Buffer>
+{
+    return std::make_shared<Buffer>(desc, this);
 }

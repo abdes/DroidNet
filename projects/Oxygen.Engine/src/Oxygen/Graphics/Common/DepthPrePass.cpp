@@ -17,8 +17,9 @@
 #include <Oxygen/Graphics/Common/DepthPrepass.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/RenderItem.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -28,13 +29,13 @@
 
 using oxygen::graphics::DepthPrePass;
 
-DepthPrePass::DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config)
+DepthPrePass::DepthPrePass(RenderController* renderer, std::shared_ptr<Config> config)
     : RenderPass(config->debug_name)
     , config_(std::move(config))
     , renderer_(renderer)
     , last_built_pso_desc_(DepthPrePass::CreatePipelineStateDesc())
 {
-    DCHECK_NOTNULL_F(renderer_, "Renderer must not be null.");
+    DCHECK_NOTNULL_F(renderer_, "RenderController must not be null.");
     DepthPrePass::ValidateConfig();
 }
 
@@ -307,7 +308,7 @@ void DepthPrePass::IssueDrawCalls(
     // that allows them to be read by the GPU after CPU writes without explicit
     // state transition barriers. Thus, explicit CommandRecorder::RequireResourceState
     // calls are often not strictly needed for these specific transient resources on D3D12.
-    // The Renderer "Deferred Release" mechanism will ensure they are kept alive until
+    // The RenderController "Deferred Release" mechanism will ensure they are kept alive until
     // the GPU is finished.
 
     for (const auto* item : GetDrawList()) {
@@ -335,7 +336,7 @@ void DepthPrePass::IssueDrawCalls(
         vb_upload_desc.memory = BufferMemory::kUpload;
         vb_upload_desc.debug_name = "DepthPrePass_TempVB";
 
-        auto temp_vb = renderer_->CreateBuffer(vb_upload_desc);
+        auto temp_vb = renderer_->GetGraphics().CreateBuffer(vb_upload_desc);
         DCHECK_NOTNULL_F(temp_vb, "Failed to create temporary vertex buffer for DepthPrePass");
         if (!temp_vb) {
             LOG_F(ERROR, "DepthPrePass::IssueDrawCalls: Failed to create temporary vertex buffer. Skipping item.");
@@ -349,13 +350,11 @@ void DepthPrePass::IssueDrawCalls(
         // 3. Bind the vertex buffer using the abstract CommandRecorder interface
         const std::shared_ptr<Buffer> buffer_array[1] = { temp_vb };
         constexpr uint32_t stride_array[1] = { static_cast<uint32_t>(sizeof(Vertex)) };
-        constexpr uint32_t offset_array[1] = {}; // Start offset within each buffer is 0
 
         command_recorder.SetVertexBuffers(
             1, // num: number of vertex buffers to bind
             buffer_array,
-            stride_array,
-            offset_array);
+            stride_array);
 
         // 4. Issue the draw call
         command_recorder.Draw(

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <string_view>
-#include <vector>
 
 #include <d3d12.h>
 
@@ -17,18 +16,22 @@
 namespace oxygen::graphics {
 class DescriptorHandle;
 
-namespace detail {
-    class PerFrameResourceManager;
-} // namespace detail
-
 namespace d3d12 {
+    class Graphics;
 
+    /*!
+     When constructing Texture objects, we take the backend `Graphics` as a
+     pointer because there is no way the texture can outlive the graphics
+     context. We keep things simple, and we clearly state that the texture is
+     owned by the graphics context and not the opposite.
+    */
     class Texture : public graphics::Texture {
         using Base = graphics::Texture;
 
     public:
-        OXYGEN_D3D12_API explicit Texture(TextureDesc desc);
-        OXYGEN_D3D12_API Texture(TextureDesc desc, NativeObject native);
+        OXYGEN_D3D12_API explicit Texture(TextureDesc desc, const Graphics* gfx);
+
+        OXYGEN_D3D12_API Texture(TextureDesc desc, const NativeObject& native, const Graphics* gfx);
 
         OXYGEN_D3D12_API ~Texture() override;
 
@@ -70,29 +73,32 @@ namespace d3d12 {
 
     private:
         // Abstract method implementations from base class
-        [[nodiscard]] OXYGEN_D3D12_API void CreateShaderResourceView(
+        OXYGEN_D3D12_API void CreateShaderResourceView(
             D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const;
 
-        [[nodiscard]] OXYGEN_D3D12_API void CreateUnorderedAccessView(
+        OXYGEN_D3D12_API void CreateUnorderedAccessView(
             D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureDimension dimension,
             TextureSubResourceSet sub_resources) const;
 
-        [[nodiscard]] OXYGEN_D3D12_API void CreateRenderTargetView(
+        OXYGEN_D3D12_API void CreateRenderTargetView(
             D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureSubResourceSet sub_resources) const;
 
-        [[nodiscard]] OXYGEN_D3D12_API void CreateDepthStencilView(
+        OXYGEN_D3D12_API void CreateDepthStencilView(
             D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
             Format format,
             TextureSubResourceSet sub_resources,
             bool is_read_only) const;
 
+        auto CurrentDevice() const -> dx::IDevice*;
+
+        const Graphics* gfx_ { nullptr };
         TextureDesc desc_;
         D3D12_RESOURCE_DESC resource_desc_;
         uint8_t plane_count_ = 1;

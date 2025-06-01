@@ -26,7 +26,11 @@ file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/shaders")
 set(dxc_optimization_debug "-Od")
 set(dxc_optimization_release "-O3")
 set(dxc_debug_symbol "-Zi")
-set(dxc_enable_advanced_features "-enable-16bit-types" "-HV 2021")
+set(
+  dxc_enable_advanced_features
+  "-enable-16bit-types"
+  "-HV 2021"
+)
 set(
   dxc_vs_shader_model
   "-T"
@@ -59,11 +63,12 @@ add_custom_target(
 )
 
 # Common DXC options (excluding model, entry point, output file, and PDB path)
-set(DXC_COMMON_OPTIONS
-    ${dxc_enable_advanced_features}
-    $<$<CONFIG:Debug>:${dxc_debug_symbol}>
-    $<$<CONFIG:Debug>:${dxc_optimization_debug}>
-    $<$<NOT:$<CONFIG:Debug>>:${dxc_optimization_release}>
+set(
+  DXC_COMMON_OPTIONS
+  ${dxc_enable_advanced_features}
+  $<$<CONFIG:Debug>:${dxc_debug_symbol}>
+  $<$<CONFIG:Debug>:${dxc_optimization_debug}>
+  $<$<NOT:$<CONFIG:Debug>>:${dxc_optimization_release}>
 )
 
 # Process each HLSL file
@@ -72,10 +77,13 @@ foreach(HLSL_FILE ${HLSL_FILES})
 
   set(shader_types_var_name "SHADER_${shader_name}_TYPES")
   if(NOT DEFINED ${shader_types_var_name})
-    message(WARNING "Shader types for ${shader_name} "
-                    "(variable ${shader_types_var_name}) are not defined. "
-                    "Skipping this shader. Define ${shader_types_var_name} "
-                    "to specify types (e.g., \"VS;PS\", \"CS\").")
+    message(
+      WARNING
+      "Shader types for ${shader_name} "
+      "(variable ${shader_types_var_name}) are not defined. "
+      "Skipping this shader. Define ${shader_types_var_name} "
+      "to specify types (e.g., \"VS;PS\", \"CS\")."
+    )
     continue() # Skip to the next HLSL_FILE
   else()
     set(CURRENT_SHADER_TYPES ${${shader_types_var_name}})
@@ -91,11 +99,34 @@ foreach(HLSL_FILE ${HLSL_FILES})
     list(APPEND SHADER_SPECIFIC_OUTPUTS ${VS_SHADER_OUTPUT})
 
     set(VS_COMPILE_COMMAND_ARGS "")
-    list(APPEND VS_COMPILE_COMMAND_ARGS ${dxc_vs_shader_model} -E ${VS_ENTRY_POINT})
+    list(
+      APPEND
+      VS_COMPILE_COMMAND_ARGS
+      ${dxc_vs_shader_model}
+      -E
+      ${VS_ENTRY_POINT}
+    )
     list(APPEND VS_COMPILE_COMMAND_ARGS ${DXC_COMMON_OPTIONS})
-    list(APPEND VS_COMPILE_COMMAND_ARGS $<$<CONFIG:Debug>:-Fd> $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_vs.pdb>)
-    list(APPEND VS_COMPILE_COMMAND_ARGS -Fo ${VS_SHADER_OUTPUT} ${HLSL_FILE})
-    list(APPEND SHADER_SPECIFIC_COMMANDS COMMAND ${dxc_exe} ${VS_COMPILE_COMMAND_ARGS})
+    list(
+      APPEND
+      VS_COMPILE_COMMAND_ARGS
+      $<$<CONFIG:Debug>:-Fd>
+      $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_vs.pdb>
+    )
+    list(
+      APPEND
+      VS_COMPILE_COMMAND_ARGS
+      -Fo
+      ${VS_SHADER_OUTPUT}
+      ${HLSL_FILE}
+    )
+    list(
+      APPEND
+      SHADER_SPECIFIC_COMMANDS
+      COMMAND
+      ${dxc_exe}
+      ${VS_COMPILE_COMMAND_ARGS}
+    )
   endif()
 
   # Pixel Shader
@@ -105,11 +136,34 @@ foreach(HLSL_FILE ${HLSL_FILES})
     list(APPEND SHADER_SPECIFIC_OUTPUTS ${PS_SHADER_OUTPUT})
 
     set(PS_COMPILE_COMMAND_ARGS "")
-    list(APPEND PS_COMPILE_COMMAND_ARGS ${dxc_ps_shader_model} -E ${PS_ENTRY_POINT})
+    list(
+      APPEND
+      PS_COMPILE_COMMAND_ARGS
+      ${dxc_ps_shader_model}
+      -E
+      ${PS_ENTRY_POINT}
+    )
     list(APPEND PS_COMPILE_COMMAND_ARGS ${DXC_COMMON_OPTIONS})
-    list(APPEND PS_COMPILE_COMMAND_ARGS $<$<CONFIG:Debug>:-Fd> $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_ps.pdb>)
-    list(APPEND PS_COMPILE_COMMAND_ARGS -Fo ${PS_SHADER_OUTPUT} ${HLSL_FILE})
-    list(APPEND SHADER_SPECIFIC_COMMANDS COMMAND ${dxc_exe} ${PS_COMPILE_COMMAND_ARGS})
+    list(
+      APPEND
+      PS_COMPILE_COMMAND_ARGS
+      $<$<CONFIG:Debug>:-Fd>
+      $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_ps.pdb>
+    )
+    list(
+      APPEND
+      PS_COMPILE_COMMAND_ARGS
+      -Fo
+      ${PS_SHADER_OUTPUT}
+      ${HLSL_FILE}
+    )
+    list(
+      APPEND
+      SHADER_SPECIFIC_COMMANDS
+      COMMAND
+      ${dxc_exe}
+      ${PS_COMPILE_COMMAND_ARGS}
+    )
   endif()
 
   # Compute Shader
@@ -119,32 +173,66 @@ foreach(HLSL_FILE ${HLSL_FILES})
     list(APPEND SHADER_SPECIFIC_OUTPUTS ${CS_SHADER_OUTPUT})
 
     set(CS_COMPILE_COMMAND_ARGS "")
-    list(APPEND CS_COMPILE_COMMAND_ARGS ${dxc_cs_shader_model} -E ${CS_ENTRY_POINT})
+    list(
+      APPEND
+      CS_COMPILE_COMMAND_ARGS
+      ${dxc_cs_shader_model}
+      -E
+      ${CS_ENTRY_POINT}
+    )
     list(APPEND CS_COMPILE_COMMAND_ARGS ${DXC_COMMON_OPTIONS})
-    list(APPEND CS_COMPILE_COMMAND_ARGS $<$<CONFIG:Debug>:-Fd> $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_cs.pdb>)
-    list(APPEND CS_COMPILE_COMMAND_ARGS -Fo ${CS_SHADER_OUTPUT} ${HLSL_FILE})
-    list(APPEND SHADER_SPECIFIC_COMMANDS COMMAND ${dxc_exe} ${CS_COMPILE_COMMAND_ARGS})
+    list(
+      APPEND
+      CS_COMPILE_COMMAND_ARGS
+      $<$<CONFIG:Debug>:-Fd>
+      $<$<CONFIG:Debug>:${SHADER_OUTPUT_DIR}/${shader_name}_cs.pdb>
+    )
+    list(
+      APPEND
+      CS_COMPILE_COMMAND_ARGS
+      -Fo
+      ${CS_SHADER_OUTPUT}
+      ${HLSL_FILE}
+    )
+    list(
+      APPEND
+      SHADER_SPECIFIC_COMMANDS
+      COMMAND
+      ${dxc_exe}
+      ${CS_COMPILE_COMMAND_ARGS}
+    )
   endif()
 
   if(SHADER_SPECIFIC_OUTPUTS) # Check if list is not empty
     add_custom_command(
-      OUTPUT ${SHADER_SPECIFIC_OUTPUTS}
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_OUTPUT_DIR}" # Ensures $CONFIG specific dir exists
-      ${SHADER_SPECIFIC_COMMANDS}
+      OUTPUT
+        ${SHADER_SPECIFIC_OUTPUTS}
+      COMMAND
+        ${CMAKE_COMMAND} -E make_directory
+        "${SHADER_OUTPUT_DIR}" # Ensures $CONFIG specific dir exists
+        ${SHADER_SPECIFIC_COMMANDS}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       VERBATIM
-      COMMENT "Compiling shader: ${shader_name}.hlsl for types (${CURRENT_SHADER_TYPES}) ($<CONFIG> mode)"
-      DEPENDS "${HLSL_FILE}"
-      MAIN_DEPENDENCY "${HLSL_FILE}" # Important for some generators like Ninja and Visual Studio
+      COMMENT
+        "Compiling shader: ${shader_name}.hlsl for types (${CURRENT_SHADER_TYPES}) ($<CONFIG> mode)"
+      DEPENDS
+        "${HLSL_FILE}"
+      MAIN_DEPENDENCY
+        "${HLSL_FILE}" # Important for some generators like Ninja and Visual Studio
     )
 
     add_custom_target(
-      ${shader_name}_shader ALL
-      DEPENDS ${SHADER_SPECIFIC_OUTPUTS}
+      ${shader_name}_shader
+      ALL
+      DEPENDS
+        ${SHADER_SPECIFIC_OUTPUTS}
     )
     add_dependencies(${META_MODULE_TARGET}_shaders ${shader_name}_shader)
   elseif(CURRENT_SHADER_TYPES) # If types were specified but none matched VS/PS/CS
-    message(WARNING "Shader ${shader_name}.hlsl: Specified types (${CURRENT_SHADER_TYPES}) did not result in any compilation commands.")
+    message(
+      WARNING
+      "Shader ${shader_name}.hlsl: Specified types (${CURRENT_SHADER_TYPES}) did not result in any compilation commands."
+    )
   endif()
 endforeach()
 

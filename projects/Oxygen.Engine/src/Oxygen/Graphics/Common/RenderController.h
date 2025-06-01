@@ -26,7 +26,6 @@ class Graphics;
 
 namespace graphics {
 
-    class Buffer;
     class CommandList;
     class CommandQueue;
     class CommandRecorder;
@@ -36,13 +35,12 @@ namespace graphics {
     class RenderPass;
     class ResourceRegistry;
     class Surface;
-    struct BufferDesc;
     struct DepthPrePassConfig;
 
     //! Orchestrates the frame render loop.
     /*!
-     The frame render loop in this engine is managed by the `Renderer` class,
-     which orchestrates all per-frame operations. Each frame begins with
+     The frame render loop in this engine is managed by the `RenderController`
+     class, which orchestrates all per-frame operations. Each frame begins with
      BeginFrame(), where the renderer checks for surface resizes, synchronizes
      with the GPU to ensure previous frame completion, and processes any
      deferred resource releases. After these preparations, the application’s
@@ -111,8 +109,8 @@ namespace graphics {
      batching of multiple command lists in one submission.
 
      When a CommandRecorder is disposed of, its command list is added by the
-     Renderer to an ordered collection of pending command lists for the current
-     frame. The 'Render Frame Task' can choose to submit command lists
+     RenderController to an ordered collection of pending command lists for the
+     current frame. The 'Render Frame Task' can choose to submit command lists
      immediately or defer them for batch submission. At any point during the
      frame render cycle, the application or engine can call
      FlushPendingCommandLists() to submit all pending command lists for the
@@ -127,31 +125,29 @@ namespace graphics {
      command lists are left un-submitted and maintaining correct timeline
      synchronization and resource management.
     */
-    class Renderer
+    class RenderController
         : public Composition,
-          public std::enable_shared_from_this<Renderer> {
+          public std::enable_shared_from_this<RenderController> {
     public:
-        OXYGEN_GFX_API Renderer(
+        OXYGEN_GFX_API RenderController(
             std::string_view name,
             std::weak_ptr<Graphics> gfx_weak,
             std::weak_ptr<Surface> surface_weak,
             uint32_t frames_in_flight = kFrameBufferCount - 1);
 
-        OXYGEN_GFX_API ~Renderer() override;
+        OXYGEN_GFX_API ~RenderController() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(Renderer)
-        OXYGEN_DEFAULT_MOVABLE(Renderer)
+        OXYGEN_MAKE_NON_COPYABLE(RenderController)
+        OXYGEN_DEFAULT_MOVABLE(RenderController)
 
         // ReSharper disable once CppHiddenFunction - hidden in backend API
         OXYGEN_GFX_API auto GetGraphics() -> Graphics&;
         // ReSharper disable once CppHiddenFunction - hidden in backend API
         OXYGEN_GFX_API auto GetGraphics() const -> const Graphics&;
 
-        OXYGEN_GFX_API auto GetDescriptorAllocator() -> DescriptorAllocator&;
-        OXYGEN_GFX_API auto GetDescriptorAllocator() const -> const DescriptorAllocator&;
+        OXYGEN_GFX_API auto GetDescriptorAllocator() const -> DescriptorAllocator&;
 
-        OXYGEN_GFX_API auto GetResourceRegistry() -> ResourceRegistry&;
-        OXYGEN_GFX_API auto GetResourceRegistry() const -> const ResourceRegistry&;
+        OXYGEN_GFX_API auto GetResourceRegistry() const -> ResourceRegistry&;
 
         OXYGEN_GFX_API void Submit(FrameRenderTask task);
         OXYGEN_GFX_API void Stop();
@@ -191,23 +187,6 @@ namespace graphics {
         {
             return per_frame_resource_manager_;
         }
-
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTexture(graphics::TextureDesc desc) const
-            -> std::shared_ptr<graphics::Texture>
-            = 0;
-
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateTextureFromNativeObject(
-            TextureDesc desc, NativeObject native) const
-            -> std::shared_ptr<graphics::Texture>
-            = 0;
-
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateFramebuffer(graphics::FramebufferDesc desc)
-            -> std::shared_ptr<graphics::Framebuffer>
-            = 0;
-
-        [[nodiscard]] OXYGEN_GFX_API virtual auto CreateBuffer(const BufferDesc& desc) const
-            -> std::shared_ptr<Buffer>
-            = 0;
 
         OXYGEN_GFX_API virtual void FlushPendingCommandLists();
 

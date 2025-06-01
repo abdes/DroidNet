@@ -2,9 +2,9 @@
 #pragma once
 
 #include <cstdint> // For uint32_t
-#include <vector>
-#include <memory>
 #include <glm/glm.hpp>
+#include <memory>
+#include <vector>
 
 namespace oxygen::graphics {
 
@@ -13,11 +13,11 @@ class Material;
 
 // Enhanced vertex structure for PBR rendering
 struct Vertex {
-    float position[3];    // x, y, z (object space)
-    float normal[3];      // nx, ny, nz (object space normal)
-    float tangent[4];     // tx, ty, tz, handedness (object space tangent + handedness)
-    float texcoord[2];    // u, v (texture coordinates)
-    float color[3];       // r, g, b (vertex color, for debugging/simple materials)
+    float position[3]; // x, y, z (object space)
+    float normal[3]; // nx, ny, nz (object space normal)
+    float tangent[4]; // tx, ty, tz, handedness (object space tangent + handedness)
+    float texcoord[2]; // u, v (texture coordinates)
+    float color[3]; // r, g, b (vertex color, for debugging/simple materials)
 };
 
 // Legacy simple vertex for backward compatibility
@@ -46,7 +46,7 @@ struct RenderItem {
     std::shared_ptr<const Material> material;
 
     // === Transformation ===
-    glm::mat4 world_transform = glm::mat4(1.0f);  // Object to world transformation
+    glm::mat4 world_transform = glm::mat4(1.0f); // Object to world transformation
     glm::mat4 normal_transform = glm::mat4(1.0f); // For transforming normals (usually inverse transpose of world)
 
     // === Rendering State ===
@@ -56,7 +56,8 @@ struct RenderItem {
         kLineList,
         kLineStrip,
         kPointList
-    } primitive_topology = PrimitiveTopology::kTriangleList;
+    } primitive_topology
+        = PrimitiveTopology::kTriangleList;
 
     // === Culling and Visibility ===
     bool visible = true;
@@ -79,7 +80,8 @@ struct RenderItem {
     [[nodiscard]] bool IsSimpleVertex() const { return !simple_vertices.empty(); }
 
     //! Get total vertex count (handles both vertex types)
-    [[nodiscard]] uint32_t GetVertexCount() const {
+    [[nodiscard]] uint32_t GetVertexCount() const
+    {
         if (!simple_vertices.empty()) {
             return static_cast<uint32_t>(simple_vertices.size());
         }

@@ -26,9 +26,9 @@ struct QueueSpecification {
     // will also be used to obtain the queue from the device at any time later.
     std::string name;
 
-    oxygen::graphics::QueueRole role;
-    oxygen::graphics::QueueAllocationPreference allocation_preference;
-    oxygen::graphics::QueueSharingPreference sharing_preference;
+    QueueRole role;
+    QueueAllocationPreference allocation_preference;
+    QueueSharingPreference sharing_preference;
 };
 
 //! Abstract interface for queue selection strategies.

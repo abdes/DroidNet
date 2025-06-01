@@ -16,11 +16,12 @@ class CommandQueue final : public graphics::CommandQueue {
     using Base = graphics::CommandQueue;
 
 public:
-    OXYGEN_D3D12_API CommandQueue(std::string_view name, QueueRole role);
+    OXYGEN_D3D12_API CommandQueue(std::string_view name, QueueRole role, const Graphics* gfx);
 
     OXYGEN_D3D12_API ~CommandQueue() noexcept override;
-    OXYGEN_MAKE_NON_COPYABLE(CommandQueue);
-    OXYGEN_MAKE_NON_MOVABLE(CommandQueue);
+
+    OXYGEN_MAKE_NON_COPYABLE(CommandQueue)
+    OXYGEN_MAKE_NON_MOVABLE(CommandQueue)
 
     [[nodiscard]] OXYGEN_D3D12_API auto GetQueueRole() const -> QueueRole override;
 
@@ -52,12 +53,14 @@ public:
     }
 
 private:
-    void CreateCommandQueue(QueueRole type, std::string_view queue_name);
+    auto CurrentDevice() const -> dx::IDevice*;
+    void CreateCommandQueue(QueueRole role, std::string_view queue_name);
     void CreateFence(std::string_view fence_name, uint64_t initial_value);
     void ReleaseCommandQueue() noexcept;
     void ReleaseFence() noexcept;
 
     QueueRole queue_role_; //<! The cached role of the command queue.
+    const Graphics* gfx_ { nullptr }; //<! The graphics context this command queue belongs to.
     dx::ICommandQueue* command_queue_ { nullptr };
 
     dx::IFence* fence_ { nullptr };

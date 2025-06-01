@@ -13,7 +13,7 @@
 #include <Oxygen/Core/Engine.h>
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/Platform/SDL/Platform.h>
 

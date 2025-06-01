@@ -28,7 +28,7 @@ class CommandRecorder;
 class Framebuffer;
 class PipelineState;
 class Texture;
-class Renderer;
+class RenderController;
 class Buffer;
 
 // Forward declaration for the items in the draw list
@@ -126,7 +126,7 @@ public:
      \param renderer The renderer that creates this depth pre-pass.
      \param config The configuration settings for this depth pre-pass.
     */
-    OXYGEN_GFX_API DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config);
+    OXYGEN_GFX_API DepthPrePass(RenderController* renderer, std::shared_ptr<Config> config);
 
     //! Destructor.
     ~DepthPrePass() override = default;
@@ -190,7 +190,7 @@ public:
     OXYGEN_GFX_API auto IsEnabled() const -> bool override;
 
 protected:
-    DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config, GraphicsPipelineDesc pipeline_desc)
+    DepthPrePass(RenderController* renderer, std::shared_ptr<Config> config, GraphicsPipelineDesc pipeline_desc)
         : RenderPass(config->debug_name)
         , config_(std::move(config))
         , renderer_(renderer)
@@ -257,7 +257,7 @@ private:
     bool enabled_ = true;
 
     //! Pointer to the renderer that created this depth pre-pass.
-    Renderer* renderer_ { nullptr };
+    RenderController* renderer_ { nullptr };
 
     // Track the last built pipeline state object (PSO) description and hash, so
     // we can properly manage their caching and retrieval.

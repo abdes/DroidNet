@@ -11,7 +11,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 namespace {
 
@@ -42,7 +42,6 @@ auto GetNameForType(const D3D12_COMMAND_LIST_TYPE list_type) -> std::string
 } // namespace
 
 using oxygen::graphics::d3d12::CommandList;
-using oxygen::graphics::d3d12::detail::GetGraphics;
 using oxygen::windows::ThrowOnFailed;
 
 void CommandList::ReleaseCommandList() noexcept
@@ -57,9 +56,11 @@ void CommandList::ReleaseCommandList() noexcept
     }
 }
 
-CommandList::CommandList(QueueRole type, const std::string_view name)
-    : Base(type, name)
+CommandList::CommandList(const std::string_view name, QueueRole type, const Graphics* gfx)
+    : Base(name, type)
 {
+    DCHECK_NOTNULL_F(gfx, "Graphics context cannot be null!");
+
     D3D12_COMMAND_LIST_TYPE d3d12_type; // NOLINT(*-init-variables)
     switch (type) // NOLINT(clang-diagnostic-switch-enum) - these are the only valid values
     {
@@ -79,7 +80,7 @@ CommandList::CommandList(QueueRole type, const std::string_view name)
         throw std::runtime_error(fmt::format("Unsupported CommandListType: {}", nostd::to_string(type)));
     }
 
-    auto* const device = GetGraphics().GetCurrentDevice();
+    auto* const device = gfx->GetCurrentDevice();
     DCHECK_NOTNULL_F(device);
 
     try {

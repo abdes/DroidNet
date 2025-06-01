@@ -23,7 +23,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
 using oxygen::Overloads;
 using oxygen::graphics::d3d12::CommandRecorder;
@@ -161,45 +161,26 @@ auto ProcessBarrierDesc(const MemoryBarrierDesc& desc) -> D3D12_RESOURCE_BARRIER
 } // anonymous namespace
 
 CommandRecorder::CommandRecorder(
-    Renderer* renderer,
+    RenderController* renderer,
     graphics::CommandList* command_list, graphics::CommandQueue* target_queue)
     : Base(command_list, target_queue)
     , renderer_(renderer)
 {
-    DCHECK_NOTNULL_F(renderer, "Renderer cannot be null");
+    DCHECK_NOTNULL_F(renderer, "RenderController cannot be null");
 }
 
 CommandRecorder::~CommandRecorder()
 {
-    DCHECK_NOTNULL_F(renderer_, "Renderer cannot be null");
+    DCHECK_NOTNULL_F(renderer_, "RenderController cannot be null");
 }
 
 void CommandRecorder::Begin()
 {
     graphics::CommandRecorder::Begin();
-
-    // resource_state_cache_.OnBeginCommandBuffer();
-
-    ResetState();
 }
 
 auto CommandRecorder::End() -> graphics::CommandList*
 {
-    // if (current_render_target_ != nullptr) {
-    //     auto* command_list = GetConcreteCommandList();
-    //     DCHECK_NOTNULL_F(command_list);
-
-    //     D3D12_RESOURCE_BARRIER barrier {
-    //         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-    //         .Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
-    //         .Transition = {
-    //             .pResource = current_render_target_->GetResource(),
-    //             .Subresource = 0,
-    //             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
-    //             .StateAfter = D3D12_RESOURCE_STATE_PRESENT }
-    //     };
-    //     command_list->GetCommandList()->ResourceBarrier(1, &barrier);
-    // }
     return graphics::CommandRecorder::End();
 }
 
@@ -312,8 +293,7 @@ void CommandRecorder::SetScissors(const Scissors& scissors)
 void CommandRecorder::SetVertexBuffers(
     const uint32_t num,
     const std::shared_ptr<graphics::Buffer>* vertex_buffers,
-    const uint32_t* strides,
-    const uint32_t* offsets)
+    const uint32_t* strides) const
 {
     const auto* command_list = GetConcreteCommandList();
     DCHECK_NOTNULL_F(command_list);
@@ -340,10 +320,6 @@ void CommandRecorder::Draw(const uint32_t vertex_num, const uint32_t instances_n
     command_list->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     command_list->GetCommandList()->DrawInstanced(vertex_num, instances_num, vertex_offset, instance_offset);
-}
-
-void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset)
-{
 }
 
 void CommandRecorder::Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z)
@@ -507,31 +483,6 @@ void CommandRecorder::SetComputeRootConstantBufferView(uint32_t root_parameter_i
         root_parameter_index, buffer_gpu_address);
 }
 
-void CommandRecorder::ResetState()
-{
-    // mGraphicsBindingState.Reset();
-    // mComputeBindingState.Reset();
-
-    // mCurrRenderTarget = nullptr;
-    // mGraphicsPipelineState = nullptr;
-    // mComputePipelineState = nullptr;
-
-    // mGraphicsPipelineStateChanged = false;
-    // mComputePipelineStateChanged = false;
-
-    // mCurrPrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
-    // mNumBoundVertexBuffers = 0u;
-    // mBoundIndexBuffer = nullptr;
-
-    // mVertexBufferChanged = false;
-    // mIndexBufferChanged = false;
-
-    // for (uint32 i = 0; i < NFE_RENDERER_MAX_VERTEX_BUFFERS; ++i)
-    // {
-    //     mBoundVertexBuffers[i] = nullptr;
-    // }
-}
-
 void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 {
     if (barriers.empty()) {
@@ -566,13 +517,15 @@ void CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
 auto CommandRecorder::GetConcreteCommandList() const -> CommandList*
 {
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
     return static_cast<CommandList*>(GetCommandList()); // NOLINT(*-pro-type-static-cast_downcast)
 }
 
 // TODO: legacy - should be replaced once render passes are implemented
 void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
 {
-    const auto& fb = static_cast<const Framebuffer&>(framebuffer); // NOLINT(*-pro-type-static-cast_downcast)
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+    const auto& fb = static_cast<const Framebuffer&>(framebuffer);
     StaticVector<D3D12_CPU_DESCRIPTOR_HANDLE, kMaxRenderTargets> rtvs;
     for (const auto& rtv : fb.GetRenderTargetViews()) {
         rtvs.emplace_back(rtv);
@@ -595,74 +548,6 @@ void CommandRecorder::BindFrameBuffer(const graphics::Framebuffer& framebuffer)
         fb.GetDescriptor().depth_attachment.IsValid() ? &dsv : nullptr);
 }
 
-void CommandRecorder::ClearTextureFloat(
-    graphics::Texture* _t,
-    TextureSubResourceSet sub_resources,
-    const Color& clearColor)
-{
-    const auto* t = static_cast<Texture*>(_t); // NOLINT(*-pro-type-static-cast_down_cast)
-    const auto& desc = t->GetDescriptor();
-
-#ifdef _DEBUG
-    const graphics::detail::FormatInfo& formatInfo = graphics::detail::GetFormatInfo(desc.format);
-    assert(!formatInfo.has_depth && !formatInfo.has_stencil);
-    assert(desc.is_uav || desc.is_render_target);
-#endif
-
-    sub_resources = sub_resources.Resolve(desc, false);
-
-    const auto* command_list_impl = GetConcreteCommandList();
-    DCHECK_NOTNULL_F(command_list_impl);
-    const auto* d3d12_command_list = command_list_impl->GetCommandList();
-    DCHECK_NOTNULL_F(d3d12_command_list);
-
-    // TODO: use the registry cache for the views
-    throw std::runtime_error("ClearTextureFloat is not implemented yet.");
-
-    // if (desc.is_render_target) {
-    //  if (m_EnableAutomaticBarriers)
-    //{
-    //      requireTextureState(t, subresources, ResourceStates::RenderTarget);
-    //  }
-    //  commitBarriers();
-
-    // TextureViewDescription rtv_desc {
-    //     .view_type = ResourceViewType::kTexture_RTV,
-    //     .visibility = DescriptorVisibility::kCpuOnly,
-    //     .format = Format::kUnknown,
-    //     .dimension = desc.dimension,
-    //     .sub_resources = sub_resources,
-    // };
-
-    // D3D12_CPU_DESCRIPTOR_HANDLE RTV = { t->GetNativeView(rtv_desc).AsInteger() };
-
-    // d3d12_command_list->ClearRenderTargetView(
-    //     RTV,
-    //     &clearColor.r,
-    //     0, nullptr);
-    //} else {
-    // if (m_EnableAutomaticBarriers)
-    //{
-    //     requireTextureState(t, subresources, ResourceStates::UnorderedAccess);
-    // }
-    // commitBarriers();
-
-    // commitDescriptorHeaps();
-
-    // for (MipLevel mipLevel = sub_resources.base_mip_level; mipLevel < sub_resources.base_mip_level + sub_resources.num_mip_levels; mipLevel++) {
-    //     const auto& desc_handle = t->GetClearMipLevelUnorderedAccessView(mipLevel);
-    //     assert(desc_handle.IsValid());
-    //     d3d12_command_list->ClearUnorderedAccessViewFloat(
-    //         desc_handle.gpu,
-    //         desc_handle.cpu,
-    //         t->GetNativeResource().AsPointer<ID3D12Resource>(),
-    //         &clearColor.r,
-    //         0,
-    //         nullptr);
-    // }
-    //}
-}
-
 void CommandRecorder::ClearFramebuffer(
     const graphics::Framebuffer& framebuffer,
     const std::optional<std::vector<std::optional<Color>>> color_clear_values,
@@ -672,7 +557,7 @@ void CommandRecorder::ClearFramebuffer(
     using d3d12::Framebuffer;
     using graphics::detail::GetFormatInfo;
 
-    // NOLINTNEXTLINE(*-pro-type-static-cast_down_cast)
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto& fb = static_cast<const Framebuffer&>(framebuffer);
 
     const auto* command_list_impl = GetConcreteCommandList();
@@ -735,10 +620,10 @@ void CommandRecorder::CopyBuffer(
     // - dst must be in D3D12_RESOURCE_STATE_COPY_DEST
     // The caller is responsible for ensuring correct resource states.
 
-    // NOLINTBEGIN(*-pro-type_static-cast_down_cast)
+    // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto& dst_buffer = static_cast<Buffer&>(dst);
     const auto& src_buffer = static_cast<const Buffer&>(src);
-    // NOLINTEND(*-pro-type_static-cast_down_cast)
+    // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
 
     auto* dst_resource = dst_buffer.GetResource();
     auto* src_resource = src_buffer.GetResource();

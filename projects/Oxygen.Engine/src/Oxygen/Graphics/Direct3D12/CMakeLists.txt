@@ -74,8 +74,7 @@ target_sources(
     "CommandRecorder.cpp"
     "Framebuffer.cpp"
     "Graphics.cpp"
-    "MemoryBlock.cpp"
-    "Renderer.cpp"
+    "RenderController.cpp"
     "Texture.cpp"
     "Allocator/D3D12MemAlloc.cpp"
     "Detail/Converters.cpp"
@@ -88,13 +87,11 @@ target_sources(
     "Detail/SwapChain.h"
     "Detail/Types.h"
     "Detail/WindowSurface.h"
-    "Detail/dx12_utils.cpp"
     "Detail/dx12_utils.h"
     "Devices/DebugLayer.cpp"
     "Devices/DebugLayer.h"
     "Devices/DeviceManager.cpp"
     # "ImGui/ImGuiModule.cpp"
-    "ImGui/imgui_impl_dx12.cpp"
     "ImGui/imgui_impl_dx12.h"
     "Shaders/EngineShaders.cpp"
     "Shaders/EngineShaders.h"
@@ -119,13 +116,22 @@ target_sources(
       "Framebuffer.h"
       "GraphicResource.h"
       "Graphics.h"
-      "MemoryBlock.h"
-      "Renderer.h"
+      "RenderController.h"
       "Texture.h"
       "Allocator/D3D12MemAlloc.h"
       "Devices/DeviceManager.h"
   # "ImGui/ImGuiModule.h"
 )
+
+# Silence specific MSVC warnings for D3D12MemAlloc.cpp
+if(MSVC)
+  set_source_files_properties(
+    Allocator/D3D12MemAlloc.cpp
+    PROPERTIES
+      COMPILE_OPTIONS
+        "/wd4100;/wd4324;/wd4505;/wd4189"
+  )
+endif()
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(

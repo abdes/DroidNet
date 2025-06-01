@@ -18,9 +18,8 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
-#include <Oxygen/ImGui/ImguiModule.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 
@@ -51,8 +50,12 @@ public:
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, std::shared_ptr<oxygen::graphics::CommandQueue>), (const, override));
     MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (std::string_view, oxygen::graphics::QueueRole, oxygen::graphics::QueueAllocationPreference), (override));
     MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
-    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Renderer>, CreateRenderer, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
-    MOCK_METHOD(std::unique_ptr<oxygen::graphics::Renderer>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::RenderController>, CreateRenderer, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::unique_ptr<oxygen::graphics::RenderController>, CreateRendererImpl, (const std::string_view, std::weak_ptr<oxygen::graphics::Surface>, uint32_t frames_in_flight), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Framebuffer>, CreateFramebuffer, (const oxygen::graphics::FramebufferDesc&, const oxygen::graphics::RenderController&), (override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTexture, (const oxygen::graphics::TextureDesc&), (const, override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Texture>, CreateTextureFromNativeObject, (const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeObject&), (const, override));
+    MOCK_METHOD(std::shared_ptr<oxygen::graphics::Buffer>, CreateBuffer, (const oxygen::graphics::BufferDesc&), (const, override));
     // NOLINTEND(modernize-use-trailing-return-type)
 
     // Getter for the JSON data

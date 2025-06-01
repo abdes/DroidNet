@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/CommandList.h> // needed for CommandListPtr
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/RenderTarget.h>
-#include <Oxygen/Graphics/Common/Renderer.h>
+#include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/DeferredObjectRelease.h> // Needed
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>

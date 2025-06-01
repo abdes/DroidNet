@@ -12,94 +12,96 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
-#include <Oxygen/Graphics/Direct3D12/Renderer.h>
+#include <Oxygen/Graphics/Direct3D12/RenderController.h>
 
-namespace oxygen::graphics {
+// ReSharper disable once CppInconsistentNaming
+namespace D3D12MA {
+class Allocator;
+} // namespace D3D12MA
 
-class CommandQueue;
-class SynchronizationCounter;
+namespace oxygen::graphics::d3d12 {
 
-namespace d3d12 {
+class Graphics : public oxygen::Graphics,
+                 public std::enable_shared_from_this<Graphics> {
+    using Base = oxygen::Graphics;
 
-    // TODO: add a component to manage descriptor heaps (rtv, dsv, srv, uav)
+public:
+    OXYGEN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
 
-    class Graphics : public oxygen::Graphics, public std::enable_shared_from_this<Graphics> {
-        using Base = oxygen::Graphics;
+    OXYGEN_D3D12_API ~Graphics() override = default;
 
-    public:
-        OXYGEN_D3D12_API explicit Graphics(const SerializedBackendConfig& config);
+    OXYGEN_MAKE_NON_COPYABLE(Graphics)
+    OXYGEN_MAKE_NON_MOVABLE(Graphics)
 
-        OXYGEN_D3D12_API ~Graphics() override = default;
+    //=== D3D12 specific factories ===----------------------------------------//
 
-        OXYGEN_MAKE_NON_COPYABLE(Graphics);
-        OXYGEN_MAKE_NON_MOVABLE(Graphics);
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
+        std::weak_ptr<platform::Window> window_weak,
+        std::shared_ptr<graphics::CommandQueue> command_queue)
+        const -> std::shared_ptr<Surface> override;
 
-        // [[nodiscard]] OXYGEN_D3D12_API auto CreateImGuiModule(
-        //     EngineWeakPtr engine,
-        //     platform::WindowIdType window_id)
-        //     const -> std::unique_ptr<imgui::ImguiModule> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateFramebuffer(
+        const FramebufferDesc& desc,
+        const graphics::RenderController& renderer)
+        -> std::shared_ptr<graphics::Framebuffer> override;
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateSurface(
-            std::weak_ptr<platform::Window> window_weak,
-            std::shared_ptr<graphics::CommandQueue> command_queue)
-            const -> std::shared_ptr<graphics::Surface> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateTexture(const TextureDesc& desc) const
+        -> std::shared_ptr<graphics::Texture> override;
 
-        //! @{
-        //! Device Manager API (module internal)
-        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetFactory() const -> dx::IFactory*;
-        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetCurrentDevice() const -> dx::IDevice*;
-        [[nodiscard]] OXYGEN_D3D12_API virtual auto GetAllocator() const -> D3D12MA::Allocator*;
-        //! @}
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateTextureFromNativeObject(
+        const TextureDesc& desc,
+        const NativeObject& native) const
+        -> std::shared_ptr<graphics::Texture> override;
 
-        [[nodiscard]] OXYGEN_D3D12_API auto GetShader(std::string_view unique_id) const
-            -> std::shared_ptr<IShaderByteCode> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateBuffer(
+        const BufferDesc& desc) const
+        -> std::shared_ptr<graphics::Buffer> override;
 
-        [[nodiscard]] OXYGEN_D3D12_API auto GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetShader(
+        std::string_view unique_id) const
+        -> std::shared_ptr<IShaderByteCode> override;
 
-    protected:
-        // Default constructor that does not initialize the backend. Used for testing purposes.
-        Graphics()
-            : Base("Dummy Graphics Backend")
-        {
-        }
+    //=== Device Manager Internal API ===-------------------------------------//
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
-            std::string_view name,
-            QueueRole role,
-            QueueAllocationPreference allocation_preference)
-            -> std::shared_ptr<graphics::CommandQueue> override;
+    //! @{
+    //! Device Manager API (module internal)
+    [[nodiscard]] OXYGEN_D3D12_API virtual auto GetFactory() const -> dx::IFactory*;
+    [[nodiscard]] OXYGEN_D3D12_API virtual auto GetCurrentDevice() const -> dx::IDevice*;
+    [[nodiscard]] OXYGEN_D3D12_API virtual auto GetAllocator() const -> D3D12MA::Allocator*;
+    //! @}
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
-            std::string_view name,
-            std::weak_ptr<Surface> surface,
-            uint32_t frames_in_flight)
-            -> std::unique_ptr<graphics::Renderer> override;
+    //=== D3D12 Helpers ===---------------------------------------------------//
 
-        [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandListImpl(
-            QueueRole role,
-            std::string_view command_list_name)
-            -> std::unique_ptr<graphics::CommandList> override;
+    [[nodiscard]] OXYGEN_D3D12_API auto GetFormatPlaneCount(
+        DXGI_FORMAT format) const -> uint8_t;
 
-    private:
-        mutable std::unordered_map<DXGI_FORMAT, uint8_t> dxgi_format_plane_count_cache_ {};
-    };
+protected:
+    // Default constructor that does not initialize the backend. Used for testing purposes.
+    Graphics()
+        : Base("Dummy Graphics Backend")
+    {
+    }
 
-    namespace detail {
-        //! Get a reference to the Direct3D12 Graphics backend for internal use
-        //! within the module.
-        /*!
-          \note These functions are not part of the public API and should not be
-          used. For application needs, use the `GetBackend()` API from the
-          `GraphicsBackendLoader` API.
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandQueue(
+        std::string_view name,
+        QueueRole role,
+        QueueAllocationPreference allocation_preference)
+        -> std::shared_ptr<graphics::CommandQueue> override;
 
-          \note These functions will __abort__ when called while the graphics
-          backend instance is not yet initialized or has been destroyed.
-        */
-        [[nodiscard]] auto GetGraphics() -> Graphics&;
-    } // namespace detail
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateRendererImpl(
+        std::string_view name,
+        std::weak_ptr<Surface> surface,
+        uint32_t frames_in_flight)
+        -> std::unique_ptr<graphics::RenderController> override;
 
-} // namespace d3d12
+    [[nodiscard]] OXYGEN_D3D12_API auto CreateCommandListImpl(
+        QueueRole role,
+        std::string_view command_list_name)
+        -> std::unique_ptr<graphics::CommandList> override;
 
-} // namespace oxygen::graphics
+private:
+    mutable std::unordered_map<DXGI_FORMAT, uint8_t> dxgi_format_plane_count_cache_ {};
+};
+
+}

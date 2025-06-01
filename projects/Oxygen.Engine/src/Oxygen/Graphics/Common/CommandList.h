@@ -17,11 +17,11 @@
 namespace oxygen::graphics {
 
 class CommandRecorder;
-class Renderer;
+class RenderController;
 
 class CommandList : public Composition, public Named {
 public:
-    OXYGEN_GFX_API CommandList(QueueRole type, std::string_view name);
+    OXYGEN_GFX_API CommandList(std::string_view name, QueueRole type);
 
     //! Destroys the command list after releasing all graphics resources it was
     //! using.
@@ -40,10 +40,10 @@ public:
     OXYGEN_GFX_API void SetName(std::string_view name) noexcept override;
 
     // State query methods
-    [[nodiscard]] bool IsFree() const noexcept { return state_ == State::kFree; }
-    [[nodiscard]] bool IsRecording() const noexcept { return state_ == State::kRecording; }
-    [[nodiscard]] bool IsClosed() const noexcept { return state_ == State::kClosed; }
-    [[nodiscard]] bool IsSubmitted() const noexcept { return state_ == State::kSubmitted; }
+    [[nodiscard]] auto IsFree() const noexcept { return state_ == State::kFree; }
+    [[nodiscard]] auto IsRecording() const noexcept { return state_ == State::kRecording; }
+    [[nodiscard]] auto IsClosed() const noexcept { return state_ == State::kClosed; }
+    [[nodiscard]] auto IsSubmitted() const noexcept { return state_ == State::kSubmitted; }
 
 protected:
     enum class State : int8_t {
@@ -61,7 +61,7 @@ protected:
     OXYGEN_GFX_API virtual void OnEndRecording();
     OXYGEN_GFX_API virtual void OnSubmitted();
 
-    friend class Renderer;
+    friend class RenderController;
     OXYGEN_GFX_API virtual void OnExecuted();
 
 private:

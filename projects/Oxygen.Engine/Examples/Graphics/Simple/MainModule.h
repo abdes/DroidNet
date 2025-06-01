@@ -24,7 +24,7 @@ class Graphics;
 namespace graphics {
     class CommandRecorder;
     class RenderTarget;
-    class Renderer;
+    class RenderController;
     class Surface;
     class Framebuffer;
     class Buffer;
@@ -66,7 +66,7 @@ private:
     std::weak_ptr<Graphics> gfx_weak_;
     std::weak_ptr<platform::Window> window_weak_;
     std::shared_ptr<graphics::Surface> surface_;
-    std::shared_ptr<graphics::Renderer> renderer_;
+    std::shared_ptr<graphics::RenderController> renderer_;
     StaticVector<std::shared_ptr<graphics::Framebuffer>, kFrameBufferCount> framebuffers_ {};
 
     std::shared_ptr<graphics::Buffer> vertex_buffer_;

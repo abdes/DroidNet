@@ -10,7 +10,8 @@
 
 namespace oxygen::graphics {
 
-void RenderItem::CalculateBoundingSphere() {
+void RenderItem::CalculateBoundingSphere()
+{
     if (vertices.empty() && simple_vertices.empty()) {
         bounding_sphere = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
         return;
@@ -41,7 +42,8 @@ void RenderItem::CalculateBoundingSphere() {
     bounding_sphere = glm::vec4(center, radius);
 }
 
-void RenderItem::UpdateNormalTransform() {
+void RenderItem::UpdateNormalTransform()
+{
     // Normal transform is the inverse transpose of the upper-left 3x3 of world transform
     // This ensures normals are transformed correctly under non-uniform scaling
     glm::mat3 world_3x3 = glm::mat3(world_transform);

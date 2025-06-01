@@ -10,7 +10,7 @@
 
 using oxygen::graphics::CommandList;
 
-CommandList::CommandList(const QueueRole type, std::string_view name)
+CommandList::CommandList(std::string_view name, const QueueRole type)
     : type_(type)
     , state_(State::kFree)
 {

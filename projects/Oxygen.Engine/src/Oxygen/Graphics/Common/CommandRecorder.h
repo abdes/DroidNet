@@ -38,7 +38,7 @@ class CommandQueue;
 class IShaderByteCode;
 class Buffer;
 class Texture;
-class Renderer;
+class RenderController;
 class Framebuffer;
 class NativeObject;
 
@@ -122,9 +122,8 @@ public:
     //=== Draw and Resource Binding Commands ===------------------------------//
 
     virtual void Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset, uint32_t instance_offset) = 0;
-    virtual void DrawIndexed(uint32_t index_num, uint32_t instances_num, uint32_t index_offset, int32_t vertex_offset, uint32_t instance_offset) = 0;
     virtual void Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z) = 0;
-    virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides, const uint32_t* offsets) = 0;
+    virtual void SetVertexBuffers(uint32_t num, const std::shared_ptr<Buffer>* vertex_buffers, const uint32_t* strides) const = 0;
 
     //=== Framebuffer and Resource Operations ===-----------------------------//
 
@@ -181,8 +180,6 @@ public:
         std::optional<float> depth_clear_value = std::nullopt,
         std::optional<uint8_t> stencil_clear_value = std::nullopt)
         = 0;
-
-    virtual void ClearTextureFloat(Texture* _t, TextureSubResourceSet sub_resources, const Color& clearColor) = 0;
 
     virtual void CopyBuffer(
         Buffer& dst, size_t dst_offset,
@@ -283,7 +280,7 @@ protected:
     virtual void ExecuteBarriers(std::span<const detail::Barrier> barriers) = 0;
 
 private:
-    friend class Renderer;
+    friend class RenderController;
     OXYGEN_GFX_API virtual void OnSubmitted();
     [[nodiscard]] auto GetSubmissionMode() const -> SubmissionMode { return submission_mode_; }
     SubmissionMode submission_mode_ { SubmissionMode::kImmediate };
