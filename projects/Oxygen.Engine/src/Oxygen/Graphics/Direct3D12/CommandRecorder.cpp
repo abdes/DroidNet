@@ -346,6 +346,15 @@ void CommandRecorder::DrawIndexed(uint32_t index_num, uint32_t instances_num, ui
 {
 }
 
+void CommandRecorder::Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y, uint32_t thread_group_count_z)
+{
+    const auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    DCHECK_EQ_F(command_list->GetQueueRole(), QueueRole::kCompute, "Invalid queue type");
+
+    command_list->GetCommandList()->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
+}
+
 /**
  * @brief Describes the root signature requirements for descriptor heaps in
  * D3D12.
@@ -486,6 +495,15 @@ void CommandRecorder::SetGraphicsRootConstantBufferView(uint32_t root_parameter_
     DCHECK_NOTNULL_F(command_list);
     auto* d3d12_command_list = command_list->GetCommandList();
     d3d12_command_list->SetGraphicsRootConstantBufferView(
+        root_parameter_index, buffer_gpu_address);
+}
+
+void CommandRecorder::SetComputeRootConstantBufferView(uint32_t root_parameter_index, uint64_t buffer_gpu_address)
+{
+    const auto* command_list = GetConcreteCommandList();
+    DCHECK_NOTNULL_F(command_list);
+    auto* d3d12_command_list = command_list->GetCommandList();
+    d3d12_command_list->SetComputeRootConstantBufferView(
         root_parameter_index, buffer_gpu_address);
 }
 
