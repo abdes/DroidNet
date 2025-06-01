@@ -507,6 +507,9 @@ auto MainModule::RenderScene() -> co::Co<>
     const auto fb = framebuffers_[renderer_->CurrentFrameIndex()];
     fb->PrepareForRender(*recorder);
 
+    // Set the framebuffer as the render target.
+    recorder->BindFrameBuffer(*fb);
+
     const ViewPort viewport {
         .width = static_cast<float>(surface_->Width()),
         .height = static_cast<float>(surface_->Height()),

@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DepthPrepass.h>
@@ -27,9 +28,9 @@
 
 using oxygen::graphics::DepthPrePass;
 
-DepthPrePass::DepthPrePass(Renderer* renderer, const Config& config)
-    : RenderPass(config.debug_name)
-    , config_(config)
+DepthPrePass::DepthPrePass(Renderer* renderer, std::shared_ptr<Config> config)
+    : RenderPass(config->debug_name)
+    , config_(std::move(config))
     , renderer_(renderer)
     , last_built_pso_desc_(DepthPrePass::CreatePipelineStateDesc())
 {
@@ -44,9 +45,9 @@ void DepthPrePass::SetViewport(const ViewPort& viewport)
             fmt::format("viewport {} is invalid",
                 nostd::to_string(viewport)));
     }
-    DCHECK_NOTNULL_F(config_.depth_texture, "expecting a non-null depth texture");
+    DCHECK_NOTNULL_F(config_->depth_texture, "expecting a non-null depth texture");
 
-    const auto& tex_desc = config_.depth_texture->GetDescriptor();
+    const auto& tex_desc = config_->depth_texture->GetDescriptor();
 
     auto viewport_width = viewport.top_left_x + viewport.width;
     auto viewport_height = viewport.top_left_y + viewport.height;
@@ -67,10 +68,10 @@ void DepthPrePass::SetScissors(const Scissors& scissors)
             fmt::format("scissors {} are invalid.",
                 nostd::to_string(scissors)));
     }
-    DCHECK_NOTNULL_F(config_.depth_texture,
+    DCHECK_NOTNULL_F(config_->depth_texture,
         "expecting depth texture to be valid when setting scissors");
 
-    const auto& tex_desc = config_.depth_texture->GetDescriptor();
+    const auto& tex_desc = config_->depth_texture->GetDescriptor();
 
     // Assuming scissors coordinates are relative to the texture origin (0,0)
     if (scissors.left < 0 || scissors.top < 0) {
@@ -108,25 +109,33 @@ auto DepthPrePass::PrepareResources(CommandRecorder& recorder) -> co::Co<>
         last_built_pso_desc_ = CreatePipelineStateDesc();
     }
 
-    if (config_.depth_texture) {
-        recorder.RequireResourceState(*config_.depth_texture, ResourceStates::kDepthWrite);
-        // Flush barriers to ensure the depth_texture is in kDepthWrite state
-        // before derived classes might perform operations like clears.
+    // Ensure the depth_texture is in kDepthWrite state before derived classes
+    // might perform operations like clears. Note that the depth_texture should
+    // be already in a valid state when this method is called, but we are
+    // explicitly transitioning it for safety. The transition will be optimized
+    // out if the state is already correct.
+    if (config_->depth_texture) {
+        recorder.RequireResourceState(*config_->depth_texture, ResourceStates::kDepthWrite);
         recorder.FlushBarriers();
     }
+
     co_return;
 }
 
 void DepthPrePass::ValidateConfig()
 {
-    if (!config_.depth_texture) {
+    if (!config_ || !config_->depth_texture) {
         throw std::runtime_error(
             "invalid DepthPrePassConfig: depth_texture cannot be null.");
     }
-    if (config_.framebuffer) {
-        const auto& fb_desc = config_.framebuffer->GetDescriptor();
+    if (!config_->scene_constants) {
+        throw std::runtime_error(
+            "invalid DepthPrePassConfig: scene_constants cannot be null.");
+    }
+    if (config_->framebuffer) {
+        const auto& fb_desc = config_->framebuffer->GetDescriptor();
         if (fb_desc.depth_attachment.texture
-            && fb_desc.depth_attachment.texture != config_.depth_texture) {
+            && fb_desc.depth_attachment.texture != config_->depth_texture) {
             throw std::runtime_error(
                 "invalid DepthPrePassConfig: framebuffer depth attachment "
                 "texture must match depth_texture when both are provided and "
@@ -150,6 +159,18 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
     return false; // No need to rebuild
 }
 
+void DepthPrePass::PrepareSceneConstantsBuffer(CommandRecorder& command_recorder) const
+{
+    const auto& root_param = last_built_pso_desc_.RootBindings()[2];
+    DCHECK_F(std::holds_alternative<DirectBufferBinding>(root_param.data),
+        "Expected root parameter 1's data to be DirectBufferBinding");
+
+    // Bind the buffer as a root CBV (direct GPU virtual address)
+    command_recorder.SetGraphicsRootConstantBufferView(
+        root_param.GetRootParameterIndex(), // binding 2 (b1, space0)
+        config_->scene_constants->GetGPUVirtualAddress());
+}
+
 auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
 {
     DCHECK_F(!NeedRebuildPipelineState(),
@@ -167,6 +188,7 @@ auto DepthPrePass::Execute(CommandRecorder& command_recorder) -> co::Co<>
         ClearDepthStencilView(command_recorder, dsv);
         SetViewAsRenderTarget(command_recorder, dsv);
         SetupViewPortAndScissors(command_recorder);
+        PrepareSceneConstantsBuffer(command_recorder);
         IssueDrawCalls(command_recorder);
     } catch (const std::exception& e) {
         DLOG_F(ERROR, "DepthPrePass::Execute failed: %s", e.what());
@@ -234,7 +256,7 @@ void DepthPrePass::ClearDepthStencilView(
     command_recorder.ClearDepthStencilView(
         GetDepthTexture(),
         dsv_handle,
-        ClearFlags::kDepth,
+        ClearFlags::kDepth, // only depth, as the depth pre-pass does not use the stencil buffer
         1.0f,
         0);
 }
@@ -320,9 +342,6 @@ void DepthPrePass::IssueDrawCalls(
             continue;
         }
 
-        // The renderer will manage the lifetime of this temporary buffer until the GPU is done.
-        DeferredObjectRelease(temp_vb, renderer_->GetPerFrameResourceManager());
-
         // 2. Update the buffer with vertex data.
         // The Buffer::Update method for an kUpload buffer should handle mapping & copying.
         temp_vb->Update(item->vertices.data(), data_size_bytes, 0);
@@ -345,6 +364,9 @@ void DepthPrePass::IssueDrawCalls(
             0, // StartVertexLocation
             0 // StartInstanceLocation
         );
+
+        // The renderer will manage the lifetime of this temporary buffer until the GPU is done.
+        DeferredObjectRelease(temp_vb, renderer_->GetPerFrameResourceManager());
     }
 }
 
@@ -382,6 +404,36 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
         .sample_count = depth_texture_desc.sample_count
     };
 
+    constexpr RootBindingDesc srv_table_desc {
+        // t0, space0
+        .binding_slot_desc = BindingSlotDesc {
+            .register_index = 0,
+            .register_space = 0 },
+        .visibility = ShaderStageFlags::kAll,
+        .data = DescriptorTableBinding {
+            .view_type = ResourceViewType::kStructuredBuffer_SRV,
+            .base_index = 0 // unbounded
+        }
+    };
+
+    constexpr RootBindingDesc resource_indices_cbv_desc {
+        // b0, space0
+        .binding_slot_desc = BindingSlotDesc {
+            .register_index = 0,
+            .register_space = 0 },
+        .visibility = ShaderStageFlags::kAll,
+        .data = DirectBufferBinding {}
+    };
+
+    constexpr RootBindingDesc scene_constants_cbv_desc {
+        // b1, space0
+        .binding_slot_desc = BindingSlotDesc {
+            .register_index = 1,
+            .register_space = 0 },
+        .visibility = ShaderStageFlags::kAll,
+        .data = DirectBufferBinding {}
+    };
+
     return GraphicsPipelineDesc::Builder()
         .SetVertexShader(ShaderStageDesc {
             .shader = MakeShaderIdentifier(ShaderType::kVertex, "DepthPrePass.hlsl") })
@@ -392,5 +444,8 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
         .SetDepthStencilState(ds_desc)
         .SetBlendState({})
         .SetFramebufferLayout(fb_layout_desc)
+        .AddRootBinding(RootBindingItem(srv_table_desc)) // binding 0: SRV table
+        .AddRootBinding(RootBindingItem(resource_indices_cbv_desc)) // binding 1: ResourceIndices CBV (b0)
+        .AddRootBinding(RootBindingItem(scene_constants_cbv_desc)) // binding 2: SceneConstants CBV (b1)
         .Build();
 }

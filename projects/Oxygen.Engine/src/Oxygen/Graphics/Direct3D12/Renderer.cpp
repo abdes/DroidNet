@@ -103,7 +103,8 @@ auto Renderer::GetOrCreateComputePipeline(ComputePipelineDesc desc, const size_t
     return cache.GetOrCreatePipeline<ComputePipelineDesc>(std::move(desc), hash);
 }
 
-auto Renderer::CreateDepthPrePass(const DepthPrePassConfig& config) -> std::shared_ptr<RenderPass>
+auto Renderer::CreateDepthPrePass(std::shared_ptr<DepthPrePassConfig> config)
+    -> std::shared_ptr<RenderPass>
 {
-    return std::static_pointer_cast<RenderPass>(std::make_shared<DepthPrePass>(this, config));
+    return std::static_pointer_cast<RenderPass>(std::make_shared<DepthPrePass>(this, std::move(config)));
 }

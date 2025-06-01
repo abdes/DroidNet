@@ -211,7 +211,7 @@ namespace graphics {
 
         OXYGEN_GFX_API virtual void FlushPendingCommandLists();
 
-        virtual auto CreateDepthPrePass(const DepthPrePassConfig& config)
+        virtual auto CreateDepthPrePass(std::shared_ptr<DepthPrePassConfig> config)
             -> std::shared_ptr<RenderPass>
             = 0;
 

@@ -86,7 +86,7 @@ Framebuffer::Framebuffer(std::shared_ptr<graphics::Renderer> renderer, Framebuff
         DCHECK_EQ_F(texture->GetDescriptor().height, rt_height,
             "Framebuffer {}: height mismatch between attachments", texture->GetName());
 
-        DescriptorHandle dsv_handle = renderer->GetDescriptorAllocator().Allocate(
+        DescriptorHandle dsv_handle = renderer_->GetDescriptorAllocator().Allocate(
             ResourceViewType::kTexture_DSV,
             DescriptorVisibility::kCpuOnly);
         if (!dsv_handle.IsValid()) {
