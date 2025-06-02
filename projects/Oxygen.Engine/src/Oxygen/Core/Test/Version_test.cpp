@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "oxygen/core/version.h"
-
-#include "oxygen/version-info.h"
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Core/Version.h>
+#include <Oxygen/Core/version-info.h>
 
 NOLINT_TEST(VersionTests, Major)
 {

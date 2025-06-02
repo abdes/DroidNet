@@ -5,8 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Core/Version.h>
-
-#include <Oxygen/version-info.h>
+#include <Oxygen/Core/version-info.h>
 
 auto oxygen::version::Major() -> std::uint8_t
 {

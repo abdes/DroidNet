@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Core/InputHandler.h>
+#include <Oxygen/Engine/InputHandler.h>
 
 #include <Oxygen/Testing/GTest.h>
 

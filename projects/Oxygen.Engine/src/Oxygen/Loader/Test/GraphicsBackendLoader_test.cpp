@@ -12,7 +12,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
-#include <Oxygen/Core/Types.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>

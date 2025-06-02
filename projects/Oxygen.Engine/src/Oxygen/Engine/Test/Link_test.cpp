@@ -4,21 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
+#include <iostream>
 
-#include <memory>
+#include <Oxygen/Engine/Engine.h>
 
-namespace oxygen {
+using oxygen::Engine;
 
-class Engine;
-using EngineWeakPtr = std::weak_ptr<Engine>;
+auto main(int /*argc*/, char** /*argv*/) -> int
+{
+    const Engine::Properties props {};
+    Engine engine({}, {}, props);
+    std::cout << Engine::Name() << " " << Engine::Version() << '\n';
 
-namespace core {
-
-    class Module;
-    class InputHandler;
-    class System;
-
-} // namespace core
-
-} // namespace oxygen
+    return 0;
+}

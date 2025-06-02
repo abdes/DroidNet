@@ -6,10 +6,12 @@
 
 #pragma once
 
-#include "./api_export.h"
+#include <memory>
+
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Module.h>
+#include <Oxygen/Engine/Module.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Imgui/api_export.h>
 #include <Oxygen/Platform/Types.h>
 
 struct ImGuiContext;
@@ -26,7 +28,7 @@ public:
 
     template <typename... Args>
     explicit ImguiModule(
-        const char* name, EngineWeakPtr engine,
+        const char* name, std::weak_ptr<Engine> engine,
         const platform::WindowIdType window_id,
         Args&&... ctor_args)
         : Base(name, engine, std::forward<Args>(ctor_args)...)

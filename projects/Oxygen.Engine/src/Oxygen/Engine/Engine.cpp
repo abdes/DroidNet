@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Core/Engine.h>
-
 #include <algorithm>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/TimeUtils.h>
 #include <Oxygen/Core/Version.h>
+#include <Oxygen/Engine/Engine.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/RenderController.h>
 #include <Oxygen/ImGui/ImguiModule.h>

@@ -4,14 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Core/Module.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Engine/Module.h>
 
 using oxygen::core::Module;
 
-Module::Module(std::string_view name, EngineWeakPtr engine)
+Module::Module(std::string_view name, std::weak_ptr<Engine> engine)
     : engine_(std::move(engine))
 {
     AddComponent<ObjectMetaData>(name);
