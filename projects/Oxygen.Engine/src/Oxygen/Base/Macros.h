@@ -37,37 +37,37 @@
 
 // NOLINTBEGIN
 #define OXYGEN_DEFINE_FLAGS_OPERATORS(EnumType)                                                                       \
-    inline EnumType operator|(EnumType lhs, EnumType rhs)                                                             \
+    inline constexpr EnumType operator|(EnumType lhs, EnumType rhs)                                                   \
     {                                                                                                                 \
         return static_cast<EnumType>(                                                                                 \
             static_cast<std::underlying_type_t<EnumType>>(lhs) | static_cast<std::underlying_type_t<EnumType>>(rhs)); \
     }                                                                                                                 \
-    inline EnumType& operator|=(EnumType& lhs, EnumType rhs)                                                          \
+    inline constexpr EnumType& operator|=(EnumType& lhs, EnumType rhs)                                                \
     {                                                                                                                 \
         lhs = lhs | rhs;                                                                                              \
         return lhs;                                                                                                   \
     }                                                                                                                 \
-    inline EnumType operator&(EnumType lhs, EnumType rhs)                                                             \
+    inline constexpr EnumType operator&(EnumType lhs, EnumType rhs)                                                   \
     {                                                                                                                 \
         return static_cast<EnumType>(                                                                                 \
             static_cast<std::underlying_type_t<EnumType>>(lhs) & static_cast<std::underlying_type_t<EnumType>>(rhs)); \
     }                                                                                                                 \
-    inline EnumType& operator&=(EnumType& lhs, EnumType rhs)                                                          \
+    inline constexpr EnumType& operator&=(EnumType& lhs, EnumType rhs)                                                \
     {                                                                                                                 \
         lhs = lhs & rhs;                                                                                              \
         return lhs;                                                                                                   \
     }                                                                                                                 \
-    inline EnumType operator^(EnumType lhs, EnumType rhs)                                                             \
+    inline constexpr EnumType operator^(EnumType lhs, EnumType rhs)                                                   \
     {                                                                                                                 \
         return static_cast<EnumType>(                                                                                 \
             static_cast<std::underlying_type_t<EnumType>>(lhs) ^ static_cast<std::underlying_type_t<EnumType>>(rhs)); \
     }                                                                                                                 \
-    inline EnumType& operator^=(EnumType& lhs, EnumType rhs)                                                          \
+    inline constexpr EnumType& operator^=(EnumType& lhs, EnumType rhs)                                                \
     {                                                                                                                 \
         lhs = lhs ^ rhs;                                                                                              \
         return lhs;                                                                                                   \
     }                                                                                                                 \
-    inline EnumType operator~(EnumType flag)                                                                          \
+    inline constexpr EnumType operator~(EnumType flag)                                                                \
     {                                                                                                                 \
         return static_cast<EnumType>(                                                                                 \
             ~static_cast<std::underlying_type_t<EnumType>>(flag));                                                    \
