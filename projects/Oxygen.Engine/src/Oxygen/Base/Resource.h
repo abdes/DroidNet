@@ -26,10 +26,10 @@ public:
 
     virtual ~Resource() = default;
 
-    OXYGEN_DEFAULT_COPYABLE(Resource);
-    OXYGEN_DEFAULT_MOVABLE(Resource);
+    OXYGEN_DEFAULT_COPYABLE(Resource)
+    OXYGEN_DEFAULT_MOVABLE(Resource)
 
-    [[nodiscard]] constexpr auto GetId() const noexcept -> const ResourceHandle&
+    [[nodiscard]] constexpr auto GetHandle() const noexcept -> const ResourceHandle&
     {
         return handle_;
     }

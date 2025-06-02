@@ -35,7 +35,7 @@ NOLINT_TEST(ResourceTest, ParameterizedConstructor)
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource(handle);
     EXPECT_TRUE(resource.IsValid());
-    EXPECT_EQ(resource.GetId(), handle);
+    EXPECT_EQ(resource.GetHandle(), handle);
 }
 
 NOLINT_TEST(ResourceTest, CopyConstructor)
@@ -43,7 +43,7 @@ NOLINT_TEST(ResourceTest, CopyConstructor)
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource1(handle);
     const auto& resource2(resource1);
-    EXPECT_EQ(resource1.GetId(), resource2.GetId());
+    EXPECT_EQ(resource1.GetHandle(), resource2.GetHandle());
 }
 
 NOLINT_TEST(ResourceTest, CopyAssignment)
@@ -51,7 +51,7 @@ NOLINT_TEST(ResourceTest, CopyAssignment)
     const ResourceHandle handle(1U, kTestResourceType);
     const TestResource resource1(handle);
     const auto& resource2 = resource1;
-    EXPECT_EQ(resource1.GetId(), resource2.GetId());
+    EXPECT_EQ(resource1.GetHandle(), resource2.GetHandle());
 }
 
 NOLINT_TEST(ResourceTest, MoveConstructor)
@@ -59,7 +59,7 @@ NOLINT_TEST(ResourceTest, MoveConstructor)
     const ResourceHandle handle(1U, kTestResourceType);
     TestResource resource1(handle);
     const auto resource2(std::move(resource1));
-    EXPECT_EQ(resource2.GetId(), handle);
+    EXPECT_EQ(resource2.GetHandle(), handle);
     EXPECT_FALSE(resource1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
@@ -68,7 +68,7 @@ NOLINT_TEST(ResourceTest, MoveAssignment)
     const ResourceHandle handle(1U, kTestResourceType);
     TestResource resource1(handle);
     const auto resource2 = std::move(resource1);
-    EXPECT_EQ(resource2.GetId(), handle);
+    EXPECT_EQ(resource2.GetHandle(), handle);
     EXPECT_FALSE(resource1.IsValid()); // NOLINT(bugprone-use-after-move) for testing purposes
 }
 
