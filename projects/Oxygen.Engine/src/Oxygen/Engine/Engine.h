@@ -15,7 +15,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/TimeUtils.h>
-#include <Oxygen/Core/api_export.h>
+#include <Oxygen/Engine/api_export.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>
 #include <Oxygen/ImGui/ImguiModule.h>
@@ -46,30 +46,30 @@ public:
         platform::WindowIdType main_window_id {};
     };
 
-    OXYGEN_CORE_API Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props);
+    OXYGEN_NGIN_API Engine(PlatformPtr platform, GraphicsPtr graphics, Properties props);
 
-    OXYGEN_CORE_API ~Engine() noexcept;
+    OXYGEN_NGIN_API ~Engine() noexcept;
 
     OXYGEN_MAKE_NON_COPYABLE(Engine)
     OXYGEN_MAKE_NON_MOVABLE(Engine)
 
-    [[nodiscard]] OXYGEN_CORE_API auto GetPlatform() const -> Platform&;
+    [[nodiscard]] OXYGEN_NGIN_API auto GetPlatform() const -> Platform&;
 
     //! Attaches the given Module to the engine, to be updated, rendered, etc.
     //! \param module module to be attached.
     //! \param layer layer to determine the order of invocation. Default is the main layer (`0`).
     //! \throws std::invalid_argument if the module is attached or the weak_ptr is expired.
-    OXYGEN_CORE_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
+    OXYGEN_NGIN_API void AttachModule(const ModulePtr& module, uint32_t layer = 0);
 
-    OXYGEN_CORE_API auto Run() -> void;
+    OXYGEN_NGIN_API auto Run() -> void;
     constexpr auto IsRunning() const -> bool { return is_running_; }
-    OXYGEN_CORE_API void Stop();
+    OXYGEN_NGIN_API void Stop();
 
-    [[nodiscard]] OXYGEN_CORE_API static auto Name() -> const std::string&;
-    [[nodiscard]] OXYGEN_CORE_API static auto Version() -> uint32_t;
+    [[nodiscard]] OXYGEN_NGIN_API static auto Name() -> const std::string&;
+    [[nodiscard]] OXYGEN_NGIN_API static auto Version() -> uint32_t;
 
     [[nodiscard]] auto HasImGui() const -> bool { return imgui_module_ != nullptr; }
-    [[nodiscard]] OXYGEN_CORE_API auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
+    [[nodiscard]] OXYGEN_NGIN_API auto GetImGuiRenderInterface() const -> imgui::ImGuiRenderInterface;
 
 private:
     //! Detach the given Module from the engine.

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Input/InputSystem.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -17,9 +15,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Core/System.h>
+#include <Oxygen/Engine/System.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>

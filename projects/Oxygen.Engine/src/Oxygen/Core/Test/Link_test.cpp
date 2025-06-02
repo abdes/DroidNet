@@ -6,15 +6,13 @@
 
 #include <iostream>
 
-#include <Oxygen/Core/Engine.h>
-
-using oxygen::Engine;
+#include <Oxygen/Core/Version.h>
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    const Engine::Properties props {};
-    Engine engine({}, {}, props);
-    std::cout << Engine::Name() << " " << Engine::Version() << '\n';
+    std::cout << "Oxygen v" << static_cast<int>(oxygen::version::Major())
+              << "." << static_cast<int>(oxygen::version::Minor())
+              << "." << static_cast<int>(oxygen::version::Patch()) << '\n';
 
     return 0;
 }

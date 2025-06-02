@@ -16,23 +16,24 @@ find_package(GTest REQUIRED CONFIG)
 
 # -- Library Link Test ---------------------------------------------------------
 
-add_executable("Oxygen.Platform.LinkTest" "Link_test.cpp")
+add_executable("Oxygen.Engine.LinkTest" "Link_test.cpp")
 set_target_properties(
-  "Oxygen.Platform.LinkTest"
+  "Oxygen.Engine.LinkTest"
   PROPERTIES
     FOLDER
       "Testing"
 )
 target_compile_options(
-  "Oxygen.Platform.LinkTest"
+  "Oxygen.Engine.LinkTest"
   PRIVATE
     ${OXYGEN_COMMON_CXX_FLAGS}
 )
-target_link_libraries("Oxygen.Platform.LinkTest" PRIVATE oxygen::platform)
-add_test(NAME "Oxygen.Platform.LinkTest" COMMAND "Oxygen.Platform.LinkTest")
+target_link_libraries("Oxygen.Engine.LinkTest" PRIVATE oxygen::engine)
+add_test(NAME "Oxygen.Engine.LinkTest" COMMAND "Oxygen.Engine.LinkTest")
 
 # -- GTest Test Programs -------------------------------------------------------
 
 include(GTestHelpers)
 
-m_gtest_program(Input SOURCES "Input_test.cpp")
+m_gtest_program(System SOURCES "System_test.cpp")
+m_gtest_program(InputHandler SOURCES "InputHandler_test.cpp")

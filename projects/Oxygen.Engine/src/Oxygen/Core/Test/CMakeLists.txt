@@ -29,16 +29,10 @@ target_compile_options(
     ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries("Oxygen.Core.LinkTest" PRIVATE oxygen::core)
-add_test(NAME "Oxygen.Core Link Test" COMMAND "Oxygen.Core.LinkTest")
+add_test(NAME "Oxygen.Core.LinkTest" COMMAND "Oxygen.Core.LinkTest")
 
 # -- GTest Test Programs -------------------------------------------------------
 
 include(GTestHelpers)
 
-m_gtest_program("Oxygen.Core.Version.Tests" SOURCES "Version_test.cpp")
-m_gtest_program("Oxygen.Core.System.Tests" SOURCES "System_test.cpp")
-m_gtest_program(
-  "Oxygen.Core.InputHandler.Tests"
-  SOURCES
-    "InputHandler_test.cpp"
-)
+m_gtest_program(Version SOURCES "Version_test.cpp")

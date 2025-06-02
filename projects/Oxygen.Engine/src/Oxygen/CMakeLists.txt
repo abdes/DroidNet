@@ -4,13 +4,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-# Generate version-header
-configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
+# Disable MSVC warning C4324 for all targets in subdirectories
+if(MSVC)
+  add_compile_options(/wd4324)
+endif()
 
 add_subdirectory("Base")
 add_subdirectory("Composition")
 add_subdirectory("Config")
 add_subdirectory("Core")
+add_subdirectory("Engine")
 add_subdirectory("Graphics")
 add_subdirectory("ImGui")
 add_subdirectory("Input")

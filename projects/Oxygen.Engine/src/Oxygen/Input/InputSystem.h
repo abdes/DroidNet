@@ -12,8 +12,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/InputHandler.h>
-#include <Oxygen/Core/System.h>
+#include <Oxygen/Engine/InputHandler.h>
+#include <Oxygen/Engine/System.h>
 #include <Oxygen/Input/api_export.h>
 #include <Oxygen/Platform/Input.h>
 

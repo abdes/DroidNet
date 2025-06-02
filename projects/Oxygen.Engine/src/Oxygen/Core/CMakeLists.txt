@@ -10,7 +10,8 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Core"
-  DESCRIPTION "Oxygen engine core"
+  DESCRIPTION
+    "Oxygen engine core module, containing shared core types and classes."
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -24,6 +25,9 @@ find_package(fmt CONFIG REQUIRED)
 # ==============================================================================
 # Build instructions
 # ==============================================================================
+
+# Generate version-header
+configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
 
 # ------------------------------------------------------------------------------
 # Main module target
@@ -49,19 +53,11 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Engine.cpp"
     "Version.cpp"
-    "Module.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "Engine.h"
-      "Version.h"
-      "Types.h"
-      "System.h"
-      "Module.h"
-      "InputHandler.h"
+    FILES "api_export.h" "version-info.h" "Resources.h" "Version.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -71,19 +67,13 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_CORE_STATIC>
 )
 
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PUBLIC
-    oxygen::base
-    oxygen::platform
-    oxygen::graphics-common
-)
+target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
 
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS)
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
   add_subdirectory("Test")
 endif()
 
