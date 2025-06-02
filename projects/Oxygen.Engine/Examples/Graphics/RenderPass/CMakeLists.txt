@@ -8,10 +8,7 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "Sample program using render passes."
-)
+set(description "Sample program using render passes.")
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.RenderPass.Example"
   DESCRIPTION description
