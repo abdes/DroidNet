@@ -20,6 +20,7 @@ add_subdirectory("Input")
 add_subdirectory("Loader")
 add_subdirectory("OxCo")
 add_subdirectory("Platform")
+add_subdirectory("Scene")
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Testing")
