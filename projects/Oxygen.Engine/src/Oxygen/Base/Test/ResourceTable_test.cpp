@@ -137,7 +137,7 @@ NOLINT_TEST(ResourceTableBasicTest, EmplaceItem)
         EXPECT_EQ(handle.ResourceType(), kItemType);
         auto& item_in_table = table.ItemAt(handle);
         EXPECT_TRUE(item_in_table.constructed);
-        EXPECT_TRUE(item_in_table.copy_constructed);
+        EXPECT_FALSE(item_in_table.copy_constructed);
         EXPECT_TRUE(item_in_table.move_constructed);
     }
 
