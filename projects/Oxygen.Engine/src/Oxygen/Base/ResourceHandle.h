@@ -125,7 +125,7 @@ public:
 
     constexpr void SetFree(bool flag);
 
-    [[nodiscard]] std::string ToString() const;
+    [[nodiscard]] constexpr auto ToString() const -> std::string;
 
 private:
     HandleT handle_ { kHandleMask };
@@ -288,11 +288,27 @@ constexpr void ResourceHandle::SetFree(const bool flag)
     }
 }
 
-inline std::string ResourceHandle::ToString() const
+constexpr auto ResourceHandle::ToString() const -> std::string
 {
     return IsValid()
-        ? std::string("ResourceHandle(Index: ") + std::to_string(Index()) + ", ResourceType: " + std::to_string(ResourceType()) + ", Generation: " + std::to_string(Generation()) + ", IsFree: " + (IsFree() ? "true" : "false") + ")"
+        ? std::string("ResourceHandle(Index: ") + std::to_string(Index())
+            + ", ResourceType: " + std::to_string(ResourceType())
+            + ", Generation: " + std::to_string(Generation())
+            + ", IsFree: " + (IsFree() ? "true" : "false") + ")"
         : "ResourceHandle(Invalid)";
 }
 
+auto constexpr to_string(const ResourceHandle& value) noexcept
+{
+    return value.ToString();
+}
+
 } // namespace oxygen
+
+template <>
+struct std::hash<oxygen::ResourceHandle> {
+    auto operator()(const oxygen::ResourceHandle& handle) const noexcept -> size_t
+    {
+        return std::hash<oxygen::ResourceHandle::HandleT> {}(handle.Handle());
+    }
+};
