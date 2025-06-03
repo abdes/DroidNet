@@ -139,9 +139,9 @@ public:
      * adding an item on the fly, passing its properties as arguments.
      */
     template <typename... Params>
-    auto Emplace(Params... args) -> ResourceHandle
+    auto Emplace(Params&&... args) -> ResourceHandle
     {
-        return Insert(T { args... });
+        return Insert(T { std::forward<Params>(args)... });
     }
 
     // Return 1 if item was found and erased; 0 otherwise.
