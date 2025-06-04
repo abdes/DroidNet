@@ -58,11 +58,11 @@ target_sources(
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
-    "api_export.h"
-    "SceneFlags.h"
-    "Scene.h"
-    "SceneNode.h"
-    "TransformComponent.h"
+      "api_export.h"
+      "SceneFlags.h"
+      "Scene.h"
+      "SceneNode.h"
+      "TransformComponent.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -89,6 +89,25 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+endif()
+
+# ------------------------------------------------------------------------------
+# API Documentation
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
+  asap_with_doxygen(
+    MODULE_NAME
+    ${META_MODULE_TARGET}
+    VERSION
+    ${META_VERSION}
+    TITLE
+    "\"Scene\""
+    BRIEF
+    "\"Scene management for Oxygen\""
+    INPUT_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
 endif()
 
 # ==============================================================================
