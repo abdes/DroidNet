@@ -146,13 +146,13 @@ set(OPTIONS_LIST
   BUILD_SHARED_LIBS        "Build shared instead of static libraries." OFF
   OXYGEN_BUILD_TESTS       "Setup target to build and run tests." ON
   OXYGEN_BUILD_EXAMPLES    "Setup target to build the examples." ON
-  OXYGEN_BUILD_DOCS        "Setup target to build the documentation." OFF
+  OXYGEN_BUILD_DOCS        "Setup target to build the documentation." ON
   OXYGEN_WITH_ASAN         "Instrument code with address sanitizer" OFF
   OXYGEN_WITH_COVERAGE     "Instrument code to measure coverage" OFF
   # OXYGEN_WITH_UBSAN        "Instrument code with undefined behavior sanitizer" OFF
   # OXYGEN_WITH_TSAN         "Instrument code with thread sanitizer" OFF
   # OXYGEN_WITH_VALGRIND     "Instrument code with valgrind profilers" OFF
-  # OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" OFF
+  OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" ON
   # OXYGEN_WITH_SPHINX       "Create targets for sphinx docs" OFF
   # OXYGEN_WITH_CLANG_FORMAT "Create targets for clang-format" ON
   # OXYGEN_WITH_CLANG_TIDY   "Create targets for clang-tidy" ON
@@ -205,6 +205,18 @@ endif()
 
 if(OXYGEN_BUILD_TESTS)
   include(CTest)
+endif()
+
+# ------------------------------------------------------------------------------
+# Documentation - doxygen, sphinx/breathe/exhale
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_DOCS)
+  if(OXYGEN_WITH_DOXYGEN)
+    # Doxygen
+    set(DOXYGEN_BUILD_DIR "${CMAKE_BINARY_DIR}/dox")
+    include(DoxGeneration)
+  endif()
 endif()
 
 # ------------------------------------------------------------------------------
