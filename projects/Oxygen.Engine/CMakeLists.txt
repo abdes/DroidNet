@@ -24,10 +24,6 @@ endif()
 # project hierarchy
 include(LogHelpers)
 
-# Setup our override file, in which we may cleanup cmake's default compiler
-# options, based on what we are doing.
-set(CMAKE_USER_MAKE_RULES_OVERRIDE "ResetInitialCompilerOptions")
-
 set(CMAKE_DEBUG_POSTFIX "-d")
 
 # ------------------------------------------------------------------------------
@@ -76,8 +72,6 @@ asap_push_project(${META_PROJECT_NAME})
 # ------------------------------------------------------------------------------
 # Project Declaration
 # ------------------------------------------------------------------------------
-
-set(CMAKE_USER_MAKE_RULES_OVERRIDE "ResetInitialCompilerOptions")
 
 # Generate folders for IDE targets (e.g., VisualStudio solutions)
 set_property(
@@ -297,6 +291,9 @@ else()
   )
 endif()
 
+# ---- Speedup build using ccache (needs CPM) ----
+include(cmake/FasterBuild.cmake)
+
 # ------------------------------------------------------------------------------
 # Print a summary of the configuration
 # ------------------------------------------------------------------------------
@@ -326,10 +323,10 @@ message(STATUS "     Build examples: ${OXYGEN_BUILD_EXAMPLES}")
 message(STATUS "     Build documentation: ${OXYGEN_BUILD_DOCS}")
 message(STATUS "     Address sanitizer: ${OXYGEN_WITH_ASAN}")
 message(STATUS "     Code coverage: ${OXYGEN_WITH_COVERAGE}")
+message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
 # message(STATUS "     Undefined behavior sanitizer: ${OXYGEN_WITH_UBSAN}")
 # message(STATUS "     Thread sanitizer: ${OXYGEN_WITH_TSAN}")
 # message(STATUS "     Valgrind: ${OXYGEN_WITH_VALGRIND}")
-# message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
 # message(STATUS "     Sphinx: ${OXYGEN_WITH_SPHINX}")
 # message(STATUS "     Clang format: ${OXYGEN_WITH_CLANG_FORMAT}")
 # message(STATUS "     Clang tidy: ${OXYGEN_WITH_CLANG_TIDY}")
