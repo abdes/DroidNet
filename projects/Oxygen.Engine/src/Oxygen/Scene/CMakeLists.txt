@@ -54,6 +54,7 @@ target_sources(
     "Scene.cpp"
     "SceneFlags.cpp"
     "SceneNode.cpp"
+    "SceneNodeImpl.cpp"
     "Detail/StringConverters.cpp"
   PUBLIC
     FILE_SET HEADERS
@@ -66,6 +67,7 @@ target_sources(
       "TransformComponent.h"
       "Types/Flags.h"
       "Types/SceneFlagEnum.h"
+      "SceneNodeImpl.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

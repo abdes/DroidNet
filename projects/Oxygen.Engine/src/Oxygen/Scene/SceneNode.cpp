@@ -9,6 +9,7 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/TransformComponent.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
@@ -17,125 +18,7 @@ using oxygen::scene::SceneNodeData;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 
-SceneNodeData::SceneNodeData(const Flags flags)
-    : flags_(flags)
-{
-    // Iterate over the flags and log each one
-    for (const auto [flag, flag_values] : flags) {
-        DLOG_F(2, "flag `{}`: {}", nostd::to_string(flag), nostd::to_string(flag_values));
-    }
-}
-
-SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
-{
-    LOG_SCOPE_F(2, "SceneNodeImpl creation");
-    DLOG_F(2, "name: '{}'", name);
-
-    AddComponent<ObjectMetaData>(name);
-    AddComponent<SceneNodeData>(flags);
-    AddComponent<TransformComponent>();
-}
-
-auto SceneNodeImpl::GetName() const noexcept -> std::string_view
-{
-    return GetComponent<ObjectMetaData>().GetName();
-}
-
-// ReSharper disable once CppMemberFunctionMayBeConst
-void SceneNodeImpl::SetName(const std::string_view name) noexcept
-{
-    GetComponent<ObjectMetaData>().SetName(name);
-}
-
-auto SceneNodeImpl::GetFlags() const noexcept -> const Flags&
-{
-    return GetComponent<SceneNodeData>().GetFlags();
-}
-
-auto SceneNodeImpl::GetFlags() noexcept -> Flags&
-{
-    return GetComponent<SceneNodeData>().GetFlags();
-}
-
-// Hierarchy access methods
-auto SceneNodeImpl::GetParent() const noexcept -> ResourceHandle
-{
-    return parent_;
-}
-
-auto SceneNodeImpl::GetFirstChild() const noexcept -> ResourceHandle
-{
-    return first_child_;
-}
-
-auto SceneNodeImpl::GetNextSibling() const noexcept -> ResourceHandle
-{
-    return next_sibling_;
-}
-
-auto SceneNodeImpl::GetPrevSibling() const noexcept -> ResourceHandle
-{
-    return prev_sibling_;
-}
-
-// Internal hierarchy management methods
-void SceneNodeImpl::SetParent(ResourceHandle parent) noexcept
-{
-    parent_ = parent;
-}
-
-void SceneNodeImpl::SetFirstChild(ResourceHandle child) noexcept
-{
-    first_child_ = child;
-}
-
-void SceneNodeImpl::SetNextSibling(ResourceHandle sibling) noexcept
-{
-    next_sibling_ = sibling;
-}
-
-void SceneNodeImpl::SetPrevSibling(ResourceHandle sibling) noexcept
-{
-    prev_sibling_ = sibling;
-}
-
-// Transform update system
-void SceneNodeImpl::MarkTransformDirty() noexcept
-{
-    transform_dirty_ = true;
-}
-
-auto SceneNodeImpl::IsTransformDirty() const noexcept -> bool
-{
-    return transform_dirty_;
-}
-
-void SceneNodeImpl::ClearTransformDirty() noexcept
-{
-    transform_dirty_ = false;
-}
-
-void SceneNodeImpl::UpdateTransforms(const Scene& scene)
-{
-    if (!transform_dirty_) {
-        return;
-    }
-
-    auto& transform = GetComponent<TransformComponent>();
-
-    // If we have a parent, compose with parent's world transform, unless we ignore parent transform
-    if (parent_.IsValid() && !ShouldIgnoreParentTransform()) {
-        // Compose with parent's world transform
-        const auto& parent_impl = scene.GetNodeImplRef(parent_);
-        const auto& parent_transform = parent_impl.GetComponent<TransformComponent>();
-        transform.UpdateWorldTransform(parent_transform.GetWorldMatrix());
-    } else {
-        // Root node or ignoring parent transform - use only local
-        transform.UpdateWorldTransformAsRoot();
-    }
-
-    ClearTransformDirty();
-}
+// SceneNodeData and SceneNodeImpl implementations moved to SceneNodeImpl.cpp
 
 SceneNode::SceneNode(const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak)
     : Resource(handle)
