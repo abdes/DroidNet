@@ -54,6 +54,7 @@ target_sources(
     "Scene.cpp"
     "SceneFlags.cpp"
     "SceneNode.cpp"
+    "Detail/StringConverters.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -63,6 +64,8 @@ target_sources(
       "Scene.h"
       "SceneNode.h"
       "TransformComponent.h"
+      "Types/Flags.h"
+      "Types/SceneFlagEnum.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

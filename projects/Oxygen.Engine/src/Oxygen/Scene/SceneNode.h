@@ -21,27 +21,12 @@
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/TransformComponent.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
 
 class Scene; // Forward declaration
-
-//! SceneNodeFlags are symbolic flags for node state and optimization hints.
-enum class SceneNodeFlags : uint8_t {
-    kVisible, //!< Node is visible for rendering
-    kStatic, //!< Node transform won't change (optimization hint)
-    kCastsShadows, //!< Node casts shadows
-    kReceivesShadows, //!< Node receives shadows
-    kRayCastingSelectable, //!< Node can be selected via ray casting
-    kIgnoreParentTransform, //!< Ignore parent transform (use only local transform)
-
-    kCount, //!< Sentinel value required for TernaryFlagEnum concept
-};
-OXYGEN_SCENE_API auto constexpr to_string(const SceneNodeFlags& value) noexcept -> const char*;
-
-static_assert(SceneFlagEnum<SceneNodeFlags>,
-    "SceneNodeFlags must satisfy TernaryFlagEnum concept requirements");
 
 //! Data-oriented component to store scene node flags and state.
 class SceneNodeData final : public Component {
