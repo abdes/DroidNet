@@ -10,34 +10,12 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/TransformComponent.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeData;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
-
-constexpr auto oxygen::scene::to_string(const SceneNodeFlags& value) noexcept -> const char*
-{
-    switch (value) {
-    case SceneNodeFlags::kVisible:
-        return "Visible";
-    case SceneNodeFlags::kStatic:
-        return "Static";
-    case SceneNodeFlags::kCastsShadows:
-        return "CastsShadows";
-    case SceneNodeFlags::kReceivesShadows:
-        return "ReceivesShadows";
-    case SceneNodeFlags::kRayCastingSelectable:
-        return "RayCastingSelectable";
-    case SceneNodeFlags::kIgnoreParentTransform:
-        return "IgnoreParentTransform";
-
-    case SceneNodeFlags::kCount:
-        break;
-    }
-
-    return "__NotSupported__";
-}
 
 SceneNodeData::SceneNodeData(const Flags flags)
     : flags_(flags)

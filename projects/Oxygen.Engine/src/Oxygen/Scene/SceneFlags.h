@@ -15,24 +15,10 @@
 #include <type_traits>
 #include <utility>
 
+#include <Oxygen/Scene/Types/SceneFlagEnum.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
-
-//! Concept defining requirements for enum types usable with SceneFlags.
-/*!
- This concept ensures that enum types used with SceneFlags template have:
- - A kCount sentinel value indicating the number of enum values
- - kCount value convertible to std::size_t
- - Maximum of 12 flags (constraint based on 5 bits per flag in 64-bit storage)
-
- \tparam T The enum type to validate
-*/
-template <typename T>
-concept SceneFlagEnum = std::is_enum_v<T> && requires {
-    T::kCount; // Must have a Count sentinel value
-    { static_cast<std::size_t>(T::kCount) } -> std::convertible_to<std::size_t>;
-} && (static_cast<std::size_t>(T::kCount) <= 12); // Maximum 12 flags with 5 bits each
 
 //! Bit positions within the 5-bit flag layout.
 /*!
