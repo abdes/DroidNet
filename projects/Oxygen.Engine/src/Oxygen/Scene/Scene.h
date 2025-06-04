@@ -171,7 +171,7 @@ namespace scene {
         [[nodiscard]] auto GetNodes() const -> const NodeTable&;
         [[nodiscard]] auto IsEmpty() const -> bool;
         void DefragmentStorage();
-        void Clear();
+        OXYGEN_SCENE_API void Clear();
 
         // Hierarchy management
 

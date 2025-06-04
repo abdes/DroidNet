@@ -11,7 +11,6 @@
 #include <Oxygen/Scene/SafeCall.h>
 #include <Oxygen/Testing/GTest.h>
 
-
 namespace {
 
 // -----------------------------------------------------------------------------
