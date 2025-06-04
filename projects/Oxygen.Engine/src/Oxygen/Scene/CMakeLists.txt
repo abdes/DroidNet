@@ -80,6 +80,7 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
+    oxygen::core
     oxygen::composition
 )
 

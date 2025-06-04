@@ -18,7 +18,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Resources.h>
-#include <Oxygen/Scene/SafeCall.h>
+#include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/TransformComponent.h>
 #include <Oxygen/Scene/api_export.h>
