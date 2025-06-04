@@ -36,3 +36,4 @@ add_test(NAME "Oxygen.Core.LinkTest" COMMAND "Oxygen.Core.LinkTest")
 include(GTestHelpers)
 
 m_gtest_program(Version SOURCES "Version_test.cpp")
+m_gtest_program(SafeCall SOURCES "SafeCall_test.cpp")

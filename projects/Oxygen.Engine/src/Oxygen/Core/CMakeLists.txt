@@ -57,7 +57,7 @@ target_sources(
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "api_export.h" "version-info.h" "Resources.h" "Version.h"
+    FILES "api_export.h" "version-info.h" "Resources.h" "Version.h" "SafeCall.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})

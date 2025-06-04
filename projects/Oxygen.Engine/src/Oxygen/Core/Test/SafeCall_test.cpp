@@ -8,8 +8,9 @@
 #include <optional>
 #include <stdexcept>
 
-#include <Oxygen/Scene/SafeCall.h>
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Core/SafeCall.h>
 
 namespace {
 
