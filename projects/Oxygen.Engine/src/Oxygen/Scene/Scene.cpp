@@ -266,7 +266,7 @@ auto Scene::GetPrevSibling(const SceneNode& node) const -> std::optional<SceneNo
         return std::nullopt;
     }
 
-    const auto prev_sibling_handle = node_impl_opt->get().GetNextSibling();
+    const auto prev_sibling_handle = node_impl_opt->get().GetPrevSibling();
     if (!prev_sibling_handle.IsValid()) {
         return std::nullopt; // No sibling
     }

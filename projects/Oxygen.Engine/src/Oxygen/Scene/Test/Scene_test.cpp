@@ -7,7 +7,6 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/Scene.h>
 
 using oxygen::scene::Scene;
 

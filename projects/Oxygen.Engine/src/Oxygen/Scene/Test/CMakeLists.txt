@@ -38,6 +38,8 @@ include(GTestHelpers)
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
 m_gtest_program(SceneFlags SOURCES "SceneFlags_test.cpp")
 m_gtest_program(SceneNodeImpl SOURCES "SceneNodeImpl_test.cpp")
+m_gtest_program(SceneNode SOURCES "SceneNode_test.cpp")
+m_gtest_program(SafeCall SOURCES "SafeCall_test.cpp")
 m_gtest_program(Scene SOURCES "Scene_test.cpp")
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 

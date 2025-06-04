@@ -165,26 +165,106 @@ SceneNode::SceneNode(const ResourceHandle& handle, std::weak_ptr<Scene> scene_we
 {
 }
 
-auto SceneNode::GetObject() const noexcept -> SceneNodeImpl::optional_cref
+// --- SceneNode SafeCall wrappers and validator ---
+
+namespace oxygen::scene {
+
+auto SceneNode::ValidateForSafeCall() const noexcept -> std::optional<std::string>
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    if (!IsValid()) {
-        DLOG_F(WARNING, "Invalid SceneNode being used.");
-        return std::nullopt;
+    if (scene_weak_.expired()) {
+        return "Scene is expired";
     }
-
-    return scene->GetNodeImpl(*this);
+    if (!IsValid()) {
+        return "SceneNode is invalid";
+    }
+    return std::nullopt;
 }
 
-auto SceneNode::GetObject() noexcept -> SceneNodeImpl::optional_ref
+void SceneNode::LogSafeCallError(const char* reason) const noexcept
 {
-    const auto cref = static_cast<const SceneNode*>(this)->GetObject();
-    if (cref.has_value()) {
-        return std::optional {
-            std::ref(const_cast<SceneNodeImpl&>(cref->get()))
-        };
+    try {
+        DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",
+            nostd::to_string(GetHandle()), reason);
+    } catch (...) {
+        // If logging fails, we can do nothing about it
+        (void)0;
+    }
+}
+
+template <typename Func>
+auto SceneNode::SafeCall(Func&& func) const noexcept
+{
+    return oxygen::SafeCall(
+        *this,
+        [this](const SceneNode&) { return this->ValidateForSafeCall(); },
+        std::forward<Func>(func));
+}
+
+template <typename Func>
+auto SceneNode::SafeCall(Func&& func) noexcept
+{
+    return oxygen::SafeCall(
+        *this,
+        [this](SceneNode&) { return this->ValidateForSafeCall(); },
+        std::forward<Func>(func));
+}
+
+} // namespace oxygen::scene
+
+auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
+{
+    auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToImpl {
+        const auto scene = n.scene_weak_.lock();
+        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
+        return scene->GetNodeImpl(n);
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
+}
+
+auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
+{
+    auto result = SafeCall([&](const SceneNode& n) -> OptionalRefToImpl {
+        const auto cref = n.GetObject();
+        if (cref.has_value()) {
+            return std::optional {
+                std::ref(const_cast<SceneNodeImpl&>(cref->get())) // NOLINT(*-pro-type-const-cast)
+            };
+        }
+        return std::nullopt;
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
+}
+
+auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
+{
+    auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToFlags {
+        if (const auto impl_opt = n.GetObject()) {
+            return impl_opt->get().GetFlags();
+        }
+        return std::nullopt;
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
+}
+
+auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
+{
+    auto result = SafeCall([&](SceneNode& n) -> OptionalRefToFlags {
+        if (const auto impl_opt = n.GetObject()) {
+            return impl_opt->get().GetFlags();
+        }
+        return std::nullopt;
+    });
+    if (result) {
+        return *result;
     }
     return std::nullopt;
 }
@@ -192,70 +272,193 @@ auto SceneNode::GetObject() noexcept -> SceneNodeImpl::optional_ref
 // Hierarchy navigation methods
 auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    return scene->GetParent(*this);
+    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+        const auto scene = n.scene_weak_.lock();
+        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
+        return scene->GetParent(n);
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    return scene->GetFirstChild(*this);
+    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+        const auto scene = n.scene_weak_.lock();
+        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
+        return scene->GetFirstChild(n);
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    return scene->GetNextSibling(*this);
+    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+        const auto scene = n.scene_weak_.lock();
+        if (!scene) {
+            return std::nullopt;
+        }
+        return scene->GetNextSibling(n);
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
 auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    return scene->GetPrevSibling(*this);
+    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+        const auto scene = n.scene_weak_.lock();
+        if (!scene) {
+            return std::nullopt;
+        }
+        return scene->GetPrevSibling(n);
+    });
+    if (result) {
+        return *result;
+    }
+    return std::nullopt;
 }
 
-// Hierarchy queries
 auto SceneNode::HasParent() const noexcept -> bool
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    const auto impl = scene->GetNodeImpl(*this);
-    if (!impl) {
-        return false; // node is invalidated now, so we consider it has no parent
-    }
-    return impl->get().GetParent().IsValid();
+    auto result = SafeCall([&](const SceneNode& n) -> bool {
+        const auto scene = n.scene_weak_.lock();
+        if (!scene) {
+            return false;
+        }
+        const auto impl = scene->GetNodeImpl(n);
+        if (!impl) {
+            return false;
+        }
+        return impl->get().GetParent().IsValid();
+    });
+    return result.value_or(false);
 }
 
 auto SceneNode::HasChildren() const noexcept -> bool
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
-
-    const auto impl = scene->GetNodeImpl(*this);
-    if (!impl) {
-        return false; // node is invalidated now, so we consider it has no children
-    }
-
-    return impl->get().GetFirstChild().IsValid();
+    auto result = SafeCall([&](const SceneNode& n) -> bool {
+        const auto scene = n.scene_weak_.lock();
+        if (!scene) {
+            return false;
+        }
+        const auto impl = scene->GetNodeImpl(n);
+        if (!impl) {
+            return false;
+        }
+        return impl->get().GetFirstChild().IsValid();
+    });
+    return result.value_or(false);
 }
 
 auto SceneNode::IsRoot() const noexcept -> bool
 {
-    const auto scene = scene_weak_.lock();
-    DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
+    auto result = SafeCall([&](const SceneNode& n) -> bool {
+        const auto scene = n.scene_weak_.lock();
+        if (!scene) {
+            return false;
+        }
+        const auto impl = scene->GetNodeImpl(n);
+        if (!impl) {
+            return false;
+        }
+        return !impl->get().GetParent().IsValid();
+    });
+    return result.value_or(false);
+}
 
-    const auto impl = scene->GetNodeImpl(*this);
-    if (!impl) {
-        return false;
+auto SceneNode::GetTransform() noexcept -> Transform
+{
+    return Transform(*this);
+}
+
+auto SceneNode::GetTransform() const noexcept -> Transform
+{
+    return Transform(const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
+}
+
+auto SceneNode::Transform::LookAt(const Vec3& target_position, const Vec3& up_direction) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        // Get current world position from cached data
+        const auto world_pos = GetWorldPosition();
+        if (!world_pos) {
+            return false;
+        }
+
+        // Compute look-at rotation in world space
+        const auto forward = glm::normalize(target_position - *world_pos);
+        const auto right = glm::normalize(glm::cross(forward, up_direction));
+        const auto up = glm::cross(right, forward);
+
+        // Create rotation matrix (note: -forward because we use -Z as forward)
+        Mat4 look_matrix(1.0F);
+        look_matrix[0] = glm::vec4(right, 0);
+        look_matrix[1] = glm::vec4(up, 0);
+        look_matrix[2] = glm::vec4(-forward, 0);
+
+        // Convert to quaternion and set as local rotation
+        const auto look_rotation = glm::quat_cast(look_matrix);
+
+        state.transform_component->SetLocalRotation(look_rotation);
+        state.node_impl->MarkTransformDirty();
+        return true;
+    }).has_value();
+}
+
+namespace {
+// Template implementation that works with both State types
+template <typename StateT>
+auto ValidateAndPopulateState(SceneNode* node, StateT& state) noexcept -> std::optional<std::string>
+{
+    using oxygen::scene::TransformComponent;
+
+    state.node = node;
+    if (!state.node->IsValid()) {
+        return "node is invalid";
     }
-    return impl->get().GetParent().IsValid() == false;
+    auto node_impl_opt = state.node->GetObject();
+    if (!node_impl_opt) {
+        return "node is expired";
+    }
+    state.node_impl = &(node_impl_opt->get());
+#if !defined(NDEBUG)
+    if (!state.node_impl->template HasComponent<TransformComponent>()) {
+        return "missing TransformComponent";
+    }
+#endif // NDEBUG
+    state.transform_component = &(state.node_impl->template GetComponent<TransformComponent>());
+    return std::nullopt;
+}
+} // namespace
+
+// Thin wrapper overloads that delegate to the common implementation
+auto SceneNode::Transform::ValidateForSafeCall(State& state) const noexcept
+    -> std::optional<std::string>
+{
+    return ValidateAndPopulateState(node_, state);
+}
+
+auto SceneNode::Transform::ValidateForSafeCall(ConstState& state) const noexcept
+    -> std::optional<std::string>
+{
+    return ValidateAndPopulateState(node_, state);
+}
+
+void SceneNode::Transform::LogSafeCallError(const char* reason) const noexcept
+{
+    try {
+        DLOG_F(ERROR, "Operation on SceneNode::Transform {} failed: {}",
+            nostd::to_string(node_->GetHandle()), reason);
+    } catch (...) {
+        // If logging fails, we can do nothing about it
+        (void)0;
+    }
 }
