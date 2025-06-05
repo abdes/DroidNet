@@ -113,7 +113,7 @@ auto Scene::CreateChildNode(
 }
 
 // ReSharper disable once CppParameterMayBeConstPtrOrRef
-auto Scene::DestroyNode(SceneNode& node) const -> bool
+auto Scene::DestroyNode(SceneNode& node) -> bool
 {
     // This is a logic error, should be fixed in the code. An invalid handle
     // should not be used anymore.
@@ -122,7 +122,15 @@ auto Scene::DestroyNode(SceneNode& node) const -> bool
     // This is also a logic error
     CHECK_F(!node.HasChildren(), "node has children, use DestroyNodeHierarchy() instead");
 
+    // Properly unlink the node from its parent and siblings
+    UnlinkNode(node.GetHandle());
+
     const auto handle = node.GetHandle();
+    // Remove from root nodes set only if it's actually a root node (optimization)
+    if (node.IsRoot()) {
+        RemoveRootNode(handle);
+    }
+
     const auto removed = nodes_->Erase(handle);
     node.Invalidate();
 
@@ -150,6 +158,11 @@ auto Scene::DestroyNodeHierarchy(SceneNode& root) -> bool
         const auto next_child = child->GetNextSibling(); // Save next sibling before destroying current child
         DestroyNodeHierarchy(*child);
         child = next_child; // Move to next sibling
+    }
+
+    // After all children are destroyed, forcibly clear the first child pointer
+    if (auto root_impl_opt = GetNodeImpl(root)) {
+        root_impl_opt->get().AsGraphNode().SetFirstChild({});
     }
 
     UnlinkNode(root.GetHandle()); // always succeeds
@@ -333,8 +346,19 @@ auto Scene::GetNode(const NodeHandle& handle) const noexcept -> std::optional<Sc
 
 auto Scene::Contains(const SceneNode& node) const noexcept -> bool
 {
-    // Do not invalidate here, just check presence.
-    return nodes_->Contains(node.GetHandle());
+    // First check if the handle exists in our node table
+    if (!nodes_->Contains(node.GetHandle())) {
+        return false;
+    }
+
+    // Then verify that the SceneNode's scene_weak_ actually points to this scene
+    // Since Scene is a friend of SceneNode, we can access the private scene_weak_ member
+    if (auto scene_shared = node.scene_weak_.lock()) {
+        return scene_shared.get() == this;
+    }
+
+    // If scene_weak_ is expired, the node doesn't belong to any scene
+    return false;
 }
 
 auto Scene::Contains(const NodeHandle& handle) const noexcept -> bool
@@ -343,7 +367,7 @@ auto Scene::Contains(const NodeHandle& handle) const noexcept -> bool
     return nodes_->Contains(handle);
 }
 
-auto Scene::GetNodeCount() const
+auto Scene::GetNodeCount() const -> size_t
 {
     return nodes_->Size();
 }
@@ -627,4 +651,36 @@ void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
     node_impl.MarkTransformDirty();
 
     LOG_F(3, "Unlinked node_handle {} from hierarchy", node_handle.ToString());
+}
+
+auto Scene::CreateNodeFrom(const SceneNode& original, const std::string& new_name)
+    -> SceneNode
+{
+    // This is a logic error, should be fixed in the code. An invalid handle
+    // should not be used anymore.
+    CHECK_F(original.IsValid(), "expecting a valid original node handle");
+
+    // Get the original node implementation
+    auto original_impl_opt = original.GetObject();
+    if (!original_impl_opt) {
+        // Original node no longer exists, this is a fatal error for this API
+        ABORT_F("Original node no longer exists in its scene");
+    }
+
+    const auto& original_impl = original_impl_opt->get();
+
+    // Clone the original node implementation
+    auto cloned_impl = original_impl.Clone();
+
+    // Set the new name on the cloned node
+    cloned_impl->SetName(new_name);
+
+    // Add the cloned implementation to this scene's node table
+    const auto handle = nodes_->Insert(std::move(*cloned_impl));
+    DCHECK_F(handle.IsValid(), "expecting a valid handle for cloned node");
+
+    // Add as root node since clones are orphaned
+    AddRootNode(handle);
+
+    return SceneNode(handle, shared_from_this());
 }

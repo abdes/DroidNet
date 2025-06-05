@@ -33,12 +33,11 @@ namespace detail {
  stores object metadata, hierarchy relationships, transform data, and scene
  flags as separate components, enabling efficient batch processing and
  cache-friendly memory access patterns.
-
  This class is not intended for direct public use - access is provided through
  the SceneNode handle/view pattern which ensures resource safety and provides a
  stable API surface.
  */
-class SceneNodeImpl : public Composition {
+class SceneNodeImpl : public Composition, public CloneableMixin<SceneNodeImpl> {
     OXYGEN_TYPED(SceneNodeImpl)
 public:
     using Flags = SceneFlags<SceneNodeFlags>;
@@ -146,7 +145,9 @@ public:
     OXYGEN_SCENE_API void MarkTransformDirty() noexcept;
     OXYGEN_SCENE_API void ClearTransformDirty() noexcept;
     [[nodiscard]] OXYGEN_SCENE_API auto IsTransformDirty() const noexcept -> bool;
-    OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene);
+    OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene); // Cloning support
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool { return true; }
+    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
 
 private:
     [[nodiscard]] constexpr auto ShouldIgnoreParentTransform() const

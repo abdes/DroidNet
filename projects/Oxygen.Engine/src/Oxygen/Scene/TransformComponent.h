@@ -226,10 +226,20 @@ public:
     //! Sets the dirty flag to indicate that the world matrix cache is invalid
     //! and needs to be recomputed. Called automatically by setter methods.
     // ReSharper disable once CppMemberFunctionMayBeConst
-    auto MarkDirty() noexcept -> void { is_dirty_ = true; }
-
-    //! Checks if the transform is dirty and needs matrix re-computation.
+    auto MarkDirty() noexcept -> void { is_dirty_ = true; } //! Checks if the transform is dirty and needs matrix re-computation.
     [[nodiscard]] auto IsDirty() const noexcept -> bool { return is_dirty_; }
+
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
+    [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
+    {
+        auto clone = std::make_unique<TransformComponent>();
+        clone->local_position_ = this->local_position_;
+        clone->local_rotation_ = this->local_rotation_;
+        clone->local_scale_ = this->local_scale_;
+        // Clone starts dirty to ensure world matrix is computed fresh
+        clone->is_dirty_ = true;
+        return clone;
+    }
 
 private:
     //! Local position (translation) component in local coordinate space.
