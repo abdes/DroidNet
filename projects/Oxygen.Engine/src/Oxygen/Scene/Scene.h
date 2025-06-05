@@ -150,6 +150,84 @@ namespace scene {
             const SceneNode& original, const std::string& new_name)
             -> SceneNode;
 
+        //! Creates a new child node by cloning the given original node under
+        //! the specified parent.
+        /*!
+         This method clones the original node (preserving its component data)
+         and creates a new child node under the given parent in this scene with
+         the specified name. The cloned node will become a child of the parent
+         node.
+
+         \param parent The parent node under which to create the cloned child
+         \param original The original node to clone (can be from this or another scene)
+         \param new_name The name to assign to the cloned child node
+
+         \return An optional SceneNode handle representing the cloned child
+                 node, or std::nullopt if the parent is invalid
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto CreateChildNodeFrom(
+            const SceneNode& parent, const SceneNode& original,
+            const std::string& new_name)
+            -> std::optional<SceneNode>;
+
+        //! Creates a new root node by cloning an entire node hierarchy from the
+        //! given root.
+        /*!
+         This method recursively clones the entire subtree rooted at the
+         original node, preserving all parent-child relationships within the
+         cloned hierarchy. The cloned root will become a new root node in this
+         scene with the specified name.
+
+         All nodes in the original hierarchy will be cloned with their component
+         data preserved, and new names will be generated based on the original
+         names. The hierarchy structure is maintained exactly as in the
+         original.
+
+         This method will only fail if the resource table holding scene data is
+         full, which can only be remedied by increasing the initial capacity of
+         the table. Therefore, a failure is a fatal error that will result in
+         the application terminating.
+
+         \param original_root The root node of the hierarchy to clone (can be from any scene)
+         \param new_root_name The name to assign to the cloned root node
+
+         \return A new SceneNode handle representing the cloned root node in
+                 this scene
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto CreateHierarchyFrom(
+            const SceneNode& original_root, const std::string& new_root_name)
+            -> SceneNode;
+
+        //! Creates a new child hierarchy by cloning an entire node hierarchy
+        //! under the given parent.
+        /*!
+         This method recursively clones the entire subtree rooted at the
+         original node, preserving all parent-child relationships within the
+         cloned hierarchy. The cloned root will become a child of the specified
+         parent node.
+
+         All nodes in the original hierarchy will be cloned with their component
+         data preserved, and new names will be generated based on the original
+         names. The hierarchy structure is maintained exactly as in the
+         original.
+
+         This method will terminate the program if the \p parent is not valid,
+         as this is a programming error. It may fail if the \p parent is valid
+         but its corresponding node was removed from the scene. In such case, it
+         will return std::nullopt and invalidate the \p parent node.
+
+         \param parent The parent node under which to create the cloned hierarchy
+         \param original_root The root node of the hierarchy to clone (can be from any scene)
+         \param new_root_name The name to assign to the cloned root node
+
+         \return A new SceneNode handle representing the cloned root node, or
+                 std::nullopt if parent is invalid
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto CreateChildHierarchyFrom(
+            const SceneNode& parent, const SceneNode& original_root,
+            const std::string& new_root_name)
+            -> std::optional<SceneNode>;
+
         //! Destroys the given node.
         /*!
          \return true if the node was destroyed, false if it was not found, and
@@ -240,38 +318,49 @@ namespace scene {
             -> std::optional<SceneNode>;
 
     private:
-        //! Creates a new node implementation with the given name and default
-        //! flags. This call will never fail, unless the resource table is full.
-        //! In such a case, the application will terminate.
-        [[nodiscard]] auto CreateNodeImpl(const std::string& name) noexcept
-            -> NodeHandle;
+        //! Creates a new node implementation with the given name and (optional)
+        //! flags.
+        /*!
+         This call will never fail, unless the resource table is full. In such a
+         case, the application will terminate.
+        */
+        template <typename... Args>
+        auto CreateNodeImpl(Args&&... args) -> SceneNode;
 
-        //! Creates a new node implementation with the given name and flags.
-        //! This call will never fail, unless the resource table is full. In
-        //! such a case, the application will terminate.
-        [[nodiscard]] auto CreateNodeImpl(const std::string& name, SceneNode::Flags flags) noexcept
-            -> NodeHandle;
+        //! Creates a new node implementation with the given name and (optional)
+        //! flags, then links it to the given parent node as a child.
+        /*!
+         This calll will never fail, unless the resource table is full. In such
+         a case, the application will terminate.
 
-        //! Links a child_handle node to a parent_handle in the hierarchy.
-        void LinkChild(const NodeHandle& parent_handle, const NodeHandle& child_handle);
+         Expects that the \p parent node is valid, and belongs to this scene, or
+         it will terminate the program. This scenario is clearly a programming
+         error, that must be fixed by the developer.
+        */
+        template <typename... Args>
+        auto CreateChildNodeImpl(const SceneNode& parent, Args&&... args) -> SceneNode;
+
+        //! Links a child node to a parent node in the hierarchy. Both of them
+        //! must be valid and belong to this scene.
+        void LinkChild(const SceneNode& parent, const SceneNode& child) noexcept;
 
         //! Un-links a node_handle from its parent and siblings, preparing it for
         //! destruction.
         /*!
-         This method does not destroy the node_handle, it only removes it from the
-         hierarchy. If the node_handle must be destroyed, DestroyNode() or
+         This method does not destroy the node, it only removes it from the
+         hierarchy. If the node must be destroyed, DestroyNode() or
          DestroyNodeHierarchy() should be used after un-linking. If it is simply
          being detached, it needs to be added to the roots set using
          AddRootNode().
         */
-        void UnlinkNode(const NodeHandle& node_handle) noexcept;
+        void UnlinkNode(const SceneNode& node) noexcept;
 
         void AddRootNode(const NodeHandle& node);
-
         void RemoveRootNode(const NodeHandle& node);
 
         std::shared_ptr<NodeTable> nodes_;
-        std::unordered_set<NodeHandle> root_nodes_; //!< Set of root nodes for robust, duplicate-free management
+        //!< Set of root nodes for robust, duplicate-free management.
+        std::unordered_set<NodeHandle> root_nodes_;
     };
 
 } // namespace scene

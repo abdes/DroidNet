@@ -39,77 +39,59 @@ void Scene::SetName(const std::string_view name) noexcept
     GetComponent<ObjectMetaData>().SetName(name);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto Scene::CreateNodeImpl(const std::string& name) noexcept -> NodeHandle
+template <typename... Args>
+auto Scene::CreateNodeImpl(Args&&... args) -> SceneNode
 {
-    const auto handle = nodes_->Emplace(name);
+    const auto handle = nodes_->Emplace(std::forward<Args>(args)...);
     DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
-    return handle;
+
+    AddRootNode(handle);
+    return SceneNode(handle, shared_from_this());
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto Scene::CreateNodeImpl(const std::string& name, SceneNode::Flags flags) noexcept -> NodeHandle
-{
-    const auto handle = nodes_->Emplace(name, flags);
-    DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
-    return handle;
-}
-
+// Public API
 auto Scene::CreateNode(const std::string& name) -> SceneNode
 {
-    // This call will abort if the table is full, and that is the only possible
-    // failure.
-    const auto handle = CreateNodeImpl(name);
-    DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
-
-    AddRootNode(handle);
-    return SceneNode(handle, shared_from_this());
+    return CreateNodeImpl(name);
 }
 
-auto Scene::CreateNode(const std::string& name, const SceneNode::Flags flags)
-    -> SceneNode
+auto Scene::CreateNode(const std::string& name, SceneNode::Flags flags) -> SceneNode
 {
-    // This call will abort if the table is full, and that is the only possible
-    // failure.
-    const auto handle = CreateNodeImpl(name, flags);
-    DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
-
-    AddRootNode(handle);
-    return SceneNode(handle, shared_from_this());
+    return CreateNodeImpl(name, flags);
 }
 
-auto Scene::CreateChildNode(const SceneNode& parent, const std::string& name)
-    -> std::optional<SceneNode>
+template <typename... Args>
+auto Scene::CreateChildNodeImpl(const SceneNode& parent, Args&&... args) -> SceneNode
 {
     // This is a logic error, should be fixed in the code. An invalid handle
     // should not be used anymore.
     CHECK_F(parent.IsValid(), "expecting a valid parent handle");
 
-    if (!GetNodeImpl(parent)) {
-        return std::nullopt;
-    }
+    // Validate that the parent belongs to this scene to prevent cross-scene
+    // corruption. An attempt to pass a node from another scene is clearly a
+    // logic error.
+    CHECK_F(Contains(parent), "expecting parent node to belong to this scene");
 
-    const auto handle = CreateNodeImpl(name);
-    LinkChild(parent.GetHandle(), handle);
-    return SceneNode(handle, shared_from_this());
+    const auto handle = nodes_->Emplace(std::forward<Args>(args)...);
+    DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
+
+    auto node = SceneNode(handle, shared_from_this());
+    LinkChild(parent, node);
+    return std::move(node);
 }
 
-auto Scene::CreateChildNode(
-    const SceneNode& parent,
+auto Scene::CreateChildNode(const SceneNode& parent,
+    const std::string& name)
+    -> std::optional<SceneNode>
+{
+    return CreateChildNodeImpl(parent, name);
+}
+
+auto Scene::CreateChildNode(const SceneNode& parent,
     const std::string& name, const SceneNode::Flags flags)
     -> std::optional<SceneNode>
 {
-    // This is a logic error, should be fixed in the code. An invalid handle
-    // should not be used anymore.
-    CHECK_F(parent.IsValid(), "expecting a valid parent handle");
-
-    if (!GetNodeImpl(parent)) {
-        return std::nullopt;
-    }
-
-    const auto handle = CreateNodeImpl(name, flags);
-    LinkChild(parent.GetHandle(), handle);
-    return SceneNode(handle, shared_from_this());
+    return CreateChildNodeImpl(parent, name, flags);
 }
 
 // ReSharper disable once CppParameterMayBeConstPtrOrRef
@@ -123,7 +105,7 @@ auto Scene::DestroyNode(SceneNode& node) -> bool
     CHECK_F(!node.HasChildren(), "node has children, use DestroyNodeHierarchy() instead");
 
     // Properly unlink the node from its parent and siblings
-    UnlinkNode(node.GetHandle());
+    UnlinkNode(node);
 
     const auto handle = node.GetHandle();
     // Remove from root nodes set only if it's actually a root node (optimization)
@@ -165,7 +147,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& root) -> bool
         root_impl_opt->get().AsGraphNode().SetFirstChild({});
     }
 
-    UnlinkNode(root.GetHandle()); // always succeeds
+    UnlinkNode(root); // always succeeds
     const auto destroyed = DestroyNode(root); // always succeeds
     DCHECK_F(destroyed);
     return destroyed;
@@ -571,20 +553,31 @@ auto Scene::GetRootNodes() const -> std::vector<NodeHandle>
     return valid_roots;
 }
 
-void Scene::LinkChild(const NodeHandle& parent_handle, const NodeHandle& child_handle)
+void Scene::LinkChild(const SceneNode& parent, const SceneNode& child) noexcept
 {
-    CHECK_F(parent_handle.IsValid(), "Parent node handle is not valid for LinkChild");
-    CHECK_F(child_handle.IsValid(), "Child node handle is not valid for LinkChild");
+    // These are logic errors, and should be fixed in the code when they occur.
+    // - An invalid handle should not be used anymore.
+    // - The parent and the child should belong to this scene. They are usually
+    //   all checked in the calling methods, but for safety we check them again
+    //   here, though only in DEBUG builds.
+    DCHECK_F(parent.IsValid(), "Parent node handle is not valid for LinkChild");
+    DCHECK_F(child.IsValid(), "Child node handle is not valid for LinkChild");
+    DCHECK_F(Contains(parent), "expecting parent to belong to this scene");
+    DCHECK_F(Contains(child), "expecting child to belong to this scene");
 
-    auto& parent_impl = GetNodeImplRef(parent_handle);
-    auto& child_impl = GetNodeImplRef(child_handle);
+    const auto& parent_handle = parent.GetHandle();
+    const auto& child_handle = child.GetHandle();
+
+    auto& parent_impl = GetNodeImplRef(parent.GetHandle());
+    auto& child_impl = GetNodeImplRef(child.GetHandle());
 
     CHECK_F(parent_handle != child_handle, "cannot link a node to itself");
 
     // TODO: Ensure not creating a cyclic dependency
 
     // If the parent already has a first child, link the new child to it
-    if (const auto first_child_handle = parent_impl.AsGraphNode().GetFirstChild(); first_child_handle.IsValid()) {
+    if (const auto first_child_handle = parent_impl.AsGraphNode().GetFirstChild();
+        first_child_handle.IsValid()) {
         // Set the new child's next sibling to the current first child
         child_impl.AsGraphNode().SetNextSibling(first_child_handle);
         // Set the current first child's previous sibling to the new child
@@ -604,13 +597,15 @@ void Scene::LinkChild(const NodeHandle& parent_handle, const NodeHandle& child_h
     LOG_F(3, "Linked node {} as a child of {}", child_handle.ToString(), parent_handle.ToString());
 }
 
-void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
+void Scene::UnlinkNode(const SceneNode& node) noexcept
 {
-    // This is a logic error, should be fixed in the code. An invalid handle
-    // should not be used anymore.
-    DCHECK_F(node_handle.IsValid(), "expecting a valid node_handle handle");
+    // These are logic errors, and should be fixed in the code when they occur.
+    // - An invalid handle should not be used anymore.
+    // - The node should belong to this scene.
+    DCHECK_F(node.IsValid(), "expecting a valid node");
+    DCHECK_F(Contains(node), "expecting node to belong to this scene");
 
-    auto& node_impl = GetNodeImplRef(node_handle);
+    auto& node_impl = GetNodeImplRef(node.GetHandle());
 
     // Get parent, next sibling, and previous sibling handles
     const ResourceHandle parent_handle = node_impl.AsGraphNode().GetParent();
@@ -620,7 +615,7 @@ void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
     // Update the parent's first_child pointer if this node_handle is the first child
     if (parent_handle.IsValid()) {
         auto& parent_impl = GetNodeImplRef(parent_handle);
-        if (parent_impl.AsGraphNode().GetFirstChild() == node_handle) {
+        if (parent_impl.AsGraphNode().GetFirstChild() == node.GetHandle()) {
             // This node_handle is the first child of its parent
             // Update parent to point to the next sibling as its first child
             parent_impl.AsGraphNode().SetFirstChild(next_sibling_handle);
@@ -650,7 +645,7 @@ void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
     // Mark node_handle's transform as dirty since its hierarchy relationship changed
     node_impl.MarkTransformDirty();
 
-    LOG_F(3, "Unlinked node_handle {} from hierarchy", node_handle.ToString());
+    LOG_F(3, "Unlinked node_handle {} from hierarchy", node.GetHandle().ToString());
 }
 
 auto Scene::CreateNodeFrom(const SceneNode& original, const std::string& new_name)
@@ -683,4 +678,26 @@ auto Scene::CreateNodeFrom(const SceneNode& original, const std::string& new_nam
     AddRootNode(handle);
 
     return SceneNode(handle, shared_from_this());
+}
+
+auto Scene::CreateChildNodeFrom(
+    const SceneNode& parent, const SceneNode& original, const std::string& new_name)
+    -> std::optional<SceneNode>
+{
+    // This is a logic error, should be fixed in the code. An invalid handle
+    // should not be used anymore.
+    CHECK_F(parent.IsValid(), "expecting a valid parent node handle");
+
+    // Get the parent's scene - we ALWAYS use the parent's scene for cloning and linking
+    auto parent_scene = parent.scene_weak_.lock();
+    if (!parent_scene) {
+        return std::nullopt; // Parent's scene no longer exists
+    }
+
+    // Use the parent's scene to create the clone and link it
+    auto cloned_node = parent_scene->CreateNodeFrom(original, new_name);
+    parent_scene->RemoveRootNode(cloned_node.GetHandle());
+    parent_scene->LinkChild(parent, cloned_node);
+
+    return cloned_node;
 }
