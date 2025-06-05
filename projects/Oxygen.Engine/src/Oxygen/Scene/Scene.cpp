@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <ranges>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
@@ -186,7 +187,7 @@ auto Scene::GetParent(const SceneNode& node) const -> std::optional<SceneNode>
         return std::nullopt;
     }
 
-    const auto parent_handle = node_impl_opt->get().GetParent();
+    const auto parent_handle = node_impl_opt->get().AsGraphNode().GetParent();
     if (!parent_handle.IsValid()) {
         return std::nullopt; // No parent
     }
@@ -214,7 +215,7 @@ auto Scene::GetFirstChild(const SceneNode& node) const -> std::optional<SceneNod
         return std::nullopt;
     }
 
-    const auto first_child_handle = node_impl_opt->get().GetFirstChild();
+    const auto first_child_handle = node_impl_opt->get().AsGraphNode().GetFirstChild();
     if (!first_child_handle.IsValid()) {
         return std::nullopt; // No first child
     }
@@ -240,7 +241,7 @@ auto Scene::GetNextSibling(const SceneNode& node) const -> std::optional<SceneNo
         return std::nullopt;
     }
 
-    const auto next_sibling_handle = node_impl_opt->get().GetNextSibling();
+    const auto next_sibling_handle = node_impl_opt->get().AsGraphNode().GetNextSibling();
     if (!next_sibling_handle.IsValid()) {
         return std::nullopt; // No sibling
     }
@@ -266,7 +267,7 @@ auto Scene::GetPrevSibling(const SceneNode& node) const -> std::optional<SceneNo
         return std::nullopt;
     }
 
-    const auto prev_sibling_handle = node_impl_opt->get().GetPrevSibling();
+    const auto prev_sibling_handle = node_impl_opt->get().AsGraphNode().GetPrevSibling();
     if (!prev_sibling_handle.IsValid()) {
         return std::nullopt; // No sibling
     }
@@ -372,11 +373,11 @@ auto Scene::GetChildrenCount(const SceneNode& parent) const -> size_t
     // terminate the program if any of the children is not valid. This is
     // clearly an indication of a logic error, and should be fixed in the code.
     size_t count = 0;
-    auto current_child_handle = parent_impl_opt->get().GetFirstChild();
+    auto current_child_handle = parent_impl_opt->get().AsGraphNode().GetFirstChild();
     while (current_child_handle.IsValid()) {
-        auto child_node_impl = GetNodeImplRef(current_child_handle);
+        auto& child_node_impl = GetNodeImplRef(current_child_handle);
         ++count;
-        current_child_handle = child_node_impl.GetNextSibling();
+        current_child_handle = child_node_impl.AsGraphNode().GetNextSibling();
     }
     return count;
 }
@@ -395,21 +396,23 @@ auto Scene::GetChildren(const SceneNode& parent) const -> std::vector<NodeHandle
     // We terminate the program if any of the children is not valid. This is
     // clearly an indication of a logic error, and should be fixed in the code.
     std::vector<NodeHandle> children;
-    auto current_child_handle = parent_impl_opt->get().GetFirstChild();
+    auto current_child_handle = parent_impl_opt->get().AsGraphNode().GetFirstChild();
     while (current_child_handle.IsValid()) {
         const auto& child_impl = GetNodeImplRef(current_child_handle);
         children.push_back(current_child_handle);
-        current_child_handle = child_impl.GetNextSibling();
+        current_child_handle = child_impl.AsGraphNode().GetNextSibling();
     }
     return children;
 }
+
+namespace {
 
 //! Processes dirty flags for all nodes in the scene.
 /*!
  Processes all dirty flags for each node in the resource table. This pass
  maximizes cache locality and ensures all dirty flags are handled.
 */
-static void ProcessDirtyFlags(Scene& scene) noexcept
+void ProcessDirtyFlags(const Scene& scene) noexcept
 {
     LOG_SCOPE_F(2, "PASS 1 - Dirty flags");
     auto& node_table = scene.GetNodes();
@@ -418,7 +421,7 @@ static void ProcessDirtyFlags(Scene& scene) noexcept
         auto& node_impl = const_cast<SceneNodeImpl&>(node_table.Items()[i]);
         LOG_SCOPE_F(2, "For Node");
         LOG_F(2, "name = {}", node_impl.GetName());
-        LOG_F(2, "is root: {}", !node_impl.GetParent().IsValid());
+        LOG_F(2, "is root: {}", !node_impl.AsGraphNode().IsRoot());
         auto& flags = node_impl.GetFlags();
         bool has_dirty_flags { false };
         for (auto flag : flags.dirty_flags()) {
@@ -444,7 +447,7 @@ static void ProcessDirtyFlags(Scene& scene) noexcept
 
  \note Only nodes marked dirty will have their transforms updated.
 */
-static void UpdateTransformsIterative(Scene& scene) noexcept
+void UpdateTransformsIterative(Scene& scene) noexcept
 {
     LOG_SCOPE_F(2, "PASS 2 - Transforms (iterative DFS)");
     const auto& root_handles = scene.GetRootNodes();
@@ -461,20 +464,20 @@ static void UpdateTransformsIterative(Scene& scene) noexcept
             if (node->IsTransformDirty()) {
                 LOG_SCOPE_F(2, "For Node");
                 LOG_F(2, "name = {}", node->GetName());
-                LOG_F(2, "is root: {}", !node->GetParent().IsValid());
+                LOG_F(2, "is root: {}", !node->AsGraphNode().IsRoot());
                 LOG_F(2, "transform: {}", node->IsTransformDirty() ? "dirty" : "clean");
                 node->UpdateTransforms(scene);
                 ++processed_count;
             }
             // Push children in reverse order for left-to-right traversal
             std::vector<SceneNodeImpl*> children;
-            auto child_handle = node->GetFirstChild();
+            auto child_handle = node->AsGraphNode().GetFirstChild();
             while (child_handle.IsValid()) {
                 children.push_back(&scene.GetNodeImplRef(child_handle));
-                child_handle = scene.GetNodeImplRef(child_handle).GetNextSibling();
+                child_handle = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
             }
-            for (auto it = children.rbegin(); it != children.rend(); ++it) {
-                stack.push_back(*it);
+            for (auto& it : std::ranges::reverse_view(children)) {
+                stack.push_back(it);
             }
         }
     }
@@ -483,7 +486,7 @@ static void UpdateTransformsIterative(Scene& scene) noexcept
 
 //! Marks the transform as dirty for a node and all its descendants
 //! (non-recursive).
-static void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& root_handle) noexcept
+void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& root_handle) noexcept
 {
     DCHECK_F(root_handle.IsValid() && scene.Contains(root_handle),
         "expecting a valid and existing root_handle");
@@ -496,15 +499,17 @@ static void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& roo
         stack.pop_back();
         node->MarkTransformDirty();
         ++count;
-        auto child_handle = node->GetFirstChild();
+        auto child_handle = node->AsGraphNode().GetFirstChild();
         while (child_handle.IsValid()) {
             stack.push_back(&scene.GetNodeImplRef(child_handle));
-            child_handle = scene.GetNodeImplRef(child_handle).GetNextSibling();
+            child_handle = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
         }
     }
     DLOG_F(2, "Marked {} nodes as transform dirty (subtree rooted at: {})",
         count, scene.GetNodeImplRef(root_handle).GetName());
 }
+
+} // namespace
 
 void Scene::Update()
 {
@@ -555,18 +560,18 @@ void Scene::LinkChild(const NodeHandle& parent_handle, const NodeHandle& child_h
     // TODO: Ensure not creating a cyclic dependency
 
     // If the parent already has a first child, link the new child to it
-    if (const auto first_child_handle = parent_impl.GetFirstChild(); first_child_handle.IsValid()) {
+    if (const auto first_child_handle = parent_impl.AsGraphNode().GetFirstChild(); first_child_handle.IsValid()) {
         // Set the new child's next sibling to the current first child
-        child_impl.SetNextSibling(first_child_handle);
+        child_impl.AsGraphNode().SetNextSibling(first_child_handle);
         // Set the current first child's previous sibling to the new child
         auto& first_child_impl = GetNodeImplRef(first_child_handle);
-        first_child_impl.SetPrevSibling(child_handle);
+        first_child_impl.AsGraphNode().SetPrevSibling(child_handle);
     }
 
     // Set the new child's parent to the parent node
-    child_impl.SetParent(parent_handle);
+    child_impl.AsGraphNode().SetParent(parent_handle);
     // Set the parent's first child to the new child
-    parent_impl.SetFirstChild(child_handle);
+    parent_impl.AsGraphNode().SetFirstChild(child_handle);
 
     // Mark both nodes' transforms as dirty since hierarchy changed
     parent_impl.MarkTransformDirty();
@@ -584,17 +589,17 @@ void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
     auto& node_impl = GetNodeImplRef(node_handle);
 
     // Get parent, next sibling, and previous sibling handles
-    const ResourceHandle parent_handle = node_impl.GetParent();
-    const ResourceHandle next_sibling_handle = node_impl.GetNextSibling();
-    const ResourceHandle prev_sibling_handle = node_impl.GetPrevSibling();
+    const ResourceHandle parent_handle = node_impl.AsGraphNode().GetParent();
+    const ResourceHandle next_sibling_handle = node_impl.AsGraphNode().GetNextSibling();
+    const ResourceHandle prev_sibling_handle = node_impl.AsGraphNode().GetPrevSibling();
 
     // Update the parent's first_child pointer if this node_handle is the first child
     if (parent_handle.IsValid()) {
         auto& parent_impl = GetNodeImplRef(parent_handle);
-        if (parent_impl.GetFirstChild() == node_handle) {
+        if (parent_impl.AsGraphNode().GetFirstChild() == node_handle) {
             // This node_handle is the first child of its parent
             // Update parent to point to the next sibling as its first child
-            parent_impl.SetFirstChild(next_sibling_handle);
+            parent_impl.AsGraphNode().SetFirstChild(next_sibling_handle);
         }
 
         // Mark parent's transform as dirty since hierarchy changed
@@ -604,19 +609,19 @@ void Scene::UnlinkNode(const NodeHandle& node_handle) noexcept
     // Update previous sibling's next_sibling pointer if it exists
     if (prev_sibling_handle.IsValid()) {
         auto& prev_sibling_impl = GetNodeImplRef(prev_sibling_handle);
-        prev_sibling_impl.SetNextSibling(next_sibling_handle);
+        prev_sibling_impl.AsGraphNode().SetNextSibling(next_sibling_handle);
     }
 
     // Update next sibling's prev_sibling pointer if it exists
     if (next_sibling_handle.IsValid()) {
         auto& next_sibling_impl = GetNodeImplRef(next_sibling_handle);
-        next_sibling_impl.SetPrevSibling(prev_sibling_handle);
+        next_sibling_impl.AsGraphNode().SetPrevSibling(prev_sibling_handle);
     }
 
     // Reset the node_handle's parent, next sibling, and previous sibling
-    node_impl.SetParent({});
-    node_impl.SetNextSibling({});
-    node_impl.SetPrevSibling({});
+    node_impl.AsGraphNode().SetParent({});
+    node_impl.AsGraphNode().SetNextSibling({});
+    node_impl.AsGraphNode().SetPrevSibling({});
 
     // Mark node_handle's transform as dirty since its hierarchy relationship changed
     node_impl.MarkTransformDirty();

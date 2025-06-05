@@ -55,6 +55,8 @@ target_sources(
     "SceneFlags.cpp"
     "SceneNode.cpp"
     "SceneNodeImpl.cpp"
+    "Detail/NodeData.h"
+    "Detail/GraphData.h"
     "Detail/StringConverters.cpp"
   PUBLIC
     FILE_SET HEADERS

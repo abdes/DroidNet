@@ -13,45 +13,7 @@
 
 using oxygen::scene::SceneFlag;
 
-constexpr auto SceneFlag::SetLocalValue(const bool value) noexcept -> SceneFlag&
-{
-    // Always disable inheritance if a local value is set
-    SetInheritedBit(false);
-
-    // If we already have a pending change, we need to check if the new
-    // change is redundant or if it reverts the pending change.
-    if (IsDirty()) {
-        if (GetPendingValueBit() == value) {
-            return *this;
-        }
-
-        // Resetting the pending value to be the same as the effective value,
-        // means reverting a pending change.
-        if (GetEffectiveValueBit() == value) {
-            SetPendingValueBit(value);
-            SetDirtyBit(false); // No change, no need to mark dirty
-            return *this;
-        }
-    }
-
-    SetPendingValueBit(value);
-    SetDirtyBit(true);
-    return *this;
-}
-
-constexpr auto SceneFlag::SetInherited(const bool state) noexcept -> SceneFlag&
-{
-    // Always enable inheritance if this is called
-    SetInheritedBit(state);
-
-    // Dirty flag management is similar to SetLocalValue, but we do not
-    // change the pending value here as it is inherited and will be updated
-    // during the next scene update cycle.
-    SetDirtyBit(true);
-    return *this;
-}
-
-constexpr auto SceneFlag::ProcessDirty() noexcept -> bool
+auto SceneFlag::ProcessDirty() noexcept -> bool
 {
     DCHECK_F(IsDirty(), "expecting flag to be dirty");
     if (!IsDirty()) {
@@ -64,7 +26,7 @@ constexpr auto SceneFlag::ProcessDirty() noexcept -> bool
     return true;
 }
 
-constexpr auto SceneFlag::UpdateValueFromParent(const bool value) noexcept -> SceneFlag&
+auto SceneFlag::UpdateValueFromParent(const bool value) noexcept -> SceneFlag&
 {
     DCHECK_F(IsInherited(), "expecting flag to be inherited");
     if (!IsInherited()) {

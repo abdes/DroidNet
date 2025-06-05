@@ -7,12 +7,10 @@
 #pragma once
 
 #include <atomic>
-#include <concepts>
 #include <cstdint>
 #include <iterator>
 #include <ranges>
 #include <string>
-#include <type_traits>
 #include <utility>
 
 #include <Oxygen/Scene/Types/SceneFlagEnum.h>
@@ -176,14 +174,48 @@ public:
      Sets a local value and disables inheritance. Implements optimization to
      avoid unnecessary dirty marking when the value doesn't change.
     */
-    OXYGEN_SCENE_API constexpr auto SetLocalValue(bool value) noexcept -> SceneFlag&;
+    constexpr auto SetLocalValue(bool value) noexcept -> SceneFlag&
+    {
+        // Always disable inheritance if a local value is set
+        SetInheritedBit(false);
+
+        // If we already have a pending change, we need to check if the new
+        // change is redundant or if it reverts the pending change.
+        if (IsDirty()) {
+            if (GetPendingValueBit() == value) {
+                return *this;
+            }
+
+            // Resetting the pending value to be the same as the effective value,
+            // means reverting a pending change.
+            if (GetEffectiveValueBit() == value) {
+                SetPendingValueBit(value);
+                SetDirtyBit(false); // No change, no need to mark dirty
+                return *this;
+            }
+        }
+
+        SetPendingValueBit(value);
+        SetDirtyBit(true);
+        return *this;
+    }
 
     //! Enable or disable inheritance from parent node.
     /*!
      When inheritance is enabled, the flag's effective value will be updated
      from the parent during the scene update cycle.
     */
-    OXYGEN_SCENE_API constexpr auto SetInherited(bool state) noexcept -> SceneFlag&;
+    constexpr auto SetInherited(const bool state) noexcept -> SceneFlag&
+    {
+        // Always enable inheritance if this is called
+        SetInheritedBit(state);
+
+        // Dirty flag management is similar to SetLocalValue, but we do not
+        // change the pending value here as it is inherited and will be updated
+        // during the next scene update cycle.
+        SetDirtyBit(true);
+        return *this;
+    }
 
     //! Update flag value from parent node (for inherited flags only).
     /*!
@@ -193,7 +225,7 @@ public:
 
      \note This method is typically called during the scene update cycle.
     */
-    OXYGEN_SCENE_API constexpr auto UpdateValueFromParent(bool value) noexcept -> SceneFlag&;
+    OXYGEN_SCENE_API auto UpdateValueFromParent(bool value) noexcept -> SceneFlag&;
 
     //! Apply pending value to effective value if dirty.
     /*!
@@ -207,7 +239,7 @@ public:
      \return true if the flag was successfully processed, false if it was not
              dirty or applying the effective value failed.
     */
-    OXYGEN_SCENE_API constexpr auto ProcessDirty() noexcept -> bool;
+    OXYGEN_SCENE_API auto ProcessDirty() noexcept -> bool;
 
     //=== Raw Data Access ===-------------------------------------------------//
 
@@ -381,7 +413,8 @@ public:
 
      \note This method is typically called during the scene update cycle.
     */
-    constexpr auto UpdateValueFromParent(FlagEnum flag, const SceneFlags& parent) noexcept -> SceneFlags&
+    constexpr auto UpdateValueFromParent(
+        FlagEnum flag, const SceneFlags& parent) noexcept -> SceneFlags&
     {
         auto flag_state = GetFlag(flag);
         flag_state.UpdateValueFromParent(parent.GetEffectiveValue(flag));
@@ -558,13 +591,13 @@ public:
 
     //! Equality comparison.
     [[nodiscard]] constexpr auto
-    operator==(const SceneFlags& other) const noexcept -> bool
+    operator==(const SceneFlags& other) const noexcept
     {
         return data_ == other.data_;
     }
 
     //! Inequality comparison.
-    [[nodiscard]] constexpr auto operator!=(const SceneFlags& other) const noexcept -> bool
+    [[nodiscard]] constexpr auto operator!=(const SceneFlags& other) const noexcept
     {
         return !(*this == other);
     }

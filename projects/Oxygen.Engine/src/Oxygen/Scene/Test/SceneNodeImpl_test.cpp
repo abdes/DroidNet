@@ -10,7 +10,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/ObjectMetaData.h>
-#include <Oxygen/Scene/Scene.h> // For mocking scene in update tests
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/TransformComponent.h>
@@ -19,7 +19,6 @@ using oxygen::ObjectMetaData;
 using oxygen::ResourceHandle;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
-using oxygen::scene::SceneNodeData;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::TransformComponent;
@@ -45,8 +44,7 @@ protected:
 TEST_F(SceneNodeImplTest, DefaultFlagsAreSetCorrectly)
 {
     const SceneNodeImpl node("TestNode");
-    const auto& data = node.GetComponent<SceneNodeData>();
-    const auto& flags = data.GetFlags();
+    const auto& flags = node.GetFlags();
     for (int i = 0; i < static_cast<int>(SceneNodeFlags::kCount); ++i) {
         auto flag = static_cast<SceneNodeFlags>(i);
         switch (flag) {
@@ -92,21 +90,6 @@ TEST_F(SceneNodeImplTest, ConstructorWithCustomFlags)
     const auto& flags = node.GetFlags();
     EXPECT_FALSE(flags.GetEffectiveValue(SceneNodeFlags::kVisible));
     EXPECT_TRUE(flags.GetEffectiveValue(SceneNodeFlags::kStatic));
-}
-
-//! Tests that all required components are properly accessible and consistent.
-TEST_F(SceneNodeImplTest, ComponentAccessAndIntegrity)
-{
-    SceneNodeImpl node = CreateDefaultNode("TestNode");
-
-    // Test component access
-    EXPECT_NO_THROW([[maybe_unused]] auto& _ = node.GetComponent<SceneNodeData>());
-    EXPECT_NO_THROW([[maybe_unused]] auto& _ = node.GetComponent<ObjectMetaData>());
-    EXPECT_NO_THROW([[maybe_unused]] auto& _ = node.GetComponent<TransformComponent>());
-
-    // Test component consistency
-    EXPECT_EQ(node.GetName(), "TestNode");
-    EXPECT_EQ(&node.GetFlags(), &node.GetComponent<SceneNodeData>().GetFlags());
 }
 
 //! Tests that node names can be set during construction and modified later.
@@ -220,15 +203,16 @@ TEST_F(SceneNodeImplTest, HierarchyAccessorsAndMutators)
     oxygen::ResourceHandle next { 44 };
     oxygen::ResourceHandle prev { 45 };
 
-    node.SetParent(parent);
-    node.SetFirstChild(child);
-    node.SetNextSibling(next);
-    node.SetPrevSibling(prev);
+    auto& graph_node = node.AsGraphNode();
+    graph_node.SetParent(parent);
+    graph_node.SetFirstChild(child);
+    graph_node.SetNextSibling(next);
+    graph_node.SetPrevSibling(prev);
 
-    EXPECT_EQ(node.GetParent(), parent);
-    EXPECT_EQ(node.GetFirstChild(), child);
-    EXPECT_EQ(node.GetNextSibling(), next);
-    EXPECT_EQ(node.GetPrevSibling(), prev);
+    EXPECT_EQ(graph_node.GetParent(), parent);
+    EXPECT_EQ(graph_node.GetFirstChild(), child);
+    EXPECT_EQ(graph_node.GetNextSibling(), next);
+    EXPECT_EQ(graph_node.GetPrevSibling(), prev);
 }
 //! Tests behavior with invalid resource handles in hierarchy management. Set
 //! all hierarchy relationships to invalid handles and verify proper handling.
@@ -240,15 +224,16 @@ TEST_F(SceneNodeImplTest, HierarchyInvalidHandles)
     ResourceHandle invalid_handle {};
     EXPECT_FALSE(invalid_handle.IsValid());
 
-    node.SetParent(invalid_handle);
-    node.SetFirstChild(invalid_handle);
-    node.SetNextSibling(invalid_handle);
-    node.SetPrevSibling(invalid_handle);
+    auto& graph_node = node.AsGraphNode();
+    graph_node.SetParent(invalid_handle);
+    graph_node.SetFirstChild(invalid_handle);
+    graph_node.SetNextSibling(invalid_handle);
+    graph_node.SetPrevSibling(invalid_handle);
 
-    EXPECT_EQ(node.GetParent(), invalid_handle);
-    EXPECT_EQ(node.GetFirstChild(), invalid_handle);
-    EXPECT_EQ(node.GetNextSibling(), invalid_handle);
-    EXPECT_EQ(node.GetPrevSibling(), invalid_handle);
+    EXPECT_EQ(graph_node.GetParent(), invalid_handle);
+    EXPECT_EQ(graph_node.GetFirstChild(), invalid_handle);
+    EXPECT_EQ(graph_node.GetNextSibling(), invalid_handle);
+    EXPECT_EQ(graph_node.GetPrevSibling(), invalid_handle);
 }
 
 //! Tests that hierarchy handles maintain consistency across multiple
@@ -264,22 +249,23 @@ TEST_F(SceneNodeImplTest, HierarchyHandleConsistency)
     ResourceHandle prev { 400 };
 
     // Set all handles
-    node.SetParent(parent);
-    node.SetFirstChild(child);
-    node.SetNextSibling(next);
-    node.SetPrevSibling(prev);
+    auto& graph_node = node.AsGraphNode();
+    graph_node.SetParent(parent);
+    graph_node.SetFirstChild(child);
+    graph_node.SetNextSibling(next);
+    graph_node.SetPrevSibling(prev);
 
     // Verify handles persist correctly
-    EXPECT_EQ(node.GetParent(), parent);
-    EXPECT_EQ(node.GetFirstChild(), child);
-    EXPECT_EQ(node.GetNextSibling(), next);
-    EXPECT_EQ(node.GetPrevSibling(), prev);
+    EXPECT_EQ(graph_node.GetParent(), parent);
+    EXPECT_EQ(graph_node.GetFirstChild(), child);
+    EXPECT_EQ(graph_node.GetNextSibling(), next);
+    EXPECT_EQ(graph_node.GetPrevSibling(), prev);
 
     // Test handle updates
     ResourceHandle new_parent { 500 };
-    node.SetParent(new_parent);
-    EXPECT_EQ(node.GetParent(), new_parent);
-    EXPECT_EQ(node.GetFirstChild(), child); // Other handles unchanged
+    graph_node.SetParent(new_parent);
+    EXPECT_EQ(graph_node.GetParent(), new_parent);
+    EXPECT_EQ(graph_node.GetFirstChild(), child); // Other handles unchanged
 }
 
 // -----------------------------------------------------------------------------
@@ -302,24 +288,26 @@ public:
         return node.GetHandle();
     }
     // Helper method to add a SceneNodeImpl with custom data for testing
-    auto AddNodeForTesting(const oxygen::scene::SceneNodeImpl& nodeImpl) -> ResourceHandle
+    auto AddNodeForTesting(const oxygen::scene::SceneNodeImpl& template_node) -> ResourceHandle
     {
         // Create a node with the same name and copy the data
-        std::string name { nodeImpl.GetName() }; // Convert string_view to string
+        std::string name { template_node.GetName() }; // Convert string_view to string
         auto node = CreateNode(name);
         auto handle = node.GetHandle();
 
         // Get the node implementation and copy the data we need for testing
-        auto& impl = GetNodeImplRef(handle);
-        impl.SetParent(nodeImpl.GetParent());
-        impl.SetFirstChild(nodeImpl.GetFirstChild());
-        impl.SetNextSibling(nodeImpl.GetNextSibling());
-        impl.SetPrevSibling(nodeImpl.GetPrevSibling());
+        auto& new_impl = GetNodeImplRef(handle);
+        auto& new_graph_node = new_impl.AsGraphNode();
+        const auto& template_graph_node = template_node.AsGraphNode();
+        new_graph_node.SetParent(template_graph_node.GetParent());
+        new_graph_node.SetFirstChild(template_graph_node.GetFirstChild());
+        new_graph_node.SetNextSibling(template_graph_node.GetNextSibling());
+        new_graph_node.SetPrevSibling(template_graph_node.GetPrevSibling());
 
-        if (nodeImpl.IsTransformDirty()) {
-            impl.MarkTransformDirty();
+        if (template_node.IsTransformDirty()) {
+            new_impl.MarkTransformDirty();
         } else {
-            impl.ClearTransformDirty();
+            new_impl.ClearTransformDirty();
         }
 
         return handle;
@@ -340,7 +328,7 @@ TEST_F(SceneNodeImplTest, UpdateTransformsWithParent)
     // Set up parent-child relationship
     auto& child_impl = mock_scene->GetNodeImplRef(child_handle);
     auto& parent_impl = mock_scene->GetNodeImplRef(parent_handle);
-    child_impl.SetParent(parent_handle);
+    child_impl.AsGraphNode().SetParent(parent_handle);
     child_impl.MarkTransformDirty();
 
     // First update the parent's transform (parent should be a root node)
@@ -368,7 +356,7 @@ TEST_F(SceneNodeImplTest, UpdateTransformsIgnoreParentTransform)
 
     // Create a parent node and set the relationship
     auto parent_handle = mock_scene->AddNodeForTesting("Parent");
-    node.SetParent(parent_handle);
+    node.AsGraphNode().SetParent(parent_handle);
     node.MarkTransformDirty();
 
     // Update transforms - should succeed and ignore the parent transform
@@ -402,7 +390,7 @@ TEST_F(SceneNodeImplTest, UpdateTransformsAsRoot)
     auto& node = mock_scene->GetNodeImplRef(node_handle);
 
     // Set as root (invalid parent handle)
-    node.SetParent(oxygen::ResourceHandle {}); // Invalid handle = root
+    node.AsGraphNode().SetParent(oxygen::ResourceHandle {}); // Invalid handle = root
 
     node.MarkTransformDirty();
     node.UpdateTransforms(*mock_scene);
