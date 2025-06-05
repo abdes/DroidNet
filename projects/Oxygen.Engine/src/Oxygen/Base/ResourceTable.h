@@ -475,7 +475,7 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps) -> size_
                 std::memmove(&meta_[j1 + 1], &meta_[j1], sizeof(Meta) * (index - j1));
                 ++swaps;
 
-                items_[j1] = tmp;
+                items_[j1] = std::move(tmp);
                 meta_[j1] = tmp_meta;
                 sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
             }
@@ -493,8 +493,8 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps) -> size_
             }
 
             if (j1 != index) {
-                items_[j1] = tmp;
-                meta_[j1] = tmp_meta;
+                items_[j1] = std::move(tmp);
+                meta_[j1] = std::move(tmp_meta);
                 sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
             }
         }
