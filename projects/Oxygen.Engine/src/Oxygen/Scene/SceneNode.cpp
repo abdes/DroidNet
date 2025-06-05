@@ -76,7 +76,6 @@ auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 {
     const auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToImpl {
         const auto scene = n.scene_weak_.lock();
-        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetNodeImpl(n);
     });
     if (result) {
@@ -135,7 +134,6 @@ auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 {
     const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
-        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetParent(n);
     });
     if (result) {
@@ -148,7 +146,6 @@ auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 {
     const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
-        DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetFirstChild(n);
     });
     if (result) {
@@ -161,9 +158,6 @@ auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 {
     const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
-        if (!scene) {
-            return std::nullopt;
-        }
         return scene->GetNextSibling(n);
     });
     if (result) {
@@ -176,9 +170,6 @@ auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 {
     const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
-        if (!scene) {
-            return std::nullopt;
-        }
         return scene->GetPrevSibling(n);
     });
     if (result) {
@@ -191,13 +182,7 @@ auto SceneNode::HasParent() const noexcept -> bool
 {
     const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
-        if (!scene) {
-            return false;
-        }
         const auto impl = scene->GetNodeImpl(n);
-        if (!impl) {
-            return false;
-        }
         // Optimize here, directly access the impl graph data component
         // to check if the parent is valid.
         return impl->get().GetComponent<GraphData>().GetParent().IsValid();
@@ -209,13 +194,7 @@ auto SceneNode::HasChildren() const noexcept -> bool
 {
     const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
-        if (!scene) {
-            return false;
-        }
         const auto impl = scene->GetNodeImpl(n);
-        if (!impl) {
-            return false;
-        }
         // Optimize here, directly access the impl graph data component
         // to check if the first child is valid.
         return impl->get().GetComponent<GraphData>().GetFirstChild().IsValid();
@@ -227,13 +206,7 @@ auto SceneNode::IsRoot() const noexcept -> bool
 {
     const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
-        if (!scene) {
-            return false;
-        }
         const auto impl = scene->GetNodeImpl(n);
-        if (!impl) {
-            return false;
-        }
         // Optimize here, directly access the impl graph data component
         // to check if the parent is valid.
         return !impl->get().GetComponent<GraphData>().GetParent().IsValid();

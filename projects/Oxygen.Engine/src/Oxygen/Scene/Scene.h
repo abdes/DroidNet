@@ -131,12 +131,33 @@ namespace scene {
             const SceneNode& parent, const std::string& name, SceneNode::Flags flags)
             -> std::optional<SceneNode>;
 
+        //! Creates a new root node by cloning the given original node.
+        /*!
+         This method clones the original node (preserving its component data) and creates
+         a new root node in this scene with the specified name. The cloned node will be
+         orphaned (no hierarchy relationships) and assigned the new name.
+
+         This method will only fail if the resource table holding scene data is
+         full, which can only be remedied by increasing the initial capacity of
+         the table. Therefore, a failure is a fatal error that will result in
+         the application terminating.
+
+         \param original The node to clone (can be from any scene)
+         \param new_name The name to assign to the cloned node
+         \return A new SceneNode handle representing the cloned node in this scene
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto CreateNodeFrom(
+            const SceneNode& original, const std::string& new_name)
+            -> SceneNode;
+
         //! Destroys the given node.
         /*!
          \return true if the node was destroyed, false if it was not found, and
                  will always invalidate the \p node.
         */
-        OXYGEN_SCENE_API auto DestroyNode(SceneNode& node) const -> bool;
+        OXYGEN_SCENE_API auto DestroyNode(SceneNode& node) -> bool;
+
+        // TODO: add sub-tree cloning
 
         //! Recursively destroys the given node and all its descendants.
         /*!
@@ -167,10 +188,10 @@ namespace scene {
         [[nodiscard]] OXYGEN_SCENE_API auto Contains(const NodeHandle& handle) const noexcept -> bool;
 
         // Statistics and Management
-        [[nodiscard]] auto GetNodeCount() const;
+        [[nodiscard]] OXYGEN_SCENE_API auto GetNodeCount() const -> size_t;
         [[nodiscard]] auto GetNodes() const -> const NodeTable&;
-        [[nodiscard]] auto IsEmpty() const -> bool;
-        void DefragmentStorage();
+        [[nodiscard]] OXYGEN_SCENE_API auto IsEmpty() const -> bool;
+        OXYGEN_SCENE_API void DefragmentStorage();
         OXYGEN_SCENE_API void Clear();
 
         // Hierarchy management

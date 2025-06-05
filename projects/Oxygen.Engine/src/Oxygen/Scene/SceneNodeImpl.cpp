@@ -11,6 +11,7 @@
 #include <Oxygen/Scene/Detail/NodeData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
@@ -210,10 +211,23 @@ auto SceneNodeImpl::operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&
         }
 
         // Perform the composition move
-        Composition::operator=(std::move(other));
-
-        // Re-initialize our cached GraphNode with moved components
+        Composition::operator=(std::move(other)); // Re-initialize our cached GraphNode with moved components
         cached_graph_node_ = GraphNode { this, &GetComponent<detail::GraphData>() };
     }
     return *this;
+}
+
+auto SceneNodeImpl::Clone() const -> std::unique_ptr<SceneNodeImpl>
+{
+    LOG_SCOPE_F(2, "SceneNodeImpl cloning");
+    DLOG_F(2, "original node name: {}", GetName());
+
+    // Use CloneableMixin to get a properly cloned composition
+    auto clone = CloneableMixin<SceneNodeImpl>::Clone();
+
+    // Re-initialize the cached GraphNode with the cloned components
+    clone->cached_graph_node_ = GraphNode { clone.get(), &clone->GetComponent<detail::GraphData>() };
+
+    DLOG_F(2, "successful");
+    return clone;
 }

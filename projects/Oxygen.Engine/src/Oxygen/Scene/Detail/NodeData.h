@@ -24,9 +24,14 @@ public:
     static_assert(std::is_trivially_copyable_v<Flags>);
     Flags flags_;
     bool transform_dirty_ = true;
-
     explicit NodeData(const Flags& flags)
         : flags_(flags)
+    {
+    }
+
+    NodeData(const Flags& flags, bool transform_dirty)
+        : flags_(flags)
+        , transform_dirty_(transform_dirty)
     {
     }
 
@@ -49,9 +54,7 @@ public:
         , flags_([](auto& src) { return std::exchange(src.flags_, kMovedFlags); }(other))
         , transform_dirty_([](auto& src) { return std::exchange(src.transform_dirty_, false); }(other))
     {
-    }
-
-    // Move assignment
+    } // Move assignment
     auto operator=(NodeData&& other) noexcept -> NodeData&
     {
         if (this != &other) {
@@ -60,6 +63,12 @@ public:
             Component::operator=(std::move(other));
         }
         return *this;
+    }
+
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
+    [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
+    {
+        return std::make_unique<NodeData>(this->flags_, this->transform_dirty_);
     }
 
 private:
