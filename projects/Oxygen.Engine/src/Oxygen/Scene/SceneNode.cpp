@@ -6,7 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -14,11 +14,11 @@
 #include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneNode;
-using oxygen::scene::SceneNodeData;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::detail::GraphData;
 
-// SceneNodeData and SceneNodeImpl implementations moved to SceneNodeImpl.cpp
+// NodeData and SceneNodeImpl implementations moved to SceneNodeImpl.cpp
 
 SceneNode::SceneNode(const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak)
     : Resource(handle)
@@ -74,7 +74,7 @@ auto SceneNode::SafeCall(Func&& func) noexcept
 
 auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 {
-    auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToImpl {
+    const auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToImpl {
         const auto scene = n.scene_weak_.lock();
         DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetNodeImpl(n);
@@ -87,7 +87,7 @@ auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 
 auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 {
-    auto result = SafeCall([&](const SceneNode& n) -> OptionalRefToImpl {
+    const auto result = SafeCall([&](const SceneNode& n) -> OptionalRefToImpl {
         const auto cref = n.GetObject();
         if (cref.has_value()) {
             return std::optional {
@@ -104,7 +104,7 @@ auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 
 auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 {
-    auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToFlags {
+    const auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToFlags {
         if (const auto impl_opt = n.GetObject()) {
             return impl_opt->get().GetFlags();
         }
@@ -118,7 +118,7 @@ auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 
 auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
 {
-    auto result = SafeCall([&](SceneNode& n) -> OptionalRefToFlags {
+    const auto result = SafeCall([&](SceneNode& n) -> OptionalRefToFlags {
         if (const auto impl_opt = n.GetObject()) {
             return impl_opt->get().GetFlags();
         }
@@ -133,7 +133,7 @@ auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
 // Hierarchy navigation methods
 auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 {
-    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
         DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetParent(n);
@@ -146,7 +146,7 @@ auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 
 auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 {
-    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
         DCHECK_NOTNULL_F(scene, "Attempting to access SceneNode whose Scene is expired or invalid.");
         return scene->GetFirstChild(n);
@@ -159,7 +159,7 @@ auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 
 auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 {
-    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
         if (!scene) {
             return std::nullopt;
@@ -174,7 +174,7 @@ auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 
 auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 {
-    auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
+    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
         const auto scene = n.scene_weak_.lock();
         if (!scene) {
             return std::nullopt;
@@ -189,7 +189,7 @@ auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 
 auto SceneNode::HasParent() const noexcept -> bool
 {
-    auto result = SafeCall([&](const SceneNode& n) -> bool {
+    const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
         if (!scene) {
             return false;
@@ -198,14 +198,16 @@ auto SceneNode::HasParent() const noexcept -> bool
         if (!impl) {
             return false;
         }
-        return impl->get().GetParent().IsValid();
+        // Optimize here, directly access the impl graph data component
+        // to check if the parent is valid.
+        return impl->get().GetComponent<GraphData>().GetParent().IsValid();
     });
     return result.value_or(false);
 }
 
 auto SceneNode::HasChildren() const noexcept -> bool
 {
-    auto result = SafeCall([&](const SceneNode& n) -> bool {
+    const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
         if (!scene) {
             return false;
@@ -214,14 +216,16 @@ auto SceneNode::HasChildren() const noexcept -> bool
         if (!impl) {
             return false;
         }
-        return impl->get().GetFirstChild().IsValid();
+        // Optimize here, directly access the impl graph data component
+        // to check if the first child is valid.
+        return impl->get().GetComponent<GraphData>().GetFirstChild().IsValid();
     });
     return result.value_or(false);
 }
 
 auto SceneNode::IsRoot() const noexcept -> bool
 {
-    auto result = SafeCall([&](const SceneNode& n) -> bool {
+    const auto result = SafeCall([&](const SceneNode& n) -> bool {
         const auto scene = n.scene_weak_.lock();
         if (!scene) {
             return false;
@@ -230,7 +234,9 @@ auto SceneNode::IsRoot() const noexcept -> bool
         if (!impl) {
             return false;
         }
-        return !impl->get().GetParent().IsValid();
+        // Optimize here, directly access the impl graph data component
+        // to check if the parent is valid.
+        return !impl->get().GetComponent<GraphData>().GetParent().IsValid();
     });
     return result.value_or(false);
 }

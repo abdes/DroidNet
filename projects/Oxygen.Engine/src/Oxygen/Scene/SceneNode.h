@@ -8,14 +8,11 @@
 
 #include <functional>
 #include <optional>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Base/ResourceHandle.h>
-#include <Oxygen/Composition/ComponentMacros.h>
-#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
@@ -56,7 +53,7 @@ class Scene; // Forward declaration
 class SceneNode : public Object, public Resource<resources::kSceneNode> {
     OXYGEN_TYPED(SceneNode)
 public:
-    using Flags = SceneNodeData::Flags;
+    using Flags = SceneNodeImpl::Flags;
     using NodeHandle = ResourceHandle;
 
     using OptionalRefToImpl = std::optional<std::reference_wrapper<SceneNodeImpl>>;
@@ -519,7 +516,3 @@ private:
 };
 
 } // namespace oxygen::scene
-
-#include <Oxygen/Scene/SceneNodeImpl.h>
-
-// SceneNodeData and SceneNodeImpl declarations moved to SceneNodeImpl.h

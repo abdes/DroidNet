@@ -21,7 +21,6 @@ using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
-using oxygen::scene::SceneNodeData;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::TransformComponent;
