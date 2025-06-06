@@ -31,7 +31,7 @@
     {
       "name": "base-release",
       "hidden": true,
-      "configuration": "RelWithDebInfo",
+      "configuration": "Release",
       "jobs": 8,
       "verbose": false
     }
