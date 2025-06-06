@@ -46,6 +46,7 @@ m_gtest_program(
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
     "Scene_graph_test.cpp"
+    "Scene_traversal_test.cpp"
 )
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 
