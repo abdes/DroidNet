@@ -91,6 +91,8 @@ MainModule::~MainModule()
         gfx->GetCommandQueue(queues.GraphicsQueueName())->Flush();
     }
 
+    // FIXME: framebuffers need to be released before the renderer is gone
+
     surface_->DetachRenderer();
     renderer_.reset();
     surface_.reset();
