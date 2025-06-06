@@ -77,7 +77,7 @@ auto Scene::CreateChildNodeImpl(const SceneNode& parent, Args&&... args) -> Scen
 
     auto node = SceneNode(handle, shared_from_this());
     LinkChild(parent, node);
-    return std::move(node);
+    return node;
 }
 
 auto Scene::CreateChildNode(const SceneNode& parent,
@@ -517,11 +517,13 @@ void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& root_handl
 
 } // namespace
 
-void Scene::Update()
+void Scene::Update(bool skip_dirty_flags)
 {
     LOG_SCOPE_F(2, "Scene update");
-    // Pass 1: Process dirty flags for all nodes (linear scan, cache-friendly)
-    ProcessDirtyFlags(*this);
+    if (!skip_dirty_flags) {
+        // Pass 1: Process dirty flags for all nodes (linear scan, cache-friendly)
+        ProcessDirtyFlags(*this);
+    }
     // Pass 2: Update transforms in parent-before-child order (iterative DFS)
     UpdateTransformsIterative(*this);
 }
@@ -530,27 +532,40 @@ void Scene::Update()
 
 void Scene::AddRootNode(const NodeHandle& node)
 {
-    root_nodes_.insert(node);
+    // Ensure no duplicate root nodes
+    DCHECK_F(std::find(root_nodes_.begin(), root_nodes_.end(), node) == root_nodes_.end(),
+        "duplicate root node detected");
+    root_nodes_.push_back(node);
 }
 
 void Scene::RemoveRootNode(const NodeHandle& node)
 {
-    root_nodes_.erase(node);
+    std::erase(root_nodes_, node);
 }
 
-auto Scene::GetRootNodes() const -> std::vector<NodeHandle>
+void Scene::EnsureRootNodesValid() const
 {
-    std::vector<NodeHandle> valid_roots;
-    valid_roots.reserve(root_nodes_.size());
+#if !defined(NDEBUG)
     for (const auto& handle : root_nodes_) {
         // A bug that needs fixing.
         DCHECK_F(handle.IsValid(), "expecting a valid root node handle");
         // This is also a bug that needs fixing.
         DCHECK_F(nodes_->Contains(handle),
             "expecting root nodes to be in the scene or not in the root nodes set");
-        valid_roots.push_back(handle);
     }
-    return valid_roots;
+#endif // NDEBUG
+}
+
+auto Scene::GetRootNodes() -> std::span<NodeHandle>
+{
+    EnsureRootNodesValid();
+    return { root_nodes_.data(), root_nodes_.size() };
+}
+
+auto Scene::GetRootNodes() const -> std::span<const NodeHandle>
+{
+    EnsureRootNodesValid();
+    return { root_nodes_.data(), root_nodes_.size() };
 }
 
 void Scene::LinkChild(const SceneNode& parent, const SceneNode& child) noexcept

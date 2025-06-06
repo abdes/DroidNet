@@ -8,11 +8,11 @@
 
 #include <memory>
 #include <optional>
-#include <shared_mutex>
 #include <string>
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
+#include <span>
 
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/api_export.h>
@@ -279,12 +279,14 @@ namespace scene {
         [[nodiscard]] OXYGEN_SCENE_API auto GetNextSibling(const SceneNode& node) const -> std::optional<SceneNode>;
         [[nodiscard]] OXYGEN_SCENE_API auto GetPrevSibling(const SceneNode& node) const -> std::optional<SceneNode>;
 
-        [[nodiscard]] OXYGEN_SCENE_API auto GetRootNodes() const -> std::vector<NodeHandle>;
+        [[nodiscard]] OXYGEN_SCENE_API auto GetRootNodes() const -> std::span<const NodeHandle>;
+        [[nodiscard]] OXYGEN_SCENE_API auto GetRootNodes() -> std::span<NodeHandle>;
         [[nodiscard]] OXYGEN_SCENE_API auto GetChildrenCount(const SceneNode& parent) const -> size_t;
         [[nodiscard]] OXYGEN_SCENE_API auto GetChildren(const SceneNode& parent) const -> std::vector<NodeHandle>;
 
         // Update system
-        OXYGEN_SCENE_API void Update();
+        // TODO: Implement a proper update system for the scene graph.
+        OXYGEN_SCENE_API void Update(bool skip_dirty_flags = false);
 
         //! @{
         //! Get the SceneNodeImpl for the given SceneNode.
@@ -357,10 +359,11 @@ namespace scene {
 
         void AddRootNode(const NodeHandle& node);
         void RemoveRootNode(const NodeHandle& node);
+        void EnsureRootNodesValid() const;
 
         std::shared_ptr<NodeTable> nodes_;
         //!< Set of root nodes for robust, duplicate-free management.
-        std::unordered_set<NodeHandle> root_nodes_;
+        std::vector<NodeHandle> root_nodes_;
     };
 
 } // namespace scene

@@ -52,6 +52,7 @@ target_sources(
   PRIVATE
     "TransformComponent.cpp"
     "Scene.cpp"
+    "SceneTraversal.cpp"
     "SceneFlags.cpp"
     "SceneNode.cpp"
     "SceneNodeImpl.cpp"
@@ -65,6 +66,7 @@ target_sources(
       "api_export.h"
       "SceneFlags.h"
       "Scene.h"
+      "SceneTraversal.h"
       "SceneNode.h"
       "TransformComponent.h"
       "Types/Flags.h"
@@ -97,6 +99,7 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+  add_subdirectory("Benchmarks")
 endif()
 
 # ------------------------------------------------------------------------------
