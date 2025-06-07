@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -11,6 +12,25 @@
 namespace oxygen::scene {
 
 //=== SceneTraversal Implementation ===--------------------------------------//
+
+auto DirtyTransformFilter::operator()(
+    const SceneNodeImpl& node,
+    const FilterResult parent_result) const noexcept
+    -> FilterResult
+{
+    // If parent was accepted and this node does not ignore parent transform, accept
+    if (node.GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform)) {
+        DLOG_F(2, "Rejecting subtree for node {} due to IgnoreParentTransform flag",
+            node.GetName());
+        return FilterResult::kRejectSubTree;
+    }
+    // Otherwise, accept if this node is dirty, or its parent accepted
+    auto verdict = parent_result == FilterResult::kAccept || node.IsTransformDirty()
+        ? FilterResult::kAccept
+        : FilterResult::kReject;
+    DLOG_F(2, "Node {} is {}", node.GetName(), verdict == FilterResult::kAccept ? "accepted" : "rejected");
+    return verdict;
+}
 
 SceneTraversal::SceneTraversal(const Scene& scene)
     : scene_(&scene)
@@ -55,6 +75,10 @@ auto SceneTraversal::UpdateTransforms() const -> std::size_t
     // Batch process with dirty transform filter for efficiency
     auto result = Traverse(
         [&updated_count](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
+            LOG_SCOPE_F(2, "For Node");
+            LOG_F(2, "name = {}", node.GetName());
+            LOG_F(2, "is root: {}", node.AsGraphNode().IsRoot());
+
             node.UpdateTransforms(scene);
             ++updated_count;
             return VisitResult::kContinue;

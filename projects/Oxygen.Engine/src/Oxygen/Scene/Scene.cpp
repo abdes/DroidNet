@@ -13,6 +13,7 @@
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneTraversal.h>
 
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
@@ -20,12 +21,19 @@ using oxygen::scene::SceneNodeImpl;
 
 Scene::Scene(const std::string& name, size_t initial_capacity)
     : nodes_(std::make_shared<NodeTable>(resources::kSceneNode, initial_capacity))
+    , traversal_(new SceneTraversal(*this))
 {
     LOG_SCOPE_F(INFO, "Scene creation");
     LOG_F(2, "name: '{}'", name);
     LOG_F(2, "initial capacity: '{}'", initial_capacity);
 
     AddComponent<ObjectMetaData>(name);
+}
+
+Scene::~Scene()
+{
+    LOG_SCOPE_F(INFO, "Scene destruction");
+    delete traversal_;
 }
 
 auto Scene::GetName() const noexcept -> std::string_view
@@ -285,7 +293,7 @@ auto Scene::GetNodeImpl(const SceneNode& node) noexcept -> optional_ref<SceneNod
     try {
         auto& impl = nodes_->ItemAt(node.GetHandle());
         return { impl };
-    } catch (const std::exception& ex) {
+    } catch ([[maybe_unused]] const std::exception& ex) {
         // If the handle is valid but the node is no longer in the scene, this
         // is a case for lazy invalidation.
         DLOG_F(4, "Node {} is no longer there -> invalidate : {}",
@@ -427,7 +435,7 @@ void ProcessDirtyFlags(const Scene& scene) noexcept
         auto& node_impl = const_cast<SceneNodeImpl&>(node_table.Items()[i]);
         LOG_SCOPE_F(2, "For Node");
         LOG_F(2, "name = {}", node_impl.GetName());
-        LOG_F(2, "is root: {}", !node_impl.AsGraphNode().IsRoot());
+        LOG_F(2, "is root: {}", node_impl.AsGraphNode().IsRoot());
         auto& flags = node_impl.GetFlags();
         bool has_dirty_flags { false };
         for (auto flag : flags.dirty_flags()) {
@@ -444,50 +452,6 @@ void ProcessDirtyFlags(const Scene& scene) noexcept
         // Do not update transforms here.
     }
     DLOG_F(2, "{}/{} nodes had dirty flags", processed_count, node_table.Size());
-}
-
-//! Updates transforms for all nodes in the scene in parent-before-child order.
-/*!
- Performs an explicit stack-based DFS traversal from each root node, updating
- transforms only once per node.
-
- \note Only nodes marked dirty will have their transforms updated.
-*/
-void UpdateTransformsIterative(Scene& scene) noexcept
-{
-    LOG_SCOPE_F(2, "PASS 2 - Transforms (iterative DFS)");
-    const auto& root_handles = scene.GetRootNodes();
-    size_t processed_count = 0;
-    for (const auto& root_handle : root_handles) {
-        if (!scene.Contains(root_handle)) {
-            continue;
-        }
-        std::vector<SceneNodeImpl*> stack;
-        stack.push_back(&scene.GetNodeImplRef(root_handle));
-        while (!stack.empty()) {
-            SceneNodeImpl* node = stack.back();
-            stack.pop_back();
-            if (node->IsTransformDirty()) {
-                LOG_SCOPE_F(2, "For Node");
-                LOG_F(2, "name = {}", node->GetName());
-                LOG_F(2, "is root: {}", !node->AsGraphNode().IsRoot());
-                LOG_F(2, "transform: {}", node->IsTransformDirty() ? "dirty" : "clean");
-                node->UpdateTransforms(scene);
-                ++processed_count;
-            }
-            // Push children in reverse order for left-to-right traversal
-            std::vector<SceneNodeImpl*> children;
-            auto child_handle = node->AsGraphNode().GetFirstChild();
-            while (child_handle.IsValid()) {
-                children.push_back(&scene.GetNodeImplRef(child_handle));
-                child_handle = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
-            }
-            for (auto& it : std::ranges::reverse_view(children)) {
-                stack.push_back(it);
-            }
-        }
-    }
-    DLOG_F(2, "{}/{} nodes updated", processed_count, scene.GetNodeCount());
 }
 
 //! Marks the transform as dirty for a node and all its descendants
@@ -524,8 +488,10 @@ void Scene::Update(bool skip_dirty_flags)
         // Pass 1: Process dirty flags for all nodes (linear scan, cache-friendly)
         ProcessDirtyFlags(*this);
     }
-    // Pass 2: Update transforms in parent-before-child order (iterative DFS)
-    UpdateTransformsIterative(*this);
+    // Pass 2: Update transforms
+    LOG_SCOPE_F(2, "PASS 2 - Update transforms");
+    [[maybe_unused]] auto updated_count = traversal_->UpdateTransforms();
+    DLOG_F(2, "Updated transforms for {} nodes", updated_count);
 }
 
 // --- Root node management API implementations ---
