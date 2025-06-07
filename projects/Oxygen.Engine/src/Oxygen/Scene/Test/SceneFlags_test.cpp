@@ -55,7 +55,7 @@ static_assert(SceneFlagEnum<TestFlag>);
 //------------------------------------------------------------------------------
 
 //! Test fixture for SceneFlag.
-class SceneFlagTest : public ::testing::Test {
+class SceneFlagTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -64,7 +64,12 @@ protected:
     }
 
     // Helper: Verify all bits are in expected state
-    void ExpectAllBitsState(bool effective, bool inherited, bool dirty, bool previous, bool pending)
+    void ExpectAllBitsState(
+        const bool effective,
+        const bool inherited,
+        const bool dirty,
+        const bool previous,
+        const bool pending) const
     {
         EXPECT_EQ(flag_.GetEffectiveValueBit(), effective);
         EXPECT_EQ(flag_.GetInheritedBit(), inherited);
@@ -151,7 +156,7 @@ NOLINT_TEST_F(SceneFlagTest, ProcessDirty_TransitionsEffectiveValueCorrectly)
     EXPECT_TRUE(flag_.GetDirtyBit());
 
     // Act: Process the dirty flag
-    auto result = flag_.ProcessDirty();
+    const auto result = flag_.ProcessDirty();
 
     // Assert: Flag should transition to new effective value and clear dirty state
     EXPECT_TRUE(result);
@@ -176,7 +181,7 @@ NOLINT_TEST_F(SceneFlagTest, UpdateValueFromParent_UpdatesInheritedFlagCorrectly
     EXPECT_FALSE(flag_.GetPendingValueBit()); // Pending should now be false from parent
 
     // Act: Process the dirty flag to apply parent value
-    auto result = flag_.ProcessDirty();
+    const auto result = flag_.ProcessDirty();
 
     // Assert: Effective value should match parent (false) and previous should be preserved (true)
     EXPECT_TRUE(result);
@@ -188,7 +193,7 @@ NOLINT_TEST_F(SceneFlagTest, UpdateValueFromParent_UpdatesInheritedFlagCorrectly
 NOLINT_TEST_F(SceneFlagTest, EqualityOperators_CompareCorrectly)
 {
     // Arrange: Two default flags
-    auto flag_a = SceneFlag {};
+    constexpr auto flag_a = SceneFlag {};
     auto flag_b = SceneFlag {};
 
     // Act & Assert: Default flags should be equal
@@ -209,7 +214,7 @@ NOLINT_TEST_F(SceneFlagTest, StringConversion_ProducesNonEmptyString)
     flag_.SetEffectiveValueBit(true);
 
     // Act: Convert to string
-    auto str = oxygen::scene::to_string(flag_);
+    const auto str = oxygen::scene::to_string(flag_);
 
     // Assert: String should not be empty
     EXPECT_FALSE(str.empty());
@@ -310,7 +315,7 @@ NOLINT_TEST_F(SceneFlagTest, ProcessDirtyTransitionTracking_PreviousValuePreserv
     EXPECT_TRUE(flag_.IsDirty());
 
     // Act: Process the transition
-    auto result = flag_.ProcessDirty();
+    const auto result = flag_.ProcessDirty();
 
     // Assert: Transition should be tracked correctly
     EXPECT_TRUE(result);
@@ -331,7 +336,7 @@ NOLINT_TEST_F(SceneFlagTest, ProcessDirtyTransitionTracking_PreviousValuePreserv
 //------------------------------------------------------------------------------
 
 //! Test fixture for SceneFlags.
-class SceneFlagsTest : public ::testing::Test {
+class SceneFlagsTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -342,15 +347,15 @@ protected:
     // Helper: Update a flag value from a simulated parent
     void UpdateFlagValueFromParent(const TestFlag flag, const bool value)
     {
-        auto parent = SceneFlags<TestFlag> {}.SetFlag(flag, SceneFlag {}.SetEffectiveValueBit(value));
+        const auto parent = SceneFlags<TestFlag> {}.SetFlag(flag, SceneFlag {}.SetEffectiveValueBit(value));
         flags_.UpdateValueFromParent(flag, parent);
     }
 
     // Helper: Verify all flags have expected effective values
-    void ExpectAllFlagsEffectiveValue(bool expected_value)
+    void ExpectAllFlagsEffectiveValue(const bool expected_value) const
     {
         for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
-            auto flag = static_cast<TestFlag>(i);
+            const auto flag = static_cast<TestFlag>(i);
             EXPECT_EQ(flags_.GetEffectiveValue(flag), expected_value);
         }
     }
@@ -371,11 +376,11 @@ NOLINT_TEST_F(SceneFlagsTest, DefaultConstruction_AllFlagsAreFalse)
 NOLINT_TEST_F(SceneFlagsTest, SetFlag_CompleteStateIsPreserved)
 {
     // Arrange: Create a flag with all bits set
-    auto complete_flag = SceneFlag {}
-                             .SetEffectiveValueBit(true)
-                             .SetInheritedBit(true)
-                             .SetDirtyBit(true)
-                             .SetPreviousValueBit(true);
+    constexpr auto complete_flag = SceneFlag {}
+                                       .SetEffectiveValueBit(true)
+                                       .SetInheritedBit(true)
+                                       .SetDirtyBit(true)
+                                       .SetPreviousValueBit(true);
 
     // Act: Set this complete flag state
     flags_.SetFlag(TestFlag::kLocked, complete_flag);
@@ -439,7 +444,7 @@ NOLINT_TEST_F(SceneFlagsTest, ProcessDirtyFlag_ReturnsTrueWhenProcessed)
     EXPECT_TRUE(flags_.IsDirty(TestFlag::kLocked));
 
     // Act: Process the specific dirty flag
-    auto result = flags_.ProcessDirtyFlag(TestFlag::kLocked);
+    const auto result = flags_.ProcessDirtyFlag(TestFlag::kLocked);
 
     // Assert: Should return true and clear dirty state
     EXPECT_TRUE(result);
@@ -454,7 +459,7 @@ NOLINT_TEST_F(SceneFlagsTest, RawAccess_PreservesCompleteState)
     flags_.ProcessDirtyFlags();
 
     // Act: Get raw representation and create new container
-    auto raw = flags_.Raw();
+    const auto raw = flags_.Raw();
     auto other = SceneFlags<TestFlag> {};
     other.SetRaw(raw);
 
@@ -498,7 +503,7 @@ NOLINT_TEST_F(SceneFlagsTest, Equality_WorksCorrectly)
 NOLINT_TEST_F(SceneFlagsTest, OutOfBoundsAccess_DoesNotThrow)
 {
     // Arrange: Invalid flag enum value
-    auto bogus = static_cast<TestFlag>(99);
+    constexpr auto bogus = static_cast<TestFlag>(99);
 
     // Act & Assert: Should not throw (graceful degradation)
     NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.GetEffectiveValue(bogus));
@@ -532,7 +537,7 @@ NOLINT_TEST_F(SceneFlagsTest, DirtyFlagsRange_ShowsOnlyDirtyFlags)
 
     // Act: Count dirty flags using range
     std::size_t dirty_count = 0;
-    for (auto flag : flags_.dirty_flags()) {
+    for (const auto flag : flags_.dirty_flags()) {
         (void)flag;
         ++dirty_count;
     }
@@ -602,11 +607,11 @@ NOLINT_TEST_F(SceneFlagsTest, Iterator_EmptyEnumHandledCorrectly)
     // Arrange: Test with enum that has no actual flags
     enum class EmptyTestFlag : uint8_t { kCount };
     static_assert(SceneFlagEnum<EmptyTestFlag>);
-    auto zero_flags = SceneFlags<EmptyTestFlag> {};
+    const auto zero_flags = SceneFlags<EmptyTestFlag> {};
 
     // Act: Iterate over empty enum
     std::size_t count = 0;
-    for (auto item : zero_flags) {
+    for (const auto item : zero_flags) {
         (void)item;
         count++;
     }
@@ -626,7 +631,7 @@ NOLINT_TEST_F(SceneFlagsTest, BulkSetLocalValue_AllFlagsModified)
 
     // Act: Set all flags to true using bulk operation
     for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
-        auto flag = static_cast<TestFlag>(i);
+        const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, true);
     }
     flags_.ProcessDirtyFlags();
@@ -639,7 +644,7 @@ NOLINT_TEST_F(SceneFlagsTest, SetInheritedAll_AllFlagsInheritFromParent)
 {
     // Arrange: Set up flags with local values
     for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
-        auto flag = static_cast<TestFlag>(i);
+        const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, true);
     }
     flags_.ProcessDirtyFlags();
@@ -696,7 +701,8 @@ NOLINT_TEST_F(SceneFlagsTest, ProcessDirtyFlags_ReturnsTrueWhenFlagsProcessed)
     flags_.SetLocalValue(TestFlag::kLocked, true);
 
     // Act: Process all dirty flags
-    auto result = flags_.ProcessDirtyFlags();
+    // ReSharper disable once CppTooWideScope
+    const auto result = flags_.ProcessDirtyFlags();
 
     // Assert: Should return true and apply all changes
     if (result) {
@@ -717,7 +723,7 @@ NOLINT_TEST_F(SceneFlagsTest, CopyConstruction_PreservesState)
     original.SetLocalValue(TestFlag::kVisible, true);
 
     // Act: Copy construct new container
-    auto copy = SceneFlags<TestFlag>(original);
+    const auto copy = SceneFlags(original);
 
     // Assert: Copy should match original exactly
     EXPECT_EQ(original, copy);
@@ -728,10 +734,9 @@ NOLINT_TEST_F(SceneFlagsTest, CopyAssignment_PreservesState)
     // Arrange: Set up source and target containers
     auto source = SceneFlags<TestFlag> {};
     source.SetLocalValue(TestFlag::kVisible, true);
-    auto target = SceneFlags<TestFlag> {};
 
     // Act: Copy assign
-    target = source;
+    const auto target = source;
 
     // Assert: Target should match source
     EXPECT_EQ(source, target);
@@ -742,10 +747,10 @@ NOLINT_TEST_F(SceneFlagsTest, MoveConstruction_TransfersState)
     // Arrange: Set up flags with state
     auto original = SceneFlags<TestFlag> {};
     original.SetLocalValue(TestFlag::kVisible, true);
-    auto expected = original; // Copy for comparison
+    const auto expected = original; // Copy for comparison
 
     // Act: Move construct
-    auto moved = SceneFlags<TestFlag>(std::move(original));
+    const auto moved = SceneFlags(std::move(original)); // NOLINT(performance-move-const-arg)
 
     // Assert: Moved container should have expected state
     EXPECT_EQ(moved, expected);
@@ -756,11 +761,10 @@ NOLINT_TEST_F(SceneFlagsTest, MoveAssignment_TransfersState)
     // Arrange: Set up source and target
     auto source = SceneFlags<TestFlag> {};
     source.SetLocalValue(TestFlag::kVisible, true);
-    auto expected = source; // Copy for comparison
-    auto target = SceneFlags<TestFlag> {};
+    const auto expected = source; // Copy for comparison
 
     // Act: Move assign
-    target = std::move(source);
+    const auto target = std::move(source); // NOLINT(performance-move-const-arg)
 
     // Assert: Target should have expected state
     EXPECT_EQ(target, expected);
@@ -771,7 +775,7 @@ NOLINT_TEST_F(SceneFlagsTest, MoveAssignment_TransfersState)
 //------------------------------------------------------------------------------
 
 //! Test fixture for AtomicSceneFlags.
-class AtomicSceneFlagsTest : public ::testing::Test {
+class AtomicSceneFlagsTest : public testing::Test {
 protected:
     AtomicSceneFlags<TestFlag> atomic_flags_ {};
 };
@@ -787,7 +791,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, StoreAndLoad_PreservesState)
     atomic_flags_.Store(flags);
 
     // Act: Load flags atomically
-    auto loaded = atomic_flags_.Load();
+    const auto loaded = atomic_flags_.Load();
 
     // Assert: Loaded flags should match stored flags
     EXPECT_TRUE(loaded.GetEffectiveValue(TestFlag::kVisible));
@@ -807,7 +811,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, Exchange_ReturnsOldValueAndSetsNew)
     new_flags.ProcessDirtyFlags();
 
     // Act: Exchange old for new
-    auto returned_flags = atomic_flags_.Exchange(new_flags);
+    const auto returned_flags = atomic_flags_.Exchange(new_flags);
 
     // Assert: Should return old value and store new value
     EXPECT_TRUE(returned_flags.GetEffectiveValue(TestFlag::kVisible));
@@ -824,7 +828,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, CompareExchangeWeak_SucceedsWithCorrectExpec
     atomic_flags_.Store(expected);
 
     // Act: Attempt weak compare-exchange with correct expected value
-    auto result = atomic_flags_.CompareExchangeWeak(expected, desired);
+    const auto result = atomic_flags_.CompareExchangeWeak(expected, desired);
 
     // Assert: Should succeed and update to desired value
     EXPECT_TRUE(result);
@@ -841,7 +845,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, CompareExchangeStrong_SucceedsWithCorrectExp
     atomic_flags_.Store(expected);
 
     // Act: Attempt strong compare-exchange with correct expected value
-    auto result = atomic_flags_.CompareExchangeStrong(expected, desired);
+    const auto result = atomic_flags_.CompareExchangeStrong(expected, desired);
 
     // Assert: Should succeed and update to desired value
     EXPECT_TRUE(result);
@@ -868,7 +872,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, CompareExchangeWeak_FailsAndUpdatesExpected)
     atomic_flags_.Store(current_value);
 
     // Act: Attempt compare-exchange with wrong expected value
-    auto result = atomic_flags_.CompareExchangeWeak(wrong_expected, desired);
+    const auto result = atomic_flags_.CompareExchangeWeak(wrong_expected, desired);
 
     // Assert: Should fail, update expected, and leave current unchanged
     EXPECT_FALSE(result);
@@ -896,7 +900,7 @@ NOLINT_TEST_F(AtomicSceneFlagsTest, CompareExchangeStrong_FailsAndUpdatesExpecte
     atomic_flags_.Store(current_value);
 
     // Act: Attempt strong compare-exchange with wrong expected value
-    auto result = atomic_flags_.CompareExchangeStrong(wrong_expected, desired);
+    const auto result = atomic_flags_.CompareExchangeStrong(wrong_expected, desired);
 
     // Assert: Should fail, update expected, and leave current unchanged
     EXPECT_FALSE(result);

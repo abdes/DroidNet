@@ -50,7 +50,6 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "TransformComponent.cpp"
     "Scene.cpp"
     "SceneTraversal.cpp"
     "SceneFlags.cpp"
@@ -59,6 +58,8 @@ target_sources(
     "Detail/NodeData.h"
     "Detail/GraphData.h"
     "Detail/StringConverters.cpp"
+    "Detail/TransformComponent.cpp"
+    "Detail/TransformComponent.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -68,7 +69,6 @@ target_sources(
       "Scene.h"
       "SceneTraversal.h"
       "SceneNode.h"
-      "TransformComponent.h"
       "Types/Flags.h"
       "Types/SceneFlagEnum.h"
       "SceneNodeImpl.h"

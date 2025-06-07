@@ -9,13 +9,14 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Detail/NodeData.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
 using oxygen::scene::detail::NodeData;
+using oxygen::scene::detail::TransformComponent;
 using GraphNode = SceneNodeImpl::GraphNode;
 
 SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
@@ -29,7 +30,7 @@ SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
 
     // Initialize the cached GraphNode efficiently, but after components are
     // added.
-    cached_graph_node_ = GraphNode { this, &GetComponent<detail::GraphData>() };
+    cached_graph_node_ = GraphNode { this, &GetComponent<GraphData>() };
 
     // Iterate over the flags and log each one
     for (const auto [flag, flag_values] : flags) {
@@ -78,23 +79,23 @@ auto SceneNodeImpl::GetFlags() noexcept -> Flags&
 // ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::MarkTransformDirty() noexcept
 {
-    GetComponent<NodeData>().transform_dirty_ = true;
+    GetComponent<TransformComponent>().MarkDirty();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::ClearTransformDirty() noexcept
 {
-    GetComponent<NodeData>().transform_dirty_ = false;
+    GetComponent<TransformComponent>().ForceClearDirty();
 }
 
 auto SceneNodeImpl::IsTransformDirty() const noexcept -> bool
 {
-    return GetComponent<NodeData>().transform_dirty_;
+    return GetComponent<TransformComponent>().IsDirty();
 }
 
 void SceneNodeImpl::UpdateTransforms(const Scene& scene)
 {
-    if (!GetComponent<NodeData>().transform_dirty_) {
+    if (!GetComponent<TransformComponent>().IsDirty()) {
         return;
     }
 
@@ -173,7 +174,7 @@ SceneNodeImpl::SceneNodeImpl(const SceneNodeImpl& other)
     : Composition(other)
 {
     // Initialize our own GraphNode after components are copied
-    cached_graph_node_ = GraphNode { this, &GetComponent<detail::GraphData>() };
+    cached_graph_node_ = GraphNode { this, &GetComponent<GraphData>() };
 }
 
 // Copy assignment
@@ -182,7 +183,7 @@ auto SceneNodeImpl::operator=(const SceneNodeImpl& other) -> SceneNodeImpl&
     if (this != &other) {
         Composition::operator=(other);
         // Re-initialize cached GraphNode with new components
-        cached_graph_node_ = GraphNode { this, &GetComponent<detail::GraphData>() };
+        cached_graph_node_ = GraphNode { this, &GetComponent<GraphData>() };
     }
     return *this;
 }
@@ -212,7 +213,7 @@ auto SceneNodeImpl::operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&
 
         // Perform the composition move
         Composition::operator=(std::move(other)); // Re-initialize our cached GraphNode with moved components
-        cached_graph_node_ = GraphNode { this, &GetComponent<detail::GraphData>() };
+        cached_graph_node_ = GraphNode { this, &GetComponent<GraphData>() };
     }
     return *this;
 }
@@ -223,10 +224,10 @@ auto SceneNodeImpl::Clone() const -> std::unique_ptr<SceneNodeImpl>
     DLOG_F(2, "original node name: {}", GetName());
 
     // Use CloneableMixin to get a properly cloned composition
-    auto clone = CloneableMixin<SceneNodeImpl>::Clone();
+    auto clone = CloneableMixin::Clone();
 
     // Re-initialize the cached GraphNode with the cloned components
-    clone->cached_graph_node_ = GraphNode { clone.get(), &clone->GetComponent<detail::GraphData>() };
+    clone->cached_graph_node_ = GraphNode { clone.get(), &clone->GetComponent<GraphData>() };
 
     DLOG_F(2, "successful");
     return clone;

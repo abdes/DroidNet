@@ -49,7 +49,6 @@ public:
               .SetFlag(SceneNodeFlags::kReceivesShadows, SceneFlag {}.SetInheritedBit(true))
               .SetFlag(SceneNodeFlags::kRayCastingSelectable, SceneFlag {}.SetInheritedBit(true));
 
-public:
     //! Efficient graph node view over a SceneNodeImpl, for hierarchy traversal
     //! and manipulation.
     /*!
@@ -143,11 +142,24 @@ public:
     OXYGEN_SCENE_API auto AsGraphNode() const noexcept -> const GraphNode&;
 
     OXYGEN_SCENE_API void MarkTransformDirty() noexcept;
-    OXYGEN_SCENE_API void ClearTransformDirty() noexcept;
     [[nodiscard]] OXYGEN_SCENE_API auto IsTransformDirty() const noexcept -> bool;
     OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene); // Cloning support
-    [[nodiscard]] auto IsCloneable() const noexcept -> bool { return true; }
-    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
+    [[nodiscard]] static auto IsCloneable() noexcept -> bool { return true; }
+    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const -> std::unique_ptr<SceneNodeImpl> override;
+
+protected:
+    //! Marks the node transform matrices as clean, without updating them.
+    /*!
+     This method is used to reset the dirty state of the node's transform
+     matrices without recalculating them. It is typically called after the
+     transforms have been updated through other means, such as during scene
+     initialization or when the node's transform has been manually set, or when
+     testing.
+
+     The proper way remains to call UpdateTransforms() to ensure the transform
+     matrices are up to date.
+    */
+    OXYGEN_SCENE_API void ClearTransformDirty() noexcept;
 
 private:
     [[nodiscard]] constexpr auto ShouldIgnoreParentTransform() const

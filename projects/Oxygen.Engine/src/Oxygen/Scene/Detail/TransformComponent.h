@@ -12,7 +12,7 @@
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/api_export.h>
 
-namespace oxygen::scene {
+namespace oxygen::scene::detail {
 
 //! Component managing 3D spatial transformations with hierarchical support and
 //! performance optimization.
@@ -33,7 +33,7 @@ namespace oxygen::scene {
 
  \note All GLM data types are 16-byte aligned for optimal SIMD performance.
 */
-class TransformComponent : public oxygen::Component {
+class TransformComponent final : public Component {
     OXYGEN_COMPONENT(TransformComponent)
     OXYGEN_COMPONENT_REQUIRES(ObjectMetaData)
 
@@ -231,6 +231,9 @@ public:
     auto MarkDirty() noexcept -> void { is_dirty_ = true; } //! Checks if the transform is dirty and needs matrix re-computation.
     [[nodiscard]] auto IsDirty() const noexcept -> bool { return is_dirty_; }
 
+    //! Clears the dirty flag without recomputing the world matrix.
+    void ForceClearDirty() noexcept { is_dirty_ = false; }
+
     [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
     {
@@ -268,9 +271,9 @@ private:
     mutable alignas(16) Mat4 world_matrix_ { 1.0f };
 
     //! Dirty flag indicating world matrix cache needs re-computation.
-    mutable bool is_dirty_ = true;
+    bool is_dirty_ = true;
 
-    ObjectMetaData* meta_data_ {nullptr};
+    ObjectMetaData* meta_data_ { nullptr };
 };
 
-} // namespace oxygen::scene
+} // namespace oxygen::scene::detail

@@ -23,7 +23,8 @@ enum class SceneNodeFlags : uint8_t {
 
     kCount, //!< Sentinel value required for TernaryFlagEnum concept
 };
-const char* to_string(const SceneNodeFlags& value) noexcept;
+
+auto to_string(const SceneNodeFlags& value) noexcept -> const char*;
 
 static_assert(SceneFlagEnum<SceneNodeFlags>,
     "SceneNodeFlags must satisfy TernaryFlagEnum concept requirements");

@@ -10,10 +10,10 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/ObjectMetaData.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
-#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::ObjectMetaData;
 using oxygen::ResourceHandle;
@@ -21,14 +21,24 @@ using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
-using oxygen::scene::TransformComponent;
+using oxygen::scene::detail::TransformComponent;
 
 //------------------------------------------------------------------------------
 // Anonymous namespace for test isolation
 //------------------------------------------------------------------------------
 namespace {
 
-class SceneNodeImplTest : public ::testing::Test {
+class TestSceneNodeImpl final : public SceneNodeImpl {
+public:
+    explicit TestSceneNodeImpl(const std::string& name = "TestNode", const Flags& flags = kDefaultFlags)
+        : SceneNodeImpl(name, flags)
+    {
+    }
+
+    using SceneNodeImpl::ClearTransformDirty;
+};
+
+class SceneNodeImplTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -36,14 +46,15 @@ protected:
     }
 
     // Helper: Create a node with default flags
-    static auto CreateDefaultNode(const std::string& name = "TestNode") -> SceneNodeImpl
+    static auto CreateDefaultNode(const std::string& name = "TestNode")
     {
-        return SceneNodeImpl(name);
+        return TestSceneNodeImpl { name };
     }
 
     // Helper: Verify all flag states match expected values
-    void ExpectFlagState(const SceneNodeImpl::Flags& flags, SceneNodeFlags flag,
-        bool effective, bool inherited, bool dirty = false, bool previous = false)
+    static void ExpectFlagState(
+        const SceneNodeImpl::Flags& flags, const SceneNodeFlags flag,
+        const bool effective, const bool inherited, const bool dirty = false, const bool previous = false)
     {
         EXPECT_EQ(flags.GetEffectiveValue(flag), effective);
         EXPECT_EQ(flags.IsInherited(flag), inherited);
@@ -62,7 +73,7 @@ NOLINT_TEST_F(SceneNodeImplTest, DefaultConstruction_InitializesWithCorrectName)
     // Arrange: Create node with specific name
 
     // Act: Construct node with default flags
-    auto node = SceneNodeImpl("TestNode");
+    const auto node = SceneNodeImpl("TestNode");
 
     // Assert: Node should have correct name
     EXPECT_EQ(node.GetName(), "TestNode");
@@ -128,7 +139,7 @@ NOLINT_TEST_F(SceneNodeImplTest, DefaultFlags_AllPendingAndDirtyBitsFalse)
 
     // Assert: All pending, dirty, and previous bits should be false
     for (int i = 0; i < static_cast<int>(SceneNodeFlags::kCount); ++i) {
-        auto flag = static_cast<SceneNodeFlags>(i);
+        const auto flag = static_cast<SceneNodeFlags>(i);
         EXPECT_FALSE(flags.GetPendingValue(flag)) << "Pending bit should be false for flag " << i;
         EXPECT_FALSE(flags.IsDirty(flag)) << "Dirty bit should be false for flag " << i;
         EXPECT_FALSE(flags.GetPreviousValue(flag)) << "Previous bit should be false for flag " << i;
@@ -138,9 +149,9 @@ NOLINT_TEST_F(SceneNodeImplTest, DefaultFlags_AllPendingAndDirtyBitsFalse)
 NOLINT_TEST_F(SceneNodeImplTest, ConstructorWithCustomFlags_PreservesCustomValues)
 {
     // Arrange: Create custom flags with specific values
-    auto custom_flags = SceneNodeImpl::Flags {}
-                            .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
-                            .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
+    const auto custom_flags = SceneNodeImpl::Flags {}
+                                  .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
+                                  .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
 
     // Act: Construct node with custom flags
     auto node = SceneNodeImpl("CustomNode", custom_flags);
@@ -222,7 +233,7 @@ NOLINT_TEST_F(SceneNodeImplTest, ProcessDirtyFlag_ClearsDirtyState)
     EXPECT_TRUE(flags.IsDirty(SceneNodeFlags::kVisible));
 
     // Act: Process the dirty flag
-    auto result = flags.ProcessDirtyFlag(SceneNodeFlags::kVisible);
+    const auto result = flags.ProcessDirtyFlag(SceneNodeFlags::kVisible);
 
     // Assert: Flag should no longer be dirty and processing should succeed
     EXPECT_TRUE(result);
@@ -258,7 +269,7 @@ NOLINT_TEST_F(SceneNodeImplTest, NewNode_StartsWithDirtyTransform)
     // Arrange: Create a new node
 
     // Act: Check initial transform dirty state
-    auto node = CreateDefaultNode();
+    const auto node = CreateDefaultNode();
 
     // Assert: New nodes should start with dirty transform
     EXPECT_TRUE(node.IsTransformDirty());
@@ -339,7 +350,7 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_SetAndGetParent)
 {
     // Arrange: Create node and parent handle
     auto node = CreateDefaultNode();
-    auto parent_handle = ResourceHandle { 42 };
+    const auto parent_handle = ResourceHandle { 42 };
 
     // Act: Set parent handle
     auto& graph_node = node.AsGraphNode();
@@ -353,7 +364,7 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_SetAndGetFirstChild)
 {
     // Arrange: Create node and child handle
     auto node = CreateDefaultNode();
-    auto child_handle = ResourceHandle { 43 };
+    const auto child_handle = ResourceHandle { 43 };
 
     // Act: Set first child handle
     auto& graph_node = node.AsGraphNode();
@@ -367,8 +378,8 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_SetAndGetSiblings)
 {
     // Arrange: Create node and sibling handles
     auto node = CreateDefaultNode();
-    auto next_handle = ResourceHandle { 44 };
-    auto prev_handle = ResourceHandle { 45 };
+    const auto next_handle = ResourceHandle { 44 };
+    const auto prev_handle = ResourceHandle { 45 };
 
     // Act: Set sibling handles
     auto& graph_node = node.AsGraphNode();
@@ -384,7 +395,7 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_InvalidHandlesAccepted)
 {
     // Arrange: Create node and invalid handle
     auto node = CreateDefaultNode();
-    auto invalid_handle = ResourceHandle {};
+    const auto invalid_handle = ResourceHandle {};
     EXPECT_FALSE(invalid_handle.IsValid());
 
     // Act: Set all hierarchy relationships to invalid handles
@@ -405,10 +416,10 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_ConsistencyAcrossOperations)
 {
     // Arrange: Create node and set all handles
     auto node = CreateDefaultNode();
-    auto parent_handle = ResourceHandle { 100 };
-    auto child_handle = ResourceHandle { 200 };
-    auto next_handle = ResourceHandle { 300 };
-    auto prev_handle = ResourceHandle { 400 };
+    const auto parent_handle = ResourceHandle { 100 };
+    const auto child_handle = ResourceHandle { 200 };
+    const auto next_handle = ResourceHandle { 300 };
+    const auto prev_handle = ResourceHandle { 400 };
 
     auto& graph_node = node.AsGraphNode();
     graph_node.SetParent(parent_handle);
@@ -425,7 +436,7 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_ConsistencyAcrossOperations)
     EXPECT_EQ(graph_node.GetPrevSibling(), prev_handle);
 
     // Act: Update one handle and verify others unchanged
-    auto new_parent = ResourceHandle { 500 };
+    const auto new_parent = ResourceHandle { 500 };
     graph_node.SetParent(new_parent);
 
     // Assert: Parent should be updated, others unchanged
@@ -440,49 +451,22 @@ NOLINT_TEST_F(SceneNodeImplTest, HierarchyHandles_ConsistencyAcrossOperations)
 //------------------------------------------------------------------------------
 
 // Mock Scene for UpdateTransforms - functional Scene subclass for testing
-class MockScene : public oxygen::scene::Scene {
+class MockScene final : public oxygen::scene::Scene {
 public:
     MockScene()
-        : oxygen::scene::Scene("MockScene", 1024)
+        : Scene("MockScene", 1024)
     {
     }
 
     // Helper: Add a SceneNodeImpl to the mock scene for testing
     auto AddNodeForTesting(const std::string& name) -> ResourceHandle
     {
-        auto node = CreateNode(name);
+        const auto node = CreateNode(name);
         return node.GetHandle();
-    }
-
-    // Helper: Add a SceneNodeImpl with custom data for testing
-    auto AddNodeForTesting(const oxygen::scene::SceneNodeImpl& template_node) -> ResourceHandle
-    {
-        // Arrange: Create node with same name and copy relevant data
-        auto name = std::string { template_node.GetName() };
-        auto node = CreateNode(name);
-        auto handle = node.GetHandle();
-
-        // Act: Copy hierarchy and transform state from template
-        auto& new_impl = GetNodeImplRef(handle);
-        auto& new_graph_node = new_impl.AsGraphNode();
-        const auto& template_graph_node = template_node.AsGraphNode();
-
-        new_graph_node.SetParent(template_graph_node.GetParent());
-        new_graph_node.SetFirstChild(template_graph_node.GetFirstChild());
-        new_graph_node.SetNextSibling(template_graph_node.GetNextSibling());
-        new_graph_node.SetPrevSibling(template_graph_node.GetPrevSibling());
-
-        if (template_node.IsTransformDirty()) {
-            new_impl.MarkTransformDirty();
-        } else {
-            new_impl.ClearTransformDirty();
-        }
-
-        return handle;
     }
 };
 
-class SceneNodeImplTransformTest : public ::testing::Test {
+class SceneNodeImplTransformTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -502,7 +486,7 @@ protected:
 NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_RootNodeClearsTransformDirty)
 {
     // Arrange: Create root node in scene
-    auto node_handle = mock_scene_->AddNodeForTesting("RootNode");
+    const auto node_handle = mock_scene_->AddNodeForTesting("RootNode");
     auto& node = mock_scene_->GetNodeImplRef(node_handle);
 
     // Arrange: Set as root (invalid parent handle) and ensure dirty
@@ -520,8 +504,8 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_RootNodeClearsTransfo
 NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_WithParentSucceeds)
 {
     // Arrange: Create parent and child nodes in scene
-    auto parent_handle = mock_scene_->AddNodeForTesting("Parent");
-    auto child_handle = mock_scene_->AddNodeForTesting("Child");
+    const auto parent_handle = mock_scene_->AddNodeForTesting("Parent");
+    const auto child_handle = mock_scene_->AddNodeForTesting("Child");
 
     auto& child_impl = mock_scene_->GetNodeImplRef(child_handle);
     auto& parent_impl = mock_scene_->GetNodeImplRef(parent_handle);
@@ -543,7 +527,7 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_WithParentSucceeds)
 NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_IgnoreParentTransformFlag)
 {
     // Arrange: Create node and set to ignore parent transform
-    auto node_handle = mock_scene_->AddNodeForTesting("TestNode");
+    const auto node_handle = mock_scene_->AddNodeForTesting("TestNode");
     auto& node = mock_scene_->GetNodeImplRef(node_handle);
 
     auto& flags = node.GetFlags();
@@ -551,7 +535,7 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_IgnoreParentTransform
     flags.ProcessDirtyFlag(SceneNodeFlags::kIgnoreParentTransform);
 
     // Arrange: Create parent and set relationship
-    auto parent_handle = mock_scene_->AddNodeForTesting("Parent");
+    const auto parent_handle = mock_scene_->AddNodeForTesting("Parent");
     node.AsGraphNode().SetParent(parent_handle);
     node.MarkTransformDirty();
 
@@ -565,9 +549,9 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_IgnoreParentTransform
 NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_CleanTransformIsNoOp)
 {
     // Arrange: Create node and clear transform dirty flag
-    auto node_handle = mock_scene_->AddNodeForTesting("TestNode");
+    const auto node_handle = mock_scene_->AddNodeForTesting("TestNode");
     auto& node = mock_scene_->GetNodeImplRef(node_handle);
-    node.ClearTransformDirty();
+    node.UpdateTransforms(*mock_scene_);
     EXPECT_FALSE(node.IsTransformDirty());
 
     // Act: Update transforms on clean node
@@ -584,7 +568,7 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_CleanTransformIsNoOp)
 NOLINT_TEST_F(SceneNodeImplTest, Clone_CreatesIndependentCopy)
 {
     // Arrange: Create original node with custom properties
-    auto original = SceneNodeImpl("OriginalNode");
+    const auto original = SceneNodeImpl("OriginalNode");
 
     // Arrange: Modify transform component
     auto& transform = original.GetComponent<TransformComponent>();
@@ -593,7 +577,7 @@ NOLINT_TEST_F(SceneNodeImplTest, Clone_CreatesIndependentCopy)
     transform.SetLocalScale({ 2.0f, 2.0f, 2.0f });
 
     // Act: Clone the node
-    auto clone = original.Clone();
+    const auto clone = original.Clone();
 
     // Assert: Clone should exist and be independent
     ASSERT_NE(clone, nullptr);
@@ -603,13 +587,13 @@ NOLINT_TEST_F(SceneNodeImplTest, Clone_CreatesIndependentCopy)
 NOLINT_TEST_F(SceneNodeImplTest, Clone_PreservesTransformData)
 {
     // Arrange: Create original with specific transform
-    auto original = SceneNodeImpl("OriginalNode");
+    const auto original = SceneNodeImpl("OriginalNode");
     auto& transform = original.GetComponent<TransformComponent>();
     transform.SetLocalPosition({ 1.0f, 2.0f, 3.0f });
     transform.SetLocalScale({ 2.0f, 2.0f, 2.0f });
 
     // Act: Clone the node
-    auto clone = original.Clone();
+    const auto clone = original.Clone();
 
     // Assert: Clone should preserve transform data
     ASSERT_NE(clone, nullptr);
@@ -622,7 +606,7 @@ NOLINT_TEST_F(SceneNodeImplTest, Clone_ClonesAreIndependent)
 {
     // Arrange: Create original node
     auto original = SceneNodeImpl("OriginalNode");
-    auto clone = original.Clone();
+    const auto clone = original.Clone();
     ASSERT_NE(clone, nullptr);
 
     // Act: Modify original name
@@ -647,7 +631,7 @@ NOLINT_TEST_F(SceneNodeImplTest, Clone_HierarchyIsOrphaned)
     graph_node.SetPrevSibling(ResourceHandle { 400 });
 
     // Act: Clone the node
-    auto clone = original.Clone();
+    const auto clone = original.Clone();
 
     // Assert: Clone should have no hierarchy relationships (orphaned)
     ASSERT_NE(clone, nullptr);

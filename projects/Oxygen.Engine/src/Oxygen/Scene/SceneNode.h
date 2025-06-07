@@ -11,6 +11,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <glm/glm.hpp>
+
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/Object.h>
@@ -18,8 +20,6 @@
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/TransformComponent.h>
-#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -167,6 +167,10 @@ concept TransformState = requires(T t) {
     t.transform_component;
 };
 
+namespace detail {
+    class TransformComponent; // Forward declaration
+} // namespace detail
+
 /*!
  Scene-aware Transform interface providing safe access to node transformations.
 
@@ -216,9 +220,9 @@ concept TransformState = requires(T t) {
 */
 class SceneNode::Transform {
 public:
-    using Vec3 = TransformComponent::Vec3;
-    using Quat = TransformComponent::Quat;
-    using Mat4 = TransformComponent::Mat4;
+    using Vec3 = glm::vec3;
+    using Quat = glm::quat;
+    using Mat4 = glm::mat4;
 
     //! Constructs a Transform interface for the given SceneNode.
     /*!
@@ -245,56 +249,32 @@ public:
      \param scale New local scale vector (positive values recommended).
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto SetLocalTransform(
+    OXYGEN_SCENE_API auto SetLocalTransform(
         const Vec3& position,
         const Quat& rotation,
         const Vec3& scale) noexcept
-        -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->SetLocalTransform(position, rotation, scale);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+        -> bool;
 
     //! Sets the local position (translation component).
     /*!
      \param position New local position vector in local coordinate space.
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto SetLocalPosition(const Vec3& position) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->SetLocalPosition(position);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto SetLocalPosition(const Vec3& position) noexcept -> bool;
 
     //! Sets the local rotation (rotation component).
     /*!
      \param rotation New local rotation quaternion (should be normalized).
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto SetLocalRotation(const Quat& rotation) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->SetLocalRotation(rotation);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto SetLocalRotation(const Quat& rotation) noexcept -> bool;
 
     //! Sets the local scale (scale component).
     /*!
      \param scale New local scale vector (positive values recommended).
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto SetLocalScale(const Vec3& scale) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->SetLocalScale(scale);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto SetLocalScale(const Vec3& scale) noexcept -> bool;
 
     //=== Local Transform Getters ===---------------------------------------//
 
@@ -303,36 +283,21 @@ public:
      \return Optional local position vector, or std::nullopt if the node is no
              longer valid.
     */
-    [[nodiscard]] auto GetLocalPosition() const noexcept -> std::optional<Vec3>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetLocalPosition();
-        });
-    }
+    [[nodiscard]] OXYGEN_SCENE_API auto GetLocalPosition() const noexcept -> std::optional<Vec3>;
 
     //! Gets the local rotation (rotation component).
     /*!
      \return Optional local rotation quaternion, or std::nullopt if the node is no
              longer valid.
     */
-    [[nodiscard]] auto GetLocalRotation() const noexcept -> std::optional<Quat>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetLocalRotation();
-        });
-    }
+    [[nodiscard]] OXYGEN_SCENE_API auto GetLocalRotation() const noexcept -> std::optional<Quat>;
 
     //! Gets the local scale (scale component).
     /*!
      \return Optional local scale vector, or std::nullopt if the node is no
              longer valid.
     */
-    [[nodiscard]] auto GetLocalScale() const noexcept -> std::optional<Vec3>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetLocalScale();
-        });
-    }
+    [[nodiscard]] OXYGEN_SCENE_API auto GetLocalScale() const noexcept -> std::optional<Vec3>;
 
     //=== Transform Operations ===------------------------------------------//
 
@@ -343,13 +308,7 @@ public:
                   offset is applied directly in world space.
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto Translate(const Vec3& offset, const bool local = true) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->Translate(offset, local);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto Translate(const Vec3& offset, bool local = true) noexcept -> bool;
 
     //! Applies a rotation to the current orientation.
     /*!
@@ -358,26 +317,14 @@ public:
                   if false, applies rotation before current rotation (world space).
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto Rotate(const Quat& rotation, bool local = true) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->Rotate(rotation, local);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto Rotate(const Quat& rotation, bool local = true) noexcept -> bool;
 
     //! Applies a scaling factor to the current scale.
     /*!
      \param scale_factor Multiplicative scale factor for each axis.
      \return True if the operation succeeded, false if the node is no longer valid.
     */
-    auto Scale(const Vec3& scale_factor) noexcept -> bool
-    {
-        return SafeCall([&](const State& state) {
-            state.transform_component->Scale(scale_factor);
-            state.node_impl->MarkTransformDirty();
-        }).has_value();
-    }
+    OXYGEN_SCENE_API auto Scale(const Vec3& scale_factor) noexcept -> bool;
 
     //=== World Transform Access (Respects Caching) ===--------------------//
 
@@ -391,12 +338,7 @@ public:
              no longer valid.
      \note This respects the existing caching system and does not force computation.
     */
-    [[nodiscard]] auto GetWorldMatrix() const noexcept -> std::optional<Mat4>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetWorldMatrix();
-        });
-    }
+    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldMatrix() const noexcept -> std::optional<Mat4>;
 
     //! Extracts the world-space position from the cached world transformation
     //! matrix.
@@ -404,32 +346,19 @@ public:
      \return Optional world-space position vector, or std::nullopt if the node
              is no longer valid.
     */
-    [[nodiscard]] auto GetWorldPosition() const noexcept -> std::optional<Vec3>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetWorldPosition();
-        });
-    } //! Extracts the world-space rotation from the cached world transformation matrix.
+    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldPosition() const noexcept -> std::optional<Vec3>;
+    //! Extracts the world-space rotation from the cached world transformation matrix.
     /*!
      \return Optional world-space rotation quaternion, or std::nullopt if the
              node is no longer valid.
     */
-    [[nodiscard]] auto GetWorldRotation() const noexcept -> std::optional<Quat>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetWorldRotation();
-        });
-    } //! Extracts the world-space scale from the cached world transformation matrix.
+    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldRotation() const noexcept -> std::optional<Quat>;
+    //! Extracts the world-space scale from the cached world transformation matrix.
     /*!
      \return Optional world-space scale vector, or std::nullopt if the node is
              no longer valid.
     */
-    [[nodiscard]] auto GetWorldScale() const noexcept -> std::optional<Vec3>
-    {
-        return SafeCall([](const ConstState& state) {
-            return state.transform_component->GetWorldScale();
-        });
-    }
+    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldScale() const noexcept -> std::optional<Vec3>;
 
     //=== Scene-Aware Transform Operations ===-----------------------------//
 
@@ -459,16 +388,16 @@ private:
     struct State {
         SceneNode* node = nullptr;
         SceneNodeImpl* node_impl = nullptr;
-        TransformComponent* transform_component = nullptr;
+        detail::TransformComponent* transform_component = nullptr;
     };
     static_assert(TransformState<State>, "State must satisfy TransformState concept requirements");
 
     struct ConstState {
         const SceneNode* node = nullptr;
         const SceneNodeImpl* node_impl = nullptr;
-        const TransformComponent* transform_component = nullptr;
+        const detail::TransformComponent* transform_component = nullptr;
     };
-    static_assert(TransformState<State>, "State must satisfy TransformState concept requirements"); // Single validation method for both State types using concepts
+    static_assert(TransformState<State>, "State must satisfy TransformState concept requirements");
 
     //! Validates the state for SafeCall operations.
     /*!

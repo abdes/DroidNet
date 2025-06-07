@@ -6,17 +6,17 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Scene/TransformComponent.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 
 using oxygen::TypeId;
-using oxygen::scene::TransformComponent;
+using oxygen::scene::detail::TransformComponent;
 
 //------------------------------------------------------------------------------
 // Anonymous namespace for test isolation
 //------------------------------------------------------------------------------
 namespace {
 
-class TransformComponentTest : public ::testing::Test {
+class TransformComponentTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -31,26 +31,26 @@ protected:
     }
 
     // Helper: Create test vectors and quaternions
-    static constexpr auto MakeVec3(float x, float y, float z) -> TransformComponent::Vec3
+    static constexpr auto MakeVec3(const float x, const float y, const float z) -> TransformComponent::Vec3
     {
         return TransformComponent::Vec3 { x, y, z };
     }
 
-    static auto MakeQuat(float w, float x, float y, float z) -> TransformComponent::Quat
+    static auto MakeQuat(const float w, const float x, const float y, const float z) -> TransformComponent::Quat
     {
         return TransformComponent::Quat { w, x, y, z };
     }
 
     // Helper: Create normalized rotation quaternion from euler angles (degrees)
-    static auto QuatFromEuler(float pitch, float yaw, float roll) -> TransformComponent::Quat
+    static auto QuatFromEuler(const float pitch, const float yaw, const float roll) -> TransformComponent::Quat
     {
-        return glm::quat(glm::radians(TransformComponent::Vec3 { pitch, yaw, roll }));
+        return { glm::radians(TransformComponent::Vec3 { pitch, yaw, roll }) };
     }
 
     // Helper: Check if two vectors are approximately equal
     static void ExpectVec3Near(const TransformComponent::Vec3& actual,
         const TransformComponent::Vec3& expected,
-        float tolerance = 1e-5f)
+        const float tolerance = 1e-5f)
     {
         EXPECT_NEAR(actual.x, expected.x, tolerance);
         EXPECT_NEAR(actual.y, expected.y, tolerance);
@@ -61,13 +61,13 @@ protected:
     // Handles the fact that q and -q represent the same rotation
     static void ExpectQuatNear(const TransformComponent::Quat& actual,
         const TransformComponent::Quat& expected,
-        float tolerance = 1e-5f)
+        const float tolerance = 1e-5f)
     {
         // Check if quaternions are the same or negatives of each other
         // (both represent the same rotation)
-        auto dot_product = glm::dot(actual, expected);
 
-        if (dot_product >= 0.0f) {
+        if (const auto dot_product = glm::dot(actual, expected);
+            dot_product >= 0.0f) {
             // Same orientation
             EXPECT_NEAR(actual.w, expected.w, tolerance);
             EXPECT_NEAR(actual.x, expected.x, tolerance);
@@ -85,7 +85,7 @@ protected:
     // Helper: Check if two matrices are approximately equal
     static void ExpectMat4Near(const TransformComponent::Mat4& actual,
         const TransformComponent::Mat4& expected,
-        float tolerance = 1e-5f)
+        const float tolerance = 1e-5f)
     {
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
@@ -96,13 +96,13 @@ protected:
     }
 
     // Helper: Verify component is in dirty state
-    void ExpectComponentDirty()
+    void ExpectComponentDirty() const
     {
         EXPECT_TRUE(component_->IsDirty());
     }
 
     // Helper: Clear dirty state by updating world transform
-    void ClearDirtyState()
+    void ClearDirtyState() const
     {
         component_->UpdateWorldTransformAsRoot();
         EXPECT_FALSE(component_->IsDirty());
@@ -120,9 +120,9 @@ NOLINT_TEST_F(TransformComponentTest, DefaultConstruction_InitializesIdentityTra
     // Arrange: Default constructed component (done in SetUp)
 
     // Act: Get default values
-    auto position = component_->GetLocalPosition();
-    auto rotation = component_->GetLocalRotation();
-    auto scale = component_->GetLocalScale();
+    const auto position = component_->GetLocalPosition();
+    const auto rotation = component_->GetLocalRotation();
+    const auto scale = component_->GetLocalScale();
 
     // Assert: Should initialize to identity transformation
     ExpectVec3Near(position, MakeVec3(0.0f, 0.0f, 0.0f));
@@ -139,7 +139,7 @@ NOLINT_TEST_F(TransformComponentTest, SetLocalPosition_UpdatesPositionAndMarksDi
 {
     // Arrange: Clear initial dirty state
     ClearDirtyState();
-    auto test_position = MakeVec3(1.0f, 2.0f, 3.0f);
+    constexpr auto test_position = MakeVec3(1.0f, 2.0f, 3.0f);
 
     // Act: Set local position
     component_->SetLocalPosition(test_position);
@@ -153,7 +153,7 @@ NOLINT_TEST_F(TransformComponentTest, SetLocalRotation_UpdatesRotationAndMarksDi
 {
     // Arrange: Clear initial dirty state and create test rotation
     ClearDirtyState();
-    auto test_rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
+    const auto test_rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
 
     // Act: Set local rotation
     component_->SetLocalRotation(test_rotation);
@@ -167,7 +167,7 @@ NOLINT_TEST_F(TransformComponentTest, SetLocalScale_UpdatesScaleAndMarksDirty)
 {
     // Arrange: Clear initial dirty state and create test scale
     ClearDirtyState();
-    auto test_scale = MakeVec3(2.0f, 0.5f, 3.0f);
+    constexpr auto test_scale = MakeVec3(2.0f, 0.5f, 3.0f);
 
     // Act: Set local scale
     component_->SetLocalScale(test_scale);
@@ -181,9 +181,9 @@ NOLINT_TEST_F(TransformComponentTest, SetLocalTransform_UpdatesAllComponentsAndM
 {
     // Arrange: Clear initial dirty state and create test values
     ClearDirtyState();
-    auto test_position = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto test_rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
-    auto test_scale = MakeVec3(2.0f, 0.5f, 3.0f);
+    constexpr auto test_position = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto test_rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
+    constexpr auto test_scale = MakeVec3(2.0f, 0.5f, 3.0f);
 
     // Act: Set all transform components at once
     component_->SetLocalTransform(test_position, test_rotation, test_scale);
@@ -222,9 +222,9 @@ NOLINT_TEST_F(TransformComponentTest, Setters_AllMarkComponentDirty)
 NOLINT_TEST_F(TransformComponentTest, SetterWithSameValue_DoesNotMarkDirty)
 {
     // Arrange: Get initial values and clear dirty state
-    auto initial_position = component_->GetLocalPosition();
-    auto initial_rotation = component_->GetLocalRotation();
-    auto initial_scale = component_->GetLocalScale();
+    const auto initial_position = component_->GetLocalPosition();
+    const auto initial_rotation = component_->GetLocalRotation();
+    const auto initial_scale = component_->GetLocalScale();
     ClearDirtyState();
 
     // Act: Set the same values
@@ -243,9 +243,9 @@ NOLINT_TEST_F(TransformComponentTest, SetterWithSameValue_DoesNotMarkDirty)
 NOLINT_TEST_F(TransformComponentTest, TranslateLocal_AppliesRotatedOffset)
 {
     // Arrange: Set initial position and rotation for local space calculation
-    auto initial_position = MakeVec3(1.0f, 1.0f, 1.0f);
-    auto offset = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f); // 90 degrees around Y
+    constexpr auto initial_position = MakeVec3(1.0f, 1.0f, 1.0f);
+    constexpr auto offset = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f); // 90 degrees around Y
 
     component_->SetLocalPosition(initial_position);
     component_->SetLocalRotation(rotation);
@@ -254,8 +254,8 @@ NOLINT_TEST_F(TransformComponentTest, TranslateLocal_AppliesRotatedOffset)
     component_->Translate(offset, true);
 
     // Assert: Offset should be rotated by current rotation and added to position
-    auto expected_world_offset = rotation * offset;
-    auto expected_position = initial_position + expected_world_offset;
+    const auto expected_world_offset = rotation * offset;
+    const auto expected_position = initial_position + expected_world_offset;
     ExpectVec3Near(component_->GetLocalPosition(), expected_position);
     ExpectComponentDirty();
 }
@@ -263,9 +263,9 @@ NOLINT_TEST_F(TransformComponentTest, TranslateLocal_AppliesRotatedOffset)
 NOLINT_TEST_F(TransformComponentTest, TranslateWorld_AppliesDirectOffset)
 {
     // Arrange: Set initial position and rotation
-    auto initial_position = MakeVec3(1.0f, 1.0f, 1.0f);
-    auto offset = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f);
+    constexpr auto initial_position = MakeVec3(1.0f, 1.0f, 1.0f);
+    constexpr auto offset = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f);
 
     component_->SetLocalPosition(initial_position);
     component_->SetLocalRotation(rotation);
@@ -274,7 +274,7 @@ NOLINT_TEST_F(TransformComponentTest, TranslateWorld_AppliesDirectOffset)
     component_->Translate(offset, false);
 
     // Assert: Offset should be added directly without rotation
-    auto expected_position = initial_position + offset;
+    constexpr auto expected_position = initial_position + offset;
     ExpectVec3Near(component_->GetLocalPosition(), expected_position);
     ExpectComponentDirty();
 }
@@ -282,15 +282,15 @@ NOLINT_TEST_F(TransformComponentTest, TranslateWorld_AppliesDirectOffset)
 NOLINT_TEST_F(TransformComponentTest, RotateLocal_AppliesAfterCurrentRotation)
 {
     // Arrange: Set initial rotation and additional rotation
-    auto initial_rotation = QuatFromEuler(45.0f, 0.0f, 0.0f);
-    auto additional_rotation = QuatFromEuler(0.0f, 45.0f, 0.0f);
+    const auto initial_rotation = QuatFromEuler(45.0f, 0.0f, 0.0f);
+    const auto additional_rotation = QuatFromEuler(0.0f, 45.0f, 0.0f);
     component_->SetLocalRotation(initial_rotation);
 
     // Act: Rotate in local space
     component_->Rotate(additional_rotation, true);
 
     // Assert: Local rotation applies after current rotation
-    auto expected_rotation = initial_rotation * additional_rotation;
+    const auto expected_rotation = initial_rotation * additional_rotation;
     ExpectQuatNear(component_->GetLocalRotation(), expected_rotation);
     ExpectComponentDirty();
 }
@@ -298,15 +298,15 @@ NOLINT_TEST_F(TransformComponentTest, RotateLocal_AppliesAfterCurrentRotation)
 NOLINT_TEST_F(TransformComponentTest, RotateWorld_AppliesBeforeCurrentRotation)
 {
     // Arrange: Set initial rotation and additional rotation
-    auto initial_rotation = QuatFromEuler(45.0f, 0.0f, 0.0f);
-    auto additional_rotation = QuatFromEuler(0.0f, 45.0f, 0.0f);
+    const auto initial_rotation = QuatFromEuler(45.0f, 0.0f, 0.0f);
+    const auto additional_rotation = QuatFromEuler(0.0f, 45.0f, 0.0f);
     component_->SetLocalRotation(initial_rotation);
 
     // Act: Rotate in world space
     component_->Rotate(additional_rotation, false);
 
     // Assert: World rotation applies before current rotation
-    auto expected_rotation = additional_rotation * initial_rotation;
+    const auto expected_rotation = additional_rotation * initial_rotation;
     ExpectQuatNear(component_->GetLocalRotation(), expected_rotation);
     ExpectComponentDirty();
 }
@@ -314,15 +314,15 @@ NOLINT_TEST_F(TransformComponentTest, RotateWorld_AppliesBeforeCurrentRotation)
 NOLINT_TEST_F(TransformComponentTest, Scale_MultipliesCurrentScale)
 {
     // Arrange: Set initial scale and scale factor
-    auto initial_scale = MakeVec3(2.0f, 1.0f, 0.5f);
-    auto scale_factor = MakeVec3(2.0f, 3.0f, 0.5f);
+    constexpr auto initial_scale = MakeVec3(2.0f, 1.0f, 0.5f);
+    constexpr auto scale_factor = MakeVec3(2.0f, 3.0f, 0.5f);
     component_->SetLocalScale(initial_scale);
 
     // Act: Apply scale factor
     component_->Scale(scale_factor);
 
     // Assert: Scale should be multiplied component-wise
-    auto expected_scale = initial_scale * scale_factor;
+    constexpr auto expected_scale = initial_scale * scale_factor;
     ExpectVec3Near(component_->GetLocalScale(), expected_scale);
     ExpectComponentDirty();
 }
@@ -336,29 +336,29 @@ NOLINT_TEST_F(TransformComponentTest, GetLocalMatrix_IdentityTransformProducesId
     // Arrange: Default identity transform (done in SetUp)
 
     // Act: Get local matrix
-    auto local_matrix = component_->GetLocalMatrix();
+    const auto local_matrix = component_->GetLocalMatrix();
 
     // Assert: Should produce identity matrix
-    auto identity = TransformComponent::Mat4 { 1.0f };
+    constexpr auto identity = TransformComponent::Mat4 { 1.0f };
     ExpectMat4Near(local_matrix, identity);
 }
 
 NOLINT_TEST_F(TransformComponentTest, GetLocalMatrix_ComputesCorrectTransformation)
 {
     // Arrange: Set specific transform values
-    auto position = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f);
-    auto scale = MakeVec3(2.0f, 1.0f, 0.5f);
+    constexpr auto position = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto rotation = QuatFromEuler(0.0f, 90.0f, 0.0f);
+    constexpr auto scale = MakeVec3(2.0f, 1.0f, 0.5f);
     component_->SetLocalTransform(position, rotation, scale);
 
     // Act: Get local matrix
-    auto local_matrix = component_->GetLocalMatrix();
+    const auto local_matrix = component_->GetLocalMatrix();
 
     // Assert: Matrix should match manually computed T * R * S
-    auto translation_matrix = glm::translate(TransformComponent::Mat4 { 1.0f }, position);
-    auto rotation_matrix = glm::mat4_cast(rotation);
-    auto scale_matrix = glm::scale(TransformComponent::Mat4 { 1.0f }, scale);
-    auto expected_matrix = translation_matrix * rotation_matrix * scale_matrix;
+    constexpr auto translation_matrix = glm::translate(TransformComponent::Mat4 { 1.0f }, position);
+    const auto rotation_matrix = glm::mat4_cast(rotation);
+    const auto scale_matrix = glm::scale(TransformComponent::Mat4 { 1.0f }, scale);
+    const auto expected_matrix = translation_matrix * rotation_matrix * scale_matrix;
 
     ExpectMat4Near(local_matrix, expected_matrix);
 }
@@ -380,9 +380,9 @@ NOLINT_TEST_F(TransformComponentTest, GetWorldMatrix_RequiresUpdateCall)
 NOLINT_TEST_F(TransformComponentTest, UpdateWorldTransformAsRoot_ClearsDirtyAndEnablesWorldAccess)
 {
     // Arrange: Set specific transform values
-    auto position = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto rotation = QuatFromEuler(45.0f, 90.0f, 0.0f);
-    auto scale = MakeVec3(2.0f, 1.0f, 0.5f);
+    constexpr auto position = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto rotation = QuatFromEuler(45.0f, 90.0f, 0.0f);
+    constexpr auto scale = MakeVec3(2.0f, 1.0f, 0.5f);
     component_->SetLocalTransform(position, rotation, scale);
     ExpectComponentDirty();
 
@@ -393,16 +393,16 @@ NOLINT_TEST_F(TransformComponentTest, UpdateWorldTransformAsRoot_ClearsDirtyAndE
     EXPECT_FALSE(component_->IsDirty());
 
     // Assert: For root transforms, world matrix should equal local matrix
-    auto world_matrix = component_->GetWorldMatrix();
-    auto local_matrix = component_->GetLocalMatrix();
+    const auto world_matrix = component_->GetWorldMatrix();
+    const auto local_matrix = component_->GetLocalMatrix();
     ExpectMat4Near(world_matrix, local_matrix);
 }
 
 NOLINT_TEST_F(TransformComponentTest, UpdateWorldTransformWithParent_ComputesCorrectWorldMatrix)
 {
     // Arrange: Set up parent transform and local transform
-    auto parent_transform = glm::translate(TransformComponent::Mat4 { 1.0f }, MakeVec3(10.0f, 20.0f, 30.0f));
-    auto position = MakeVec3(1.0f, 2.0f, 3.0f);
+    constexpr auto parent_transform = glm::translate(TransformComponent::Mat4 { 1.0f }, MakeVec3(10.0f, 20.0f, 30.0f));
+    constexpr auto position = MakeVec3(1.0f, 2.0f, 3.0f);
     component_->SetLocalPosition(position);
 
     // Act: Update world transform with parent
@@ -412,9 +412,9 @@ NOLINT_TEST_F(TransformComponentTest, UpdateWorldTransformWithParent_ComputesCor
     EXPECT_FALSE(component_->IsDirty());
 
     // Assert: World matrix should be parent * local
-    auto world_matrix = component_->GetWorldMatrix();
-    auto local_matrix = component_->GetLocalMatrix();
-    auto expected_world_matrix = parent_transform * local_matrix;
+    const auto world_matrix = component_->GetWorldMatrix();
+    const auto local_matrix = component_->GetLocalMatrix();
+    const auto expected_world_matrix = parent_transform * local_matrix;
     ExpectMat4Near(world_matrix, expected_world_matrix);
 }
 
@@ -425,12 +425,12 @@ NOLINT_TEST_F(TransformComponentTest, UpdateWorldTransformWithParent_ComputesCor
 NOLINT_TEST_F(TransformComponentTest, GetWorldPosition_ReturnsCorrectPositionForRoot)
 {
     // Arrange: Set local position and update as root
-    auto position = MakeVec3(1.0f, 2.0f, 3.0f);
+    constexpr auto position = MakeVec3(1.0f, 2.0f, 3.0f);
     component_->SetLocalPosition(position);
     component_->UpdateWorldTransformAsRoot();
 
     // Act: Get world position
-    auto world_position = component_->GetWorldPosition();
+    const auto world_position = component_->GetWorldPosition();
 
     // Assert: World position should match local position for root
     ExpectVec3Near(world_position, position);
@@ -439,30 +439,30 @@ NOLINT_TEST_F(TransformComponentTest, GetWorldPosition_ReturnsCorrectPositionFor
 NOLINT_TEST_F(TransformComponentTest, GetWorldPosition_IncorporatesParentTransform)
 {
     // Arrange: Set up parent and local positions
-    auto parent_position = MakeVec3(10.0f, 20.0f, 30.0f);
-    auto local_position = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto parent_transform = glm::translate(TransformComponent::Mat4 { 1.0f }, parent_position);
+    constexpr auto parent_position = MakeVec3(10.0f, 20.0f, 30.0f);
+    constexpr auto local_position = MakeVec3(1.0f, 2.0f, 3.0f);
+    constexpr auto parent_transform = glm::translate(TransformComponent::Mat4 { 1.0f }, parent_position);
 
     component_->SetLocalPosition(local_position);
     component_->UpdateWorldTransform(parent_transform);
 
     // Act: Get world position
-    auto world_position = component_->GetWorldPosition();
+    const auto world_position = component_->GetWorldPosition();
 
     // Assert: World position should combine parent and local positions
-    auto expected_world_position = parent_position + local_position;
+    constexpr auto expected_world_position = parent_position + local_position;
     ExpectVec3Near(world_position, expected_world_position);
 }
 
 NOLINT_TEST_F(TransformComponentTest, GetWorldRotation_ReturnsCorrectRotationForRoot)
 {
     // Arrange: Set local rotation and update as root
-    auto rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
+    const auto rotation = QuatFromEuler(45.0f, 90.0f, 180.0f);
     component_->SetLocalRotation(rotation);
     component_->UpdateWorldTransformAsRoot();
 
     // Act: Get world rotation
-    auto world_rotation = component_->GetWorldRotation();
+    const auto world_rotation = component_->GetWorldRotation();
 
     // Assert: World rotation should match local rotation for root
     ExpectQuatNear(world_rotation, rotation);
@@ -471,12 +471,12 @@ NOLINT_TEST_F(TransformComponentTest, GetWorldRotation_ReturnsCorrectRotationFor
 NOLINT_TEST_F(TransformComponentTest, GetWorldScale_ReturnsCorrectScaleForRoot)
 {
     // Arrange: Set local scale and update as root
-    auto scale = MakeVec3(2.0f, 0.5f, 3.0f);
+    constexpr auto scale = MakeVec3(2.0f, 0.5f, 3.0f);
     component_->SetLocalScale(scale);
     component_->UpdateWorldTransformAsRoot();
 
     // Act: Get world scale
-    auto world_scale = component_->GetWorldScale();
+    const auto world_scale = component_->GetWorldScale();
 
     // Assert: World scale should match local scale for root
     ExpectVec3Near(world_scale, scale);
@@ -485,18 +485,18 @@ NOLINT_TEST_F(TransformComponentTest, GetWorldScale_ReturnsCorrectScaleForRoot)
 NOLINT_TEST_F(TransformComponentTest, GetWorldScale_IncorporatesParentScale)
 {
     // Arrange: Set up parent and local scales
-    auto parent_scale = MakeVec3(2.0f, 2.0f, 2.0f);
-    auto local_scale = MakeVec3(0.5f, 3.0f, 1.0f);
-    auto parent_transform = glm::scale(TransformComponent::Mat4 { 1.0f }, parent_scale);
+    constexpr auto parent_scale = MakeVec3(2.0f, 2.0f, 2.0f);
+    constexpr auto local_scale = MakeVec3(0.5f, 3.0f, 1.0f);
+    const auto parent_transform = glm::scale(TransformComponent::Mat4 { 1.0f }, parent_scale);
 
     component_->SetLocalScale(local_scale);
     component_->UpdateWorldTransform(parent_transform);
 
     // Act: Get world scale
-    auto world_scale = component_->GetWorldScale();
+    const auto world_scale = component_->GetWorldScale();
 
     // Assert: World scale should combine parent and local scales
-    auto expected_world_scale = parent_scale * local_scale;
+    constexpr auto expected_world_scale = parent_scale * local_scale;
     ExpectVec3Near(world_scale, expected_world_scale, 1e-4f); // Slightly higher tolerance for matrix decomposition
 }
 
@@ -528,16 +528,16 @@ NOLINT_TEST_F(TransformComponentTest, MatrixDecomposition_HandlesDecompositionIs
 
     // Act & Assert: Should not crash and return reasonable fallback values
     EXPECT_NO_FATAL_FAILURE({
-        auto world_rotation = component_->GetWorldRotation();
-        auto world_scale = component_->GetWorldScale();
+        [[maybe_unused]] auto world_rotation = component_->GetWorldRotation();
+        [[maybe_unused]] auto world_scale = component_->GetWorldScale();
     });
 }
 
 NOLINT_TEST_F(TransformComponentTest, LargeTransformationValues_HandledCorrectly)
 {
     // Arrange: Set very large transformation values
-    auto large_position = MakeVec3(1e6f, -1e6f, 1e6f);
-    auto large_scale = MakeVec3(1000.0f, 0.001f, 1000.0f);
+    constexpr auto large_position = MakeVec3(1e6f, -1e6f, 1e6f);
+    constexpr auto large_scale = MakeVec3(1000.0f, 0.001f, 1000.0f);
 
     component_->SetLocalPosition(large_position);
     component_->SetLocalScale(large_scale);
@@ -549,8 +549,8 @@ NOLINT_TEST_F(TransformComponentTest, LargeTransformationValues_HandledCorrectly
 
     // Act & Assert: World space access should not crash
     EXPECT_NO_FATAL_FAILURE({
-        auto world_pos = component_->GetWorldPosition();
-        auto world_scale = component_->GetWorldScale();
+        [[maybe_unused]] auto world_pos = component_->GetWorldPosition();
+        [[maybe_unused]] auto world_scale = component_->GetWorldScale();
     });
 }
 
@@ -585,9 +585,9 @@ NOLINT_TEST_F(TransformComponentTest, ComplexHierarchicalTransform_ComputesCorre
 
     // Assert: World space getters should work without crashing
     EXPECT_NO_FATAL_FAILURE({
-        auto world_pos = component_->GetWorldPosition();
-        auto world_rot = component_->GetWorldRotation();
-        auto world_scale = component_->GetWorldScale();
+        [[maybe_unused]] auto world_pos = component_->GetWorldPosition();
+        [[maybe_unused]] auto world_rot = component_->GetWorldRotation();
+        [[maybe_unused]] auto world_scale = component_->GetWorldScale();
     });
 }
 
@@ -601,7 +601,7 @@ NOLINT_TEST_F(TransformComponentTest, TransformationChaining_MultipleOperationsW
     component_->Translate(MakeVec3(0.0f, 0.0f, 1.0f), false);
 
     // Assert: Final position should be cumulative
-    auto expected_position = MakeVec3(1.0f, 1.0f, 1.0f);
+    constexpr auto expected_position = MakeVec3(1.0f, 1.0f, 1.0f);
     ExpectVec3Near(component_->GetLocalPosition(), expected_position);
 
     // Act: Chain rotations
@@ -614,16 +614,16 @@ NOLINT_TEST_F(TransformComponentTest, TransformationChaining_MultipleOperationsW
     component_->Scale(MakeVec3(0.5f, 1.0f, 0.25f));
 
     // Assert: Final scale should be cumulative
-    auto expected_scale = MakeVec3(1.0f, 2.0f, 0.5f);
+    constexpr auto expected_scale = MakeVec3(1.0f, 2.0f, 0.5f);
     ExpectVec3Near(component_->GetLocalScale(), expected_scale);
 }
 
 NOLINT_TEST_F(TransformComponentTest, IdentityOperations_DoNotChangeTransform)
 {
     // Arrange: Set up non-identity transform
-    auto initial_position = MakeVec3(1.0f, 2.0f, 3.0f);
-    auto initial_rotation = QuatFromEuler(45.0f, 90.0f, 0.0f);
-    auto initial_scale = MakeVec3(2.0f, 0.5f, 1.5f);
+    constexpr auto initial_position = MakeVec3(1.0f, 2.0f, 3.0f);
+    const auto initial_rotation = QuatFromEuler(45.0f, 90.0f, 0.0f);
+    constexpr auto initial_scale = MakeVec3(2.0f, 0.5f, 1.5f);
     component_->SetLocalTransform(initial_position, initial_rotation, initial_scale);
     ClearDirtyState();
 
