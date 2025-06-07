@@ -98,7 +98,7 @@ static_assert(SceneFilter<AcceptAllFilter>);
 struct DirtyTransformFilter {
     OXYGEN_SCENE_API auto operator()(
         const SceneNodeImpl& node,
-        const FilterResult parent_result) const noexcept
+        FilterResult parent_result) const noexcept
         -> FilterResult;
 };
 static_assert(SceneFilter<DirtyTransformFilter>);

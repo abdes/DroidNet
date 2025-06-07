@@ -6,14 +6,16 @@
 
 #include <iostream>
 
-// #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Scene.h>
 
-// using oxygen::scene::SceneNode;
+using oxygen::scene::Scene;
+using oxygen::scene::SceneNode;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    // SceneNode::Handle handle(1, oxygen::resources::kSceneNode);
-    // SceneNode node("TestNode", handle);
-    // std::cout << "Created scene node: " << node.GetName() << '\n';
+    const auto scene = std::make_shared<Scene>("TestScene");
+    std::cout << "Created scene: " << scene->GetName() << '\n';
+    auto node = scene->CreateNode("TestNode");
+    std::cout << "Created scene node: " << node.GetObject()->get().GetName() << '\n';
     return 0;
 }

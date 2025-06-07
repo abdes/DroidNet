@@ -81,6 +81,7 @@ public:
     //! Set the effective value bit.
     constexpr auto SetEffectiveValueBit(const bool value) noexcept -> SceneFlag&
     {
+        // ReSharper disable once CppRedundantParentheses
         bits_ = (bits_ & ~0b00001) | (value ? 0b00001 : 0);
         return *this;
     }
@@ -94,6 +95,7 @@ public:
     //! Set whether flag inherits its value from parent.
     constexpr auto SetInheritedBit(const bool value) noexcept -> SceneFlag&
     {
+        // ReSharper disable once CppRedundantParentheses
         bits_ = (bits_ & ~0b00010) | (value ? 0b00010 : 0);
         return *this;
     }
@@ -107,6 +109,7 @@ public:
     //! Set the pending value.
     constexpr auto SetPendingValueBit(const bool value) noexcept -> SceneFlag&
     {
+        // ReSharper disable once CppRedundantParentheses
         bits_ = (bits_ & ~0b00100) | (value ? 0b00100 : 0);
         return *this;
     }
@@ -120,6 +123,7 @@ public:
     //! Set dirty state for deferred processing.
     constexpr auto SetDirtyBit(const bool value) noexcept -> SceneFlag&
     {
+        // ReSharper disable once CppRedundantParentheses
         bits_ = (bits_ & ~0b01000) | (value ? 0b01000 : 0);
         return *this;
     }
@@ -133,6 +137,7 @@ public:
     //! Set previous value for transition detection.
     constexpr auto SetPreviousValueBit(const bool value) noexcept -> SceneFlag&
     {
+        // ReSharper disable once CppRedundantParentheses
         bits_ = (bits_ & ~0b10000) | (value ? 0b10000 : 0);
         return *this;
     }
@@ -174,7 +179,7 @@ public:
      Sets a local value and disables inheritance. Implements optimization to
      avoid unnecessary dirty marking when the value doesn't change.
     */
-    constexpr auto SetLocalValue(bool value) noexcept -> SceneFlag&
+    constexpr auto SetLocalValue(const bool value) noexcept -> SceneFlag&
     {
         // Always disable inheritance if a local value is set
         SetInheritedBit(false);
@@ -624,7 +629,7 @@ private:
     [[nodiscard]] constexpr auto GetFlagBits(const std::size_t index) const noexcept -> std::uint8_t
     {
         const auto shift = index * bits_per_flag;
-        return static_cast<std::uint8_t>((data_ >> shift) & flag_mask);
+        return static_cast<std::uint8_t>(data_ >> shift & flag_mask);
     }
 
     //! Set all bits for a flag.
@@ -632,7 +637,8 @@ private:
     {
         const auto shift = index * bits_per_flag;
         const auto mask = storage_type { flag_mask } << shift;
-        data_ = (data_ & ~mask) | ((storage_type { bits } & flag_mask) << shift);
+        // ReSharper disable once CppRedundantParentheses
+        data_ = (data_ & ~mask) | (storage_type { bits } & flag_mask) << shift;
     }
 
     //! Get the full flag state.

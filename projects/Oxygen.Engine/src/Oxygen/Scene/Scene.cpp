@@ -151,7 +151,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& root) -> bool
     }
 
     // After all children are destroyed, forcibly clear the first child pointer
-    if (auto root_impl_opt = GetNodeImpl(root)) {
+    if (const auto root_impl_opt = GetNodeImpl(root)) {
         root_impl_opt->get().AsGraphNode().SetFirstChild({});
     }
 
@@ -343,7 +343,7 @@ auto Scene::Contains(const SceneNode& node) const noexcept -> bool
 
     // Then verify that the SceneNode's scene_weak_ actually points to this scene
     // Since Scene is a friend of SceneNode, we can access the private scene_weak_ member
-    if (auto scene_shared = node.scene_weak_.lock()) {
+    if (const auto scene_shared = node.scene_weak_.lock()) {
         return scene_shared.get() == this;
     }
 
@@ -402,7 +402,7 @@ auto Scene::GetChildren(const SceneNode& parent) const -> std::vector<NodeHandle
     // should not be used anymore.
     CHECK_F(parent.IsValid(), "Parent node handle is not valid for GetChildren");
 
-    auto parent_impl_opt = GetNodeImpl(parent);
+    const auto parent_impl_opt = GetNodeImpl(parent);
     if (!parent_impl_opt) {
         return {};
     }
@@ -481,7 +481,8 @@ void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& root_handl
 
 } // namespace
 
-void Scene::Update(bool skip_dirty_flags)
+// ReSharper disable once CppMemberFunctionMayBeConst
+void Scene::Update(const bool skip_dirty_flags)
 {
     LOG_SCOPE_F(2, "Scene update");
     if (!skip_dirty_flags) {
@@ -490,7 +491,7 @@ void Scene::Update(bool skip_dirty_flags)
     }
     // Pass 2: Update transforms
     LOG_SCOPE_F(2, "PASS 2 - Update transforms");
-    [[maybe_unused]] auto updated_count = traversal_->UpdateTransforms();
+    [[maybe_unused]] const auto updated_count = traversal_->UpdateTransforms();
     DLOG_F(2, "Updated transforms for {} nodes", updated_count);
 }
 
@@ -499,7 +500,7 @@ void Scene::Update(bool skip_dirty_flags)
 void Scene::AddRootNode(const NodeHandle& node)
 {
     // Ensure no duplicate root nodes
-    DCHECK_F(std::find(root_nodes_.begin(), root_nodes_.end(), node) == root_nodes_.end(),
+    DCHECK_F(std::ranges::find(root_nodes_, node) == root_nodes_.end(),
         "duplicate root node detected");
     root_nodes_.push_back(node);
 }
@@ -637,7 +638,7 @@ auto Scene::CreateNodeFrom(const SceneNode& original, const std::string& new_nam
     CHECK_F(original.IsValid(), "expecting a valid original node handle");
 
     // Get the original node implementation
-    auto original_impl_opt = original.GetObject();
+    const auto original_impl_opt = original.GetObject();
     if (!original_impl_opt) {
         // Original node no longer exists, this is a fatal error for this API
         ABORT_F("Original node no longer exists in its scene");
@@ -646,7 +647,7 @@ auto Scene::CreateNodeFrom(const SceneNode& original, const std::string& new_nam
     const auto& original_impl = original_impl_opt->get();
 
     // Clone the original node implementation
-    auto cloned_impl = original_impl.Clone();
+    const auto cloned_impl = original_impl.Clone();
 
     // Set the new name on the cloned node
     cloned_impl->SetName(new_name);
@@ -670,7 +671,7 @@ auto Scene::CreateChildNodeFrom(
     CHECK_F(parent.IsValid(), "expecting a valid parent node handle");
 
     // Get the parent's scene - we ALWAYS use the parent's scene for cloning and linking
-    auto parent_scene = parent.scene_weak_.lock();
+    const auto parent_scene = parent.scene_weak_.lock();
     if (!parent_scene) {
         return std::nullopt; // Parent's scene no longer exists
     }

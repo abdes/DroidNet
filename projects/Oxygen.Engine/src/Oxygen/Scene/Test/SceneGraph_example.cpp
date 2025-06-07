@@ -24,12 +24,10 @@
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
-using oxygen::scene::TransformComponent;
 
 // When not building with shared libraries / DLLs, make sure to link the main
 // executable (statically) with the type registry initialization library.
@@ -70,7 +68,7 @@ struct DemoState {
     // Demo configuration
     struct AnimationConfig {
         float duration = 3.0f;
-        float timestep = 0.5f;
+        float time_step = 0.5f;
 
         struct OrbitalParams {
             float radius = 5.0f;
@@ -103,12 +101,12 @@ struct DemoState {
 //=============================================================================
 
 // Helper to create a quaternion from Euler angles (degrees)
-auto CreateRotationFromEuler(float pitch, float yaw, float roll) -> glm::quat
+auto CreateRotationFromEuler(const float pitch, const float yaw, const float roll) -> glm::quat
 {
-    return glm::quat(glm::vec3(
+    return { glm::vec3(
         glm::radians(pitch),
         glm::radians(yaw),
-        glm::radians(roll)));
+        glm::radians(roll)) };
 }
 
 // Helper to create a LookAt quaternion manually
@@ -134,7 +132,7 @@ auto FormatVec3(const glm::vec3& vec) -> std::string
 }
 
 // Helper to print transform information (called after Scene::Update())
-void PrintTransformInfo(const SceneNode& node, const std::string& label, bool show_world = true)
+void PrintTransformInfo(const SceneNode& node, const std::string& label, const bool show_world = true)
 {
     if (!node.IsValid()) {
         std::cout << "  " << label << ": [INVALID NODE]\n";
@@ -142,10 +140,10 @@ void PrintTransformInfo(const SceneNode& node, const std::string& label, bool sh
     }
 
     // All nodes created via Scene have TransformComponent - it's guaranteed
-    auto transform = node.GetTransform();
+    const auto transform = node.GetTransform();
 
     std::cout << "  " << label << " (Local): ";
-    if (auto local_pos = transform.GetLocalPosition()) {
+    if (const auto local_pos = transform.GetLocalPosition()) {
         std::cout << FormatVec3(*local_pos);
     } else {
         std::cout << "[no local position]";
@@ -153,7 +151,7 @@ void PrintTransformInfo(const SceneNode& node, const std::string& label, bool sh
 
     if (show_world) {
         std::cout << " -> World: ";
-        if (auto world_pos = transform.GetWorldPosition()) {
+        if (const auto world_pos = transform.GetWorldPosition()) {
             std::cout << FormatVec3(*world_pos);
         } else {
             std::cout << "[no world position]";
@@ -163,7 +161,7 @@ void PrintTransformInfo(const SceneNode& node, const std::string& label, bool sh
 }
 
 // Helper to print a node's name and visibility, with ASCII tree structure
-void PrintNodeInfo(const SceneNode& node, const std::string& prefix, bool is_last, bool is_root = false)
+void PrintNodeInfo(const SceneNode& node, const std::string& prefix, const bool is_last, const bool is_root = false)
 {
     std::cout << prefix;
     if (!is_root) {
@@ -182,7 +180,7 @@ void PrintNodeInfo(const SceneNode& node, const std::string& prefix, bool is_las
 }
 
 // Recursive tree printer with ASCII tree drawing
-void PrintTree(const SceneNode& node, const std::string& prefix = "", bool is_last = true, bool is_root = true)
+void PrintTree(const SceneNode& node, const std::string& prefix = "", const bool is_last = true, const bool is_root = true)
 {
     PrintNodeInfo(node, prefix, is_last, is_root);
 
@@ -195,10 +193,10 @@ void PrintTree(const SceneNode& node, const std::string& prefix = "", bool is_la
     }
 
     for (size_t i = 0; i < children.size(); ++i) {
-        const bool last = (i == children.size() - 1);
+        const bool last = i == children.size() - 1;
         std::string child_prefix = prefix;
         if (!is_root) {
-            child_prefix += (is_last ? "    " : "|   ");
+            child_prefix += is_last ? "    " : "|   ";
         }
         PrintTree(children[i], child_prefix, last, false);
     }
@@ -240,8 +238,8 @@ void RunBasicSceneDemo(DemoState& state)
     std::cout << "  * Root node:     'Root'\n";
 
     // Safe optional handling
-    auto child1_opt = state.main_scene->CreateChildNode(*state.root, "Child1");
-    auto child2_opt = state.main_scene->CreateChildNode(*state.root, "Child2");
+    const auto child1_opt = state.main_scene->CreateChildNode(*state.root, "Child1");
+    const auto child2_opt = state.main_scene->CreateChildNode(*state.root, "Child2");
     if (!child1_opt || !child2_opt) {
         PrintErrorAndExit("Failed to create child nodes");
     }
@@ -251,7 +249,7 @@ void RunBasicSceneDemo(DemoState& state)
     std::cout << "  * Children:      'Child1', 'Child2'\n";
 
     // Safe grandchild creation
-    auto grandchild_opt = state.main_scene->CreateChildNode(*state.child1, "Grandchild");
+    const auto grandchild_opt = state.main_scene->CreateChildNode(*state.child1, "Grandchild");
     if (!grandchild_opt) {
         PrintErrorAndExit("Failed to create Grandchild");
     }
@@ -300,9 +298,11 @@ void RunBasicSceneDemo(DemoState& state)
 //=============================================================================
 
 // Creates a node with transform component (guaranteed by Scene)
-auto CreateTransformNode(Scene& scene, const std::string& name, SceneNode* parent = nullptr) -> SceneNode
+auto CreateTransformNode(Scene& scene, const std::string& name, const SceneNode* parent = nullptr) -> SceneNode
 {
-    auto node = parent ? scene.CreateChildNode(*parent, name).value() : scene.CreateNode(name);
+    auto node = parent != nullptr
+        ? scene.CreateChildNode(*parent, name).value()
+        : scene.CreateNode(name);
 
     // All nodes created via Scene have TransformComponent automatically
     // Just initialize with identity transform
@@ -390,7 +390,7 @@ void RunTransformDemo(DemoState& state)
 //=============================================================================
 
 // Animation update functions
-void UpdateOrbitalTransform(SceneNode& node, float time, const DemoState::AnimationConfig::OrbitalParams& params)
+void UpdateOrbitalTransform(SceneNode& node, const float time, const DemoState::AnimationConfig::OrbitalParams& params)
 {
     auto transform = node.GetTransform();
 
@@ -408,7 +408,7 @@ void UpdateOrbitalTransform(SceneNode& node, float time, const DemoState::Animat
     transform.SetLocalRotation(look_rotation);
 }
 
-void UpdatePendulumTransform(SceneNode& node, float time, const DemoState::AnimationConfig::PendulumParams& params)
+void UpdatePendulumTransform(SceneNode& node, const float time, const DemoState::AnimationConfig::PendulumParams& params)
 {
     auto transform = node.GetTransform();
 
@@ -418,7 +418,7 @@ void UpdatePendulumTransform(SceneNode& node, float time, const DemoState::Anima
     transform.SetLocalRotation(rotation);
 }
 
-void UpdatePulsingScale(SceneNode& node, float time, const DemoState::AnimationConfig::PulsingParams& params)
+void UpdatePulsingScale(SceneNode& node, const float time, const DemoState::AnimationConfig::PulsingParams& params)
 {
     auto transform = node.GetTransform();
 
@@ -437,7 +437,7 @@ void SetupAnimatedScene(DemoState& state)
     state.animated_nodes.push_back(root);
 
     // Create orbital parent (revolves around origin)
-    auto orbital_parent = CreateTransformNode(*state.animation_scene, "OrbitalParent", &root);
+    const auto orbital_parent = CreateTransformNode(*state.animation_scene, "OrbitalParent", &root);
     state.animated_nodes.push_back(orbital_parent);
 
     // Create pendulum child (swings relative to orbital parent)
@@ -452,7 +452,7 @@ void SetupAnimatedScene(DemoState& state)
 }
 
 // Simulates one frame of animation using proper game engine pattern
-void SimulateAnimationFrame(DemoState& state, float time)
+void SimulateAnimationFrame(DemoState& state, const float time)
 {
     // FRAME STEP 1: Prepare data - Update all local transforms (game logic)
     UpdateOrbitalTransform(state.animated_nodes[1], time, state.anim_config.orbital);
@@ -479,13 +479,13 @@ void RunAnimationDemo(DemoState& state)
     std::cout << "  * Pulser: Scales (pulses) relative to pendulum\n";
 
     std::cout << "\n=== Transform Animation Simulation ===\n";
-    std::cout << "Duration: " << state.anim_config.duration << "s, Timestep: " << state.anim_config.timestep << "s\n";
+    std::cout << "Duration: " << state.anim_config.duration << "s, Time step: " << state.anim_config.time_step << "s\n";
     std::cout << "Following proper game engine frame pattern:\n";
     std::cout << "  1. Prepare Data (set local transforms)\n";
     std::cout << "  2. Scene::Update() (propagate transforms)\n";
     std::cout << "  3. Process/Display (read world transforms)\n\n";
 
-    for (float time = 0.0f; time <= state.anim_config.duration; time += state.anim_config.timestep) {
+    for (float time = 0.0f; time <= state.anim_config.duration; time += state.anim_config.time_step) {
         std::cout << "=== FRAME at Time: " << std::fixed << std::setprecision(2) << time << "s ===\n";
 
         // Execute one complete frame cycle
@@ -493,7 +493,7 @@ void RunAnimationDemo(DemoState& state)
 
         // Display current transform states (this is the "present" phase)
         for (const auto& node : state.animated_nodes) {
-            if (auto obj = node.GetObject()) {
+            if (const auto obj = node.GetObject()) {
                 PrintTransformInfo(node, std::string(obj->get().GetName()));
             }
         }
@@ -562,9 +562,9 @@ void RunCleanupDemo(DemoState& state)
 // Main Function - Orchestrates All Demo Parts
 //=============================================================================
 
-int main()
+auto main() -> int
 {
-    // Configure loguru for cleaner debugging output
+    // Configure logging for cleaner debugging output
     loguru::g_preamble_date = false;
     loguru::g_preamble_file = true;
     loguru::g_preamble_verbose = false;

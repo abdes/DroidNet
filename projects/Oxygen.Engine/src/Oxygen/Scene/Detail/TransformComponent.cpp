@@ -7,9 +7,9 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Scene/TransformComponent.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 
-using oxygen::scene::TransformComponent;
+using oxygen::scene::detail::TransformComponent;
 
 void TransformComponent::SetLocalTransform(
     const Vec3& position, const Quat& rotation,
@@ -140,11 +140,13 @@ auto TransformComponent::GetWorldRotation() const -> Quat
     const Mat4& world = GetWorldMatrix();
 
     // Extract rotation from world matrix
+    // ReSharper disable CppTooWideScopeInitStatement
     Vec3 scale;
     Quat rotation;
     Vec3 translation;
     Vec3 skew;
     glm::vec4 perspective;
+    // ReSharper restore CppTooWideScopeInitStatement
 
     if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
         return rotation;
@@ -159,11 +161,13 @@ auto TransformComponent::GetWorldScale() const -> Vec3
     const Mat4& world = GetWorldMatrix();
 
     // Extract scale from world matrix
+    // ReSharper disable CppTooWideScopeInitStatement
     Vec3 scale;
     Quat rotation;
     Vec3 translation;
     Vec3 skew;
     glm::vec4 perspective;
+    // ReSharper restore CppTooWideScopeInitStatement
 
     if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
         return scale;

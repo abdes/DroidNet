@@ -8,11 +8,11 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
-#include <span>
 
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/api_export.h>
@@ -167,7 +167,7 @@ namespace scene {
          \return An optional SceneNode handle representing the cloned child
                  node, or std::nullopt if the parent is invalid
         */
-        [[nodiscard]] OXYGEN_SCENE_API auto CreateChildNodeFrom(
+        [[nodiscard]] static OXYGEN_SCENE_API auto CreateChildNodeFrom(
             const SceneNode& parent, const SceneNode& original,
             const std::string& new_name)
             -> std::optional<SceneNode>;
@@ -198,7 +198,7 @@ namespace scene {
         */
         [[nodiscard]] OXYGEN_SCENE_API auto CreateHierarchyFrom(
             const SceneNode& original_root, const std::string& new_root_name)
-            -> SceneNode;
+            -> SceneNode; // TODO: missing implementation
 
         //! Creates a new child hierarchy by cloning an entire node hierarchy
         //! under the given parent.
@@ -228,7 +228,7 @@ namespace scene {
         [[nodiscard]] OXYGEN_SCENE_API auto CreateChildHierarchyFrom(
             const SceneNode& parent, const SceneNode& original_root,
             const std::string& new_root_name)
-            -> std::optional<SceneNode>;
+            -> std::optional<SceneNode>; // TODO: missing implementation
 
         //! Destroys the given node.
         /*!
@@ -334,8 +334,8 @@ namespace scene {
         //! Creates a new node implementation with the given name and (optional)
         //! flags, then links it to the given parent node as a child.
         /*!
-         This calll will never fail, unless the resource table is full. In such
-         a case, the application will terminate.
+         This call will never fail, unless the resource table is full. In such a
+         case, the application will terminate.
 
          Expects that the \p parent node is valid, and belongs to this scene, or
          it will terminate the program. This scenario is clearly a programming

@@ -70,7 +70,7 @@ auto constexpr oxygen::scene::to_string(const SceneFlag value) noexcept -> std::
     // Helper lambda to append a boolean value as '1' or '0' to the buffer.
     // This lambda is constexpr.
     auto append_bool_as_char = [&](const bool b_val) constexpr {
-        *current++ = (b_val ? '1' : '0');
+        *current++ = b_val ? '1' : '0';
     };
 
     append_literal("SF{EV:");

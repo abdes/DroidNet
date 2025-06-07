@@ -7,10 +7,10 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/TransformComponent.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneNode;
@@ -50,6 +50,111 @@ void SceneNode::LogSafeCallError(const char* reason) const noexcept
         // If logging fails, we can do nothing about it
         (void)0;
     }
+}
+
+auto SceneNode::Transform::SetLocalTransform(const Vec3& position, const Quat& rotation, const Vec3& scale) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->SetLocalTransform(position, rotation, scale);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->SetLocalPosition(position);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->SetLocalRotation(rotation);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->SetLocalScale(scale);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::GetLocalPosition() const noexcept -> std::optional<Vec3>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetLocalPosition();
+    });
+}
+
+auto SceneNode::Transform::GetLocalRotation() const noexcept -> std::optional<Quat>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetLocalRotation();
+    });
+}
+
+auto SceneNode::Transform::GetLocalScale() const noexcept -> std::optional<Vec3>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetLocalScale();
+    });
+}
+
+auto SceneNode::Transform::Translate(const Vec3& offset, const bool local) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->Translate(offset, local);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::Rotate(const Quat& rotation, const bool local) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->Rotate(rotation, local);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
+{
+    return SafeCall([&](const State& state) {
+        state.transform_component->Scale(scale_factor);
+        state.node_impl->MarkTransformDirty();
+    }).has_value();
+}
+
+auto SceneNode::Transform::GetWorldMatrix() const noexcept -> std::optional<Mat4>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetWorldMatrix();
+    });
+}
+
+auto SceneNode::Transform::GetWorldPosition() const noexcept -> std::optional<Vec3>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetWorldPosition();
+    });
+}
+
+auto SceneNode::Transform::GetWorldRotation() const noexcept -> std::optional<Quat>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetWorldRotation();
+    });
+}
+
+auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
+{
+    return SafeCall([](const ConstState& state) {
+        return state.transform_component->GetWorldScale();
+    });
 }
 
 template <typename Func>
@@ -258,7 +363,7 @@ namespace {
 template <typename StateT>
 auto ValidateAndPopulateState(SceneNode* node, StateT& state) noexcept -> std::optional<std::string>
 {
-    using oxygen::scene::TransformComponent;
+    using oxygen::scene::detail::TransformComponent;
 
     state.node = node;
     if (!state.node->IsValid()) {
@@ -268,13 +373,13 @@ auto ValidateAndPopulateState(SceneNode* node, StateT& state) noexcept -> std::o
     if (!node_impl_opt) {
         return "node is expired";
     }
-    state.node_impl = &(node_impl_opt->get());
+    state.node_impl = &node_impl_opt->get();
 #if !defined(NDEBUG)
     if (!state.node_impl->template HasComponent<TransformComponent>()) {
         return "missing TransformComponent";
     }
 #endif // NDEBUG
-    state.transform_component = &(state.node_impl->template GetComponent<TransformComponent>());
+    state.transform_component = &state.node_impl->template GetComponent<TransformComponent>();
     return std::nullopt;
 }
 } // namespace

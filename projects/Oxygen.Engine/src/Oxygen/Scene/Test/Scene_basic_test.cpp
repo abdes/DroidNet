@@ -13,7 +13,6 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
-#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::ObjectMetaData;
 using oxygen::ResourceHandle;
@@ -23,7 +22,6 @@ using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
-using oxygen::scene::TransformComponent;
 
 namespace {
 
@@ -31,7 +29,7 @@ namespace {
 // Scene Basic Functionality Tests
 //=============================================================================
 
-class SceneBasicTest : public ::testing::Test {
+class SceneBasicTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -41,66 +39,73 @@ protected:
     {
         scene_.reset();
     }
-    SceneNode CreateNode(const std::string& name)
+
+    [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
     {
         return scene_->CreateNode(name);
     }
-    SceneNode CreateNode(const std::string& name, const SceneNode::Flags& flags)
+
+    [[nodiscard]] auto CreateNode(const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
     {
         return scene_->CreateNode(name, flags);
     }
-    std::optional<SceneNode> CreateChildNode(const SceneNode& parent, const std::string& name)
+
+    [[nodiscard]] auto CreateChildNode(const SceneNode& parent, const std::string& name) const -> std::optional<SceneNode>
     {
         return scene_->CreateChildNode(parent, name);
     }
-    bool DestroyNode(SceneNode& node)
+
+    auto DestroyNode(SceneNode& node) const -> bool
     {
         return scene_->DestroyNode(node);
     }
-    bool DestroyNodeHierarchy(SceneNode& node)
+
+    auto DestroyNodeHierarchy(SceneNode& node) const -> bool
     {
         return scene_->DestroyNodeHierarchy(node);
     }
-    void ClearScene()
+    void ClearScene() const
     {
         scene_->Clear();
     }
-    void ExpectNodeValidWithName(const SceneNode& node, const std::string& name)
+
+    static void ExpectNodeValidWithName(const SceneNode& node, const std::string& name)
     {
         if (!node.IsValid())
             FAIL() << "Node should be valid";
-        auto obj_opt = node.GetObject();
+        const auto obj_opt = node.GetObject();
         if (!obj_opt.has_value())
             FAIL() << "Node object should be present";
         if (obj_opt->get().GetName() != name)
             FAIL() << "Node name mismatch: expected '" << name
                    << "', got '" << obj_opt->get().GetName() << "'";
     }
-    void ExpectNodeLazyInvalidated(SceneNode& node)
+
+    static void ExpectNodeLazyInvalidated(SceneNode& node)
     {
         // Node may appear valid, but after GetObject() it should be invalidated
         if (node.IsValid()) {
-            auto obj_opt = node.GetObject();
-            if (obj_opt.has_value())
+            if (const auto obj_opt = node.GetObject(); obj_opt.has_value())
                 FAIL() << "Node should not have a valid object after destruction/clear";
             if (node.IsValid())
                 FAIL() << "Node should be invalidated after failed access (lazy invalidation)";
         }
     }
-    void ExpectNodeNotContainedAndInvalidated(SceneNode& node)
+    void ExpectNodeNotContainedAndInvalidated(SceneNode& node) const
     {
         if (scene_->Contains(node))
             FAIL() << "Node should not be contained in scene";
         ExpectNodeLazyInvalidated(node);
     }
-    void ExpectHandlesUnique(const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
+
+    static void ExpectHandlesUnique(const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
     {
         if (n1.GetHandle() == n2.GetHandle()
             || n2.GetHandle() == n3.GetHandle()
             || n1.GetHandle() == n3.GetHandle())
             FAIL() << "Node handles should be unique";
     }
-    void ExpectSceneEmpty()
+    void ExpectSceneEmpty() const
     {
         if (!scene_->IsEmpty())
             FAIL() << "Scene should be empty";
@@ -111,7 +116,7 @@ protected:
 };
 
 // Error/Assertion fixture
-class SceneBasicErrorTest : public ::testing::Test {
+class SceneBasicErrorTest : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -121,7 +126,8 @@ protected:
     {
         scene_.reset();
     }
-    SceneNode CreateNode(const std::string& name)
+
+    [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
     {
         return scene_->CreateNode(name);
     }
@@ -137,9 +143,9 @@ NOLINT_TEST_F(SceneBasicTest, SceneConstruction)
     // Arrange: No specific arrangement beyond fixture setup.
 
     // Act: Create three separate Scene instances with different names.
-    auto scene1 = std::make_shared<Scene>("Scene1", 1024);
-    auto scene2 = std::make_shared<Scene>("EmptyName", 1024);
-    auto scene3 = std::make_shared<Scene>("Scene With Spaces", 1024);
+    const auto scene1 = std::make_shared<Scene>("Scene1", 1024);
+    const auto scene2 = std::make_shared<Scene>("EmptyName", 1024);
+    const auto scene3 = std::make_shared<Scene>("Scene With Spaces", 1024);
     // Assert: Verify names are set correctly and new scenes are empty and have zero nodes.
     EXPECT_EQ(scene1->GetName(), "Scene1");
     EXPECT_EQ(scene2->GetName(), "EmptyName");
@@ -178,7 +184,7 @@ NOLINT_TEST_F(SceneBasicTest, BasicNodeCreation)
     // Arrange: Scene is ready for use (fixture setup).
     // (scene_ is already set up)
     // Act: Create a single node with a specific name.
-    auto node = CreateNode("TestNode");
+    const auto node = CreateNode("TestNode");
 
     // Assert: Verify the node is valid, has the correct name, and scene
     // statistics are updated.
@@ -190,7 +196,7 @@ NOLINT_TEST_F(SceneBasicTest, NodeCreationWithEmptyName)
 {
     // Arrange: Scene is ready for use (fixture setup).
     // Act: Create a node with an empty name.
-    auto node = CreateNode("");
+    const auto node = CreateNode("");
     // Assert: Node should be valid and have an empty name.
     ExpectNodeValidWithName(node, "");
 }
@@ -198,7 +204,7 @@ NOLINT_TEST_F(SceneBasicTest, NodeCreationWithEmptyName)
 NOLINT_TEST_F(SceneBasicTest, NodeCreationWithCustomFlags)
 {
     // Arrange: Define custom node flags (e.g., not visible, static).
-    auto custom_flags
+    const auto custom_flags
         = SceneNode::Flags {}
               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
               .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
@@ -209,7 +215,7 @@ NOLINT_TEST_F(SceneBasicTest, NodeCreationWithCustomFlags)
     // Assert: Verify the node is valid and its flags match the custom flags
     // set.
     EXPECT_TRUE(node.IsValid());
-    auto flags_opt = node.GetFlags();
+    const auto flags_opt = node.GetFlags();
     ASSERT_TRUE(flags_opt.has_value());
     const auto& flags = flags_opt->get();
     EXPECT_FALSE(flags.GetEffectiveValue(SceneNodeFlags::kVisible));
@@ -221,9 +227,9 @@ NOLINT_TEST_F(SceneBasicTest, MultipleNodeCreation)
     // Arrange: Scene is ready for use (fixture setup).
 
     // Act: Create three distinct nodes.
-    auto node1 = CreateNode("Node1");
-    auto node2 = CreateNode("Node2");
-    auto node3 = CreateNode("Node3");
+    const auto node1 = CreateNode("Node1");
+    const auto node2 = CreateNode("Node2");
+    const auto node3 = CreateNode("Node3");
 
     // Assert: All nodes should be valid, their handles unique, and scene count
     // updated correctly.
@@ -237,16 +243,16 @@ NOLINT_TEST_F(SceneBasicTest, MultipleNodeCreation)
 NOLINT_TEST_F(SceneBasicTest, ChildNodeCreation)
 {
     // Arrange: Create a parent node and verify its validity.
-    auto parent = CreateNode("Parent");
+    const auto parent = CreateNode("Parent");
     EXPECT_TRUE(parent.IsValid());
 
     // Act: Create a child node for the previously created parent.
-    auto child_opt = CreateChildNode(parent, "Child");
+    const auto child_opt = CreateChildNode(parent, "Child");
 
     // Assert: Verify the child was created, both parent and child are valid
     // with correct names, and scene node count is updated.
     ASSERT_TRUE(child_opt.has_value());
-    auto child = child_opt.value();
+    const auto& child = child_opt.value();
     ExpectNodeValidWithName(parent, "Parent");
     ExpectNodeValidWithName(child, "Child");
     EXPECT_EQ(scene_->GetNodeCount(), 2);
@@ -265,7 +271,7 @@ NOLINT_TEST_F(SceneBasicTest, BasicNodeDestruction)
     EXPECT_EQ(scene_->GetNodeCount(), 1);
 
     // Act: Destroy the created node.
-    bool destroyed = DestroyNode(node);
+    const bool destroyed = DestroyNode(node);
 
     // Assert: Verify successful destruction, node invalidation, and scene
     // emptiness.
@@ -279,8 +285,8 @@ NOLINT_TEST_F(SceneBasicTest, HierarchicalNodeDestruction)
     // Arrange: Create a parent node and two child nodes. Verify initial scene
     // count and child creation success.
     auto parent = CreateNode("Parent");
-    auto child1_opt = CreateChildNode(parent, "Child1");
-    auto child2_opt = CreateChildNode(parent, "Child2");
+    const auto child1_opt = CreateChildNode(parent, "Child1");
+    const auto child2_opt = CreateChildNode(parent, "Child2");
     ASSERT_TRUE(child1_opt.has_value());
     ASSERT_TRUE(child2_opt.has_value());
     auto child1 = child1_opt.value();
@@ -288,7 +294,7 @@ NOLINT_TEST_F(SceneBasicTest, HierarchicalNodeDestruction)
     EXPECT_EQ(scene_->GetNodeCount(), 3);
 
     // Act: Destroy the parent node and its entire hierarchy.
-    bool destroyed = DestroyNodeHierarchy(parent);
+    const bool destroyed = DestroyNodeHierarchy(parent);
 
     // Assert: Verify successful destruction, scene emptiness, and invalidation
     // of parent and all children.
@@ -321,7 +327,7 @@ NOLINT_TEST_F(SceneBasicErrorTest, DestroyNonExistentNodeDeath)
 // -----------------------------------------------------------------------------
 
 // New Fixture for Death Tests related to Scene basic operations CHECK_F assertions
-class SceneBasicDeathTest : public ::testing::Test {
+class SceneBasicDeathTest : public testing::Test {
 protected:
     std::shared_ptr<Scene> scene_;
     // SceneNode is already in scope via: using oxygen::scene::SceneNode;
@@ -339,7 +345,7 @@ protected:
 
     // Helper to create an invalidated node for testing
     // Creates a node and then destroys it, returning the now-invalidated SceneNode object.
-    SceneNode CreateInvalidatedNode(const std::string& name = "InvalidNode")
+    [[nodiscard]] auto CreateInvalidatedNode(const std::string& name = "InvalidNode") const -> SceneNode
     {
         auto node = scene_->CreateNode(name);
         // Assuming CreateNode aborts on failure (e.g. scene full) as per its documentation,
@@ -352,10 +358,10 @@ protected:
 
 NOLINT_TEST_F(SceneBasicDeathTest, CreateChildNodeWithInvalidParentDeath)
 {
-    SceneNode invalidParent = CreateInvalidatedNode("InvalidParentForChild");
+    const SceneNode invalid_parent = CreateInvalidatedNode("InvalidParentForChild");
     // This should trigger: CHECK_F(parent.IsValid(), "expecting a valid parent
     // handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->CreateChildNode(invalidParent, "ChildOfInvalid"),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->CreateChildNode(invalid_parent, "ChildOfInvalid"),
         ".*expecting a valid parent handle.*");
 }
 
@@ -363,7 +369,7 @@ NOLINT_TEST_F(SceneBasicDeathTest, DestroyNodeWithChildrenDeath)
 {
     auto parent = scene_->CreateNode("ParentWithChild");
     ASSERT_TRUE(parent.IsValid()); // Ensure parent is valid
-    auto child_opt = scene_->CreateChildNode(parent, "Child");
+    const auto child_opt = scene_->CreateChildNode(parent, "Child");
     ASSERT_TRUE(child_opt.has_value() && child_opt->IsValid()); // Ensure child is valid and created
 
     // This should trigger: CHECK_F(!node.HasChildren(), "node has children, use
@@ -374,51 +380,51 @@ NOLINT_TEST_F(SceneBasicDeathTest, DestroyNodeWithChildrenDeath)
 
 NOLINT_TEST_F(SceneBasicDeathTest, DestroyNodeHierarchyWithInvalidRootDeath)
 {
-    SceneNode invalidRoot = CreateInvalidatedNode("InvalidRootForHierarchy");
+    SceneNode invalid_root = CreateInvalidatedNode("InvalidRootForHierarchy");
     // This should trigger: CHECK_F(root.IsValid(), "expecting a valid root node
     // handle");
-    ASSERT_DEATH(scene_->DestroyNodeHierarchy(invalidRoot),
+    ASSERT_DEATH(scene_->DestroyNodeHierarchy(invalid_root),
         ".*expecting a valid root node handle.*");
 }
 
 NOLINT_TEST_F(SceneBasicDeathTest, GetParentFromInvalidNodeDeath)
 {
-    SceneNode invalidNode = CreateInvalidatedNode("InvalidNodeForGetParent");
+    const SceneNode invalid_node = CreateInvalidatedNode("InvalidNodeForGetParent");
     // This should trigger: CHECK_F(node.IsValid(), "expecting a valid node handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetParent(invalidNode),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetParent(invalid_node),
         ".*expecting a valid node handle.*");
 }
 
 NOLINT_TEST_F(SceneBasicDeathTest, GetFirstChildFromInvalidNodeDeath)
 {
-    SceneNode invalidNode = CreateInvalidatedNode("InvalidNodeForGetFirstChild");
+    const SceneNode invalid_node = CreateInvalidatedNode("InvalidNodeForGetFirstChild");
     // This should trigger: CHECK_F(node.IsValid(), "expecting a valid node handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetFirstChild(invalidNode),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetFirstChild(invalid_node),
         ".*expecting a valid node handle.*");
 }
 
 NOLINT_TEST_F(SceneBasicDeathTest, GetNextSiblingFromInvalidNodeDeath)
 {
-    SceneNode invalidNode = CreateInvalidatedNode("InvalidNodeForGetNextSibling");
+    const SceneNode invalid_node = CreateInvalidatedNode("InvalidNodeForGetNextSibling");
     // This should trigger: CHECK_F(node.IsValid(), "expecting a valid node handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetNextSibling(invalidNode),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetNextSibling(invalid_node),
         ".*expecting a valid node handle.*");
 }
 
 NOLINT_TEST_F(SceneBasicDeathTest, GetPrevSiblingFromInvalidNodeDeath)
 {
-    SceneNode invalidNode = CreateInvalidatedNode("InvalidNodeForGetPrevSibling");
+    const SceneNode invalid_node = CreateInvalidatedNode("InvalidNodeForGetPrevSibling");
     // Assuming GetPrevSibling has a similar CHECK_F for node.IsValid()
     // This should trigger: CHECK_F(node.IsValid(), "expecting a valid node handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetPrevSibling(invalidNode),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->GetPrevSibling(invalid_node),
         ".*expecting a valid node handle.*");
 }
 
 NOLINT_TEST_F(SceneBasicDeathTest, DestroyInvalidNodeDeath)
 {
-    SceneNode invalidNode = CreateInvalidatedNode("InvalidNodeForDestroy");
+    SceneNode invalid_node = CreateInvalidatedNode("InvalidNodeForDestroy");
     // This should trigger: CHECK_F(node.IsValid(), "expecting a valid node handle");
-    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->DestroyNode(invalidNode),
+    ASSERT_DEATH([[maybe_unused]] auto _ = scene_->DestroyNode(invalid_node),
         ".*expecting a valid node handle.*");
 }
 
@@ -442,7 +448,7 @@ NOLINT_TEST_F(SceneBasicTest, ContainsNodeHandle)
 {
     // Arrange: Create a test node and get its handle.
     auto node = CreateNode("TestNode");
-    auto handle = node.GetHandle();
+    const auto handle = node.GetHandle();
 
     // Act & Assert: Verify containment of the handle before node destruction
     // and non-containment after.
@@ -454,8 +460,8 @@ NOLINT_TEST_F(SceneBasicTest, ContainsNodeHandle)
 NOLINT_TEST_F(SceneBasicTest, ContainsNodeFromDifferentScene)
 {
     // Arrange: Create a node in a separate, different scene.
-    auto other_scene = std::make_shared<Scene>("OtherScene", 1024);
-    auto other_node = other_scene->CreateNode("OtherNode");
+    const auto other_scene = std::make_shared<Scene>("OtherScene", 1024);
+    const auto other_node = other_scene->CreateNode("OtherNode");
 
     // Assert: Verify the current scene does not contain the foreign
     // node/handle, while the other scene correctly reports containment.
@@ -563,9 +569,9 @@ NOLINT_TEST_F(SceneBasicTest, DefragmentStorage)
 {
     // Arrange: Create three nodes, destroy the middle one to induce
     // fragmentation, and verify node count.
-    auto node1 = CreateNode("Node1");
+    const auto node1 = CreateNode("Node1");
     auto node2 = CreateNode("Node2");
-    auto node3 = CreateNode("Node3");
+    const auto node3 = CreateNode("Node3");
     DestroyNode(node2);
     EXPECT_EQ(scene_->GetNodeCount(), 2);
 
@@ -618,7 +624,7 @@ NOLINT_TEST_F(SceneBasicTest, SpecialCharacterNames)
 NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
 {
     // Arrange: Prepare a very long string to be used as a node name.
-    std::string long_name(1000, 'A');
+    const std::string long_name(1000, 'A');
 
     // Act: Create a node using the prepared very long name.
     auto node = CreateNode(long_name);
@@ -626,7 +632,7 @@ NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
     // Assert: Verify the node is valid and its name is correctly stored and
     // retrieved, matching the long string.
     EXPECT_TRUE(node.IsValid());
-    auto obj = node.GetObject();
+    const auto obj = node.GetObject();
     ASSERT_TRUE(obj.has_value());
     EXPECT_EQ(obj->get().GetName(), long_name);
 }
@@ -638,6 +644,7 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
     // Act: Create nodes with names containing various Unicode characters (e.g.,
     // Japanese, Cyrillic, Emojis).
     auto node1 = CreateNode("Node_こんにちは");
+    // ReSharper disable once StringLiteralTypo
     auto node2 = CreateNode("Node_Здравствуй");
     auto node3 = CreateNode("Node_🚀🌟");
 
@@ -646,13 +653,14 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
     EXPECT_TRUE(node1.IsValid());
     EXPECT_TRUE(node2.IsValid());
     EXPECT_TRUE(node3.IsValid());
-    auto obj1 = node1.GetObject();
-    auto obj2 = node2.GetObject();
-    auto obj3 = node3.GetObject();
+    const auto obj1 = node1.GetObject();
+    const auto obj2 = node2.GetObject();
+    const auto obj3 = node3.GetObject();
     ASSERT_TRUE(obj1.has_value());
     ASSERT_TRUE(obj2.has_value());
     ASSERT_TRUE(obj3.has_value());
     EXPECT_EQ(obj1->get().GetName(), "Node_こんにちは");
+    // ReSharper disable once StringLiteralTypo
     EXPECT_EQ(obj2->get().GetName(), "Node_Здравствуй");
     EXPECT_EQ(obj3->get().GetName(), "Node_🚀🌟");
 }

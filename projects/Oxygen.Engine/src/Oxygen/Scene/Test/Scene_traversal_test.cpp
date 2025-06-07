@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -15,7 +16,6 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
-#include <Oxygen/Scene/TransformComponent.h>
 
 using oxygen::ResourceHandle;
 using oxygen::scene::AcceptAllFilter;
@@ -27,7 +27,6 @@ using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::SceneTraversal;
-using oxygen::scene::TransformComponent;
 using oxygen::scene::TraversalOrder;
 using oxygen::scene::TraversalResult;
 using oxygen::scene::VisibleFilter;
@@ -39,7 +38,7 @@ namespace {
 // Base Traversal Test Fixture
 //=============================================================================
 
-class SceneTraversalTestBase : public ::testing::Test {
+class SceneTraversalTestBase : public testing::Test {
 protected:
     void SetUp() override
     {
@@ -56,11 +55,11 @@ protected:
     }
 
     // Helper: Create a scene node with proper flags
-    auto CreateNode(const std::string& name, const glm::vec3& position = { 0.0f, 0.0f, 0.0f }) const -> SceneNode
+    [[nodiscard]] auto CreateNode(const std::string& name, const glm::vec3& position = { 0.0f, 0.0f, 0.0f }) const -> SceneNode
     {
-        auto flags = SceneNode::Flags {}
-                         .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
-                         .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(false));
+        const auto flags = SceneNode::Flags {}
+                               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
+                               .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(false));
         auto node = scene_->CreateNode(name, flags);
         EXPECT_TRUE(node.IsValid());
 
@@ -74,27 +73,27 @@ protected:
     }
 
     // Helper: Create child node
-    auto CreateChildNode(const SceneNode& parent, const std::string& name) const -> SceneNode
+    [[nodiscard]] auto CreateChildNode(const SceneNode& parent, const std::string& name) const -> SceneNode
     {
         auto child_opt = scene_->CreateChildNode(parent, name);
         EXPECT_TRUE(child_opt.has_value());
         return child_opt.value();
     }
 
-    auto CreateInvisibleNode(const std::string& name) const -> SceneNode
+    [[nodiscard]] auto CreateInvisibleNode(const std::string& name) const -> SceneNode
     {
-        auto flags = SceneNode::Flags {}
-                         .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
+        const auto flags = SceneNode::Flags {}
+                               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
         auto node = scene_->CreateNode(name, flags);
         EXPECT_TRUE(node.IsValid());
         return node;
     }
 
     // Helper: Create invisible child node
-    auto CreateInvisibleChildNode(const SceneNode& parent, const std::string& name) const -> SceneNode
+    [[nodiscard]] auto CreateInvisibleChildNode(const SceneNode& parent, const std::string& name) const -> SceneNode
     {
-        auto flags = SceneNode::Flags {}
-                         .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
+        const auto flags = SceneNode::Flags {}
+                               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
         auto child_opt = scene_->CreateChildNode(parent, name, flags);
         EXPECT_TRUE(child_opt.has_value());
         return child_opt.value();
@@ -103,28 +102,19 @@ protected:
     // Helper: Mark a node's transform as dirty
     static void MarkNodeTransformDirty(SceneNode& node)
     {
-        auto impl = node.GetObject();
+        const auto impl = node.GetObject();
         ASSERT_TRUE(impl.has_value());
-        auto& transform = impl->get().GetComponent<TransformComponent>();
-        auto pos = transform.GetLocalPosition();
-        transform.SetLocalPosition(pos + glm::vec3(0.001f, 0.0f, 0.0f));
+        if (const auto pos = node.GetTransform().GetLocalPosition()) {
+            node.GetTransform().SetLocalPosition(*pos + glm::vec3(0.001f, 0.0f, 0.0f));
+        }
         // Also mark the node itself as transform dirty
         impl->get().MarkTransformDirty();
-    }
-
-    // Helper: Clear a node's dirty transform flag
-    static void ClearNodeTransformDirty(SceneNode& node)
-    {
-        auto impl = node.GetObject();
-        ASSERT_TRUE(impl.has_value());
-        // Remove const to call the non-const method
-        impl->get().ClearTransformDirty();
     }
 
     // Helper: Check if a node's transform is dirty
     static auto IsNodeTransformDirty(const SceneNode& node) -> bool
     {
-        auto impl = node.GetObject();
+        const auto impl = node.GetObject();
         if (!impl.has_value())
             return false;
         return impl->get().IsTransformDirty();
@@ -133,7 +123,7 @@ protected:
     // Helper: Clear a node's dirty transform flag
     void UpdateSingleNodeTransforms(SceneNode& node) const
     {
-        auto impl = node.GetObject();
+        const auto impl = node.GetObject();
         ASSERT_TRUE(impl.has_value());
         // Remove const to call the non-const method
         impl->get().UpdateTransforms(*scene_);
@@ -155,7 +145,7 @@ protected:
         return [this, stop_at_name](SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
             visited_nodes_.push_back(&node);
             visit_order_.emplace_back(node.GetName()); // Convert string_view to string
-            return (node.GetName() == stop_at_name) ? VisitResult::kStop : VisitResult::kContinue;
+            return node.GetName() == stop_at_name ? VisitResult::kStop : VisitResult::kContinue;
         };
     }
 
@@ -165,12 +155,12 @@ protected:
         return [this, skip_subtree_of](SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
             visited_nodes_.push_back(&node);
             visit_order_.emplace_back(node.GetName()); // Convert string_view to string
-            return (node.GetName() == skip_subtree_of) ? VisitResult::kSkipSubtree : VisitResult::kContinue;
+            return node.GetName() == skip_subtree_of ? VisitResult::kSkipSubtree : VisitResult::kContinue;
         };
     }
 
     // Helper: Create a filter that rejects specific nodes
-    auto CreateRejectFilter(const std::vector<std::string>& reject_names)
+    static auto CreateRejectFilter(const std::vector<std::string>& reject_names)
     {
         return [reject_names](const SceneNodeImpl& node, FilterResult /*parent_result*/) -> FilterResult {
             for (const auto& name : reject_names) {
@@ -183,7 +173,7 @@ protected:
     }
 
     // Helper: Create a filter that rejects subtrees of specific nodes
-    auto CreateRejectSubtreeFilter(const std::vector<std::string>& reject_subtree_names)
+    static auto CreateRejectSubtreeFilter(const std::vector<std::string>& reject_subtree_names)
     {
         return [reject_subtree_names](const SceneNodeImpl& node, FilterResult /*parent_result*/) -> FilterResult {
             for (const auto& name : reject_subtree_names) {
@@ -204,10 +194,10 @@ protected:
         }
     }
 
-    void ExpectTraversalResult(const TraversalResult& result,
-        std::size_t expected_visited,
-        std::size_t expected_filtered,
-        bool expected_completed = true)
+    static void ExpectTraversalResult(const TraversalResult& result,
+        const std::size_t expected_visited,
+        const std::size_t expected_filtered,
+        const bool expected_completed = true)
     {
         EXPECT_EQ(result.nodes_visited, expected_visited);
         EXPECT_EQ(result.nodes_filtered, expected_filtered);
@@ -234,7 +224,7 @@ protected:
 
     // Helper: Verify expected nodes are present and forbidden nodes are not
     void ExpectContainsExactlyNodes(const std::vector<std::string>& expected_nodes,
-        const std::vector<std::string>& forbidden_nodes = {})
+        const std::vector<std::string>& forbidden_nodes = {}) const
     {
         ExpectContainsAllNodes(expected_nodes);
         ExpectContainsNoForbiddenNodes(forbidden_nodes);
@@ -247,7 +237,7 @@ protected:
         const std::vector<std::string>& level2_nodes)
     {
         auto find_pos = [this](const std::string& name) {
-            return std::find(visit_order_.begin(), visit_order_.end(), name) - visit_order_.begin();
+            return std::ranges::find(visit_order_, name) - visit_order_.begin();
         };
 
         // Find max position of level 1 and min position of level 2
@@ -318,7 +308,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, EmptySceneTraversal)
     scene_->Clear();
 
     // Act: Traverse the empty scene
-    auto result = traversal_->Traverse(CreateTrackingVisitor());
+    const auto result = traversal_->Traverse(CreateTrackingVisitor());
 
     // Assert: No nodes should be visited
     ExpectTraversalResult(result, 0, 0, true);
@@ -333,7 +323,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, SingleNodeTraversal)
     auto single_node = CreateNode("single");
 
     // Act: Traverse the scene with one node
-    auto result = traversal_->Traverse(CreateTrackingVisitor());
+    const auto result = traversal_->Traverse(CreateTrackingVisitor());
 
     // Assert: Single node should be visited
     ExpectTraversalResult(result, 1, 0, true);
@@ -344,7 +334,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, SingleNodeTraversal)
 NOLINT_TEST_F(SceneTraversalBasicTest, DepthFirstTraversal)
 {
     // Act: Traverse using depth-first order
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst);
 
@@ -360,7 +350,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, DepthFirstTraversal)
 NOLINT_TEST_F(SceneTraversalBasicTest, BreadthFirstTraversal)
 {
     // Act: Traverse using breadth-first order
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kBreadthFirst);
 
@@ -422,7 +412,7 @@ protected:
 NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromSingleRoot)
 {
     // Act: Traverse from root1 only
-    auto result = traversal_->TraverseFrom(
+    const auto result = traversal_->TraverseFrom(
         root1_->GetHandle(),
         CreateTrackingVisitor());
 
@@ -435,10 +425,10 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromSingleRoot)
 NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromMultipleRoots)
 {
     // Arrange: Prepare handles for root1 and root3
-    std::vector<ResourceHandle> roots = { root1_->GetHandle(), root3_->GetHandle() };
+    std::vector roots = { root1_->GetHandle(), root3_->GetHandle() };
 
     // Act: Traverse from multiple specific roots
-    auto result = traversal_->TraverseFrom(
+    const auto result = traversal_->TraverseFrom(
         roots,
         CreateTrackingVisitor());
 
@@ -454,7 +444,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromEmptyRootList)
     std::vector<ResourceHandle> empty_roots;
 
     // Act: Traverse from empty root list
-    auto result = traversal_->TraverseFrom(
+    const auto result = traversal_->TraverseFrom(
         empty_roots,
         CreateTrackingVisitor());
 
@@ -467,10 +457,10 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromEmptyRootList)
 NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromInvalidHandle)
 {
     // Arrange: Invalid handle
-    ResourceHandle invalid_handle;
+    const ResourceHandle invalid_handle;
 
     // Act: Traverse from invalid handle
-    auto result = traversal_->TraverseFrom(
+    const auto result = traversal_->TraverseFrom(
         invalid_handle,
         CreateTrackingVisitor());
 
@@ -490,7 +480,7 @@ class SceneTraversalVisitorControlTest : public SceneTraversalBasicTest {
 NOLINT_TEST_F(SceneTraversalVisitorControlTest, EarlyTerminationDepthFirst)
 {
     // Act: Traverse with early termination at node A
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateEarlyTerminationVisitor("A"),
         TraversalOrder::kDepthFirst);
 
@@ -501,7 +491,7 @@ NOLINT_TEST_F(SceneTraversalVisitorControlTest, EarlyTerminationDepthFirst)
     EXPECT_THAT(visit_order_, testing::Contains("A"));
 
     // Find the position where "A" appears and ensure traversal stopped there
-    auto a_pos = std::find(visit_order_.begin(), visit_order_.end(), "A");
+    const auto a_pos = std::ranges::find(visit_order_, "A");
     EXPECT_NE(a_pos, visit_order_.end());
     EXPECT_EQ(a_pos + 1, visit_order_.end()) << "Traversal should stop immediately after visiting A";
 }
@@ -510,7 +500,7 @@ NOLINT_TEST_F(SceneTraversalVisitorControlTest, EarlyTerminationDepthFirst)
 NOLINT_TEST_F(SceneTraversalVisitorControlTest, SubtreeSkippingDepthFirst)
 {
     // Act: Traverse with subtree skipping at node A
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateSubtreeSkippingVisitor("A"),
         TraversalOrder::kDepthFirst);
 
@@ -523,7 +513,7 @@ NOLINT_TEST_F(SceneTraversalVisitorControlTest, SubtreeSkippingDepthFirst)
 NOLINT_TEST_F(SceneTraversalVisitorControlTest, SubtreeSkippingBreadthFirst)
 {
     // Act: Traverse with subtree skipping at node A in breadth-first
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateSubtreeSkippingVisitor("A"),
         TraversalOrder::kBreadthFirst);
 
@@ -543,7 +533,7 @@ class SceneTraversalFilterTest : public SceneTraversalBasicTest {
 NOLINT_TEST_F(SceneTraversalFilterTest, AcceptAllFilter)
 {
     // Act: Traverse with AcceptAllFilter
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         AcceptAllFilter {});
@@ -557,7 +547,7 @@ NOLINT_TEST_F(SceneTraversalFilterTest, AcceptAllFilter)
 NOLINT_TEST_F(SceneTraversalFilterTest, RejectSpecificNodes)
 {
     // Act: Traverse rejecting nodes A and E
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         CreateRejectFilter({ "A", "E" }));
@@ -571,7 +561,7 @@ NOLINT_TEST_F(SceneTraversalFilterTest, RejectSpecificNodes)
 NOLINT_TEST_F(SceneTraversalFilterTest, RejectSubtreeOfSpecificNodes)
 {
     // Act: Traverse rejecting subtree of node A
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         CreateRejectSubtreeFilter({ "A" }));
@@ -585,7 +575,7 @@ NOLINT_TEST_F(SceneTraversalFilterTest, RejectSubtreeOfSpecificNodes)
 NOLINT_TEST_F(SceneTraversalFilterTest, RejectSubtreeInBreadthFirst)
 {
     // Act: Traverse rejecting subtree of node B in breadth-first
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kBreadthFirst,
         CreateRejectSubtreeFilter({ "B" }));
@@ -632,7 +622,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, DirtyTransformFilter)
     MarkNodeTransformDirty(*nodeC_);
 
     // Act: Traverse with dirty transform filter
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         DirtyTransformFilter {});
@@ -655,7 +645,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
         SceneFlag {}.SetEffectiveValueBit(true));
 
     // Act: Update transforms using convenience method
-    auto updated_count = traversal_->UpdateTransforms();
+    const auto updated_count = traversal_->UpdateTransforms();
 
     // Assert: A, and B are dirty and should be updated
     EXPECT_EQ(updated_count, 2);
@@ -679,8 +669,8 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
     MarkNodeTransformDirty(*nodeC_);
 
     // Act: Update transforms only from nodeA's subtree
-    std::vector<ResourceHandle> roots = { nodeA_->GetHandle() };
-    auto updated_count = traversal_->UpdateTransformsFrom(roots);
+    std::vector roots = { nodeA_->GetHandle() };
+    const auto updated_count = traversal_->UpdateTransformsFrom(roots);
 
     // Assert: Only A and C should be updated, B should remain dirty
     EXPECT_EQ(updated_count, 2);
@@ -719,7 +709,7 @@ protected:
 NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, VisibleFilter)
 {
     // Act: Traverse with VisibleFilter
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         VisibleFilter {});
@@ -737,7 +727,7 @@ NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, DirtyTransformFilter)
     MarkNodeTransformDirty(*visible_child_);
 
     // Act: Traverse with DirtyTransformFilter
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         DirtyTransformFilter {});
@@ -765,7 +755,7 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, DeepHierarchyTraversal)
     }
 
     // Act: Traverse the deep hierarchy
-    auto result = traversal_->Traverse(CreateTrackingVisitor());
+    const auto result = traversal_->Traverse(CreateTrackingVisitor());
 
     // Assert: All 100 nodes should be visited without stack overflow
     ExpectTraversalResult(result, 100, 0, true);
@@ -779,13 +769,13 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, WideHierarchyTraversal)
 {
     // Arrange: Create a wide hierarchy (many children at root level)
     scene_->Clear();
-    SceneNode root = CreateNode("root");
+    const SceneNode root = CreateNode("root");
     for (int i = 0; i < 100; ++i) {
-        CreateChildNode(root, "child_" + std::to_string(i));
+        [[maybe_unused]] auto _ = CreateChildNode(root, "child_" + std::to_string(i));
     }
 
     // Act: Traverse the wide hierarchy
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kBreadthFirst);
 
@@ -799,14 +789,14 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, WideHierarchyTraversal)
 NOLINT_TEST_F(SceneTraversalEdgeCaseTest, FilterRejectingAllNodes)
 {
     // Arrange: Create simple hierarchy
-    auto root = CreateNode("root");
-    CreateChildNode(root, "child");
+    const auto root = CreateNode("root");
+    [[maybe_unused]] auto _ = CreateChildNode(root, "child");
 
     // Act: Traverse with filter that rejects all nodes
     auto reject_all_filter = [](const SceneNodeImpl& /*node*/, FilterResult /*parent_result*/) -> FilterResult {
         return FilterResult::kRejectSubTree;
     };
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateTrackingVisitor(),
         TraversalOrder::kDepthFirst,
         reject_all_filter);
@@ -822,15 +812,15 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, FilterRejectingAllNodes)
 NOLINT_TEST_F(SceneTraversalEdgeCaseTest, VisitorStoppingImmediately)
 {
     // Arrange: Create simple hierarchy
-    auto root = CreateNode("root");
-    CreateChildNode(root, "child");
+    const auto root = CreateNode("root");
+    [[maybe_unused]] auto _ = CreateChildNode(root, "child");
 
     // Act: Traverse with visitor that stops immediately
     auto immediate_stop_visitor = [this](const SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
         visit_order_.emplace_back(node.GetName()); // Convert string_view to string
         return VisitResult::kStop;
     };
-    auto result = traversal_->Traverse(immediate_stop_visitor);
+    const auto result = traversal_->Traverse(immediate_stop_visitor);
 
     // Assert: Only first node should be visited
     ExpectTraversalResult(result, 1, 0, false);
@@ -912,7 +902,7 @@ protected:
 NOLINT_TEST_F(SceneTraversalComplexTest, CombinedFilterAndVisitorControl)
 {
     // Act: Traverse with visible filter and subtree skipping at A
-    auto result = traversal_->Traverse(
+    const auto result = traversal_->Traverse(
         CreateSubtreeSkippingVisitor("A"),
         TraversalOrder::kDepthFirst,
         VisibleFilter {});
@@ -932,7 +922,7 @@ NOLINT_TEST_F(SceneTraversalComplexTest, DirtyTransformUpdateInComplexHierarchy)
     MarkNodeTransformDirty(*nodeK_);
 
     // Act: Update only dirty transforms
-    auto updated_count = traversal_->UpdateTransforms();
+    const auto updated_count = traversal_->UpdateTransforms();
 
     // Assert: Should update all dirty subtrees (A, D, E, J, F, K)
     EXPECT_EQ(updated_count, 6);
@@ -950,7 +940,7 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
         const auto visible = flags.GetEffectiveValue(SceneNodeFlags::kVisible);
         std::cerr << "Node `" << node.GetName() << "` is "
                   << (visible ? "visible" : "invisible")
-                  << " and " << (node.IsTransformDirty() ? "dirty" : "clean") << std::endl;
+                  << " and " << (node.IsTransformDirty() ? "dirty" : "clean") << "\n";
         if (!visible) {
             return FilterResult::kRejectSubTree;
         }
@@ -961,11 +951,11 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
 
     // Act: Update transforms with custom filter
     auto updated_names = std::vector<std::string> {};
-    auto updated_count = traversal_->Traverse(
+    const auto updated_count = traversal_->Traverse(
         [&updated_names](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
             if (node.IsTransformDirty()) {
                 node.UpdateTransforms(scene);
-                updated_names.push_back(std::string(node.GetName()));
+                updated_names.emplace_back(node.GetName());
             }
             return VisitResult::kContinue;
         },

@@ -25,7 +25,7 @@ auto DirtyTransformFilter::operator()(
         return FilterResult::kRejectSubTree;
     }
     // Otherwise, accept if this node is dirty, or its parent accepted
-    auto verdict = parent_result == FilterResult::kAccept || node.IsTransformDirty()
+    const auto verdict = parent_result == FilterResult::kAccept || node.IsTransformDirty()
         ? FilterResult::kAccept
         : FilterResult::kReject;
     DLOG_F(2, "Node {} is {}", node.GetName(), verdict == FilterResult::kAccept ? "accepted" : "rejected");
@@ -73,7 +73,7 @@ auto SceneTraversal::UpdateTransforms() const -> std::size_t
     std::size_t updated_count = 0;
 
     // Batch process with dirty transform filter for efficiency
-    auto result = Traverse(
+    [[maybe_unused]] auto result = Traverse(
         [&updated_count](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
             LOG_SCOPE_F(2, "For Node");
             LOG_F(2, "name = {}", node.GetName());
@@ -95,7 +95,7 @@ auto SceneTraversal::UpdateTransformsFrom(
     std::size_t updated_count = 0;
 
     // Batch process from specific roots with dirty transform filter
-    auto result = TraverseFrom(
+    [[maybe_unused]] auto result = TraverseFrom(
         root_handles,
         [&updated_count](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
             node.UpdateTransforms(scene);
