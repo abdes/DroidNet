@@ -40,6 +40,12 @@ namespace scene {
        routed through Scene.
      - Root node management is automated and robust; users do not manage root
        nodes directly.
+     - Designed for game/3D engine use cases with hierarchy-focused operations
+       that move complete subtrees to preserve relationships, safe destruction
+       that prevents accidental orphaning of children, optional world transform
+       preservation during hierarchy changes.
+     - Atomic cross-scene operations, that either fully succeed or leave scenes
+       completely unchanged.
      - Many handles or SceneNode instances may exist, referring to the same node
        data (SceneNodeImpl). The scene graph does not provide immediate
        invalidation for existing handles/SceneNode instances when a node is
@@ -60,7 +66,8 @@ namespace scene {
        }
      \endcode
     */
-    class Scene : public Composition, public std::enable_shared_from_this<Scene> {
+    class Scene : public Composition,
+                  public std::enable_shared_from_this<Scene> {
         OXYGEN_TYPED(Scene)
 
         //! Implementation of a scene node, stored in a resource table.
@@ -130,14 +137,16 @@ namespace scene {
          it will return std::nullopt and invalidate the \p parent node.
         */
         [[nodiscard]] OXYGEN_SCENE_API auto CreateChildNode(
-            const SceneNode& parent, const std::string& name, SceneNode::Flags flags)
+            const SceneNode& parent,
+            const std::string& name, SceneNode::Flags flags)
             -> std::optional<SceneNode>;
 
         //! Creates a new root node by cloning the given original node.
         /*!
-         This method clones the original node (preserving its component data) and creates
-         a new root node in this scene with the specified name. The cloned node will be
-         orphaned (no hierarchy relationships) and assigned the new name.
+         This method clones the original node (preserving its component data)
+         and creates a new root node in this scene with the specified name. The
+         cloned node will be orphaned (no hierarchy relationships) and assigned
+         the new name.
 
          This method will only fail if the resource table holding scene data is
          full, which can only be remedied by increasing the initial capacity of
@@ -160,14 +169,15 @@ namespace scene {
          the specified name. The cloned node will become a child of the parent
          node.
 
-         \param parent The parent node under which to create the cloned child
+         \param parent The parent node under which to create the cloned child (must be in this scene)
          \param original The original node to clone (can be from this or another scene)
          \param new_name The name to assign to the cloned child node
 
          \return An optional SceneNode handle representing the cloned child
-                 node, or std::nullopt if the parent is invalid
+                 node, or std::nullopt if the parent is invalid or doesn't
+                 belong to this scene
         */
-        [[nodiscard]] static OXYGEN_SCENE_API auto CreateChildNodeFrom(
+        [[nodiscard]] OXYGEN_SCENE_API auto CreateChildNodeFrom(
             const SceneNode& parent, const SceneNode& original,
             const std::string& new_name)
             -> std::optional<SceneNode>;
@@ -230,22 +240,55 @@ namespace scene {
             const std::string& new_root_name)
             -> std::optional<SceneNode>; // TODO: missing implementation
 
-        //! Destroys the given node.
+        //! Destroys the given node if it has no children.
         /*!
-         \return true if the node was destroyed, false if it was not found, and
-                 will always invalidate the \p node.
+         Destroys a single node that has no children. If the node has children,
+         the operation will fail and return false. Use DestroyNodeHierarchy()
+         to destroy a node along with all its descendants.
+
+         \param node Node to destroy (must have no children)
+         \return true if the node was destroyed, false if it was not found or has children
         */
         OXYGEN_SCENE_API auto DestroyNode(SceneNode& node) -> bool;
 
-        // TODO: add sub-tree cloning
+        //! Destroys multiple nodes that have no children.
+        /*!
+         Batch operation for destroying multiple nodes that have no children.
+         Each node is processed individually - nodes with children are skipped.
+
+         \param nodes Nodes to destroy (each must have no children)
+         \return Vector indicating success (true) or failure (false) for each
+                 node at the same index
+
+         \note **Partial Success:** Nodes with children or that are invalid are
+               skipped.
+        */
+        OXYGEN_SCENE_API auto DestroyNodes(std::span<SceneNode> nodes) -> std::vector<uint8_t>;
 
         //! Recursively destroys the given node and all its descendants.
         /*!
-         \return true, unless \p node was not found. In such a case, \p node is
-                 also invalidated. This method will silently skip descendants
-                 that are not there anymore, but will invalidate them anyway.
+         Destroys an entire node hierarchy starting from the given root node.
+         All descendants are destroyed recursively, regardless of their individual
+         child counts.
+
+         \param root Root of hierarchy to destroy
+         \return true if the hierarchy was destroyed, false if root was not found
         */
         OXYGEN_SCENE_API auto DestroyNodeHierarchy(SceneNode& root) -> bool;
+
+        //! Recursively destroys multiple node hierarchies.
+        /*!
+         Batch operation for destroying multiple complete node hierarchies.
+         Each hierarchy is destroyed entirely, including all descendants.
+
+         \param hierarchy_roots Roots of hierarchies to destroy
+         \return Vector indicating success (true) or failure (false) for each
+                 hierarchy at the same index
+
+         \note **Partial Success:** Invalid roots are skipped and do not affect
+               other hierarchies.
+        */
+        OXYGEN_SCENE_API auto DestroyNodeHierarchies(std::span<SceneNode> hierarchy_roots) -> std::vector<uint8_t>;
 
         //! Checks if the data object for the given \p node is still in the
         //! scene.
@@ -286,6 +329,13 @@ namespace scene {
         [[nodiscard]] OXYGEN_SCENE_API auto GetChildrenCount(const SceneNode& parent) const -> size_t;
         [[nodiscard]] OXYGEN_SCENE_API auto GetChildren(const SceneNode& parent) const -> std::vector<NodeHandle>;
 
+        // Node search and query
+        [[nodiscard]] OXYGEN_SCENE_API auto FindNodeByName(std::string_view name) const -> std::optional<SceneNode>;
+        [[nodiscard]] OXYGEN_SCENE_API auto FindNodesByName(std::string_view name) const -> std::vector<SceneNode>;
+
+        // High-performance traversal access
+        [[nodiscard]] OXYGEN_SCENE_API auto Traverse() const -> const SceneTraversal&;
+
         // Update system
         // TODO: Implement a proper update system for the scene graph.
         OXYGEN_SCENE_API void Update(bool skip_dirty_flags = false);
@@ -320,6 +370,245 @@ namespace scene {
         //! does not correspond to an existing node.
         [[nodiscard]] OXYGEN_SCENE_API auto GetNode(const NodeHandle& handle) const noexcept
             -> std::optional<SceneNode>;
+
+    public:
+        //=== Node Re-parenting API (Same-Scene Only) ===------------------------//
+
+        //! Re-parent a node hierarchy to a new parent within this scene
+        /*!
+         Changes the parent of an existing node within this scene, moving the
+         entire hierarchy rooted at that node. Both nodes must belong to this
+         scene.
+
+         \param node Root of hierarchy to re-parent (must be in this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transform to maintain world position
+         \return true if re-parenting succeeded, false if invalid nodes or would create cycle
+
+         \note **Atomicity:** Only hierarchy pointers are modified without destroying/recreating
+               node data. Either fully succeeds or leaves scene unchanged.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto ReparentNode(
+            const SceneNode& node,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Make a node hierarchy a root hierarchy in this scene
+        /*!
+         Makes a node a root node within this scene, moving the entire hierarchy
+         rooted at that node to become a top-level hierarchy.
+
+         \param node Root of hierarchy to make root (must be in this scene)
+         \param preserve_world_transform If true, adjusts local transform to maintain world position
+         \return true if operation succeeded, false if invalid node
+
+         \note **Atomicity:** Only hierarchy pointers are modified without
+               destroying/recreating node data. Either fully succeeds or leaves
+               scene unchanged.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto MakeNodeRoot(
+            const SceneNode& node,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Re-parent multiple node hierarchies to a new parent within this
+        //! scene
+        /*!
+         Batch operation for re-parenting multiple node hierarchies efficiently
+         within this scene. Each node represents the root of a hierarchy that
+         will be moved entirely.
+
+         \param nodes Hierarchy roots to re-parent (all must be in this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transform to maintain world position
+         \return Vector indicating success (true) or failure (false) for each node at the same index
+
+         \note **Partial Success:** Each individual re-parenting is atomic, but
+               some may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto ReparentNodes(
+            std::span<const SceneNode> nodes,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
+
+        //! Re-parent multiple node hierarchies to become root hierarchies in
+        //! this scene
+        /*!
+         Batch operation for making multiple node hierarchies root hierarchies
+         within this scene. Each node represents the root of a hierarchy that
+         will be moved entirely.
+
+         \param nodes Hierarchy roots to make roots (all must be in this scene)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world position
+         \return Vector indicating success (true) or failure (false) for each node at the same index
+
+         \note **Partial Success:** Each individual operation is atomic, but
+               some may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto MakeNodesRoot(
+            std::span<const SceneNode> nodes,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
+
+        //=== Node Adoption API (Cross-Scene Operations) ===--------------------//
+
+        //! Adopt a node from any scene and re-parent it to a new parent in this
+        //! scene
+        /*!
+         Brings a node from any scene into this scene by cloning its data and
+         sets its parent.
+
+         \param node Node to adopt (can be from any scene, will be updated to point to this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transform to maintain world position
+         \return true if adoption succeeded, false if invalid nodes or would create cycle
+
+         \note **Handle Update:** Only this specific SceneNode handle is updated
+               to point to the new cloned data. Other copies become invalid.
+
+         \note **Atomicity:** Target scene is modified first, then source scene
+               cleanup.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptNode(
+            SceneNode& node,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Adopt a node from any scene and make it a root node in this scene
+        /*!
+         Brings a node from any scene into this scene by cloning its data and
+         makes it a root.
+
+         \param node Node to adopt as root (can be from any scene, will be updated to point to this scene)
+         \param preserve_world_transform If true, adjusts local transform to maintain world position
+         \return true if adoption succeeded, false if invalid node
+
+         \note **Handle Update:** Only this specific SceneNode handle is updated
+               to point to the new cloned data. Other copies become invalid.
+
+         \note **Atomicity:** Target scene is modified first, then source scene
+               cleanup.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptNodeAsRoot(
+            SceneNode& node,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Adopt multiple nodes from any scenes and re-parent them to a new
+        //! parent in this scene
+        /*!
+         Batch operation for adopting multiple nodes from any scenes into this
+         scene.
+
+         \param nodes Nodes to adopt (can be from any scenes, each will be updated to point to this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return Vector indicating success (true) or failure (false) for each node at the same index
+
+         \note **Partial Success:** Each individual adoption is atomic, but some
+         may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptNodes(
+            std::span<SceneNode> nodes,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
+
+        //! Adopt multiple nodes from any scenes and make them root nodes in this scene
+        /*!
+         Batch operation for adopting multiple nodes from any scenes as roots in this scene.
+
+         \param nodes Nodes to adopt as roots (can be from any scenes, each will be updated to point to this scene)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return Vector indicating success (true) or failure (false) for each node at the same index
+
+         \note **Partial Success:** Each individual adoption is atomic, but some may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptNodesAsRoot(
+            std::span<SceneNode> nodes,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
+
+        //=== Hierarchy Adoption API (Cross-Scene Operations) ===----------------//
+
+        //! Adopt an entire node hierarchy from any scene and re-parent it in
+        //! this scene
+        /*!
+         Brings a complete node hierarchy from any scene into this scene by
+         cloning all nodes in the subtree and preserving their relationships.
+         The root of the hierarchy gets a new parent.
+
+         \param hierarchy_root Root of the hierarchy to adopt (can be from any scene, will be updated to point to this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return true if adoption succeeded, false if invalid nodes or would create cycle
+
+         \note **Handle Update:** Only the specified SceneNode handle is
+               updated. Other copies of handles within the hierarchy become
+               invalid.
+
+         \note **Atomicity:** Target scene is modified first with complete
+               hierarchy, then source cleanup.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptHierarchy(
+            SceneNode& hierarchy_root,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Adopt an entire node hierarchy from any scene as a new root
+        //! hierarchy in this scene
+        /*!
+         Brings a complete node hierarchy from any scene into this scene by
+         cloning all nodes in the subtree and making the root a top-level root
+         in this scene.
+
+         \param hierarchy_root Root of the hierarchy to adopt (can be from any scene, will be updated to point to this scene)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return true if adoption succeeded, false if invalid hierarchy root
+
+         \note **Handle Update:** Only the specified SceneNode handle is
+               updated. Other copies of handles within the hierarchy become
+               invalid.
+
+         \note **Atomicity:** Target scene is modified first with complete
+               hierarchy, then source cleanup.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptHierarchyAsRoot(
+            SceneNode& hierarchy_root,
+            bool preserve_world_transform = true) -> bool;
+
+        //! Adopt multiple complete hierarchies from any scenes and re-parent
+        //! them in this scene
+        /*!
+         Batch operation for adopting multiple complete hierarchies from any
+         scenes into this scene. Each hierarchy is cloned entirely with all
+         internal relationships preserved.
+
+         \param hierarchy_roots Roots of hierarchies to adopt (can be from any scenes, each will be updated to point to this scene)
+         \param new_parent New parent node (must be in this scene, use SceneNode{} for root)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return Vector indicating success (true) or failure (false) for each hierarchy at the same index
+
+         \note **Partial Success:** Each individual hierarchy adoption is
+               atomic, but some may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptHierarchies(
+            std::span<SceneNode> hierarchy_roots,
+            const SceneNode& new_parent,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
+
+        //! Adopt multiple complete hierarchies from any scenes as new root
+        //! hierarchies in this scene
+        /*!
+         Batch operation for adopting multiple complete hierarchies as roots in
+         this scene. Each hierarchy is cloned entirely with all internal
+         relationships preserved.
+
+         \param hierarchy_roots Roots of hierarchies to adopt (can be from any scenes, each will be updated to point to this scene)
+         \param preserve_world_transform If true, adjusts local transforms to maintain world positions
+         \return Vector indicating success (true) or failure (false) for each hierarchy at the same index
+
+         \note **Partial Success:** Each individual hierarchy adoption is
+               atomic, but some may fail.
+        */
+        [[nodiscard]] OXYGEN_SCENE_API auto AdoptHierarchiesAsRoot(
+            std::span<SceneNode> hierarchy_roots,
+            bool preserve_world_transform = true) -> std::vector<uint8_t>;
 
     private:
         //! Creates a new node implementation with the given name and (optional)
@@ -362,6 +651,14 @@ namespace scene {
         void AddRootNode(const NodeHandle& node);
         void RemoveRootNode(const NodeHandle& node);
         void EnsureRootNodesValid() const;
+
+        //! Check if re-parenting would create a cycle in the hierarchy
+        [[nodiscard]] auto WouldCreateCycle(
+            const SceneNode& node,
+            const SceneNode& new_parent) const -> bool;
+
+        //! Check if a SceneNode belongs to this scene
+        [[nodiscard]] auto BelongsToThisScene(const SceneNode& node) const -> bool;
 
         std::shared_ptr<NodeTable> nodes_;
         //!< Set of root nodes for robust, duplicate-free management.
