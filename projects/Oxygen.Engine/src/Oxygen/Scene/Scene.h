@@ -300,16 +300,6 @@ namespace scene {
         */
         [[nodiscard]] OXYGEN_SCENE_API auto Contains(const SceneNode& node) const noexcept -> bool;
 
-        //! Checks if the data object for the given \p handle is still in the
-        //! scene.
-        /*!
-         This method will return true if the node data exists, and false if it
-         does not. If the node data does not exist anymore, it will not
-         invalidate the \p handle, assuming that this is a genuine check for the
-         node existence.
-        */
-        [[nodiscard]] OXYGEN_SCENE_API auto Contains(const NodeHandle& handle) const noexcept -> bool;
-
         // Statistics and Management
         [[nodiscard]] OXYGEN_SCENE_API auto GetNodeCount() const -> size_t;
         [[nodiscard]] auto GetNodes() const -> const NodeTable&;
@@ -656,9 +646,6 @@ namespace scene {
         [[nodiscard]] auto WouldCreateCycle(
             const SceneNode& node,
             const SceneNode& new_parent) const -> bool;
-
-        //! Check if a SceneNode belongs to this scene
-        [[nodiscard]] auto BelongsToThisScene(const SceneNode& node) const -> bool;
 
         std::shared_ptr<NodeTable> nodes_;
         //!< Set of root nodes for robust, duplicate-free management.

@@ -44,9 +44,11 @@ SceneTraversal::SceneTraversal(const Scene& scene)
 auto SceneTraversal::GetNodeImpl(const ResourceHandle& handle) const
     -> SceneNodeImpl*
 {
-    if (!scene_->Contains(handle)) {
-        return nullptr;
-    }
+    // Private stuff to Scene, and should not be checked here.
+    // if (!scene_->Contains(handle)) {
+    //     return nullptr;
+    // }
+
     // TODO: Breaks const-correctness but some visitors need mutation.
     // Need better solution for mutable access.
     return &const_cast<Scene*>(scene_)->GetNodeImplRef(handle);
