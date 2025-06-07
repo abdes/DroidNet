@@ -670,16 +670,23 @@ auto Scene::CreateChildNodeFrom(
     // should not be used anymore.
     CHECK_F(parent.IsValid(), "expecting a valid parent node handle");
 
-    // Get the parent's scene - we ALWAYS use the parent's scene for cloning and linking
-    const auto parent_scene = parent.scene_weak_.lock();
-    if (!parent_scene) {
-        return std::nullopt; // Parent's scene no longer exists
+    // Validate that the parent belongs to this scene to prevent cross-scene
+    // corruption. An attempt to pass a node from another scene is clearly a
+    // logic error.
+    CHECK_F(Contains(parent), "expecting parent node to belong to this scene");
+
+    // Check if parent still exists in this scene
+    const auto parent_impl_opt = GetNodeImpl(parent);
+    if (!parent_impl_opt) {
+        return std::nullopt; // Parent node no longer exists
     }
 
-    // Use the parent's scene to create the clone and link it
-    auto cloned_node = parent_scene->CreateNodeFrom(original, new_name);
-    parent_scene->RemoveRootNode(cloned_node.GetHandle());
-    parent_scene->LinkChild(parent, cloned_node);
+    // Create the cloned node as a root first
+    auto cloned_node = CreateNodeFrom(original, new_name);
+
+    // Remove from root nodes and link as child
+    RemoveRootNode(cloned_node.GetHandle());
+    LinkChild(parent, cloned_node);
 
     return cloned_node;
 }

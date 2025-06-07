@@ -281,8 +281,8 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_BasicFunctionality_Crea
     ASSERT_TRUE(parent.IsValid());
     ASSERT_TRUE(original.IsValid());
 
-    // Act: Clone original as child of parent
-    const auto child_clone_opt = Scene::CreateChildNodeFrom(parent, original, "ChildClone");
+    // Act: Clone original as child of parent (using target scene instance method)
+    const auto child_clone_opt = target_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
 
     // Assert: Child clone should be created successfully
     ASSERT_TRUE(child_clone_opt.has_value());
@@ -321,8 +321,8 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_CrossSceneCloning_Prese
     original_flags.SetLocalValue(SceneNodeFlags::kVisible, false);
     original_flags.ProcessDirtyFlags();
 
-    // Act: Clone original as child
-    const auto child_clone_opt = Scene::CreateChildNodeFrom(parent, original, "ChildClone");
+    // Act: Clone original as child (using target scene instance method)
+    const auto child_clone_opt = target_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
     ASSERT_TRUE(child_clone_opt.has_value());
     auto child_clone = child_clone_opt.value();
 
@@ -343,8 +343,8 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_SameSceneCloning_WorksC
     ASSERT_TRUE(parent.IsValid());
     ASSERT_TRUE(original.IsValid());
 
-    // Act: Clone original as child within same scene
-    const auto child_clone_opt = Scene::CreateChildNodeFrom(parent, original, "ChildClone");
+    // Act: Clone original as child within same scene (using source scene instance method)
+    const auto child_clone_opt = source_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
     ASSERT_TRUE(child_clone_opt.has_value());
     const auto& child_clone = child_clone_opt.value();
 
@@ -365,7 +365,7 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_SameSceneCloning_WorksC
 
 NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_MultipleChildren_MaintainsHierarchy)
 {
-    // Arrange: Create parent and multiple originals
+    // Arrange: Create parent in target scene and multiple originals in source scene
     auto parent = target_scene_->CreateNode("Parent");
     auto original1 = source_scene_->CreateNode("Original1");
     auto original2 = source_scene_->CreateNode("Original2");
@@ -373,9 +373,9 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_MultipleChildren_Mainta
     ASSERT_TRUE(original1.IsValid());
     ASSERT_TRUE(original2.IsValid());
 
-    // Act: Clone multiple children
-    auto child1_opt = Scene::CreateChildNodeFrom(parent, original1, "Child1");
-    auto child2_opt = Scene::CreateChildNodeFrom(parent, original2, "Child2");
+    // Act: Clone multiple children (using target scene instance method)
+    auto child1_opt = target_scene_->CreateChildNodeFrom(parent, original1, "Child1");
+    auto child2_opt = target_scene_->CreateChildNodeFrom(parent, original2, "Child2");
 
     ASSERT_TRUE(child1_opt.has_value());
     ASSERT_TRUE(child2_opt.has_value());
@@ -395,15 +395,15 @@ NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_MultipleChildren_Mainta
 
 NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_ClonesAreIndependent_ModificationsDoNotAffect)
 {
-    // Arrange: Create parent and original with initial data
+    // Arrange: Create parent in target scene and original in source scene with initial data
     const auto parent = target_scene_->CreateNode("Parent");
     auto original = source_scene_->CreateNode("OriginalNode");
     ASSERT_TRUE(parent.IsValid());
     ASSERT_TRUE(original.IsValid());
     SetTransformValues(original, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f });
 
-    // Act: Clone as child
-    const auto child_clone_opt = Scene::CreateChildNodeFrom(parent, original, "ChildClone");
+    // Act: Clone as child (using target scene instance method)
+    const auto child_clone_opt = target_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
     ASSERT_TRUE(child_clone_opt.has_value());
     auto child_clone = child_clone_opt.value();
 
@@ -449,28 +449,21 @@ NOLINT_TEST_F(SceneCreateChildNodeFromTest, CreateChildNodeFrom_InvalidParent_Te
         "expecting a valid parent node handle");
 }
 
-NOLINT_TEST_F(SceneCreateChildNodeFromTest, CreateChildNodeFrom_CrossSceneOperation_UsesParentScene)
+NOLINT_TEST_F(SceneCreateChildNodeFromTest, CreateChildNodeFrom_ParentFromDifferentScene_TerminatesProgram)
 {
-    // Arrange: Create parent in source scene and original in source scene
-    const auto parent = source_scene_->CreateNode("Parent");
-    const auto original = source_scene_->CreateNode("OriginalNode");
-    ASSERT_TRUE(parent.IsValid());
+    // Arrange: Create parent in source scene and original in target scene
+    const auto parent_in_source = source_scene_->CreateNode("Parent");
+    const auto original = target_scene_->CreateNode("OriginalNode");
+    ASSERT_TRUE(parent_in_source.IsValid());
     ASSERT_TRUE(original.IsValid());
 
-    // Act: Create child using target scene but parent from source scene
-    // This should work because the method uses the parent's scene
-    const auto child_clone_opt = Scene::CreateChildNodeFrom(parent, original, "ChildClone");
-
-    // Assert: Should succeed and the child should be in the parent's scene (source_scene_)
-    ASSERT_TRUE(child_clone_opt.has_value());
-    auto child_clone = child_clone_opt.value();
-    EXPECT_TRUE(child_clone.IsValid());
-    const auto obj = child_clone.GetObject();
-    ASSERT_TRUE(obj.has_value());
-    EXPECT_EQ(obj->get().GetName(), "ChildClone");
-    EXPECT_TRUE(source_scene_->Contains(child_clone)); // Child is in parent's scene
-    EXPECT_FALSE(target_scene_->Contains(child_clone)); // Not in the target scene
-    EXPECT_EQ(child_clone.GetParent()->GetHandle(), parent.GetHandle()); // Properly linked
+    // Act & Assert: Should terminate program due to CHECK_F for cross-scene parent
+    EXPECT_DEATH(
+        {
+            [[maybe_unused]] auto result
+                = target_scene_->CreateChildNodeFrom(parent_in_source, original, "ChildClone");
+        },
+        "expecting parent node to belong to this scene");
 }
 
 NOLINT_TEST_F(SceneCloningNodesTest, CreateChildNodeFrom_InvalidOriginal_TerminatesProgram)
@@ -499,7 +492,8 @@ NOLINT_TEST_F(SceneCreateChildNodeFromTest, CreateChildNodeFrom_OriginalRemovedF
     const auto parent = target_scene_->CreateNode("Parent");
     auto original = source_scene_->CreateNode("OriginalNode");
     ASSERT_TRUE(parent.IsValid());
-    ASSERT_TRUE(original.IsValid()); // Act: Remove original from scene
+    ASSERT_TRUE(original.IsValid());
+    // Act: Remove original from scene
     const bool destroyed = source_scene_->DestroyNode(original);
     EXPECT_TRUE(destroyed);
 
