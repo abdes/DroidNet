@@ -105,10 +105,11 @@ auto TransformComponent::GetWorldMatrix() const -> const Mat4&
 
     // Requires UpdateWorldTransform() to have been called, and the transform
     // component is not dirty (these two conditions are linked).
-    CHECK_F(!is_dirty_,
-        "UpdateWorldTransform() has never been called! This TransformComponent "
-        "must be registered with the scene hierarchy and UpdateWorldTransform() "
-        "must be called by the SceneManager before accessing world space data.");
+    CHECK_F(!is_dirty_, "expecting transforms to be up-to-date for node `{}`. "
+                        "UpdateWorldTransform() has never been called! This TransformComponent "
+                        "must be registered with the scene hierarchy and UpdateWorldTransform() "
+                        "must be called by the SceneManager before accessing world space data.",
+        meta_data_ ? meta_data_->GetName() : "unknown");
 
     return world_matrix_;
 }

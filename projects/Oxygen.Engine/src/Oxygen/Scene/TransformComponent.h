@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -33,7 +34,8 @@ namespace oxygen::scene {
  \note All GLM data types are 16-byte aligned for optimal SIMD performance.
 */
 class TransformComponent : public oxygen::Component {
-    OXYGEN_TYPED(TransformComponent)
+    OXYGEN_COMPONENT(TransformComponent)
+    OXYGEN_COMPONENT_REQUIRES(ObjectMetaData)
 
 public:
     using Vec3 = glm::vec3;
@@ -241,6 +243,17 @@ public:
         return clone;
     }
 
+protected:
+    //! Updates the dependencies of this component.
+    /*!
+     This method is called when the component is cloned, to ensure that the
+     dependencies are properly set up in the cloned component.
+     */
+    void UpdateDependencies(const Composition& composition) override
+    {
+        meta_data_ = &composition.GetComponent<ObjectMetaData>();
+    }
+
 private:
     //! Local position (translation) component in local coordinate space.
     alignas(16) Vec3 local_position_ { 0.0f, 0.0f, 0.0f };
@@ -256,6 +269,8 @@ private:
 
     //! Dirty flag indicating world matrix cache needs re-computation.
     mutable bool is_dirty_ = true;
+
+    ObjectMetaData* meta_data_ {nullptr};
 };
 
 } // namespace oxygen::scene

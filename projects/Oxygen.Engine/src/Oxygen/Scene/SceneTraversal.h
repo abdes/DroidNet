@@ -96,20 +96,10 @@ static_assert(SceneFilter<AcceptAllFilter>);
    up-to-date, allowing it to compute its own world transform.
 */
 struct DirtyTransformFilter {
-    auto operator()(
+    OXYGEN_SCENE_API auto operator()(
         const SceneNodeImpl& node,
         const FilterResult parent_result) const noexcept
-        -> FilterResult
-    {
-        // If parent was accepted and this node does not ignore parent transform, accept
-        if (node.GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform)) {
-            return FilterResult::kRejectSubTree;
-        }
-        // Otherwise, accept if this node is dirty
-        return parent_result == FilterResult::kAccept || node.IsTransformDirty()
-            ? FilterResult::kAccept
-            : FilterResult::kReject;
-    }
+        -> FilterResult;
 };
 static_assert(SceneFilter<DirtyTransformFilter>);
 
@@ -188,7 +178,7 @@ public:
 
      \return Number of nodes that had their transforms updated
     */
-    [[nodiscard]] OXYGEN_SCENE_API auto UpdateTransforms() const -> std::size_t;
+    OXYGEN_SCENE_API auto UpdateTransforms() const -> std::size_t;
 
     //! Update transforms for dirty nodes from specific roots
     /*!

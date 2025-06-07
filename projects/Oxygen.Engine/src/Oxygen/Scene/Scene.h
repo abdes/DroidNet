@@ -24,6 +24,8 @@ class ResourceTable;
 
 namespace scene {
 
+    class SceneTraversal;
+
     //! Root of the Oxygen scene graph.
     /*!
      Scene is the root of the Oxygen scene graph and the central manager for all
@@ -79,7 +81,7 @@ namespace scene {
         OXYGEN_SCENE_API explicit Scene(
             const std::string& name, size_t initial_capacity = 1024);
 
-        OXYGEN_SCENE_API ~Scene() override = default;
+        OXYGEN_SCENE_API ~Scene() override;
 
         OXYGEN_MAKE_NON_COPYABLE(Scene)
         OXYGEN_MAKE_NON_MOVABLE(Scene)
@@ -364,6 +366,8 @@ namespace scene {
         std::shared_ptr<NodeTable> nodes_;
         //!< Set of root nodes for robust, duplicate-free management.
         std::vector<NodeHandle> root_nodes_;
+
+        SceneTraversal* traversal_;
     };
 
 } // namespace scene
