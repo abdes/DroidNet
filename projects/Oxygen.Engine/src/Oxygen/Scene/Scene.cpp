@@ -191,12 +191,8 @@ auto Scene::GetParent(const SceneNode& node) const -> std::optional<SceneNode>
     }
 
     const auto parent_handle = node_impl_opt->get().AsGraphNode().GetParent();
-    if (!parent_handle.IsValid()) {
-        return std::nullopt; // No parent
-    }
-
     // Check the parent is still alive
-    if (!Contains(parent_handle)) {
+    if (!nodes_->Contains(parent_handle)) {
         DLOG_F(4, "Parent node is no longer there: {} -> child node {} invalidated",
             parent_handle.ToString(), node.GetHandle().ToString());
         node.Invalidate();
@@ -219,15 +215,12 @@ auto Scene::GetFirstChild(const SceneNode& node) const -> std::optional<SceneNod
     }
 
     const auto first_child_handle = node_impl_opt->get().AsGraphNode().GetFirstChild();
-    if (!first_child_handle.IsValid()) {
-        return std::nullopt; // No first child
-    }
 
     // Check the first child is still alive. If not, this is a bug and is fatal.
     // We can't really recover from this situation, because the children list
     // linking is embedded in the node implementation, and if the first child
     // disappeared, the entire hierarchy is broken.
-    CHECK_F(Contains(first_child_handle), "Child node is no longer there");
+    CHECK_F(nodes_->Contains(first_child_handle), "Child node is no longer there");
 
     return SceneNode(first_child_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
 }
@@ -245,15 +238,12 @@ auto Scene::GetNextSibling(const SceneNode& node) const -> std::optional<SceneNo
     }
 
     const auto next_sibling_handle = node_impl_opt->get().AsGraphNode().GetNextSibling();
-    if (!next_sibling_handle.IsValid()) {
-        return std::nullopt; // No sibling
-    }
 
     // Check the sibling is still alive. If not, this is a bug and is fatal. We
     // can't really recover from this situation, because the children list
     // linking is embedded in the node implementation, and if one link is
     // broken, the entire hierarchy is broken.
-    CHECK_F(Contains(next_sibling_handle), "Sibling node is no longer there");
+    CHECK_F(nodes_->Contains(next_sibling_handle), "Sibling node is no longer there");
 
     return SceneNode(next_sibling_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
 }
@@ -271,15 +261,12 @@ auto Scene::GetPrevSibling(const SceneNode& node) const -> std::optional<SceneNo
     }
 
     const auto prev_sibling_handle = node_impl_opt->get().AsGraphNode().GetPrevSibling();
-    if (!prev_sibling_handle.IsValid()) {
-        return std::nullopt; // No sibling
-    }
 
     // Check the sibling is still alive. If not, this is a bug and is fatal. We
     // can't really recover from this situation, because the children list
     // linking is embedded in the node implementation, and if one link is
     // broken, the entire hierarchy is broken.
-    CHECK_F(Contains(prev_sibling_handle), "Sibling node is no longer there");
+    CHECK_F(nodes_->Contains(prev_sibling_handle), "Sibling node is no longer there");
 
     return SceneNode(prev_sibling_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
 }
@@ -328,7 +315,7 @@ auto Scene::GetNodeImplRef(const NodeHandle& handle) const noexcept -> const Sce
 
 auto Scene::GetNode(const NodeHandle& handle) const noexcept -> std::optional<SceneNode>
 {
-    if (!Contains(handle)) {
+    if (!nodes_->Contains(handle)) {
         return std::nullopt;
     }
     return SceneNode(handle, std::const_pointer_cast<Scene>(shared_from_this()));
@@ -336,25 +323,17 @@ auto Scene::GetNode(const NodeHandle& handle) const noexcept -> std::optional<Sc
 
 auto Scene::Contains(const SceneNode& node) const noexcept -> bool
 {
-    // First check if the handle exists in our node table
+    // First ensure the node is associated with this scene.
+    if (node.scene_weak_.expired() || node.scene_weak_.lock().get() != this) {
+        return false;
+    }
+
+    // Then check if the handle is valid and exists in our node table
     if (!nodes_->Contains(node.GetHandle())) {
         return false;
     }
 
-    // Then verify that the SceneNode's scene_weak_ actually points to this scene
-    // Since Scene is a friend of SceneNode, we can access the private scene_weak_ member
-    if (const auto scene_shared = node.scene_weak_.lock()) {
-        return scene_shared.get() == this;
-    }
-
-    // If scene_weak_ is expired, the node doesn't belong to any scene
-    return false;
-}
-
-auto Scene::Contains(const NodeHandle& handle) const noexcept -> bool
-{
-    // Do not invalidate here, just check presence.
-    return nodes_->Contains(handle);
+    return true;
 }
 
 auto Scene::GetNodeCount() const -> size_t
@@ -458,9 +437,6 @@ void ProcessDirtyFlags(const Scene& scene) noexcept
 //! (non-recursive).
 void MarkSubtreeTransformDirty(Scene& scene, const Scene::NodeHandle& root_handle) noexcept
 {
-    DCHECK_F(root_handle.IsValid() && scene.Contains(root_handle),
-        "expecting a valid and existing root_handle");
-
     std::vector<SceneNodeImpl*> stack;
     size_t count = 0;
     stack.push_back(&scene.GetNodeImplRef(root_handle));
@@ -542,10 +518,8 @@ void Scene::LinkChild(const SceneNode& parent, const SceneNode& child) noexcept
     // - The parent and the child should belong to this scene. They are usually
     //   all checked in the calling methods, but for safety we check them again
     //   here, though only in DEBUG builds.
-    DCHECK_F(parent.IsValid(), "Parent node handle is not valid for LinkChild");
-    DCHECK_F(child.IsValid(), "Child node handle is not valid for LinkChild");
-    DCHECK_F(Contains(parent), "expecting parent to belong to this scene");
-    DCHECK_F(Contains(child), "expecting child to belong to this scene");
+    DCHECK_F(Contains(parent), "expecting parent to belong to this scene (valid and owned by this scene)");
+    DCHECK_F(Contains(child), "expecting child to belong to this scene (valid and owned by this scene)");
 
     const auto& parent_handle = parent.GetHandle();
     const auto& child_handle = child.GetHandle();
@@ -584,8 +558,7 @@ void Scene::UnlinkNode(const SceneNode& node) noexcept
     // These are logic errors, and should be fixed in the code when they occur.
     // - An invalid handle should not be used anymore.
     // - The node should belong to this scene.
-    DCHECK_F(node.IsValid(), "expecting a valid node");
-    DCHECK_F(Contains(node), "expecting node to belong to this scene");
+    DCHECK_F(Contains(node), "expecting node to belong to this scene (valid and owned by this scene)");
 
     auto& node_impl = GetNodeImplRef(node.GetHandle());
 

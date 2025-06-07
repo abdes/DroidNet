@@ -444,19 +444,6 @@ NOLINT_TEST_F(SceneBasicTest, ContainsSceneNode)
     EXPECT_FALSE(scene_->Contains(node));
 }
 
-NOLINT_TEST_F(SceneBasicTest, ContainsNodeHandle)
-{
-    // Arrange: Create a test node and get its handle.
-    auto node = CreateNode("TestNode");
-    const auto handle = node.GetHandle();
-
-    // Act & Assert: Verify containment of the handle before node destruction
-    // and non-containment after.
-    EXPECT_TRUE(scene_->Contains(handle));
-    DestroyNode(node);
-    EXPECT_FALSE(scene_->Contains(handle));
-}
-
 NOLINT_TEST_F(SceneBasicTest, ContainsNodeFromDifferentScene)
 {
     // Arrange: Create a node in a separate, different scene.
@@ -466,7 +453,6 @@ NOLINT_TEST_F(SceneBasicTest, ContainsNodeFromDifferentScene)
     // Assert: Verify the current scene does not contain the foreign
     // node/handle, while the other scene correctly reports containment.
     EXPECT_FALSE(scene_->Contains(other_node));
-    EXPECT_FALSE(scene_->Contains(other_node.GetHandle()));
     EXPECT_TRUE(other_scene->Contains(other_node));
 }
 
