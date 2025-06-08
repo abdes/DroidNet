@@ -55,7 +55,7 @@ struct Base {
     bool is_ready { true };
 
     // Shared validation logic
-    std::optional<std::string> Validate() const noexcept
+    auto Validate() const noexcept -> std::optional<std::string>
     {
         if (!is_ready) {
             return "Component not ready";
@@ -72,11 +72,12 @@ struct Base {
 // -----------------------------------------------------------------------------
 
 struct WithLogging {
-    void LogSafeCallError(const char* reason) const noexcept
+    [[maybe_unused]] static void LogSafeCallError(const char* reason) noexcept
     {
-        std::cerr << "Error: " << reason << std::endl;
+        std::cerr << "Error: " << reason << "\n";
     }
 };
+static_assert(oxygen::HasLogSafeCallError<WithLogging>);
 
 // -----------------------------------------------------------------------------
 // CRTP-based Validators to ensure correct type is passed to SafeCall
@@ -84,6 +85,10 @@ struct WithLogging {
 
 template <typename Derived>
 struct LambdaValidator : Base {
+private:
+    LambdaValidator() = default; // CRTP private constructor
+
+public:
     template <typename Func>
     auto SafeCall(Func&& func) noexcept
     {
@@ -104,36 +109,51 @@ struct LambdaValidator : Base {
 
     [[nodiscard]] auto GetValueSafe() const noexcept -> std::optional<int>
     {
-        return SafeCall([](const Derived& self) -> int {
+        return SafeCall([](const Derived& self) noexcept -> int {
             return self.value;
         });
     }
 
     auto IncrementValueSafe() noexcept -> std::optional<bool>
     {
-        return SafeCall([](Derived& self) -> bool {
+        return SafeCall([](Derived& self) noexcept -> bool {
             return self.IncrementValue();
         });
     }
 
     auto IncrementValueOrThrowSafe() noexcept -> std::optional<bool>
     {
-        return SafeCall([](Derived& self) -> bool {
-            return self.IncrementValueOrThrow();
+        return SafeCall([](Derived& self) noexcept -> bool {
+            // Must catch exceptions before they bubble up to oxygen::SafeCall,
+            // which requires that the callable does not throw.
+            try {
+                return self.IncrementValueOrThrow();
+            } catch (const std::exception& e) {
+                if constexpr (oxygen::HasLogSafeCallError<Derived>) {
+                    WithLogging::LogSafeCallError(e.what());
+                }
+                return false;
+            }
         });
     }
 
     [[nodiscard]] auto HasBigValueSafe() const noexcept -> bool
     {
-        auto result = SafeCall([](const Derived& self) -> bool {
+        auto result = SafeCall([](const Derived& self) noexcept -> bool {
             return self.HasBigValue();
         });
         return result.value_or(false);
     }
+
+    friend Derived;
 };
 
 template <typename Derived>
 struct MemberValidator : Base {
+private:
+    MemberValidator() = default; // CRTP private constructor
+
+public:
     template <typename Func>
     auto SafeCall(Func&& func) noexcept
     {
@@ -154,32 +174,43 @@ struct MemberValidator : Base {
 
     [[nodiscard]] auto GetValueSafe() const noexcept -> std::optional<int>
     {
-        return SafeCall([](const Derived& self) -> int {
+        return SafeCall([](const Derived& self) noexcept -> int {
             return self.value;
         });
     }
 
     auto IncrementValueSafe() noexcept -> std::optional<bool>
     {
-        return SafeCall([](Derived& self) -> bool {
+        return SafeCall([](Derived& self) noexcept -> bool {
             return self.IncrementValue();
         });
     }
 
     auto IncrementValueOrThrowSafe() noexcept -> std::optional<bool>
     {
-        return SafeCall([](Derived& self) -> bool {
-            return self.IncrementValueOrThrow();
+        return SafeCall([](Derived& self) noexcept -> bool {
+            // Must catch exceptions before they bubble up to oxygen::SafeCall,
+            // which requires that the callable does not throw.
+            try {
+                return self.IncrementValueOrThrow();
+            } catch (const std::exception& e) {
+                if constexpr (oxygen::HasLogSafeCallError<Derived>) {
+                    WithLogging::LogSafeCallError(e.what());
+                }
+                return false;
+            }
         });
     }
 
     [[nodiscard]] auto HasBigValueSafe() const noexcept -> bool
     {
-        auto result = SafeCall([](const Derived& self) -> bool {
+        auto result = SafeCall([](const Derived& self) noexcept -> bool {
             return self.HasBigValue();
         });
         return result.value_or(false);
     }
+
+    friend Derived;
 };
 
 // Concrete types
@@ -293,7 +324,8 @@ TYPED_TEST(SafeCallValidTest, OperationThrowsException)
 
     if constexpr (requires { this->sut_.IncrementValueOrThrowSafe(); }) {
         const auto result = this->sut_.IncrementValueOrThrowSafe();
-        EXPECT_FALSE(result.has_value());
+        EXPECT_TRUE(result.has_value());
+        EXPECT_FALSE(*result); // Expect false since operation fails
 
         if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
             ExpectLogMessage("Simulated runtime error during increment", [&] {

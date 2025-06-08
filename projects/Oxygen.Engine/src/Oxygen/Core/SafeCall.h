@@ -166,7 +166,9 @@ concept HasLogSafeCallError = requires(T t, const char* msg) {
          if validation fails or an exception occurs.
 */
 template <typename TargetRef, typename Validator, typename Func>
-    requires std::invocable<Func, TargetRef> && std::invocable<Validator, TargetRef>
+    requires std::invocable<Func, TargetRef>
+    && std::is_nothrow_invocable_v<Func, TargetRef>
+    && std::invocable<Validator, TargetRef>
 auto SafeCall(TargetRef&& target, Validator&& validate, Func&& func) noexcept
 {
     using ReturnType = std::invoke_result_t<Func, TargetRef>;
