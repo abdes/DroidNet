@@ -303,6 +303,16 @@ auto constexpr to_string(const ResourceHandle& value) noexcept
     return value.ToString();
 }
 
+auto constexpr to_string_compact(const ResourceHandle& value) noexcept
+{
+    return value.IsValid()
+        ? std::string("RH(i:") + std::to_string(value.Index())
+            + ", t:" + std::to_string(value.ResourceType())
+            + ", g:" + std::to_string(value.Generation())
+            + ", f:" + (value.IsFree() ? "1" : "0") + ")"
+        : "RH(Invalid)";
+}
+
 } // namespace oxygen
 
 template <>
