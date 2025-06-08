@@ -42,6 +42,7 @@ class SceneNodeImpl : public Composition, public CloneableMixin<SceneNodeImpl> {
 public:
     using Flags = SceneFlags<SceneNodeFlags>;
 
+    //! Default flags for scene nodes, providing a sensible starting point.
     static constexpr auto kDefaultFlags
         = Flags {}
               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
@@ -57,13 +58,19 @@ public:
      as a view into the graph data component, caching pointers to avoid repeated
      component lookups during tree traversal operations.
 
-     The design employs pointer caching to eliminate the expensive component lookup
-     costs that would otherwise occur on every hierarchy operation. Move semantics
-     ensure proper invalidation during SceneNodeImpl lifecycle events, preventing
-     dangling pointer access while maintaining optimal performance for valid operations.
+     The design employs pointer caching to eliminate the expensive component
+     lookup costs that would otherwise occur on every hierarchy operation. Move
+     semantics ensure proper invalidation during SceneNodeImpl lifecycle events,
+     preventing dangling pointer access while maintaining optimal performance
+     for valid operations.
 
      All hierarchy queries and modifications are validated through the IsValid()
      check, providing graceful degradation when accessing invalidated nodes.
+
+     \note Semantic validation of graph operations, such as preventing cycles or
+           self-parenting, cannot be enforced at this level. It is the
+           responsibility of the scene graph manager or higher-level API to
+           ensure that.
      */
     class GraphNode {
     public:
@@ -124,28 +131,128 @@ public:
         detail::GraphData* graph_data_; //!< Cached pointer to the GraphData component
     };
 
-    OXYGEN_SCENE_API explicit SceneNodeImpl(const std::string& name, Flags flags = kDefaultFlags);
+    OXYGEN_SCENE_API explicit SceneNodeImpl(
+        const std::string& name, Flags flags = kDefaultFlags);
+
     OXYGEN_SCENE_API ~SceneNodeImpl() override;
 
-    SceneNodeImpl(const SceneNodeImpl& other);
-    auto operator=(const SceneNodeImpl& other) -> SceneNodeImpl&;
-    SceneNodeImpl(SceneNodeImpl&& other) noexcept;
-    auto operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&;
+    OXYGEN_SCENE_API SceneNodeImpl(const SceneNodeImpl& other);
+    OXYGEN_SCENE_API auto operator=(const SceneNodeImpl& other) -> SceneNodeImpl&;
+    OXYGEN_SCENE_API SceneNodeImpl(SceneNodeImpl&& other) noexcept;
+    OXYGEN_SCENE_API auto operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&;
 
     [[nodiscard]] OXYGEN_SCENE_API auto GetName() const noexcept -> std::string_view;
     OXYGEN_SCENE_API void SetName(std::string_view name) noexcept;
 
+    //=== Node Flags Accessors ===--------------------------------------------//
+
     [[nodiscard]] OXYGEN_SCENE_API auto GetFlags() const noexcept -> const Flags&;
     [[nodiscard]] OXYGEN_SCENE_API auto GetFlags() noexcept -> Flags&;
+
+    //=== Graph Aware View ===------------------------------------------------//
 
     OXYGEN_SCENE_API auto AsGraphNode() noexcept -> GraphNode&;
     OXYGEN_SCENE_API auto AsGraphNode() const noexcept -> const GraphNode&;
 
+    //=== Transform management ===--------------------------------------------//
+
+    //! Marks the node's transform as requiring recalculation.
+    /*!
+     This method flags the node's TransformComponent as dirty, indicating that
+     its cached world transformation matrix needs to be recomputed during the
+     next transform update pass. The dirty flag is used by the scene's update
+     system to efficiently batch transform calculations and maintain proper
+     hierarchy dependencies.
+
+     The transform becomes dirty when:
+     - Local position, rotation, or scale is modified
+     - The node is moved within the scene hierarchy
+     - Parent transforms change (propagated automatically)
+     - Manual marking is required for custom transform modifications
+
+     \note This method only sets the dirty flag - it does not immediately
+           recalculate the transform matrices. Call UpdateTransforms() or wait
+           for the next Scene::Update() to perform the actual computation.
+
+     \note The method is thread-safe as it only modifies a simple boolean flag,
+           but transform updates should still be performed on the main thread.
+
+     \see UpdateTransforms(), ClearTransformDirty(), IsTransformDirty()
+     \see Scene::Update() for automatic transform updates    */
     OXYGEN_SCENE_API void MarkTransformDirty() noexcept;
+
+    //! Checks whether the node's transform requires recalculation.
+    /*!
+     This method queries the current dirty state of the node's
+     TransformComponent, indicating whether the cached world transformation
+     matrix is valid or needs to be recomputed. The dirty state is managed
+     automatically by the scene system to optimize transform updates and
+     maintain hierarchy consistency.
+
+     The dirty state is cleared when:
+     - UpdateTransforms() successfully recalculates the world matrix
+     - ClearTransformDirty() is called explicitly (primarily for testing)
+     - Scene::Update() processes the node during the transform update pass
+
+     \return `true` if the transform needs recalculation, `false` if the cached
+             world transformation matrix is up-to-date.
+
+     \note This is a lightweight query operation that simply checks a boolean flag
+           in the TransformComponent - no expensive calculations are performed.
+
+     \see MarkTransformDirty(), UpdateTransforms(), ClearTransformDirty()
+     \see Scene::Update() for automatic dirty state processing
+     \see DirtyTransformFilter for efficient traversal of dirty nodes
+    */
     [[nodiscard]] OXYGEN_SCENE_API auto IsTransformDirty() const noexcept -> bool;
-    OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene); // Cloning support
+
+    //! Updates the node's world transformation matrices.
+    /*!
+     Recalculates the cached world transformation matrix for this node by
+     composing its local transform with its parent's world transform (if any).
+     This method is the core of the scene's hierarchical transform system,
+     responsible for propagating transformation changes down the scene graph.
+
+     **Transform Computation Logic:**
+     - **Root nodes**: World matrix = Local matrix (no parent composition)
+     - **Child nodes**: World matrix = Parent's world matrix × Local matrix
+     - **Ignore parent flag**: Treated as root regardless of parent relationship
+
+     **Performance Optimization:**
+     The method performs an early exit if the transform is not dirty, making it
+     safe to call repeatedly without performance penalty. Only dirty nodes
+     perform the actual matrix multiplication and composition.
+
+     **Parent Dependency:**
+     For child nodes, the parent's world transform must be up-to-date before
+     calling this method. The Scene's update system ensures proper traversal
+     order (parent-first, depth-first) to maintain hierarchy consistency.
+
+     **State Changes:**
+     - Clears the dirty flag after successful computation
+     - Updates the cached world matrix in the TransformComponent
+     - Enables access to world-space transformation data
+
+     \param scene Reference to the Scene containing this node, used to resolve
+                  parent relationships and access parent transforms.
+
+     \note This method should typically be called by the Scene's update system
+           rather than directly. Manual calls require ensuring parent nodes are
+           updated first to maintain correct hierarchical relationships.
+
+     \see MarkTransformDirty() to flag transforms for recalculation
+     \see IsTransformDirty() to check if recalculation is needed
+     \see Scene::Update() for automatic hierarchical transform updates
+     \see TransformComponent::UpdateWorldTransform() for low-level matrix computation
+     \see SceneTraversal::UpdateTransforms() for batch transform processing
+    */
+    OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene);
+
+    //=== Cloning Support ===-------------------------------------------------//
+
     [[nodiscard]] static auto IsCloneable() noexcept -> bool { return true; }
-    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const -> std::unique_ptr<SceneNodeImpl> override;
+    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const
+        -> std::unique_ptr<SceneNodeImpl> override;
 
 protected:
     //! Marks the node transform matrices as clean, without updating them.
@@ -167,7 +274,8 @@ private:
         return GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
     }
 
-    // Cached GraphNode for efficient access - always initialized, using std::optional for efficiency
+    // Cached GraphNode for efficient access - always initialized, using
+    // std::optional for efficiency
     mutable std::optional<GraphNode> cached_graph_node_;
 };
 
