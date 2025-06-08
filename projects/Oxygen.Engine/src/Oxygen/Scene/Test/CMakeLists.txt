@@ -36,7 +36,14 @@ add_test(NAME "Oxygen.Scene Link Test" COMMAND "Oxygen.Scene.LinkTest")
 include(GTestHelpers)
 
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
-m_gtest_program(SceneFlags SOURCES "SceneFlags_test.cpp")
+m_gtest_program(
+  SceneFlags
+  SOURCES
+    "Mocks/TestFlag.h"
+    "SceneFlags_test.cpp"
+    "SceneFlagsAtomic_test.cpp"
+    "SceneFlag_test.cpp"
+)
 m_gtest_program(NodeData SOURCES "NodeData_test.cpp")
 m_gtest_program(SceneNodeImpl SOURCES "SceneNodeImpl_test.cpp")
 m_gtest_program(SceneNode SOURCES "SceneNode_test.cpp")

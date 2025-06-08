@@ -212,7 +212,7 @@ public:
     */
     constexpr auto SetInherited(const bool state) noexcept -> SceneFlag&
     {
-        // Always enable inheritance if this is called
+        // Always enable inheritance if this is called  <-- MISLEADING COMMENT
         SetInheritedBit(state);
 
         // Dirty flag management is similar to SetLocalValue, but we do not
