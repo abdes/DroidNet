@@ -46,7 +46,12 @@ m_gtest_program(
 )
 m_gtest_program(NodeData SOURCES "NodeData_test.cpp")
 m_gtest_program(SceneNodeImpl SOURCES "SceneNodeImpl_test.cpp")
-m_gtest_program(SceneNode SOURCES "SceneNode_test.cpp")
+m_gtest_program(
+  SceneNode
+  SOURCES
+    "SceneNode_test.cpp"
+    "SceneNode_Transform_test.cpp"
+)
 m_gtest_program(
   Scene
   SOURCES
