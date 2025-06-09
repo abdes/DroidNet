@@ -21,6 +21,7 @@
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::VisitedNode;
 
 // =============================================================================
 // Scene Validator Implementations
@@ -248,6 +249,10 @@ auto Scene::LeafNodeCanBeDestroyed(const SceneNode& node) const
   return LeafNodeCanBeDestroyedValidator(this, node);
 }
 
+//------------------------------------------------------------------------------
+// Basic Scene Operations
+//------------------------------------------------------------------------------
+
 Scene::Scene(const std::string& name, size_t initial_capacity)
   : nodes_(std::make_shared<NodeTable>(resources::kSceneNode, initial_capacity))
   , traversal_(new SceneTraversal(*this))
@@ -275,6 +280,10 @@ void Scene::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetaData>().SetName(name);
 }
+
+//------------------------------------------------------------------------------
+// Scene graph operations
+//------------------------------------------------------------------------------
 
 auto Scene::IsOwnerOf(const SceneNode& node) const -> bool
 {
@@ -933,84 +942,6 @@ auto Scene::GetChildren(const SceneNode& parent) const
   return children;
 }
 
-namespace {
-
-//! Processes dirty flags for all nodes in the scene.
-/*!
- Processes all dirty flags for each node in the resource table. This pass
- maximizes cache locality and ensures all dirty flags are handled.
-*/
-void ProcessDirtyFlags(const Scene& scene) noexcept
-{
-  LOG_SCOPE_F(2, "PASS 1 - Dirty flags");
-  auto& node_table = scene.GetNodes();
-  size_t processed_count = 0;
-  for (size_t i = 0; i < node_table.Size(); ++i) {
-    auto& node_impl = const_cast<SceneNodeImpl&>(node_table.Items()[i]);
-    LOG_SCOPE_F(2, "For Node");
-    LOG_F(2, "name = {}", node_impl.GetName());
-    LOG_F(2, "is root: {}", node_impl.AsGraphNode().IsRoot());
-    auto& flags = node_impl.GetFlags();
-    bool has_dirty_flags { false };
-    for (auto flag : flags.dirty_flags()) {
-      LOG_F(2, "flag: ", nostd::to_string(flag));
-      flags.ProcessDirtyFlag(flag);
-      if (!has_dirty_flags) {
-        LOG_F(2, "Flags");
-      }
-      has_dirty_flags = true;
-    }
-    if (has_dirty_flags) {
-      ++processed_count;
-    }
-    // Do not update transforms here.
-  }
-  DLOG_F(2, "{}/{} nodes had dirty flags", processed_count, node_table.Size());
-}
-
-//! Marks the transform as dirty for a node and all its descendants
-//! (non-recursive).
-void MarkSubtreeTransformDirty(
-  Scene& scene, const Scene::NodeHandle& root_handle) noexcept
-{
-  std::vector<SceneNodeImpl*> stack;
-  size_t count = 0;
-  stack.push_back(&scene.GetNodeImplRef(root_handle));
-  while (!stack.empty()) {
-    SceneNodeImpl* node = stack.back();
-    stack.pop_back();
-    node->MarkTransformDirty();
-    ++count;
-    auto child_handle = node->AsGraphNode().GetFirstChild();
-    while (child_handle.IsValid()) {
-      stack.push_back(&scene.GetNodeImplRef(child_handle));
-      child_handle
-        = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
-    }
-  }
-  DLOG_F(2, "Marked {} nodes as transform dirty (subtree rooted at: {})", count,
-    scene.GetNodeImplRef(root_handle).GetName());
-}
-
-} // namespace
-
-// ReSharper disable once CppMemberFunctionMayBeConst
-void Scene::Update(const bool skip_dirty_flags) noexcept
-{
-  LOG_SCOPE_F(2, "Scene update");
-  if (!skip_dirty_flags) {
-    // Pass 1: Process dirty flags for all nodes (linear scan,
-    // cache-friendly)
-    ProcessDirtyFlags(*this);
-  }
-  // Pass 2: Update transforms
-  LOG_SCOPE_F(2, "PASS 2 - Update transforms");
-  [[maybe_unused]] const auto updated_count = traversal_->UpdateTransforms();
-  DLOG_F(2, "Updated transforms for {} nodes", updated_count);
-}
-
-// --- Root node management API implementations ---
-
 void Scene::AddRootNode(const NodeHandle& node)
 {
   // Ensure no duplicate root nodes
@@ -1088,7 +1019,7 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
 
   // Mark both nodes' transforms as dirty since hierarchy changed
   parent_impl->MarkTransformDirty();
-  MarkSubtreeTransformDirty(*this, child_handle);
+  MarkSubtreeTransformDirty(child_handle);
 
   LOG_F(3, "Linked node {} as a child of {}", child_handle.ToString(),
     parent_handle.ToString());
@@ -1146,7 +1077,93 @@ void Scene::UnlinkNode(
 }
 
 //------------------------------------------------------------------------------
-// Anonymous namespace for test isolation
+// Scene Update and Dirty Flags Processing
+//------------------------------------------------------------------------------
+
+namespace {
+
+//! Processes dirty flags for all nodes in the scene.
+/*!
+ Processes all dirty flags for each node in the resource table. This pass
+ maximizes cache locality and ensures all dirty flags are handled.
+*/
+void ProcessDirtyFlags(const Scene& scene) noexcept
+{
+  LOG_SCOPE_F(2, "PASS 1 - Dirty flags");
+  auto& node_table = scene.GetNodes();
+  size_t processed_count = 0;
+  for (size_t i = 0; i < node_table.Size(); ++i) {
+    auto& node_impl = const_cast<SceneNodeImpl&>(node_table.Items()[i]);
+    LOG_SCOPE_F(2, "For Node");
+    LOG_F(2, "name = {}", node_impl.GetName());
+    LOG_F(2, "is root: {}", node_impl.AsGraphNode().IsRoot());
+    auto& flags = node_impl.GetFlags();
+    bool has_dirty_flags { false };
+    for (auto flag : flags.dirty_flags()) {
+      LOG_F(2, "flag: ", nostd::to_string(flag));
+      flags.ProcessDirtyFlag(flag);
+      if (!has_dirty_flags) {
+        LOG_F(2, "Flags");
+      }
+      has_dirty_flags = true;
+    }
+    if (has_dirty_flags) {
+      ++processed_count;
+    }
+    // Do not update transforms here.
+  }
+  DLOG_F(2, "{}/{} nodes had dirty flags", processed_count, node_table.Size());
+}
+
+//! Marks the transform as dirty for a node and all its descendants
+//! (non-recursive).
+void MarkSubtreeTransformDirty(
+  Scene& scene, const Scene::NodeHandle& root_handle) noexcept
+{
+  std::vector<SceneNodeImpl*> stack;
+  size_t count = 0;
+  stack.push_back(&scene.GetNodeImplRef(root_handle));
+  while (!stack.empty()) {
+    SceneNodeImpl* node = stack.back();
+    stack.pop_back();
+    node->MarkTransformDirty();
+    ++count;
+    auto child_handle = node->AsGraphNode().GetFirstChild();
+    while (child_handle.IsValid()) {
+      stack.push_back(&scene.GetNodeImplRef(child_handle));
+      child_handle
+        = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
+    }
+  }
+  DLOG_F(2, "Marked {} nodes as transform dirty (subtree rooted at: {})", count,
+    scene.GetNodeImplRef(root_handle).GetName());
+}
+
+} // namespace
+
+void Scene::MarkSubtreeTransformDirty(
+  const Scene::NodeHandle& root_handle) noexcept
+{
+  ::MarkSubtreeTransformDirty(*this, root_handle);
+}
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+void Scene::Update(const bool skip_dirty_flags) noexcept
+{
+  LOG_SCOPE_F(2, "Scene update");
+  if (!skip_dirty_flags) {
+    // Pass 1: Process dirty flags for all nodes (linear scan,
+    // cache-friendly)
+    ProcessDirtyFlags(*this);
+  }
+  // Pass 2: Update transforms
+  LOG_SCOPE_F(2, "PASS 2 - Update transforms");
+  [[maybe_unused]] const auto updated_count = traversal_->UpdateTransforms();
+  DLOG_F(2, "Updated transforms for {} nodes", updated_count);
+}
+
+//------------------------------------------------------------------------------
+// Node cloning support
 //------------------------------------------------------------------------------
 
 /*!
@@ -1171,8 +1188,9 @@ void Scene::UnlinkNode(
  @param original The node to clone (can be from any scene).
  @param new_name The name to assign to the cloned node.
 
- @return An optional SceneNode wrapper around the handle of the newly created
- node when successful; std::nullopt otherwise.
+ @return When successful, a std::pair, where the first item is the handle to the
+ cloned node, and the second item is the corresponding SceneNodeImpl object;
+ std::nullopt otherwise.
 */
 auto Scene::CloneNode(const SceneNode& original, const std::string& new_name)
   -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>
@@ -1294,3 +1312,196 @@ auto Scene::CreateChildNodeFrom(const SceneNode& parent,
       return SceneNode(cloned_handle, shared_from_this());
     });
 }
+
+/*!
+ Traverses the hierarchy to be cloned starting from \p starting_node, in a non
+ recursive way, cloning each node and properly linking it to the hierarchy under
+ construction.
+
+ This method assumes the hierarchy to be cloned is a valid hierarchy, with all
+ nodes having valid handles, valid impl objects, and properly linked to their
+ parent and siblings. If any of these assumptions are violated, the method will
+ skip invalid nodes and continue with the traversal.
+
+ The cloned hierarchy will have the same structure as the original, with names
+ preserved exactly. The root of the cloned hierarchy will be added as a root
+ node to this scene.
+
+ __Failure Scenarios:__
+ - If the \p starting_node handle is not valid (expired or invalidated).
+ - If the \p starting_node is valid but its corresponding node was removed from
+   its scene.
+ - If any individual node cloning fails due to component issues or memory
+   constraints.
+ - If the resource table is full and cannot accommodate new nodes.
+
+ @note This method will terminate the program if the resource table is full,
+ which can only be remedied by increasing the initial capacity of the table.
+
+ @param starting_node The node from which to start cloning the hierarchy, can be
+ from any scene
+
+ @return When successful, a std::pair, where the first item is the handle to the
+ root node of the cloned hierarchy, and the second item is the corresponding
+ SceneNodeImpl object; std::nullopt otherwise.
+*/
+auto Scene::CloneHierarchy(const SceneNode& starting_node)
+  -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>
+{
+  DLOG_SCOPE_F(3, "Clone Hierarchy");
+
+  // Validate starting node using the SafeCall pattern for consistency
+  if (!starting_node.IsValid()) {
+    DLOG_F(WARNING, "CloneHierarchy starting from an invalid node.");
+    return std::nullopt;
+  }
+
+  std::unordered_map<NodeHandle, NodeHandle> handle_map;
+  NodeHandle root_cloned_handle;
+  SceneNodeImpl* root_cloned_impl = nullptr;
+  bool root_cloned = false;
+  std::vector<NodeHandle> cloned_nodes; // Track for cleanup on failure
+  SceneTraversal traversal(*starting_node.scene_weak_.lock());
+  const auto traversal_result = traversal.TraverseHierarchy(
+    const_cast<SceneNode&>(starting_node),
+    [&](const VisitedNode& node, const Scene&) -> VisitResult {
+      auto orig_parent_handle = node.node_impl->AsGraphNode().GetParent();
+      std::string name = std::string(node.node_impl->GetName());
+
+      try {
+        // Clone the node directly from impl
+        auto cloned_impl = node.node_impl->Clone();
+        cloned_impl->SetName(name);
+        NodeHandle cloned_handle = nodes_->Insert(std::move(*cloned_impl));
+        DCHECK_F(
+          cloned_handle.IsValid(), "expecting a valid handle for cloned node");
+
+        cloned_nodes.push_back(cloned_handle);
+        handle_map[node.handle] = cloned_handle;
+
+        if (!orig_parent_handle.IsValid()) {
+          // Root node of the hierarchy being cloned
+          root_cloned_handle = cloned_handle;
+          root_cloned_impl = &nodes_->ItemAt(cloned_handle);
+          AddRootNode(cloned_handle);
+          root_cloned = true;
+        } else {
+          // Link to already-cloned parent
+          auto it = handle_map.find(orig_parent_handle);
+          if (it == handle_map.end()) {
+            // This should never happen with depth-first traversal and a valid
+            // hierarchy If it does, it indicates corruption in the source
+            // hierarchy
+            DLOG_F(ERROR,
+              "Parent handle {} not found in handle map for node {} - "
+              "hierarchy corruption detected",
+              nostd::to_string(orig_parent_handle), name);
+            return VisitResult::kStop;
+          }
+          NodeHandle cloned_parent_handle = it->second;
+          SceneNodeImpl* cloned_parent_impl
+            = &GetNodeImplRefUnsafe(cloned_parent_handle);
+          LinkChild(cloned_parent_handle, cloned_parent_impl, cloned_handle,
+            &nodes_->ItemAt(cloned_handle));
+        }
+        return VisitResult::kContinue;
+      } catch (const std::exception& ex) {
+        DLOG_F(ERROR, "Failed to clone node {}: {}", name, ex.what());
+        // Clean up any nodes we've created so far
+        for (const auto& handle : cloned_nodes) {
+          if (nodes_->Contains(handle)) {
+            nodes_->Erase(handle);
+          }
+        }
+        if (root_cloned_handle.IsValid()) {
+          RemoveRootNode(root_cloned_handle);
+        }
+        return VisitResult::kStop;
+      }
+    },
+    TraversalOrder::kDepthFirst); // Depth-first guarantees parent visited
+                                  // before children
+
+  LOG_SCOPE_F(INFO, "Traversal result");
+  LOG_F(INFO, "traversal completed: {}", traversal_result.completed);
+  LOG_F(INFO, "visited nodes: {}", traversal_result.nodes_visited);
+  LOG_F(INFO, "filtered nodes: {}", traversal_result.nodes_filtered);
+
+  if (!traversal_result.completed || !root_cloned) {
+    DLOG_F(WARNING, "Hierarchy cloning failed or incomplete");
+    return std::nullopt;
+  }
+  return std::make_pair(root_cloned_handle, root_cloned_impl);
+}
+
+/*!
+ This method clones the entire subtree rooted at the original node, preserving
+ all parent-child relationships within the cloned hierarchy. The cloned root
+ will become a new root node in this scene with the specified name.
+
+ All nodes in the original hierarchy will be cloned with their component data
+ preserved, and new names will be generated based on the original names. The
+ hierarchy structure is maintained exactly as in the original.
+
+ This method will only fail if the resource table holding scene data is full,
+ which can only be remedied by increasing the initial capacity of the table.
+ Therefore, a failure is a fatal error that will result in the application
+ terminating.
+
+ @param original_root The root node of the hierarchy to clone (can be from any
+ scene)
+ @param new_root_name The name to assign to the cloned root node
+
+ @return A new SceneNode handle representing the cloned root node in this scene
+*/
+auto Scene::CreateHierarchyFrom(
+  const SceneNode& original_root, const std::string& new_root_name) -> SceneNode
+{
+  DLOG_SCOPE_F(3, "Create Hierarchy From");
+
+  // Use the private CloneHierarchy method to do the heavy lifting
+  auto clone_result = CloneHierarchy(original_root);
+  if (!clone_result.has_value()) {
+    // CloneHierarchy failed - this should not happen with a valid hierarchy
+    // and sufficient capacity, so terminate the program as documented
+    ABORT_F("Failed to clone hierarchy from node '{}' - this indicates either "
+            "an invalid source hierarchy or insufficient scene capacity",
+      original_root.IsValid() ? "unknown" : "invalid");
+  }
+
+  auto [cloned_root_handle, cloned_root_impl] = clone_result.value();
+
+  // Update the root node's name as requested
+  cloned_root_impl->SetName(new_root_name);
+
+  // Return the cloned root as a SceneNode
+  return SceneNode(cloned_root_handle, shared_from_this());
+}
+
+/*!
+ This method  clones the entire subtree rooted at the original node, preserving
+ all parent-child relationships within the cloned hierarchy. The cloned root
+ will become a child of the specified parent node.
+
+ All nodes in the original hierarchy will be cloned with their component data
+ preserved, and new names will be generated based on the original names. The
+ hierarchy structure is maintained exactly as in the original.
+
+ This method will terminate the program if the \p parent is not valid, as this
+ is a programming error. It may fail if the \p parent is valid but its
+ corresponding node was removed from the scene. In such case, it will return
+ std::nullopt and invalidate the \p parent node.
+
+ @param parent The parent node under which to create the cloned hierarchy
+ @param original_root The root node of the hierarchy to clone (can be from any
+ scene)
+ @param new_root_name The name to assign to the cloned root node
+
+ @return A new SceneNode handle representing the cloned root node, or
+ std::nullopt if parent is invalid
+*/
+// auto Scene::CreateChildHierarchyFrom(const SceneNode& parent,
+//   const SceneNode& original_root, const std::string& new_root_name)
+//   -> std::optional<SceneNode>
+// {
+// }

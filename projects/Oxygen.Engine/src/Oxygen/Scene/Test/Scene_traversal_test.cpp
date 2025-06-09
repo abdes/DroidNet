@@ -30,6 +30,7 @@ using oxygen::scene::SceneTraversal;
 using oxygen::scene::TraversalOrder;
 using oxygen::scene::TraversalResult;
 using oxygen::scene::VisibleFilter;
+using oxygen::scene::VisitedNode;
 using oxygen::scene::VisitResult;
 
 namespace {
@@ -139,24 +140,25 @@ protected:
   // Helper: Visit tracking visitor
   auto CreateTrackingVisitor()
   {
-    return [this](SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
-      visited_nodes_.push_back(&node);
-      visit_order_.emplace_back(
-        node.GetName()); // Convert string_view to string
-      return VisitResult::kContinue;
-    };
+    return
+      [this](const VisitedNode& node, const Scene& /*scene*/) -> VisitResult {
+        visited_nodes_.push_back(node.node_impl);
+        visit_order_.emplace_back(
+          node.node_impl->GetName()); // Convert string_view to string
+        return VisitResult::kContinue;
+      };
   }
 
   // Helper: Visit tracking visitor with early termination
   auto CreateEarlyTerminationVisitor(const std::string& stop_at_name)
   {
     return [this, stop_at_name](
-             SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
-      visited_nodes_.push_back(&node);
+             const VisitedNode& node, const Scene& /*scene*/) -> VisitResult {
+      visited_nodes_.push_back(node.node_impl);
       visit_order_.emplace_back(
-        node.GetName()); // Convert string_view to string
-      return node.GetName() == stop_at_name ? VisitResult::kStop
-                                            : VisitResult::kContinue;
+        node.node_impl->GetName()); // Convert string_view to string
+      return node.node_impl->GetName() == stop_at_name ? VisitResult::kStop
+                                                       : VisitResult::kContinue;
     };
   }
 
@@ -164,22 +166,26 @@ protected:
   auto CreateSubtreeSkippingVisitor(const std::string& skip_subtree_of)
   {
     return [this, skip_subtree_of](
-             SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
-      visited_nodes_.push_back(&node);
+             const VisitedNode& node, const Scene& /*scene*/) -> VisitResult {
+      visited_nodes_.push_back(node.node_impl);
       visit_order_.emplace_back(
-        node.GetName()); // Convert string_view to string
-      return node.GetName() == skip_subtree_of ? VisitResult::kSkipSubtree
-                                               : VisitResult::kContinue;
+        node.node_impl->GetName()); // Convert string_view to string
+      return node.node_impl->GetName() == skip_subtree_of
+        ? VisitResult::kSkipSubtree
+        : VisitResult::kContinue;
     };
   }
 
   // Helper: Create a filter that rejects specific nodes
   static auto CreateRejectFilter(const std::vector<std::string>& reject_names)
   {
-    return [reject_names](const SceneNodeImpl& node,
+    return [reject_names](const VisitedNode& visited_node,
              FilterResult /*parent_result*/) -> FilterResult {
+      if (visited_node.node_impl == nullptr) {
+        return FilterResult::kReject; // Safety check for null pointer
+      }
       for (const auto& name : reject_names) {
-        if (node.GetName() == name) {
+        if (visited_node.node_impl->GetName() == name) {
           return FilterResult::kReject;
         }
       }
@@ -191,10 +197,10 @@ protected:
   static auto CreateRejectSubtreeFilter(
     const std::vector<std::string>& reject_subtree_names)
   {
-    return [reject_subtree_names](const SceneNodeImpl& node,
+    return [reject_subtree_names](const VisitedNode& visited_node,
              FilterResult /*parent_result*/) -> FilterResult {
       for (const auto& name : reject_subtree_names) {
-        if (node.GetName() == name) {
+        if (visited_node.node_impl->GetName() == name) {
           return FilterResult::kRejectSubTree;
         }
       }
@@ -809,9 +815,8 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, FilterRejectingAllNodes)
   // Arrange: Create simple hierarchy
   const auto root = CreateNode("root");
   [[maybe_unused]] auto _ = CreateChildNode(root, "child");
-
   // Act: Traverse with filter that rejects all nodes
-  auto reject_all_filter = [](const SceneNodeImpl& /*node*/,
+  auto reject_all_filter = [](const VisitedNode& /*visited_node*/,
                              FilterResult /*parent_result*/) -> FilterResult {
     return FilterResult::kRejectSubTree;
   };
@@ -836,8 +841,9 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, VisitorStoppingImmediately)
 
   // Act: Traverse with visitor that stops immediately
   auto immediate_stop_visitor
-    = [this](const SceneNodeImpl& node, const Scene& /*scene*/) -> VisitResult {
-    visit_order_.emplace_back(node.GetName()); // Convert string_view to string
+    = [this](const VisitedNode& node, const Scene& /*scene*/) -> VisitResult {
+    visit_order_.emplace_back(
+      node.node_impl->GetName()); // Convert string_view to string
     return VisitResult::kStop;
   };
   const auto result = traversal_->Traverse(immediate_stop_visitor);
@@ -955,10 +961,11 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
 {
   // Arrange: Mark B and K as dirty, but C is invisible (so K is invisible)
   MarkNodeTransformDirty(*nodeB_);
-  MarkNodeTransformDirty(*nodeK_);
-  // Custom filter: node must be dirty and visible
-  auto dirty_and_visible = [](const SceneNodeImpl& node,
+  MarkNodeTransformDirty(
+    *nodeK_); // Custom filter: node must be dirty and visible
+  auto dirty_and_visible = [](const VisitedNode& visited_node,
                              FilterResult /*parent_result*/) -> FilterResult {
+    const auto& node = *visited_node.node_impl;
     const auto& flags = node.GetFlags();
     const auto visible = flags.GetEffectiveValue(SceneNodeFlags::kVisible);
     std::cerr << "Node `" << node.GetName() << "` is "
@@ -974,10 +981,11 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
   // Act: Update transforms with custom filter
   auto updated_names = std::vector<std::string> {};
   const auto updated_count = traversal_->Traverse(
-    [&updated_names](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
-      if (node.IsTransformDirty()) {
-        node.UpdateTransforms(scene);
-        updated_names.emplace_back(node.GetName());
+    [&updated_names](
+      const VisitedNode& node, const Scene& scene) -> VisitResult {
+      if (node.node_impl->IsTransformDirty()) {
+        node.node_impl->UpdateTransforms(scene);
+        updated_names.emplace_back(node.node_impl->GetName());
       }
       return VisitResult::kContinue;
     },

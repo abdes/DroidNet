@@ -197,7 +197,7 @@ private:
 
   // Cached GraphNode for efficient access - always initialized, using
   // std::optional for efficiency
-  mutable std::optional<GraphNode> cached_graph_node_;
+  mutable std::optional<GraphNode> cached_graph_node_ {};
 };
 
 } // namespace oxygen::scene
