@@ -183,6 +183,11 @@ auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
 #endif // defined(NDEBUG)
 }
 
+/*!
+ @return A reference (through unwrapping the std::reference_wrapper) to the
+ underlying SceneNodeImpl object, or std::nullopt if the node is invalid or
+ expired.
+*/
 auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 {
   return SafeCall(NodeIsValidAndInScene(),
@@ -195,6 +200,9 @@ auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
     });
 }
 
+/*!
+ @copydoc SceneNode::GetObject() const
+*/
 auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 {
   return SafeCall(NodeIsValidAndInScene(),
@@ -207,6 +215,10 @@ auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
     });
 }
 
+/*!
+ @return A reference (through unwrapping the std::reference_wrapper) to the
+ node's Flags, or std::nullopt if the node is invalid or expired.
+*/
 auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 {
   return SafeCall(NodeIsValidAndInScene(),
@@ -219,6 +231,9 @@ auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
     });
 }
 
+/*!
+ @copydoc SceneNode::GetFlags() const
+*/
 auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
 {
   return SafeCall(NodeIsValidAndInScene(),
@@ -305,11 +320,24 @@ auto SceneNode::HasChildren() const noexcept -> bool
 
 auto SceneNode::IsRoot() const noexcept -> bool { return !HasParent(); }
 
+/*!
+ The Transform interface provides convenient, type-safe access to the node's
+ TransformComponent while respecting the scene's caching and dirty marking
+ systems. Unlike direct component access, Transform operations are aware of
+ scene hierarchy and provide additional convenience methods.
+
+ @return Transform interface wrapper for this node's transform operations.
+ @note If the node has no TransformComponent, operations will be no-ops.
+*/
+
 auto SceneNode::GetTransform() noexcept -> Transform
 {
   return Transform(*this);
 }
 
+/*!
+ @copydoc SceneNode::GetTransform() const
+*/
 auto SceneNode::GetTransform() const noexcept -> Transform
 {
   return Transform(

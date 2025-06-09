@@ -73,20 +73,16 @@ public:
   using OptionalConstRefToFlags
     = std::optional<std::reference_wrapper<const Flags>>;
 
-  /*!
-   Forward declaration for Transform interface.
-   \see SceneNode::Transform for full documentation.
-  */
+  //! Forward declaration for Transform interface.
+  //! @see SceneNode::Transform for full documentation.
   class Transform;
 
   // We make the Scene a friend, so it can invalidate a SceneNode when its
   // data is erased.
   friend class Scene;
 
-  /*!
-   Constructs a SceneNode handle for the given resource handle and scene.
-   Only Scene should create SceneNode instances.
-  */
+  //! Constructs a SceneNode handle for the given resource handle and scene.
+  //! @note SceneNode instances are usually created via the Scene class.
   OXGN_SCN_API SceneNode(
     const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak);
 
@@ -113,36 +109,18 @@ public:
   //=== SceneNodeImpl Access ===--------------------------------------------//
 
   //! Gets a reference to the underlying SceneNodeImpl object if it exists.
-  /*!
-   \return A reference (through unwrapping the std::reference_wrapper) to the
-           underlying SceneNodeImpl object, or std::nullopt if the node is
-           invalid or expired.
-  */
   OXGN_SCN_NDAPI auto GetObject() const noexcept -> OptionalConstRefToImpl;
   OXGN_SCN_NDAPI auto GetObject() noexcept -> OptionalRefToImpl;
 
   //=== Scene Node Flags Access ===-----------------------------------------//
 
   //! Gets a reference to the flags for this SceneNode if the node is alive.
-  /*!
-   \return A reference (through unwrapping the std::reference_wrapper) to the
-           node's Flags, or std::nullopt if the node is invalid or expired.
-  */
   OXGN_SCN_NDAPI auto GetFlags() const noexcept -> OptionalConstRefToFlags;
   OXGN_SCN_NDAPI auto GetFlags() noexcept -> OptionalRefToFlags;
 
   //=== Transform Access ===------------------------------------------------//
 
   //! Gets a Transform interface for safe transform operations.
-  /*!
-   The Transform interface provides convenient, type-safe access to the node's
-   TransformComponent while respecting the scene's caching and dirty marking
-   systems. Unlike direct component access, Transform operations are aware of
-   scene hierarchy and provide additional convenience methods.
-
-   \return Transform interface wrapper for this node's transform operations.
-   \note If the node has no TransformComponent, operations will be no-ops.
-  */
   OXGN_SCN_NDAPI auto GetTransform() noexcept -> Transform;
   OXGN_SCN_NDAPI auto GetTransform() const noexcept -> Transform;
 
@@ -154,9 +132,6 @@ private:
     // NOLINTNEXTLINE(*-pro-type-const-cast)
     const_cast<SceneNode*>(this)->Resource::Invalidate();
   }
-
-  [[nodiscard]] auto ValidateForSafeCall() const noexcept
-    -> std::optional<std::string>;
 
   // Logging for SafeCall errors using DLOG_F
   void LogSafeCallError(const char* reason) const noexcept;
@@ -297,148 +272,62 @@ public:
   //=== Local Transform Operations (Forward to TransformComponent) ===------//
 
   //! Sets all local transformation components atomically.
-  /*!
-   \param position New local position vector.
-   \param rotation New local rotation quaternion (should be normalized).
-   \param scale New local scale vector (positive values recommended).
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto SetLocalTransform(const Vec3& position,
     const Quat& rotation, const Vec3& scale) noexcept -> bool;
 
   //! Sets the local position (translation component).
-  /*!
-   \param position New local position vector in local coordinate space.
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto SetLocalPosition(const Vec3& position) noexcept -> bool;
 
   //! Sets the local rotation (rotation component).
-  /*!
-   \param rotation New local rotation quaternion (should be normalized).
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto SetLocalRotation(const Quat& rotation) noexcept -> bool;
 
   //! Sets the local scale (scale component).
-  /*!
-   \param scale New local scale vector (positive values recommended).
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto SetLocalScale(const Vec3& scale) noexcept -> bool;
 
   //=== Local Transform Getters ===---------------------------------------//
 
   //! Gets the local position (translation component).
-  /*!
-   \return Optional local position vector, or std::nullopt if the node is no
-           longer valid.
-  */
   OXGN_SCN_NDAPI auto GetLocalPosition() const noexcept -> std::optional<Vec3>;
 
   //! Gets the local rotation (rotation component).
-  /*!
-   \return Optional local rotation quaternion, or std::nullopt if the node is
-   no longer valid.
-  */
   OXGN_SCN_NDAPI auto GetLocalRotation() const noexcept -> std::optional<Quat>;
 
   //! Gets the local scale (scale component).
-  /*!
-   \return Optional local scale vector, or std::nullopt if the node is no
-           longer valid.
-  */
   OXGN_SCN_NDAPI auto GetLocalScale() const noexcept -> std::optional<Vec3>;
 
   //=== Transform Operations ===------------------------------------------//
 
   //! Applies a translation (movement) to the current position.
-  /*!
-   \param offset Distance to move along each axis.
-   \param local If true, offset is rotated by current orientation; if false,
-                offset is applied directly in world space.
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto Translate(const Vec3& offset, bool local = true) noexcept
     -> bool;
 
   //! Applies a rotation to the current orientation.
-  /*!
-   \param rotation Quaternion rotation to apply (should be normalized).
-   \param local If true, applies rotation after current rotation (local
-   space); if false, applies rotation before current rotation (world space).
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto Rotate(const Quat& rotation, bool local = true) noexcept
     -> bool;
 
   //! Applies a scaling factor to the current scale.
-  /*!
-   \param scale_factor Multiplicative scale factor for each axis.
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-  */
   OXGN_SCN_API auto Scale(const Vec3& scale_factor) noexcept -> bool;
 
   //=== World Transform Access (Respects Caching) ===-----------------------//
 
   //! Gets the world transformation matrix.
-  /*!
-   Returns the cached world-space transformation matrix without forcing
-   computation. The matrix is computed lazily during scene update passes
-   and cached until marked dirty.
-
-   \return Optional world transformation matrix, or std::nullopt if the node
-           is no longer valid.
-  */
   OXGN_SCN_NDAPI auto GetWorldMatrix() const noexcept -> std::optional<Mat4>;
 
   //! Extracts the world-space position from the cached world transformation
   //! matrix.
-  /*!
-   \return Optional world-space position vector, or std::nullopt if the node
-           is no longer valid.
-  */
   OXGN_SCN_NDAPI auto GetWorldPosition() const noexcept -> std::optional<Vec3>;
 
   //! Extracts the world-space rotation from the cached world transformation
   //! matrix.
-  /*!
-   \return Optional world-space rotation quaternion, or std::nullopt if the
-           node is no longer valid.
-  */
   OXGN_SCN_NDAPI auto GetWorldRotation() const noexcept -> std::optional<Quat>;
 
   //! Extracts the world-space scale from the cached world transformation
   //! matrix.
-  /*!
-   \return Optional world-space scale vector, or std::nullopt if the node is
-           no longer valid.
-  */
   OXGN_SCN_NDAPI auto GetWorldScale() const noexcept -> std::optional<Vec3>;
 
   //=== Scene-Aware Transform Operations ===--------------------------------//
 
   //! Orients the node to look at a target position.
-  /*!
-   Rotates the node so that its forward direction (-Z axis in local space)
-   points toward the target position. This sets the local rotation directly
-   without attempting to compute inverse parent transforms, as world transform
-   computation is deferred and handled by the Scene.
-
-   \param target_position World-space position to look at.
-   \param up_direction World-space up direction (default: Y-up).
-   \return True if the operation succeeded, false if the node is no longer
-   valid.
-   \note This computes rotation based on current cached world position.
-         For accurate results, ensure scene transforms are up to date.
-  */
   OXGN_SCN_API auto LookAt(const Vec3& target_position,
     const Vec3& up_direction = Vec3(0, 1, 0)) noexcept -> bool;
 
