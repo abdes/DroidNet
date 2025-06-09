@@ -44,7 +44,9 @@ public:
     */
     NodeData(NodeData&& other) noexcept
         : Component(std::move(other))
-        , flags_([](auto& src) { return std::exchange(src.flags_, kMovedFlags); }(other))
+        , flags_([](auto& src) {
+            return std::exchange(src.flags_, kMovedFlags);
+        }(other))
     {
     } // Move assignment
     auto operator=(NodeData&& other) noexcept -> NodeData&
@@ -56,17 +58,18 @@ public:
         return *this;
     }
 
-    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool override
+    {
+        return true;
+    }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
     {
         return std::make_unique<NodeData>(this->flags_);
     }
 
 private:
-    static constexpr auto kMovedFlags
-        = Flags {}
-              .SetInheritedAll(false)
-              .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
+    static constexpr auto kMovedFlags = Flags {}.SetInheritedAll(false).SetFlag(
+        SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
 };
 
 } // namespace oxygen::scene::detail

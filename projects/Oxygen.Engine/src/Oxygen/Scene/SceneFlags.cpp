@@ -51,11 +51,13 @@ auto SceneFlag::UpdateValueFromParent(const bool value) noexcept -> SceneFlag&
     return *this;
 }
 
-auto constexpr oxygen::scene::to_string(const SceneFlag value) noexcept -> std::string
+auto constexpr oxygen::scene::to_string(const SceneFlag value) noexcept
+    -> std::string
 {
     // The string format is "SF{EV:b,I:b,D:b,PV:b}" where b is '0' or '1'.
     // Example: "SF{EV:1,I:1,D:1,PV:1}"
-    constexpr auto size = sizeof("SF{EV:1,I:1,D:1,PV:1}") - 1; // -1 for null terminator
+    constexpr auto size
+        = sizeof("SF{EV:1,I:1,D:1,PV:1}") - 1; // -1 for null terminator
     std::array<char, size> buffer;
     char* current = buffer.data();
 
@@ -69,9 +71,8 @@ auto constexpr oxygen::scene::to_string(const SceneFlag value) noexcept -> std::
 
     // Helper lambda to append a boolean value as '1' or '0' to the buffer.
     // This lambda is constexpr.
-    auto append_bool_as_char = [&](const bool b_val) constexpr {
-        *current++ = b_val ? '1' : '0';
-    };
+    auto append_bool_as_char
+        = [&](const bool b_val) constexpr { *current++ = b_val ? '1' : '0'; };
 
     append_literal("SF{EV:");
     append_bool_as_char(value.GetEffectiveValueBit());

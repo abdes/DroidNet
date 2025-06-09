@@ -33,16 +33,20 @@ namespace {
 //------------------------------------------------------------------------------
 
 // Helper: Update a flag value from a simulated parent
-void UpdateFlagValueFromParent(SceneFlags<TestFlag>& flags, const TestFlag flag, const bool value)
+void UpdateFlagValueFromParent(
+    SceneFlags<TestFlag>& flags, const TestFlag flag, const bool value)
 {
-    const auto parent = SceneFlags<TestFlag> {}.SetFlag(flag, SceneFlag {}.SetEffectiveValueBit(value));
+    const auto parent = SceneFlags<TestFlag> {}.SetFlag(
+        flag, SceneFlag {}.SetEffectiveValueBit(value));
     flags.UpdateValueFromParent(flag, parent);
 }
 
 // Helper: Verify all flags have expected effective values
-void ExpectAllFlagsEffectiveValue(const SceneFlags<TestFlag>& flags, const bool expected_value)
+void ExpectAllFlagsEffectiveValue(
+    const SceneFlags<TestFlag>& flags, const bool expected_value)
 {
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         EXPECT_EQ(flags.GetEffectiveValue(flag), expected_value);
     }
@@ -225,10 +229,12 @@ NOLINT_TEST_F(SceneFlagsBasicTest, EffectiveTrueFlagsAdapter_ShowsOnlyTrueFlags)
     }
 
     // Assert: Should find only flags with true effective values
-    EXPECT_THAT(true_flags, testing::UnorderedElementsAre(TestFlag::kVisible, TestFlag::kSelected));
+    EXPECT_THAT(true_flags,
+        testing::UnorderedElementsAre(TestFlag::kVisible, TestFlag::kSelected));
 }
 
-NOLINT_TEST_F(SceneFlagsBasicTest, EffectiveFalseFlagsAdapter_ShowsOnlyFalseFlags)
+NOLINT_TEST_F(
+    SceneFlagsBasicTest, EffectiveFalseFlagsAdapter_ShowsOnlyFalseFlags)
 {
     // Arrange: Set up flags with mixed effective values
     flags_.Clear();
@@ -252,7 +258,8 @@ NOLINT_TEST_F(SceneFlagsBasicTest, BulkSetLocalValue_AllFlagsModified)
     // Arrange: Clean flags container
 
     // Act: Set all flags to true using bulk operation
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, true);
     }
@@ -297,7 +304,8 @@ NOLINT_TEST_F(SceneFlagsBasicTest, CountDirtyFlags_ReturnsCorrectCount)
     EXPECT_EQ(flags_.CountDirtyFlags(), 0);
 }
 
-NOLINT_TEST_F(SceneFlagsBasicTest, ProcessDirtyFlags_ReturnsTrueWhenFlagsProcessed)
+NOLINT_TEST_F(
+    SceneFlagsBasicTest, ProcessDirtyFlags_ReturnsTrueWhenFlagsProcessed)
 {
     // Arrange: Make flags dirty
     flags_.SetLocalValue(TestFlag::kVisible, true);
@@ -349,7 +357,8 @@ NOLINT_TEST_F(SceneFlagsBasicTest, MoveConstruction_TransfersState)
     const auto expected = original; // Copy for comparison
 
     // Act: Move construct
-    const auto moved = SceneFlags(std::move(original)); // NOLINT(performance-move-const-arg)
+    const auto moved
+        = SceneFlags(std::move(original)); // NOLINT(performance-move-const-arg)
 
     // Assert: Moved container should have expected state
     EXPECT_EQ(moved, expected);
@@ -419,7 +428,8 @@ protected:
     SceneFlags<TestFlag> flags_;
 };
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, BasicInheritanceAndParentUpdate_WorksCorrectly)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, BasicInheritanceAndParentUpdate_WorksCorrectly)
 {
     // Arrange: Set up flag as inherited from parent
     flags_.SetLocalValue(TestFlag::kVisible, true);
@@ -444,7 +454,8 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, BasicInheritanceAndParentUpdate_WorksCo
     EXPECT_FALSE(flags_.GetEffectiveValue(TestFlag::kVisible));
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, InheritedFlagsAdapter_ShowsOnlyInheritedFlags)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, InheritedFlagsAdapter_ShowsOnlyInheritedFlags)
 {
     // Arrange: Set up some flags as inherited
     flags_.Clear();
@@ -459,13 +470,16 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, InheritedFlagsAdapter_ShowsOnlyInherite
     }
 
     // Assert: Should find only the inherited flags
-    EXPECT_THAT(inherited, testing::UnorderedElementsAre(TestFlag::kVisible, TestFlag::kSelected));
+    EXPECT_THAT(inherited,
+        testing::UnorderedElementsAre(TestFlag::kVisible, TestFlag::kSelected));
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, SetInheritedAll_AllFlagsInheritFromParent)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, SetInheritedAll_AllFlagsInheritFromParent)
 {
     // Arrange: Set up flags with local values
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, true);
     }
@@ -481,7 +495,8 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, SetInheritedAll_AllFlagsInheritFromPare
     EXPECT_GT(flags_.CountDirtyFlags(), 0);
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, SetInheritedAll_VerifyAllFlagsInheritanceState)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, SetInheritedAll_VerifyAllFlagsInheritanceState)
 {
     // Arrange: Set up flags with mixed inheritance states
     flags_.SetInherited(TestFlag::kVisible, false);
@@ -492,22 +507,27 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, SetInheritedAll_VerifyAllFlagsInheritan
     flags_.SetInheritedAll(true);
 
     // Assert: All flags should now be inherited
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
-        EXPECT_TRUE(flags_.IsInherited(flag)) << "Flag " << i << " should be inherited";
+        EXPECT_TRUE(flags_.IsInherited(flag))
+            << "Flag " << i << " should be inherited";
     }
 
     // Act: Set all flags to not inherit
     flags_.SetInheritedAll(false);
 
     // Assert: All flags should now be local
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
-        EXPECT_FALSE(flags_.IsInherited(flag)) << "Flag " << i << " should not be inherited";
+        EXPECT_FALSE(flags_.IsInherited(flag))
+            << "Flag " << i << " should not be inherited";
     }
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, UpdateAllInheritFromParent_HandlesComplexParentState)
+NOLINT_TEST_F(SceneFlagsInheritanceTest,
+    UpdateAllInheritFromParent_HandlesComplexParentState)
 {
     // Arrange: Set up child flags to inherit
     flags_.SetInheritedAll(true);
@@ -531,12 +551,16 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, UpdateAllInheritFromParent_HandlesCompl
     flags_.ProcessDirtyFlags();
 
     // Assert: Child should now have parent's effective values
-    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kVisible), parent.GetEffectiveValue(TestFlag::kVisible));
-    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kLocked), parent.GetEffectiveValue(TestFlag::kLocked));
-    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kSelected), parent.GetEffectiveValue(TestFlag::kSelected));
+    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kVisible),
+        parent.GetEffectiveValue(TestFlag::kVisible));
+    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kLocked),
+        parent.GetEffectiveValue(TestFlag::kLocked));
+    EXPECT_EQ(flags_.GetEffectiveValue(TestFlag::kSelected),
+        parent.GetEffectiveValue(TestFlag::kSelected));
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, InheritedFlagsRange_EmptyWhenNoFlagsInherited)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, InheritedFlagsRange_EmptyWhenNoFlagsInherited)
 {
     // Arrange: Flags with no inheritance (all local)
     flags_.SetInheritedAll(false);
@@ -551,27 +575,31 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, InheritedFlagsRange_EmptyWhenNoFlagsInh
     EXPECT_TRUE(inherited_flags.empty());
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, FlagAccessibility_AllFlagsAccessibleWithInheritance)
+NOLINT_TEST_F(SceneFlagsInheritanceTest,
+    FlagAccessibility_AllFlagsAccessibleWithInheritance)
 {
     // Arrange: Set different states for each flag including inheritance
     flags_.SetLocalValue(TestFlag::kVisible, true);
     flags_.SetInherited(TestFlag::kLocked, true);
     flags_.SetLocalValue(TestFlag::kSelected, false);
 
-    // Act & Assert: All flags should be accessible with correct states using public interface
+    // Act & Assert: All flags should be accessible with correct states using
+    // public interface
     EXPECT_TRUE(flags_.IsDirty(TestFlag::kVisible));
     EXPECT_TRUE(flags_.IsInherited(TestFlag::kLocked));
     EXPECT_TRUE(flags_.IsDirty(TestFlag::kSelected));
 }
 
-NOLINT_TEST_F(SceneFlagsInheritanceTest, RawPreservation_PreservesAllInheritanceStates)
+NOLINT_TEST_F(
+    SceneFlagsInheritanceTest, RawPreservation_PreservesAllInheritanceStates)
 {
     // Arrange: Create flags with complex mixed states including inheritance
     flags_.SetLocalValue(TestFlag::kVisible, true);
     flags_.SetInherited(TestFlag::kLocked, true);
     flags_.SetLocalValue(TestFlag::kSelected, false);
     flags_.ProcessDirtyFlags();
-    flags_.SetInherited(TestFlag::kVisible, true); // Make it inherited after processing
+    flags_.SetInherited(
+        TestFlag::kVisible, true); // Make it inherited after processing
 
     // Act: Get raw value and set it to a new container
     const auto raw_value = flags_.Raw();
@@ -580,9 +608,12 @@ NOLINT_TEST_F(SceneFlagsInheritanceTest, RawPreservation_PreservesAllInheritance
 
     // Assert: All flag states including inheritance should be preserved exactly
     EXPECT_EQ(new_flags, flags_);
-    EXPECT_EQ(new_flags.GetEffectiveValue(TestFlag::kVisible), flags_.GetEffectiveValue(TestFlag::kVisible));
-    EXPECT_EQ(new_flags.IsInherited(TestFlag::kVisible), flags_.IsInherited(TestFlag::kVisible));
-    EXPECT_EQ(new_flags.IsInherited(TestFlag::kLocked), flags_.IsInherited(TestFlag::kLocked));
+    EXPECT_EQ(new_flags.GetEffectiveValue(TestFlag::kVisible),
+        flags_.GetEffectiveValue(TestFlag::kVisible));
+    EXPECT_EQ(new_flags.IsInherited(TestFlag::kVisible),
+        flags_.IsInherited(TestFlag::kVisible));
+    EXPECT_EQ(new_flags.IsInherited(TestFlag::kLocked),
+        flags_.IsInherited(TestFlag::kLocked));
 }
 
 //------------------------------------------------------------------------------
@@ -607,10 +638,12 @@ NOLINT_TEST_F(SceneFlagsErrorTest, OutOfBoundsAccess_DoesNotThrow)
     constexpr auto bogus = static_cast<TestFlag>(99);
 
     // Act & Assert: Should not throw (graceful degradation)
-    NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.GetEffectiveValue(bogus));
+    NOLINT_EXPECT_NO_THROW(
+        [[maybe_unused]] auto _ = flags_.GetEffectiveValue(bogus));
 }
 
-NOLINT_TEST_F(SceneFlagsErrorTest, ProcessDirtyFlag_ReturnsFalseWhenFlagNotDirty)
+NOLINT_TEST_F(
+    SceneFlagsErrorTest, ProcessDirtyFlag_ReturnsFalseWhenFlagNotDirty)
 {
     // Arrange: Clean flag that is not dirty
     EXPECT_FALSE(flags_.IsDirty(TestFlag::kVisible));
@@ -674,10 +707,12 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, DirtyFlagsRange_EmptyWhenNoFlagsDirty)
     EXPECT_EQ(dirty_count, 0);
 }
 
-NOLINT_TEST_F(SceneFlagsEdgeCaseTest, EffectiveTrueFlagsRange_EmptyWhenAllFlagsFalse)
+NOLINT_TEST_F(
+    SceneFlagsEdgeCaseTest, EffectiveTrueFlagsRange_EmptyWhenAllFlagsFalse)
 {
     // Arrange: All flags set to false
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, false);
     }
@@ -693,10 +728,12 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, EffectiveTrueFlagsRange_EmptyWhenAllFlagsF
     EXPECT_TRUE(true_flags.empty());
 }
 
-NOLINT_TEST_F(SceneFlagsEdgeCaseTest, EffectiveFalseFlagsRange_EmptyWhenAllFlagsTrue)
+NOLINT_TEST_F(
+    SceneFlagsEdgeCaseTest, EffectiveFalseFlagsRange_EmptyWhenAllFlagsTrue)
 {
     // Arrange: All flags set to true
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         flags_.SetLocalValue(flag, true);
     }
@@ -718,17 +755,23 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, GetFlag_WithAllFlagEnumValues)
     flags_.SetLocalValue(TestFlag::kVisible, true);
     flags_.SetLocalValue(TestFlag::kLocked, false);
     flags_.SetLocalValue(TestFlag::kSelected, true);
-    flags_.ProcessDirtyFlags(); // Act & Assert: All enum values should be accessible using public interface
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    flags_.ProcessDirtyFlags(); // Act & Assert: All enum values should be
+                                // accessible using public interface
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
 
         // Act: Access flag state should not throw
-        NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.GetEffectiveValue(flag));
+        NOLINT_EXPECT_NO_THROW(
+            [[maybe_unused]] auto _ = flags_.GetEffectiveValue(flag));
         NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.IsDirty(flag));
-        NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.IsInherited(flag));
-        NOLINT_EXPECT_NO_THROW([[maybe_unused]] auto _ = flags_.GetPreviousValue(flag));
+        NOLINT_EXPECT_NO_THROW(
+            [[maybe_unused]] auto _ = flags_.IsInherited(flag));
+        NOLINT_EXPECT_NO_THROW(
+            [[maybe_unused]] auto _ = flags_.GetPreviousValue(flag));
 
-        // Assert: Flag state should be consistent (processed flags should not be dirty)
+        // Assert: Flag state should be consistent (processed flags should not
+        // be dirty)
         EXPECT_FALSE(flags_.IsDirty(flag));
     }
 }
@@ -745,7 +788,8 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, SetRaw_WithZeroValue)
 
     // Assert: All flags should be in default state
     ExpectAllFlagsEffectiveValue(flags_, false);
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
         EXPECT_FALSE(flags_.IsDirty(flag));
         EXPECT_FALSE(flags_.IsInherited(flag));
@@ -757,11 +801,14 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, SetRaw_WithMaximumValidValue)
 {
     // Arrange: Calculate maximum valid value for our flag count
     // Each flag uses 5 bits, so for 3 flags we have 15 bits total
-    constexpr auto max_valid_value = (1ULL << (static_cast<std::size_t>(TestFlag::kCount) * 5)) - 1;
+    constexpr auto max_valid_value
+        = (1ULL << (static_cast<std::size_t>(TestFlag::kCount) * 5)) - 1;
 
     // Act: Set raw to maximum valid value (all bits set for all flags)
-    flags_.SetRaw(max_valid_value); // Assert: All flags should have all bits set using public interface
-    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
+    flags_.SetRaw(max_valid_value); // Assert: All flags should have all bits
+                                    // set using public interface
+    for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount);
+        ++i) {
         const auto flag = static_cast<TestFlag>(i);
 
         EXPECT_TRUE(flags_.GetEffectiveValue(flag));

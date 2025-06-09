@@ -29,20 +29,45 @@ public:
     OXYGEN_DEFAULT_COPYABLE(GraphData)
     OXYGEN_DEFAULT_MOVABLE(GraphData)
 
-    [[nodiscard]] auto GetParent() const noexcept -> const ResourceHandle& { return parent_; }
-    [[nodiscard]] auto GetFirstChild() const noexcept -> const ResourceHandle& { return first_child_; }
-    [[nodiscard]] auto GetNextSibling() const noexcept -> const ResourceHandle& { return next_sibling_; }
-    [[nodiscard]] auto GetPrevSibling() const noexcept -> const ResourceHandle& { return prev_sibling_; }
+    [[nodiscard]] auto GetParent() const noexcept -> const ResourceHandle&
+    {
+        return parent_;
+    }
+    [[nodiscard]] auto GetFirstChild() const noexcept -> const ResourceHandle&
+    {
+        return first_child_;
+    }
+    [[nodiscard]] auto GetNextSibling() const noexcept -> const ResourceHandle&
+    {
+        return next_sibling_;
+    }
+    [[nodiscard]] auto GetPrevSibling() const noexcept -> const ResourceHandle&
+    {
+        return prev_sibling_;
+    }
     void SetParent(const ResourceHandle& parent) noexcept { parent_ = parent; }
-    void SetFirstChild(const ResourceHandle& child) noexcept { first_child_ = child; }
-    void SetNextSibling(const ResourceHandle& sibling) noexcept { next_sibling_ = sibling; }
-    void SetPrevSibling(const ResourceHandle& sibling) noexcept { prev_sibling_ = sibling; }
+    void SetFirstChild(const ResourceHandle& child) noexcept
+    {
+        first_child_ = child;
+    }
+    void SetNextSibling(const ResourceHandle& sibling) noexcept
+    {
+        next_sibling_ = sibling;
+    }
+    void SetPrevSibling(const ResourceHandle& sibling) noexcept
+    {
+        prev_sibling_ = sibling;
+    }
 
-    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool override
+    {
+        return true;
+    }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
     {
         // Create an orphaned clone (no hierarchy relationships)
-        // This is the safest approach since handles may not be valid in clone context
+        // This is the safest approach since handles may not be valid in clone
+        // context
         return std::make_unique<GraphData>();
     }
 

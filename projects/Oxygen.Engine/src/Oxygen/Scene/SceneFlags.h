@@ -70,7 +70,8 @@ public:
     constexpr explicit SceneFlag(const std::uint8_t bits) noexcept
         : bits_(bits & 0b11111)
     {
-    } //=== Bit Access Methods ===---------------------------------------------//
+    } //=== Bit Access Methods
+      //===---------------------------------------------//
 
     //! Get the effective (final resolved) value bit.
     [[nodiscard]] constexpr auto GetEffectiveValueBit() const noexcept -> bool
@@ -191,8 +192,8 @@ public:
                 return *this;
             }
 
-            // Resetting the pending value to be the same as the effective value,
-            // means reverting a pending change.
+            // Resetting the pending value to be the same as the effective
+            // value, means reverting a pending change.
             if (GetEffectiveValueBit() == value) {
                 SetPendingValueBit(value);
                 SetDirtyBit(false); // No change, no need to mark dirty
@@ -230,7 +231,7 @@ public:
 
      \note This method is typically called during the scene update cycle.
     */
-    OXYGEN_SCENE_API auto UpdateValueFromParent(bool value) noexcept -> SceneFlag&;
+    OXGN_SCN_API auto UpdateValueFromParent(bool value) noexcept -> SceneFlag&;
 
     //! Apply pending value to effective value if dirty.
     /*!
@@ -244,7 +245,7 @@ public:
      \return true if the flag was successfully processed, false if it was not
              dirty or applying the effective value failed.
     */
-    OXYGEN_SCENE_API auto ProcessDirty() noexcept -> bool;
+    OXGN_SCN_API auto ProcessDirty() noexcept -> bool;
 
     //=== Raw Data Access ===-------------------------------------------------//
 
@@ -267,13 +268,15 @@ public:
     //=== Comparison Operators ===--------------------------------------------//
 
     //! Bitwise equality comparison (compares all bits).
-    [[nodiscard]] constexpr auto operator==(const SceneFlag& other) const noexcept -> bool
+    [[nodiscard]] constexpr auto operator==(
+        const SceneFlag& other) const noexcept -> bool
     {
         return bits_ == other.bits_;
     }
 
     //! Bitwise inequality comparison.
-    [[nodiscard]] constexpr auto operator!=(const SceneFlag& other) const noexcept -> bool
+    [[nodiscard]] constexpr auto operator!=(
+        const SceneFlag& other) const noexcept -> bool
     {
         return bits_ != other.bits_;
     }
@@ -283,7 +286,8 @@ public:
      Returns true only if both flags are not dirty and have the same effective
      value. Returns false if either flag is dirty (unstable state).
     */
-    [[nodiscard]] constexpr auto EffectiveEquals(const SceneFlag& other) const noexcept
+    [[nodiscard]] constexpr auto EffectiveEquals(
+        const SceneFlag& other) const noexcept
     {
         // If either flag is dirty, they cannot be considered equal
         if (IsDirty() || other.IsDirty()) {
@@ -294,7 +298,8 @@ public:
     }
 
     //! Semantic inequality comparison based on effective values.
-    [[nodiscard]] constexpr auto EffectiveNotEquals(const SceneFlag& other) const noexcept
+    [[nodiscard]] constexpr auto EffectiveNotEquals(
+        const SceneFlag& other) const noexcept
     {
         return !EffectiveEquals(other);
     }
@@ -302,7 +307,7 @@ public:
 private:
     std::uint8_t bits_ = 0; ///< 5 bits used for flag state, 3 bits reserved
 };
-OXYGEN_SCENE_API auto constexpr to_string(SceneFlag value) noexcept -> std::string;
+OXGN_SCN_API auto constexpr to_string(SceneFlag value) noexcept -> std::string;
 
 //! Template-based scene graph flags container with inheritance support.
 /*!
@@ -318,13 +323,13 @@ OXYGEN_SCENE_API auto constexpr to_string(SceneFlag value) noexcept -> std::stri
 
  \tparam FlagEnum Enum type that must satisfy SceneFlagEnum concept.
 */
-template <SceneFlagEnum FlagEnum>
-class SceneFlags {
+template <SceneFlagEnum FlagEnum> class SceneFlags {
 public:
     using flag_type = FlagEnum;
     using flag_value_type = SceneFlag;
     using storage_type = std::uint64_t;
-    static constexpr auto flag_count = static_cast<std::size_t>(FlagEnum::kCount);
+    static constexpr auto flag_count
+        = static_cast<std::size_t>(FlagEnum::kCount);
     static constexpr auto bits_per_flag = 5;
     static constexpr auto flag_mask = 0b11111;
 
@@ -345,7 +350,8 @@ public:
     constexpr SceneFlags(SceneFlags&&) noexcept = default;
 
     //! Copy assignment operator.
-    constexpr auto operator=(const SceneFlags&) noexcept -> SceneFlags& = default;
+    constexpr auto operator=(const SceneFlags&) noexcept
+        -> SceneFlags& = default;
 
     //! Move assignment operator.
     constexpr auto operator=(SceneFlags&&) noexcept -> SceneFlags& = default;
@@ -356,7 +362,8 @@ public:
     //=== Flag Access Methods ===---------------------------------------------//
 
     //! Set the full flag state.
-    constexpr auto SetFlag(FlagEnum flag, const SceneFlag& value) noexcept -> SceneFlags&
+    constexpr auto SetFlag(FlagEnum flag, const SceneFlag& value) noexcept
+        -> SceneFlags&
     {
         SetFlagBits(static_cast<std::size_t>(flag), value.GetRaw());
         return *this;
@@ -395,7 +402,8 @@ public:
     }
 
     //! Set a local value (overrides inheritance).
-    constexpr auto SetLocalValue(FlagEnum flag, bool value) noexcept -> SceneFlags&
+    constexpr auto SetLocalValue(FlagEnum flag, bool value) noexcept
+        -> SceneFlags&
     {
         auto flag_state = GetFlag(flag);
         flag_state.SetLocalValue(value);
@@ -403,7 +411,8 @@ public:
     }
 
     //! Enable inheritance from parent.
-    constexpr auto SetInherited(FlagEnum flag, bool state) noexcept -> SceneFlags&
+    constexpr auto SetInherited(FlagEnum flag, bool state) noexcept
+        -> SceneFlags&
     {
         auto flag_state = GetFlag(flag);
         flag_state.SetInherited(state);
@@ -485,12 +494,14 @@ public:
     }
 
     //! Update all inherited flags from parent.
-    constexpr auto UpdateAllInheritFromParent(const SceneFlags& parent) noexcept -> SceneFlags&
+    constexpr auto UpdateAllInheritFromParent(const SceneFlags& parent) noexcept
+        -> SceneFlags&
     {
         for (std::size_t i = 0; i < flag_count; ++i) {
             auto flag = static_cast<FlagEnum>(i);
             if (auto flag_state = GetFlag(flag); flag_state.IsInherited()) {
-                flag_state.UpdateValueFromParent(parent.GetEffectiveValue(flag));
+                flag_state.UpdateValueFromParent(
+                    parent.GetEffectiveValue(flag));
                 SetFlag(flag, flag_state);
             }
         }
@@ -546,63 +557,56 @@ public:
     [[nodiscard]] constexpr auto dirty_flags() const noexcept
     {
         return std::views::iota(std::size_t { 0 }, flag_count)
-            | std::views::transform([](std::size_t i) {
-                  return static_cast<FlagEnum>(i);
-              })
-            | std::views::filter([this](FlagEnum flag) {
-                  return this->IsDirty(flag);
-              });
+            | std::views::transform(
+                [](std::size_t i) { return static_cast<FlagEnum>(i); })
+            | std::views::filter(
+                [this](FlagEnum flag) { return this->IsDirty(flag); });
     }
 
     //! Get a view of all flags that inherit from parent.
     [[nodiscard]] constexpr auto inherited_flags() const noexcept
     {
         return std::views::iota(std::size_t { 0 }, flag_count)
-            | std::views::transform([](std::size_t i) {
-                  return static_cast<FlagEnum>(i);
-              })
-            | std::views::filter([this](FlagEnum flag) {
-                  return this->IsInherited(flag);
-              });
+            | std::views::transform(
+                [](std::size_t i) { return static_cast<FlagEnum>(i); })
+            | std::views::filter(
+                [this](FlagEnum flag) { return this->IsInherited(flag); });
     }
 
     //! Get a view of all flags with effective value = true.
     [[nodiscard]] constexpr auto effective_true_flags() const noexcept
     {
         return std::views::iota(std::size_t { 0 }, flag_count)
-            | std::views::transform([](std::size_t i) {
-                  return static_cast<FlagEnum>(i);
-              })
-            | std::views::filter(
-                [this](FlagEnum flag) {
-                    return this->GetEffectiveValue(flag);
-                });
+            | std::views::transform(
+                [](std::size_t i) { return static_cast<FlagEnum>(i); })
+            | std::views::filter([this](FlagEnum flag) {
+                  return this->GetEffectiveValue(flag);
+              });
     }
 
     //! Get a view of all flags with effective value = false.
     [[nodiscard]] constexpr auto effective_false_flags() const noexcept
     {
         return std::views::iota(std::size_t { 0 }, flag_count)
-            | std::views::transform([](std::size_t i) {
-                  return static_cast<FlagEnum>(i);
-              })
-            | std::views::filter(
-                [this](FlagEnum flag) {
-                    return !this->GetEffectiveValue(flag);
-                });
+            | std::views::transform(
+                [](std::size_t i) { return static_cast<FlagEnum>(i); })
+            | std::views::filter([this](FlagEnum flag) {
+                  return !this->GetEffectiveValue(flag);
+              });
     }
 
     //=== Comparison Operations ===------------------------------------------//
 
     //! Equality comparison.
-    [[nodiscard]] constexpr auto
-    operator==(const SceneFlags& other) const noexcept
+    [[nodiscard]] constexpr auto operator==(
+        const SceneFlags& other) const noexcept
     {
         return data_ == other.data_;
     }
 
     //! Inequality comparison.
-    [[nodiscard]] constexpr auto operator!=(const SceneFlags& other) const noexcept
+    [[nodiscard]] constexpr auto operator!=(
+        const SceneFlags& other) const noexcept
     {
         return !(*this == other);
     }
@@ -626,14 +630,16 @@ private:
     storage_type data_ = 0;
 
     //! Get all bits for a flag.
-    [[nodiscard]] constexpr auto GetFlagBits(const std::size_t index) const noexcept -> std::uint8_t
+    [[nodiscard]] constexpr auto GetFlagBits(
+        const std::size_t index) const noexcept -> std::uint8_t
     {
         const auto shift = index * bits_per_flag;
         return static_cast<std::uint8_t>(data_ >> shift & flag_mask);
     }
 
     //! Set all bits for a flag.
-    constexpr auto SetFlagBits(const std::size_t index, std::uint8_t bits) noexcept -> void
+    constexpr auto SetFlagBits(
+        const std::size_t index, std::uint8_t bits) noexcept -> void
     {
         const auto shift = index * bits_per_flag;
         const auto mask = storage_type { flag_mask } << shift;
@@ -647,7 +653,8 @@ private:
      the original SceneFlags. It is used for the const_iterator and for setting
      all flags in bulk.
     */
-    [[nodiscard]] constexpr auto GetFlag(FlagEnum flag) const noexcept -> SceneFlag
+    [[nodiscard]] constexpr auto GetFlag(FlagEnum flag) const noexcept
+        -> SceneFlag
     {
         return SceneFlag(GetFlagBits(static_cast<std::size_t>(flag)));
     }
@@ -664,8 +671,7 @@ private:
 
  \tparam FlagEnum Enum type that must satisfy SceneFlagEnum concept.
 */
-template <SceneFlagEnum FlagEnum>
-class SceneFlags<FlagEnum>::const_iterator {
+template <SceneFlagEnum FlagEnum> class SceneFlags<FlagEnum>::const_iterator {
 public:
     using iterator_category = std::forward_iterator_tag;
     using value_type = std::pair<FlagEnum, SceneFlag>;
@@ -681,7 +687,8 @@ public:
     }
 
     //! Constructor for iterator at specific position.
-    constexpr const_iterator(const SceneFlags& flags, const std::size_t index) noexcept
+    constexpr const_iterator(
+        const SceneFlags& flags, const std::size_t index) noexcept
         : flags_(&flags)
         , index_(index)
     {
@@ -690,13 +697,17 @@ public:
     //! Dereference operator returns flag-state pair.
     [[nodiscard]] constexpr auto operator*() const noexcept -> value_type
     {
-        return { static_cast<FlagEnum>(index_), flags_->GetFlag(static_cast<FlagEnum>(index_)) };
+        return { static_cast<FlagEnum>(index_),
+            flags_->GetFlag(static_cast<FlagEnum>(index_)) };
     }
 
     //! Arrow proxy for member access.
     struct ArrowProxy {
         value_type value;
-        constexpr auto operator->() const noexcept -> const value_type* { return &value; }
+        constexpr auto operator->() const noexcept -> const value_type*
+        {
+            return &value;
+        }
     };
 
     //! Member access operator.
@@ -721,7 +732,8 @@ public:
     }
 
     //! Equality comparison.
-    [[nodiscard]] constexpr auto operator==(const const_iterator& other) const noexcept -> bool
+    [[nodiscard]] constexpr auto operator==(
+        const const_iterator& other) const noexcept -> bool
     {
         if (flags_ == nullptr) {
             return other.flags_ == nullptr;
@@ -733,7 +745,8 @@ public:
     }
 
     //! Inequality comparison.
-    [[nodiscard]] constexpr auto operator!=(const const_iterator& other) const noexcept -> bool
+    [[nodiscard]] constexpr auto operator!=(
+        const const_iterator& other) const noexcept -> bool
     {
         return !(*this == other);
     }
@@ -765,7 +778,8 @@ template <SceneFlagEnum FlagEnum>
 
 //! Global range adapter for flags with effective value = true.
 template <SceneFlagEnum FlagEnum>
-[[nodiscard]] constexpr auto effective_true_flags(const SceneFlags<FlagEnum>& flags)
+[[nodiscard]] constexpr auto effective_true_flags(
+    const SceneFlags<FlagEnum>& flags)
 {
     return flags | std::views::filter([](const auto& pair) {
         return pair.second.GetEffectiveValue();
@@ -774,7 +788,8 @@ template <SceneFlagEnum FlagEnum>
 
 //! Global range adapter for flags with effective value = false.
 template <SceneFlagEnum FlagEnum>
-[[nodiscard]] constexpr auto effective_false_flags(const SceneFlags<FlagEnum>& flags)
+[[nodiscard]] constexpr auto effective_false_flags(
+    const SceneFlags<FlagEnum>& flags)
 {
     return flags | std::views::filter([](const auto& pair) {
         return !pair.second.GetEffectiveValue();
@@ -796,8 +811,7 @@ template <SceneFlagEnum FlagEnum>
 
  \tparam FlagEnum Enum type that must satisfy SceneFlagEnum concept
 */
-template <SceneFlagEnum FlagEnum>
-class AtomicSceneFlags {
+template <SceneFlagEnum FlagEnum> class AtomicSceneFlags {
 public:
     using flags_type = SceneFlags<FlagEnum>;
     using storage_type = typename flags_type::storage_type;
@@ -816,7 +830,8 @@ public:
      Returns a snapshot of the current flags state that can be safely
      read and modified without affecting the atomic storage.
     */
-    [[nodiscard]] auto Load(std::memory_order order = std::memory_order_seq_cst) const noexcept -> flags_type
+    [[nodiscard]] auto Load(std::memory_order order
+        = std::memory_order_seq_cst) const noexcept -> flags_type
     {
         flags_type result;
         result.SetRaw(data_.load(order));
@@ -828,7 +843,8 @@ public:
      Replaces the entire flags state atomically. All previous flag
      states are overwritten with the new values.
     */
-    auto Store(const flags_type& flags, std::memory_order order = std::memory_order_seq_cst) noexcept -> void
+    auto Store(const flags_type& flags,
+        std::memory_order order = std::memory_order_seq_cst) noexcept -> void
     {
         data_.store(flags.Raw(), order);
     }
@@ -839,7 +855,9 @@ public:
      the previous state. Useful for atomic updates that need to know
      the previous value.
     */
-    [[nodiscard]] auto Exchange(const flags_type& flags, std::memory_order order = std::memory_order_seq_cst) noexcept -> flags_type
+    [[nodiscard]] auto Exchange(const flags_type& flags,
+        std::memory_order order = std::memory_order_seq_cst) noexcept
+        -> flags_type
     {
         flags_type result;
         result.SetRaw(data_.exchange(flags.Raw(), order));
@@ -854,11 +872,13 @@ public:
 
      Updates expected parameter with current value if exchange fails.
     */
-    [[nodiscard]] auto CompareExchangeWeak(flags_type& expected, const flags_type& desired,
+    [[nodiscard]] auto CompareExchangeWeak(flags_type& expected,
+        const flags_type& desired,
         std::memory_order order = std::memory_order_seq_cst) noexcept -> bool
     {
         auto expected_raw = expected.Raw();
-        const auto result = data_.compare_exchange_weak(expected_raw, desired.Raw(), order);
+        const auto result
+            = data_.compare_exchange_weak(expected_raw, desired.Raw(), order);
         if (!result) {
             expected.SetRaw(expected_raw);
         }
@@ -873,11 +893,13 @@ public:
 
      Updates expected parameter with current value if exchange fails.
     */
-    [[nodiscard]] auto CompareExchangeStrong(flags_type& expected, const flags_type& desired,
+    [[nodiscard]] auto CompareExchangeStrong(flags_type& expected,
+        const flags_type& desired,
         std::memory_order order = std::memory_order_seq_cst) noexcept -> bool
     {
         auto expected_raw = expected.Raw();
-        const auto result = data_.compare_exchange_strong(expected_raw, desired.Raw(), order);
+        const auto result
+            = data_.compare_exchange_strong(expected_raw, desired.Raw(), order);
         if (!result) {
             expected.SetRaw(expected_raw);
         }

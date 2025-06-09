@@ -6,7 +6,8 @@
 
 #include <Oxygen/Scene/Types/Flags.h>
 
-auto oxygen::scene::to_string(const SceneNodeFlags& value) noexcept -> const char*
+auto oxygen::scene::to_string(const SceneNodeFlags& value) noexcept -> const
+    char*
 {
     switch (value) {
     case SceneNodeFlags::kVisible:

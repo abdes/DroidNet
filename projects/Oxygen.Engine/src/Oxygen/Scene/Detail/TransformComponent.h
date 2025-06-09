@@ -55,9 +55,9 @@ public:
      The identity transformation means objects will appear at the origin with
      their original orientation and size until explicitly transformed.
     */
-    OXYGEN_SCENE_API TransformComponent() = default;
+    OXGN_SCN_API TransformComponent() = default;
 
-    OXYGEN_SCENE_API ~TransformComponent() override = default;
+    OXGN_SCN_API ~TransformComponent() override = default;
 
     OXYGEN_DEFAULT_COPYABLE(TransformComponent)
     OXYGEN_DEFAULT_MOVABLE(TransformComponent)
@@ -74,7 +74,7 @@ public:
      \param rotation New local rotation quaternion (must be normalized).
      \param scale New local scale vector (positive for normal scaling).
      */
-    OXYGEN_SCENE_API void SetLocalTransform(
+    OXGN_SCN_API void SetLocalTransform(
         const Vec3& position, const Quat& rotation, const Vec3& scale) noexcept;
 
     //! Sets the local position (translation component).
@@ -84,7 +84,7 @@ public:
 
      \param position New local position vector in local coordinate space.
      */
-    OXYGEN_SCENE_API void SetLocalPosition(const Vec3& position) noexcept;
+    OXGN_SCN_API void SetLocalPosition(const Vec3& position) noexcept;
 
     //! Sets the local rotation (rotation component).
     /*!
@@ -94,7 +94,7 @@ public:
      \param rotation New local rotation quaternion (should be normalized).
      \warning Non-normalized quaternions may cause unexpected behavior.
      */
-    OXYGEN_SCENE_API void SetLocalRotation(const Quat& rotation) noexcept;
+    OXGN_SCN_API void SetLocalRotation(const Quat& rotation) noexcept;
 
     //! Sets the local scale (scale component).
     /*!
@@ -105,18 +105,27 @@ public:
      \warning Negative scale values will cause mesh inversion.
      \warning Zero scale values will cause degenerate transformations.
      */
-    OXYGEN_SCENE_API void SetLocalScale(const Vec3& scale) noexcept;
+    OXGN_SCN_API void SetLocalScale(const Vec3& scale) noexcept;
 
     //=== Local Transform Getters ===----------------------------------------//
 
     //! Gets the local position (translation component).
-    [[nodiscard]] auto GetLocalPosition() const noexcept -> const Vec3& { return local_position_; }
+    [[nodiscard]] auto GetLocalPosition() const noexcept -> const Vec3&
+    {
+        return local_position_;
+    }
 
     //! Gets the local rotation (rotation component).
-    [[nodiscard]] auto GetLocalRotation() const noexcept -> const Quat& { return local_rotation_; }
+    [[nodiscard]] auto GetLocalRotation() const noexcept -> const Quat&
+    {
+        return local_rotation_;
+    }
 
     //! Gets the local scale (scale component).
-    [[nodiscard]] auto GetLocalScale() const noexcept -> const Vec3& { return local_scale_; }
+    [[nodiscard]] auto GetLocalScale() const noexcept -> const Vec3&
+    {
+        return local_scale_;
+    }
 
     //=== Transform Operations ===--------------------------------------------//
 
@@ -129,7 +138,7 @@ public:
      \param local If true, offset is rotated by current orientation before
                   applying; if false, offset is applied directly in world space.
      */
-    OXYGEN_SCENE_API void Translate(const Vec3& offset, bool local = true) noexcept;
+    OXGN_SCN_API void Translate(const Vec3& offset, bool local = true) noexcept;
 
     //! Applies a rotation to the current orientation.
     /*!
@@ -141,7 +150,7 @@ public:
                   space); if false, applies rotation before current rotation
                   (world space).
      */
-    OXYGEN_SCENE_API void Rotate(const Quat& rotation, bool local = true) noexcept;
+    OXGN_SCN_API void Rotate(const Quat& rotation, bool local = true) noexcept;
 
     //! Applies a scaling factor to the current scale.
     /*!
@@ -152,7 +161,7 @@ public:
      \warning Values of 0 will cause degenerate transformations.
      \warning Negative values will cause mesh inversion.
      */
-    OXYGEN_SCENE_API void Scale(const Vec3& scale_factor) noexcept;
+    OXGN_SCN_API void Scale(const Vec3& scale_factor) noexcept;
 
     //=== World Transform Access ===------------------------------------------//
 
@@ -166,7 +175,7 @@ public:
      \return Const reference to the 4×4 world transformation matrix.
      \note Matrix is computed lazily and cached until marked dirty.
      */
-    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldMatrix() const -> const Mat4&;
+    OXGN_SCN_NDAPI auto GetWorldMatrix() const -> const Mat4&;
 
     //! Updates world transform from parent's world matrix (used by scene
     //! graph).
@@ -178,7 +187,8 @@ public:
      \param parent_world_matrix The parent object's world transformation matrix.
      \note Clears the dirty flag after computation.
      */
-    OXYGEN_SCENE_API auto UpdateWorldTransform(const Mat4& parent_world_matrix) -> void;
+    OXGN_SCN_API auto UpdateWorldTransform(const Mat4& parent_world_matrix)
+        -> void;
 
     //! Updates world transform for root nodes (no parent).
     /*!
@@ -188,14 +198,14 @@ public:
 
      \note This should only be called for root nodes in the scene hierarchy.
      */
-    OXYGEN_SCENE_API auto UpdateWorldTransformAsRoot() -> void;
+    OXGN_SCN_API auto UpdateWorldTransformAsRoot() -> void;
 
     //! Extracts the world-space position from the world transformation matrix.
     /*!
      \return World-space position vector (translation component of world
              matrix).
      */
-    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldPosition() const -> Vec3;
+    OXGN_SCN_NDAPI auto GetWorldPosition() const -> Vec3;
 
     //! Extracts the world-space rotation from the world transformation matrix.
     /*!
@@ -203,14 +213,14 @@ public:
              matrix).
      \note Returns identity quaternion (1,0,0,0) if matrix decomposition fails.
      */
-    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldRotation() const -> Quat;
+    OXGN_SCN_NDAPI auto GetWorldRotation() const -> Quat;
 
     //! Extracts the world-space scale from the world transformation matrix.
     /*!
      \return World-space scale vector (scale component of world matrix).
      \note Returns unit scale (1,1,1) if matrix decomposition fails.
      */
-    [[nodiscard]] OXYGEN_SCENE_API auto GetWorldScale() const -> Vec3;
+    OXGN_SCN_NDAPI auto GetWorldScale() const -> Vec3;
 
     //! Computes the local transformation matrix from TRS components.
     /*!
@@ -221,20 +231,26 @@ public:
      \return 4×4 local transformation matrix (Translation × Rotation × Scale).
      \note Matrix composition order: T × R × S (translation applied last).
      */
-    [[nodiscard]] OXYGEN_SCENE_API auto GetLocalMatrix() const -> Mat4;
+    OXGN_SCN_NDAPI auto GetLocalMatrix() const -> Mat4;
 
     //=== Dirty State Management ===------------------------------------------//
 
     //! Sets the dirty flag to indicate that the world matrix cache is invalid
     //! and needs to be recomputed. Called automatically by setter methods.
     // ReSharper disable once CppMemberFunctionMayBeConst
-    auto MarkDirty() noexcept -> void { is_dirty_ = true; } //! Checks if the transform is dirty and needs matrix re-computation.
+    auto MarkDirty() noexcept -> void
+    {
+        is_dirty_ = true;
+    } //! Checks if the transform is dirty and needs matrix re-computation.
     [[nodiscard]] auto IsDirty() const noexcept -> bool { return is_dirty_; }
 
     //! Clears the dirty flag without recomputing the world matrix.
     void ForceClearDirty() noexcept { is_dirty_ = false; }
 
-    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
+    [[nodiscard]] auto IsCloneable() const noexcept -> bool override
+    {
+        return true;
+    }
     [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
     {
         auto clone = std::make_unique<TransformComponent>();
@@ -267,7 +283,8 @@ private:
     //! Local scale component (multiplicative scale factors per axis).
     alignas(16) Vec3 local_scale_ { 1.0f, 1.0f, 1.0f };
 
-    //! Cached world transformation matrix (lazy-computed, mutable for const access).
+    //! Cached world transformation matrix (lazy-computed, mutable for const
+    //! access).
     mutable alignas(16) Mat4 world_matrix_ { 1.0f };
 
     //! Dirty flag indicating world matrix cache needs re-computation.

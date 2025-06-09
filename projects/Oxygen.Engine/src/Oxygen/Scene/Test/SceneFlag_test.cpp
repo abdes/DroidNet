@@ -30,12 +30,8 @@ namespace {
 //------------------------------------------------------------------------------
 
 // Helper: Verify all bits are in expected state
-void ExpectAllBitsState(
-    const SceneFlag& flag,
-    const bool effective,
-    const bool inherited,
-    const bool dirty,
-    const bool previous,
+void ExpectAllBitsState(const SceneFlag& flag, const bool effective,
+    const bool inherited, const bool dirty, const bool previous,
     const bool pending)
 {
     EXPECT_EQ(flag.GetEffectiveValueBit(), effective);
@@ -114,7 +110,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, RawAccess_SetAndGetRawValueCorrectly)
     ExpectAllBitsState(flag_, false, false, false, false, false);
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, SetLocalValue_MakesFlagDirtyAndSetsCorrectState)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, SetLocalValue_MakesFlagDirtyAndSetsCorrectState)
 {
     // Arrange: Flag with inherited bit set and effective value false
     flag_.SetInheritedBit(true).SetEffectiveValueBit(false);
@@ -128,7 +125,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, SetLocalValue_MakesFlagDirtyAndSetsCorrectStat
     EXPECT_TRUE(flag_.GetPendingValueBit());
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, ProcessDirty_TransitionsEffectiveValueCorrectly)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, ProcessDirty_TransitionsEffectiveValueCorrectly)
 {
     // Arrange: Set up flag for processing (inherited, with pending value)
     flag_.SetInheritedBit(true).SetEffectiveValueBit(false);
@@ -138,7 +136,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, ProcessDirty_TransitionsEffectiveValueCorrectl
     // Act: Process the dirty flag
     const auto result = flag_.ProcessDirty();
 
-    // Assert: Flag should transition to new effective value and clear dirty state
+    // Assert: Flag should transition to new effective value and clear dirty
+    // state
     EXPECT_TRUE(result);
     EXPECT_TRUE(flag_.GetEffectiveValueBit());
     EXPECT_FALSE(flag_.GetInheritedBit());
@@ -175,7 +174,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, StringConversion_ProducesNonEmptyString)
     EXPECT_FALSE(str.empty());
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, SemanticEquality_EffectiveEqualsWorksCorrectly)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, SemanticEquality_EffectiveEqualsWorksCorrectly)
 {
     // Arrange: Two flags with same effective value, both clean
     auto flag1 = SceneFlag {};
@@ -183,12 +183,14 @@ NOLINT_TEST_F(SceneFlagBasicTest, SemanticEquality_EffectiveEqualsWorksCorrectly
     flag1.SetEffectiveValueBit(true).SetDirtyBit(false);
     flag2.SetEffectiveValueBit(true).SetDirtyBit(false);
 
-    // Act & Assert: Clean flags with same effective value should be semantically equal
+    // Act & Assert: Clean flags with same effective value should be
+    // semantically equal
     EXPECT_TRUE(flag1.EffectiveEquals(flag2));
     EXPECT_FALSE(flag1.EffectiveNotEquals(flag2));
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, SemanticEquality_DifferentEffectiveValuesNotEqual)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, SemanticEquality_DifferentEffectiveValuesNotEqual)
 {
     // Arrange: Two clean flags with different effective values
     auto flag1 = SceneFlag {};
@@ -196,7 +198,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, SemanticEquality_DifferentEffectiveValuesNotEq
     flag1.SetEffectiveValueBit(true).SetDirtyBit(false);
     flag2.SetEffectiveValueBit(false).SetDirtyBit(false);
 
-    // Act & Assert: Clean flags with different effective values should not be equal
+    // Act & Assert: Clean flags with different effective values should not be
+    // equal
     EXPECT_FALSE(flag1.EffectiveEquals(flag2));
     EXPECT_TRUE(flag1.EffectiveNotEquals(flag2));
 }
@@ -229,8 +232,10 @@ NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_MasksUpperBits)
 
 NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_SpecificBitPattern)
 {
-    // Arrange: Raw bit pattern with specific bits set (effective=true, dirty=true)
-    constexpr std::uint8_t specific_bits = 0b01001; // dirty (bit 3) and effective (bit 0)
+    // Arrange: Raw bit pattern with specific bits set (effective=true,
+    // dirty=true)
+    constexpr std::uint8_t specific_bits
+        = 0b01001; // dirty (bit 3) and effective (bit 0)
 
     // Act: Construct flag from raw bits
     constexpr auto flag = SceneFlag(specific_bits);
@@ -240,12 +245,14 @@ NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_SpecificBitPattern)
     EXPECT_EQ(flag.GetRaw(), specific_bits);
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, GetEffectiveValue_WrapperAroundGetEffectiveValueBit)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, GetEffectiveValue_WrapperAroundGetEffectiveValueBit)
 {
     // Arrange: Flag with effective value bit set to true
     flag_.SetEffectiveValueBit(true);
 
-    // Act & Assert: GetEffectiveValue should return same as GetEffectiveValueBit
+    // Act & Assert: GetEffectiveValue should return same as
+    // GetEffectiveValueBit
     EXPECT_EQ(flag_.GetEffectiveValue(), flag_.GetEffectiveValueBit());
     EXPECT_TRUE(flag_.GetEffectiveValue());
 
@@ -257,7 +264,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, GetEffectiveValue_WrapperAroundGetEffectiveVal
     EXPECT_FALSE(flag_.GetEffectiveValue());
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, GetPendingValue_WrapperAroundGetPendingValueBit)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, GetPendingValue_WrapperAroundGetPendingValueBit)
 {
     // Arrange: Flag with pending value bit set to true
     flag_.SetPendingValueBit(true);
@@ -274,7 +282,8 @@ NOLINT_TEST_F(SceneFlagBasicTest, GetPendingValue_WrapperAroundGetPendingValueBi
     EXPECT_FALSE(flag_.GetPendingValue());
 }
 
-NOLINT_TEST_F(SceneFlagBasicTest, GetPreviousValue_WrapperAroundGetPreviousValueBit)
+NOLINT_TEST_F(
+    SceneFlagBasicTest, GetPreviousValue_WrapperAroundGetPreviousValueBit)
 {
     // Arrange: Flag with previous value bit set to true
     flag_.SetPreviousValueBit(true);
@@ -324,7 +333,8 @@ protected:
     SceneFlag flag_;
 };
 
-// Note: Currently no error test cases - this fixture is reserved for future error scenarios
+// Note: Currently no error test cases - this fixture is reserved for future
+// error scenarios
 
 //------------------------------------------------------------------------------
 // SceneFlag Inheritance Tests
@@ -342,7 +352,8 @@ protected:
     SceneFlag flag_;
 };
 
-NOLINT_TEST_F(SceneFlagInheritanceTest, UpdateValueFromParent_UpdatesInheritedFlagCorrectly)
+NOLINT_TEST_F(SceneFlagInheritanceTest,
+    UpdateValueFromParent_UpdatesInheritedFlagCorrectly)
 {
     // Arrange: Set up inherited flag with initial effective value of true
     flag_.SetInheritedBit(true);
@@ -355,19 +366,24 @@ NOLINT_TEST_F(SceneFlagInheritanceTest, UpdateValueFromParent_UpdatesInheritedFl
 
     // Assert: Flag should become dirty due to parent update changing the value
     EXPECT_TRUE(flag_.GetDirtyBit());
-    EXPECT_FALSE(flag_.GetPendingValueBit()); // Pending should now be false from parent
+    EXPECT_FALSE(
+        flag_.GetPendingValueBit()); // Pending should now be false from parent
 
     // Act: Process the dirty flag to apply parent value
     const auto result = flag_.ProcessDirty();
 
-    // Assert: Effective value should match parent (false) and previous should be preserved (true)
+    // Assert: Effective value should match parent (false) and previous should
+    // be preserved (true)
     EXPECT_TRUE(result);
-    EXPECT_FALSE(flag_.GetEffectiveValueBit()); // New effective value from parent
-    EXPECT_TRUE(flag_.GetPreviousValueBit()); // Previous value should be the old effective value (true)
+    EXPECT_FALSE(
+        flag_.GetEffectiveValueBit()); // New effective value from parent
+    EXPECT_TRUE(flag_.GetPreviousValueBit()); // Previous value should be the
+                                              // old effective value (true)
     EXPECT_FALSE(flag_.GetDirtyBit()); // Should be clean after processing
 }
 
-NOLINT_TEST_F(SceneFlagInheritanceTest, IsInherited_WrapperAroundGetInheritedBit)
+NOLINT_TEST_F(
+    SceneFlagInheritanceTest, IsInherited_WrapperAroundGetInheritedBit)
 {
     // Arrange: Flag with inherited bit set to true
     flag_.SetInheritedBit(true);
@@ -384,7 +400,8 @@ NOLINT_TEST_F(SceneFlagInheritanceTest, IsInherited_WrapperAroundGetInheritedBit
     EXPECT_FALSE(flag_.IsInherited());
 }
 
-NOLINT_TEST_F(SceneFlagInheritanceTest, SetInherited_EnablesInheritanceAndMarksDirty)
+NOLINT_TEST_F(
+    SceneFlagInheritanceTest, SetInherited_EnablesInheritanceAndMarksDirty)
 {
     // Arrange: Clean flag
     EXPECT_FALSE(flag_.IsInherited());
@@ -398,7 +415,8 @@ NOLINT_TEST_F(SceneFlagInheritanceTest, SetInherited_EnablesInheritanceAndMarksD
     EXPECT_TRUE(flag_.IsDirty());
 }
 
-NOLINT_TEST_F(SceneFlagInheritanceTest, SetInherited_DisablesInheritanceAndMarksDirty)
+NOLINT_TEST_F(
+    SceneFlagInheritanceTest, SetInherited_DisablesInheritanceAndMarksDirty)
 {
     // Arrange: Flag with inheritance enabled
     flag_.SetInheritedBit(true).SetDirtyBit(false);
@@ -413,7 +431,8 @@ NOLINT_TEST_F(SceneFlagInheritanceTest, SetInherited_DisablesInheritanceAndMarks
     EXPECT_TRUE(flag_.IsDirty());
 }
 
-NOLINT_TEST_F(SceneFlagInheritanceTest, UpdateValueFromParentOptimization_SameValueIsNoOp)
+NOLINT_TEST_F(
+    SceneFlagInheritanceTest, UpdateValueFromParentOptimization_SameValueIsNoOp)
 {
     // Arrange: Inherited flag with current pending value
     flag_.SetInheritedBit(true);
@@ -456,7 +475,8 @@ NOLINT_TEST_F(SceneFlagEdgeCaseTest, SemanticEquality_DirtyFlagsNeverEqual)
     EXPECT_TRUE(flag1.EffectiveNotEquals(flag2));
 }
 
-NOLINT_TEST_F(SceneFlagEdgeCaseTest, SetLocalValueOptimization_SameValueWhenDirtyIsNoOp)
+NOLINT_TEST_F(
+    SceneFlagEdgeCaseTest, SetLocalValueOptimization_SameValueWhenDirtyIsNoOp)
 {
     // Arrange: Flag that's already dirty with pending value
     flag_.SetLocalValue(true);
@@ -471,7 +491,8 @@ NOLINT_TEST_F(SceneFlagEdgeCaseTest, SetLocalValueOptimization_SameValueWhenDirt
     EXPECT_TRUE(flag_.GetPendingValueBit());
 }
 
-NOLINT_TEST_F(SceneFlagEdgeCaseTest, SetLocalValueOptimization_RevertToEffectiveClearsDirty)
+NOLINT_TEST_F(SceneFlagEdgeCaseTest,
+    SetLocalValueOptimization_RevertToEffectiveClearsDirty)
 {
     // Arrange: Flag with effective value false, then set to true
     flag_.SetEffectiveValueBit(false);
@@ -486,7 +507,8 @@ NOLINT_TEST_F(SceneFlagEdgeCaseTest, SetLocalValueOptimization_RevertToEffective
     EXPECT_FALSE(flag_.GetPendingValueBit());
 }
 
-NOLINT_TEST_F(SceneFlagEdgeCaseTest, ProcessDirtyTransitionTracking_PreviousValuePreserved)
+NOLINT_TEST_F(SceneFlagEdgeCaseTest,
+    ProcessDirtyTransitionTracking_PreviousValuePreserved)
 {
     // Arrange: Flag transitioning from false to true
     flag_.SetEffectiveValueBit(false);

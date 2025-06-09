@@ -45,10 +45,14 @@ public:
     //! Default flags for scene nodes, providing a sensible starting point.
     static constexpr auto kDefaultFlags
         = Flags {}
-              .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
-              .SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetInheritedBit(true))
-              .SetFlag(SceneNodeFlags::kReceivesShadows, SceneFlag {}.SetInheritedBit(true))
-              .SetFlag(SceneNodeFlags::kRayCastingSelectable, SceneFlag {}.SetInheritedBit(true));
+              .SetFlag(SceneNodeFlags::kVisible,
+                  SceneFlag {}.SetEffectiveValueBit(true))
+              .SetFlag(SceneNodeFlags::kCastsShadows,
+                  SceneFlag {}.SetInheritedBit(true))
+              .SetFlag(SceneNodeFlags::kReceivesShadows,
+                  SceneFlag {}.SetInheritedBit(true))
+              .SetFlag(SceneNodeFlags::kRayCastingSelectable,
+                  SceneFlag {}.SetInheritedBit(true));
 
     //! Efficient graph node view over a SceneNodeImpl, for hierarchy traversal
     //! and manipulation.
@@ -98,18 +102,23 @@ public:
             return *this;
         }
 
-        [[nodiscard]] OXYGEN_SCENE_API auto GetParent() const noexcept -> const ResourceHandle&;
-        [[nodiscard]] OXYGEN_SCENE_API auto GetFirstChild() const noexcept -> const ResourceHandle&;
-        [[nodiscard]] OXYGEN_SCENE_API auto GetNextSibling() const noexcept -> const ResourceHandle&;
-        [[nodiscard]] OXYGEN_SCENE_API auto GetPrevSibling() const noexcept -> const ResourceHandle&;
+        OXGN_SCN_NDAPI auto GetParent() const noexcept -> const ResourceHandle&;
+        OXGN_SCN_NDAPI auto GetFirstChild() const noexcept
+            -> const ResourceHandle&;
+        OXGN_SCN_NDAPI auto GetNextSibling() const noexcept
+            -> const ResourceHandle&;
+        OXGN_SCN_NDAPI auto GetPrevSibling() const noexcept
+            -> const ResourceHandle&;
 
-        OXYGEN_SCENE_API void SetParent(const ResourceHandle& parent) noexcept;
-        OXYGEN_SCENE_API void SetFirstChild(const ResourceHandle& child) noexcept;
-        OXYGEN_SCENE_API void SetNextSibling(const ResourceHandle& sibling) noexcept;
-        OXYGEN_SCENE_API void SetPrevSibling(const ResourceHandle& sibling) noexcept;
+        OXGN_SCN_API void SetParent(const ResourceHandle& parent) noexcept;
+        OXGN_SCN_API void SetFirstChild(const ResourceHandle& child) noexcept;
+        OXGN_SCN_API void SetNextSibling(
+            const ResourceHandle& sibling) noexcept;
+        OXGN_SCN_API void SetPrevSibling(
+            const ResourceHandle& sibling) noexcept;
 
-        [[nodiscard]] OXYGEN_SCENE_API auto IsRoot() const noexcept -> bool;
-        [[nodiscard]] OXYGEN_SCENE_API auto IsValid() const noexcept -> bool
+        OXGN_SCN_NDAPI auto IsRoot() const noexcept -> bool;
+        OXGN_SCN_NDAPI auto IsValid() const noexcept -> bool
         {
             return impl_ != nullptr && graph_data_ != nullptr;
         }
@@ -128,31 +137,33 @@ public:
         }
 
         SceneNodeImpl* impl_; //!< Back pointer to the SceneNodeImpl instance
-        detail::GraphData* graph_data_; //!< Cached pointer to the GraphData component
+        detail::GraphData*
+            graph_data_; //!< Cached pointer to the GraphData component
     };
 
-    OXYGEN_SCENE_API explicit SceneNodeImpl(
+    OXGN_SCN_API explicit SceneNodeImpl(
         const std::string& name, Flags flags = kDefaultFlags);
 
-    OXYGEN_SCENE_API ~SceneNodeImpl() override;
+    OXGN_SCN_API ~SceneNodeImpl() override;
 
-    OXYGEN_SCENE_API SceneNodeImpl(const SceneNodeImpl& other);
-    OXYGEN_SCENE_API auto operator=(const SceneNodeImpl& other) -> SceneNodeImpl&;
-    OXYGEN_SCENE_API SceneNodeImpl(SceneNodeImpl&& other) noexcept;
-    OXYGEN_SCENE_API auto operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&;
+    OXGN_SCN_API SceneNodeImpl(const SceneNodeImpl& other);
+    OXGN_SCN_API auto operator=(const SceneNodeImpl& other) -> SceneNodeImpl&;
+    OXGN_SCN_API SceneNodeImpl(SceneNodeImpl&& other) noexcept;
+    OXGN_SCN_API auto operator=(SceneNodeImpl&& other) noexcept
+        -> SceneNodeImpl&;
 
-    [[nodiscard]] OXYGEN_SCENE_API auto GetName() const noexcept -> std::string_view;
-    OXYGEN_SCENE_API void SetName(std::string_view name) noexcept;
+    OXGN_SCN_NDAPI auto GetName() const noexcept -> std::string_view;
+    OXGN_SCN_API void SetName(std::string_view name) noexcept;
 
     //=== Node Flags Accessors ===--------------------------------------------//
 
-    [[nodiscard]] OXYGEN_SCENE_API auto GetFlags() const noexcept -> const Flags&;
-    [[nodiscard]] OXYGEN_SCENE_API auto GetFlags() noexcept -> Flags&;
+    OXGN_SCN_NDAPI auto GetFlags() const noexcept -> const Flags&;
+    OXGN_SCN_NDAPI auto GetFlags() noexcept -> Flags&;
 
     //=== Graph Aware View ===------------------------------------------------//
 
-    OXYGEN_SCENE_API auto AsGraphNode() noexcept -> GraphNode&;
-    OXYGEN_SCENE_API auto AsGraphNode() const noexcept -> const GraphNode&;
+    OXGN_SCN_API auto AsGraphNode() noexcept -> GraphNode&;
+    OXGN_SCN_API auto AsGraphNode() const noexcept -> const GraphNode&;
 
     //=== Transform management ===--------------------------------------------//
 
@@ -179,7 +190,7 @@ public:
 
      \see UpdateTransforms(), ClearTransformDirty(), IsTransformDirty()
      \see Scene::Update() for automatic transform updates    */
-    OXYGEN_SCENE_API void MarkTransformDirty() noexcept;
+    OXGN_SCN_API void MarkTransformDirty() noexcept;
 
     //! Checks whether the node's transform requires recalculation.
     /*!
@@ -197,14 +208,14 @@ public:
      \return `true` if the transform needs recalculation, `false` if the cached
              world transformation matrix is up-to-date.
 
-     \note This is a lightweight query operation that simply checks a boolean flag
-           in the TransformComponent - no expensive calculations are performed.
+     \note This is a lightweight query operation that simply checks a boolean
+     flag in the TransformComponent - no expensive calculations are performed.
 
      \see MarkTransformDirty(), UpdateTransforms(), ClearTransformDirty()
      \see Scene::Update() for automatic dirty state processing
      \see DirtyTransformFilter for efficient traversal of dirty nodes
     */
-    [[nodiscard]] OXYGEN_SCENE_API auto IsTransformDirty() const noexcept -> bool;
+    OXGN_SCN_NDAPI auto IsTransformDirty() const noexcept -> bool;
 
     //! Updates the node's world transformation matrices.
     /*!
@@ -243,15 +254,16 @@ public:
      \see MarkTransformDirty() to flag transforms for recalculation
      \see IsTransformDirty() to check if recalculation is needed
      \see Scene::Update() for automatic hierarchical transform updates
-     \see TransformComponent::UpdateWorldTransform() for low-level matrix computation
+     \see TransformComponent::UpdateWorldTransform() for low-level matrix
+     computation
      \see SceneTraversal::UpdateTransforms() for batch transform processing
     */
-    OXYGEN_SCENE_API void UpdateTransforms(const Scene& scene);
+    OXGN_SCN_API void UpdateTransforms(const Scene& scene);
 
     //=== Cloning Support ===-------------------------------------------------//
 
     [[nodiscard]] static auto IsCloneable() noexcept -> bool { return true; }
-    [[nodiscard]] OXYGEN_SCENE_API auto Clone() const
+    OXGN_SCN_NDAPI auto Clone() const
         -> std::unique_ptr<SceneNodeImpl> override;
 
 protected:
@@ -266,12 +278,13 @@ protected:
      The proper way remains to call UpdateTransforms() to ensure the transform
      matrices are up to date.
     */
-    OXYGEN_SCENE_API void ClearTransformDirty() noexcept;
+    OXGN_SCN_API void ClearTransformDirty() noexcept;
 
 private:
     [[nodiscard]] constexpr auto ShouldIgnoreParentTransform() const
     {
-        return GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
+        return GetFlags().GetEffectiveValue(
+            SceneNodeFlags::kIgnoreParentTransform);
     }
 
     // Cached GraphNode for efficient access - always initialized, using
