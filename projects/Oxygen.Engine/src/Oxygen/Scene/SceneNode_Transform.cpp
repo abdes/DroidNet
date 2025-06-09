@@ -163,6 +163,12 @@ auto SceneNode::Transform::CleanValidator() const -> CleanTransformValidator
 // SceneNode::Transform Implementations
 // =============================================================================
 
+/*!
+ @param position New local position vector.
+ @param rotation New local rotation quaternion (should be normalized).
+ @param scale New local scale vector (positive values recommended).
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::SetLocalTransform(const Vec3& position,
   const Quat& rotation, const Vec3& scale) noexcept -> bool
 {
@@ -177,6 +183,10 @@ auto SceneNode::Transform::SetLocalTransform(const Vec3& position,
   });
 }
 
+/*!
+ @param position New local position vector in local coordinate space.
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept
   -> bool
 {
@@ -191,6 +201,10 @@ auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept
   });
 }
 
+/*!
+ @param rotation New local rotation quaternion (should be normalized).
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept
   -> bool
 {
@@ -205,6 +219,10 @@ auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept
   });
 }
 
+/*!
+ @param scale New local scale vector (positive values recommended).
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
 {
   return SafeCall(BasicValidator(), [&](const SafeCallState& state) -> bool {
@@ -218,6 +236,10 @@ auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
   });
 }
 
+/*!
+ @return Optional local position vector, or std::nullopt if the node is no
+ longer valid.
+*/
 auto SceneNode::Transform::GetLocalPosition() const noexcept
   -> std::optional<Vec3>
 {
@@ -231,6 +253,10 @@ auto SceneNode::Transform::GetLocalPosition() const noexcept
     });
 }
 
+/*!
+ @return Optional local rotation quaternion, or std::nullopt if the node is no
+ longer valid.
+*/
 auto SceneNode::Transform::GetLocalRotation() const noexcept
   -> std::optional<Quat>
 {
@@ -244,6 +270,10 @@ auto SceneNode::Transform::GetLocalRotation() const noexcept
     });
 }
 
+/*!
+ @return Optional local scale vector, or std::nullopt if the node is no longer
+ valid.
+*/
 auto SceneNode::Transform::GetLocalScale() const noexcept -> std::optional<Vec3>
 {
   return SafeCall(BasicValidator(),
@@ -256,6 +286,12 @@ auto SceneNode::Transform::GetLocalScale() const noexcept -> std::optional<Vec3>
     });
 }
 
+/*!
+ @param offset Distance to move along each axis.
+ @param local If true, offset is rotated by current orientation; if false,
+ offset is applied directly in world space.
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::Translate(
   const Vec3& offset, const bool local) noexcept -> bool
 {
@@ -271,6 +307,12 @@ auto SceneNode::Transform::Translate(
     });
 }
 
+/*!
+ @param rotation Quaternion rotation to apply (should be normalized).
+ @param local If true, applies rotation after current rotation (local space); if
+ false, applies rotation before current rotation (world space).
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::Rotate(
   const Quat& rotation, const bool local) noexcept -> bool
 {
@@ -286,6 +328,10 @@ auto SceneNode::Transform::Rotate(
     });
 }
 
+/*!
+ @param scale_factor Multiplicative scale factor for each axis.
+ @return True if the operation succeeded, false if the node is no longer valid.
+*/
 auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
 {
   return SafeCall(
@@ -300,6 +346,14 @@ auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
     });
 }
 
+/*!
+ Returns the cached world-space transformation matrix without forcing
+ computation. The matrix is computed lazily during scene update passes and
+ cached until marked dirty.
+
+ @return Optional world transformation matrix, or std::nullopt if the node is no
+ longer valid.
+*/
 auto SceneNode::Transform::GetWorldMatrix() const noexcept
   -> std::optional<Mat4>
 {
@@ -313,6 +367,10 @@ auto SceneNode::Transform::GetWorldMatrix() const noexcept
     });
 }
 
+/*!
+ @return Optional world-space position vector, or std::nullopt if the node is no
+ longer valid.
+*/
 auto SceneNode::Transform::GetWorldPosition() const noexcept
   -> std::optional<Vec3>
 {
@@ -326,6 +384,10 @@ auto SceneNode::Transform::GetWorldPosition() const noexcept
     });
 }
 
+/*!
+ @return Optional world-space rotation quaternion, or std::nullopt if the node
+ is no longer valid.
+*/
 auto SceneNode::Transform::GetWorldRotation() const noexcept
   -> std::optional<Quat>
 {
@@ -339,6 +401,10 @@ auto SceneNode::Transform::GetWorldRotation() const noexcept
     });
 }
 
+/*!
+ @return Optional world-space scale vector, or std::nullopt if the node is no
+ longer valid.
+*/
 auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
 {
   return SafeCall(BasicValidator(),
@@ -351,6 +417,18 @@ auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
     });
 }
 
+/*!
+ Rotates the node so that its forward direction (-Z axis in local space) points
+ toward the target position. This sets the local rotation directly without
+ attempting to compute inverse parent transforms, as world transform computation
+ is deferred and handled by the Scene.
+
+ @param target_position World-space position to look at.
+ @param up_direction World-space up direction (default: Y-up).
+ @return True if the operation succeeded, false if the node is no longer valid.
+ @note This computes rotation based on current cached world position. For
+ accurate results, ensure scene transforms are up to date.
+*/
 auto SceneNode::Transform::LookAt(
   const Vec3& target_position, const Vec3& up_direction) noexcept -> bool
 {
