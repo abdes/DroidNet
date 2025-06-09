@@ -126,63 +126,14 @@ public:
 
   //! Creates a new root node by cloning an entire node hierarchy from the
   //! given root.
-  /*!
-   This method recursively clones the entire subtree rooted at the original
-   node, preserving all parent-child relationships within the cloned
-   hierarchy. The cloned root will become a new root node in this scene with
-   the specified name.
-
-   All nodes in the original hierarchy will be cloned with their component
-   data preserved, and new names will be generated based on the original
-   names. The hierarchy structure is maintained exactly as in the original.
-
-   This method will only fail if the resource table holding scene data is
-   full, which can only be remedied by increasing the initial capacity of the
-   table. Therefore, a failure is a fatal error that will result in the
-   application terminating.
-
-   \param original_root The root node of the hierarchy to clone (can be from
-   any scene)
-   \param new_root_name The name to assign to the cloned root node
-
-   \return A new SceneNode handle representing the cloned root node in this
-           scene
-  */
-  OXGN_SCN_NDAPI auto CreateHierarchyFrom(
-    const SceneNode& original_root, const std::string& new_root_name)
-    -> SceneNode; // TODO: missing implementation
+  OXGN_SCN_NDAPI auto CreateHierarchyFrom(const SceneNode& original_root,
+    const std::string& new_root_name) -> SceneNode;
 
   //! Creates a new child hierarchy by cloning an entire node hierarchy
   //! under the given parent.
-  /*!
-   This method recursively clones the entire subtree rooted at the
-   original node, preserving all parent-child relationships within the
-   cloned hierarchy. The cloned root will become a child of the specified
-   parent node.
-
-   All nodes in the original hierarchy will be cloned with their component
-   data preserved, and new names will be generated based on the original
-   names. The hierarchy structure is maintained exactly as in the
-   original.
-
-   This method will terminate the program if the \p parent is not valid,
-   as this is a programming error. It may fail if the \p parent is valid
-   but its corresponding node was removed from the scene. In such case, it
-   will return std::nullopt and invalidate the \p parent node.
-
-   \param parent The parent node under which to create the cloned
-   hierarchy
-   \param original_root The root node of the hierarchy to clone (can be
-   from any scene)
-   \param new_root_name The name to assign to the cloned root node
-
-   \return A new SceneNode handle representing the cloned root node, or
-           std::nullopt if parent is invalid
-  */
   OXGN_SCN_NDAPI auto CreateChildHierarchyFrom(const SceneNode& parent,
-    const SceneNode& original_root,
-    const std::string& new_root_name)
-    -> std::optional<SceneNode>; // TODO: missing implementation
+    const SceneNode& original_root, const std::string& new_root_name)
+    -> std::optional<SceneNode>;
 
   //! Destroys the given node if it has no children.
   /*!
@@ -620,6 +571,12 @@ private:
   auto CloneNode(const SceneNode& original, const std::string& new_name)
     -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
+  //! Clones an entire hierarchy starting from the given original node, for
+  //! later being attached to a target scene as a root or a child of an existing
+  //! node.
+  auto CloneHierarchy(const SceneNode& original_node)
+    -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
+
   //! Links a child node to a parent node in the hierarchy. Both of them
   //! must be valid and belong to this scene.
   void LinkChild(const NodeHandle& parent_handle, SceneNodeImpl* parent_impl,
@@ -644,6 +601,9 @@ private:
   //! Check if re-parenting would create a cycle in the hierarchy
   [[nodiscard]] auto WouldCreateCycle(
     const SceneNode& node, const SceneNode& new_parent) const noexcept -> bool;
+
+  //! Marks the transform as dirty for a node and all its descendants.
+  void MarkSubtreeTransformDirty(const Scene::NodeHandle& root_handle) noexcept;
 
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.

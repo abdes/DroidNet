@@ -10,7 +10,6 @@
 #include <concepts>
 #include <cstdint>
 #include <deque>
-#include <ranges>
 #include <span>
 #include <vector>
 
@@ -25,6 +24,27 @@ class Scene;
 class SceneNodeImpl;
 
 //=== Traversal Types ===-----------------------------------------------------//
+
+//! Context structure providing both handle and implementation for traversal
+//! visitors.
+/*!
+ This structure provides visitors with access to both the ResourceHandle and
+ SceneNodeImpl for a node during traversal. This enables scenarios where the
+ visitor needs the handle for operations like cloning, mapping, or external
+ resource management, while still providing efficient access to the node data.
+
+ Key use cases:
+ - Node cloning operations that need to maintain handle mappings
+ - External resource synchronization that uses handles as keys
+ - Debugging and logging that benefits from handle identification
+ - Custom operations that need both handle identity and node data
+ */
+struct VisitedNode {
+  //! Handle to the node being visited
+  ResourceHandle handle;
+  //! Reference to the node implementation
+  SceneNodeImpl* node_impl { nullptr };
+};
 
 //! Enumeration of supported traversal orders
 enum class TraversalOrder : uint8_t {
@@ -59,22 +79,22 @@ enum class VisitResult : uint8_t {
 
 template <typename Visitor>
 concept SceneVisitor
-  = requires(Visitor v, SceneNodeImpl& node, const Scene& scene) {
-      { v(node, scene) } -> std::convertible_to<VisitResult>;
+  = requires(Visitor v, const VisitedNode& visited_node, const Scene& scene) {
+      { v(visited_node, scene) } -> std::convertible_to<VisitResult>;
     };
 
-// Update SceneFilter concept to accept parent_result
+// Update SceneFilter concept to accept VisitedNode and parent_result
 template <typename Filter>
-concept SceneFilter
-  = requires(Filter f, const SceneNodeImpl& node, FilterResult parent_result) {
-      { f(node, parent_result) } -> std::convertible_to<FilterResult>;
-    };
+concept SceneFilter = requires(
+  Filter f, const VisitedNode& visited_node, FilterResult parent_result) {
+  { f(visited_node, parent_result) } -> std::convertible_to<FilterResult>;
+};
 
 //=== High-Performance Filters ===--------------------------------------------//
 
 //! Filter that accepts all nodes.
 struct AcceptAllFilter {
-  constexpr auto operator()(const SceneNodeImpl& /*node*/,
+  constexpr auto operator()(const VisitedNode& /*visited_node*/,
     FilterResult /*parent_result*/) const noexcept -> FilterResult
   {
     return FilterResult::kAccept;
@@ -98,7 +118,7 @@ static_assert(SceneFilter<AcceptAllFilter>);
    up-to-date, allowing it to compute its own world transform.
 */
 struct DirtyTransformFilter {
-  OXGN_SCN_API auto operator()(const SceneNodeImpl& node,
+  OXGN_SCN_API auto operator()(const VisitedNode& visited_node,
     FilterResult parent_result) const noexcept -> FilterResult;
 };
 static_assert(SceneFilter<DirtyTransformFilter>);
@@ -109,10 +129,10 @@ static_assert(SceneFilter<DirtyTransformFilter>);
  entire sub-tree below a node if it's not visible.
 */
 struct VisibleFilter {
-  auto operator()(const SceneNodeImpl& node,
+  auto operator()(const VisitedNode& visited_node,
     FilterResult /*parent_result*/) const noexcept -> FilterResult
   {
-    const auto& flags = node.GetFlags();
+    const auto& flags = visited_node.node_impl->GetFlags();
     return flags.GetEffectiveValue(SceneNodeFlags::kVisible)
       ? FilterResult::kAccept
       : FilterResult::kRejectSubTree;
@@ -184,25 +204,29 @@ public:
 
 private:
   const Scene* scene_;
-  mutable std::vector<SceneNodeImpl*> children_buffer_;
+  mutable std::vector<VisitedNode> children_buffer_;
 
   //! Calculate optimal stack capacity based on scene size
   [[nodiscard]] auto GetOptimalStackCapacity() const -> std::size_t
   {
+    // NOLINTBEGIN(*-magic-numbers)
     const auto node_count = scene_->GetNodeCount();
-    if (node_count <= 64)
+    if (node_count <= 64) {
       return 32;
-    if (node_count <= 256)
+    }
+    if (node_count <= 256) {
       return 64;
-    if (node_count <= 1024)
+    }
+    if (node_count <= 1024) {
       return 128;
+    }
     return 256; // Cap at reasonable size for deep scenes
+    // NOLINTEND(*-magic-numbers)
   }
 
   //! Get valid node pointer from handle
   OXGN_SCN_API auto GetNodeImpl(const ResourceHandle& handle) const
     -> SceneNodeImpl*;
-
   //! Collect children of a node into reused buffer
   void CollectChildren(SceneNodeImpl* node) const
   {
@@ -216,14 +240,11 @@ private:
     // Collect all children in a single pass
     while (child_handle.IsValid()) {
       auto* child_node = GetNodeImpl(child_handle);
-      children_buffer_.push_back(child_node);
+      children_buffer_.push_back(
+        VisitedNode { .handle = child_handle, .node_impl = child_node });
       child_handle = child_node->AsGraphNode().GetNextSibling();
     }
   }
-
-  //! Initialize node pointers from handles
-  OXGN_SCN_API void GetImplNodes(std::span<const SceneNode> nodes,
-    std::vector<SceneNodeImpl*>& impl_nodes) const;
 
   //! Depth-first traversal implementation
   /*!
@@ -231,8 +252,8 @@ private:
    \warning Sibling order is not guaranteed and depends on Scene storage.
   */
   template <typename VisitorFunc, typename FilterFunc>
-  auto TraverseDepthFirst(const std::span<SceneNodeImpl*> roots,
-    VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult;
+  auto TraverseDepthFirst(std::span<VisitedNode> roots, VisitorFunc&& visitor,
+    FilterFunc&& filter) const -> TraversalResult;
 
   //! Breadth-first traversal implementation
   /*!
@@ -240,12 +261,12 @@ private:
    \warning Sibling order is not guaranteed and depends on Scene storage.
   */
   template <typename VisitorFunc, typename FilterFunc>
-  auto TraverseBreadthFirst(const std::span<SceneNodeImpl*> roots,
-    VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult;
+  auto TraverseBreadthFirst(std::span<VisitedNode> roots, VisitorFunc&& visitor,
+    FilterFunc&& filter) const -> TraversalResult;
 
   //! Core traversal dispatcher
   template <typename VisitorFunc, typename FilterFunc>
-  [[nodiscard]] auto TraverseInternal(std::span<SceneNodeImpl*> root_impl_nodes,
+  [[nodiscard]] auto TraverseInternal(std::span<VisitedNode> root_impl_nodes,
     VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
     -> TraversalResult;
 };
@@ -263,10 +284,12 @@ auto SceneTraversal::Traverse(VisitorFunc&& visitor, TraversalOrder order,
 
   // We're traversing the root nodes of our scene. No need to be paranoid with
   // checks for validity.
-  std::vector<SceneNodeImpl*> root_impl_nodes;
+  std::vector<VisitedNode> root_impl_nodes;
   root_impl_nodes.reserve(root_handles.size());
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
-    [this](const ResourceHandle& handle) { return GetNodeImpl(handle); });
+    [this](const ResourceHandle& handle) {
+      return VisitedNode { .handle = handle, .node_impl = GetNodeImpl(handle) };
+    });
 
   return TraverseInternal(root_impl_nodes, std::forward<VisitorFunc>(visitor),
     order, std::forward<FilterFunc>(filter));
@@ -284,7 +307,9 @@ auto SceneTraversal::TraverseHierarchy(SceneNode& starting_node,
   CHECK_F(scene_->Contains(starting_node),
     "Starting node for traversal must be part of this scene");
 
-  std::array root_impl_nodes { GetNodeImpl(starting_node.GetHandle()) };
+  std::array root_impl_nodes { VisitedNode {
+    .handle = starting_node.GetHandle(),
+    .node_impl = GetNodeImpl(starting_node.GetHandle()) } };
 
   return TraverseInternal(root_impl_nodes, std::forward<VisitorFunc>(visitor),
     order, std::forward<FilterFunc>(filter));
@@ -299,14 +324,14 @@ auto SceneTraversal::TraverseHierarchies(std::span<SceneNode> starting_nodes,
     return TraversalResult {};
   }
 
-  std::vector<SceneNodeImpl*> root_impl_nodes;
+  std::vector<VisitedNode> root_impl_nodes;
   root_impl_nodes.reserve(starting_nodes.size());
-
   std::ranges::transform(starting_nodes, std::back_inserter(root_impl_nodes),
     [this](const SceneNode& node) {
       CHECK_F(scene_->Contains(node),
         "Starting nodes for traversal must be part of this scene");
-      return GetNodeImpl(node.GetHandle());
+      return VisitedNode { .handle = node.GetHandle(),
+        .node_impl = GetNodeImpl(node.GetHandle()) };
     });
 
   return TraverseInternal(root_impl_nodes, std::forward<VisitorFunc>(visitor),
@@ -314,7 +339,7 @@ auto SceneTraversal::TraverseHierarchies(std::span<SceneNode> starting_nodes,
 }
 
 template <typename VisitorFunc, typename FilterFunc>
-auto SceneTraversal::TraverseInternal(std::span<SceneNodeImpl*> root_impl_nodes,
+auto SceneTraversal::TraverseInternal(std::span<VisitedNode> root_impl_nodes,
   VisitorFunc&& visitor, const TraversalOrder order, FilterFunc&& filter) const
   -> TraversalResult
 {
@@ -336,7 +361,7 @@ auto SceneTraversal::TraverseInternal(std::span<SceneNodeImpl*> root_impl_nodes,
 
 // NOLINTBEGIN(*-missing-std-forward)
 template <typename VisitorFunc, typename FilterFunc>
-auto SceneTraversal::TraverseDepthFirst(const std::span<SceneNodeImpl*> roots,
+auto SceneTraversal::TraverseDepthFirst(const std::span<VisitedNode> roots,
   VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult
 // NOLINTEND(*-missing-std-forward)
 {
@@ -346,38 +371,40 @@ auto SceneTraversal::TraverseDepthFirst(const std::span<SceneNodeImpl*> roots,
 
   TraversalResult result {};
   struct StackEntry {
-    SceneNodeImpl* node;
-    FilterResult parent_result;
+    VisitedNode visited_node;
+    FilterResult parent_result { FilterResult::kAccept };
   };
   std::vector<StackEntry> stack;
   stack.reserve(GetOptimalStackCapacity());
-
   // Initialize stack with roots, parent_result defaults to Reject
-  for (auto root : std::ranges::reverse_view(roots)) {
-    stack.push_back({ root, FilterResult::kReject });
+  for (const auto& root : roots) {
+    stack.emplace_back(root, FilterResult::kReject);
   }
 
   auto add_children_to_stack
     = [&](SceneNodeImpl* node, FilterResult parent_filter_result) {
         CollectChildren(node);
         if (!children_buffer_.empty()) {
-          for (auto& it : std::ranges::reverse_view(children_buffer_)) {
+          for (auto& it : children_buffer_) {
             stack.push_back({ it, parent_filter_result });
           }
         }
       };
-
   while (!stack.empty()) {
-    const auto& entry = stack.back();
-    auto* node = entry.node;
-    auto parent_result = entry.parent_result;
+    const auto entry = stack.back(); // copy the item to avoid invalidation
     stack.pop_back();
 
-    switch (
-      const FilterResult filter_result = local_filter(*node, parent_result)) {
+    auto* node = entry.visited_node.node_impl;
+    auto parent_result = entry.parent_result;
+
+    const FilterResult filter_result
+      = local_filter(entry.visited_node, parent_result);
+
+    switch (filter_result) {
     case FilterResult::kAccept: {
       ++result.nodes_visited;
-      const VisitResult visit_result = local_visitor(*node, *scene_);
+      const VisitResult visit_result
+        = local_visitor(entry.visited_node, *scene_);
       if (visit_result == VisitResult::kStop) [[unlikely]] {
         result.completed = false;
         return result;
@@ -405,7 +432,7 @@ auto SceneTraversal::TraverseDepthFirst(const std::span<SceneNodeImpl*> roots,
 
 // NOLINTBEGIN(*-missing-std-forward)
 template <typename VisitorFunc, typename FilterFunc>
-auto SceneTraversal::TraverseBreadthFirst(const std::span<SceneNodeImpl*> roots,
+auto SceneTraversal::TraverseBreadthFirst(const std::span<VisitedNode> roots,
   VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult
 // NOLINTEND(*-missing-std-forward)
 {
@@ -415,13 +442,12 @@ auto SceneTraversal::TraverseBreadthFirst(const std::span<SceneNodeImpl*> roots,
 
   TraversalResult result { .completed = true };
   struct QueueEntry {
-    SceneNodeImpl* node;
-    FilterResult parent_result;
+    VisitedNode visited_node;
+    FilterResult parent_result { FilterResult::kAccept };
   };
   std::deque<QueueEntry> queue;
-
   // Initialize queue with all roots, parent_result defaults to Reject
-  for (auto* root : roots) {
+  for (const auto& root : roots) {
     queue.push_back({ root, FilterResult::kReject });
   }
 
@@ -429,23 +455,24 @@ auto SceneTraversal::TraverseBreadthFirst(const std::span<SceneNodeImpl*> roots,
     = [&](SceneNodeImpl* node, FilterResult parent_filter_result) {
         CollectChildren(node);
         if (!children_buffer_.empty()) {
-          for (auto& it : std::ranges::reverse_view(children_buffer_)) {
+          for (auto& it : children_buffer_) {
             queue.push_back({ it, parent_filter_result });
           }
         }
       };
-
   while (!queue.empty()) {
-    const auto& entry = queue.front();
-    auto* node = entry.node;
+    const auto entry = queue.front(); // copy the item to avoid invalidation
+    auto* node = entry.visited_node.node_impl;
     auto parent_result = entry.parent_result;
     queue.pop_front();
 
-    switch (
-      const FilterResult filter_result = local_filter(*node, parent_result)) {
+    const FilterResult filter_result
+      = local_filter(entry.visited_node, parent_result);
+    switch (filter_result) {
     case FilterResult::kAccept: {
       ++result.nodes_visited;
-      const VisitResult visit_result = local_visitor(*node, *scene_);
+      const VisitResult visit_result
+        = local_visitor(entry.visited_node, *scene_);
       if (visit_result == VisitResult::kStop) [[unlikely]] {
         result.completed = false;
         return result;
