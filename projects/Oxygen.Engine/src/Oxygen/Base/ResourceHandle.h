@@ -57,268 +57,269 @@ resource type inside the Render Device.
 
 class ResourceHandle final {
 public:
-    using HandleT = uint64_t;
+  using HandleT = uint64_t;
 
 private:
-    static constexpr uint8_t kHandleBits = sizeof(HandleT) * 8;
-    static constexpr uint8_t kGenerationBits { 16 };
-    static constexpr uint8_t kResourceTypeBits { 15 };
-    static constexpr uint8_t kIndexBits { kHandleBits - kGenerationBits - kResourceTypeBits - 1 };
+  static constexpr uint8_t kHandleBits = sizeof(HandleT) * 8;
+  static constexpr uint8_t kGenerationBits { 16 };
+  static constexpr uint8_t kResourceTypeBits { 15 };
+  static constexpr uint8_t kIndexBits { kHandleBits - kGenerationBits
+    - kResourceTypeBits - 1 };
 
-    static constexpr HandleT kHandleMask = static_cast<HandleT>(-1);
-    static constexpr HandleT kIndexMask = (HandleT { 1 } << kIndexBits) - 1;
-    static constexpr HandleT kGenerationMask = (HandleT { 1 } << kGenerationBits) - 1;
-    static constexpr HandleT kResourceTypeMask = (HandleT { 1 } << kResourceTypeBits) - 1;
+  static constexpr HandleT kHandleMask = static_cast<HandleT>(-1);
+  static constexpr HandleT kIndexMask = (HandleT { 1 } << kIndexBits) - 1;
+  static constexpr HandleT kGenerationMask
+    = (HandleT { 1 } << kGenerationBits) - 1;
+  static constexpr HandleT kResourceTypeMask
+    = (HandleT { 1 } << kResourceTypeBits) - 1;
 
 public:
-    using GenerationT = std::conditional_t<
-        kGenerationBits <= 16,
-        std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>,
-        uint32_t>;
-    using ResourceTypeT = std::conditional_t<
-        kGenerationBits <= 16,
-        std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>,
-        uint32_t>;
-    using IndexT = std::conditional_t<kIndexBits <= 32, uint32_t, uint64_t>;
+  using GenerationT = std::conditional_t<kGenerationBits <= 16,
+    std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>, uint32_t>;
+  using ResourceTypeT = std::conditional_t<kGenerationBits <= 16,
+    std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>, uint32_t>;
+  using IndexT = std::conditional_t<kIndexBits <= 32, uint32_t, uint64_t>;
 
-    static constexpr GenerationT kGenerationMax = kGenerationMask;
-    static constexpr GenerationT kTypeNotInitialized = kResourceTypeMask;
-    static constexpr GenerationT kResourceTypeMax = kResourceTypeMask;
-    static constexpr IndexT kIndexMax = kIndexMask;
-    static constexpr IndexT kInvalidIndex = kIndexMax;
+  static constexpr GenerationT kGenerationMax = kGenerationMask;
+  static constexpr GenerationT kTypeNotInitialized = kResourceTypeMask;
+  static constexpr GenerationT kResourceTypeMax = kResourceTypeMask;
+  static constexpr IndexT kIndexMax = kIndexMask;
+  static constexpr IndexT kInvalidIndex = kIndexMax;
 
-    constexpr ResourceHandle();
+  constexpr ResourceHandle();
 
-    ~ResourceHandle() = default;
+  ~ResourceHandle() = default;
 
-    explicit constexpr ResourceHandle(IndexT index, ResourceTypeT type = kTypeNotInitialized);
+  explicit constexpr ResourceHandle(
+    IndexT index, ResourceTypeT type = kTypeNotInitialized);
 
-    constexpr ResourceHandle(const ResourceHandle&) = default;
-    constexpr auto operator=(const ResourceHandle&) -> ResourceHandle&;
+  constexpr ResourceHandle(const ResourceHandle&) = default;
+  constexpr auto operator=(const ResourceHandle&) -> ResourceHandle&;
 
-    constexpr ResourceHandle(ResourceHandle&&) noexcept;
-    constexpr auto operator=(ResourceHandle&&) noexcept -> ResourceHandle&;
+  constexpr ResourceHandle(ResourceHandle&&) noexcept;
+  constexpr auto operator=(ResourceHandle&&) noexcept -> ResourceHandle&;
 
-    constexpr auto operator==(const ResourceHandle& rhs) const -> bool;
-    constexpr auto operator!=(const ResourceHandle& rhs) const -> bool;
-    constexpr auto operator<(const ResourceHandle& rhs) const -> bool;
+  constexpr auto operator==(const ResourceHandle& rhs) const -> bool;
+  constexpr auto operator!=(const ResourceHandle& rhs) const -> bool;
+  constexpr auto operator<(const ResourceHandle& rhs) const -> bool;
 
-    [[nodiscard]] constexpr auto Handle() const -> HandleT;
+  [[nodiscard]] constexpr auto Handle() const -> HandleT;
 
-    [[nodiscard]] constexpr auto IsValid() const -> bool;
+  [[nodiscard]] constexpr auto IsValid() const noexcept -> bool;
 
-    constexpr void Invalidate();
+  constexpr void Invalidate();
 
-    [[nodiscard]] constexpr auto Index() const -> IndexT;
+  [[nodiscard]] constexpr auto Index() const -> IndexT;
 
-    constexpr void SetIndex(IndexT index);
+  constexpr void SetIndex(IndexT index);
 
-    [[nodiscard]] constexpr auto Generation() const -> GenerationT;
+  [[nodiscard]] constexpr auto Generation() const -> GenerationT;
 
-    constexpr void NewGeneration();
+  constexpr void NewGeneration();
 
-    [[nodiscard]] constexpr auto ResourceType() const -> ResourceTypeT;
+  [[nodiscard]] constexpr auto ResourceType() const -> ResourceTypeT;
 
-    constexpr void SetResourceType(ResourceTypeT type);
+  constexpr void SetResourceType(ResourceTypeT type);
 
-    [[nodiscard]] constexpr auto IsFree() const -> bool;
+  [[nodiscard]] constexpr auto IsFree() const -> bool;
 
-    constexpr void SetFree(bool flag);
+  constexpr void SetFree(bool flag);
 
-    [[nodiscard]] constexpr auto ToString() const -> std::string;
+  [[nodiscard]] constexpr auto ToString() const -> std::string;
 
 private:
-    HandleT handle_ { kHandleMask };
+  HandleT handle_ { kHandleMask };
 
-    constexpr void SetGeneration(GenerationT generation);
+  constexpr void SetGeneration(GenerationT generation);
 
-    static constexpr HandleT kResourceTypeSetMask = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
-        | (HandleT { 1 } << (kIndexBits + kGenerationBits + kResourceTypeBits));
+  static constexpr HandleT kResourceTypeSetMask
+    = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
+    | (HandleT { 1 } << (kIndexBits + kGenerationBits + kResourceTypeBits));
 
-    static constexpr HandleT kGenerationSetMask = (kHandleMask << (kIndexBits + kGenerationBits)) | kIndexMask;
+  static constexpr HandleT kGenerationSetMask
+    = (kHandleMask << (kIndexBits + kGenerationBits)) | kIndexMask;
 
-    static constexpr HandleT kIndexSetMask = kHandleMask << kIndexBits;
+  static constexpr HandleT kIndexSetMask = kHandleMask << kIndexBits;
 
-    static_assert((kHandleBits - kGenerationBits - kResourceTypeBits) > 0, "Invalid handle bit configuration");
-    static_assert(sizeof(GenerationT) * 8 >= kGenerationBits, "GenerationT size is insufficient for kGenerationBits");
-    static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits, "ResourceTypeT size is insufficient for kResourceTypeBits");
-    static_assert(sizeof(IndexT) * 8 >= kIndexBits, "IndexT size is insufficient for kIndexBits");
+  static_assert((kHandleBits - kGenerationBits - kResourceTypeBits) > 0,
+    "Invalid handle bit configuration");
+  static_assert(sizeof(GenerationT) * 8 >= kGenerationBits,
+    "GenerationT size is insufficient for kGenerationBits");
+  static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits,
+    "ResourceTypeT size is insufficient for kResourceTypeBits");
+  static_assert(sizeof(IndexT) * 8 >= kIndexBits,
+    "IndexT size is insufficient for kIndexBits");
 };
 
 // ---------------------------------------------------------------------------
 
-constexpr ResourceHandle::ResourceHandle(const IndexT index, const ResourceTypeT type)
+constexpr ResourceHandle::ResourceHandle(
+  const IndexT index, const ResourceTypeT type)
 {
-    SetIndex(index);
-    SetResourceType(type);
-    SetGeneration(0);
-    SetFree(false);
+  SetIndex(index);
+  SetResourceType(type);
+  SetGeneration(0);
+  SetFree(false);
 }
 
 constexpr ResourceHandle::ResourceHandle()
 {
-    SetGeneration(0);
-    SetFree(false);
+  SetGeneration(0);
+  SetFree(false);
 }
 
 constexpr ResourceHandle::ResourceHandle(ResourceHandle&& other) noexcept
-    : handle_(other.handle_)
+  : handle_(other.handle_)
 
 {
-    other.handle_ = kInvalidIndex; // Reset the other handle to an invalid state
+  other.handle_ = kInvalidIndex; // Reset the other handle to an invalid state
 }
 
 constexpr auto ResourceHandle::operator=(const ResourceHandle& other)
-    -> ResourceHandle&
+  -> ResourceHandle&
 {
-    if (this == &other) {
-        return *this;
-    }
-    handle_ = other.handle_;
+  if (this == &other) {
     return *this;
+  }
+  handle_ = other.handle_;
+  return *this;
 }
 
 constexpr auto ResourceHandle::operator=(ResourceHandle&& other) noexcept
-    -> ResourceHandle&
+  -> ResourceHandle&
 {
-    if (this == &other) {
-        return *this;
-    }
-    handle_ = other.handle_;
-    other.handle_ = kInvalidIndex; // Reset the other handle to an invalid state
+  if (this == &other) {
     return *this;
+  }
+  handle_ = other.handle_;
+  other.handle_ = kInvalidIndex; // Reset the other handle to an invalid state
+  return *this;
 }
 
 constexpr auto ResourceHandle::operator==(const ResourceHandle& rhs) const
-    -> bool
+  -> bool
 {
-    return handle_ == rhs.handle_;
+  return handle_ == rhs.handle_;
 }
 
 constexpr auto ResourceHandle::operator!=(const ResourceHandle& rhs) const
-    -> bool
+  -> bool
 {
-    return handle_ != rhs.handle_;
+  return handle_ != rhs.handle_;
 }
 
 constexpr auto ResourceHandle::operator<(const ResourceHandle& rhs) const
-    -> bool
+  -> bool
 {
-    return handle_ < rhs.handle_;
+  return handle_ < rhs.handle_;
 }
 
-constexpr auto ResourceHandle::IsValid() const -> bool
+constexpr auto ResourceHandle::IsValid() const noexcept -> bool
 {
-    return Index() != kInvalidIndex;
+  return Index() != kInvalidIndex;
 }
 
-constexpr void ResourceHandle::Invalidate()
-{
-    this->handle_ = kHandleMask;
-}
+constexpr void ResourceHandle::Invalidate() { this->handle_ = kHandleMask; }
 
-constexpr auto ResourceHandle::Handle() const -> HandleT
-{
-    return handle_;
-}
+constexpr auto ResourceHandle::Handle() const -> HandleT { return handle_; }
 
 constexpr auto ResourceHandle::Index() const -> IndexT
 {
-    return handle_ & kIndexMask;
+  return handle_ & kIndexMask;
 }
 
 constexpr void ResourceHandle::SetIndex(const IndexT index)
 {
-    assert(index <= kIndexMax); // max value is invalid
-    handle_ = (handle_ & kIndexSetMask) |
-        // NOLINTNEXTLINE(clang-diagnostic-tautological-type-limit-compare)
-        (index <= kIndexMax ? index : kInvalidIndex);
+  assert(index <= kIndexMax); // max value is invalid
+  handle_ = (handle_ & kIndexSetMask) |
+    // NOLINTNEXTLINE(clang-diagnostic-tautological-type-limit-compare)
+    (index <= kIndexMax ? index : kInvalidIndex);
 }
 
 constexpr auto ResourceHandle::ResourceType() const -> ResourceTypeT
 {
-    return static_cast<ResourceTypeT>((handle_ >> (kIndexBits + kGenerationBits))
-        & kResourceTypeMask);
+  return static_cast<ResourceTypeT>(
+    (handle_ >> (kIndexBits + kGenerationBits)) & kResourceTypeMask);
 }
 
 constexpr void ResourceHandle::SetResourceType(const ResourceTypeT type)
 {
-    assert(type <= kResourceTypeMax); // max value is not-initialized
-    handle_ = (handle_ & kResourceTypeSetMask)
-        | (static_cast<HandleT>(type) << (kIndexBits + kGenerationBits));
+  assert(type <= kResourceTypeMax); // max value is not-initialized
+  handle_ = (handle_ & kResourceTypeSetMask)
+    | (static_cast<HandleT>(type) << (kIndexBits + kGenerationBits));
 }
 
 constexpr auto ResourceHandle::Generation() const -> GenerationT
 {
-    return (handle_ >> (kIndexBits)) & kGenerationMask;
+  return (handle_ >> (kIndexBits)) & kGenerationMask;
 }
 
 constexpr void ResourceHandle::SetGeneration(GenerationT generation)
 {
-    assert(generation <= kGenerationMax);
-    // Wrap around
-    // NOLINTNEXTLINE(clang-diagnostic-tautological-type-limit-compare)
-    if (generation > kGenerationMax) {
-        generation = 0;
-    }
-    handle_ = (handle_ & kGenerationSetMask) | (static_cast<HandleT>(generation) << kIndexBits);
+  assert(generation <= kGenerationMax);
+  // Wrap around
+  // NOLINTNEXTLINE(clang-diagnostic-tautological-type-limit-compare)
+  if (generation > kGenerationMax) {
+    generation = 0;
+  }
+  handle_ = (handle_ & kGenerationSetMask)
+    | (static_cast<HandleT>(generation) << kIndexBits);
 }
 
 constexpr void ResourceHandle::NewGeneration()
 {
-    const auto current_generation = Generation();
-    assert(current_generation <= kGenerationMax);
-    const auto new_generation {
-        (current_generation == kGenerationMax) ? 0 : current_generation + 1U
-    };
-    // Wrap around
-    handle_ = (handle_ & kGenerationSetMask) | (static_cast<HandleT>(new_generation) << kIndexBits);
+  const auto current_generation = Generation();
+  assert(current_generation <= kGenerationMax);
+  const auto new_generation {
+    (current_generation == kGenerationMax) ? 0 : current_generation + 1U
+  };
+  // Wrap around
+  handle_ = (handle_ & kGenerationSetMask)
+    | (static_cast<HandleT>(new_generation) << kIndexBits);
 }
 
 constexpr auto ResourceHandle::IsFree() const -> bool
 {
-    return (handle_ & (HandleT { 1 } << (kHandleBits - 1))) != 0;
+  return (handle_ & (HandleT { 1 } << (kHandleBits - 1))) != 0;
 }
 
 constexpr void ResourceHandle::SetFree(const bool flag)
 {
-    handle_ &= ((HandleT { 1 } << (kHandleBits - 1)) - 1);
-    if (flag) {
-        handle_ |= (HandleT { 1 } << (kHandleBits - 1));
-    }
+  handle_ &= ((HandleT { 1 } << (kHandleBits - 1)) - 1);
+  if (flag) {
+    handle_ |= (HandleT { 1 } << (kHandleBits - 1));
+  }
 }
 
 constexpr auto ResourceHandle::ToString() const -> std::string
 {
-    return IsValid()
-        ? std::string("ResourceHandle(Index: ") + std::to_string(Index())
-            + ", ResourceType: " + std::to_string(ResourceType())
-            + ", Generation: " + std::to_string(Generation())
-            + ", IsFree: " + (IsFree() ? "true" : "false") + ")"
-        : "ResourceHandle(Invalid)";
+  return IsValid()
+    ? std::string("ResourceHandle(Index: ") + std::to_string(Index())
+      + ", ResourceType: " + std::to_string(ResourceType())
+      + ", Generation: " + std::to_string(Generation())
+      + ", IsFree: " + (IsFree() ? "true" : "false") + ")"
+    : "ResourceHandle(Invalid)";
 }
 
 auto constexpr to_string(const ResourceHandle& value) noexcept
 {
-    return value.ToString();
+  return value.ToString();
 }
 
 auto constexpr to_string_compact(const ResourceHandle& value) noexcept
 {
-    return value.IsValid()
-        ? std::string("RH(i:") + std::to_string(value.Index())
-            + ", t:" + std::to_string(value.ResourceType())
-            + ", g:" + std::to_string(value.Generation())
-            + ", f:" + (value.IsFree() ? "1" : "0") + ")"
-        : "RH(Invalid)";
+  return value.IsValid() ? std::string("RH(i:") + std::to_string(value.Index())
+      + ", t:" + std::to_string(value.ResourceType())
+      + ", g:" + std::to_string(value.Generation())
+      + ", f:" + (value.IsFree() ? "1" : "0") + ")"
+                         : "RH(Invalid)";
 }
 
 } // namespace oxygen
 
-template <>
-struct std::hash<oxygen::ResourceHandle> {
-    auto operator()(const oxygen::ResourceHandle& handle) const noexcept -> size_t
-    {
-        return std::hash<oxygen::ResourceHandle::HandleT> {}(handle.Handle());
-    }
+template <> struct std::hash<oxygen::ResourceHandle> {
+  auto operator()(const oxygen::ResourceHandle& handle) const noexcept -> size_t
+  {
+    return std::hash<oxygen::ResourceHandle::HandleT> {}(handle.Handle());
+  }
 };

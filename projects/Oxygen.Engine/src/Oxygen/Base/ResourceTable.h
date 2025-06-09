@@ -80,171 +80,171 @@ https://github.com/y2kiah/griffin-containers.
 
 using HandleSet = std::vector<ResourceHandle>;
 
-template <typename T>
-class ResourceTable {
+template <typename T> class ResourceTable {
 public:
-    struct Meta {
-        uint32_t dense_to_sparse;
-    };
+  struct Meta {
+    uint32_t dense_to_sparse;
+  };
 
-    using DenseSet = std::vector<T>;
-    using MetaSet = std::vector<Meta>;
+  using DenseSet = std::vector<T>;
+  using MetaSet = std::vector<Meta>;
 
-    ResourceTable(const ResourceHandle::ResourceTypeT item_type, size_t reserve_count)
-        : item_type_(item_type)
-    {
-        assert(reserve_count < ResourceHandle::kIndexMax);
-        sparse_table_.reserve(reserve_count);
-        items_.reserve(reserve_count);
-        meta_.reserve(reserve_count);
-    }
+  ResourceTable(
+    const ResourceHandle::ResourceTypeT item_type, size_t reserve_count)
+    : item_type_(item_type)
+  {
+    assert(reserve_count < ResourceHandle::kIndexMax);
+    sparse_table_.reserve(reserve_count);
+    items_.reserve(reserve_count);
+    meta_.reserve(reserve_count);
+  }
 
-    virtual ~ResourceTable() = default;
+  virtual ~ResourceTable() = default;
 
-    OXYGEN_MAKE_NON_COPYABLE(ResourceTable);
-    OXYGEN_MAKE_NON_MOVABLE(ResourceTable);
+  OXYGEN_MAKE_NON_COPYABLE(ResourceTable);
+  OXYGEN_MAKE_NON_MOVABLE(ResourceTable);
 
-    [[nodiscard]] auto GetItemType() const -> ResourceHandle::ResourceTypeT
-    {
-        return item_type_;
-    }
+  [[nodiscard]] auto GetItemType() const -> ResourceHandle::ResourceTypeT
+  {
+    return item_type_;
+  }
 
-    // -- Element access -------------------------------------------------------
+  // -- Element access -------------------------------------------------------
 
-    [[nodiscard]] auto Contains(const ResourceHandle& handle) const -> bool;
-    [[nodiscard]] auto ItemAt(const ResourceHandle& handle) -> T&;
-    [[nodiscard]] auto ItemAt(const ResourceHandle& handle) const -> const T&;
+  [[nodiscard]] auto Contains(const ResourceHandle& handle) const noexcept
+    -> bool;
+  [[nodiscard]] auto ItemAt(const ResourceHandle& handle) -> T&;
+  [[nodiscard]] auto ItemAt(const ResourceHandle& handle) const -> const T&;
 
-    /*
-    Direct access to items set for iterating over them with no modification of the
-    set or its items.
-     */
-    [[nodiscard]] auto Items() const -> std::span<const T> { return items_; }
+  /*
+  Direct access to items set for iterating over them with no modification of the
+  set or its items.
+   */
+  [[nodiscard]] auto Items() const -> std::span<const T> { return items_; }
 
-    // -- Capacity -------------------------------------------------------------
+  // -- Capacity -------------------------------------------------------------
 
-    [[nodiscard]] auto Size() const noexcept { return items_.size(); }
-    [[nodiscard]] auto IsEmpty() const noexcept { return items_.empty(); }
-    [[nodiscard]] auto Capacity() const noexcept { return items_.capacity(); }
+  [[nodiscard]] auto Size() const noexcept { return items_.size(); }
+  [[nodiscard]] auto IsEmpty() const noexcept { return items_.empty(); }
+  [[nodiscard]] auto Capacity() const noexcept { return items_.capacity(); }
 
-    // -- Modifiers ------------------------------------------------------------
+  // -- Modifiers ------------------------------------------------------------
 
-    template <typename URef = T>
-        requires std::is_same_v<std::remove_cvref_t<URef>, T>
-    auto Insert(URef&& item) -> ResourceHandle;
+  template <typename URef = T>
+    requires std::is_same_v<std::remove_cvref_t<URef>, T>
+  auto Insert(URef&& item) -> ResourceHandle;
 
-    /**
-     * Inserts an item in the table, constructing the item in place at the
-     * position chosen by the table. Prefer to use this instead of Insert when
-     * adding an item on the fly, passing its properties as arguments.
-     */
-    template <typename... Params>
-    auto Emplace(Params&&... args) -> ResourceHandle
-    {
-        return Insert(T { std::forward<Params>(args)... });
-    }
+  /**
+   * Inserts an item in the table, constructing the item in place at the
+   * position chosen by the table. Prefer to use this instead of Insert when
+   * adding an item on the fly, passing its properties as arguments.
+   */
+  template <typename... Params> auto Emplace(Params&&... args) -> ResourceHandle
+  {
+    return Insert(T { std::forward<Params>(args)... });
+  }
 
-    // Return 1 if item was found and erased; 0 otherwise.
-    auto Erase(const ResourceHandle& handle) -> size_t;
+  // Return 1 if item was found and erased; 0 otherwise.
+  auto Erase(const ResourceHandle& handle) -> size_t;
 
-    // Return count of items that were removed.
-    auto EraseItems(const HandleSet& handles) -> size_t;
+  // Return count of items that were removed.
+  auto EraseItems(const HandleSet& handles) -> size_t;
 
-    /*
-    Removes all items, leaving the sparse set intact by adding each entry to the
-    freelist and incrementing its generation.
+  /*
+  Removes all items, leaving the sparse set intact by adding each entry to the
+  freelist and incrementing its generation.
 
-    This operation is slower than `Reset()`, but safer for the detection of
-    stale handles later. Complexity is linear.
-    */
-    void Clear() noexcept;
+  This operation is slower than `Reset()`, but safer for the detection of
+  stale handles later. Complexity is linear.
+  */
+  void Clear() noexcept;
 
-    /*
-    Removes all items, destroying the sparse set. Leaves the container's
-    capacity, but otherwise equivalent to a default-constructed container.
+  /*
+  Removes all items, destroying the sparse set. Leaves the container's
+  capacity, but otherwise equivalent to a default-constructed container.
 
-    This is faster than `Clear()`, but cannot safely detect lookups by stale
-    handles obtained before the reset. Complexity is constant.
-    */
-    void Reset() noexcept;
+  This is faster than `Clear()`, but cannot safely detect lookups by stale
+  handles obtained before the reset. Complexity is constant.
+  */
+  void Reset() noexcept;
 
-    /*
-    De-fragmentation uses the comparison function `comp` to establish an ideal
-    order or the dense set to maximum cache locality for traversals.
+  /*
+  De-fragmentation uses the comparison function `comp` to establish an ideal
+  order or the dense set to maximum cache locality for traversals.
 
-    The dense set can become fragmented over time due to removal operations.
-    This can be an expensive operation; use the `max_swaps` parameter to limit
-    the number of swaps that will occur before the function returns or use `0`to
-    run until completion.
+  The dense set can become fragmented over time due to removal operations.
+  This can be an expensive operation; use the `max_swaps` parameter to limit
+  the number of swaps that will occur before the function returns or use `0`to
+  run until completion.
 
-    The comparison function object (std::function, lambda or function pointer)
-    should return true if the first argument is less than (i.e. is ordered
-    before) the second. The signature of the comparison function should be
-    equivalent to the following:
+  The comparison function object (std::function, lambda or function pointer)
+  should return true if the first argument is less than (i.e. is ordered
+  before) the second. The signature of the comparison function should be
+  equivalent to the following:
 
-      `bool cmp(const T& a, const T& b);`
+    `bool cmp(const T& a, const T& b);`
 
-    While the signature does not need to have const&, the function must not
-    modify the objects passed to it and must be able to accept all values of
-    type (possibly const) T.
+  While the signature does not need to have const&, the function must not
+  modify the objects passed to it and must be able to accept all values of
+  type (possibly const) T.
 
-    Returns the number of swaps that occurred;
-    */
-    template <typename Compare>
-    auto Defragment(Compare comp, size_t max_swaps = 0) -> size_t;
+  Returns the number of swaps that occurred;
+  */
+  template <typename Compare>
+  auto Defragment(Compare comp, size_t max_swaps = 0) -> size_t;
 
 private:
-    [[nodiscard]] auto GetInnerIndex(const ResourceHandle& handle) const
-        -> ResourceHandle::IndexT;
+  [[nodiscard]] auto GetInnerIndex(const ResourceHandle& handle) const
+    -> ResourceHandle::IndexT;
 
-    [[nodiscard]] auto IsFreeListEmpty() const
-    {
-        // Having the front at the max index value, means the freelist is empty.
-        // The back will implicitly be equal to the front.
-        return (freelist_front_ == ResourceHandle::kIndexMax);
-    }
+  [[nodiscard]] auto IsFreeListEmpty() const
+  {
+    // Having the front at the max index value, means the freelist is empty.
+    // The back will implicitly be equal to the front.
+    return (freelist_front_ == ResourceHandle::kIndexMax);
+  }
 
-    // Index of the first item in the freelist
-    ResourceHandle::IndexT freelist_front_ = ResourceHandle::kInvalidIndex;
-    // Index of the last item in the freelist
-    ResourceHandle::IndexT freelist_back_ = ResourceHandle::kInvalidIndex;
+  // Index of the first item in the freelist
+  ResourceHandle::IndexT freelist_front_ = ResourceHandle::kInvalidIndex;
+  // Index of the last item in the freelist
+  ResourceHandle::IndexT freelist_back_ = ResourceHandle::kInvalidIndex;
 
-    // Resource type of handles produced when inserting items into this table.
-    // All items in a table have the same type. Multiple tables need to be used
-    // to store different resource types.
-    ResourceHandle::ResourceTypeT item_type_;
+  // Resource type of handles produced when inserting items into this table.
+  // All items in a table have the same type. Multiple tables need to be used
+  // to store different resource types.
+  ResourceHandle::ResourceTypeT item_type_;
 
-    // Stores the `inner` handles, used as internal indices into the dense set
-    // and to form the freelist of available slots (holes in the array).
-    HandleSet sparse_table_;
+  // Stores the `inner` handles, used as internal indices into the dense set
+  // and to form the freelist of available slots (holes in the array).
+  HandleSet sparse_table_;
 
-    // Stores the actual `items` inserted into the table.
-    DenseSet items_;
+  // Stores the actual `items` inserted into the table.
+  DenseSet items_;
 
-    // Stores `meta` information (extra information, not in the item data) for
-    // each item. Currently used for the reverse indexing from the dense set to
-    // the sparse set.
-    MetaSet meta_;
+  // Stores `meta` information (extra information, not in the item data) for
+  // each item. Currently used for the reverse indexing from the dense set to
+  // the sparse set.
+  MetaSet meta_;
 
-    // Fragmentation state of the dense set. Set to `true` when items are
-    // inserted into or removed from this table. Reset to `false` after
-    // de-fragmentation.
-    bool fragmented_ { false };
+  // Fragmentation state of the dense set. Set to `true` when items are
+  // inserted into or removed from this table. Reset to `false` after
+  // de-fragmentation.
+  bool fragmented_ { false };
 };
 
 // -----------------------------------------------------------------------------
 
 namespace detail {
 
-    template <typename T>
-    concept InternalSet = requires(T set) {
-        { set.size() } -> std::convertible_to<size_t>;
-    };
+  template <typename T>
+  concept InternalSet = requires(T set) {
+    { set.size() } -> std::convertible_to<size_t>;
+  };
 
-    auto NewIndex(const InternalSet auto& set)
-    {
-        return static_cast<ResourceHandle::IndexT>(set.size());
-    }
+  auto NewIndex(const InternalSet auto& set)
+  {
+    return static_cast<ResourceHandle::IndexT>(set.size());
+  }
 
 } // namespace detail
 
@@ -253,259 +253,263 @@ namespace detail {
 template <typename T>
 auto ResourceTable<T>::ItemAt(const ResourceHandle& handle) -> T&
 {
-    return items_[GetInnerIndex(handle)];
+  return items_[GetInnerIndex(handle)];
 }
 
 template <typename T>
 auto ResourceTable<T>::ItemAt(const ResourceHandle& handle) const -> const T&
 {
-    return items_[GetInnerIndex(handle)];
+  return items_[GetInnerIndex(handle)];
 }
 
 template <typename T>
-auto ResourceTable<T>::Contains(const ResourceHandle& handle) const -> bool
+auto ResourceTable<T>::Contains(const ResourceHandle& handle) const noexcept
+  -> bool
 {
-    // quick bailout before starting the lookup
-    if (handle.Index() >= sparse_table_.size() || handle.ResourceType() != item_type_) {
-        return false;
-    }
+  // quick bailout before starting the lookup
+  if (handle.Index() >= sparse_table_.size()
+    || handle.ResourceType() != item_type_) {
+    return false;
+  }
 
-    const ResourceHandle inner_id = sparse_table_[handle.Index()];
+  const ResourceHandle inner_id = sparse_table_[handle.Index()];
 
-    if (inner_id.IsFree()) {
-        return false;
-    }
+  if (inner_id.IsFree()) {
+    return false;
+  }
 
-    assert(inner_id.Index() < items_.size());
-    return (handle.Generation() == inner_id.Generation());
+  assert(inner_id.Index() < items_.size());
+  return (handle.Generation() == inner_id.Generation());
 }
 
 template <typename T>
 auto ResourceTable<T>::GetInnerIndex(const ResourceHandle& handle) const
-    -> uint32_t
+  -> uint32_t
 {
-    if (!handle.IsValid()) {
-        throw std::invalid_argument("invalid handle");
-    }
-    if (handle.Index() >= detail::NewIndex(sparse_table_)) {
-        throw std::out_of_range("bad handle, index out of range");
-    }
-    if (handle.ResourceType() != item_type_) {
-        throw std::invalid_argument("item type mismatch, using wrong table?");
-    }
+  if (!handle.IsValid()) {
+    throw std::invalid_argument("invalid handle");
+  }
+  if (handle.Index() >= detail::NewIndex(sparse_table_)) {
+    throw std::out_of_range("bad handle, index out of range");
+  }
+  if (handle.ResourceType() != item_type_) {
+    throw std::invalid_argument("item type mismatch, using wrong table?");
+  }
 
-    const ResourceHandle inner_handle = sparse_table_[handle.Index()];
-    if (inner_handle.IsFree()) {
-        throw std::invalid_argument("bad handle, item already erased");
-    }
-    if (handle.Generation() != inner_handle.Generation()) {
-        throw std::invalid_argument("external handle is stale (obsolete generation)");
-    }
+  const ResourceHandle inner_handle = sparse_table_[handle.Index()];
+  if (inner_handle.IsFree()) {
+    throw std::invalid_argument("bad handle, item already erased");
+  }
+  if (handle.Generation() != inner_handle.Generation()) {
+    throw std::invalid_argument(
+      "external handle is stale (obsolete generation)");
+  }
 
-    assert(inner_handle.Index() < detail::NewIndex(items_) && "corrupted table, inner index is out of range");
+  assert(inner_handle.Index() < detail::NewIndex(items_)
+    && "corrupted table, inner index is out of range");
 
-    return inner_handle.Index();
+  return inner_handle.Index();
 }
 
 // template <typename T, typename UR>
 // ResourceHandle ResourceTable<T>::Insert(T&& item)
 template <typename T>
 template <typename URef>
-    requires std::is_same_v<std::remove_cvref_t<URef>, T>
+  requires std::is_same_v<std::remove_cvref_t<URef>, T>
 auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
 {
-    // We never fill the table beyond the maximum valid index value. This is very
-    // unlikely, so we just assert for it and not test it in production.
-    assert(Size() < ResourceHandle::kIndexMax && "index will be out of range, increase bit size of the index values");
+  // We never fill the table beyond the maximum valid index value. This is very
+  // unlikely, so we just assert for it and not test it in production.
+  assert(Size() < ResourceHandle::kIndexMax
+    && "index will be out of range, increase bit size of the index values");
 
-    ResourceHandle handle;
-    fragmented_ = true;
+  ResourceHandle handle;
+  fragmented_ = true;
 
+  if (IsFreeListEmpty()) {
+    handle.SetIndex(detail::NewIndex(sparse_table_));
+    handle.SetResourceType(item_type_);
+    handle.SetFree(false);
+    sparse_table_.push_back(handle);
+  } else {
+    const uint32_t outer_index = freelist_front_;
+    ResourceHandle& inner_handle = sparse_table_[outer_index];
+
+    // the index of a free slot refers to the next free slot
+    freelist_front_ = inner_handle.Index();
     if (IsFreeListEmpty()) {
-        handle.SetIndex(detail::NewIndex(sparse_table_));
-        handle.SetResourceType(item_type_);
-        handle.SetFree(false);
-        sparse_table_.push_back(handle);
-    } else {
-        const uint32_t outer_index = freelist_front_;
-        ResourceHandle& inner_handle = sparse_table_[outer_index];
-
-        // the index of a free slot refers to the next free slot
-        freelist_front_ = inner_handle.Index();
-        if (IsFreeListEmpty()) {
-            freelist_back_ = freelist_front_;
-        }
-
-        // convert the index from freelist to inner index
-        inner_handle.SetFree(false);
-        inner_handle.SetIndex(detail::NewIndex(items_));
-
-        handle = inner_handle;
-        handle.SetIndex(outer_index);
+      freelist_back_ = freelist_front_;
     }
 
-    items_.push_back(std::forward<URef>(item));
-    meta_.push_back({ handle.Index() });
+    // convert the index from freelist to inner index
+    inner_handle.SetFree(false);
+    inner_handle.SetIndex(detail::NewIndex(items_));
 
-    return handle;
+    handle = inner_handle;
+    handle.SetIndex(outer_index);
+  }
+
+  items_.push_back(std::forward<URef>(item));
+  meta_.push_back({ handle.Index() });
+
+  return handle;
 }
 
 template <typename T>
 auto ResourceTable<T>::Erase(const ResourceHandle& handle) -> size_t
 {
-    try {
-        if (!Contains(handle)) {
-            return 0;
-        }
-    } catch (const std::exception&) {
-        return 0;
+  try {
+    if (!Contains(handle)) {
+      return 0;
     }
+  } catch (const std::exception&) {
+    return 0;
+  }
 
-    fragmented_ = true;
+  fragmented_ = true;
 
-    ResourceHandle inner_handle = sparse_table_[handle.Index()];
-    ResourceHandle::IndexT inner_index = inner_handle.Index();
+  ResourceHandle inner_handle = sparse_table_[handle.Index()];
+  ResourceHandle::IndexT inner_index = inner_handle.Index();
 
-    // push this slot to the back of the freelist
-    inner_handle.SetFree(true);
-    // increment generation so remaining outer ids go stale
-    inner_handle.NewGeneration();
-    // max value represents the end of the freelist
-    inner_handle.SetIndex(ResourceHandle::kIndexMax);
-    // write outer id changes back to the array
-    sparse_table_[handle.Index()] = inner_handle;
+  // push this slot to the back of the freelist
+  inner_handle.SetFree(true);
+  // increment generation so remaining outer ids go stale
+  inner_handle.NewGeneration();
+  // max value represents the end of the freelist
+  inner_handle.SetIndex(ResourceHandle::kIndexMax);
+  // write outer id changes back to the array
+  sparse_table_[handle.Index()] = inner_handle;
 
-    if (IsFreeListEmpty()) {
-        // if the freelist was empty, it now starts (and ends) at this index
-        freelist_front_ = handle.Index();
-        freelist_back_ = freelist_front_;
-    } else {
-        // previous back of the freelist points to new back
-        sparse_table_[freelist_back_].SetIndex(handle.Index());
-        // new freelist back is stored
-        freelist_back_ = handle.Index();
-    }
+  if (IsFreeListEmpty()) {
+    // if the freelist was empty, it now starts (and ends) at this index
+    freelist_front_ = handle.Index();
+    freelist_back_ = freelist_front_;
+  } else {
+    // previous back of the freelist points to new back
+    sparse_table_[freelist_back_].SetIndex(handle.Index());
+    // new freelist back is stored
+    freelist_back_ = handle.Index();
+  }
 
-    // remove the component by swapping with the last element, then pop_back
-    if (inner_index != items_.size() - 1) {
-        std::swap(items_[inner_index], items_.back());
-        std::swap(meta_[inner_index], meta_.back());
+  // remove the component by swapping with the last element, then pop_back
+  if (inner_index != items_.size() - 1) {
+    std::swap(items_[inner_index], items_.back());
+    std::swap(meta_[inner_index], meta_.back());
 
-        // fix the ComponentId index of the swapped component
-        sparse_table_[meta_[inner_index].dense_to_sparse].SetIndex(inner_index);
-    }
+    // fix the ComponentId index of the swapped component
+    sparse_table_[meta_[inner_index].dense_to_sparse].SetIndex(inner_index);
+  }
 
-    items_.pop_back();
-    meta_.pop_back();
+  items_.pop_back();
+  meta_.pop_back();
 
-    return 1;
+  return 1;
 }
 
 template <typename T>
 auto ResourceTable<T>::EraseItems(const HandleSet& handles) -> size_t
 {
-    size_t count = 0;
-    for (const auto& handle : handles) {
-        count += Erase(handle);
-    }
-    return count;
+  size_t count = 0;
+  for (const auto& handle : handles) {
+    count += Erase(handle);
+  }
+  return count;
 }
 
-template <typename T>
-void ResourceTable<T>::Clear() noexcept
+template <typename T> void ResourceTable<T>::Clear() noexcept
 {
-    if (const uint32_t size = detail::NewIndex(sparse_table_); size > 0) {
-        items_.clear();
-        meta_.clear();
-
-        freelist_front_ = 0;
-        freelist_back_ = size - 1;
-        fragmented_ = false;
-
-        for (uint32_t index = 0; index < size; ++index) {
-            auto& handle = sparse_table_[index];
-            handle.SetFree(true);
-            handle.NewGeneration();
-            handle.SetIndex(index + 1);
-        }
-        sparse_table_[size - 1].SetIndex(ResourceHandle::kInvalidIndex);
-    }
-}
-
-template <typename T>
-void ResourceTable<T>::Reset() noexcept
-{
-    freelist_front_ = ResourceHandle::kIndexMax;
-    freelist_back_ = ResourceHandle::kIndexMax;
-    fragmented_ = false;
-
+  if (const uint32_t size = detail::NewIndex(sparse_table_); size > 0) {
     items_.clear();
     meta_.clear();
-    sparse_table_.clear();
+
+    freelist_front_ = 0;
+    freelist_back_ = size - 1;
+    fragmented_ = false;
+
+    for (uint32_t index = 0; index < size; ++index) {
+      auto& handle = sparse_table_[index];
+      handle.SetFree(true);
+      handle.NewGeneration();
+      handle.SetIndex(index + 1);
+    }
+    sparse_table_[size - 1].SetIndex(ResourceHandle::kInvalidIndex);
+  }
+}
+
+template <typename T> void ResourceTable<T>::Reset() noexcept
+{
+  freelist_front_ = ResourceHandle::kIndexMax;
+  freelist_back_ = ResourceHandle::kIndexMax;
+  fragmented_ = false;
+
+  items_.clear();
+  meta_.clear();
+  sparse_table_.clear();
 }
 
 template <typename T>
 template <typename Compare>
-auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps) -> size_t
+auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps)
+  -> size_t
 {
-    if (!fragmented_) {
-        return 0;
+  if (!fragmented_) {
+    return 0;
+  }
+  size_t swaps = 0;
+
+  int index = 1;
+  // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
+  for (; index < items_.size() && (max_swaps == 0 || swaps < max_swaps);
+    ++index) {
+    T tmp = items_[index];
+    Meta tmp_meta = meta_[index];
+
+    int i = index - 1;
+    int j1 = i + 1;
+
+    // trivially copyable implementation
+    if (std::is_trivially_copyable_v<T>) {
+      while (i >= 0 && comp(items_[i], tmp)) {
+        sparse_table_[meta_[i].dense_to_sparse].SetIndex(j1);
+        --i;
+        --j1;
+      }
+      if (j1 != index) {
+        std::memmove(&items_[j1 + 1], &items_[j1], sizeof(T) * (index - j1));
+        std::memmove(&meta_[j1 + 1], &meta_[j1], sizeof(Meta) * (index - j1));
+        ++swaps;
+
+        items_[j1] = std::move(tmp);
+        meta_[j1] = tmp_meta;
+        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+      }
     }
-    size_t swaps = 0;
+    // standard implementation
+    else {
+      while (i >= 0 && (max_swaps == 0 || swaps < max_swaps)
+        && comp(items_[i], tmp)) {
+        items_[j1] = std::move(items_[i]);
+        meta_[j1] = std::move(meta_[i]);
+        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+        --i;
+        --j1;
+        ++swaps;
+      }
 
-    int index = 1;
-    // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
-    for (; index < items_.size() && (max_swaps == 0 || swaps < max_swaps);
-        ++index) {
-        T tmp = items_[index];
-        Meta tmp_meta = meta_[index];
-
-        int i = index - 1;
-        int j1 = i + 1;
-
-        // trivially copyable implementation
-        if (std::is_trivially_copyable_v<T>) {
-            while (i >= 0 && comp(items_[i], tmp)) {
-                sparse_table_[meta_[i].dense_to_sparse].SetIndex(j1);
-                --i;
-                --j1;
-            }
-            if (j1 != index) {
-                std::memmove(&items_[j1 + 1], &items_[j1], sizeof(T) * (index - j1));
-                std::memmove(&meta_[j1 + 1], &meta_[j1], sizeof(Meta) * (index - j1));
-                ++swaps;
-
-                items_[j1] = std::move(tmp);
-                meta_[j1] = tmp_meta;
-                sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
-            }
-        }
-        // standard implementation
-        else {
-            while (i >= 0 && (max_swaps == 0 || swaps < max_swaps)
-                && comp(items_[i], tmp)) {
-                items_[j1] = std::move(items_[i]);
-                meta_[j1] = std::move(meta_[i]);
-                sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
-                --i;
-                --j1;
-                ++swaps;
-            }
-
-            if (j1 != index) {
-                items_[j1] = std::move(tmp);
-                meta_[j1] = std::move(tmp_meta);
-                sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
-            }
-        }
+      if (j1 != index) {
+        items_[j1] = std::move(tmp);
+        meta_[j1] = std::move(tmp_meta);
+        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+      }
     }
+  }
 
-    // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
-    if (index == items_.size()) {
-        fragmented_ = false;
-    }
+  // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
+  if (index == items_.size()) {
+    fragmented_ = false;
+  }
 
-    return swaps;
+  return swaps;
 }
 
 } // namespace oxygen
