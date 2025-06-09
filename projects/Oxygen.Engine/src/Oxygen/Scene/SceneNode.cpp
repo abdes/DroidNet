@@ -7,7 +7,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
-#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -18,392 +17,301 @@ using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
 
-// NodeData and SceneNodeImpl implementations moved to SceneNodeImpl.cpp
-
-SceneNode::SceneNode(const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak)
-    : Resource(handle)
-    , scene_weak_(std::move(scene_weak))
-{
-}
-
-// --- SceneNode SafeCall wrappers and validator ---
-
-namespace oxygen::scene {
-
-auto SceneNode::ValidateForSafeCall() const noexcept -> std::optional<std::string>
-{
-    if (scene_weak_.expired()) {
-        return "Scene is expired";
-    }
-    if (!IsValid()) {
-        return "SceneNode is invalid";
-    }
-    return std::nullopt;
-}
+// =============================================================================
+// SceneNode Validator Implementations
+// =============================================================================
 
 void SceneNode::LogSafeCallError(const char* reason) const noexcept
 {
-    try {
-        DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",
-            nostd::to_string(GetHandle()), reason);
-    } catch (...) {
-        // If logging fails, we can do nothing about it
-        (void)0;
+  try {
+    DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",
+      nostd::to_string(*this), reason);
+  } catch (...) {
+    // If logging fails, we can do nothing about it
+    (void)0;
+  }
+}
+
+//! Base validator for Transform operations, following Scene's pattern
+class SceneNode::BaseNodeValidator {
+public:
+  explicit BaseNodeValidator(const SceneNode& node) noexcept
+    : node_(&node)
+  {
+  }
+
+protected:
+  [[nodiscard]] auto GetNode() const noexcept -> const SceneNode&
+  {
+    return *node_;
+  }
+
+  [[nodiscard]] auto GetScene() const noexcept -> Scene*
+  {
+    DCHECK_F(!node_->scene_weak_.expired());
+    return node_->scene_weak_.lock().get();
+  }
+
+  [[nodiscard]] auto GetResult() noexcept -> std::optional<std::string>
+  {
+    return std::move(result_);
+  }
+
+  auto CheckSceneNotExpired(SafeCallState& state) -> bool
+  {
+    if (node_->scene_weak_.expired()) [[unlikely]] {
+      result_ = fmt::format(
+        "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
+      return false;
     }
-}
+    state.scene = node_->scene_weak_.lock().get();
+    result_.reset();
+    return true;
+  }
 
-auto SceneNode::Transform::SetLocalTransform(const Vec3& position, const Quat& rotation, const Vec3& scale) noexcept -> bool
+  auto CheckNodeIsValid() -> bool
+  {
+    // In debug mode, we can also explicitly check if the node is valid.
+    // This is not strictly needed, as nodes_ table will check if the handle
+    // is within bounds (i.e. valid), but it can help troubleshoot exactly
+    // the reason why validation failed.
+    if (!GetNode().IsValid()) [[unlikely]] {
+      result_ = fmt::format(
+        "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
+      return false;
+    }
+    result_.reset();
+    return true;
+  }
+
+  auto PopulateStateWithNodeImpl(SafeCallState& state) -> bool
+  {
+    // Then check if the node is still in the scene node table, and retrieve
+    // its implementation object.
+    try {
+      state.scene = GetScene();
+      auto& impl_ref = state.scene->GetNodeImplRefUnsafe(node_->GetHandle());
+      state.node_impl = &impl_ref;
+      result_.reset();
+      return true;
+    } catch (const std::exception&) {
+      result_ = fmt::format("node({}) is no longer in scene",
+        nostd::to_string(GetNode().GetHandle()));
+      node_->Invalidate();
+      return false;
+    }
+  }
+
+private:
+  std::optional<std::string> result_ {};
+  const SceneNode* node_;
+};
+
+//! A validator that checks if a SceneNode is valid and belongs to the \p scene.
+class SceneNode::NodeIsValidValidator : public BaseNodeValidator {
+public:
+  explicit NodeIsValidValidator(const SceneNode& node) noexcept
+    : BaseNodeValidator(node)
+  {
+  }
+
+  auto operator()(SafeCallState& state) -> std::optional<std::string>
+  {
+    state.node = const_cast<SceneNode*>(&GetNode());
+    if (CheckSceneNotExpired(state) && CheckNodeIsValid()) [[likely]] {
+      return std::nullopt;
+    }
+    return GetResult();
+  }
+};
+
+//! A validator that checks if a SceneNode is valid and belongs to the \p scene.
+class SceneNode::NodeIsValidAndInSceneValidator : public BaseNodeValidator {
+public:
+  explicit NodeIsValidAndInSceneValidator(const SceneNode& node) noexcept
+    : BaseNodeValidator(node)
+  {
+  }
+
+  auto operator()(SafeCallState& state) -> std::optional<std::string>
+  {
+    state.node = const_cast<SceneNode*>(&GetNode());
+    if (CheckSceneNotExpired(state) && CheckNodeIsValid()
+      && PopulateStateWithNodeImpl(state)) [[likely]] {
+      return std::nullopt;
+    }
+    return GetResult();
+  }
+};
+
+auto SceneNode::NodeIsValid() const -> NodeIsValidValidator
 {
-    return SafeCall([&](const State& state) {
-        state.transform_component->SetLocalTransform(position, rotation, scale);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
+  return NodeIsValidValidator { *this };
 }
 
-auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept -> bool
+auto SceneNode::NodeIsValidAndInScene() const -> NodeIsValidAndInSceneValidator
 {
-    return SafeCall([&](const State& state) {
-        state.transform_component->SetLocalPosition(position);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
+  return NodeIsValidAndInSceneValidator { *this };
 }
 
-auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept -> bool
+// =============================================================================
+// SceneNode Implementations
+// =============================================================================
+
+SceneNode::SceneNode(
+  const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak)
+  : Resource(handle)
+  , scene_weak_(std::move(scene_weak))
 {
-    return SafeCall([&](const State& state) {
-        state.transform_component->SetLocalRotation(rotation);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
 }
 
-auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
+auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
 {
-    return SafeCall([&](const State& state) {
-        state.transform_component->SetLocalScale(scale);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
+  if (!node.IsValid()) {
+    return "SN(invalid)";
+  }
+#if !defined(NDEBUG)
+  // In debug mode, include the name of the node if it exists
+  const auto impl = node.GetObject();
+  if (!impl) {
+    return fmt::format("SN({}, stale)", to_string_compact(node.GetHandle()));
+  }
+  return fmt::format("SN({}, n='{}')", to_string_compact(node.GetHandle()),
+    impl->get().GetName());
+#else // defined(NDEBUG)
+  return fmt::format("SN({})", to_string_compact(node.GetHandle()));
+#endif // defined(NDEBUG)
 }
-
-auto SceneNode::Transform::GetLocalPosition() const noexcept -> std::optional<Vec3>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetLocalPosition();
-    });
-}
-
-auto SceneNode::Transform::GetLocalRotation() const noexcept -> std::optional<Quat>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetLocalRotation();
-    });
-}
-
-auto SceneNode::Transform::GetLocalScale() const noexcept -> std::optional<Vec3>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetLocalScale();
-    });
-}
-
-auto SceneNode::Transform::Translate(const Vec3& offset, const bool local) noexcept -> bool
-{
-    return SafeCall([&](const State& state) {
-        state.transform_component->Translate(offset, local);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
-}
-
-auto SceneNode::Transform::Rotate(const Quat& rotation, const bool local) noexcept -> bool
-{
-    return SafeCall([&](const State& state) {
-        state.transform_component->Rotate(rotation, local);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
-}
-
-auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
-{
-    return SafeCall([&](const State& state) {
-        state.transform_component->Scale(scale_factor);
-        state.node_impl->MarkTransformDirty();
-    }).has_value();
-}
-
-auto SceneNode::Transform::GetWorldMatrix() const noexcept -> std::optional<Mat4>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetWorldMatrix();
-    });
-}
-
-auto SceneNode::Transform::GetWorldPosition() const noexcept -> std::optional<Vec3>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetWorldPosition();
-    });
-}
-
-auto SceneNode::Transform::GetWorldRotation() const noexcept -> std::optional<Quat>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetWorldRotation();
-    });
-}
-
-auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
-{
-    return SafeCall([](const ConstState& state) {
-        return state.transform_component->GetWorldScale();
-    });
-}
-
-template <typename Func>
-auto SceneNode::SafeCall(Func&& func) const noexcept
-{
-    return oxygen::SafeCall(
-        *this,
-        [this](const SceneNode&) { return this->ValidateForSafeCall(); },
-        std::forward<Func>(func));
-}
-
-template <typename Func>
-auto SceneNode::SafeCall(Func&& func) noexcept
-{
-    return oxygen::SafeCall(
-        *this,
-        [this](SceneNode&) { return this->ValidateForSafeCall(); },
-        std::forward<Func>(func));
-}
-
-} // namespace oxygen::scene
 
 auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToImpl {
-        const auto scene = n.scene_weak_.lock();
-        return scene->GetNodeImpl(n);
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> OptionalConstRefToImpl {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetNodeImplRefUnsafe(GetHandle());
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> OptionalRefToImpl {
-        const auto cref = n.GetObject();
-        if (cref.has_value()) {
-            return std::optional {
-                std::ref(const_cast<SceneNodeImpl&>(cref->get())) // NOLINT(*-pro-type-const-cast)
-            };
-        }
-        return std::nullopt;
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> OptionalRefToImpl {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetNodeImplRefUnsafe(GetHandle());
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> OptionalConstRefToFlags {
-        if (const auto impl_opt = n.GetObject()) {
-            return impl_opt->get().GetFlags();
-        }
-        return std::nullopt;
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> OptionalConstRefToFlags {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.node_impl->GetFlags();
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
 {
-    const auto result = SafeCall([&](SceneNode& n) -> OptionalRefToFlags {
-        if (const auto impl_opt = n.GetObject()) {
-            return impl_opt->get().GetFlags();
-        }
-        return std::nullopt;
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> OptionalRefToFlags {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.node_impl->GetFlags();
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
-// Hierarchy navigation methods
 auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
-        const auto scene = n.scene_weak_.lock();
-        return scene->GetParent(n);
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetParentUnsafe(*this, state.node_impl);
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
-        const auto scene = n.scene_weak_.lock();
-        return scene->GetFirstChild(n);
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetFirstChildUnsafe(*this, state.node_impl);
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
-        const auto scene = n.scene_weak_.lock();
-        return scene->GetNextSibling(n);
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetNextSiblingUnsafe(*this, state.node_impl);
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> std::optional<SceneNode> {
-        const auto scene = n.scene_weak_.lock();
-        return scene->GetPrevSibling(n);
+  return SafeCall(NodeIsValidAndInScene(),
+    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->GetPrevSiblingUnsafe(*this, state.node_impl);
     });
-    if (result) {
-        return *result;
-    }
-    return std::nullopt;
 }
 
 auto SceneNode::HasParent() const noexcept -> bool
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> bool {
-        const auto scene = n.scene_weak_.lock();
-        const auto impl = scene->GetNodeImpl(n);
-        // Optimize here, directly access the impl graph data component
-        // to check if the parent is valid.
-        return impl->get().GetComponent<GraphData>().GetParent().IsValid();
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->HasParentUnsafe(*this, state.node_impl);
     });
-    return result.value_or(false);
 }
 
 auto SceneNode::HasChildren() const noexcept -> bool
 {
-    const auto result = SafeCall([&](const SceneNode& n) -> bool {
-        const auto scene = n.scene_weak_.lock();
-        const auto impl = scene->GetNodeImpl(n);
-        // Optimize here, directly access the impl graph data component
-        // to check if the first child is valid.
-        return impl->get().GetComponent<GraphData>().GetFirstChild().IsValid();
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, this);
+      DCHECK_NOTNULL_F(state.scene);
+      DCHECK_NOTNULL_F(state.node_impl);
+
+      return state.scene->HasChildrenUnsafe(*this, state.node_impl);
     });
-    return result.value_or(false);
 }
 
-auto SceneNode::IsRoot() const noexcept -> bool
-{
-    const auto result = SafeCall([&](const SceneNode& n) -> bool {
-        const auto scene = n.scene_weak_.lock();
-        const auto impl = scene->GetNodeImpl(n);
-        // Optimize here, directly access the impl graph data component
-        // to check if the parent is valid.
-        return !impl->get().GetComponent<GraphData>().GetParent().IsValid();
-    });
-    return result.value_or(false);
-}
+auto SceneNode::IsRoot() const noexcept -> bool { return !HasParent(); }
 
 auto SceneNode::GetTransform() noexcept -> Transform
 {
-    return Transform(*this);
+  return Transform(*this);
 }
 
 auto SceneNode::GetTransform() const noexcept -> Transform
 {
-    return Transform(const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
-}
-
-auto SceneNode::Transform::LookAt(const Vec3& target_position, const Vec3& up_direction) noexcept -> bool
-{
-    return SafeCall([&](const State& state) {
-        // Get current world position from cached data
-        const auto world_pos = GetWorldPosition();
-        if (!world_pos) {
-            return false;
-        }
-
-        // Compute look-at rotation in world space
-        const auto forward = glm::normalize(target_position - *world_pos);
-        const auto right = glm::normalize(glm::cross(forward, up_direction));
-        const auto up = glm::cross(right, forward);
-
-        // Create rotation matrix (note: -forward because we use -Z as forward)
-        Mat4 look_matrix(1.0F);
-        look_matrix[0] = glm::vec4(right, 0);
-        look_matrix[1] = glm::vec4(up, 0);
-        look_matrix[2] = glm::vec4(-forward, 0);
-
-        // Convert to quaternion and set as local rotation
-        const auto look_rotation = glm::quat_cast(look_matrix);
-
-        state.transform_component->SetLocalRotation(look_rotation);
-        state.node_impl->MarkTransformDirty();
-        return true;
-    }).has_value();
-}
-
-namespace {
-// Template implementation that works with both State types
-template <typename StateT>
-auto ValidateAndPopulateState(SceneNode* node, StateT& state) noexcept -> std::optional<std::string>
-{
-    using oxygen::scene::detail::TransformComponent;
-
-    state.node = node;
-    if (!state.node->IsValid()) {
-        return "node is invalid";
-    }
-    auto node_impl_opt = state.node->GetObject();
-    if (!node_impl_opt) {
-        return "node is expired";
-    }
-    state.node_impl = &node_impl_opt->get();
-#if !defined(NDEBUG)
-    if (!state.node_impl->template HasComponent<TransformComponent>()) {
-        return "missing TransformComponent";
-    }
-#endif // NDEBUG
-    state.transform_component = &state.node_impl->template GetComponent<TransformComponent>();
-    return std::nullopt;
-}
-} // namespace
-
-// Thin wrapper overloads that delegate to the common implementation
-auto SceneNode::Transform::ValidateForSafeCall(State& state) const noexcept
-    -> std::optional<std::string>
-{
-    return ValidateAndPopulateState(node_, state);
-}
-
-auto SceneNode::Transform::ValidateForSafeCall(ConstState& state) const noexcept
-    -> std::optional<std::string>
-{
-    return ValidateAndPopulateState(node_, state);
-}
-
-void SceneNode::Transform::LogSafeCallError(const char* reason) const noexcept
-{
-    try {
-        DLOG_F(ERROR, "Operation on SceneNode::Transform {} failed: {}",
-            nostd::to_string(node_->GetHandle()), reason);
-    } catch (...) {
-        // If logging fails, we can do nothing about it
-        (void)0;
-    }
+  return Transform(
+    const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
 }

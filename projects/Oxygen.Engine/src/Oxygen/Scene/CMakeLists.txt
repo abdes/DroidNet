@@ -54,6 +54,7 @@ target_sources(
     "SceneTraversal.cpp"
     "SceneFlags.cpp"
     "SceneNode.cpp"
+    "SceneNode_Transform.cpp"
     "SceneNodeImpl.cpp"
     "Detail/NodeData.h"
     "Detail/GraphData.h"
@@ -81,7 +82,7 @@ target_compile_definitions(
     GLM_ENABLE_EXPERIMENTAL
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_GFX_STATIC>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SCN_STATIC>
 )
 
 target_link_libraries(

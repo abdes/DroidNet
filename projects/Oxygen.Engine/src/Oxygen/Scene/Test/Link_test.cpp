@@ -6,6 +6,7 @@
 
 #include <iostream>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Scene.h>
 
 using oxygen::scene::Scene;
@@ -13,10 +14,9 @@ using oxygen::scene::SceneNode;
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-    const auto scene = std::make_shared<Scene>("TestScene");
-    std::cout << "Created scene: " << scene->GetName() << '\n';
-    auto node = scene->CreateNode("TestNode");
-    std::cout << "Created scene node: " << node.GetObject()->get().GetName()
-              << '\n';
-    return 0;
+  const auto scene = std::make_shared<Scene>("TestScene");
+  std::cout << "Created scene: " << scene->GetName() << '\n';
+  auto node = scene->CreateNode("TestNode");
+  std::cout << "Created scene node: " << nostd::to_string(node) << '\n';
+  return 0;
 }
