@@ -4,16 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
-#include <atomic>
-#include <cstdint>
-#include <type_traits>
-#include <vector>
+#pragma once
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstdint>
 
 #include <Oxygen/Scene/SceneFlags.h>
-#include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::scene::AtomicSceneFlags;
 using oxygen::scene::SceneFlag;
@@ -25,27 +20,27 @@ namespace oxygen::scene::testing {
 //! Test enum for SceneFlags.
 //! This enum defines a set of flags used for testing the SceneFlags class.
 enum class TestFlag : uint8_t {
-    kVisible, //!< Represents visibility status.
-    kLocked, //!< Represents locked status.
-    kSelected, //!< Represents selected status.
-    kCount //!< Represents the total number of flags.
+  kVisible, //!< Represents visibility status.
+  kLocked, //!< Represents locked status.
+  kSelected, //!< Represents selected status.
+  kCount //!< Represents the total number of flags.
 };
 static_assert(SceneFlagEnum<TestFlag>);
 [[maybe_unused]] auto constexpr to_string(const TestFlag& value) noexcept
-    -> const char*
+  -> const char*
 {
-    switch (value) {
-    case TestFlag::kVisible:
-        return "Visible";
-    case TestFlag::kLocked:
-        return "Locked";
-    case TestFlag::kSelected:
-        return "Selected";
+  switch (value) {
+  case TestFlag::kVisible:
+    return "Visible";
+  case TestFlag::kLocked:
+    return "Locked";
+  case TestFlag::kSelected:
+    return "Selected";
 
-    case TestFlag::kCount:
-        break; // Sentinel value, not used
-    }
-    return "__NotSupported__";
+  case TestFlag::kCount:
+    break; // Sentinel value, not used
+  }
+  return "__NotSupported__";
 }
 
 } // namespace oxygen::scene::testing
