@@ -12,8 +12,7 @@
 using oxygen::scene::detail::TransformComponent;
 
 void TransformComponent::SetLocalTransform(
-    const Vec3& position, const Quat& rotation,
-    const Vec3& scale) noexcept
+    const Vec3& position, const Quat& rotation, const Vec3& scale) noexcept
 {
     local_position_ = position;
     local_rotation_ = rotation;
@@ -45,7 +44,8 @@ void TransformComponent::SetLocalScale(const Vec3& scale) noexcept
     }
 }
 
-void TransformComponent::Translate(const Vec3& offset, const bool local) noexcept
+void TransformComponent::Translate(
+    const Vec3& offset, const bool local) noexcept
 {
     if (local) {
         // Transform offset by current rotation for local-space translation
@@ -79,7 +79,8 @@ void TransformComponent::Scale(const Vec3& scale_factor) noexcept
 auto TransformComponent::GetLocalMatrix() const -> Mat4
 {
     // Compose TRS matrix: T * R * S
-    const Mat4 translation_matrix = glm::translate(Mat4 { 1.0f }, local_position_);
+    const Mat4 translation_matrix
+        = glm::translate(Mat4 { 1.0f }, local_position_);
     const Mat4 rotation_matrix = glm::mat4_cast(local_rotation_);
     const Mat4 scale_matrix = glm::scale(Mat4 { 1.0f }, local_scale_);
 
@@ -105,10 +106,12 @@ auto TransformComponent::GetWorldMatrix() const -> const Mat4&
 
     // Requires UpdateWorldTransform() to have been called, and the transform
     // component is not dirty (these two conditions are linked).
-    CHECK_F(!is_dirty_, "expecting transforms to be up-to-date for node `{}`. "
-                        "UpdateWorldTransform() has never been called! This TransformComponent "
-                        "must be registered with the scene hierarchy and UpdateWorldTransform() "
-                        "must be called by the SceneManager before accessing world space data.",
+    CHECK_F(!is_dirty_,
+        "expecting transforms to be up-to-date for node `{}`. "
+        "UpdateWorldTransform() has never been called! This TransformComponent "
+        "must be registered with the scene hierarchy and "
+        "UpdateWorldTransform() "
+        "must be called by the SceneManager before accessing world space data.",
         meta_data_ ? meta_data_->GetName() : "unknown");
 
     return world_matrix_;
@@ -148,7 +151,8 @@ auto TransformComponent::GetWorldRotation() const -> Quat
     glm::vec4 perspective;
     // ReSharper restore CppTooWideScopeInitStatement
 
-    if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
+    if (glm::decompose(
+            world, scale, rotation, translation, skew, perspective)) {
         return rotation;
     }
 
@@ -169,7 +173,8 @@ auto TransformComponent::GetWorldScale() const -> Vec3
     glm::vec4 perspective;
     // ReSharper restore CppTooWideScopeInitStatement
 
-    if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
+    if (glm::decompose(
+            world, scale, rotation, translation, skew, perspective)) {
         return scale;
     }
 

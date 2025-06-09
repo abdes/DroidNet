@@ -16,6 +16,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     const auto scene = std::make_shared<Scene>("TestScene");
     std::cout << "Created scene: " << scene->GetName() << '\n';
     auto node = scene->CreateNode("TestNode");
-    std::cout << "Created scene node: " << node.GetObject()->get().GetName() << '\n';
+    std::cout << "Created scene node: " << node.GetObject()->get().GetName()
+              << '\n';
     return 0;
 }

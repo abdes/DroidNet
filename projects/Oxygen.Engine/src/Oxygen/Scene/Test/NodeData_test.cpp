@@ -24,17 +24,23 @@ protected:
     {
         // Arrange: Set up default and custom flags for testing
         default_flags_ = NodeData::Flags {}
-                             .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
-                             .SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(false));
+                             .SetFlag(SceneNodeFlags::kVisible,
+                                 SceneFlag {}.SetEffectiveValueBit(true))
+                             .SetFlag(SceneNodeFlags::kCastsShadows,
+                                 SceneFlag {}.SetEffectiveValueBit(false));
 
         custom_flags_ = NodeData::Flags {}
-                            .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
-                            .SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(true))
-                            .SetFlag(SceneNodeFlags::kReceivesShadows, SceneFlag {}.SetEffectiveValueBit(true));
+                            .SetFlag(SceneNodeFlags::kVisible,
+                                SceneFlag {}.SetEffectiveValueBit(false))
+                            .SetFlag(SceneNodeFlags::kCastsShadows,
+                                SceneFlag {}.SetEffectiveValueBit(true))
+                            .SetFlag(SceneNodeFlags::kReceivesShadows,
+                                SceneFlag {}.SetEffectiveValueBit(true));
     }
 
     // Helper: Validate flags and transform state match expected values
-    static void ExpectNodeDataState(const NodeData& node_data, const NodeData::Flags& expected_flags)
+    static void ExpectNodeDataState(
+        const NodeData& node_data, const NodeData::Flags& expected_flags)
     {
         EXPECT_EQ(node_data.flags_, expected_flags);
     }
@@ -55,19 +61,22 @@ NOLINT_TEST_F(NodeDataTest, Constructor_InitializesWithDefaultFlags)
     // Act: Create NodeData with default flags
     const auto node_data = NodeData(default_flags_);
 
-    // Assert: Verify flags are set correctly and transform_dirty defaults to true
+    // Assert: Verify flags are set correctly and transform_dirty defaults to
+    // true
     EXPECT_EQ(node_data.flags_, default_flags_);
 }
 
 NOLINT_TEST_F(NodeDataTest, Constructor_InitializesWithCustomFlags)
 {
     // Arrange: Use pre-configured custom flags from SetUp
-    // (custom_flags_ configured with visible=false, castsShadows=true, receivesShadows=true)
+    // (custom_flags_ configured with visible=false, castsShadows=true,
+    // receivesShadows=true)
 
     // Act: Create NodeData with custom flags
     const auto node_data = NodeData(custom_flags_);
 
-    // Assert: Verify custom flags are set correctly and transform_dirty defaults to true
+    // Assert: Verify custom flags are set correctly and transform_dirty
+    // defaults to true
     EXPECT_EQ(node_data.flags_, custom_flags_);
 }
 
@@ -77,13 +86,15 @@ NOLINT_TEST_F(NodeDataTest, Constructor_InitializesWithCustomFlags)
 
 NOLINT_TEST_F(NodeDataTest, CopyConstructor_PreservesAllData)
 {
-    // Arrange: Create original NodeData with custom flags and clean transform state
+    // Arrange: Create original NodeData with custom flags and clean transform
+    // state
     auto original = NodeData(custom_flags_);
 
     // Act: Create copy using copy constructor
     const auto copy = NodeData(original);
 
-    // Assert: Verify all data is copied correctly, including the clean transform state
+    // Assert: Verify all data is copied correctly, including the clean
+    // transform state
     ExpectNodeDataState(copy, original.flags_);
 }
 
@@ -110,16 +121,19 @@ NOLINT_TEST_F(NodeDataTest, CopyAssignment_PreservesAllData)
 
 NOLINT_TEST_F(NodeDataTest, MoveConstructor_TransfersDataAndInvalidatesSource)
 {
-    // Arrange: Create original with custom flags and capture expected state before move
+    // Arrange: Create original with custom flags and capture expected state
+    // before move
     auto original = NodeData(custom_flags_);
     const auto expected_flags = original.flags_;
 
     // Act: Move construct new object from original
     const auto moved = NodeData(std::move(original));
 
-    // Assert: Verify data transferred to moved object and original is in valid moved-from state
+    // Assert: Verify data transferred to moved object and original is in valid
+    // moved-from state
     ExpectNodeDataState(moved, expected_flags);
-    // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from object
+    // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from
+    // object
     EXPECT_FALSE(original.flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
 }
 
@@ -137,9 +151,11 @@ NOLINT_TEST_F(NodeDataTest, MoveAssignment_TransfersDataAndInvalidatesSource)
     // Act: Move assign original to target
     target = std::move(original);
 
-    // Assert: Verify data transferred to target and original is in valid moved-from state
+    // Assert: Verify data transferred to target and original is in valid
+    // moved-from state
     ExpectNodeDataState(target, expected_flags);
-    // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from object
+    // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from
+    // object
     EXPECT_FALSE(original.flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
 }
 
@@ -153,10 +169,12 @@ NOLINT_TEST_F(NodeDataTest, SelfMoveAssignment_HandledCorrectly)
     auto node_data = NodeData(custom_flags_);
     const auto expected_flags = node_data.flags_;
 
-    // Act: Perform self move-assignment (edge case that should be handled gracefully)
+    // Act: Perform self move-assignment (edge case that should be handled
+    // gracefully)
     node_data = std::move(node_data); // NOLINT(clang-diagnostic-self-move)
 
-    // Assert: Verify object remains in valid, unchanged state after self-assignment
+    // Assert: Verify object remains in valid, unchanged state after
+    // self-assignment
     ExpectNodeDataState(node_data, expected_flags);
 }
 
@@ -197,10 +215,12 @@ NOLINT_TEST_F(NodeDataTest, Clone_CreatesIndependentCopy)
     const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
 
     // Act: Modify original after cloning to test independence
-    original.flags_.SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true));
+    original.flags_.SetFlag(
+        SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true));
 
     // Assert: Verify clone remains unchanged despite original modifications
-    EXPECT_FALSE(cloned_node_data->flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
+    EXPECT_FALSE(
+        cloned_node_data->flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
 }
 
 //------------------------------------------------------------------------------
@@ -210,11 +230,13 @@ NOLINT_TEST_F(NodeDataTest, Clone_CreatesIndependentCopy)
 NOLINT_TEST_F(NodeDataTest, ComplexFlagConfiguration_CopyAndCloneWork)
 {
     // Arrange: Create NodeData with complex flag configuration
-    const auto complex_flags
-        = NodeData::Flags {}
-              .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
-              .SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(true))
-              .SetFlag(SceneNodeFlags::kReceivesShadows, SceneFlag {}.SetEffectiveValueBit(true));
+    const auto complex_flags = NodeData::Flags {}
+                                   .SetFlag(SceneNodeFlags::kVisible,
+                                       SceneFlag {}.SetEffectiveValueBit(false))
+                                   .SetFlag(SceneNodeFlags::kCastsShadows,
+                                       SceneFlag {}.SetEffectiveValueBit(true))
+                                   .SetFlag(SceneNodeFlags::kReceivesShadows,
+                                       SceneFlag {}.SetEffectiveValueBit(true));
     auto node_data = NodeData(complex_flags);
 
     // Act: Test both copy constructor and cloning with complex flags
@@ -247,11 +269,13 @@ NOLINT_TEST_F(NodeDataTest, AllFlagsDefaultConfiguration_CloneWorks)
     ExpectNodeDataState(*cloned_node_data, all_default);
 }
 
-NOLINT_TEST_F(NodeDataTest, FlagModificationAfterConstruction_ClonePreservesModifications)
+NOLINT_TEST_F(
+    NodeDataTest, FlagModificationAfterConstruction_ClonePreservesModifications)
 {
     // Arrange: Create NodeData and modify flags after construction
     auto node_data = NodeData(default_flags_);
-    node_data.flags_.SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(true));
+    node_data.flags_.SetFlag(
+        SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(true));
 
     // Act: Clone NodeData with post-construction modifications
     const auto cloned = node_data.Clone();
@@ -259,7 +283,8 @@ NOLINT_TEST_F(NodeDataTest, FlagModificationAfterConstruction_ClonePreservesModi
     const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
 
     // Assert: Verify clone preserves the modified flag state
-    EXPECT_TRUE(cloned_node_data->flags_.GetEffectiveValue(SceneNodeFlags::kCastsShadows));
+    EXPECT_TRUE(cloned_node_data->flags_.GetEffectiveValue(
+        SceneNodeFlags::kCastsShadows));
 }
 
 } // namespace

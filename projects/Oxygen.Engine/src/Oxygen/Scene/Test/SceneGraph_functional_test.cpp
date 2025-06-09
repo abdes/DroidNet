@@ -50,18 +50,21 @@ protected:
     [[nodiscard]] auto CreateGameObject(const std::string& name,
         const glm::vec3& position = { 0.0f, 0.0f, 0.0f },
         const glm::vec3& scale = { 1.0f, 1.0f, 1.0f },
-        const bool visible = true,
-        const bool static_obj = false) const -> SceneNode
+        const bool visible = true, const bool static_obj = false) const
+        -> SceneNode
     {
         const auto flags
             = SceneNode::Flags {}
-                  .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(visible))
-                  .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(static_obj));
+                  .SetFlag(SceneNodeFlags::kVisible,
+                      SceneFlag {}.SetEffectiveValueBit(visible))
+                  .SetFlag(SceneNodeFlags::kStatic,
+                      SceneFlag {}.SetEffectiveValueBit(static_obj));
 
         auto node = scene_->CreateNode(name, flags);
 
         // Set transform if not default
-        if (position != glm::vec3 { 0.0f, 0.0f, 0.0f } || scale != glm::vec3 { 1.0f, 1.0f, 1.0f }) {
+        if (position != glm::vec3 { 0.0f, 0.0f, 0.0f }
+            || scale != glm::vec3 { 1.0f, 1.0f, 1.0f }) {
             auto transform = node.GetTransform();
             transform.SetLocalPosition(position);
             transform.SetLocalScale(scale);
@@ -80,7 +83,8 @@ protected:
 
         for (const auto& child_name : child_names) {
             auto child_opt = scene_->CreateChildNode(parent, child_name);
-            EXPECT_TRUE(child_opt.has_value()) << "Failed to create child: " << child_name;
+            EXPECT_TRUE(child_opt.has_value())
+                << "Failed to create child: " << child_name;
             if (child_opt.has_value()) {
                 children.push_back(child_opt.value());
             }
@@ -91,8 +95,7 @@ protected:
 
     // Helper: Verify node has expected transform values
     static void ExpectTransformValues(const SceneNode& node,
-        const glm::vec3& expected_pos,
-        const glm::vec3& expected_scale)
+        const glm::vec3& expected_pos, const glm::vec3& expected_scale)
     {
         const auto transform = node.GetTransform();
         const auto pos = transform.GetLocalPosition();
@@ -107,7 +110,7 @@ protected:
     // Helper: Verify scene integrity (no dangling references)
     void VerifySceneIntegrity() const
     {
-        for (const auto root_nodes = scene_->GetRootNodes();
+        for (const auto root_nodes = scene_->GetRootHandles();
             const auto& root_handle : root_nodes) {
             auto root_opt = scene_->GetNode(root_handle);
             ASSERT_TRUE(root_opt.has_value());
@@ -133,19 +136,22 @@ protected:
                 }
                 current_child = current_child->GetNextSibling();
             }
-            EXPECT_TRUE(found_in_parent) << "Node not found in parent's children list";
+            EXPECT_TRUE(found_in_parent)
+                << "Node not found in parent's children list";
         } else {
             EXPECT_TRUE(node.IsRoot());
         }
 
         // Verify sibling consistency
-        if (auto next_sibling = node.GetNextSibling(); next_sibling.has_value()) {
+        if (auto next_sibling = node.GetNextSibling();
+            next_sibling.has_value()) {
             auto prev_of_next = next_sibling->GetPrevSibling();
             ASSERT_TRUE(prev_of_next.has_value());
             EXPECT_EQ(prev_of_next->GetHandle(), node.GetHandle());
         }
 
-        if (auto prev_sibling = node.GetPrevSibling(); prev_sibling.has_value()) {
+        if (auto prev_sibling = node.GetPrevSibling();
+            prev_sibling.has_value()) {
             auto next_of_prev = prev_sibling->GetNextSibling();
             ASSERT_TRUE(next_of_prev.has_value());
             EXPECT_EQ(next_of_prev->GetHandle(), node.GetHandle());
@@ -172,7 +178,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
     EXPECT_EQ(scene_->GetNodeCount(), 0);
 
     // Act: Create a game object
-    auto player = CreateGameObject("Player", { 10.0f, 5.0f, 0.0f }, { 1.5f, 1.5f, 1.5f });
+    auto player = CreateGameObject(
+        "Player", { 10.0f, 5.0f, 0.0f }, { 1.5f, 1.5f, 1.5f });
 
     // Assert: Node should be created correctly
     EXPECT_TRUE(player.IsValid());
@@ -200,7 +207,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
     EXPECT_EQ(scene_->GetNodeCount(), 0);
 }
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, NodePersistence_HandleValidityAcrossOperations)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, NodePersistence_HandleValidityAcrossOperations)
 {
     // Arrange: Create multiple nodes
     const auto enemy1 = CreateGameObject("Enemy1");
@@ -223,7 +231,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodePersistence_HandleValidityAcrossOper
     // Act: Destroy one node and verify handles update appropriately
     scene_->DestroyNode(enemy2);
 
-    // Assert: Destroyed node handle should be invalid, others should remain valid
+    // Assert: Destroyed node handle should be invalid, others should remain
+    // valid
     EXPECT_FALSE(scene_->GetNode(enemy2_handle).has_value());
     EXPECT_TRUE(scene_->GetNode(enemy1_handle).has_value());
     EXPECT_TRUE(enemy1.IsValid());
@@ -235,10 +244,13 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodePersistence_HandleValidityAcrossOper
 // Hierarchy Management Functional Tests
 //------------------------------------------------------------------------------
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, GameObjectHierarchy_ParentChildRelationships)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, GameObjectHierarchy_ParentChildRelationships)
 {
     // Arrange: Create a vehicle hierarchy (Vehicle -> Body, Wheels)
-    auto [vehicle, parts] = CreateHierarchy("Vehicle", { "Body", "FrontLeftWheel", "FrontRightWheel", "RearLeftWheel", "RearRightWheel" });
+    auto [vehicle, parts] = CreateHierarchy("Vehicle",
+        { "Body", "FrontLeftWheel", "FrontRightWheel", "RearLeftWheel",
+            "RearRightWheel" });
     ASSERT_EQ(parts.size(), 5);
 
     // Assert: Verify hierarchy structure
@@ -267,7 +279,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, GameObjectHierarchy_ParentChildRelations
 NOLINT_TEST_F(SceneGraphFunctionalTest, ComplexHierarchy_MultiLevelNesting)
 {
     // Arrange: Create a complex scene hierarchy step by step
-    // World -> Player -> (Head, Body -> (LeftArm, RightArm), Legs -> (LeftLeg, RightLeg))
+    // World -> Player -> (Head, Body -> (LeftArm, RightArm), Legs -> (LeftLeg,
+    // RightLeg))
     auto world = CreateGameObject("World");
 
     // Act: Create Player as child of World
@@ -300,49 +313,58 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, ComplexHierarchy_MultiLevelNesting)
     ASSERT_TRUE(left_leg_opt.has_value());
     ASSERT_TRUE(right_leg_opt.has_value());
 
-    // Assert: Verify final total node count (World + Player + Head + Body + Legs + LeftArm + RightArm + LeftLeg + RightLeg = 9)
+    // Assert: Verify final total node count (World + Player + Head + Body +
+    // Legs + LeftArm + RightArm + LeftLeg + RightLeg = 9)
     EXPECT_EQ(scene_->GetNodeCount(), 9)
-        << "Final count: World + Player + Head + Body + Legs + 2 Arms + 2 Legs = 9 nodes";
+        << "Final count: World + Player + Head + Body + Legs + 2 Arms + 2 Legs "
+           "= 9 nodes";
 
     // Assert: Verify hierarchy structure at each level
     EXPECT_TRUE(world.IsRoot()) << "World should be root";
     EXPECT_FALSE(world.HasParent()) << "World should have no parent";
     EXPECT_TRUE(world.HasChildren()) << "World should have children";
-    EXPECT_EQ(scene_->GetChildrenCount(world), 1) << "World should have 1 child";
+    EXPECT_EQ(scene_->GetChildrenCount(world), 1)
+        << "World should have 1 child";
 
     EXPECT_FALSE(player.IsRoot()) << "Player should not be root";
     EXPECT_TRUE(player.HasParent()) << "Player should have parent";
     EXPECT_TRUE(player.HasChildren()) << "Player should have children";
-    EXPECT_EQ(scene_->GetChildrenCount(player), 3) << "Player should have 3 children";
+    EXPECT_EQ(scene_->GetChildrenCount(player), 3)
+        << "Player should have 3 children";
 
     EXPECT_FALSE(body.IsRoot()) << "Body should not be root";
     EXPECT_TRUE(body.HasParent()) << "Body should have parent";
     EXPECT_TRUE(body.HasChildren()) << "Body should have children";
-    EXPECT_EQ(scene_->GetChildrenCount(body), 2) << "Body should have 2 children";
+    EXPECT_EQ(scene_->GetChildrenCount(body), 2)
+        << "Body should have 2 children";
 
     EXPECT_FALSE(legs.IsRoot()) << "Legs should not be root";
     EXPECT_TRUE(legs.HasParent()) << "Legs should have parent";
     EXPECT_TRUE(legs.HasChildren()) << "Legs should have children";
-    EXPECT_EQ(scene_->GetChildrenCount(legs), 2) << "Legs should have 2 children";
+    EXPECT_EQ(scene_->GetChildrenCount(legs), 2)
+        << "Legs should have 2 children";
 
     EXPECT_FALSE(head.IsRoot()) << "Head should not be root";
     EXPECT_TRUE(head.HasParent()) << "Head should have parent";
     EXPECT_FALSE(head.HasChildren()) << "Head should have no children";
-    EXPECT_EQ(scene_->GetChildrenCount(head), 0) << "Head should have 0 children";
+    EXPECT_EQ(scene_->GetChildrenCount(head), 0)
+        << "Head should have 0 children";
 
     // Assert: Verify only World should be in root nodes collection
-    auto final_root_nodes = scene_->GetRootNodes();
+    auto final_root_nodes = scene_->GetRootHandles();
     EXPECT_EQ(final_root_nodes.size(), 1) << "Should have exactly 1 root node";
-    EXPECT_EQ(final_root_nodes[0], world.GetHandle()) << "World should be the only root node";
+    EXPECT_EQ(final_root_nodes[0], world.GetHandle())
+        << "World should be the only root node";
 
     // Assert: Verify scene integrity after complex hierarchy creation
     VerifySceneIntegrity();
 }
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, HierarchyDestruction_CascadingCleanup)
+NOLINT_TEST_F(SceneGraphFunctionalTest, HierarchyDestruction_EntireSceneGraph)
 {
     // Arrange: Create a hierarchy with nested objects
-    auto [root, children] = CreateHierarchy("RootObject", { "Child1", "Child2", "Child3" });
+    auto [root, children]
+        = CreateHierarchy("RootObject", { "Child1", "Child2", "Child3" });
 
     // Add grandchildren to first child
     auto child1 = children[0];
@@ -372,6 +394,94 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, HierarchyDestruction_CascadingCleanup)
     EXPECT_FALSE(grandchild2.GetObject().has_value());
 }
 
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, HierarchyDestruction_SubtreeInMultiRootScene)
+{
+    // Arrange: Create a multi-root scene graph with multiple independent
+    // hierarchies
+    auto [root1, children1]
+        = CreateHierarchy("RootObject1", { "Child1A", "Child1B" });
+    auto [root2, children2]
+        = CreateHierarchy("RootObject2", { "Child2A", "Child2B", "Child2C" });
+    auto [root3, children3] = CreateHierarchy("RootObject3", { "Child3A" });
+
+    // Create grandchildren under Child1A to make it a deeper subtree
+    auto grandchild1A1_opt
+        = scene_->CreateChildNode(children1[0], "GrandChild1A1");
+    auto grandchild1A2_opt
+        = scene_->CreateChildNode(children1[0], "GrandChild1A2");
+    ASSERT_TRUE(grandchild1A1_opt.has_value());
+    ASSERT_TRUE(grandchild1A2_opt.has_value());
+
+    auto grandchild1A1 = grandchild1A1_opt.value();
+    auto grandchild1A2 = grandchild1A2_opt.value();
+
+    // Arrange: Verify initial scene state
+    EXPECT_EQ(scene_->GetNodeCount(),
+        11); // 3 roots + 6 children + 2 grandchildren = 11
+    auto initial_roots = scene_->GetRootHandles();
+    EXPECT_EQ(initial_roots.size(), 3) << "Should have exactly 3 root nodes";
+
+    // Verify each root has expected children
+    EXPECT_EQ(scene_->GetChildrenCount(root1), 2)
+        << "Root1 should have 2 children";
+    EXPECT_EQ(scene_->GetChildrenCount(root2), 3)
+        << "Root2 should have 3 children";
+    EXPECT_EQ(scene_->GetChildrenCount(root3), 1)
+        << "Root3 should have 1 child";
+
+    // Verify Child1A has grandchildren
+    EXPECT_EQ(scene_->GetChildrenCount(children1[0]), 2)
+        << "Child1A should have 2 grandchildren";
+
+    // Act: Destroy Child1A subtree (which includes its grandchildren)
+    auto destruction_result = scene_->DestroyNodeHierarchy(children1[0]);
+
+    // Assert: Only the Child1A subtree should be destroyed (Child1A + 2
+    // grandchildren = 3 nodes)
+    EXPECT_TRUE(destruction_result);
+    EXPECT_EQ(scene_->GetNodeCount(), 8)
+        << "Should have 11 - 3 = 8 nodes remaining";
+
+    // Assert: Root1 and its other children should still exist
+    EXPECT_TRUE(root1.IsValid());
+    EXPECT_TRUE(children1[1].IsValid()) << "Child1B should still exist";
+
+    // Assert: Root1 should still be a root but with fewer children
+    EXPECT_TRUE(root1.IsRoot());
+    EXPECT_EQ(scene_->GetChildrenCount(root1), 1)
+        << "Root1 should now have 1 child (Child1B)";
+
+    // Assert: Other root hierarchies should be completely unaffected
+    EXPECT_TRUE(root2.IsValid());
+    EXPECT_TRUE(children2[0].IsValid()) << "Child2A should still exist";
+    EXPECT_TRUE(children2[1].IsValid()) << "Child2B should still exist";
+    EXPECT_TRUE(children2[2].IsValid()) << "Child2C should still exist";
+    EXPECT_EQ(scene_->GetChildrenCount(root2), 3)
+        << "Root2 should still have 3 children";
+
+    EXPECT_TRUE(root3.IsValid());
+    EXPECT_TRUE(children3[0].IsValid()) << "Child3A should still exist";
+    EXPECT_EQ(scene_->GetChildrenCount(root3), 1)
+        << "Root3 should still have 1 child";
+
+    // Assert: Scene should still have 3 root nodes
+    auto final_roots = scene_->GetRootHandles();
+    EXPECT_EQ(final_roots.size(), 3)
+        << "Should still have exactly 3 root nodes";
+
+    // Assert: Destroyed subtree nodes should be invalid
+    EXPECT_FALSE(children1[0].GetObject().has_value())
+        << "Child1A should be destroyed";
+    EXPECT_FALSE(grandchild1A1.GetObject().has_value())
+        << "GrandChild1A1 should be destroyed";
+    EXPECT_FALSE(grandchild1A2.GetObject().has_value())
+        << "GrandChild1A2 should be destroyed";
+
+    // Assert: Verify scene integrity after partial destruction
+    VerifySceneIntegrity();
+}
+
 //------------------------------------------------------------------------------
 // Transform System Integration Tests
 //------------------------------------------------------------------------------
@@ -379,7 +489,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, HierarchyDestruction_CascadingCleanup)
 NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
 {
     // Arrange: Create parent-child hierarchy with transforms
-    auto parent = CreateGameObject("Parent", { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
+    auto parent = CreateGameObject(
+        "Parent", { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
     const auto child_opt = scene_->CreateChildNode(parent, "Child");
     ASSERT_TRUE(child_opt.has_value());
     auto child = child_opt.value();
@@ -401,16 +512,20 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
     parent_impl.GetComponent<TransformComponent>().UpdateWorldTransformAsRoot();
 
     // Update child transform with parent matrix
-    const auto& parent_transform_component = parent_impl.GetComponent<TransformComponent>();
-    auto& child_transform_component = child_impl.GetComponent<TransformComponent>();
-    child_transform_component.UpdateWorldTransform(parent_transform_component.GetWorldMatrix());
+    const auto& parent_transform_component
+        = parent_impl.GetComponent<TransformComponent>();
+    auto& child_transform_component
+        = child_impl.GetComponent<TransformComponent>();
+    child_transform_component.UpdateWorldTransform(
+        parent_transform_component.GetWorldMatrix());
 
     // Assert: Verify world space computations
     const auto child_world_pos = child_transform_component.GetWorldPosition();
     const auto child_world_scale = child_transform_component.GetWorldScale();
 
     // Expected: parent_pos + (parent_rotation * (parent_scale * child_pos))
-    // Since no rotation: (10,20,30) + (2,2,2) * (5,10,15) = (10,20,30) + (10,20,30) = (20,40,60)
+    // Since no rotation: (10,20,30) + (2,2,2) * (5,10,15) = (10,20,30) +
+    // (10,20,30) = (20,40,60)
     EXPECT_EQ(child_world_pos, glm::vec3(20.0f, 40.0f, 60.0f));
 
     // Expected: parent_scale * child_scale = (2,2,2) * (0.5,0.5,0.5) = (1,1,1)
@@ -429,10 +544,12 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
     // Apply local translation (should be in object's local space)
     const auto impl_opt = object.GetObject();
     ASSERT_TRUE(impl_opt.has_value());
-    auto& transform_component = impl_opt->get().GetComponent<TransformComponent>();
+    auto& transform_component
+        = impl_opt->get().GetComponent<TransformComponent>();
 
     // Set rotation first
-    const auto rotation = glm::quat(glm::radians(glm::vec3(0.0f, 90.0f, 0.0f))); // 90 degrees around Y
+    const auto rotation = glm::quat(
+        glm::radians(glm::vec3(0.0f, 90.0f, 0.0f))); // 90 degrees around Y
     transform_component.SetLocalRotation(rotation);
 
     // Translate in local space (should be rotated)
@@ -440,7 +557,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
 
     // Assert: Verify the result accounts for rotation
     const auto final_position = transform_component.GetLocalPosition();
-    // Original position (10,0,0) + rotated offset (90° Y rotation of (5,0,0) = (0,0,-5)) = (10,0,-5)
+    // Original position (10,0,0) + rotated offset (90° Y rotation of (5,0,0) =
+    // (0,0,-5)) = (10,0,-5)
     EXPECT_NEAR(final_position.x, 10.0f, 1e-5f);
     EXPECT_NEAR(final_position.y, 0.0f, 1e-5f);
     EXPECT_NEAR(final_position.z, -5.0f, 1e-5f);
@@ -450,12 +568,15 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
 // Flag System Integration Tests
 //------------------------------------------------------------------------------
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, FlagInheritance_ParentToChildPropagation)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, FlagInheritance_ParentToChildPropagation)
 {
     // Arrange: Create parent with specific flags
     const auto parent_flags = SceneNode::Flags {}
-                                  .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
-                                  .SetFlag(SceneNodeFlags::kCastsShadows, SceneFlag {}.SetEffectiveValueBit(true));
+                                  .SetFlag(SceneNodeFlags::kVisible,
+                                      SceneFlag {}.SetEffectiveValueBit(true))
+                                  .SetFlag(SceneNodeFlags::kCastsShadows,
+                                      SceneFlag {}.SetEffectiveValueBit(true));
 
     auto parent = scene_->CreateNode("Parent", parent_flags);
     const auto child_opt = scene_->CreateChildNode(parent, "Child");
@@ -476,7 +597,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, FlagInheritance_ParentToChildPropagation
     auto& parent_impl = parent_impl_opt->get();
     const auto& parent_flags_ref = parent_impl.GetFlags();
 
-    child_flags.UpdateValueFromParent(SceneNodeFlags::kCastsShadows, parent_flags_ref);
+    child_flags.UpdateValueFromParent(
+        SceneNodeFlags::kCastsShadows, parent_flags_ref);
     child_flags.ProcessDirtyFlags();
 
     // Assert: Child should inherit parent's shadow casting flag
@@ -487,8 +609,10 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, FlagInheritance_ParentToChildPropagation
 NOLINT_TEST_F(SceneGraphFunctionalTest, FlagModification_DynamicFlagChanges)
 {
     // Arrange: Create game objects with different visibility states
-    auto visible_object = CreateGameObject("VisibleObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, true);
-    auto hidden_object = CreateGameObject("HiddenObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, false);
+    auto visible_object = CreateGameObject(
+        "VisibleObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, true);
+    auto hidden_object = CreateGameObject(
+        "HiddenObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, false);
 
     // Act: Toggle visibility flags
     const auto visible_impl_opt = visible_object.GetObject();
@@ -525,11 +649,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, LargeSceneManagement_ManyObjects)
     // Act: Create many game objects
     for (std::size_t i = 0; i < object_count; ++i) {
         auto object_name = "GameObject_" + std::to_string(i);
-        auto position = glm::vec3 {
-            static_cast<float>(i % 100),
-            static_cast<float>(i / 100 % 100),
-            static_cast<float>(i / 10000)
-        };
+        auto position = glm::vec3 { static_cast<float>(i % 100),
+            static_cast<float>(i / 100 % 100), static_cast<float>(i / 10000) };
         auto object = CreateGameObject(object_name, position);
         objects.push_back(object);
     }
@@ -540,15 +661,14 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, LargeSceneManagement_ManyObjects)
 
     // Verify random access to objects
     for (std::size_t i = 0; i < 10; ++i) {
-        const auto random_index = i * 101 % object_count; // Pseudo-random access
+        const auto random_index
+            = i * 101 % object_count; // Pseudo-random access
         auto& object = objects[random_index];
         EXPECT_TRUE(object.IsValid());
 
-        auto expected_pos = glm::vec3 {
-            static_cast<float>(random_index % 100),
+        auto expected_pos = glm::vec3 { static_cast<float>(random_index % 100),
             static_cast<float>(random_index / 100 % 100),
-            static_cast<float>(random_index / 10000)
-        };
+            static_cast<float>(random_index / 10000) };
         ExpectTransformValues(object, expected_pos, { 1.0f, 1.0f, 1.0f });
     }
 
@@ -608,7 +728,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, DeepHierarchy_ExtensiveNesting)
 // Error Handling and Edge Cases Tests
 //------------------------------------------------------------------------------
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, ErrorRecovery_InvalidOperationsHandledGracefully)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, ErrorRecovery_InvalidOperationsHandledGracefully)
 {
     // Arrange: Create valid objects
     auto valid_object = CreateGameObject("ValidObject");
@@ -635,9 +756,11 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, ErrorRecovery_InvalidOperationsHandledGr
     EXPECT_TRUE(another_object.GetFlags().has_value());
 }
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_SequentialCreationAndDestruction)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, MemoryManagement_SequentialCreationAndDestruction)
 {
-    // Arrange: Test sequential creation and destruction to avoid Scene state issues
+    // Arrange: Test sequential creation and destruction to avoid Scene state
+    // issues
     constexpr std::size_t total_objects = 100;
 
     for (std::size_t i = 0; i < total_objects; ++i) {
@@ -646,8 +769,10 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_SequentialCreationAndDe
         auto object = CreateGameObject(object_name);
 
         // Assert: Verify object is created correctly
-        ASSERT_TRUE(object.IsValid()) << "Object " << i << " should be created successfully";
-        EXPECT_EQ(scene_->GetNodeCount(), 1) << "Scene should have exactly 1 node";
+        ASSERT_TRUE(object.IsValid())
+            << "Object " << i << " should be created successfully";
+        EXPECT_EQ(scene_->GetNodeCount(), 1)
+            << "Scene should have exactly 1 node";
 
         // Act: Modify object to test functionality
         auto transform = object.GetTransform();
@@ -662,20 +787,25 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_SequentialCreationAndDe
         auto destruction_result = scene_->DestroyNode(object);
 
         // Assert: Destruction should succeed and scene should be empty
-        EXPECT_TRUE(destruction_result) << "Object " << i << " should be destroyed successfully";
-        EXPECT_EQ(scene_->GetNodeCount(), 0) << "Scene should be empty after destroying object " << i;
-        EXPECT_TRUE(scene_->GetRootNodes().empty()) << "Root nodes should be empty after destroying object " << i;
+        EXPECT_TRUE(destruction_result)
+            << "Object " << i << " should be destroyed successfully";
+        EXPECT_EQ(scene_->GetNodeCount(), 0)
+            << "Scene should be empty after destroying object " << i;
+        EXPECT_TRUE(scene_->GetRootHandles().empty())
+            << "Root nodes should be empty after destroying object " << i;
     }
 
     // Assert: Final verification
     EXPECT_EQ(scene_->GetNodeCount(), 0);
-    EXPECT_TRUE(scene_->GetRootNodes().empty());
+    EXPECT_TRUE(scene_->GetRootHandles().empty());
 }
 
-NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperations)
+NOLINT_TEST_F(
+    SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperations)
 {
     // Arrange: Perform bulk creation and destruction with validation
-    constexpr std::size_t iterations = 10; // Reduced to avoid Scene state corruption
+    constexpr std::size_t iterations
+        = 10; // Reduced to avoid Scene state corruption
 
     for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
         constexpr std::size_t objects_per_iteration = 5;
@@ -683,26 +813,27 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperati
 
         // Act: Create objects
         for (std::size_t i = 0; i < objects_per_iteration; ++i) {
-            auto object_name = "TempObject_" + std::to_string(iteration) + "_" + std::to_string(i);
+            auto object_name = "TempObject_" + std::to_string(iteration) + "_"
+                + std::to_string(i);
             auto object = CreateGameObject(object_name);
 
-            // Assert: Verify object creation succeeded before adding to collection
-            ASSERT_TRUE(object.IsValid()) << "Object creation should succeed for " << object_name;
+            // Assert: Verify object creation succeeded before adding to
+            // collection
+            ASSERT_TRUE(object.IsValid())
+                << "Object creation should succeed for " << object_name;
             objects.push_back(object);
         }
 
         // Assert: Verify expected scene state after creation
         EXPECT_EQ(scene_->GetNodeCount(), objects_per_iteration)
-            << "Scene should have exactly " << objects_per_iteration << " nodes after creation in iteration " << iteration;
+            << "Scene should have exactly " << objects_per_iteration
+            << " nodes after creation in iteration " << iteration;
 
         // Act: Modify objects (test that they're functional)
         for (auto& object : objects) {
             auto transform = object.GetTransform();
-            auto position = glm::vec3 {
-                static_cast<float>(iteration),
-                static_cast<float>(iteration),
-                static_cast<float>(iteration)
-            };
+            auto position = glm::vec3 { static_cast<float>(iteration),
+                static_cast<float>(iteration), static_cast<float>(iteration) };
 
             // Only modify if object is still valid
             if (object.IsValid()) {
@@ -715,7 +846,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperati
             if (object.IsValid()) {
                 auto destruction_result = scene_->DestroyNode(object);
                 EXPECT_TRUE(destruction_result)
-                    << "Node destruction should succeed in iteration " << iteration;
+                    << "Node destruction should succeed in iteration "
+                    << iteration;
             }
         }
 
@@ -724,14 +856,15 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperati
             << "Scene should be empty after iteration " << iteration;
 
         // Assert: Verify root nodes collection is also empty
-        auto root_nodes = scene_->GetRootNodes();
+        auto root_nodes = scene_->GetRootHandles();
         EXPECT_TRUE(root_nodes.empty())
-            << "Root nodes collection should be empty after iteration " << iteration;
+            << "Root nodes collection should be empty after iteration "
+            << iteration;
     }
 
     // Assert: Final scene state should be clean
     EXPECT_EQ(scene_->GetNodeCount(), 0);
-    EXPECT_TRUE(scene_->GetRootNodes().empty());
+    EXPECT_TRUE(scene_->GetRootHandles().empty());
 }
 
 } // namespace
@@ -740,8 +873,8 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, MemoryManagement_NoLeaksAfterBulkOperati
 // Additional Cross-Module Scenarios Needed:
 //------------------------------------------------------------------------------
 /*
- * Based on this refactoring, the following additional cross-module test scenarios
- * should be implemented in separate test files:
+ * Based on this refactoring, the following additional cross-module test
+ * scenarios should be implemented in separate test files:
  *
  * 1. **Scene Serialization Tests** (Scene + Serialization Module):
  *    - Save/load complete scene hierarchies with transforms and flags

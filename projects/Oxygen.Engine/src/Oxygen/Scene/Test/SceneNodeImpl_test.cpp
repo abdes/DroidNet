@@ -34,7 +34,8 @@ namespace {
 
 class TestSceneNodeImpl final : public SceneNodeImpl {
 public:
-    explicit TestSceneNodeImpl(const std::string& name = "TestNode", const Flags& flags = kDefaultFlags)
+    explicit TestSceneNodeImpl(const std::string& name = "TestNode",
+        const Flags& flags = kDefaultFlags)
         : SceneNodeImpl(name, flags)
     {
     }
@@ -58,9 +59,9 @@ protected:
     }
 
     // Helper: Verify all flag states match expected values
-    static void ExpectFlagState(
-        const SceneNodeImpl::Flags& flags, const SceneNodeFlags flag,
-        const bool effective, const bool inherited, const bool dirty = false, const bool previous = false)
+    static void ExpectFlagState(const SceneNodeImpl::Flags& flags,
+        const SceneNodeFlags flag, const bool effective, const bool inherited,
+        const bool dirty = false, const bool previous = false)
     {
         EXPECT_EQ(flags.GetEffectiveValue(flag), effective);
         EXPECT_EQ(flags.IsInherited(flag), inherited);
@@ -75,7 +76,8 @@ protected:
 //------------------------------------------------------------------------------
 class SceneNodeImplDefaultFlagsTest : public SceneNodeImplTestBase { };
 
-NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, Construction_InitializesWithCorrectName)
+NOLINT_TEST_F(
+    SceneNodeImplDefaultFlagsTest, Construction_InitializesWithCorrectName)
 {
     // Arrange: Create node with default flags
     const auto node = SceneNodeImpl("TestNode");
@@ -104,7 +106,8 @@ NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_StaticSetCorrectly)
     ExpectFlagState(flags, SceneNodeFlags::kStatic, false, false);
 }
 
-NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_InheritedFlagsSetCorrectly)
+NOLINT_TEST_F(
+    SceneNodeImplDefaultFlagsTest, DefaultFlags_InheritedFlagsSetCorrectly)
 {
     // Arrange: Create node with default flags
     auto node = CreateDefaultNode();
@@ -116,17 +119,20 @@ NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_InheritedFlagsSetCorre
     ExpectFlagState(flags, SceneNodeFlags::kRayCastingSelectable, false, true);
 }
 
-NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_IgnoreParentTransformSetCorrectly)
+NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest,
+    DefaultFlags_IgnoreParentTransformSetCorrectly)
 {
     // Arrange: Create node with default flags
     auto node = CreateDefaultNode();
     const auto& flags = node.GetFlags();
 
     // Act/Assert: IgnoreParentTransform should be false and not inherited
-    ExpectFlagState(flags, SceneNodeFlags::kIgnoreParentTransform, false, false);
+    ExpectFlagState(
+        flags, SceneNodeFlags::kIgnoreParentTransform, false, false);
 }
 
-NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_AllPendingAndDirtyBitsFalse)
+NOLINT_TEST_F(
+    SceneNodeImplDefaultFlagsTest, DefaultFlags_AllPendingAndDirtyBitsFalse)
 {
     // Arrange: Create node with default flags
     auto node = CreateDefaultNode();
@@ -135,19 +141,24 @@ NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_AllPendingAndDirtyBits
     // Act/Assert: All pending, dirty, and previous bits should be false
     for (int i = 0; i < static_cast<int>(SceneNodeFlags::kCount); ++i) {
         const auto flag = static_cast<SceneNodeFlags>(i);
-        EXPECT_FALSE(flags.GetPendingValue(flag)) << "Pending bit should be false for flag " << i;
-        EXPECT_FALSE(flags.IsDirty(flag)) << "Dirty bit should be false for flag " << i;
-        EXPECT_FALSE(flags.GetPreviousValue(flag)) << "Previous bit should be false for flag " << i;
+        EXPECT_FALSE(flags.GetPendingValue(flag))
+            << "Pending bit should be false for flag " << i;
+        EXPECT_FALSE(flags.IsDirty(flag))
+            << "Dirty bit should be false for flag " << i;
+        EXPECT_FALSE(flags.GetPreviousValue(flag))
+            << "Previous bit should be false for flag " << i;
     }
 }
 
-NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, ConstructorWithCustomFlags_PreservesCustomValues)
+NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest,
+    ConstructorWithCustomFlags_PreservesCustomValues)
 {
     // Arrange: Create custom flags with specific values
-    const auto custom_flags
-        = SceneNodeImpl::Flags {}
-              .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false))
-              .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
+    const auto custom_flags = SceneNodeImpl::Flags {}
+                                  .SetFlag(SceneNodeFlags::kVisible,
+                                      SceneFlag {}.SetEffectiveValueBit(false))
+                                  .SetFlag(SceneNodeFlags::kStatic,
+                                      SceneFlag {}.SetEffectiveValueBit(true));
 
     // Act: Construct node with custom flags
     auto node = SceneNodeImpl("CustomNode", custom_flags);
@@ -207,7 +218,8 @@ NOLINT_TEST_F(SceneNodeImplFlagManipulationTest, SetInherited_MakesFlagDirty)
     EXPECT_TRUE(flags.IsInherited(SceneNodeFlags::kVisible));
 }
 
-NOLINT_TEST_F(SceneNodeImplFlagManipulationTest, SetLocalValue_MakesFlagDirtyAndDisablesInheritance)
+NOLINT_TEST_F(SceneNodeImplFlagManipulationTest,
+    SetLocalValue_MakesFlagDirtyAndDisablesInheritance)
 {
     // Arrange: Create node and set flag to inherit
     auto node = CreateDefaultNode();
@@ -222,7 +234,8 @@ NOLINT_TEST_F(SceneNodeImplFlagManipulationTest, SetLocalValue_MakesFlagDirtyAnd
     EXPECT_FALSE(flags.IsInherited(SceneNodeFlags::kStatic));
 }
 
-NOLINT_TEST_F(SceneNodeImplFlagManipulationTest, ProcessDirtyFlag_ClearsDirtyState)
+NOLINT_TEST_F(
+    SceneNodeImplFlagManipulationTest, ProcessDirtyFlag_ClearsDirtyState)
 {
     // Arrange: Create node and make a flag dirty
     auto node = CreateDefaultNode();
@@ -282,7 +295,8 @@ NOLINT_TEST_F(SceneNodeImplTransformDirtyTest, MarkTransformDirty_SetsFlag)
     EXPECT_TRUE(node.IsTransformDirty());
 }
 
-NOLINT_TEST_F(SceneNodeImplTransformDirtyTest, MarkTransformDirty_MultipleCallsRemainDirty)
+NOLINT_TEST_F(SceneNodeImplTransformDirtyTest,
+    MarkTransformDirty_MultipleCallsRemainDirty)
 {
     // Arrange: Create node and clear transform dirty
     auto node = CreateDefaultNode();
@@ -297,7 +311,8 @@ NOLINT_TEST_F(SceneNodeImplTransformDirtyTest, MarkTransformDirty_MultipleCallsR
     EXPECT_TRUE(node.IsTransformDirty());
 }
 
-NOLINT_TEST_F(SceneNodeImplTransformDirtyTest, TransformDirtyLifecycle_CompleteWorkflow)
+NOLINT_TEST_F(
+    SceneNodeImplTransformDirtyTest, TransformDirtyLifecycle_CompleteWorkflow)
 {
     // Arrange: Create node (starts dirty)
     auto node = CreateDefaultNode();
@@ -372,7 +387,8 @@ NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_SetAndGetSiblings)
     EXPECT_EQ(graph_node.GetPrevSibling(), prev_handle);
 }
 
-NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_InvalidHandlesAccepted)
+NOLINT_TEST_F(
+    SceneNodeImplHierarchyTest, HierarchyHandles_InvalidHandlesAccepted)
 {
     // Arrange: Create node and invalid handle
     auto node = CreateDefaultNode();
@@ -393,7 +409,8 @@ NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_InvalidHandlesAccepte
     EXPECT_EQ(graph_node.GetPrevSibling(), invalid_handle);
 }
 
-NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_ConsistencyAcrossOperations)
+NOLINT_TEST_F(
+    SceneNodeImplHierarchyTest, HierarchyHandles_ConsistencyAcrossOperations)
 {
     // Arrange: Create node and set all handles
     auto node = CreateDefaultNode();
@@ -513,7 +530,8 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ObjectMetaDataIsIndependent)
     clone->GetComponent<ObjectMetaData>().SetName("ChangedClone");
 
     // Assert: Names are independent
-    EXPECT_EQ(original.GetComponent<ObjectMetaData>().GetName(), "ChangedOriginal");
+    EXPECT_EQ(
+        original.GetComponent<ObjectMetaData>().GetName(), "ChangedOriginal");
     EXPECT_EQ(clone->GetComponent<ObjectMetaData>().GetName(), "ChangedClone");
 }
 
@@ -521,8 +539,10 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesNodeDataFlags)
 {
     // Arrange: Create original node with custom flags
     SceneNodeImpl::Flags custom_flags;
-    custom_flags.SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
-    custom_flags.SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
+    custom_flags.SetFlag(
+        SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
+    custom_flags.SetFlag(
+        SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
     const auto original = SceneNodeImpl("FlagNode", custom_flags);
 
     // Act: Clone the node
@@ -532,8 +552,10 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesNodeDataFlags)
     ASSERT_NE(clone, nullptr);
     const auto& orig_flags = original.GetComponent<NodeData>().flags_;
     const auto& clone_flags = clone->GetComponent<NodeData>().flags_;
-    EXPECT_EQ(clone_flags.GetEffectiveValue(SceneNodeFlags::kVisible), orig_flags.GetEffectiveValue(SceneNodeFlags::kVisible));
-    EXPECT_EQ(clone_flags.GetEffectiveValue(SceneNodeFlags::kStatic), orig_flags.GetEffectiveValue(SceneNodeFlags::kStatic));
+    EXPECT_EQ(clone_flags.GetEffectiveValue(SceneNodeFlags::kVisible),
+        orig_flags.GetEffectiveValue(SceneNodeFlags::kVisible));
+    EXPECT_EQ(clone_flags.GetEffectiveValue(SceneNodeFlags::kStatic),
+        orig_flags.GetEffectiveValue(SceneNodeFlags::kStatic));
 }
 
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_NodeDataFlagsAreIndependent)
@@ -544,12 +566,16 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_NodeDataFlagsAreIndependent)
     ASSERT_NE(clone, nullptr);
 
     // Act: Change a flag in original and clone independently
-    original.GetComponent<NodeData>().flags_.SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
-    clone->GetComponent<NodeData>().flags_.SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true));
+    original.GetComponent<NodeData>().flags_.SetFlag(
+        SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
+    clone->GetComponent<NodeData>().flags_.SetFlag(
+        SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true));
 
     // Assert: Flags are independent
-    EXPECT_FALSE(original.GetComponent<NodeData>().flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
-    EXPECT_TRUE(clone->GetComponent<NodeData>().flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
+    EXPECT_FALSE(original.GetComponent<NodeData>().flags_.GetEffectiveValue(
+        SceneNodeFlags::kVisible));
+    EXPECT_TRUE(clone->GetComponent<NodeData>().flags_.GetEffectiveValue(
+        SceneNodeFlags::kVisible));
 }
 
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesGraphDataOrphansClone)
@@ -651,7 +677,8 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_WithParentSucceeds)
     EXPECT_FALSE(child_impl.IsTransformDirty());
 }
 
-NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_IgnoreParentTransformFlag)
+NOLINT_TEST_F(
+    SceneNodeImplTransformTest, UpdateTransforms_IgnoreParentTransformFlag)
 {
     // Arrange: Create node and set to ignore parent transform
     const auto node_handle = mock_scene_->AddNodeForTesting("TestNode");

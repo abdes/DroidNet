@@ -26,7 +26,8 @@ public:
         loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
         loguru::g_colorlogtostderr = true;
 
-        // Create test scene with different hierarchies based on benchmark parameters
+        // Create test scene with different hierarchies based on benchmark
+        // parameters
         const int depth = static_cast<int>(state.range(0));
         const int width = static_cast<int>(state.range(1));
         scene_ = std::make_shared<Scene>("BenchmarkScene", 4096);
@@ -43,15 +44,16 @@ public:
     }
 
 protected:
-    // Helper: Create a scene node with proper flags (following functional test pattern)
-    [[nodiscard]] auto CreateRootNode(
-        const std::string& name,
-        const glm::vec3& position = { 0.0f, 0.0f, 0.0f }) const
-        -> SceneNode
+    // Helper: Create a scene node with proper flags (following functional test
+    // pattern)
+    [[nodiscard]] auto CreateRootNode(const std::string& name,
+        const glm::vec3& position = { 0.0f, 0.0f, 0.0f }) const -> SceneNode
     {
         const auto flags = SceneNode::Flags {}
-                               .SetFlag(SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(true))
-                               .SetFlag(SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(false));
+                               .SetFlag(SceneNodeFlags::kVisible,
+                                   SceneFlag {}.SetEffectiveValueBit(true))
+                               .SetFlag(SceneNodeFlags::kStatic,
+                                   SceneFlag {}.SetEffectiveValueBit(false));
         auto node = scene_->CreateNode(name, flags);
         assert(node.IsValid());
 
@@ -68,17 +70,20 @@ protected:
 
         return node;
     }
-    void CreateChildNodes(const SceneNode& parent, const int remaining_depth, const int children_per_node)
+    void CreateChildNodes(const SceneNode& parent, const int remaining_depth,
+        const int children_per_node)
     {
         if (remaining_depth <= 0)
             return;
 
         for (int i = 0; i < children_per_node; ++i) {
-            auto child_node = scene_->CreateChildNode(parent, "child_" + std::to_string(i));
+            auto child_node
+                = scene_->CreateChildNode(parent, "child_" + std::to_string(i));
             assert(child_node.has_value());
 
             auto transform = child_node->GetTransform();
-            transform.SetLocalPosition({ static_cast<float>(i), static_cast<float>(remaining_depth), 0.0f });
+            transform.SetLocalPosition({ static_cast<float>(i),
+                static_cast<float>(remaining_depth), 0.0f });
 
             // Clear the dirty flag that was set when we modified the transform
             auto impl = child_node->GetObject();
@@ -86,7 +91,8 @@ protected:
 
             all_nodes_.push_back(*child_node);
 
-            CreateChildNodes(*child_node, remaining_depth - 1, children_per_node);
+            CreateChildNodes(
+                *child_node, remaining_depth - 1, children_per_node);
         }
     }
 
@@ -98,8 +104,7 @@ protected:
 
         // Create root nodes
         for (int i = 0; i < children_per_node; ++i) {
-            auto root_node = CreateRootNode(
-                "root_" + std::to_string(i),
+            auto root_node = CreateRootNode("root_" + std::to_string(i),
                 { static_cast<float>(i), 0.0f, 0.0f });
 
             all_nodes_.push_back(root_node);
@@ -132,29 +137,33 @@ protected:
     std::vector<SceneNode> all_nodes_;
 };
 
-// Benchmark SceneTraversal visitor pattern processing ONLY DIRTY transform nodes
-BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(benchmark::State& state)
+// Benchmark SceneTraversal visitor pattern processing ONLY DIRTY transform
+// nodes
+BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(
+    benchmark::State& state)
 {
-    // Extract dirty ratio from benchmark args: args[2] = dirty ratio (0.0 to 1.0)
+    // Extract dirty ratio from benchmark args: args[2] = dirty ratio (0.0
+    // to 1.0)
     const float dirty_ratio = static_cast<float>(state.range(2)) / 100.0f;
 
     for (auto _ : state) {
         state.PauseTiming();
         MarkRandomNodesDirty(dirty_ratio); // Set specified percentage dirty
-        state.ResumeTiming(); // Use optimized batch processing with dirty transform filter
+        state.ResumeTiming(); // Use optimized batch processing with dirty
+                              // transform filter
         SceneTraversal traversal(*scene_);
         auto result = traversal.Traverse(
             [](SceneNodeImpl& node, const Scene& scene_param) -> VisitResult {
                 node.UpdateTransforms(scene_param);
                 return VisitResult::kContinue; // Continue traversal
             },
-            TraversalOrder::kDepthFirst,
-            DirtyTransformFilter {});
+            TraversalOrder::kDepthFirst, DirtyTransformFilter {});
 
         benchmark::DoNotOptimize(result);
     }
 
-    state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(all_nodes_.size()));
+    state.SetItemsProcessed(
+        state.iterations() * static_cast<int64_t>(all_nodes_.size()));
 }
 
 // Register benchmarks grouped by scene configuration for easy comparison

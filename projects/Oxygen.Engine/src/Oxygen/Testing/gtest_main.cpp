@@ -34,7 +34,11 @@ auto main(int argc, char** argv) -> int
         loguru::g_preamble_header = false;
         loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
         loguru::init(argc, argv);
-        loguru::g_stderr_verbosity = loguru::Verbosity_2;
+#if !defined(NDEBUG)
+        loguru::g_stderr_verbosity = loguru::Verbosity_3;
+#else
+        loguru::g_stderr_verbosity = loguru::Verbosity_0;
+#endif // !NDEBUG
     }
 
     testing::InitGoogleTest(&argc, argv);

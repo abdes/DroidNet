@@ -76,7 +76,8 @@ NOLINT_TEST_F(SceneFlagsAtomicTest, Exchange_ReturnsOldValueAndSetsNew)
     EXPECT_EQ(atomic_flags_.Load(), new_flags);
 }
 
-NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeWeak_SucceedsWithCorrectExpected)
+NOLINT_TEST_F(
+    SceneFlagsAtomicTest, CompareExchangeWeak_SucceedsWithCorrectExpected)
 {
     // Arrange: Set up expected and desired states
     auto expected = SceneFlags<TestFlag> {};
@@ -93,7 +94,8 @@ NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeWeak_SucceedsWithCorrectExpec
     EXPECT_EQ(atomic_flags_.Load(), desired);
 }
 
-NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeStrong_SucceedsWithCorrectExpected)
+NOLINT_TEST_F(
+    SceneFlagsAtomicTest, CompareExchangeStrong_SucceedsWithCorrectExpected)
 {
     // Arrange: Set up expected and desired states
     auto expected = SceneFlags<TestFlag> {};
@@ -130,7 +132,8 @@ NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeWeak_FailsAndUpdatesExpected)
     atomic_flags_.Store(current_value);
 
     // Act: Attempt compare-exchange with wrong expected value
-    const auto result = atomic_flags_.CompareExchangeWeak(wrong_expected, desired);
+    const auto result
+        = atomic_flags_.CompareExchangeWeak(wrong_expected, desired);
 
     // Assert: Should fail, update expected, and leave current unchanged
     EXPECT_FALSE(result);
@@ -138,7 +141,8 @@ NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeWeak_FailsAndUpdatesExpected)
     EXPECT_EQ(atomic_flags_.Load(), current_value);
 }
 
-NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeStrong_FailsAndUpdatesExpected)
+NOLINT_TEST_F(
+    SceneFlagsAtomicTest, CompareExchangeStrong_FailsAndUpdatesExpected)
 {
     // Arrange: Set up mismatched expected value
     auto current_value = SceneFlags<TestFlag> {};
@@ -158,7 +162,8 @@ NOLINT_TEST_F(SceneFlagsAtomicTest, CompareExchangeStrong_FailsAndUpdatesExpecte
     atomic_flags_.Store(current_value);
 
     // Act: Attempt strong compare-exchange with wrong expected value
-    const auto result = atomic_flags_.CompareExchangeStrong(wrong_expected, desired);
+    const auto result
+        = atomic_flags_.CompareExchangeStrong(wrong_expected, desired);
 
     // Assert: Should fail, update expected, and leave current unchanged
     EXPECT_FALSE(result);

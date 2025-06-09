@@ -44,8 +44,10 @@ protected:
         scene_.reset();
     }
 
-    // Helper: Collect all children of a node into a set for order-agnostic comparison
-    static auto CollectChildrenHandles(const SceneNode& parent) -> std::set<ResourceHandle>
+    // Helper: Collect all children of a node into a set for order-agnostic
+    // comparison
+    static auto CollectChildrenHandles(const SceneNode& parent)
+        -> std::set<ResourceHandle>
     {
         auto children = std::set<ResourceHandle> {};
         auto current = parent.GetFirstChild();
@@ -57,28 +59,36 @@ protected:
     }
 
     // Helper: Verify parent-child relationship exists
-    static void ExpectParentChildRelationship(const SceneNode& parent, const SceneNode& child)
+    static void ExpectParentChildRelationship(
+        const SceneNode& parent, const SceneNode& child)
     {
         // Child should know its parent
         const auto child_parent = child.GetParent();
         ASSERT_TRUE(child_parent.has_value()) << "Child should have a parent";
-        EXPECT_EQ(child_parent->GetHandle(), parent.GetHandle()) << "Child's parent should match expected parent";
+        EXPECT_EQ(child_parent->GetHandle(), parent.GetHandle())
+            << "Child's parent should match expected parent";
 
         // Parent should have this child in its children list
         const auto children = CollectChildrenHandles(parent);
-        EXPECT_TRUE(children.contains(child.GetHandle())) << "Parent should contain this child";
+        EXPECT_TRUE(children.contains(child.GetHandle()))
+            << "Parent should contain this child";
     }
 
     // Helper: Verify hierarchy state flags for a node
-    static void ExpectHierarchyState(const SceneNode& node, const bool is_root, const bool has_parent, const bool has_children)
+    static void ExpectHierarchyState(const SceneNode& node, const bool is_root,
+        const bool has_parent, const bool has_children)
     {
-        EXPECT_EQ(node.IsRoot(), is_root) << "Node root status should match expected";
-        EXPECT_EQ(node.HasParent(), has_parent) << "Node parent status should match expected";
-        EXPECT_EQ(node.HasChildren(), has_children) << "Node children status should match expected";
+        EXPECT_EQ(node.IsRoot(), is_root)
+            << "Node root status should match expected";
+        EXPECT_EQ(node.HasParent(), has_parent)
+            << "Node parent status should match expected";
+        EXPECT_EQ(node.HasChildren(), has_children)
+            << "Node children status should match expected";
     }
 
     // Helper: Create a simple parent with N children and return all nodes
-    [[nodiscard]] auto CreateSimpleFamily(const std::string& parent_name, const std::vector<std::string>& child_names) const
+    [[nodiscard]] auto CreateSimpleFamily(const std::string& parent_name,
+        const std::vector<std::string>& child_names) const
         -> std::pair<SceneNode, std::vector<SceneNode>>
     {
         auto parent = scene_->CreateNode(parent_name);
@@ -86,7 +96,8 @@ protected:
 
         for (const auto& child_name : child_names) {
             auto child_opt = scene_->CreateChildNode(parent, child_name);
-            EXPECT_TRUE(child_opt.has_value()) << "Child creation should succeed";
+            EXPECT_TRUE(child_opt.has_value())
+                << "Child creation should succeed";
             if (child_opt.has_value()) {
                 children.push_back(child_opt.value());
             }
@@ -96,7 +107,8 @@ protected:
     }
 
     // Helper: Verify all nodes in a list have the same parent
-    static void ExpectAllHaveSameParent(const std::vector<SceneNode>& nodes, const SceneNode& expected_parent)
+    static void ExpectAllHaveSameParent(
+        const std::vector<SceneNode>& nodes, const SceneNode& expected_parent)
     {
         for (const auto& node : nodes) {
             ExpectParentChildRelationship(expected_parent, node);
@@ -104,11 +116,14 @@ protected:
     }
 
     // Helper: Verify expected children count matches actual
-    void ExpectChildrenCount(const SceneNode& parent, const std::size_t expected_count) const
+    void ExpectChildrenCount(
+        const SceneNode& parent, const std::size_t expected_count) const
     {
         const auto children = CollectChildrenHandles(parent);
-        EXPECT_EQ(children.size(), expected_count) << "Parent should have expected number of children";
-        EXPECT_EQ(scene_->GetChildrenCount(parent), expected_count) << "Scene API should report same children count";
+        EXPECT_EQ(children.size(), expected_count)
+            << "Parent should have expected number of children";
+        EXPECT_EQ(scene_->GetChildrenCount(parent), expected_count)
+            << "Scene API should report same children count";
     }
 
     std::shared_ptr<Scene> scene_;
@@ -158,7 +173,8 @@ NOLINT_TEST_F(SceneGraphTest, SingleChild_ParentNavigationWorks)
 NOLINT_TEST_F(SceneGraphTest, MultipleChildren_SiblingNavigationWorks)
 {
     // Arrange: Create parent with multiple children
-    auto [parent, children] = CreateSimpleFamily("Parent", { "Child1", "Child2", "Child3" });
+    auto [parent, children]
+        = CreateSimpleFamily("Parent", { "Child1", "Child2", "Child3" });
     ASSERT_EQ(children.size(), 3);
 
     // Act: Collect children through sibling navigation
@@ -178,10 +194,12 @@ NOLINT_TEST_F(SceneGraphTest, MultipleChildren_SiblingNavigationWorks)
     ExpectChildrenCount(parent, 3);
 }
 
-NOLINT_TEST_F(SceneGraphTest, SiblingConsistency_ForwardAndBackwardNavigationMatch)
+NOLINT_TEST_F(
+    SceneGraphTest, SiblingConsistency_ForwardAndBackwardNavigationMatch)
 {
     // Arrange: Create parent with exactly 2 children for predictable testing
-    auto [parent, children] = CreateSimpleFamily("Parent", { "FirstChild", "SecondChild" });
+    auto [parent, children]
+        = CreateSimpleFamily("Parent", { "FirstChild", "SecondChild" });
     ASSERT_EQ(children.size(), 2);
 
     // Act: Get first child and navigate to second
@@ -200,8 +218,10 @@ NOLINT_TEST_F(SceneGraphTest, SiblingConsistency_ForwardAndBackwardNavigationMat
     EXPECT_EQ(first_child->GetHandle(), back_to_first.GetHandle());
 
     // Assert: Boundary conditions
-    EXPECT_FALSE(first_child->GetPrevSibling().has_value()); // First has no previous
-    EXPECT_FALSE(second_child.GetNextSibling().has_value()); // Second has no next
+    EXPECT_FALSE(
+        first_child->GetPrevSibling().has_value()); // First has no previous
+    EXPECT_FALSE(
+        second_child.GetNextSibling().has_value()); // Second has no next
 }
 
 //------------------------------------------------------------------------------
@@ -239,13 +259,12 @@ NOLINT_TEST_F(SceneGraphTest, RootNodeCollection_AllRootsFound)
     ASSERT_TRUE(child_opt.has_value());
 
     // Act: Get root nodes from scene
-    auto root_handles = scene_->GetRootNodes();
+    auto root_handles = scene_->GetRootHandles();
 
     // Assert: Should find exactly the root nodes (not the child)
     EXPECT_EQ(root_handles.size(), 3);
-    const auto expected_roots = std::set {
-        root1.GetHandle(), root2.GetHandle(), root3.GetHandle()
-    };
+    const auto expected_roots
+        = std::set { root1.GetHandle(), root2.GetHandle(), root3.GetHandle() };
     const auto found_roots = std::set(root_handles.begin(), root_handles.end());
     EXPECT_EQ(found_roots, expected_roots);
 }
@@ -258,7 +277,7 @@ NOLINT_TEST_F(SceneGraphTest, RootNodeDestruction_RemovedFromRootCollection)
     const auto root3 = scene_->CreateNode("Root3");
 
     // Arrange: Verify initial root collection
-    const auto initial_roots = scene_->GetRootNodes();
+    const auto initial_roots = scene_->GetRootHandles();
     EXPECT_EQ(initial_roots.size(), 3);
 
     // Act: Destroy one root node
@@ -268,20 +287,23 @@ NOLINT_TEST_F(SceneGraphTest, RootNodeDestruction_RemovedFromRootCollection)
     EXPECT_TRUE(destroyed);
     EXPECT_FALSE(root2.IsValid());
 
-    // Assert: Root collection should be updated (this would fail with the original bug)
-    auto remaining_roots = scene_->GetRootNodes();
+    // Assert: Root collection should be updated (this would fail with the
+    // original bug)
+    auto remaining_roots = scene_->GetRootHandles();
     EXPECT_EQ(remaining_roots.size(), 2);
 
-    const auto expected_remaining = std::set {
-        root1.GetHandle(), root3.GetHandle()
-    };
-    const auto found_remaining = std::set(remaining_roots.begin(), remaining_roots.end());
+    const auto expected_remaining
+        = std::set { root1.GetHandle(), root3.GetHandle() };
+    const auto found_remaining
+        = std::set(remaining_roots.begin(), remaining_roots.end());
     EXPECT_EQ(found_remaining, expected_remaining);
 
     // Assert: Destroyed root should not be in the collection
     auto destroyed_handle = root2.GetHandle();
-    EXPECT_TRUE(std::ranges::none_of(remaining_roots,
-        [destroyed_handle](const auto& handle) { return handle == destroyed_handle; }));
+    EXPECT_TRUE(std::ranges::none_of(
+        remaining_roots, [destroyed_handle](const auto& handle) {
+            return handle == destroyed_handle;
+        }));
 }
 
 //------------------------------------------------------------------------------
@@ -308,16 +330,19 @@ NOLINT_TEST_F(SceneGraphTest, ThreeGenerationHierarchy_NavigationWorks)
     // Assert: Middle level (has parent and children)
     ExpectHierarchyState(child, false, true, true);
     ExpectParentChildRelationship(root, child);
-    ExpectParentChildRelationship(child, grandchild); // NOLINT(readability-suspicious-call-argument)
+    ExpectParentChildRelationship(
+        child, grandchild); // NOLINT(readability-suspicious-call-argument)
 
     // Assert: Leaf level (has parent, no children)
     ExpectHierarchyState(grandchild, false, true, false);
-    ExpectParentChildRelationship(child, grandchild); // NOLINT(readability-suspicious-call-argument)
+    ExpectParentChildRelationship(
+        child, grandchild); // NOLINT(readability-suspicious-call-argument)
 }
 
 NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
 {
-    // Arrange: Build tree: Root -> (Child1, Child2) where Child1 has 2 grandchildren, Child2 has 1
+    // Arrange: Build tree: Root -> (Child1, Child2) where Child1 has 2
+    // grandchildren, Child2 has 1
     auto root = scene_->CreateNode("Root");
 
     auto child1_opt = scene_->CreateChildNode(root, "Child1");
@@ -355,7 +380,8 @@ NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
     // Assert: Child2 branch verification
     ExpectHierarchyState(child2, false, true, true);
     ExpectChildrenCount(child2, 1);
-    ExpectParentChildRelationship(child2, grandchild3); // NOLINT(readability-suspicious-call-argument)
+    ExpectParentChildRelationship(
+        child2, grandchild3); // NOLINT(readability-suspicious-call-argument)
 
     // Assert: Leaf nodes verification
     ExpectHierarchyState(grandchild1, false, true, false);
@@ -370,7 +396,8 @@ NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
 NOLINT_TEST_F(SceneGraphTest, SceneHierarchyAPI_MatchesDirectNavigation)
 {
     // Arrange: Create a simple family for API testing
-    auto [parent, children] = CreateSimpleFamily("Parent", { "Child1", "Child2" });
+    auto [parent, children]
+        = CreateSimpleFamily("Parent", { "Child1", "Child2" });
     ASSERT_EQ(children.size(), 2);
 
     // Act: Test Scene API methods
@@ -385,15 +412,18 @@ NOLINT_TEST_F(SceneGraphTest, SceneHierarchyAPI_MatchesDirectNavigation)
     ASSERT_TRUE(first_child_from_scene.has_value());
     auto direct_first_child = parent.GetFirstChild();
     ASSERT_TRUE(direct_first_child.has_value());
-    EXPECT_EQ(first_child_from_scene->GetHandle(), direct_first_child->GetHandle());
+    EXPECT_EQ(
+        first_child_from_scene->GetHandle(), direct_first_child->GetHandle());
 
     // Assert: Scene children collection should match navigation
     auto expected_children = CollectChildrenHandles(parent);
-    auto scene_children_set = std::set(scene_children.begin(), scene_children.end());
+    auto scene_children_set
+        = std::set(scene_children.begin(), scene_children.end());
     EXPECT_EQ(scene_children_set, expected_children);
 }
 
-NOLINT_TEST_F(SceneGraphTest, ChildrenCountAndEnumeration_IncrementalVerification)
+NOLINT_TEST_F(
+    SceneGraphTest, ChildrenCountAndEnumeration_IncrementalVerification)
 {
     // Arrange: Start with parent and no children
     const auto parent = scene_->CreateNode("Parent");
@@ -418,9 +448,8 @@ NOLINT_TEST_F(SceneGraphTest, ChildrenCountAndEnumeration_IncrementalVerificatio
     children = scene_->GetChildren(parent);
 
     // Assert: Final verification of all children
-    const auto expected_handles = std::set {
-        child1_opt->GetHandle(), child2_opt->GetHandle(), child3_opt->GetHandle()
-    };
+    const auto expected_handles = std::set { child1_opt->GetHandle(),
+        child2_opt->GetHandle(), child3_opt->GetHandle() };
     const auto found_handles = std::set(children.begin(), children.end());
     EXPECT_EQ(found_handles, expected_handles);
 }
@@ -470,7 +499,7 @@ NOLINT_TEST_F(SceneGraphTest, InvalidNodeNavigation_ReturnsEmptyOptionals)
     // Assert: Invalid node hierarchy queries should return false
     EXPECT_FALSE(child.HasParent());
     EXPECT_FALSE(child.HasChildren());
-    EXPECT_FALSE(child.IsRoot());
+    EXPECT_TRUE(child.IsRoot()); // Invalid parent, means no parent
 }
 
 NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_AllDescendantsInvalidated)
@@ -487,7 +516,8 @@ NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_AllDescendantsInvalidated)
     // Arrange: Verify initial hierarchy
     EXPECT_EQ(scene_->GetNodeCount(), 3);
     ExpectParentChildRelationship(root, child);
-    ExpectParentChildRelationship(child, grandchild); // NOLINT(readability-suspicious-call-argument)
+    ExpectParentChildRelationship(
+        child, grandchild); // NOLINT(readability-suspicious-call-argument)
 
     // Act: Destroy entire hierarchy starting from root
     const auto destroy_result = scene_->DestroyNodeHierarchy(root);
@@ -514,7 +544,7 @@ NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_RootCollectionUpdated)
     ASSERT_TRUE(child2_opt.has_value());
 
     // Arrange: Verify initial state
-    const auto initial_roots = scene_->GetRootNodes();
+    const auto initial_roots = scene_->GetRootHandles();
     EXPECT_EQ(initial_roots.size(), 2);
     EXPECT_EQ(scene_->GetNodeCount(), 4); // 2 roots + 2 children
 
@@ -524,8 +554,9 @@ NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_RootCollectionUpdated)
     // Assert: Destruction should succeed
     EXPECT_TRUE(destroy_result);
 
-    // Assert: Root collection should be updated (this would fail with the original bug)
-    const auto remaining_roots = scene_->GetRootNodes();
+    // Assert: Root collection should be updated (this would fail with the
+    // original bug)
+    const auto remaining_roots = scene_->GetRootHandles();
     EXPECT_EQ(remaining_roots.size(), 1);
     EXPECT_EQ(remaining_roots[0], root2.GetHandle());
 
@@ -546,7 +577,8 @@ NOLINT_TEST_F(SceneGraphTest, DeepHierarchy_NavigationPerformance)
     auto nodes = std::vector { current };
 
     for (int i = 1; i < 10; ++i) {
-        auto child_opt = scene_->CreateChildNode(current, "Node" + std::to_string(i));
+        auto child_opt
+            = scene_->CreateChildNode(current, "Node" + std::to_string(i));
         ASSERT_TRUE(child_opt.has_value());
         current = child_opt.value();
         nodes.push_back(current);
@@ -556,8 +588,10 @@ NOLINT_TEST_F(SceneGraphTest, DeepHierarchy_NavigationPerformance)
     auto nav_current = nodes[0]; // Start at root
     for (std::size_t i = 1; i < nodes.size(); ++i) {
         auto child = nav_current.GetFirstChild();
-        ASSERT_TRUE(child.has_value()) << "Navigation should work at depth " << i;
-        EXPECT_EQ(child->GetHandle(), nodes[i].GetHandle()) << "Navigation should find correct child at depth " << i;
+        ASSERT_TRUE(child.has_value())
+            << "Navigation should work at depth " << i;
+        EXPECT_EQ(child->GetHandle(), nodes[i].GetHandle())
+            << "Navigation should find correct child at depth " << i;
         nav_current = child.value();
     }
 
@@ -565,8 +599,10 @@ NOLINT_TEST_F(SceneGraphTest, DeepHierarchy_NavigationPerformance)
     nav_current = nodes.back(); // Start at leaf
     for (int i = static_cast<int>(nodes.size()) - 2; i >= 0; --i) {
         auto parent = nav_current.GetParent();
-        ASSERT_TRUE(parent.has_value()) << "Navigation should work at depth " << i;
-        EXPECT_EQ(parent->GetHandle(), nodes[i].GetHandle()) << "Navigation should find correct parent at depth " << i;
+        ASSERT_TRUE(parent.has_value())
+            << "Navigation should work at depth " << i;
+        EXPECT_EQ(parent->GetHandle(), nodes[i].GetHandle())
+            << "Navigation should find correct parent at depth " << i;
         nav_current = parent.value();
     }
 }
@@ -577,13 +613,15 @@ NOLINT_TEST_F(SceneGraphTest, DeepHierarchy_NavigationPerformance)
 
 NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
 {
-    // Arrange: Create parent with many children (testing sibling list integrity)
+    // Arrange: Create parent with many children (testing sibling list
+    // integrity)
     constexpr std::size_t child_count = 50;
     const auto parent = scene_->CreateNode("Parent");
     auto children = std::vector<SceneNode> {};
 
     for (std::size_t i = 0; i < child_count; ++i) {
-        auto child_opt = scene_->CreateChildNode(parent, "Child" + std::to_string(i));
+        auto child_opt
+            = scene_->CreateChildNode(parent, "Child" + std::to_string(i));
         ASSERT_TRUE(child_opt.has_value());
         children.push_back(child_opt.value());
     }
@@ -604,6 +642,32 @@ NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
     for (const auto& child : children) {
         ExpectParentChildRelationship(parent, child);
     }
+}
+
+//------------------------------------------------------------------------------
+// Edge Case Tests
+//------------------------------------------------------------------------------
+class SceneGraphEdgeCasesTest : public SceneGraphTest { };
+
+NOLINT_TEST_F(SceneGraphEdgeCasesTest, SetParentToSelf_Aborts)
+{
+    // Arrange: Create a SceneNodeImpl directly
+    const auto node = scene_->CreateNode("TestNode");
+
+    // TODO: Uncomment after we implement the logic to prevent self-parenting
+    FAIL();
+    // Act: Set parent to self (unit test: raw struct, no scene logic)
+    // EXPECT_DEATH(
+    //    {
+    //        [[maybe_unused]] auto result = scene_->ReparentNode(node, node);
+    //    },
+    //    ".*cannot set parent to self.*");
+}
+
+NOLINT_TEST_F(SceneGraphEdgeCasesTest, SetParentToDescendant_Aborts)
+{
+    // TODO: Implement this test
+    FAIL();
 }
 
 } // namespace

@@ -31,7 +31,8 @@ enum class TestFlag : uint8_t {
     kCount //!< Represents the total number of flags.
 };
 static_assert(SceneFlagEnum<TestFlag>);
-[[maybe_unused]] auto constexpr to_string(const TestFlag& value) noexcept -> const char*
+[[maybe_unused]] auto constexpr to_string(const TestFlag& value) noexcept
+    -> const char*
 {
     switch (value) {
     case TestFlag::kVisible:

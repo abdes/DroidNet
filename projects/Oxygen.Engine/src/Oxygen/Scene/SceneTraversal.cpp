@@ -9,26 +9,31 @@
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
-namespace oxygen::scene {
+using oxygen::scene::DirtyTransformFilter;
+using oxygen::scene::FilterResult;
+using oxygen::scene::SceneTraversal;
 
-//=== SceneTraversal Implementation ===--------------------------------------//
+//=== SceneTraversal Implementation ===---------------------------------------//
 
-auto DirtyTransformFilter::operator()(
-    const SceneNodeImpl& node,
-    const FilterResult parent_result) const noexcept
-    -> FilterResult
+auto DirtyTransformFilter::operator()(const SceneNodeImpl& node,
+    const FilterResult parent_result) const noexcept -> FilterResult
 {
-    // If parent was accepted and this node does not ignore parent transform, accept
-    if (node.GetFlags().GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform)) {
-        DLOG_F(2, "Rejecting subtree for node {} due to IgnoreParentTransform flag",
+    using enum FilterResult;
+
+    // If parent was accepted and this node does not ignore parent transform,
+    // accept
+    if (node.GetFlags().GetEffectiveValue(
+            SceneNodeFlags::kIgnoreParentTransform)) {
+        DLOG_F(2, "Rejecting subtree for node {} due to IgnoreParentTransform",
             node.GetName());
-        return FilterResult::kRejectSubTree;
+        return kRejectSubTree;
     }
     // Otherwise, accept if this node is dirty, or its parent accepted
-    const auto verdict = parent_result == FilterResult::kAccept || node.IsTransformDirty()
-        ? FilterResult::kAccept
-        : FilterResult::kReject;
-    DLOG_F(2, "Node {} is {}", node.GetName(), verdict == FilterResult::kAccept ? "accepted" : "rejected");
+    const auto parent_accepted = parent_result == kAccept;
+    const auto should_accept = parent_accepted || node.IsTransformDirty();
+    const auto verdict = should_accept ? kAccept : kReject;
+    DLOG_F(2, "Node {} is {}", node.GetName(),
+        verdict == kAccept ? "accepted" : "rejected");
     return verdict;
 }
 
@@ -39,7 +44,7 @@ SceneTraversal::SceneTraversal(const Scene& scene)
     children_buffer_.reserve(8);
 }
 
-//=== Helper Methods ===-----------------------------------------------------//
+//=== Helper Methods ===------------------------------------------------------//
 
 auto SceneTraversal::GetNodeImpl(const ResourceHandle& handle) const
     -> SceneNodeImpl*
@@ -54,29 +59,16 @@ auto SceneTraversal::GetNodeImpl(const ResourceHandle& handle) const
     return &const_cast<Scene*>(scene_)->GetNodeImplRef(handle);
 }
 
-void SceneTraversal::InitializeNodes(
-    const std::span<const ResourceHandle> handles,
-    std::vector<SceneNodeImpl*>& nodes) const
-{
-    nodes.clear();
-    nodes.reserve(handles.size());
+//=== Transform Update Methods ===--------------------------------------------//
 
-    for (const auto& handle : handles) {
-        if (auto* node = GetNodeImpl(handle)) [[likely]] {
-            nodes.push_back(node);
-        }
-    }
-}
-
-//=== Transform Update Methods ===-------------------------------------------//
-
-auto SceneTraversal::UpdateTransforms() const -> std::size_t
+auto SceneTraversal::UpdateTransforms() -> std::size_t
 {
     std::size_t updated_count = 0;
 
     // Batch process with dirty transform filter for efficiency
     [[maybe_unused]] auto result = Traverse(
-        [&updated_count](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
+        [&updated_count](
+            SceneNodeImpl& node, const Scene& scene) -> VisitResult {
             LOG_SCOPE_F(2, "For Node");
             LOG_F(2, "name = {}", node.GetName());
             LOG_F(2, "is root: {}", node.AsGraphNode().IsRoot());
@@ -85,29 +77,26 @@ auto SceneTraversal::UpdateTransforms() const -> std::size_t
             ++updated_count;
             return VisitResult::kContinue;
         },
-        TraversalOrder::kDepthFirst,
-        DirtyTransformFilter {});
+        TraversalOrder::kDepthFirst, DirtyTransformFilter {});
 
     return updated_count;
 }
 
-auto SceneTraversal::UpdateTransformsFrom(
-    const std::span<const ResourceHandle> root_handles) const -> std::size_t
+auto SceneTraversal::UpdateTransforms(std::span<SceneNode> starting_nodes)
+    -> std::size_t
 {
     std::size_t updated_count = 0;
 
     // Batch process from specific roots with dirty transform filter
-    [[maybe_unused]] auto result = TraverseFrom(
-        root_handles,
-        [&updated_count](SceneNodeImpl& node, const Scene& scene) -> VisitResult {
+    [[maybe_unused]] auto result = TraverseHierarchies(
+        starting_nodes,
+        [&updated_count](
+            SceneNodeImpl& node, const Scene& scene) -> VisitResult {
             node.UpdateTransforms(scene);
             ++updated_count;
             return VisitResult::kContinue;
         },
-        TraversalOrder::kDepthFirst,
-        DirtyTransformFilter {});
+        TraversalOrder::kDepthFirst, DirtyTransformFilter {});
 
     return updated_count;
 }
-
-} // namespace oxygen::scene

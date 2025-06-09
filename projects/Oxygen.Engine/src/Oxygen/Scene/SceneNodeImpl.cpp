@@ -34,14 +34,12 @@ SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
 
     // Iterate over the flags and log each one
     for (const auto [flag, flag_values] : flags) {
-        DLOG_F(2, "flag `{}`: {}", nostd::to_string(flag), nostd::to_string(flag_values));
+        DLOG_F(2, "flag `{}`: {}", nostd::to_string(flag),
+            nostd::to_string(flag_values));
     }
 }
 
-SceneNodeImpl::~SceneNodeImpl()
-{
-    LOG_SCOPE_F(3, "SceneNodeImpl destruction");
-}
+SceneNodeImpl::~SceneNodeImpl() { LOG_SCOPE_F(3, "SceneNodeImpl destruction"); }
 
 auto SceneNodeImpl::AsGraphNode() noexcept -> GraphNode&
 {
@@ -103,7 +101,8 @@ void SceneNodeImpl::UpdateTransforms(const Scene& scene)
     if (const auto& parent = GetComponent<GraphData>().GetParent();
         parent.IsValid() && !ShouldIgnoreParentTransform()) {
         const auto& parent_impl = scene.GetNodeImplRef(parent);
-        const auto& parent_transform = parent_impl.GetComponent<TransformComponent>();
+        const auto& parent_transform
+            = parent_impl.GetComponent<TransformComponent>();
         transform.UpdateWorldTransform(parent_transform.GetWorldMatrix());
     } else {
         transform.UpdateWorldTransformAsRoot();
@@ -212,7 +211,8 @@ auto SceneNodeImpl::operator=(SceneNodeImpl&& other) noexcept -> SceneNodeImpl&
         }
 
         // Perform the composition move
-        Composition::operator=(std::move(other)); // Re-initialize our cached GraphNode with moved components
+        Composition::operator=(std::move(
+            other)); // Re-initialize our cached GraphNode with moved components
         cached_graph_node_ = GraphNode { this, &GetComponent<GraphData>() };
     }
     return *this;
@@ -227,7 +227,8 @@ auto SceneNodeImpl::Clone() const -> std::unique_ptr<SceneNodeImpl>
     auto clone = CloneableMixin::Clone();
 
     // Re-initialize the cached GraphNode with the cloned components
-    clone->cached_graph_node_ = GraphNode { clone.get(), &clone->GetComponent<GraphData>() };
+    clone->cached_graph_node_
+        = GraphNode { clone.get(), &clone->GetComponent<GraphData>() };
 
     DLOG_F(2, "successful");
     return clone;
