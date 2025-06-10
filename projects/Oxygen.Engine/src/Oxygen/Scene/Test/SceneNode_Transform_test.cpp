@@ -14,7 +14,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeImpl;

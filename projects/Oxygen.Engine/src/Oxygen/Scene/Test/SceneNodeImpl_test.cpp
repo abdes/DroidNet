@@ -18,7 +18,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNodeFlags;
@@ -345,7 +345,7 @@ NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_SetAndGetParent)
 {
   // Arrange: Create node and parent handle
   auto node = CreateDefaultNode();
-  const auto parent_handle = ResourceHandle { 42 };
+  const auto parent_handle = NodeHandle { 42 };
 
   // Act: Set parent handle
   auto& graph_node = node.AsGraphNode();
@@ -359,7 +359,7 @@ NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_SetAndGetFirstChild)
 {
   // Arrange: Create node and child handle
   auto node = CreateDefaultNode();
-  const auto child_handle = ResourceHandle { 43 };
+  const auto child_handle = NodeHandle { 43 };
 
   // Act: Set first child handle
   auto& graph_node = node.AsGraphNode();
@@ -373,8 +373,8 @@ NOLINT_TEST_F(SceneNodeImplHierarchyTest, HierarchyHandles_SetAndGetSiblings)
 {
   // Arrange: Create node and sibling handles
   auto node = CreateDefaultNode();
-  const auto next_handle = ResourceHandle { 44 };
-  const auto prev_handle = ResourceHandle { 45 };
+  const auto next_handle = NodeHandle { 44 };
+  const auto prev_handle = NodeHandle { 45 };
 
   // Act: Set sibling handles
   auto& graph_node = node.AsGraphNode();
@@ -391,7 +391,7 @@ NOLINT_TEST_F(
 {
   // Arrange: Create node and invalid handle
   auto node = CreateDefaultNode();
-  const auto invalid_handle = ResourceHandle {};
+  const auto invalid_handle = NodeHandle {};
   EXPECT_FALSE(invalid_handle.IsValid());
 
   // Act: Set all hierarchy relationships to invalid handles
@@ -413,10 +413,10 @@ NOLINT_TEST_F(
 {
   // Arrange: Create node and set all handles
   auto node = CreateDefaultNode();
-  const auto parent_handle = ResourceHandle { 100 };
-  const auto child_handle = ResourceHandle { 200 };
-  const auto next_handle = ResourceHandle { 300 };
-  const auto prev_handle = ResourceHandle { 400 };
+  const auto parent_handle = NodeHandle { 100 };
+  const auto child_handle = NodeHandle { 200 };
+  const auto next_handle = NodeHandle { 300 };
+  const auto prev_handle = NodeHandle { 400 };
 
   auto& graph_node = node.AsGraphNode();
   graph_node.SetParent(parent_handle);
@@ -433,7 +433,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(graph_node.GetPrevSibling(), prev_handle);
 
   // Act: Update one handle and verify others unchanged
-  const auto new_parent = ResourceHandle { 500 };
+  const auto new_parent = NodeHandle { 500 };
   graph_node.SetParent(new_parent);
 
   // Assert: Parent should be updated, others unchanged
@@ -582,10 +582,10 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesGraphDataOrphansClone)
   // Arrange: Create original with hierarchy handles
   auto original = SceneNodeImpl("OriginalNode");
   auto& graph_node = original.AsGraphNode();
-  graph_node.SetParent(ResourceHandle { 100 });
-  graph_node.SetFirstChild(ResourceHandle { 200 });
-  graph_node.SetNextSibling(ResourceHandle { 300 });
-  graph_node.SetPrevSibling(ResourceHandle { 400 });
+  graph_node.SetParent(NodeHandle { 100 });
+  graph_node.SetFirstChild(NodeHandle { 200 });
+  graph_node.SetNextSibling(NodeHandle { 300 });
+  graph_node.SetPrevSibling(NodeHandle { 400 });
 
   // Act: Clone the node
   const auto clone = original.Clone();
@@ -611,7 +611,7 @@ public:
   }
 
   // Helper: Add a SceneNodeImpl to the mock scene for testing
-  auto AddNodeForTesting(const std::string& name) -> ResourceHandle
+  auto AddNodeForTesting(const std::string& name) -> NodeHandle
   {
     const auto node = CreateNode(name);
     return node.GetHandle();
@@ -642,7 +642,7 @@ NOLINT_TEST_F(SceneNodeImplTransformTest, UpdateTransforms_RootNodeSucceeds)
   auto& node = mock_scene_->GetNodeImplRef(node_handle);
 
   // Arrange: Set as root (invalid parent handle) and ensure dirty
-  node.AsGraphNode().SetParent(ResourceHandle {});
+  node.AsGraphNode().SetParent(NodeHandle {});
   node.MarkTransformDirty();
   EXPECT_TRUE(node.IsTransformDirty());
 

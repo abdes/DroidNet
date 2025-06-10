@@ -17,10 +17,10 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
-using oxygen::ResourceHandle;
 using oxygen::scene::AcceptAllFilter;
 using oxygen::scene::DirtyTransformFilter;
 using oxygen::scene::FilterResult;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;

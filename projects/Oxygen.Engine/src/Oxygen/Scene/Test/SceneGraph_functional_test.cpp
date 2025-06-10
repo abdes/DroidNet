@@ -18,7 +18,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
@@ -725,7 +725,7 @@ NOLINT_TEST_F(
   auto another_object = CreateGameObject("AnotherObject");
 
   // Act: Attempt invalid operations
-  const auto invalid_handle = ResourceHandle {}; // Default invalid handle
+  const auto invalid_handle = NodeHandle {}; // Default invalid handle
   const auto invalid_node_opt = scene_->GetNode(invalid_handle);
 
   // Assert: Invalid operations should fail gracefully

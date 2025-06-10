@@ -198,53 +198,53 @@ void SceneNodeImpl::UpdateTransforms(const Scene& scene)
   ClearTransformDirty();
 }
 
-auto GraphNode::GetParent() const noexcept -> const ResourceHandle&
+auto GraphNode::GetParent() const noexcept -> const NodeHandle&
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   return graph_data_->GetParent();
 }
 
-auto GraphNode::GetFirstChild() const noexcept -> const ResourceHandle&
+auto GraphNode::GetFirstChild() const noexcept -> const NodeHandle&
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   return graph_data_->GetFirstChild();
 }
 
-auto GraphNode::GetNextSibling() const noexcept -> const ResourceHandle&
+auto GraphNode::GetNextSibling() const noexcept -> const NodeHandle&
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   return graph_data_->GetNextSibling();
 }
 
-auto GraphNode::GetPrevSibling() const noexcept -> const ResourceHandle&
+auto GraphNode::GetPrevSibling() const noexcept -> const NodeHandle&
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   return graph_data_->GetPrevSibling();
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void GraphNode::SetParent(const ResourceHandle& parent) noexcept
+void GraphNode::SetParent(const NodeHandle& parent) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetParent(parent);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void GraphNode::SetFirstChild(const ResourceHandle& child) noexcept
+void GraphNode::SetFirstChild(const NodeHandle& child) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetFirstChild(child);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void GraphNode::SetNextSibling(const ResourceHandle& sibling) noexcept
+void GraphNode::SetNextSibling(const NodeHandle& sibling) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetNextSibling(sibling);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-void GraphNode::SetPrevSibling(const ResourceHandle& sibling) noexcept
+void GraphNode::SetPrevSibling(const NodeHandle& sibling) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetPrevSibling(sibling);

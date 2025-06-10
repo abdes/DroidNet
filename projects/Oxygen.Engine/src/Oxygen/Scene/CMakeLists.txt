@@ -71,6 +71,7 @@ target_sources(
       "SceneTraversal.h"
       "SceneNode.h"
       "Types/Flags.h"
+      "Types/NodeHandle.h"
       "Types/SceneFlagEnum.h"
       "SceneNodeImpl.h"
 )

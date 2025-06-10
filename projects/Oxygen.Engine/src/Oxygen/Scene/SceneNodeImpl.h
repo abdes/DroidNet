@@ -9,11 +9,11 @@
 #include <optional>
 #include <string>
 
-#include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -100,17 +100,15 @@ public:
       return *this;
     }
 
-    OXGN_SCN_NDAPI auto GetParent() const noexcept -> const ResourceHandle&;
-    OXGN_SCN_NDAPI auto GetFirstChild() const noexcept -> const ResourceHandle&;
-    OXGN_SCN_NDAPI auto GetNextSibling() const noexcept
-      -> const ResourceHandle&;
-    OXGN_SCN_NDAPI auto GetPrevSibling() const noexcept
-      -> const ResourceHandle&;
+    OXGN_SCN_NDAPI auto GetParent() const noexcept -> const NodeHandle&;
+    OXGN_SCN_NDAPI auto GetFirstChild() const noexcept -> const NodeHandle&;
+    OXGN_SCN_NDAPI auto GetNextSibling() const noexcept -> const NodeHandle&;
+    OXGN_SCN_NDAPI auto GetPrevSibling() const noexcept -> const NodeHandle&;
 
-    OXGN_SCN_API void SetParent(const ResourceHandle& parent) noexcept;
-    OXGN_SCN_API void SetFirstChild(const ResourceHandle& child) noexcept;
-    OXGN_SCN_API void SetNextSibling(const ResourceHandle& sibling) noexcept;
-    OXGN_SCN_API void SetPrevSibling(const ResourceHandle& sibling) noexcept;
+    OXGN_SCN_API void SetParent(const NodeHandle& parent) noexcept;
+    OXGN_SCN_API void SetFirstChild(const NodeHandle& child) noexcept;
+    OXGN_SCN_API void SetNextSibling(const NodeHandle& sibling) noexcept;
+    OXGN_SCN_API void SetPrevSibling(const NodeHandle& sibling) noexcept;
 
     OXGN_SCN_NDAPI auto IsRoot() const noexcept -> bool;
     OXGN_SCN_NDAPI auto IsValid() const noexcept -> bool

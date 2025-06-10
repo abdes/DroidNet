@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::scene::detail {
 
@@ -29,32 +29,29 @@ public:
   OXYGEN_DEFAULT_COPYABLE(GraphData)
   OXYGEN_DEFAULT_MOVABLE(GraphData)
 
-  [[nodiscard]] auto GetParent() const noexcept -> const ResourceHandle&
+  [[nodiscard]] auto GetParent() const noexcept -> const NodeHandle&
   {
     return parent_;
   }
-  [[nodiscard]] auto GetFirstChild() const noexcept -> const ResourceHandle&
+  [[nodiscard]] auto GetFirstChild() const noexcept -> const NodeHandle&
   {
     return first_child_;
   }
-  [[nodiscard]] auto GetNextSibling() const noexcept -> const ResourceHandle&
+  [[nodiscard]] auto GetNextSibling() const noexcept -> const NodeHandle&
   {
     return next_sibling_;
   }
-  [[nodiscard]] auto GetPrevSibling() const noexcept -> const ResourceHandle&
+  [[nodiscard]] auto GetPrevSibling() const noexcept -> const NodeHandle&
   {
     return prev_sibling_;
   }
-  void SetParent(const ResourceHandle& parent) noexcept { parent_ = parent; }
-  void SetFirstChild(const ResourceHandle& child) noexcept
-  {
-    first_child_ = child;
-  }
-  void SetNextSibling(const ResourceHandle& sibling) noexcept
+  void SetParent(const NodeHandle& parent) noexcept { parent_ = parent; }
+  void SetFirstChild(const NodeHandle& child) noexcept { first_child_ = child; }
+  void SetNextSibling(const NodeHandle& sibling) noexcept
   {
     next_sibling_ = sibling;
   }
-  void SetPrevSibling(const ResourceHandle& sibling) noexcept
+  void SetPrevSibling(const NodeHandle& sibling) noexcept
   {
     prev_sibling_ = sibling;
   }
@@ -72,10 +69,10 @@ public:
   }
 
 private:
-  ResourceHandle parent_;
-  ResourceHandle first_child_;
-  ResourceHandle next_sibling_;
-  ResourceHandle prev_sibling_;
+  NodeHandle parent_;
+  NodeHandle first_child_;
+  NodeHandle next_sibling_;
+  NodeHandle prev_sibling_;
 };
 
 } // namespace oxygen::scene::detail

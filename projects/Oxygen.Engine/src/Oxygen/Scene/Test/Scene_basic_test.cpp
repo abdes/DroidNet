@@ -15,7 +15,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
@@ -124,7 +124,7 @@ protected:
 
   [[nodiscard]] auto CreateNodeWithInvalidScene() const -> SceneNode
   {
-    return { };
+    return {};
   }
 
   [[nodiscard]] auto CreateNodeWithInvalidHandle() const -> SceneNode
