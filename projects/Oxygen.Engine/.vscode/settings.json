@@ -119,15 +119,10 @@
     "C_Cpp.default.cStandard": "c17",
     "C_Cpp.intelliSenseEngine": "default",
     "[cmake]": {
-        "editor.defaultFormatter": "lxl66566.anyformatter-vscode"
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false
     },
-    "anyformatter": {
-        "cmake": {
-            "command": "gersemi -i",
-            "file": true,
-        }
-    },
-    "editor.formatOnSave": false,
+    "editor.formatOnSave": true,
     "C_Cpp.codeAnalysis.clangTidy.enabled": true,
     "C_Cpp.codeAnalysis.clangTidy.args": [
         "--config-file=${workspaceFolder}/.clang-tidy",
