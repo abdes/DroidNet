@@ -1,17 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
   <Type Name="oxygen::ResourceHandle">
-    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFFFFFF) != 0xFFFFFFFFFFFF">
-      Handle={handle_,x} (Index={Index()}, Type={ResourceType()}, Gen={Generation()}, {IsFree()})
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) != 0xFFFFFFFF">
+      RH(i:{handle_ &amp; 0xFFFFFFFF}, t:{(handle_ >> 44) &amp; 0xFF}, g:{(handle_ >> 32) &amp; 0xFFF}, c:{(handle_ >> 44) &amp; 0xFF})
     </DisplayString>
-    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFFFFFF) == 0xFFFFFFFFFFFF">Invalid Handle</DisplayString>
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) == 0xFFFFFFFF">RH(Invalid)</DisplayString>
     <Expand>
-      <Item Name="Raw Handle">handle_,x</Item>
-      <Item Name="Index">Index()</Item>
-      <Item Name="ResourceType">ResourceType()</Item>
-      <Item Name="Generation">Generation()</Item>
-      <Item Name="IsFree">IsFree()</Item>
-      <Item Name="IsValid">IsValid()</Item>
+      <Item Name="Raw Handle" Condition="true">handle_,x</Item>
+      <Item Name="Index" Condition="true">handle_ &amp; 0xFFFFFFFF</Item>
+      <Item Name="Generation" Condition="true">(handle_ >> 32) &amp; 0xFFF</Item>
+      <Item Name="Custom" Condition="true">(handle_ >> 44) &amp; 0xFF</Item>
+      <Item Name="ResourceType" Condition="true">(handle_ >> 52) &amp; 0xFF</Item>
+      <Item Name="IsFree" Condition="true">((handle_ >> 60) &amp; 1) != 0</Item>
+      <Item Name="Reserved" Condition="true">(handle_ >> 61) &amp; 0x7</Item>
+      <Item Name="IsValid" Condition="true">(handle_ &amp; 0xFFFFFFFF) != 0xFFFFFFFF</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="oxygen::scene::NodeHandle">
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) != 0xFFFFFFFF">
+      NH(i:{handle_ &amp; 0xFFFFFFFF}, scene:{(handle_ >> 44) &amp; 0xFF}, g:{(handle_ >> 32) &amp; 0xFFF})
+    </DisplayString>
+    <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) == 0xFFFFFFFF">NH(Invalid)</DisplayString>
+    <Expand>
+      <Item Name="Raw Handle" Condition="true">handle_,x</Item>
+      <Item Name="Index" Condition="true">handle_ &amp; 0xFFFFFFFF</Item>
+      <Item Name="Scene ID" Condition="true">(handle_ >> 44) &amp; 0xFF</Item>
+      <Item Name="Generation" Condition="true">(handle_ >> 32) &amp; 0xFFF</Item>
+      <Item Name="ResourceType" Condition="true">(handle_ >> 52) &amp; 0xFF</Item>
+      <Item Name="IsFree" Condition="true">((handle_ >> 60) &amp; 1) != 0</Item>
+      <Item Name="Reserved" Condition="true">(handle_ >> 61) &amp; 0x7</Item>
+      <Item Name="IsValid" Condition="true">(handle_ &amp; 0xFFFFFFFF) != 0xFFFFFFFF</Item>
     </Expand>
   </Type>
 </AutoVisualizer>
