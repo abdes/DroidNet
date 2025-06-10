@@ -12,11 +12,11 @@
 namespace oxygen {
 
 /*
-A graphics API agnostic POD structure representing different types of
-resources that get linked to their counterparts on the core backend.
+A graphics API agnostic POD structure representing different types of resources
+that get linked to their counterparts on the core backend.
 
-The handle is used as an alternative to pointers / associative container
-lookup to achieve several enhancements:
+The handle is used as an alternative to pointers / associative container lookup
+to achieve several enhancements:
 
 1. Store data in a contiguous block of memory.
 2. Create an associative mapping between the application view of the resource
@@ -26,45 +26,51 @@ lookup to achieve several enhancements:
 The handle is a 64-bit value, so there is no additional overhead compared to a
 pointer on 64-bit platforms.
 
-The 64-bit value is laid out in the following way, with the order of the
-fields being important for sorting prioritized by the free status, then
-resource type, then generation, and finally index.
+The 64-bit value is laid out in the following way, with the order of the fields
+being important for sorting prioritized by the reserved bits, then free status,
+then custom bits, then resource type, then generation, and finally index.
 
-   1       15                16                         32
-   X<-    type    -> <-      gen    -> <------------- index ------------->
-   ........ ........ ........ ........ ........ ........ ........ ........
+```
+    reserved
+      free bit
+    3 1    8        8         12                       32
+    ---X<-cust--><-type--><--- gen ---> <------------- index ------------->
+    ........ ........ ........ ........ ........ ........ ........ ........
+```
 
-The most significant bit of the handle is reserved (used for implementation of
-the handle lookup table). When set, the handle is part of freelist managed by
-the lookup table and can be allocated for a new resource. Otherwise, the
-handle is active. This gives us an embedded singly linked list within the
-lookup table costing just 1 bit in the handle. As long as we store the front
-index of the freelist separately, it is an O(1) operation to find the next
-available slot and maintain the singly linked list.
+The 4 most significant bits of the handle are reserved (used for implementation
+of the handle lookup table). The free bit is used to manage the freelist. When
+set, the handle is part of a freelist managed by the lookup table and can be
+allocated for a new resource. Otherwise, the handle is active. This gives us an
+embedded singly linked list within the lookup table costing just 1 bit in the
+handle. As long as we store the front index of the freelist separately, it is an
+O(1) operation to find the next available slot and maintain the singly linked
+list.
 
 The next most significant bits of the handle hold the resource type. This is
 extra information, that can introduce an element of type safety in the
 application or be used for special handling of resources by type.
 
-The generation field is used as a safety mechanism to detect when a stale
-handle is trying to access data that has since been overwritten in the
-corresponding slot. Every time a slot in the lookup table is removed, the
-generation increments. Handle lookups assert that the generations match.
+The generation field is used as a safety mechanism to detect when a stale handle
+is trying to access data that has since been overwritten in the corresponding
+slot. Every time a slot in the lookup table is removed, the generation
+increments. Handle lookups assert that the generations match.
 
-The remaining bits are simply an index into an array for that specific
-resource type inside the Render Device.
+The remaining bits are simply an index into an array for that specific resource
+type inside the Render Device.
 */
-
-class ResourceHandle final {
+class ResourceHandle {
 public:
   using HandleT = uint64_t;
 
 private:
   static constexpr uint8_t kHandleBits = sizeof(HandleT) * 8;
-  static constexpr uint8_t kGenerationBits { 16 };
-  static constexpr uint8_t kResourceTypeBits { 15 };
-  static constexpr uint8_t kIndexBits { kHandleBits - kGenerationBits
-    - kResourceTypeBits - 1 };
+  static constexpr uint8_t kReservedBits { 3 };
+  static constexpr uint8_t kFreeBits { 1 };
+  static constexpr uint8_t kCustomBits { 8 };
+  static constexpr uint8_t kResourceTypeBits { 8 };
+  static constexpr uint8_t kGenerationBits { 12 };
+  static constexpr uint8_t kIndexBits { 32 };
 
   static constexpr HandleT kHandleMask = static_cast<HandleT>(-1);
   static constexpr HandleT kIndexMask = (HandleT { 1 } << kIndexBits) - 1;
@@ -72,26 +78,36 @@ private:
     = (HandleT { 1 } << kGenerationBits) - 1;
   static constexpr HandleT kResourceTypeMask
     = (HandleT { 1 } << kResourceTypeBits) - 1;
+  static constexpr HandleT kCustomMask = (HandleT { 1 } << kCustomBits) - 1;
+  static constexpr HandleT kReservedMask = (HandleT { 1 } << kReservedBits) - 1;
 
 public:
   using GenerationT = std::conditional_t<kGenerationBits <= 16,
     std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>, uint32_t>;
-  using ResourceTypeT = std::conditional_t<kGenerationBits <= 16,
-    std::conditional_t<kGenerationBits <= 8, uint8_t, uint16_t>, uint32_t>;
+  using ResourceTypeT = std::conditional_t<kResourceTypeBits <= 16,
+    std::conditional_t<kResourceTypeBits <= 8, uint8_t, uint16_t>, uint32_t>;
   using IndexT = std::conditional_t<kIndexBits <= 32, uint32_t, uint64_t>;
+  using CustomT = std::conditional_t<kCustomBits <= 16,
+    std::conditional_t<kCustomBits <= 8, uint8_t, uint16_t>, uint32_t>;
+  using ReservedT = std::conditional_t<kReservedBits <= 16,
+    std::conditional_t<kReservedBits <= 8, uint8_t, uint16_t>, uint32_t>;
 
   static constexpr GenerationT kGenerationMax = kGenerationMask;
-  static constexpr GenerationT kTypeNotInitialized = kResourceTypeMask;
-  static constexpr GenerationT kResourceTypeMax = kResourceTypeMask;
+  static constexpr ResourceTypeT kTypeNotInitialized = kResourceTypeMask;
+  static constexpr ResourceTypeT kResourceTypeMax = kResourceTypeMask;
+  static constexpr CustomT kCustomMax = kCustomMask;
+  static constexpr ReservedT kReservedMax = kReservedMask;
   static constexpr IndexT kIndexMax = kIndexMask;
   static constexpr IndexT kInvalidIndex = kIndexMax;
 
+protected:
   constexpr ResourceHandle();
 
-  ~ResourceHandle() = default;
-
+public:
   explicit constexpr ResourceHandle(
     IndexT index, ResourceTypeT type = kTypeNotInitialized);
+
+    ~ResourceHandle() = default;
 
   constexpr ResourceHandle(const ResourceHandle&) = default;
   constexpr auto operator=(const ResourceHandle&) -> ResourceHandle&;
@@ -121,37 +137,64 @@ public:
 
   constexpr void SetResourceType(ResourceTypeT type);
 
+  [[nodiscard]] constexpr auto Custom() const -> CustomT;
+
+  constexpr void SetCustom(CustomT custom);
+
+  [[nodiscard]] constexpr auto Reserved() const -> ReservedT;
+
+  constexpr void SetReserved(ReservedT reserved);
+
   [[nodiscard]] constexpr auto IsFree() const -> bool;
 
   constexpr void SetFree(bool flag);
 
-  [[nodiscard]] constexpr auto ToString() const -> std::string;
-
 private:
   HandleT handle_ { kHandleMask };
-
   constexpr void SetGeneration(GenerationT generation);
+  static constexpr HandleT kCustomSetMask
+    = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
+    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits));
 
   static constexpr HandleT kResourceTypeSetMask
-    = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
-    | (HandleT { 1 } << (kIndexBits + kGenerationBits + kResourceTypeBits));
+    = ((HandleT { 1 } << (kIndexBits + kGenerationBits + kCustomBits)) - 1)
+    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits
+         + kResourceTypeBits));
 
   static constexpr HandleT kGenerationSetMask
     = (kHandleMask << (kIndexBits + kGenerationBits)) | kIndexMask;
 
   static constexpr HandleT kIndexSetMask = kHandleMask << kIndexBits;
 
-  static_assert((kHandleBits - kGenerationBits - kResourceTypeBits) > 0,
-    "Invalid handle bit configuration");
+  static constexpr HandleT kReservedSetMask
+    = ((HandleT { 1 } << (kHandleBits - kReservedBits)) - 1);
+
+  //=== Static Assertions ===-------------------------------------------------//
+
+  static_assert(kReservedBits + kFreeBits + kCustomBits + kResourceTypeBits
+        + kGenerationBits + kIndexBits
+      == kHandleBits,
+    "Bit allocation must sum to total handle bits");
+
   static_assert(sizeof(GenerationT) * 8 >= kGenerationBits,
     "GenerationT size is insufficient for kGenerationBits");
-  static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits,
+
+    static_assert(sizeof(ResourceTypeT) * 8 >= kResourceTypeBits,
     "ResourceTypeT size is insufficient for kResourceTypeBits");
-  static_assert(sizeof(IndexT) * 8 >= kIndexBits,
+
+    static_assert(sizeof(IndexT) * 8 >= kIndexBits,
     "IndexT size is insufficient for kIndexBits");
+
+    static_assert(sizeof(CustomT) * 8 >= kCustomBits,
+    "CustomT size is insufficient for kCustomBits");
+
+    static_assert(sizeof(ReservedT) * 8 >= kReservedBits,
+    "ReservedT size is insufficient for kReservedBits");
 };
 
-// ---------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Implementation of ResourceHandle methods
+//------------------------------------------------------------------------------
 
 constexpr ResourceHandle::ResourceHandle(
   const IndexT index, const ResourceTypeT type)
@@ -159,12 +202,18 @@ constexpr ResourceHandle::ResourceHandle(
   SetIndex(index);
   SetResourceType(type);
   SetGeneration(0);
+  SetCustom(0);
+  SetReserved(0);
   SetFree(false);
 }
 
 constexpr ResourceHandle::ResourceHandle()
 {
+  SetIndex(kInvalidIndex);
+  SetResourceType(kTypeNotInitialized);
   SetGeneration(0);
+  SetCustom(0);
+  SetReserved(0);
   SetFree(false);
 }
 
@@ -239,14 +288,42 @@ constexpr void ResourceHandle::SetIndex(const IndexT index)
 constexpr auto ResourceHandle::ResourceType() const -> ResourceTypeT
 {
   return static_cast<ResourceTypeT>(
-    (handle_ >> (kIndexBits + kGenerationBits)) & kResourceTypeMask);
+    (handle_ >> (kIndexBits + kGenerationBits + kCustomBits))
+    & kResourceTypeMask);
 }
 
 constexpr void ResourceHandle::SetResourceType(const ResourceTypeT type)
 {
   assert(type <= kResourceTypeMax); // max value is not-initialized
   handle_ = (handle_ & kResourceTypeSetMask)
-    | (static_cast<HandleT>(type) << (kIndexBits + kGenerationBits));
+    | (static_cast<HandleT>(type)
+      << (kIndexBits + kGenerationBits + kCustomBits));
+}
+
+constexpr auto ResourceHandle::Custom() const -> CustomT
+{
+  return static_cast<CustomT>(
+    (handle_ >> (kIndexBits + kGenerationBits)) & kCustomMask);
+}
+
+constexpr void ResourceHandle::SetCustom(const CustomT custom)
+{
+  assert(custom <= kCustomMax);
+  handle_ = (handle_ & kCustomSetMask)
+    | (static_cast<HandleT>(custom) << (kIndexBits + kGenerationBits));
+}
+
+constexpr auto ResourceHandle::Reserved() const -> ReservedT
+{
+  return static_cast<ReservedT>(
+    (handle_ >> (kHandleBits - kReservedBits)) & kReservedMask);
+}
+
+constexpr void ResourceHandle::SetReserved(const ReservedT reserved)
+{
+  assert(reserved <= kReservedMax);
+  handle_ = (handle_ & kReservedSetMask)
+    | (static_cast<HandleT>(reserved) << (kHandleBits - kReservedBits));
 }
 
 constexpr auto ResourceHandle::Generation() const -> GenerationT
@@ -280,37 +357,46 @@ constexpr void ResourceHandle::NewGeneration()
 
 constexpr auto ResourceHandle::IsFree() const -> bool
 {
-  return (handle_ & (HandleT { 1 } << (kHandleBits - 1))) != 0;
+  return (handle_ & (HandleT { 1 } << (kHandleBits - kReservedBits - 1))) != 0;
 }
 
 constexpr void ResourceHandle::SetFree(const bool flag)
 {
-  handle_ &= ((HandleT { 1 } << (kHandleBits - 1)) - 1);
+  const auto free_bit_position = kHandleBits - kReservedBits - 1;
+  handle_ &= ~(HandleT { 1 } << free_bit_position);
   if (flag) {
-    handle_ |= (HandleT { 1 } << (kHandleBits - 1));
+    handle_ |= (HandleT { 1 } << free_bit_position);
   }
 }
 
-constexpr auto ResourceHandle::ToString() const -> std::string
+constexpr auto to_string(const ResourceHandle& value) noexcept -> std::string
 {
-  return IsValid()
-    ? std::string("ResourceHandle(Index: ") + std::to_string(Index())
-      + ", ResourceType: " + std::to_string(ResourceType())
-      + ", Generation: " + std::to_string(Generation())
-      + ", IsFree: " + (IsFree() ? "true" : "false") + ")"
-    : "ResourceHandle(Invalid)";
+  if (!value.IsValid()) {
+    return "RH(Invalid)";
+  }
+
+  auto result = std::string("RH(Index: ") + std::to_string(value.Index())
+    + ", ResourceType: " + std::to_string(value.ResourceType())
+    + ", Generation: " + std::to_string(value.Generation());
+
+  if (value.Custom() != 0) {
+    result += ", Custom: " + std::to_string(value.Custom());
+  }
+  if (value.Reserved() != 0) {
+    result += ", Reserved: " + std::to_string(value.Reserved());
+  }
+
+  result += ", IsFree: " + std::string(value.IsFree() ? "true" : "false") + ")";
+  return result;
 }
 
-auto constexpr to_string(const ResourceHandle& value) noexcept
-{
-  return value.ToString();
-}
-
-auto constexpr to_string_compact(const ResourceHandle& value) noexcept
+constexpr auto to_string_compact(const ResourceHandle& value) noexcept
 {
   return value.IsValid() ? std::string("RH(i:") + std::to_string(value.Index())
       + ", t:" + std::to_string(value.ResourceType())
       + ", g:" + std::to_string(value.Generation())
+      + ", c:" + std::to_string(value.Custom())
+      + ", r:" + std::to_string(value.Reserved())
       + ", f:" + (value.IsFree() ? "1" : "0") + ")"
                          : "RH(Invalid)";
 }

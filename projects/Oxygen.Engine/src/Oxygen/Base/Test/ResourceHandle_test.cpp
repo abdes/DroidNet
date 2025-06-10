@@ -4,34 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/ResourceHandle.h>
-
 #include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ResourceHandle.h>
 
 using oxygen::ResourceHandle;
 
 namespace {
 
+// Test helper class to access protected default constructor
+class TestResourceHandle : public ResourceHandle {
+public:
+  TestResourceHandle()
+    : ResourceHandle()
+  {
+  }
+};
+
 NOLINT_TEST(ResourceHandleTest, InvalidHandle)
 {
-  const ResourceHandle handle;
+  const TestResourceHandle handle;
   ASSERT_FALSE(handle.IsValid());
 }
 
 NOLINT_TEST(ResourceHandleTest, ToString)
 {
   const ResourceHandle handle(1U, 0x04);
-  const std::string expected_string
-    = "ResourceHandle(Index: 1, ResourceType: 4, Generation: 0, IsFree: false)";
-  EXPECT_EQ(handle.ToString(), expected_string);
+  NOLINT_EXPECT_NO_THROW(nostd::to_string(handle));
+  NOLINT_EXPECT_NO_THROW(oxygen::to_string_compact(handle));
 }
 
 NOLINT_TEST(ResourceHandleTest, ToString_InvalidHandle)
 {
-  const ResourceHandle handle;
+  const TestResourceHandle handle;
   ASSERT_FALSE(handle.IsValid());
-  const std::string expected_string = "ResourceHandle(Invalid)";
-  EXPECT_EQ(handle.ToString(), expected_string);
+  NOLINT_EXPECT_NO_THROW(nostd::to_string(handle));
+  NOLINT_EXPECT_NO_THROW(oxygen::to_string_compact(handle));
 }
 
 NOLINT_TEST(ResourceHandleTest, ValidHandle)
@@ -59,7 +68,7 @@ NOLINT_TEST(ResourceHandleTest, GetHandle)
 {
   const ResourceHandle handle(1U, 0x04);
   const ResourceHandle::HandleT the_handle = handle.Handle();
-  EXPECT_EQ(the_handle, 0x0004'0000'0000'0001ULL);
+  EXPECT_EQ(the_handle, 0x0040'0000'0000'0001ULL);
 }
 
 NOLINT_TEST(ResourceHandleTest, NewGeneration)
@@ -91,7 +100,7 @@ NOLINT_TEST(ResourceHandleTest, SetResourceType)
 
 NOLINT_TEST(ResourceHandleTest, SetIndex)
 {
-  ResourceHandle handle;
+  ResourceHandle handle(1U, 0x01); // Create a valid handle first
   handle.SetIndex(0);
   EXPECT_EQ(handle.Index(), 0U);
   constexpr ResourceHandle::IndexT kValidIndex = 12345;

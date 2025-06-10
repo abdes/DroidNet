@@ -15,67 +15,70 @@
 
 namespace oxygen {
 
-/*
-Lookup table for resources indexed with a resource handle.
+/*!
+ @class ResourceTable
 
-The same resource handle data type is used in two different ways: as an
-externally visible handle, also used as an index into a sparse set, and as an
-internal index into a dense set storing the actual objects.
+ Lookup table for resources indexed with a resource handle.
 
-The sparse set is an array with holes. The holes are created when items are
-removed from the set. Each slot in the sparse set stores an internal index
-that points to the location of the actual data in the dense set. The dense set
-is a packed array that can be moved around without impacting the externally
-visible handles.
+ The same resource handle data type is used in two different ways: as an
+ externally visible handle, also used as an index into a sparse set, and as an
+ internal index into a dense set storing the actual objects.
 
-The sparse set also maintains a free list of available slots. The free list
-links the holes together using the reserved free bit in the handle. Gaps in
-the sparse set resulting from deletions will be filled by subsequent
-insertions. The sparse set will always fill gaps before growing, and thus will
-itself try to remain dense.
+ The sparse set is an array with holes. The holes are created when items are
+ removed from the set. Each slot in the sparse set stores an internal index that
+ points to the location of the actual data in the dense set. The dense set is a
+ packed array that can be moved around without impacting the externally visible
+ handles.
 
-The dense set stores the data itself, tightly packed to ensure best cache
-locality during traversals.
+ The sparse set also maintains a free list of available slots. The free list
+ links the holes together using the reserved free bit in the handle. Gaps in the
+ sparse set resulting from deletions will be filled by subsequent insertions.
+ The sparse set will always fill gaps before growing, and thus will itself try
+ to remain dense.
 
-Constant time lookups are achieved because handles contain information about
-their location in the sparse set. This makes lookups into the sparse set
-nothing more than an array lookup. The information contained in the sparse set
-knows the item's exact location in the dense set, so again just an array
-lookup.
+ The dense set stores the data itself, tightly packed to ensure best cache
+ locality during traversals.
 
-Constant time insertions are done by pushing the new item to the back of the
-dense set, and using the first available slot in the sparse set's freelist for
-the index.
+ Constant time lookups are achieved because handles contain information about
+ their location in the sparse set. This makes lookups into the sparse set
+ nothing more than an array lookup. The information contained in the sparse set
+ knows the item's exact location in the dense set, so again just an array
+ lookup.
 
-Constant time removal is made possible by using the "swap and pop" trick in
-the dense set. That is, we swap the item being removed with the last item in
-the array, and then pop_back to remove it. We also have to update the index of
-the last item referenced in the sparse set. We have to discover the location
-in the sparse set of the corresponding inner id for the (former) last item
-that we are swapping with. The index field must be changed to reference its
-new location in the dense set.
+ Constant time insertions are done by pushing the new item to the back of the
+ dense set, and using the first available slot in the sparse set's freelist for
+ the index.
 
-Constant time removal is achieved by swapping the item being removed with the
-last item in the dense set and then popping the last item off of the dense
-set. The index of the last item referenced in the sparse set must also be
-updated. To do this, we first need to find the location of the corresponding
-internal handle for the (former) last item that we are swapping with in the
-sparse set. Once we have found the location, we can change the index field to
-reference the new location of the item in the dense set.
+ Constant time removal is made possible by using the "swap and pop" trick in the
+ dense set. That is, we swap the item being removed with the last item in the
+ array, and then pop_back to remove it. We also have to update the index of the
+ last item referenced in the sparse set. We have to discover the location in the
+ sparse set of the corresponding inner id for the (former) last item that we are
+ swapping with. The index field must be changed to reference its new location in
+ the dense set.
 
-We introduce a third storage set, called the meta set, which contains an index
-back to the sparse set. This gives us a two-way link between the dense set and
-the sparse set. We do not combine the meta information directly into the dense
-set because it is currently only used for deletion. There is no need to harm
-cache locality and alignment of the main object store for infrequently used
-data.
+ Constant time removal is achieved by swapping the item being removed with the
+ last item in the dense set and then popping the last item off of the dense set.
+ The index of the last item referenced in the sparse set must also be updated.
+ To do this, we first need to find the location of the corresponding internal
+ handle for the (former) last item that we are swapping with in the sparse set.
+ Once we have found the location, we can change the index field to reference the
+ new location of the item in the dense set.
 
-Inspired by ID Lookup in the stingray core.
-http://bitsquid.blogspot.com/2011/09/managing-decoupling-part-4-id-lookup.html
+ We introduce a third storage set, called the meta set, which contains an index
+ back to the sparse set. This gives us a two-way link between the dense set and
+ the sparse set. We do not combine the meta information directly into the dense
+ set because it is currently only used for deletion. There is no need to harm
+ cache locality and alignment of the main object store for infrequently used
+ data.
 
-Uses reverse lookup from dense set to sparse set from
-https://github.com/y2kiah/griffin-containers.
-- @copyright The MIT License (MIT), Copyright (c) 2015 Jeff Kiah.
+ Inspired by ID Lookup in the stingray core.
+ http://bitsquid.blogspot.com/2011/09/managing-decoupling-part-4-id-lookup.html
+
+ Uses reverse lookup from dense set to sparse set from
+ https://github.com/y2kiah/griffin-containers.
+
+ @copyright The MIT License (MIT), Copyright (c) 2015 Jeff Kiah.
 */
 
 using HandleSet = std::vector<ResourceHandle>;
@@ -109,7 +112,7 @@ public:
     return item_type_;
   }
 
-  // -- Element access -------------------------------------------------------
+  //=== Element Access ===----------------------------------------------------//
 
   [[nodiscard]] auto Contains(const ResourceHandle& handle) const noexcept
     -> bool;
@@ -122,13 +125,13 @@ public:
    */
   [[nodiscard]] auto Items() const -> std::span<const T> { return items_; }
 
-  // -- Capacity -------------------------------------------------------------
+  //=== Capacity ===----------------------------------------------------------//
 
   [[nodiscard]] auto Size() const noexcept { return items_.size(); }
   [[nodiscard]] auto IsEmpty() const noexcept { return items_.empty(); }
   [[nodiscard]] auto Capacity() const noexcept { return items_.capacity(); }
 
-  // -- Modifiers ------------------------------------------------------------
+  //=== Modifiers ===---------------------------------------------------------//
 
   template <typename URef = T>
     requires std::is_same_v<std::remove_cvref_t<URef>, T>
@@ -232,7 +235,9 @@ private:
   bool fragmented_ { false };
 };
 
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Implementation of ResourceTable methods
+//------------------------------------------------------------------------------
 
 namespace detail {
 
@@ -248,7 +253,6 @@ namespace detail {
 
 } // namespace detail
 
-// -----------------------------------------------------------------------------
 
 template <typename T>
 auto ResourceTable<T>::ItemAt(const ResourceHandle& handle) -> T&
@@ -323,7 +327,7 @@ auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
   assert(Size() < ResourceHandle::kIndexMax
     && "index will be out of range, increase bit size of the index values");
 
-  ResourceHandle handle;
+  ResourceHandle handle(ResourceHandle::kInvalidIndex, item_type_);
   fragmented_ = true;
 
   if (IsFreeListEmpty()) {
