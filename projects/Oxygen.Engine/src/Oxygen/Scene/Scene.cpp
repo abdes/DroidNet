@@ -1086,8 +1086,10 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
   DCHECK_NE_F(parent_impl, child_impl, "cannot link a node to itself");
 
   DLOG_SCOPE_F(3, "Link Child Node");
-  DLOG_F(3, "child node: {}", to_string_compact(child_handle));
-  DLOG_F(3, "parent node: {}", to_string_compact(parent_handle));
+  DLOG_F(3, "child node `{}`: {}", child_impl->GetName(),
+    to_string_compact(child_handle));
+  DLOG_F(3, "parent node: `{}`: {}", parent_impl->GetName(),
+    to_string_compact(parent_handle));
 
   // TODO: Ensure not creating a cyclic dependency
 
@@ -1125,7 +1127,8 @@ void Scene::UnlinkNode(
   DCHECK_NOTNULL_F(node_impl);
 
   DLOG_SCOPE_F(3, "Unlink Node");
-  DLOG_F(3, "node: {}", to_string_compact(node_handle));
+  DLOG_F(
+    3, "node `{}`: {}", node_impl->GetName(), to_string_compact(node_handle));
 
   // Get parent, next sibling, and previous sibling handles
   const NodeHandle parent_handle = node_impl->AsGraphNode().GetParent();
@@ -1137,8 +1140,9 @@ void Scene::UnlinkNode(
   // Update the parent's first_child pointer if this node_handle is the first
   // child
   if (parent_handle.IsValid()) {
-    DLOG_F(3, "parent: {}", to_string_compact(parent_handle));
     auto& parent_impl = GetNodeImplRef(parent_handle);
+    DLOG_F(3, "parent `{}`: {}", parent_impl.GetName(),
+      to_string_compact(parent_handle));
     if (parent_impl.AsGraphNode().GetFirstChild() == node_handle) {
       // This node_handle is the first child of its parent
       // Update parent to point to the next sibling as its first child
@@ -1151,15 +1155,17 @@ void Scene::UnlinkNode(
 
   // Update previous sibling's next_sibling pointer if it exists
   if (prev_sibling_handle.IsValid()) {
-    DLOG_F(3, "prev sibling: {}", to_string_compact(prev_sibling_handle));
     auto& prev_sibling_impl = GetNodeImplRef(prev_sibling_handle);
+    DLOG_F(3, "prev sibling `{}`: {}", prev_sibling_impl.GetName(),
+      to_string_compact(prev_sibling_handle));
     prev_sibling_impl.AsGraphNode().SetNextSibling(next_sibling_handle);
   }
 
   // Update next sibling's prev_sibling pointer if it exists
   if (next_sibling_handle.IsValid()) {
-    DLOG_F(3, "next sibling: {}", to_string_compact(next_sibling_handle));
     auto& next_sibling_impl = GetNodeImplRef(next_sibling_handle);
+    DLOG_F(3, "next sibling `{}`: {}", next_sibling_impl.GetName(),
+      to_string_compact(next_sibling_handle));
     next_sibling_impl.AsGraphNode().SetPrevSibling(prev_sibling_handle);
   }
 
