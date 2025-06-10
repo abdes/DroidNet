@@ -523,7 +523,37 @@ auto Scene::CreateChildNode(const SceneNode& parent, const std::string& name,
   return CreateChildNodeImpl(parent, name, flags);
 }
 
-// ReSharper disable once CppParameterMayBeConstPtrOrRef
+/*!
+ This method safely destroys a leaf node (a node with no children) from the
+ scene. The node is properly unlinked from its parent and siblings, removed from
+ the scene's node table, and its handle is invalidated. If the node is a root
+ node, it is also removed from the scene's root nodes collection.
+
+ __Failure Scenarios:__
+ - If the node handle is invalid (not pointing to a valid node)
+ - If the node is no longer in the scene (was previously destroyed)
+ - If the node has children (use `DestroyNodeHierarchy()` instead)
+ - If the node does not belong to this scene (fatal error)
+
+ __Postconditions (on success):__
+ - The node is removed from the scene hierarchy
+ - The node's handle is invalidated
+ - Parent-child and sibling relationships are properly updated
+ - If the node was a root node, it's removed from the root nodes collection
+
+ @note For nodes with children, use `DestroyNodeHierarchy()` to destroy the
+ entire subtree.
+ @note If the node is no longer in the scene, its handle will be invalidated,
+ ensuring lazy invalidation semantics.
+
+ @param node Node to destroy (must be a leaf node belonging to this scene)
+
+ @return true if the node was successfully destroyed, false if the node is
+ invalid or was not found in the scene.
+
+ @see DestroyNodeHierarchy() for destroying nodes with children
+ @see UnlinkNode() for removing nodes from hierarchy without destroying them
+*/
 auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
 {
   DLOG_SCOPE_F(3, "Destroy Node");
@@ -547,6 +577,54 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
       node.Invalidate();
       return true;
     });
+}
+
+/*!
+ This method destroys multiple leaf nodes in a batch operation. Each node in the
+ provided span is destroyed using the same logic as `DestroyNode()`, with the
+ results collected into a vector indicating success or failure for each node.
+
+ __Batch Operation Behavior:__
+ - Processes each node independently - failure of one node does not affect
+   others
+ - Returns a result vector with one entry per input node (true = destroyed,
+   false = failed)
+
+ @param nodes Span of leaf nodes to destroy (all must belong to this scene)
+
+ @return Vector of boolean results, one per input node. true indicates the node
+ was successfully destroyed, false indicates failure (see `DestroyNode()` for
+ failure scenarios).
+
+ @see DestroyNode() for detailed destruction logic and failure scenarios
+ @see DestroyNodeHierarchy() for destroying nodes with children
+*/
+auto Scene::DestroyNodes(std::span<SceneNode> nodes) noexcept
+  -> std::vector<uint8_t>
+{
+  DLOG_SCOPE_F(3, "Destroy Nodes");
+
+  // Bailout early if no nodes to destroy
+  if (nodes.empty()) {
+    return {};
+  }
+
+  std::vector<uint8_t> results;
+  results.reserve(nodes.size());
+
+  for (SceneNode& node : nodes) {
+    const auto result = DestroyNode(node);
+    results.push_back(result);
+  }
+
+  const auto destroyed_count = std::count(results.begin(), results.end(), 1);
+  DLOG_F(3, "{} / {} nodes destroyed", destroyed_count, results.size());
+  if (static_cast<size_t>(destroyed_count) != results.size()) {
+    LOG_F(WARNING, "DestroyNodes, {} nodes out of {} were not destroyed",
+      results.size() - destroyed_count, results.size());
+  }
+
+  return results;
 }
 
 auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
@@ -591,8 +669,10 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
           // Move to next sibling using SceneNode's public API
           child_opt = child.GetNextSibling();
         }
-      } // First, handle the starting node's relationship with its
-        // parent/scene
+      }
+
+      // First, handle the starting node's relationship with its
+      // parent/scene
       // If it's a scene root node, remove it from the root nodes
       // collection If it has a parent, unlink it from its parent
       if (starting_node.IsRoot()) {
@@ -1148,9 +1228,6 @@ void Scene::UnlinkNode(
       // Update parent to point to the next sibling as its first child
       parent_impl.AsGraphNode().SetFirstChild(next_sibling_handle);
     }
-
-    // Mark parent's transform as dirty since hierarchy changed
-    parent_impl.MarkTransformDirty();
   }
 
   // Update previous sibling's next_sibling pointer if it exists
@@ -1469,7 +1546,10 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
   SceneTraversal traversal(*starting_node.scene_weak_.lock());
   const auto traversal_result = traversal.TraverseHierarchy(
     const_cast<SceneNode&>(starting_node),
-    [&](const VisitedNode& node, const Scene&) -> VisitResult {
+    [&](const VisitedNode& node, const Scene&, bool dry_run) -> VisitResult {
+      DCHECK_F(!dry_run,
+        "CloneHierarchy uses kPreOrder and should never receive dry_run=true");
+
       auto orig_parent_handle = node.node_impl->AsGraphNode().GetParent();
       std::string name = std::string(node.node_impl->GetName());
 
@@ -1525,8 +1605,8 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
         return VisitResult::kStop;
       }
     },
-    TraversalOrder::kDepthFirst); // Depth-first guarantees parent visited
-                                  // before children
+    TraversalOrder::kPreOrder); // Pre-order guarantees parent visited
+                                // before children
 
   LOG_SCOPE_F(INFO, "Traversal result");
   LOG_F(INFO, "traversal completed: {}", traversal_result.completed);

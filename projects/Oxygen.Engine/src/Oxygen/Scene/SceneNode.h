@@ -29,10 +29,10 @@ class SceneNode;
 class SceneNodeImpl;
 
 namespace detail {
-  class TransformComponent; // Forward declaration
+  class TransformComponent;
 } // namespace detail
 
-class Scene; // Forward declaration
+class Scene;
 
 //! Lightweight handle to a scene graph node, providing safe API for scene
 //! hierarchy, transformation, etc.
@@ -41,22 +41,22 @@ class Scene; // Forward declaration
  SceneNode is a non-owning handle/view that provides access to nodes in a
  SceneNodeImpl objects managed by the Scene's resource table.
 
- **Key Characteristics**
+ ### Key Characteristics
 
  - **Mutation Routing**: All scene hierarchy modifications (creation,
    destruction, re-parenting) must go through the Scene class.
  - **No-data policy**: SceneNode does not own the underlying data. SceneNodeImpl
    does, and this allows efficient processing of the data by the engine.
 
- **Lazy Invalidation**
+ ### Lazy Invalidation
 
  When a SceneNodeImpl is removed from the Scene, existing SceneNode handles are
  not immediately invalidated due to the complexity of tracking all copies.
  Instead, handles become invalid lazily when accessed. Operations on invalid
  handles will fail safely, and its validity can be verified using IsValid().
 
- \note SceneNode is the primary user-facing API for scene graph operations. Use
-       Scene methods for creating, destroying, or re-parenting nodes.
+ @note SceneNode is the primary user-facing API for scene graph operations. Use
+ Scene methods for creating, destroying, or re-parenting nodes.
 */
 class SceneNode : public Object,
                   public Resource<resources::kSceneNode, NodeHandle> {
@@ -205,9 +205,9 @@ private:
 
 auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
 
-//=============================================================================
+//==============================================================================
 // SceneNode::Transform Implementation
-//=============================================================================
+//==============================================================================
 
 /*!
  Scene-aware Transform interface providing safe access to node transformations.
@@ -218,7 +218,8 @@ auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
  operations are scene-aware and provide additional convenience methods for
  common transform operations.
 
- Key Design Principles:
+ ### Key Design Principles
+
  - **Respect Caching**: Does not force immediate world matrix computation;
    respects the existing dirty marking and caching system
  - **Scene-Aware**: Provides operations that understand scene hierarchy and
@@ -229,7 +230,8 @@ auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
  - **Future-Proof**: Designed to accommodate animation, physics, and advanced
    transform operations
 
- Usage Examples:
+ ### Usage Examples
+
  ```cpp
  auto node = scene->CreateNode("MyNode");
  auto transform = node.GetTransform();
@@ -253,8 +255,8 @@ auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
  Performance: Transform creates minimal overhead as it's a simple reference
  wrapper. Most operations forward directly to TransformComponent methods.
 
- \note This class is designed as a nested class of SceneNode to provide
-       strong encapsulation while maintaining clean public APIs.
+ @note This class is designed as a nested class of SceneNode to provide strong
+ encapsulation while maintaining clean public APIs.
 */
 class SceneNode::Transform {
 public:
@@ -264,21 +266,21 @@ public:
 
   //! Constructs a Transform interface for the given SceneNode.
   /*!
-   Creates a Transform interface that operates on the specified SceneNode.
-   This allows safe access to the node's TransformComponent and provides
-   convenient methods for local and world transformations.
+   Creates a Transform interface that operates on the specified SceneNode. This
+   allows safe access to the node's TransformComponent and provides convenient
+   methods for local and world transformations.
 
-   \param node Reference to the SceneNode this Transform will operate on.
+   @param node Reference to the SceneNode this Transform will operate on.
 
-   \note The node reference must remain valid for the lifetime of this
-         Transform.
+   @note The node reference must remain valid for the lifetime of this
+   Transform.
   */
   explicit Transform(SceneNode& node) noexcept
     : node_(&node)
   {
   }
 
-  //=== Local Transform Operations (Forward to TransformComponent) ===------//
+  //=== Local Transform Operations (Forward to TransformComponent) ===--------//
 
   //! Sets all local transformation components atomically.
   OXGN_SCN_API auto SetLocalTransform(const Vec3& position,
@@ -293,7 +295,7 @@ public:
   //! Sets the local scale (scale component).
   OXGN_SCN_API auto SetLocalScale(const Vec3& scale) noexcept -> bool;
 
-  //=== Local Transform Getters ===---------------------------------------//
+  //=== Local Transform Getters ===-------------------------------------------//
 
   //! Gets the local position (translation component).
   OXGN_SCN_NDAPI auto GetLocalPosition() const noexcept -> std::optional<Vec3>;
@@ -304,7 +306,7 @@ public:
   //! Gets the local scale (scale component).
   OXGN_SCN_NDAPI auto GetLocalScale() const noexcept -> std::optional<Vec3>;
 
-  //=== Transform Operations ===------------------------------------------//
+  //=== Transform Operations ===----------------------------------------------//
 
   //! Applies a translation (movement) to the current position.
   OXGN_SCN_API auto Translate(const Vec3& offset, bool local = true) noexcept
@@ -317,7 +319,7 @@ public:
   //! Applies a scaling factor to the current scale.
   OXGN_SCN_API auto Scale(const Vec3& scale_factor) noexcept -> bool;
 
-  //=== World Transform Access (Respects Caching) ===-----------------------//
+  //=== World Transform Access (Respects Caching) ===-------------------------//
 
   //! Gets the world transformation matrix.
   OXGN_SCN_NDAPI auto GetWorldMatrix() const noexcept -> std::optional<Mat4>;
@@ -334,7 +336,7 @@ public:
   //! matrix.
   OXGN_SCN_NDAPI auto GetWorldScale() const noexcept -> std::optional<Vec3>;
 
-  //=== Scene-Aware Transform Operations ===--------------------------------//
+  //=== Scene-Aware Transform Operations ===----------------------------------//
 
   //! Orients the node to look at a target position.
   OXGN_SCN_API auto LookAt(const Vec3& target_position,
