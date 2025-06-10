@@ -15,12 +15,12 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Resource.h>
-#include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -58,12 +58,12 @@ class Scene; // Forward declaration
  \note SceneNode is the primary user-facing API for scene graph operations. Use
        Scene methods for creating, destroying, or re-parenting nodes.
 */
-class SceneNode : public Object, public Resource<resources::kSceneNode> {
+class SceneNode : public Object,
+                  public Resource<resources::kSceneNode, NodeHandle> {
   OXYGEN_TYPED(SceneNode)
 
 public:
   using Flags = SceneNodeImpl::Flags;
-  using NodeHandle = ResourceHandle;
 
   using OptionalRefToImpl
     = std::optional<std::reference_wrapper<SceneNodeImpl>>;
@@ -93,14 +93,14 @@ public:
   //! Creates a SceneNode, associated with the given, \b valid scene and with
   //! the given \b valid \p handle.
   OXGN_SCN_API SceneNode(
-    std::weak_ptr<Scene> scene_weak, const ResourceHandle& handle);
+    std::weak_ptr<Scene> scene_weak, const NodeHandle& handle);
 
   ~SceneNode() override = default;
 
   OXYGEN_DEFAULT_COPYABLE(SceneNode)
   OXYGEN_DEFAULT_MOVABLE(SceneNode)
 
-  //=== Scene Hierarchy ===-------------------------------------------------//
+  //=== Scene Hierarchy ===---------------------------------------------------//
 
   OXGN_SCN_NDAPI auto GetParent() const noexcept -> std::optional<SceneNode>;
 

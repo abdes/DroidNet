@@ -6,7 +6,10 @@
 
 #pragma once
 
+#include <atomic>
+#include <bitset>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -16,6 +19,7 @@
 
 #include <Oxygen/Base/Concepts.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen {
@@ -74,8 +78,8 @@ class Scene : public Composition, public std::enable_shared_from_this<Scene> {
   using SceneNodeImpl = SceneNodeImpl;
 
 public:
-  using NodeHandle = SceneNode::NodeHandle;
   using NodeTable = ResourceTable<SceneNodeImpl>;
+  using SceneId = NodeHandle::SceneId;
 
   using OptionalRefToImpl
     = std::optional<std::reference_wrapper<SceneNodeImpl>>;
@@ -95,6 +99,9 @@ public:
 
   OXGN_SCN_NDAPI auto GetName() const noexcept -> std::string_view;
   OXGN_SCN_API void SetName(std::string_view name) noexcept;
+
+  //! Gets the unique ID of this scene (0-255).
+  OXGN_SCN_NDAPI auto GetId() const noexcept { return scene_id_; }
 
   //! Creates a new root node with the given \p name and default flags.
   OXGN_SCN_NDAPI auto CreateNode(const std::string& name) -> SceneNode;
@@ -449,8 +456,8 @@ public:
    \return Vector indicating success (true) or failure (false) for each
    node at the same index
 
-   \note **Partial Success:** Each individual adoption is atomic, but some
-   may fail.
+   \note **Partial Success:** Each individual operation is atomic, but some may
+         fail.
   */
   OXGN_SCN_NDAPI auto AdoptNodesAsRoot(std::span<SceneNode> nodes,
     bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
@@ -577,20 +584,15 @@ private:
   auto CloneHierarchy(const SceneNode& original_node)
     -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
-  //! Links a child node to a parent node in the hierarchy. Both of them
-  //! must be valid and belong to this scene.
+  //! Links a child node to a parent node in the hierarchy. Both of them must be
+  //! valid and belong to this scene. The child node must be an orphan, newly
+  //! created or resulting from a prior call to UnlinkNode().
   void LinkChild(const NodeHandle& parent_handle, SceneNodeImpl* parent_impl,
     const NodeHandle& child_handle, SceneNodeImpl* child_impl) noexcept;
 
-  //! Un-links a node_handle from its parent and siblings, preparing it
-  //! for destruction.
-  /*!
-   This method does not destroy the node, it only removes it from the
-   hierarchy. If the node must be destroyed, DestroyNode() or
-   DestroyNodeHierarchy() should be used after un-linking. If it is simply
-   being detached, it needs to be added to the roots set using
-   AddRootNode().
-  */
+  //! Un-links a node_handle from its parent and siblings, making it an orphan.
+  //! Follow-up action is required to destroy it, add it to the roots, or
+  //! re-parent it.
   void UnlinkNode(
     const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept;
 
@@ -603,13 +605,16 @@ private:
     const SceneNode& node, const SceneNode& new_parent) const noexcept -> bool;
 
   //! Marks the transform as dirty for a node and all its descendants.
-  void MarkSubtreeTransformDirty(const Scene::NodeHandle& root_handle) noexcept;
+  void MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept;
 
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.
   std::vector<NodeHandle> root_nodes_;
 
   SceneTraversal* traversal_;
+
+  //! Unique ID for this scene (0-255)
+  SceneId scene_id_;
 
   //=== Validation Helpers ===------------------------------------------------//
 

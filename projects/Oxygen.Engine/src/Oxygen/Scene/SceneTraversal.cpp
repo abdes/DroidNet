@@ -49,7 +49,7 @@ SceneTraversal::SceneTraversal(const Scene& scene)
 
 //=== Helper Methods ===------------------------------------------------------//
 
-auto SceneTraversal::GetNodeImpl(const ResourceHandle& handle) const
+auto SceneTraversal::GetNodeImpl(const NodeHandle& handle) const
   -> SceneNodeImpl*
 {
   // Private stuff to Scene, and should not be checked here.

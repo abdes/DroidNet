@@ -18,10 +18,67 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::VisitedNode;
+
+// =============================================================================
+// SceneIdManager Implementations
+// =============================================================================
+
+namespace {
+
+//! Thread-safe scene ID management
+struct SceneIdManager {
+  static constexpr Scene::SceneId kMaxScenes = NodeHandle::kMaxSceneId;
+
+  std::mutex mutex;
+  std::bitset<kMaxScenes> used_ids {};
+
+  //! Allocates the next available scene ID
+  auto AllocateId() -> std::optional<Scene::SceneId>;
+
+  //! Releases a scene ID for reuse
+  void ReleaseId(Scene::SceneId id) noexcept;
+
+  //! Gets the singleton instance
+  static auto Instance() -> SceneIdManager&;
+};
+
+auto SceneIdManager::AllocateId() -> std::optional<Scene::SceneId>
+{
+  std::lock_guard<std::mutex> lock(mutex);
+
+  // Find first available ID, that is not the invalid ID
+  for (size_t i = 0; i < kMaxScenes; ++i) {
+    if (!used_ids[i] && i != NodeHandle::kInvalidSceneId) {
+      used_ids[i] = true;
+      return static_cast<Scene::SceneId>(i);
+    }
+  }
+
+  // All IDs are in use
+  return std::nullopt;
+}
+
+void SceneIdManager::ReleaseId(Scene::SceneId id) noexcept
+{
+  std::lock_guard<std::mutex> lock(mutex);
+
+  if (id < kMaxScenes) {
+    used_ids[id] = false;
+  }
+}
+
+auto SceneIdManager::Instance() -> SceneIdManager&
+{
+  static SceneIdManager instance;
+  return instance;
+}
+
+} // namespace
 
 // =============================================================================
 // Scene Validator Implementations
@@ -262,12 +319,27 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   LOG_F(2, "initial capacity: '{}'", initial_capacity);
 
   AddComponent<ObjectMetaData>(name);
+
+  // Allocate unique scene ID
+  auto id = SceneIdManager::Instance().AllocateId();
+  if (!id.has_value()) {
+    // Handle the case where all 256 IDs are exhausted
+    // This could throw an exception or use a fallback strategy
+    throw std::runtime_error(
+      "Cannot create Scene: All 256 scene IDs are in use");
+  }
+  scene_id_ = *id;
+
+  SetName(name);
 }
 
 Scene::~Scene()
 {
   LOG_SCOPE_F(INFO, "Scene destruction");
   delete traversal_;
+
+  // Release the scene ID for reuse
+  SceneIdManager::Instance().ReleaseId(scene_id_);
 }
 
 auto Scene::GetName() const noexcept -> std::string_view
@@ -314,7 +386,8 @@ auto Scene::IsOwnerOf(const SceneNode& node) const -> bool
 template <typename... Args>
 auto Scene::CreateNodeImpl(Args&&... args) noexcept -> SceneNode
 {
-  const auto handle = nodes_->Emplace(std::forward<Args>(args)...);
+  const NodeHandle handle { nodes_->Emplace(std::forward<Args>(args)...),
+    GetId() };
   DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
 
   AddRootNode(handle);
@@ -395,7 +468,9 @@ auto Scene::CreateChildNodeImpl(
       DCHECK_EQ_F(state.node, &parent);
       DCHECK_NOTNULL_F(state.node_impl);
 
-      const auto child_handle = nodes_->Emplace(std::forward<Args>(args)...);
+      const NodeHandle child_handle {
+        nodes_->Emplace(std::forward<Args>(args)...), GetId()
+      };
       DCHECK_F(
         child_handle.IsValid(), "expecting a valid handle for a new node");
 
@@ -819,7 +894,7 @@ auto Scene::GetNodeImpl(const SceneNode& node) noexcept -> OptionalRefToImpl
     // If the handle is valid but the node is no longer in the scene, this
     // is a case for lazy invalidation.
     DLOG_F(4, "Node {} is no longer there -> invalidate : {}",
-      node.GetHandle().ToString(), ex.what());
+      to_string_compact(node.GetHandle()), ex.what());
     node.Invalidate();
     return std::nullopt;
   }
@@ -988,6 +1063,14 @@ auto Scene::GetRootHandles() const -> std::span<const NodeHandle>
   return { root_nodes_.data(), root_nodes_.size() };
 }
 
+/*!
+ Expects the child node to be an orphan, with no exiting hierarchy links to a
+ parent or to siblings. Such a node is usually a newly created one, or one
+ obtained through a call to UnlinkNode().
+
+ The child node may have children though. In such case, its children will remain
+ attached, and as result, the entire subtree will be preserved.
+*/
 void Scene::LinkChild(const NodeHandle& parent_handle,
   SceneNodeImpl* parent_impl, const NodeHandle& child_handle,
   SceneNodeImpl* child_impl) noexcept
@@ -996,8 +1079,15 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
   DCHECK_NOTNULL_F(parent_impl);
   DCHECK_F(child_handle.IsValid());
   DCHECK_NOTNULL_F(child_impl);
+  DCHECK_F(!child_impl->AsGraphNode().GetParent().IsValid());
+  DCHECK_F(!child_impl->AsGraphNode().GetPrevSibling().IsValid());
+  DCHECK_F(!child_impl->AsGraphNode().GetNextSibling().IsValid());
 
   DCHECK_NE_F(parent_impl, child_impl, "cannot link a node to itself");
+
+  DLOG_SCOPE_F(3, "Link Child Node");
+  DLOG_F(3, "child node: {}", to_string_compact(child_handle));
+  DLOG_F(3, "parent node: {}", to_string_compact(parent_handle));
 
   // TODO: Ensure not creating a cyclic dependency
 
@@ -1020,27 +1110,34 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
   // Mark both nodes' transforms as dirty since hierarchy changed
   parent_impl->MarkTransformDirty();
   MarkSubtreeTransformDirty(child_handle);
-
-  LOG_F(3, "Linked node {} as a child of {}", child_handle.ToString(),
-    parent_handle.ToString());
 }
 
+/*!
+ This method does not destroy the node, it only removes it from the hierarchy.
+ If the node must be destroyed, DestroyNode() or DestroyNodeHierarchy() should
+ be used after un-linking. If it is simply being detached, it needs to be added
+ to the roots set using AddRootNode().
+*/
 void Scene::UnlinkNode(
   const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept
 {
   DCHECK_F(node_handle.IsValid());
   DCHECK_NOTNULL_F(node_impl);
 
+  DLOG_SCOPE_F(3, "Unlink Node");
+  DLOG_F(3, "node: {}", to_string_compact(node_handle));
+
   // Get parent, next sibling, and previous sibling handles
-  const ResourceHandle parent_handle = node_impl->AsGraphNode().GetParent();
-  const ResourceHandle next_sibling_handle
+  const NodeHandle parent_handle = node_impl->AsGraphNode().GetParent();
+  const NodeHandle next_sibling_handle
     = node_impl->AsGraphNode().GetNextSibling();
-  const ResourceHandle prev_sibling_handle
+  const NodeHandle prev_sibling_handle
     = node_impl->AsGraphNode().GetPrevSibling();
 
   // Update the parent's first_child pointer if this node_handle is the first
   // child
   if (parent_handle.IsValid()) {
+    DLOG_F(3, "parent: {}", to_string_compact(parent_handle));
     auto& parent_impl = GetNodeImplRef(parent_handle);
     if (parent_impl.AsGraphNode().GetFirstChild() == node_handle) {
       // This node_handle is the first child of its parent
@@ -1054,12 +1151,14 @@ void Scene::UnlinkNode(
 
   // Update previous sibling's next_sibling pointer if it exists
   if (prev_sibling_handle.IsValid()) {
+    DLOG_F(3, "prev sibling: {}", to_string_compact(prev_sibling_handle));
     auto& prev_sibling_impl = GetNodeImplRef(prev_sibling_handle);
     prev_sibling_impl.AsGraphNode().SetNextSibling(next_sibling_handle);
   }
 
   // Update next sibling's prev_sibling pointer if it exists
   if (next_sibling_handle.IsValid()) {
+    DLOG_F(3, "next sibling: {}", to_string_compact(next_sibling_handle));
     auto& next_sibling_impl = GetNodeImplRef(next_sibling_handle);
     next_sibling_impl.AsGraphNode().SetPrevSibling(prev_sibling_handle);
   }
@@ -1118,7 +1217,7 @@ void ProcessDirtyFlags(const Scene& scene) noexcept
 //! Marks the transform as dirty for a node and all its descendants
 //! (non-recursive).
 void MarkSubtreeTransformDirty(
-  Scene& scene, const Scene::NodeHandle& root_handle) noexcept
+  Scene& scene, const NodeHandle& root_handle) noexcept
 {
   std::vector<SceneNodeImpl*> stack;
   size_t count = 0;
@@ -1141,8 +1240,7 @@ void MarkSubtreeTransformDirty(
 
 } // namespace
 
-void Scene::MarkSubtreeTransformDirty(
-  const Scene::NodeHandle& root_handle) noexcept
+void Scene::MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept
 {
   ::MarkSubtreeTransformDirty(*this, root_handle);
 }
@@ -1207,7 +1305,8 @@ auto Scene::CloneNode(const SceneNode& original, const std::string& new_name)
       cloned_impl->SetName(new_name);
 
       // Add the cloned implementation to this scene's node table
-      const auto cloned_handle = nodes_->Insert(std::move(*cloned_impl));
+      const NodeHandle cloned_handle { nodes_->Insert(std::move(*cloned_impl)),
+        GetId() };
       DCHECK_F(
         cloned_handle.IsValid(), "expecting a valid handle for cloned node");
 
@@ -1372,7 +1471,8 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
         // Clone the node directly from impl
         auto cloned_impl = node.node_impl->Clone();
         cloned_impl->SetName(name);
-        NodeHandle cloned_handle = nodes_->Insert(std::move(*cloned_impl));
+        NodeHandle cloned_handle { nodes_->Insert(std::move(*cloned_impl)),
+          GetId() };
         DCHECK_F(
           cloned_handle.IsValid(), "expecting a valid handle for cloned node");
 
@@ -1504,4 +1604,3 @@ auto Scene::CreateHierarchyFrom(
 //   const SceneNode& original_root, const std::string& new_root_name)
 //   -> std::optional<SceneNode>
 // {
-// }

@@ -17,7 +17,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::ObjectMetaData;
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneFlags;
@@ -47,9 +47,9 @@ protected:
   // Helper: Collect all children of a node into a set for order-agnostic
   // comparison
   static auto CollectChildrenHandles(const SceneNode& parent)
-    -> std::set<ResourceHandle>
+    -> std::set<NodeHandle>
   {
-    auto children = std::set<ResourceHandle> {};
+    auto children = std::set<NodeHandle> {};
     auto current = parent.GetFirstChild();
     while (current.has_value()) {
       children.insert(current->GetHandle());
@@ -178,7 +178,7 @@ NOLINT_TEST_F(SceneGraphTest, MultipleChildren_SiblingNavigationWorks)
 
   // Act: Collect children through sibling navigation
   const auto found_children = CollectChildrenHandles(parent);
-  auto expected_children = std::set<ResourceHandle> {};
+  auto expected_children = std::set<NodeHandle> {};
   for (const auto& child : children) {
     expected_children.insert(child.GetHandle());
   }

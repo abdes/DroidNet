@@ -6,10 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/detail/TransformComponent.h>
 
 #include <fmt/format.h>
@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-using oxygen::ResourceHandle;
+using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;
@@ -266,7 +266,7 @@ private:
     }
     ss << "\n";
 
-    // Process children (sort by ResourceHandle for consistent output)
+    // Process children (sort by NodeHandle for consistent output)
     std::vector<SceneNode> children;
     auto child_opt = node.GetFirstChild();
     while (child_opt.has_value()) {
@@ -274,7 +274,7 @@ private:
       child_opt = child_opt->GetNextSibling();
     }
 
-    // Sort children by ResourceHandle for deterministic display order
+    // Sort children by NodeHandle for deterministic display order
     std::sort(children.begin(), children.end(),
       [](const SceneNode& a, const SceneNode& b) {
         return a.GetHandle() < b.GetHandle();

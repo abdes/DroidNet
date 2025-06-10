@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -28,7 +29,7 @@ class SceneNodeImpl;
 //! Context structure providing both handle and implementation for traversal
 //! visitors.
 /*!
- This structure provides visitors with access to both the ResourceHandle and
+ This structure provides visitors with access to both the NodeHandle and
  SceneNodeImpl for a node during traversal. This enables scenarios where the
  visitor needs the handle for operations like cloning, mapping, or external
  resource management, while still providing efficient access to the node data.
@@ -41,7 +42,7 @@ class SceneNodeImpl;
  */
 struct VisitedNode {
   //! Handle to the node being visited
-  ResourceHandle handle;
+  NodeHandle handle;
   //! Reference to the node implementation
   SceneNodeImpl* node_impl { nullptr };
 };
@@ -225,7 +226,7 @@ private:
   }
 
   //! Get valid node pointer from handle
-  OXGN_SCN_API auto GetNodeImpl(const ResourceHandle& handle) const
+  OXGN_SCN_API auto GetNodeImpl(const NodeHandle& handle) const
     -> SceneNodeImpl*;
   //! Collect children of a node into reused buffer
   void CollectChildren(SceneNodeImpl* node) const
@@ -287,7 +288,7 @@ auto SceneTraversal::Traverse(VisitorFunc&& visitor, TraversalOrder order,
   std::vector<VisitedNode> root_impl_nodes;
   root_impl_nodes.reserve(root_handles.size());
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
-    [this](const ResourceHandle& handle) {
+    [this](const NodeHandle& handle) {
       return VisitedNode { .handle = handle, .node_impl = GetNodeImpl(handle) };
     });
 
