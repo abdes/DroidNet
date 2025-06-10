@@ -158,11 +158,48 @@ auto SceneNode::NodeIsValidAndInScene() const -> NodeIsValidAndInSceneValidator
 // SceneNode Implementations
 // =============================================================================
 
+/*!
+ This constructor creates an invalid SceneNode that cannot be used for any
+ operations. It is primarily intended as a placeholder node, and for use by
+ std:: containers.
+*/
+SceneNode::SceneNode()
+  : Resource(NodeHandle { NodeHandle::kInvalidIndex, resources::kSceneNode })
+{
+}
+
+/*!
+ This constructor creates an invalid SceneNode that cannot be used for any
+ operations. It is primarily intended as a placeholder node, and for use by
+ std:: containers. It is still associated with the given scene, which must not
+ be expired.
+
+ @param scene_weak A weak pointer (not expired) to the Scene this node is
+ associated with.
+*/
+SceneNode::SceneNode(std::weak_ptr<Scene> scene_weak)
+  : Resource(NodeHandle { NodeHandle::kInvalidIndex, resources::kSceneNode })
+  , scene_weak_(std::move(scene_weak))
+{
+  // Validate that the scene is not expired
+  DCHECK_F(!scene_weak_.expired(), "expecting a non-expired Scene");
+}
+
+/*!
+  This constructor creates a SceneNode that is associated with the given scene
+  and has a valid handle. The node is expected to be valid and in the scene.
+
+  @param scene_weak A weak pointer (not expired) to the Scene this node is
+  @param handle A valid ResourceHandle for this SceneNode.
+  associated with.
+*/
 SceneNode::SceneNode(
-  const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak)
+  std::weak_ptr<Scene> scene_weak, const ResourceHandle& handle)
   : Resource(handle)
   , scene_weak_(std::move(scene_weak))
 {
+  DCHECK_F(handle.IsValid(), "expecting a valid ResourceHandle");
+  DCHECK_F(!scene_weak_.expired(), "expecting a non-expired Scene");
 }
 
 auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string

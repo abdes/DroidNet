@@ -318,7 +318,7 @@ auto Scene::CreateNodeImpl(Args&&... args) noexcept -> SceneNode
   DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
 
   AddRootNode(handle);
-  return SceneNode(handle, shared_from_this());
+  return SceneNode(shared_from_this(), handle);
 }
 
 /*!
@@ -403,7 +403,7 @@ auto Scene::CreateChildNodeImpl(
 
       LinkChild(
         state.node->GetHandle(), state.node_impl, child_handle, node_impl);
-      return SceneNode(child_handle, shared_from_this());
+      return SceneNode(shared_from_this(), child_handle);
     });
 }
 
@@ -600,7 +600,7 @@ auto Scene::GetParentUnsafe(const SceneNode& node,
   // Check the the parent node is still alive
   if (nodes_->Contains(parent_handle)) {
     return SceneNode(
-      parent_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
+      std::const_pointer_cast<Scene>(this->shared_from_this()), parent_handle);
   }
 
   // The parent node is no longer alive, likely due to recent hierarchy
@@ -715,7 +715,7 @@ auto Scene::GetFirstChildUnsafe(const SceneNode& node,
 
   if (nodes_->Contains(child_handle)) {
     return SceneNode(
-      child_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
+      std::const_pointer_cast<Scene>(this->shared_from_this()), child_handle);
   }
 
   // The child node is no longer alive, likely due to recent hierarchy
@@ -754,7 +754,7 @@ auto Scene::GetNextSiblingUnsafe(const SceneNode& node,
 
   if (nodes_->Contains(sibling_handle)) {
     return SceneNode(
-      sibling_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
+      std::const_pointer_cast<Scene>(this->shared_from_this()), sibling_handle);
   }
 
   // The sibling is no longer alive, likely due to recent hierarchy
@@ -793,7 +793,7 @@ auto Scene::GetPrevSiblingUnsafe(const SceneNode& node,
 
   if (nodes_->Contains(sibling_handle)) {
     return SceneNode(
-      sibling_handle, std::const_pointer_cast<Scene>(this->shared_from_this()));
+      std::const_pointer_cast<Scene>(this->shared_from_this()), sibling_handle);
   }
 
   // The sibling node is no longer valid, likely due to recent hierarchy
@@ -867,7 +867,7 @@ auto Scene::GetNode(const NodeHandle& handle) const noexcept
   if (!nodes_->Contains(handle)) {
     return std::nullopt;
   }
-  return SceneNode(handle, std::const_pointer_cast<Scene>(shared_from_this()));
+  return SceneNode(std::const_pointer_cast<Scene>(shared_from_this()), handle);
 }
 
 auto Scene::Contains(const SceneNode& node) const noexcept -> bool
@@ -977,7 +977,7 @@ auto Scene::GetRootNodes() const -> std::vector<SceneNode>
   nodes.reserve(root_nodes_.size());
   for (const auto& handle : root_nodes_) {
     nodes.emplace_back(
-      handle, std::const_pointer_cast<Scene>(shared_from_this()));
+      std::const_pointer_cast<Scene>(shared_from_this()), handle);
   }
   return nodes;
 }
@@ -1255,7 +1255,7 @@ auto Scene::CreateNodeFrom(const SceneNode& original,
       // Add as root node since clones are orphaned
       AddRootNode(cloned_handle);
 
-      return { SceneNode(cloned_handle, shared_from_this()) };
+      return SceneNode(shared_from_this(), cloned_handle);
     });
 }
 
@@ -1309,7 +1309,7 @@ auto Scene::CreateChildNodeFrom(const SceneNode& parent,
       LinkChild(
         parent.GetHandle(), state.node_impl, cloned_handle, cloned_node_impl);
 
-      return SceneNode(cloned_handle, shared_from_this());
+      return SceneNode(shared_from_this(), cloned_handle);
     });
 }
 
@@ -1475,7 +1475,7 @@ auto Scene::CreateHierarchyFrom(
   cloned_root_impl->SetName(new_root_name);
 
   // Return the cloned root as a SceneNode
-  return SceneNode(cloned_root_handle, shared_from_this());
+  return SceneNode(shared_from_this(), cloned_root_handle);
 }
 
 /*!

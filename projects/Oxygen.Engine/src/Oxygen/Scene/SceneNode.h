@@ -60,6 +60,7 @@ class Scene; // Forward declaration
 */
 class SceneNode : public Object, public Resource<resources::kSceneNode> {
   OXYGEN_TYPED(SceneNode)
+
 public:
   using Flags = SceneNodeImpl::Flags;
   using NodeHandle = ResourceHandle;
@@ -81,10 +82,18 @@ public:
   // data is erased.
   friend class Scene;
 
-  //! Constructs a SceneNode handle for the given resource handle and scene.
-  //! @note SceneNode instances are usually created via the Scene class.
+  //! Default constructor. Creates an \b invalid SceneNode with an \b invalid
+  //! handle, and not associated with any scene.
+  OXGN_SCN_API SceneNode();
+
+  //! Creates an \b invalid SceneNode, associated with the given \b valid scene,
+  //! and an invalid handle.
+  explicit OXGN_SCN_API SceneNode(std::weak_ptr<Scene> scene_weak);
+
+  //! Creates a SceneNode, associated with the given, \b valid scene and with
+  //! the given \b valid \p handle.
   OXGN_SCN_API SceneNode(
-    const ResourceHandle& handle, std::weak_ptr<Scene> scene_weak);
+    std::weak_ptr<Scene> scene_weak, const ResourceHandle& handle);
 
   ~SceneNode() override = default;
 
@@ -136,7 +145,7 @@ private:
   // Logging for SafeCall errors using DLOG_F
   void LogSafeCallError(const char* reason) const noexcept;
 
-  std::weak_ptr<Scene> scene_weak_;
+  std::weak_ptr<Scene> scene_weak_ {};
 
   //=== Validation Helpers ===------------------------------------------------//
 
