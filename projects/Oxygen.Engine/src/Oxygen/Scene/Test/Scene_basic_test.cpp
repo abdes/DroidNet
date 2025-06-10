@@ -122,25 +122,26 @@ protected:
     return scene_->CreateNode(name);
   }
 
-  [[nodiscard]] auto CreateNodeWithInvalidHandle() const -> SceneNode
+  [[nodiscard]] auto CreateNodeWithInvalidScene() const -> SceneNode
   {
-    const ResourceHandle invalid_handle(
-      ResourceHandle::kInvalidIndex, oxygen::resources::kSceneNode);
-    return { invalid_handle, scene_ };
+    return { };
   }
 
-  // Helper to create an invalidated node for testing
-  // Creates a node and then destroys it, returning the now-invalidated
-  // SceneNode object.
+  [[nodiscard]] auto CreateNodeWithInvalidHandle() const -> SceneNode
+  {
+    return SceneNode(scene_);
+  }
+
+  // Helper to create a to-be lazily invalidated node for testing. Creates a
+  // node, stores its handle, then destroys it, and return a new node with the
+  // stored handle.
   [[nodiscard]] auto CreateLazyInvalidationNode(
     const std::string& name = "InvalidNode") const -> SceneNode
   {
     auto node = scene_->CreateNode(name);
-    // Assuming CreateNode aborts on failure (e.g. scene full) as per its
-    // documentation, 'node' here should be valid if we reach this point.
-    // DestroyNode will call node.Invalidate() on the 'node' object.
+    const auto handle = node.GetHandle();
     scene_->DestroyNode(node);
-    return node;
+    return SceneNode(scene_, handle);
   }
 
   std::shared_ptr<Scene> scene_;
@@ -327,11 +328,7 @@ NOLINT_TEST_F(SceneBasicTest, HierarchicalNodeDestruction)
 NOLINT_TEST_F(SceneBasicErrorTest, DestroyNode_NonExistent_Fails)
 {
   // Arrange: Create a node then destroy it making it non-existent.
-  auto node = CreateNode("Node");
-  const ResourceHandle handle(node.GetHandle());
-  EXPECT_TRUE(scene_->DestroyNode(node));
-  node = SceneNode(
-    handle, scene_); // Recreate node with the same handle, now invalid.
+  auto node = CreateLazyInvalidationNode("NonExistentNode");
 
   // Act: Destroy the node, making it non-existent for a subsequent operation.
   const auto result = scene_->DestroyNode(node);

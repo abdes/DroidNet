@@ -306,29 +306,28 @@ protected:
     //  / \    /
     // C   D  E
     root_ = CreateNode("root");
-    nodeA_ = CreateChildNode(*root_, "A");
-    nodeB_ = CreateChildNode(*root_, "B");
-    nodeC_ = CreateChildNode(*nodeA_, "C");
-    nodeD_ = CreateChildNode(*nodeA_, "D");
-    nodeE_ = CreateChildNode(*nodeB_, "E");
+    nodeA_ = CreateChildNode(root_, "A");
+    nodeB_ = CreateChildNode(root_, "B");
+    nodeC_ = CreateChildNode(nodeA_, "C");
+    nodeD_ = CreateChildNode(nodeA_, "D");
+    nodeE_ = CreateChildNode(nodeB_, "E");
 
     // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(*root_);
-    UpdateSingleNodeTransforms(*nodeA_);
-    UpdateSingleNodeTransforms(*nodeB_);
-    UpdateSingleNodeTransforms(*nodeC_);
-    UpdateSingleNodeTransforms(*nodeD_);
-    UpdateSingleNodeTransforms(*nodeE_);
+    UpdateSingleNodeTransforms(root_);
+    UpdateSingleNodeTransforms(nodeA_);
+    UpdateSingleNodeTransforms(nodeB_);
+    UpdateSingleNodeTransforms(nodeC_);
+    UpdateSingleNodeTransforms(nodeD_);
+    UpdateSingleNodeTransforms(nodeE_);
   }
 
-  // Member variables using optional since SceneNode has no default
-  // constructor
-  std::optional<SceneNode> root_;
-  std::optional<SceneNode> nodeA_;
-  std::optional<SceneNode> nodeB_;
-  std::optional<SceneNode> nodeC_;
-  std::optional<SceneNode> nodeD_;
-  std::optional<SceneNode> nodeE_;
+  // Member variables using default constructor for SceneNode
+  SceneNode root_;
+  SceneNode nodeA_;
+  SceneNode nodeB_;
+  SceneNode nodeC_;
+  SceneNode nodeD_;
+  SceneNode nodeE_;
 };
 
 //! Tests that traversing an empty scene visits no nodes.
@@ -413,30 +412,29 @@ protected:
     root1_ = CreateNode("root1");
     root2_ = CreateNode("root2");
     root3_ = CreateNode("root3");
-    nodeA_ = CreateChildNode(*root1_, "A");
-    nodeB_ = CreateChildNode(*root1_, "B");
-    nodeC_ = CreateChildNode(*root2_, "C");
-    nodeD_ = CreateChildNode(*nodeB_, "D");
+    nodeA_ = CreateChildNode(root1_, "A");
+    nodeB_ = CreateChildNode(root1_, "B");
+    nodeC_ = CreateChildNode(root2_, "C");
+    nodeD_ = CreateChildNode(nodeB_, "D");
 
     // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(*root1_);
-    UpdateSingleNodeTransforms(*root2_);
-    UpdateSingleNodeTransforms(*root3_);
-    UpdateSingleNodeTransforms(*nodeA_);
-    UpdateSingleNodeTransforms(*nodeB_);
-    UpdateSingleNodeTransforms(*nodeC_);
-    UpdateSingleNodeTransforms(*nodeD_);
+    UpdateSingleNodeTransforms(root1_);
+    UpdateSingleNodeTransforms(root2_);
+    UpdateSingleNodeTransforms(root3_);
+    UpdateSingleNodeTransforms(nodeA_);
+    UpdateSingleNodeTransforms(nodeB_);
+    UpdateSingleNodeTransforms(nodeC_);
+    UpdateSingleNodeTransforms(nodeD_);
   }
 
-  // Member variables using optional since SceneNode has no default
-  // constructor
-  std::optional<SceneNode> root1_;
-  std::optional<SceneNode> root2_;
-  std::optional<SceneNode> root3_;
-  std::optional<SceneNode> nodeA_;
-  std::optional<SceneNode> nodeB_;
-  std::optional<SceneNode> nodeC_;
-  std::optional<SceneNode> nodeD_;
+  // Member variables using default constructor for SceneNode
+  SceneNode root1_;
+  SceneNode root2_;
+  SceneNode root3_;
+  SceneNode nodeA_;
+  SceneNode nodeB_;
+  SceneNode nodeC_;
+  SceneNode nodeD_;
 };
 
 //! Tests that traversing from a single root only visits that root's hierarchy.
@@ -444,7 +442,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromSingleRoot)
 {
   // Act: Traverse from root1 only
   const auto result
-    = traversal_->TraverseHierarchy(*root1_, CreateTrackingVisitor());
+    = traversal_->TraverseHierarchy(root1_, CreateTrackingVisitor());
 
   // Assert: Only root1's hierarchy should be visited
   ExpectTraversalResult(result, 4, 0, true);
@@ -456,7 +454,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromSingleRoot)
 NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromMultipleRoots)
 {
   // Arrange: Prepare handles for root1 and root3
-  std::vector roots = { *root1_, *root3_ };
+  std::vector roots = { root1_, root3_ };
 
   // Act: Traverse from multiple specific roots
   const auto result
@@ -485,10 +483,8 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromEmptyRootList)
 //! Tests that traversing from an invalid handle visits no nodes.
 NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromInvalidHandle)
 {
-  // Arrange: Invalid handle
-  const ResourceHandle invalid_handle(
-    ResourceHandle::kInvalidIndex, oxygen::resources::kSceneNode);
-  auto invalid_node = SceneNode(invalid_handle, scene_);
+  // Arrange: Invalid node using default constructor
+  auto invalid_node = SceneNode();
 
   // Act: Traverse from invalid handle
   const auto result
@@ -619,31 +615,30 @@ protected:
     SceneTraversalTestBase::SetUp();
     // Create test hierarchy - nodes are created clean by helper methods
     root_ = CreateNode("root");
-    nodeA_ = CreateChildNode(*root_, "A");
-    nodeB_ = CreateChildNode(*root_, "B");
-    nodeC_ = CreateChildNode(*nodeA_, "C");
+    nodeA_ = CreateChildNode(root_, "A");
+    nodeB_ = CreateChildNode(root_, "B");
+    nodeC_ = CreateChildNode(nodeA_, "C");
 
     // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(*root_);
-    UpdateSingleNodeTransforms(*nodeA_);
-    UpdateSingleNodeTransforms(*nodeB_);
-    UpdateSingleNodeTransforms(*nodeC_);
+    UpdateSingleNodeTransforms(root_);
+    UpdateSingleNodeTransforms(nodeA_);
+    UpdateSingleNodeTransforms(nodeB_);
+    UpdateSingleNodeTransforms(nodeC_);
   }
 
-  // Member variables using optional since SceneNode has no default
-  // constructor
-  std::optional<SceneNode> root_;
-  std::optional<SceneNode> nodeA_;
-  std::optional<SceneNode> nodeB_;
-  std::optional<SceneNode> nodeC_;
+  // Member variables using default constructor for SceneNode
+  SceneNode root_;
+  SceneNode nodeA_;
+  SceneNode nodeB_;
+  SceneNode nodeC_;
 };
 
 //! Tests that only dirty nodes are visited when using DirtyTransformFilter.
 NOLINT_TEST_F(SceneTraversalTransformTest, DirtyTransformFilter)
 {
   // Arrange: Mark specific nodes as dirty
-  MarkNodeTransformDirty(*nodeA_);
-  MarkNodeTransformDirty(*nodeC_);
+  MarkNodeTransformDirty(nodeA_);
+  MarkNodeTransformDirty(nodeC_);
 
   // Act: Traverse with dirty transform filter
   const auto result = traversal_->Traverse(CreateTrackingVisitor(),
@@ -659,10 +654,10 @@ NOLINT_TEST_F(SceneTraversalTransformTest, DirtyTransformFilter)
 NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
 {
   // Arrange: Mark specific nodes as dirty
-  MarkNodeTransformDirty(*nodeA_);
-  MarkNodeTransformDirty(*nodeB_);
+  MarkNodeTransformDirty(nodeA_);
+  MarkNodeTransformDirty(nodeB_);
   // C will ignore its parent transform
-  nodeC_->GetObject()->get().GetFlags().SetFlag(
+  nodeC_.GetObject()->get().GetFlags().SetFlag(
     SceneNodeFlags::kIgnoreParentTransform,
     SceneFlag {}.SetEffectiveValueBit(true));
 
@@ -671,10 +666,10 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
 
   // Assert: A, and B are dirty and should be updated
   EXPECT_EQ(updated_count, 2);
-  EXPECT_FALSE(IsNodeTransformDirty(*root_));
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeA_));
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeB_));
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeC_)); // Still clean
+  EXPECT_FALSE(IsNodeTransformDirty(root_));
+  EXPECT_FALSE(IsNodeTransformDirty(nodeA_));
+  EXPECT_FALSE(IsNodeTransformDirty(nodeB_));
+  EXPECT_FALSE(IsNodeTransformDirty(nodeC_)); // Still clean
 }
 
 //! Tests that UpdateTransformsFrom only updates nodes in the specified subtree.
@@ -683,22 +678,22 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
   // The parent of A,B, and C is root, so it must have updated world
   // transforms, or the world update of A,B,C is meaningless and will make
   // assertions fail. This is done in Setup().
-  EXPECT_FALSE(IsNodeTransformDirty(*root_));
+  EXPECT_FALSE(IsNodeTransformDirty(root_));
 
   // Arrange: Mark nodes as dirty in different subtrees
-  MarkNodeTransformDirty(*nodeA_);
-  MarkNodeTransformDirty(*nodeB_);
-  MarkNodeTransformDirty(*nodeC_);
+  MarkNodeTransformDirty(nodeA_);
+  MarkNodeTransformDirty(nodeB_);
+  MarkNodeTransformDirty(nodeC_);
 
   // Act: Update transforms only from nodeA's subtree
-  std::vector<SceneNode> roots = { *nodeA_ };
+  std::vector<SceneNode> roots = { nodeA_ };
   const auto updated_count = traversal_->UpdateTransforms(roots);
 
   // Assert: Only A and C should be updated, B should remain dirty
   EXPECT_EQ(updated_count, 2);
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeA_));
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeC_));
-  EXPECT_TRUE(IsNodeTransformDirty(*nodeB_));
+  EXPECT_FALSE(IsNodeTransformDirty(nodeA_));
+  EXPECT_FALSE(IsNodeTransformDirty(nodeC_));
+  EXPECT_TRUE(IsNodeTransformDirty(nodeB_));
 }
 
 //=============================================================================
@@ -713,20 +708,18 @@ protected:
     // Create nodes with different visibility states
     visible_root_ = CreateNode("visible_root");
     invisible_node_ = CreateInvisibleNode("invisible");
-    visible_child_
-      = CreateInvisibleChildNode(*invisible_node_, "visible_child");
+    visible_child_ = CreateInvisibleChildNode(invisible_node_, "visible_child");
 
     // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(*visible_root_);
-    UpdateSingleNodeTransforms(*invisible_node_);
-    UpdateSingleNodeTransforms(*visible_child_);
+    UpdateSingleNodeTransforms(visible_root_);
+    UpdateSingleNodeTransforms(invisible_node_);
+    UpdateSingleNodeTransforms(visible_child_);
   }
 
-  // Member variables using optional since SceneNode has no default
-  // constructor
-  std::optional<SceneNode> visible_root_;
-  std::optional<SceneNode> invisible_node_;
-  std::optional<SceneNode> visible_child_;
+  // Member variables using default constructor for SceneNode
+  SceneNode visible_root_;
+  SceneNode invisible_node_;
+  SceneNode visible_child_;
 };
 
 //! Tests that only visible nodes are visited when using VisibleFilter.
@@ -747,8 +740,8 @@ NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, VisibleFilter)
 NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, DirtyTransformFilter)
 {
   // Setup: Mark some nodes as dirty
-  MarkNodeTransformDirty(*visible_root_);
-  MarkNodeTransformDirty(*visible_child_);
+  MarkNodeTransformDirty(visible_root_);
+  MarkNodeTransformDirty(visible_child_);
 
   // Act: Traverse with DirtyTransformFilter
   const auto result = traversal_->Traverse(CreateTrackingVisitor(),
@@ -869,60 +862,59 @@ protected:
     // Create a complex hierarchy:
     //         root
     //       /   |   \
-        //      A    B    C (invisible)
+    //      A    B    C (invisible)
     //     /|    |   /|\
-        //    D E    F  G H I
+    //    D E    F  G H I
     //      |       |
     //      J       K
 
     root_ = CreateNode("root");
 
     // Level 1
-    nodeA_ = CreateChildNode(*root_, "A");
-    nodeB_ = CreateChildNode(*root_, "B");
-    nodeC_ = CreateInvisibleChildNode(*root_, "C");
+    nodeA_ = CreateChildNode(root_, "A");
+    nodeB_ = CreateChildNode(root_, "B");
+    nodeC_ = CreateInvisibleChildNode(root_, "C");
 
     // Level 2
-    nodeD_ = CreateChildNode(*nodeA_, "D");
-    nodeE_ = CreateChildNode(*nodeA_, "E");
-    nodeF_ = CreateChildNode(*nodeB_, "F");
-    nodeG_ = CreateChildNode(*nodeC_, "G");
-    nodeH_ = CreateChildNode(*nodeC_, "H");
-    nodeI_ = CreateChildNode(*nodeC_, "I");
+    nodeD_ = CreateChildNode(nodeA_, "D");
+    nodeE_ = CreateChildNode(nodeA_, "E");
+    nodeF_ = CreateChildNode(nodeB_, "F");
+    nodeG_ = CreateChildNode(nodeC_, "G");
+    nodeH_ = CreateChildNode(nodeC_, "H");
+    nodeI_ = CreateChildNode(nodeC_, "I");
 
     // Level 3
-    nodeJ_ = CreateChildNode(*nodeE_, "J");
-    nodeK_ = CreateChildNode(*nodeH_, "K");
+    nodeJ_ = CreateChildNode(nodeE_, "J");
+    nodeK_ = CreateChildNode(nodeH_, "K");
 
     // As a clean start, update the transforms of all nodes.
-    UpdateSingleNodeTransforms(*root_);
-    UpdateSingleNodeTransforms(*nodeA_);
-    UpdateSingleNodeTransforms(*nodeB_);
-    UpdateSingleNodeTransforms(*nodeC_);
-    UpdateSingleNodeTransforms(*nodeD_);
-    UpdateSingleNodeTransforms(*nodeE_);
-    UpdateSingleNodeTransforms(*nodeF_);
-    UpdateSingleNodeTransforms(*nodeG_);
-    UpdateSingleNodeTransforms(*nodeH_);
-    UpdateSingleNodeTransforms(*nodeI_);
-    UpdateSingleNodeTransforms(*nodeJ_);
-    UpdateSingleNodeTransforms(*nodeK_);
+    UpdateSingleNodeTransforms(root_);
+    UpdateSingleNodeTransforms(nodeA_);
+    UpdateSingleNodeTransforms(nodeB_);
+    UpdateSingleNodeTransforms(nodeC_);
+    UpdateSingleNodeTransforms(nodeD_);
+    UpdateSingleNodeTransforms(nodeE_);
+    UpdateSingleNodeTransforms(nodeF_);
+    UpdateSingleNodeTransforms(nodeG_);
+    UpdateSingleNodeTransforms(nodeH_);
+    UpdateSingleNodeTransforms(nodeI_);
+    UpdateSingleNodeTransforms(nodeJ_);
+    UpdateSingleNodeTransforms(nodeK_);
   }
 
-  // Member variables using optional since SceneNode has no default
-  // constructor
-  std::optional<SceneNode> root_;
-  std::optional<SceneNode> nodeA_;
-  std::optional<SceneNode> nodeB_;
-  std::optional<SceneNode> nodeC_;
-  std::optional<SceneNode> nodeD_;
-  std::optional<SceneNode> nodeE_;
-  std::optional<SceneNode> nodeF_;
-  std::optional<SceneNode> nodeG_;
-  std::optional<SceneNode> nodeH_;
-  std::optional<SceneNode> nodeI_;
-  std::optional<SceneNode> nodeJ_;
-  std::optional<SceneNode> nodeK_;
+  // Member variables using default constructor for SceneNode
+  SceneNode root_;
+  SceneNode nodeA_;
+  SceneNode nodeB_;
+  SceneNode nodeC_;
+  SceneNode nodeD_;
+  SceneNode nodeE_;
+  SceneNode nodeF_;
+  SceneNode nodeG_;
+  SceneNode nodeH_;
+  SceneNode nodeI_;
+  SceneNode nodeJ_;
+  SceneNode nodeK_;
 };
 
 //! Tests that combining a visible filter and subtree skipping works as expected
@@ -944,9 +936,9 @@ NOLINT_TEST_F(SceneTraversalComplexTest, CombinedFilterAndVisitorControl)
 NOLINT_TEST_F(SceneTraversalComplexTest, DirtyTransformUpdateInComplexHierarchy)
 {
   // Arrange: Mark nodes as dirty for this test
-  MarkNodeTransformDirty(*nodeA_);
-  MarkNodeTransformDirty(*nodeF_);
-  MarkNodeTransformDirty(*nodeK_);
+  MarkNodeTransformDirty(nodeA_);
+  MarkNodeTransformDirty(nodeF_);
+  MarkNodeTransformDirty(nodeK_);
 
   // Act: Update only dirty transforms
   const auto updated_count = traversal_->UpdateTransforms();
@@ -960,9 +952,9 @@ NOLINT_TEST_F(SceneTraversalComplexTest, DirtyTransformUpdateInComplexHierarchy)
 NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
 {
   // Arrange: Mark B and K as dirty, but C is invisible (so K is invisible)
-  MarkNodeTransformDirty(*nodeB_);
+  MarkNodeTransformDirty(nodeB_);
   MarkNodeTransformDirty(
-    *nodeK_); // Custom filter: node must be dirty and visible
+    nodeK_); // Custom filter: node must be dirty and visible
   auto dirty_and_visible = [](const VisitedNode& visited_node,
                              FilterResult /*parent_result*/) -> FilterResult {
     const auto& node = *visited_node.node_impl;
@@ -995,8 +987,8 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
   // not dirty, A and E are not dirty)
   EXPECT_THAT(updated_names, testing::UnorderedElementsAre("B"));
   EXPECT_EQ(updated_count.nodes_visited, 1); // 1 visible node visited: B
-  EXPECT_FALSE(IsNodeTransformDirty(*nodeB_));
-  EXPECT_TRUE(IsNodeTransformDirty(*nodeK_)); // K should remain dirty
+  EXPECT_FALSE(IsNodeTransformDirty(nodeB_));
+  EXPECT_TRUE(IsNodeTransformDirty(nodeK_)); // K should remain dirty
 }
 
 } // namespace
