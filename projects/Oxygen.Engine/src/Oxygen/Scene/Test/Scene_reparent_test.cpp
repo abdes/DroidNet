@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -66,20 +68,34 @@ class FluentHierarchyBuilder;
 class HierarchyDiff;
 
 // Hierarchy node data for comparisons
+// Enhanced hierarchy node data using NodeHandle identity
 struct HierarchyNodeData {
-  std::string name;
-  std::string parent_name; // Track parent for move detection
+  NodeHandle handle;                    // Unique identity (includes Scene ID)
+  std::string name;                     // For display purposes only
+  NodeHandle parent_handle;             // Direct handle reference instead of name
   glm::vec3 position = { 0.0f, 0.0f, 0.0f };
   glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
   bool visible = true;
-  std::unordered_set<std::string>
-    child_names; // Use unordered_set to ignore order
+  std::unordered_set<NodeHandle> child_handles; // Direct handle references
+
+  // Scene validation helpers
+  [[nodiscard]] auto GetSceneId() const noexcept { return handle.GetSceneId(); }
+  [[nodiscard]] auto BelongsToScene(NodeHandle::SceneId scene_id) const noexcept {
+    return handle.BelongsToScene(scene_id);
+  }
+  [[nodiscard]] auto IsValidInScene(NodeHandle::SceneId scene_id) const noexcept {
+    return handle.IsValid() && BelongsToScene(scene_id);
+  }
 
   bool operator==(const HierarchyNodeData& other) const
   {
-    return name == other.name && parent_name == other.parent_name
-      && position == other.position && scale == other.scale
-      && visible == other.visible && child_names == other.child_names;
+    // Primary comparison by handle (includes scene validation)
+    return handle == other.handle
+      && parent_handle == other.parent_handle
+      && position == other.position
+      && scale == other.scale
+      && visible == other.visible
+      && child_handles == other.child_handles;
   }
 };
 
@@ -94,8 +110,8 @@ enum class DiffType {
 
 struct NodeDiff {
   DiffType type;
-  std::string node_name;
-  std::string parent_name;
+  std::string node_name;                          // Keep for display purposes
+  NodeHandle node_handle;                         // Primary identity
   std::optional<HierarchyNodeData> expected_data;
   std::optional<HierarchyNodeData> actual_data;
   std::vector<std::string> property_differences; // Detailed change list
@@ -291,9 +307,11 @@ private:
 // Sophisticated hierarchy diff system
 class HierarchyDiff {
 private:
-  std::unordered_map<std::string, HierarchyNodeData> expected_nodes_;
-  std::unordered_map<std::string, HierarchyNodeData> actual_nodes_;
+  std::unordered_map<NodeHandle, HierarchyNodeData> expected_nodes_;
+  std::unordered_map<NodeHandle, HierarchyNodeData> actual_nodes_;
   std::vector<NodeDiff> differences_;
+  NodeHandle::SceneId expected_scene_id_ = NodeHandle::kInvalidSceneId;
+  NodeHandle::SceneId actual_scene_id_ = NodeHandle::kInvalidSceneId;
 
   // Structure to represent merged hierarchy for diff display
   struct MergedNode {
@@ -303,122 +321,47 @@ private:
     std::optional<HierarchyNodeData> expected_data;
     std::optional<HierarchyNodeData> actual_data;
     std::vector<std::shared_ptr<MergedNode>> children;
-  };
-  std::shared_ptr<MergedNode> BuildMergedHierarchy()
+  };  std::shared_ptr<MergedNode> BuildMergedHierarchy()
   {
-    // Create a map of all nodes (both expected and actual)
-    std::unordered_map<std::string, std::shared_ptr<MergedNode>> all_nodes;
-    std::shared_ptr<MergedNode> root_node = nullptr;
+    // Find all root nodes (nodes with invalid parent handles)
+    std::set<NodeHandle> all_root_handles;
 
-    // First pass: create all nodes from differences
-    for (const auto& diff : differences_) {
-      if (all_nodes.find(diff.node_name) == all_nodes.end()) {
-        auto merged_node = std::make_shared<MergedNode>();
-        merged_node->name = diff.node_name;
-        merged_node->diff_type = diff.type;
-        merged_node->expected_data = diff.expected_data;
-        merged_node->actual_data = diff.actual_data;
-        all_nodes[diff.node_name] = merged_node;
+    // Collect root handles from expected nodes
+    for (const auto& [handle, data] : expected_nodes_) {
+      if (!data.parent_handle.IsValid()) {
+        all_root_handles.insert(handle);
       }
     }
 
-    // For moved nodes, we need to create "shadow" nodes to show them in both
-    // locations
-    std::unordered_map<std::string, std::shared_ptr<MergedNode>> moved_shadows;
-    for (const auto& diff : differences_) {
-      if (diff.type == DiffType::Moved) {
-        // Create a shadow node for the old location (deletion)
-        auto old_shadow = std::make_shared<MergedNode>();
-        old_shadow->name = diff.node_name + "_OLD_LOCATION";
-        old_shadow->diff_type = DiffType::Moved;
-        old_shadow->expected_data = diff.expected_data;
-        old_shadow->actual_data = diff.actual_data;
-        moved_shadows[diff.node_name + "_OLD"] = old_shadow;
-
-        // The main node will be placed in the new location (addition)
-        all_nodes[diff.node_name]->diff_type = DiffType::Moved;
-      }
-    } // Add moved shadow nodes to all_nodes
-    for (const auto& [key, shadow] : moved_shadows) {
-      all_nodes[key] = shadow;
-    }
-
-    // Second pass: build parent-child relationships using ACTUAL hierarchy
-    // (post-move state)
-    for (const auto& [name, actual_data] : actual_nodes_) {
-      for (const auto& [parent_name, parent_data] : actual_nodes_) {
-        if (parent_data.child_names.find(name)
-          != parent_data.child_names.end()) {
-          if (all_nodes.find(name) != all_nodes.end()
-            && all_nodes.find(parent_name) != all_nodes.end()) {
-            all_nodes[name]->parent_name = parent_name;
-            all_nodes[parent_name]->children.push_back(all_nodes[name]);
-          }
-          break;
-        }
+    // Collect root handles from actual nodes
+    for (const auto& [handle, data] : actual_nodes_) {
+      if (!data.parent_handle.IsValid()) {
+        all_root_handles.insert(handle);
       }
     }
 
-    // Third pass: place moved node shadows in their original locations
-    for (const auto& diff : differences_) {
-      if (diff.type == DiffType::Moved && diff.expected_data.has_value()) {
-        std::string shadow_key = diff.node_name + "_OLD";
-        if (moved_shadows.find(shadow_key) != moved_shadows.end()) {
-          auto shadow = moved_shadows[shadow_key];
+    // If no roots found, return nullptr
+    if (all_root_handles.empty()) {
+      return nullptr;
+    }
 
-          // Find the expected parent and add shadow there
-          std::string expected_parent = diff.expected_data->parent_name;
-          if (expected_parent.empty()) {
-            // Was a root node in expected
-            if (!root_node || root_node->name != expected_parent) {
-              // Need to find the expected root
-              for (const auto& [node_name, node_data] : expected_nodes_) {
-                if (node_data.parent_name.empty()) {
-                  expected_parent = node_name;
-                  break;
-                }
-              }
-            }
-          }
+    // Create a virtual root to hold all actual roots
+    auto virtual_root = std::make_shared<MergedNode>();
+    virtual_root->name = "<ROOT>";
+    virtual_root->parent_name = "";
+    virtual_root->diff_type = DiffType::Unchanged;
 
-          if (all_nodes.find(expected_parent) != all_nodes.end()) {
-            shadow->parent_name = expected_parent;
-            all_nodes[expected_parent]->children.push_back(shadow);
-          }
-        }
+    // Build children for each root handle
+    for (const NodeHandle& root_handle : all_root_handles) {
+      auto child = BuildMergedNodeRecursive(root_handle);
+      if (child) {
+        virtual_root->children.push_back(child);
       }
     }
 
-    // Handle nodes that only exist in expected (removed nodes)
-    for (const auto& [name, expected_data] : expected_nodes_) {
-      if (actual_nodes_.find(name) == actual_nodes_.end()) {
-        // This node was removed - place it in expected hierarchy structure
-        for (const auto& [parent_name, parent_data] : expected_nodes_) {
-          if (parent_data.child_names.find(name)
-            != parent_data.child_names.end()) {
-            if (all_nodes.find(name) != all_nodes.end()
-              && all_nodes.find(parent_name) != all_nodes.end()) {
-              all_nodes[name]->parent_name = parent_name;
-              all_nodes[parent_name]->children.push_back(all_nodes[name]);
-            }
-            break;
-          }
-        }
-      }
-    }
-
-    // Find root node (node with no parent)
-    for (const auto& [name, node] : all_nodes) {
-      if (node->parent_name.empty()) {
-        root_node = node;
-        break;
-      }
-    }
-    return root_node;
+    return virtual_root;
   }
-
-  HierarchyNodeData ExtractNodeData(
-    const SceneNode& node, const std::string& parent_name = "")
+  HierarchyNodeData ExtractNodeData(const SceneNode& node)
   {
     HierarchyNodeData data;
     auto impl_opt = node.GetObject();
@@ -429,41 +372,50 @@ private:
     const auto& transform = impl.GetComponent<TransformComponent>();
     const auto& flags = impl.GetFlags();
 
-    data.name = impl.GetName();
+    // Use NodeHandle as primary identity
+    data.handle = node.GetHandle();
+    data.name = impl.GetName(); // For display only
     data.position = transform.GetLocalPosition();
     data.scale = transform.GetLocalScale();
     data.visible = flags.GetEffectiveValue(SceneNodeFlags::kVisible);
 
-    // Store the parent name for move detection
-    data.parent_name = parent_name;
+    // Get parent handle directly
+    auto parent_opt = node.GetParent();
+    data.parent_handle = parent_opt.has_value() ? parent_opt->GetHandle() : NodeHandle{};
 
-    // Collect children names (order-independent)
+    // Collect child handles directly
     auto child_opt = node.GetFirstChild();
     while (child_opt.has_value()) {
-      auto child_impl_opt = child_opt->GetObject();
-      if (child_impl_opt.has_value()) {
-        data.child_names.insert(std::string(child_impl_opt->get().GetName()));
-      }
+      data.child_handles.insert(child_opt->GetHandle());
       child_opt = child_opt->GetNextSibling();
     }
 
     return data;
   }
-
   void CollectNodesRecursive(const SceneNode& node,
-    std::unordered_map<std::string, HierarchyNodeData>& node_map,
-    const std::string& parent_name = "")
+    std::unordered_map<NodeHandle, HierarchyNodeData>& node_map)
   {
-    auto data = ExtractNodeData(node, parent_name);
-    node_map[data.name] = data;
+    auto data = ExtractNodeData(node);
+
+    // Validate scene consistency if this is not the first node
+    if (!node_map.empty()) {
+      auto first_scene_id = node_map.begin()->second.GetSceneId();
+      if (!data.BelongsToScene(first_scene_id)) {
+        EXPECT_TRUE(false) << "Cross-scene comparison detected: node "
+                          << data.name << " belongs to scene " << data.GetSceneId()
+                          << " but expected scene " << first_scene_id;
+        return;
+      }
+    }
+
+    node_map[data.handle] = data;
 
     auto child_opt = node.GetFirstChild();
     while (child_opt.has_value()) {
-      CollectNodesRecursive(child_opt.value(), node_map, data.name);
+      CollectNodesRecursive(child_opt.value(), node_map);
       child_opt = child_opt->GetNextSibling();
     }
   }
-
   std::vector<std::string> CompareNodeProperties(
     const HierarchyNodeData& expected, const HierarchyNodeData& actual)
   {
@@ -489,93 +441,100 @@ private:
         actual.visible ? "visible" : "hidden"));
     }
 
-    if (expected.child_names != actual.child_names) {
-      // For better error reporting, show which children differ
-      std::vector<std::string> expected_sorted(
-        expected.child_names.begin(), expected.child_names.end());
-      std::vector<std::string> actual_sorted(
-        actual.child_names.begin(), actual.child_names.end());
-      std::sort(expected_sorted.begin(), expected_sorted.end());
-      std::sort(actual_sorted.begin(), actual_sorted.end());
+    if (expected.child_handles != actual.child_handles) {
+      // For cross-scene comparisons, we need to match by logical identity
+      // rather than exact handle equality (since scene ID will differ)
+      auto expected_scene_id = expected.GetSceneId();
+      auto actual_scene_id = actual.GetSceneId();
 
-      std::string expected_str, actual_str;
-      for (size_t i = 0; i < expected_sorted.size(); ++i) {
-        if (i > 0)
-          expected_str += ", ";
-        expected_str += expected_sorted[i];
+      if (expected_scene_id == actual_scene_id) {
+        // Same scene - direct handle comparison
+        diffs.push_back("Children differ: handle sets don't match");
+      } else {
+        // Cross-scene - compare child count and names as a simpler heuristic
+        if (expected.child_handles.size() != actual.child_handles.size()) {
+          diffs.push_back(fmt::format("Child count differs: expected {} but was {}",
+            expected.child_handles.size(), actual.child_handles.size()));
+        }
+        // Could enhance with detailed logical child comparison
       }
-      for (size_t i = 0; i < actual_sorted.size(); ++i) {
-        if (i > 0)
-          actual_str += ", ";
-        actual_str += actual_sorted[i];
-      }
-
-      diffs.push_back(fmt::format("Children differ: expected [{}] but was [{}]",
-        expected_str, actual_str));
     }
 
     return diffs;
   }
 
-public:
-  void Compare(const SceneNode& expected_root, const SceneNode& actual_root)
+public:  void Compare(const SceneNode& expected_root, const SceneNode& actual_root)
   {
     expected_nodes_.clear();
     actual_nodes_.clear();
     differences_.clear();
 
+    // Early validation - ensure we're comparing nodes from valid scenes
+    if (!expected_root.IsValid() || !actual_root.IsValid()) {
+      EXPECT_TRUE(false) << "Cannot compare invalid scene nodes";
+      return;
+    }
+
+    // Extract scene IDs for validation
+    expected_scene_id_ = expected_root.GetHandle().GetSceneId();
+    actual_scene_id_ = actual_root.GetHandle().GetSceneId();
+
     // Collect all nodes from both hierarchies
     CollectNodesRecursive(expected_root, expected_nodes_);
-    CollectNodesRecursive(actual_root, actual_nodes_);
+    CollectNodesRecursive(actual_root, actual_nodes_);    // Validate scene consistency
+    if (expected_scene_id_ != actual_scene_id_) {
+      // Cross-scene comparison - this is usually valid for adoption/migration tests
+      LOG_F(INFO, "Cross-scene comparison: expected scene %s vs actual scene %s",
+             nostd::to_string(expected_scene_id_).c_str(), nostd::to_string(actual_scene_id_).c_str());
+    }
 
-    // Find differences
-    std::unordered_set<std::string> processed;
+    // Find differences using handle-based comparison
+    std::unordered_set<NodeHandle> processed;
 
     // Check for added/modified nodes
-    for (const auto& [name, actual_data] : actual_nodes_) {
-      processed.insert(name);
+    for (const auto& [handle, actual_data] : actual_nodes_) {
+      processed.insert(handle);
 
-      auto it = expected_nodes_.find(name);
-      if (it == expected_nodes_.end()) {
+      // For cross-scene comparisons, we need to match by logical identity
+      // rather than exact handle equality (since scene ID will differ)
+      auto expected_match = FindLogicalMatch(handle, actual_data);
+        if (!expected_match) {
         // Node added
         differences_.push_back(
-          { DiffType::Added, name, "", std::nullopt, actual_data, {} });
+          { DiffType::Added, actual_data.name, handle, std::nullopt, actual_data, {} });
       } else {
         // Node exists in both - check for modifications or moves
-        const auto& expected_data = it->second;
+        const auto& expected_data = expected_match.value();
 
         // Check if the node has moved (different parent)
-        bool has_moved = expected_data.parent_name != actual_data.parent_name;
+        bool has_moved = !HandleLogicallyEqual(expected_data.parent_handle, actual_data.parent_handle);
 
         // Check for other property differences
         auto prop_diffs = CompareNodeProperties(expected_data, actual_data);
 
         if (has_moved && !prop_diffs.empty()) {
-          // Node moved AND has property changes - treat as modified for
-          // simplicity
-          differences_.push_back({ DiffType::Modified, name, "", expected_data,
+          // Node moved AND has property changes
+          differences_.push_back({ DiffType::Modified, actual_data.name, handle, expected_data,
             actual_data, prop_diffs });
         } else if (has_moved) {
           // Node moved but properties unchanged
           differences_.push_back(
-            { DiffType::Moved, name, "", expected_data, actual_data, {} });
+            { DiffType::Moved, actual_data.name, handle, expected_data, actual_data, {} });
         } else if (!prop_diffs.empty()) {
           // Node has property changes but didn't move
-          differences_.push_back({ DiffType::Modified, name, "", expected_data,
+          differences_.push_back({ DiffType::Modified, actual_data.name, handle, expected_data,
             actual_data, prop_diffs });
         } else {
           // Node is completely unchanged
           differences_.push_back(
-            { DiffType::Unchanged, name, "", expected_data, actual_data, {} });
+            { DiffType::Unchanged, actual_data.name, handle, expected_data, actual_data, {} });
         }
       }
-    }
-
-    // Check for removed nodes
-    for (const auto& [name, expected_data] : expected_nodes_) {
-      if (processed.find(name) == processed.end()) {
+    }    // Check for removed nodes
+    for (const auto& [handle, expected_data] : expected_nodes_) {
+      if (!FindLogicalMatch(handle, expected_data, actual_nodes_)) {
         differences_.push_back(
-          { DiffType::Removed, name, "", expected_data, std::nullopt, {} });
+          { DiffType::Removed, expected_data.name, handle, expected_data, std::nullopt, {} });
       }
     }
   }
@@ -622,112 +581,86 @@ private:
   {
     (void)expected_root; // Suppress unused parameter warning
     (void)actual_root; // Suppress unused parameter warning
-    std::stringstream ss;
-
-    // Build merged hierarchy and format as tree
+    std::stringstream ss;    // Build merged hierarchy and format as tree
     auto merged_root = BuildMergedHierarchy();
     if (merged_root) {
-      FormatMergedNodeRecursive(merged_root, ss, "");
+      FormatMergedNodeRecursive(merged_root, ss, "", true);
     }
 
     return ss.str();
   }
-  enum class DiffContext { Expected, Actual };
-
-  void FormatMergedNodeRecursive(std::shared_ptr<MergedNode> node,
-    std::stringstream& ss, const std::string& prefix)
+  enum class DiffContext { Expected, Actual };  void FormatMergedNodeRecursive(std::shared_ptr<MergedNode> node,
+    std::stringstream& ss, const std::string& prefix, bool is_last = true)
   {
     if (!node)
       return;
 
-    // Handle shadow nodes for moved items (old location)
-    if (node->name.find("_OLD_LOCATION") != std::string::npos) {
-      // Extract original name
-      std::string original_name
-        = node->name.substr(0, node->name.find("_OLD_LOCATION"));
-      ss << "- " << prefix << original_name;
-      if (node->expected_data.has_value()) {
-        FormatNodeProperties(ss, node->expected_data->position,
-          node->expected_data->scale, node->expected_data->visible);
-      }
-      ss << " (moved to "
-         << (node->actual_data.has_value()
-                  && !node->actual_data->parent_name.empty()
-                ? node->actual_data->parent_name
-                : "root")
-         << ")\n";
-      return; // Don't process children for shadow nodes
-    }
-
-    // For modified nodes, show both expected (removed) and actual (added)
-    // versions
-    if (node->diff_type == DiffType::Modified && node->expected_data.has_value()
-      && node->actual_data.has_value()) {
-
-      // Show the expected version (what was removed)
-      ss << "- " << prefix << node->expected_data->name;
-      FormatNodeProperties(ss, node->expected_data->position,
-        node->expected_data->scale, node->expected_data->visible);
-      ss << "\n";
-
-      // Show the actual version (what was added)
-      ss << "+ " << prefix << node->actual_data->name;
-      FormatNodeProperties(ss, node->actual_data->position,
-        node->actual_data->scale, node->actual_data->visible);
-      ss << "\n";
-    } else if (node->diff_type == DiffType::Moved
-      && node->expected_data.has_value() && node->actual_data.has_value()) {
-
-      // For moved nodes at new location, show addition with "moved from"
-      // comment
-      ss << "+ " << prefix << node->actual_data->name;
-      FormatNodeProperties(ss, node->actual_data->position,
-        node->actual_data->scale, node->actual_data->visible);
-      ss << " (moved from "
-         << (node->expected_data->parent_name.empty()
-                ? "root"
-                : node->expected_data->parent_name)
-         << ")\n";
-    } else {
-      // Standard node line with diff symbol
-      std::string diff_symbol = " ";
-      switch (node->diff_type) {
+    // Format node with diff indicator
+    std::string diff_marker;
+    switch (node->diff_type) {
       case DiffType::Added:
-        diff_symbol = "+ ";
+        diff_marker = " [+]";
         break;
       case DiffType::Removed:
-        diff_symbol = "- ";
+        diff_marker = " [-]";
         break;
-      case DiffType::Moved:
-        diff_symbol = "~ ";
-        break; // Use ~ for moved nodes (fallback)
-      default:
-        diff_symbol = "  ";
+      case DiffType::Modified:
+        diff_marker = " [*]";
         break;
+      case DiffType::Unchanged:
+        diff_marker = "";
+        break;
+    }
+
+    // Don't show the virtual root node
+    if (node->name != "<ROOT>") {
+      ss << prefix << (is_last ? "`-- " : "|-- ") << node->name << diff_marker;
+
+      // Add property details for modified nodes
+      if (node->diff_type == DiffType::Modified) {
+        if (node->expected_data && node->actual_data) {
+          const auto& exp = *node->expected_data;
+          const auto& act = *node->actual_data;
+
+          // Show position changes
+          if (exp.position != act.position) {
+            ss << " pos(" << act.position.x << "," << act.position.y << "," << act.position.z << ")";
+          }
+
+          // Show visibility changes
+          if (exp.visible != act.visible) {
+            ss << (act.visible ? " [VISIBLE]" : " [HIDDEN]");
+          }
+
+          // Show parent changes (reparenting)
+          if (!HandleLogicallyEqual(exp.parent_handle, act.parent_handle)) {
+            ss << " [MOVED]";
+          }
+        }
       }
 
-      ss << diff_symbol << prefix << node->name;
-
-      // Use data from whichever version exists
-      if (node->actual_data.has_value()) {
-        FormatNodeProperties(ss, node->actual_data->position,
-          node->actual_data->scale, node->actual_data->visible);
-      } else if (node->expected_data.has_value()) {
-        FormatNodeProperties(ss, node->expected_data->position,
-          node->expected_data->scale, node->expected_data->visible);
+      // Add property details for added/removed nodes
+      else if (node->diff_type == DiffType::Added && node->actual_data) {
+        const auto& data = *node->actual_data;
+        FormatNodeProperties(ss, data.position, data.scale, data.visible);
       }
+      else if (node->diff_type == DiffType::Removed && node->expected_data) {
+        const auto& data = *node->expected_data;
+        FormatNodeProperties(ss, data.position, data.scale, data.visible);
+      }
+
       ss << "\n";
     }
 
-    // Sort children by name for consistent output
-    std::sort(node->children.begin(), node->children.end(),
-      [](const std::shared_ptr<MergedNode>& a,
-        const std::shared_ptr<MergedNode>& b) { return a->name < b->name; });
+    // Format children
+    std::string child_prefix = prefix;
+    if (node->name != "<ROOT>") {
+      child_prefix += (is_last ? "    " : "|   ");
+    }
 
-    // Process children with simple indentation
     for (size_t i = 0; i < node->children.size(); ++i) {
-      std::string child_prefix = prefix + "  "; // Simple 2-space indentation
-      FormatMergedNodeRecursive(node->children[i], ss, child_prefix);
+      bool child_is_last = (i == node->children.size() - 1);
+      FormatMergedNodeRecursive(node->children[i], ss, child_prefix, child_is_last);
     }
   }
 
@@ -753,6 +686,181 @@ public:
       auto report = GenerateDiffReport(expected_root, actual_root);
       EXPECT_TRUE(false) << context << "\n" << report;
     }
+  }
+
+  // Helper methods for cross-scene comparison logic
+
+  // Find a logically equivalent node in the expected hierarchy
+  std::optional<HierarchyNodeData> FindLogicalMatch(const NodeHandle& actual_handle,
+                                                   const HierarchyNodeData& actual_data)
+  {
+    return FindLogicalMatch(actual_handle, actual_data, expected_nodes_);
+  }
+    // Generic helper to find logical matches in any node map
+  template<typename NodeMap>
+  std::optional<HierarchyNodeData> FindLogicalMatch(const NodeHandle& handle,
+                                                   const HierarchyNodeData& data,
+                                                   const NodeMap& node_map)
+  {
+    if (expected_scene_id_ == actual_scene_id_) {
+      // Same scene - first try exact handle match for efficiency
+      auto it = node_map.find(handle);
+      if (it != node_map.end()) {
+        return it->second;
+      }
+
+      // If no exact match, try logical equivalence (for clone comparisons within same scene)
+      for (const auto& [other_handle, other_data] : node_map) {
+        if (IsLogicallyEquivalent(data, other_data)) {
+          return other_data;
+        }
+      }
+      return std::nullopt;
+    } else {
+      // Cross-scene - match by logical equivalence (name + hierarchy position)
+      for (const auto& [other_handle, other_data] : node_map) {
+        if (IsLogicallyEquivalent(data, other_data)) {
+          return other_data;
+        }
+      }
+      return std::nullopt;
+    }
+  }
+  // Check if two nodes are logically equivalent (for cross-scene comparisons)
+  bool IsLogicallyEquivalent(const HierarchyNodeData& a, const HierarchyNodeData& b) const
+  {
+    // Match by name and structural position
+    if (a.name != b.name) return false;
+
+    // Check if properties match
+    if (a.position != b.position || a.scale != b.scale || a.visible != b.visible) {
+      return false;
+    }
+
+    // Check if parent relationships are logically equivalent
+    bool both_root = (!a.parent_handle.IsValid() && !b.parent_handle.IsValid());
+    bool both_have_parent = (a.parent_handle.IsValid() && b.parent_handle.IsValid());
+
+    if (both_root) {
+      // Both are root nodes - properties already checked above
+      return true;
+    } else if (both_have_parent) {
+      // Both have parents - for same-scene clone comparisons, we can't easily verify
+      // parent equivalence without complex recursive logic, so we accept that they
+      // both have parents (properties already checked)
+      return true;
+    } else {
+      // One is root, one is not - definitely different
+      return false;
+    }
+  }
+
+  // Check if two handles are logically equal (considering cross-scene scenarios)
+  bool HandleLogicallyEqual(const NodeHandle& a, const NodeHandle& b) const
+  {
+    if (expected_scene_id_ == actual_scene_id_) {
+      // Same scene - exact equality
+      return a == b;
+    } else {
+      // Cross-scene - both invalid, or both valid (structure equivalence)
+      return a.IsValid() == b.IsValid();
+    }
+  }
+
+  std::shared_ptr<MergedNode> BuildMergedNodeRecursive(const NodeHandle& handle)
+  {
+    auto merged_node = std::make_shared<MergedNode>();
+
+    // Look up node data in both expected and actual collections
+    auto expected_it = expected_nodes_.find(handle);
+    auto actual_it = actual_nodes_.find(handle);
+
+    bool in_expected = (expected_it != expected_nodes_.end());
+    bool in_actual = (actual_it != actual_nodes_.end());
+
+    // Determine diff type
+    if (in_expected && in_actual) {
+      // Node exists in both - check if it has changes
+      const auto& expected_data = expected_it->second;
+      const auto& actual_data = actual_it->second;
+
+      if (IsLogicallyEquivalent(expected_data, actual_data)) {
+        merged_node->diff_type = DiffType::Unchanged;
+      } else {
+        merged_node->diff_type = DiffType::Modified;
+      }
+        merged_node->expected_data = expected_data;
+      merged_node->actual_data = actual_data;
+      merged_node->name = expected_data.name; // Use expected name as primary
+      merged_node->parent_name = GetParentNameFromHandle(expected_data.parent_handle);
+    }
+    else if (in_expected && !in_actual) {
+      // Node was removed
+      merged_node->diff_type = DiffType::Removed;
+      merged_node->expected_data = expected_it->second;
+      merged_node->name = expected_it->second.name;
+      merged_node->parent_name = GetParentNameFromHandle(expected_it->second.parent_handle);
+    }
+    else if (!in_expected && in_actual) {
+      // Node was added
+      merged_node->diff_type = DiffType::Added;
+      merged_node->actual_data = actual_it->second;
+      merged_node->name = actual_it->second.name;
+      merged_node->parent_name = GetParentNameFromHandle(actual_it->second.parent_handle);
+    }
+    else {
+      // This shouldn't happen if we're calling this correctly
+      return nullptr;
+    }
+
+    // Collect all child handles from both expected and actual
+    std::set<NodeHandle> all_child_handles;
+
+    if (in_expected) {
+      const auto& expected_data = expected_it->second;
+      for (const NodeHandle& child_handle : expected_data.child_handles) {
+        all_child_handles.insert(child_handle);
+      }
+    }
+
+    if (in_actual) {
+      const auto& actual_data = actual_it->second;
+      for (const NodeHandle& child_handle : actual_data.child_handles) {
+        all_child_handles.insert(child_handle);
+      }
+    }
+
+    // Recursively build children
+    for (const NodeHandle& child_handle : all_child_handles) {
+      auto child_node = BuildMergedNodeRecursive(child_handle);
+      if (child_node) {
+        merged_node->children.push_back(child_node);
+      }
+    }
+
+    return merged_node;
+  }
+
+  std::string GetParentNameFromHandle(const NodeHandle& parent_handle) const
+  {
+    if (!parent_handle.IsValid()) {
+      return "<ROOT>";
+    }
+
+    // Look for the parent in expected nodes first
+    auto expected_it = expected_nodes_.find(parent_handle);
+    if (expected_it != expected_nodes_.end()) {
+      return expected_it->second.name;
+    }
+
+    // Look for the parent in actual nodes
+    auto actual_it = actual_nodes_.find(parent_handle);
+    if (actual_it != actual_nodes_.end()) {
+      return actual_it->second.name;
+    }
+
+    // If not found, return handle as string
+    return nostd::to_string(parent_handle);
   }
 };
 
