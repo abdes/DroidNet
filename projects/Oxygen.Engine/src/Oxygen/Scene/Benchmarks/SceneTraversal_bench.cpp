@@ -152,11 +152,14 @@ BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(
                           // transform filter
     SceneTraversal traversal(*scene_);
     auto result = traversal.Traverse(
-      [](const VisitedNode& node, const Scene& scene_param) -> VisitResult {
+      [](const VisitedNode& node, const Scene& scene_param,
+        bool dry_run) -> VisitResult {
+        DCHECK_F(!dry_run,
+          "Benchmark uses kPreOrder and should never receive dry_run=true");
         node.node_impl->UpdateTransforms(scene_param);
         return VisitResult::kContinue; // Continue traversal
       },
-      TraversalOrder::kDepthFirst, DirtyTransformFilter {});
+      TraversalOrder::kPreOrder, DirtyTransformFilter {});
 
     benchmark::DoNotOptimize(result);
   }

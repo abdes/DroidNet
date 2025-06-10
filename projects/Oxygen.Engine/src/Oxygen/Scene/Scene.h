@@ -86,9 +86,9 @@ public:
   using OptionalConstRefToImpl
     = std::optional<std::reference_wrapper<const SceneNodeImpl>>;
 
-  /*!
-   Constructs a Scene with the given name and initial capacity hint.
-  */
+  //=== Basic API ===---------------------------------------------------------//
+
+  //! Constructs a Scene with the given name and initial capacity hint.
   OXGN_SCN_API explicit Scene(
     const std::string& name, size_t initial_capacity = 1024);
 
@@ -102,6 +102,8 @@ public:
 
   //! Gets the unique ID of this scene (0-255).
   OXGN_SCN_NDAPI auto GetId() const noexcept { return scene_id_; }
+
+  //=== Node Factories - Creation ===-----------------------------------------//
 
   //! Creates a new root node with the given \p name and default flags.
   OXGN_SCN_NDAPI auto CreateNode(const std::string& name) -> SceneNode;
@@ -142,43 +144,17 @@ public:
     const SceneNode& original_root, const std::string& new_root_name)
     -> std::optional<SceneNode>;
 
-  //! Destroys the given node if it has no children.
-  /*!
-   Destroys a single node that has no children. If the node has children,
-   the operation will fail and return false. Use DestroyNodeHierarchy()
-   to destroy a node along with all its descendants.
+  //=== Node Factories - Destruction ===--------------------------------------//
 
-   \param node Node to destroy (must have no children)
-   \return true if the node was destroyed, false if the node is invalid or
-           was not found in the scene.
-  */
+  //! Destroys the given node if it has no children, and invalidates it.
   OXGN_SCN_API auto DestroyNode(SceneNode& node) noexcept -> bool;
 
-  //! Destroys multiple nodes that have no children.
-  /*!
-   Batch operation for destroying multiple nodes that have no children.
-   Each node is processed individually - nodes with children are skipped.
-
-   \param nodes Nodes to destroy (each must have no children)
-   \return Vector indicating success (true) or failure (false) for each
-           node at the same index
-
-   \note **Partial Success:** Nodes with children or that are invalid are
-         skipped.
-  */
+  //! Destroys multiple leaf nodes in a batch operation. Failure of on node does
+  //! not affect others.
   OXGN_SCN_API auto DestroyNodes(std::span<SceneNode> nodes) noexcept
     -> std::vector<uint8_t>;
 
-  //! Recursively destroys the given node and all its descendants.
-  /*!
-   Destroys an entire node hierarchy starting from the given root node. All
-   descendants are destroyed recursively, regardless of their individual child
-   counts.
-
-   \param root Root of hierarchy to destroy
-   \return true if the hierarchy was destroyed, false if root was not
-   found
-  */
+  //! Destroys the given node and all its descendants.
   OXGN_SCN_API auto DestroyNodeHierarchy(SceneNode& root) noexcept -> bool;
 
   //! Recursively destroys multiple node hierarchies.
@@ -195,6 +171,8 @@ public:
   */
   OXGN_SCN_API auto DestroyNodeHierarchies(
     std::span<SceneNode> hierarchy_roots) noexcept -> std::vector<uint8_t>;
+
+  //=== Graph Queries ===-----------------------------------------------------//
 
   //! Checks if the data object for the given \p node is still in the
   //! scene.
@@ -252,50 +230,6 @@ public:
   OXGN_SCN_NDAPI auto FindNodesByName(std::string_view name) const
     -> std::vector<SceneNode>;
 
-  // High-performance traversal access
-  OXGN_SCN_NDAPI auto Traverse() const -> const SceneTraversal&;
-
-  // Update system
-  // TODO: Implement a proper update system for the scene graph.
-  OXGN_SCN_API void Update(bool skip_dirty_flags = false) noexcept;
-
-  //! @{
-  //! Get the SceneNodeImpl for the given SceneNode.
-  /*!
-   If the node data does not exist anymore, this method will return
-   std::nullopt, and will invalidate the node.
-
-   Expects the node to be valid, or it will terminate the program.
-  */
-  OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) noexcept
-    -> OptionalRefToImpl;
-  OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) const noexcept
-    -> OptionalConstRefToImpl;
-  //! @}
-
-  //! @{
-  //! Get the SceneNodeImpl for the given handle.
-  /*!
-   Expects the handle to be valid, and the node to exist, or it will
-   terminate the program.
-  */
-  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) noexcept
-    -> SceneNodeImpl&;
-  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) const noexcept
-    -> const SceneNodeImpl&;
-
-  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle)
-    -> SceneNodeImpl&;
-  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle) const
-    -> const SceneNodeImpl&;
-  //! @}
-
-  //! Provides a SceneNode for a NodeHandle, or std::nullopt if the \p
-  //! handle does not correspond to an existing node.
-  OXGN_SCN_NDAPI auto GetNode(const NodeHandle& handle) const noexcept
-    -> std::optional<SceneNode>;
-
-public:
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
   //! Re-parent a node hierarchy to a new parent within this scene
@@ -376,7 +310,7 @@ public:
   OXGN_SCN_NDAPI auto MakeNodesRoot(std::span<const SceneNode> nodes,
     bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
-  //=== Node Adoption API (Cross-Scene Operations) ===------------------//
+  //=== Node Adoption API (Cross-Scene Operations) ===------------------------//
 
   //! Adopt a node from any scene and re-parent it to a new parent in this scene
   /*!
@@ -560,6 +494,52 @@ public:
 
   // Logging for SafeCall errors using DLOG_F
   OXGN_SCN_API static void LogSafeCallError(const char* reason) noexcept;
+
+  //=== Traversal ===---------------------------------------------------------//
+
+  // High-performance traversal access
+  OXGN_SCN_NDAPI auto Traverse() const -> const SceneTraversal&;
+
+  // TODO: Implement a proper update system for the scene graph.
+  OXGN_SCN_API void Update(bool skip_dirty_flags = false) noexcept;
+
+  //=== Low-level Access ===--------------------------------------------------//
+
+  //! @{
+  //! Get the SceneNodeImpl for the given SceneNode.
+  /*!
+   If the node data does not exist anymore, this method will return
+   std::nullopt, and will invalidate the node.
+
+   Expects the node to be valid, or it will terminate the program.
+  */
+  OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) noexcept
+    -> OptionalRefToImpl;
+  OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) const noexcept
+    -> OptionalConstRefToImpl;
+  //! @}
+
+  //! @{
+  //! Get the SceneNodeImpl for the given handle.
+  /*!
+   Expects the handle to be valid, and the node to exist, or it will
+   terminate the program.
+  */
+  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) noexcept
+    -> SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) const noexcept
+    -> const SceneNodeImpl&;
+
+  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle)
+    -> SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle) const
+    -> const SceneNodeImpl&;
+  //! @}
+
+  //! Provides a SceneNode for a NodeHandle, or std::nullopt if the \p
+  //! handle does not correspond to an existing node.
+  OXGN_SCN_NDAPI auto GetNode(const NodeHandle& handle) const noexcept
+    -> std::optional<SceneNode>;
 
 private:
   //! Creates a new node implementation with the given name and (optional)

@@ -15,16 +15,16 @@ namespace oxygen {
 
 class Object {
 public:
-    OXYGEN_COMP_API Object();
-    OXYGEN_COMP_API virtual ~Object();
+  OXYGEN_COMP_API Object();
+  OXYGEN_COMP_API virtual ~Object();
 
-    // All components should implement proper copy and move semantics to handle
-    // copying and moving as appropriate.
-    OXYGEN_DEFAULT_COPYABLE(Object)
-    OXYGEN_DEFAULT_MOVABLE(Object)
+  // All components should implement proper copy and move semantics to handle
+  // copying and moving as appropriate.
+  OXYGEN_DEFAULT_COPYABLE(Object)
+  OXYGEN_DEFAULT_MOVABLE(Object)
 
-    [[nodiscard]] virtual auto GetTypeId() const -> TypeId = 0;
-    [[nodiscard]] virtual auto GetTypeName() const -> const char* = 0;
+  [[nodiscard]] virtual auto GetTypeId() const -> TypeId = 0;
+  [[nodiscard]] virtual auto GetTypeName() const -> const char* = 0;
 };
 
 } // namespace oxygen
@@ -37,18 +37,22 @@ public:
 #  define OXYGEN_TYPE_NAME_IMPL_() #arg_type
 #endif
 
-#define OXYGEN_TYPED(arg_type)                                                                              \
-public:                                                                                                     \
-    inline static constexpr auto ClassTypeName()                                                            \
-    {                                                                                                       \
-        return OXYGEN_TYPE_NAME_IMPL();                                                                     \
-    }                                                                                                       \
-    inline static auto ClassTypeId() -> oxygen::TypeId                                                      \
-    {                                                                                                       \
-        static oxygen::TypeId typeId = oxygen::TypeRegistry::Get().RegisterType(arg_type::ClassTypeName()); \
-        return typeId;                                                                                      \
-    }                                                                                                       \
-    auto GetTypeName() const -> const char* override { return ClassTypeName(); }                            \
-    inline auto GetTypeId() const -> oxygen::TypeId override { return ClassTypeId(); }                      \
-                                                                                                            \
+#define OXYGEN_TYPED(arg_type)                                                 \
+public:                                                                        \
+  inline static constexpr auto ClassTypeName()                                 \
+  {                                                                            \
+    return OXYGEN_TYPE_NAME_IMPL();                                            \
+  }                                                                            \
+  inline static auto ClassTypeId() -> ::oxygen::TypeId                         \
+  {                                                                            \
+    static ::oxygen::TypeId typeId                                             \
+      = ::oxygen::TypeRegistry::Get().RegisterType(arg_type::ClassTypeName()); \
+    return typeId;                                                             \
+  }                                                                            \
+  auto GetTypeName() const -> const char* override { return ClassTypeName(); } \
+  inline auto GetTypeId() const -> ::oxygen::TypeId override                   \
+  {                                                                            \
+    return ClassTypeId();                                                      \
+  }                                                                            \
+                                                                               \
 private:
