@@ -39,7 +39,17 @@ SceneNodeImpl::SceneNodeImpl(const std::string& name, Flags flags)
   }
 }
 
-SceneNodeImpl::~SceneNodeImpl() { LOG_SCOPE_F(3, "SceneNodeImpl destruction"); }
+SceneNodeImpl::~SceneNodeImpl()
+{
+  if (!HasComponents()) {
+    // This is most likely a default-constructed SceneNodeImpl, not worth
+    // logging
+    return;
+  }
+
+  LOG_SCOPE_F(3, "SceneNodeImpl destruction");
+  DestroyComponents();
+}
 
 auto SceneNodeImpl::AsGraphNode() noexcept -> GraphNode&
 {
