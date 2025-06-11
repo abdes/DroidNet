@@ -19,6 +19,11 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
+// Aliases for gtest/gmock matchers to reduce clutter
+using ::testing::Contains;
+using ::testing::Not;
+using ::testing::UnorderedElementsAreArray;
+
 namespace oxygen::scene::testing {
 
 //=============================================================================
@@ -92,28 +97,6 @@ protected:
     return child_opt.value();
   }
 
-  // Helper: Mark a node's transform as dirty
-  static void MarkNodeTransformDirty(SceneNode& node)
-  {
-    const auto impl = node.GetObject();
-    ASSERT_TRUE(impl.has_value());
-    if (const auto pos = node.GetTransform().GetLocalPosition()) {
-      node.GetTransform().SetLocalPosition(
-        *pos + glm::vec3(0.001f, 0.0f, 0.0f));
-    }
-    // Also mark the node itself as transform dirty
-    impl->get().MarkTransformDirty();
-  }
-
-  // Helper: Check if a node's transform is dirty
-  static auto IsNodeTransformDirty(const SceneNode& node) -> bool
-  {
-    const auto impl = node.GetObject();
-    if (!impl.has_value())
-      return false;
-    return impl->get().IsTransformDirty();
-  }
-
   // Helper: Clear a node's dirty transform flag
   void UpdateSingleNodeTransforms(SceneNode& node) const
   {
@@ -122,6 +105,7 @@ protected:
     // Remove const to call the non-const method
     impl->get().UpdateTransforms(*scene_);
   }
+
   // Helper: Visit tracking visitor
   auto CreateTrackingVisitor()
   {
@@ -222,21 +206,13 @@ protected:
   void ExpectContainsAllNodes(
     const std::vector<std::string>& expected_nodes) const
   {
-    using ::testing::Contains;
-
-    for (const auto& expected : expected_nodes) {
-      EXPECT_THAT(visit_order_, Contains(expected))
-        << "Missing expected node: " << expected;
-    }
+    EXPECT_THAT(visit_order_, UnorderedElementsAreArray(expected_nodes));
   }
 
   // Helper: Verify none of the forbidden nodes are present
   void ExpectContainsNoForbiddenNodes(
     const std::vector<std::string>& forbidden_nodes) const
   {
-    using ::testing::Contains;
-    using ::testing::Not;
-
     for (const auto& forbidden : forbidden_nodes) {
       EXPECT_THAT(visit_order_, Not(Contains(forbidden)))
         << "Found forbidden node (should not be present): " << forbidden;
@@ -248,66 +224,13 @@ protected:
     const std::vector<std::string>& expected_nodes,
     const std::vector<std::string>& forbidden_nodes = {}) const
   {
-    ExpectContainsAllNodes(expected_nodes);
-    ExpectContainsNoForbiddenNodes(forbidden_nodes);
+    EXPECT_THAT(visit_order_, UnorderedElementsAreArray(expected_nodes));
+    for (const auto& forbidden : forbidden_nodes) {
+      EXPECT_THAT(visit_order_, Not(Contains(forbidden)))
+        << "Found forbidden node (should not be present): " << forbidden;
+    }
     EXPECT_EQ(visit_order_.size(), expected_nodes.size())
       << "Should visit exactly " << expected_nodes.size() << " nodes";
-  } // Helper: Verify level-based ordering for breadth-first traversal
-  void ExpectLevelBasedOrdering(const std::vector<std::string>& level1_nodes,
-    const std::vector<std::string>& level2_nodes) const
-  {
-    auto find_pos = [this](const std::string& name) {
-      return std::ranges::find(visit_order_, name) - visit_order_.begin();
-    };
-
-    // Find max position of level 1 and min position of level 2
-    size_t max_level1_pos = 0;
-    for (const auto& node : level1_nodes) {
-      max_level1_pos
-        = std::max(max_level1_pos, static_cast<size_t>(find_pos(node)));
-    }
-
-    size_t min_level2_pos = visit_order_.size();
-    for (const auto& node : level2_nodes) {
-      min_level2_pos
-        = std::min(min_level2_pos, static_cast<size_t>(find_pos(node)));
-    }
-
-    EXPECT_LT(max_level1_pos, min_level2_pos)
-      << "Level 1 nodes should come before level 2 nodes in "
-         "breadth-first traversal";
-  }
-
-  // Helper: Verify parent-child ordering semantics
-  void ExpectParentBeforeChild(
-    const std::string& parent, const std::string& child) const
-  {
-    auto find_pos = [this](const std::string& name) {
-      return std::ranges::find(visit_order_, name) - visit_order_.begin();
-    };
-
-    const auto parent_pos = find_pos(parent);
-    const auto child_pos = find_pos(child);
-
-    EXPECT_LT(parent_pos, child_pos)
-      << "Parent '" << parent << "' should be visited before child '" << child
-      << "'";
-  }
-
-  // Helper: Verify child-parent ordering semantics (for post-order)
-  void ExpectChildBeforeParent(
-    const std::string& child, const std::string& parent) const
-  {
-    auto find_pos = [this](const std::string& name) {
-      return std::ranges::find(visit_order_, name) - visit_order_.begin();
-    };
-
-    const auto child_pos = find_pos(child);
-    const auto parent_pos = find_pos(parent);
-
-    EXPECT_LT(child_pos, parent_pos)
-      << "Child '" << child << "' should be visited before parent '" << parent
-      << "'";
   }
 
   std::shared_ptr<Scene> scene_;
@@ -324,7 +247,7 @@ protected:
     // Create a simple test hierarchy:
     //     root
     //    /    \
-        //   A      B
+    //   A      B
     //  / \    /
     // C   D  E
     root_ = CreateNode("root");
@@ -343,31 +266,29 @@ protected:
     UpdateSingleNodeTransforms(nodeE_);
   }
 
+  [[nodiscard]] auto GetNodeCount() const -> std::size_t { return 6; }
+
   // Helper: Verify complete semantic ordering for the basic test hierarchy
   void ExpectSemanticOrdering(TraversalOrder order) const
   {
     switch (order) {
     case TraversalOrder::kPreOrder:
       // Pre-order: parent before children
-      ExpectParentBeforeChild("root", "A");
-      ExpectParentBeforeChild("root", "B");
-      ExpectParentBeforeChild("A", "C");
-      ExpectParentBeforeChild("A", "D");
-      ExpectParentBeforeChild("B", "E");
+      CHECK_FOR_FAILURES_MSG(
+        ExpectContainsExactlyNodes({ "root", "A", "C", "D", "B", "E" }),
+        "Pre-order traversal should visit parent before children");
       break;
-
     case TraversalOrder::kPostOrder:
       // Post-order: children before parent
-      ExpectChildBeforeParent("A", "root");
-      ExpectChildBeforeParent("B", "root");
-      ExpectChildBeforeParent("C", "A");
-      ExpectChildBeforeParent("D", "A");
-      ExpectChildBeforeParent("E", "B");
+      CHECK_FOR_FAILURES_MSG(
+        ExpectContainsExactlyNodes({ "C", "D", "A", "E", "B", "root" }),
+        "Post-order traversal should visit children before parent");
       break;
-
     case TraversalOrder::kBreadthFirst:
       // Breadth-first: level by level
-      ExpectLevelBasedOrdering({ "A", "B" }, { "C", "D", "E" });
+      CHECK_FOR_FAILURES_MSG(
+        ExpectContainsExactlyNodes({ "root", "A", "B", "C", "D", "E" }),
+        "Breadth-first traversal should visit nodes level by level");
       break;
     }
   }

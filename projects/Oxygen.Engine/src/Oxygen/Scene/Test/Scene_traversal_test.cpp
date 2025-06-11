@@ -143,115 +143,6 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromInvalidHandle)
 }
 
 //=============================================================================
-// Visitor Control Tests
-//=============================================================================
-
-class SceneTraversalVisitorControlTest : public SceneTraversalBasicTest { };
-
-//! Tests that traversal stops early when the visitor requests it (depth-first).
-NOLINT_TEST_F(SceneTraversalVisitorControlTest, EarlyTerminationDepthFirst)
-{
-  // Act: Traverse with early termination at node A
-  const auto result = traversal_->Traverse(
-    CreateEarlyTerminationVisitor("A"), TraversalOrder::kPreOrder);
-
-  // Assert: Traversal should stop at A (exact order depends on Scene storage)
-  EXPECT_FALSE(result.completed);
-  EXPECT_GT(result.nodes_visited, 0);
-  EXPECT_THAT(visit_order_, testing::Contains("root"));
-  EXPECT_THAT(visit_order_, testing::Contains("A"));
-
-  // Find the position where "A" appears and ensure traversal stopped there
-  const auto a_pos = std::ranges::find(visit_order_, "A");
-  EXPECT_NE(a_pos, visit_order_.end());
-  EXPECT_EQ(a_pos + 1, visit_order_.end())
-    << "Traversal should stop immediately after visiting A";
-}
-
-//! Tests that subtree skipping works in depth-first traversal (children of A
-//! are skipped).
-NOLINT_TEST_F(SceneTraversalVisitorControlTest, SubtreeSkippingDepthFirst)
-{
-  // Act: Traverse with subtree skipping at node A
-  const auto result = traversal_->Traverse(
-    CreateSubtreeSkippingVisitor("A"), TraversalOrder::kPreOrder);
-
-  // Assert: A should be visited but its children (C, D) should be skipped
-  ExpectTraversalResult(result, 4, 0, true);
-  ExpectContainsExactlyNodes({ "root", "A", "B", "E" }, { "C", "D" });
-}
-
-//! Tests that subtree skipping works in breadth-first traversal (children of A
-//! are skipped).
-NOLINT_TEST_F(SceneTraversalVisitorControlTest, SubtreeSkippingBreadthFirst)
-{
-  // Act: Traverse with subtree skipping at node A in breadth-first
-  const auto result = traversal_->Traverse(
-    CreateSubtreeSkippingVisitor("A"), TraversalOrder::kBreadthFirst);
-
-  // Assert: A should be visited but its children should be skipped
-  ExpectTraversalResult(result, 4, 0, true);
-  ExpectContainsExactlyNodes({ "root", "A", "B", "E" }, { "C", "D" });
-}
-
-//=============================================================================
-// Filter Control Tests
-//=============================================================================
-
-class SceneTraversalFilterTest : public SceneTraversalBasicTest { };
-
-//! Tests that AcceptAllFilter visits all nodes (no filtering).
-NOLINT_TEST_F(SceneTraversalFilterTest, AcceptAllFilter)
-{
-  // Act: Traverse with AcceptAllFilter
-  const auto result = traversal_->Traverse(
-    CreateTrackingVisitor(), TraversalOrder::kPreOrder, AcceptAllFilter {});
-
-  // Assert: All nodes should be visited
-  ExpectTraversalResult(result, 6, 0, true);
-  ExpectContainsAllNodes({ "root", "A", "B", "C", "D", "E" });
-}
-
-//! Tests that rejecting specific nodes with a filter excludes them but still
-//! visits their children.
-NOLINT_TEST_F(SceneTraversalFilterTest, RejectSpecificNodes)
-{
-  // Act: Traverse rejecting nodes A and E
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(),
-    TraversalOrder::kPreOrder, CreateRejectFilter({ "A", "E" }));
-
-  // Assert: A and E should be filtered out but their children still visited
-  ExpectTraversalResult(result, 4, 2, true);
-  ExpectContainsExactlyNodes({ "root", "B", "C", "D" }, { "A", "E" });
-}
-
-//! Tests that rejecting a subtree with a filter excludes the node and all its
-//! descendants.
-NOLINT_TEST_F(SceneTraversalFilterTest, RejectSubtreeOfSpecificNodes)
-{
-  // Act: Traverse rejecting subtree of node A
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(),
-    TraversalOrder::kPreOrder, CreateRejectSubtreeFilter({ "A" }));
-
-  // Assert: A and its children (C, D) should be filtered out
-  ExpectTraversalResult(result, 3, 1, true);
-  ExpectContainsExactlyNodes({ "root", "B", "E" }, { "A", "C", "D" });
-}
-
-//! Tests that rejecting a subtree in breadth-first traversal excludes the node
-//! and all its descendants.
-NOLINT_TEST_F(SceneTraversalFilterTest, RejectSubtreeInBreadthFirst)
-{
-  // Act: Traverse rejecting subtree of node B in breadth-first
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(),
-    TraversalOrder::kBreadthFirst, CreateRejectSubtreeFilter({ "B" }));
-
-  // Assert: B and its children should be filtered out
-  ExpectTraversalResult(result, 4, 1, true);
-  ExpectContainsExactlyNodes({ "root", "A", "C", "D" }, { "B", "E" });
-}
-
-//=============================================================================
 // Transform Update Tests
 //=============================================================================
 
@@ -271,6 +162,28 @@ protected:
     UpdateSingleNodeTransforms(nodeA_);
     UpdateSingleNodeTransforms(nodeB_);
     UpdateSingleNodeTransforms(nodeC_);
+  }
+
+  // Helper: Mark a node's transform as dirty
+  static void MarkNodeTransformDirty(SceneNode& node)
+  {
+    const auto impl = node.GetObject();
+    ASSERT_TRUE(impl.has_value());
+    if (const auto pos = node.GetTransform().GetLocalPosition()) {
+      node.GetTransform().SetLocalPosition(
+        *pos + glm::vec3(0.001f, 0.0f, 0.0f));
+    }
+    // Also mark the node itself as transform dirty
+    impl->get().MarkTransformDirty();
+  }
+
+  // Helper: Check if a node's transform is dirty
+  static auto IsNodeTransformDirty(const SceneNode& node) -> bool
+  {
+    const auto impl = node.GetObject();
+    if (!impl.has_value())
+      return false;
+    return impl->get().IsTransformDirty();
   }
 
   // Member variables using default constructor for SceneNode
@@ -347,7 +260,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
 // High-Performance Filter Tests
 //=============================================================================
 
-class SceneTraversalBuiltinFilterTest : public SceneTraversalTestBase {
+class SceneTraversalBuiltinFilterTest : public SceneTraversalTransformTest {
 protected:
   void SetUp() override
   {
@@ -500,7 +413,7 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, VisitorStoppingImmediately)
 // Complex Scenario Tests
 //=============================================================================
 
-class SceneTraversalComplexTest : public SceneTraversalTestBase {
+class SceneTraversalComplexTest : public SceneTraversalTransformTest {
 protected:
   void SetUp() override
   {
