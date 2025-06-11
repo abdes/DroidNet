@@ -10,43 +10,49 @@
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/api_export.h>
 
 namespace oxygen {
 
 class ObjectMetaData final : public Component {
-    OXYGEN_COMPONENT(ObjectMetaData)
+  OXYGEN_COMPONENT(ObjectMetaData)
 public:
-    explicit ObjectMetaData(const std::string_view name)
-        : name_(name)
-    {
+  OXYGEN_COMP_API explicit ObjectMetaData(const std::string_view name);
+
+  OXYGEN_COMP_API ~ObjectMetaData() override;
+
+  OXYGEN_DEFAULT_COPYABLE(ObjectMetaData)
+  OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
+
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
+  {
+    return name_;
+  }
+
+  void SetName(const std::string_view name) noexcept
+  {
+    try {
+      name_ = name;
+    } catch (...) {
+      // Setting the name should not throw, unless not enough memory to
+      // allocate the new name. In such case, we can do nothing about it
+      // except aborting.
+      Unreachable();
     }
+  }
 
-    ~ObjectMetaData() override = default;
+  [[nodiscard]] auto IsCloneable() const noexcept -> bool override
+  {
+    return true;
+  }
 
-    OXYGEN_DEFAULT_COPYABLE(ObjectMetaData)
-    OXYGEN_DEFAULT_MOVABLE(ObjectMetaData)
-
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view { return name_; }
-    void SetName(const std::string_view name) noexcept
-    {
-        try {
-            name_ = name;
-        } catch (...) {
-            // Setting the name should not throw, unless not enough memory to
-            // allocate the new name. In such case, we can do nothing about it
-            // except aborting.
-            Unreachable();
-        }
-    }
-
-    [[nodiscard]] auto IsCloneable() const noexcept -> bool override { return true; }
-    [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
-    {
-        return std::make_unique<ObjectMetaData>(this->name_);
-    }
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<Component> override
+  {
+    return std::make_unique<ObjectMetaData>(this->name_);
+  }
 
 private:
-    std::string name_;
+  std::string name_;
 };
 
 static_assert(IsComponent<ObjectMetaData>);

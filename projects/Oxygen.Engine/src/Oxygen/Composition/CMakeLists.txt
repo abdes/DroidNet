@@ -52,6 +52,7 @@ target_sources(
   PRIVATE
     "Composition.cpp"
     "Object.cpp"
+    "ObjectMetaData.cpp"
     "TypeSystem.cpp"
     "InitializeTypeRegistry.cpp"
   PUBLIC
