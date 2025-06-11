@@ -136,16 +136,13 @@ public:
   template <typename URef = T>
     requires std::is_same_v<std::remove_cvref_t<URef>, T>
   auto Insert(URef&& item) -> ResourceHandle;
-
   /**
    * Inserts an item in the table, constructing the item in place at the
    * position chosen by the table. Prefer to use this instead of Insert when
    * adding an item on the fly, passing its properties as arguments.
    */
-  template <typename... Params> auto Emplace(Params&&... args) -> ResourceHandle
-  {
-    return Insert(T { std::forward<Params>(args)... });
-  }
+  template <typename... Params>
+  auto Emplace(Params&&... args) -> ResourceHandle;
 
   // Return 1 if item was found and erased; 0 otherwise.
   auto Erase(const ResourceHandle& handle) -> size_t;
@@ -200,6 +197,11 @@ private:
   [[nodiscard]] auto GetInnerIndex(const ResourceHandle& handle) const
     -> ResourceHandle::IndexT;
 
+  // Common implementation for insertion that prepares the handle and metadata
+  // but delegates item creation to the provided functor
+  template <typename ItemCreator>
+  auto InsertImpl(ItemCreator&& item_creator) -> ResourceHandle;
+
   [[nodiscard]] auto IsFreeListEmpty() const
   {
     // Having the front at the max index value, means the freelist is empty.
@@ -252,7 +254,6 @@ namespace detail {
   }
 
 } // namespace detail
-
 
 template <typename T>
 auto ResourceTable<T>::ItemAt(const ResourceHandle& handle) -> T&
@@ -322,6 +323,21 @@ template <typename URef>
   requires std::is_same_v<std::remove_cvref_t<URef>, T>
 auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
 {
+  return InsertImpl([&]() { items_.push_back(std::forward<URef>(item)); });
+}
+
+template <typename T>
+template <typename... Params>
+auto ResourceTable<T>::Emplace(Params&&... args) -> ResourceHandle
+{
+  return InsertImpl(
+    [&]() { items_.emplace_back(std::forward<Params>(args)...); });
+}
+
+template <typename T>
+template <typename ItemCreator>
+auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
+{
   // We never fill the table beyond the maximum valid index value. This is very
   // unlikely, so we just assert for it and not test it in production.
   assert(Size() < ResourceHandle::kIndexMax
@@ -353,7 +369,8 @@ auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
     handle.SetIndex(outer_index);
   }
 
-  items_.push_back(std::forward<URef>(item));
+  // Delegate item creation to the provided functor
+  item_creator();
   meta_.push_back({ handle.Index() });
 
   return handle;

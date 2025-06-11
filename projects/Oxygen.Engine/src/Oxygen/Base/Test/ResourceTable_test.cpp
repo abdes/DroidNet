@@ -15,7 +15,6 @@
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
 
-
 using oxygen::HandleSet;
 using oxygen::ResourceHandle;
 using oxygen::ResourceTable;
@@ -128,7 +127,7 @@ NOLINT_TEST(ResourceTableBasicTest, EmplaceItem)
     auto& item_in_table = table.ItemAt(handle);
     EXPECT_TRUE(item_in_table.constructed);
     EXPECT_FALSE(item_in_table.copy_constructed);
-    EXPECT_TRUE(item_in_table.move_constructed);
+    EXPECT_FALSE(item_in_table.move_constructed);
   }
   {
     auto handle = table.Emplace(Item("Constructed"));
