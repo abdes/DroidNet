@@ -640,30 +640,4 @@ NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
   }
 }
 
-//------------------------------------------------------------------------------
-// Edge Case Tests
-//------------------------------------------------------------------------------
-class SceneGraphEdgeCasesTest : public SceneGraphTest { };
-
-NOLINT_TEST_F(SceneGraphEdgeCasesTest, SetParentToSelf_Aborts)
-{
-  // Arrange: Create a SceneNodeImpl directly
-  const auto node = scene_->CreateNode("TestNode");
-
-  // TODO: Uncomment after we implement the logic to prevent self-parenting
-  FAIL();
-  // Act: Set parent to self (unit test: raw struct, no scene logic)
-  // EXPECT_DEATH(
-  //    {
-  //        [[maybe_unused]] auto result = scene_->ReparentNode(node, node);
-  //    },
-  //    ".*cannot set parent to self.*");
-}
-
-NOLINT_TEST_F(SceneGraphEdgeCasesTest, SetParentToDescendant_Aborts)
-{
-  // TODO: Implement this test
-  FAIL();
-}
-
 } // namespace

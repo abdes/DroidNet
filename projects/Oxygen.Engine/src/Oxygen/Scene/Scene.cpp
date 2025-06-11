@@ -576,6 +576,10 @@ auto Scene::GetRootHandles() const -> std::span<const NodeHandle>
 
  The child node may have children though. In such case, its children will remain
  attached, and as result, the entire subtree will be preserved.
+
+ @note Transform management is the responsibility of the caller. This method
+ does NOT mark transforms as dirty - the caller should handle transform
+ preservation or dirty marking as appropriate for their use case.
 */
 void Scene::LinkChild(const NodeHandle& parent_handle,
   SceneNodeImpl* parent_impl, const NodeHandle& child_handle,
@@ -613,15 +617,10 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
     auto& first_child_impl = GetNodeImplRef(first_child_handle);
     first_child_impl.AsGraphNode().SetPrevSibling(child_handle);
   }
-
   // Set the new child's parent to the parent node
   child_impl->AsGraphNode().SetParent(parent_handle);
   // Set the parent's first child to the new child
   parent_impl->AsGraphNode().SetFirstChild(child_handle);
-
-  // Mark both nodes' transforms as dirty since hierarchy changed
-  parent_impl->MarkTransformDirty();
-  MarkSubtreeTransformDirty(child_handle);
 }
 
 /*!
@@ -630,9 +629,9 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
  be used after un-linking. If it is simply being detached, it needs to be added
  to the roots set using AddRootNode().
 
- @note This method does NOT mark transforms as dirty. The calling function is
- responsible for handling transform dirty flags as appropriate for the specific
- operation (e.g., preservation vs. recalculation).
+ @note Transform management is the responsibility of the caller. This method
+ does NOT mark transforms as dirty - the caller should handle transform
+ preservation or dirty marking as appropriate for their use case.
 */
 void Scene::UnlinkNode(
   const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept
@@ -679,7 +678,6 @@ void Scene::UnlinkNode(
       to_string_compact(next_sibling_handle));
     next_sibling_impl.AsGraphNode().SetPrevSibling(prev_sibling_handle);
   }
-
   // Reset the node_handle's parent, next sibling, and previous sibling
   node_impl->AsGraphNode().SetParent({});
   node_impl->AsGraphNode().SetNextSibling({});
