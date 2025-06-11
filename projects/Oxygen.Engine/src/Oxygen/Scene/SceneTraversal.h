@@ -219,6 +219,9 @@ private:
   const Scene* scene_;
   mutable std::vector<VisitedNode> children_buffer_;
 
+  //! Collect children of a node into reused buffer
+  OXGN_SCN_API void CollectChildrenToBuffer(SceneNodeImpl* node) const;
+
   //! Get valid node pointer from handle
   OXGN_SCN_API auto GetNodeImpl(const NodeHandle& handle) const
     -> SceneNodeImpl*;
@@ -245,72 +248,6 @@ private:
   //! std::vector (better memory locality) for depth-first traversals and a
   //! std::deque (more efficient front removal) for breadth-first traversal.
   template <TraversalOrder Order> struct ContainerTraits;
-  template <> struct ContainerTraits<TraversalOrder::kBreadthFirst> {
-    template <typename T> using container_type = std::deque<T>;
-
-    template <typename Container>
-    static constexpr void push(
-      Container& container, const typename Container::value_type& value)
-    {
-      container.push_back(value);
-    }
-
-    template <typename Container>
-    static constexpr auto pop(Container& container) ->
-      typename Container::value_type
-    {
-      auto item = container.front();
-      container.pop_front();
-      return item;
-    }
-
-    template <typename Container>
-    static constexpr auto peek(Container& container) ->
-      typename Container::value_type&
-    {
-      return container.front();
-    }
-
-    template <typename Container>
-    static constexpr bool empty(const Container& container)
-    {
-      return container.empty();
-    }
-  };
-
-  // Pre-order and post-order use stack-like behavior (vector)
-  template <> struct ContainerTraits<TraversalOrder::kPreOrder> {
-    template <typename T> using container_type = std::vector<T>;
-
-    template <typename Container>
-    static constexpr void push(
-      Container& container, const typename Container::value_type& value)
-    {
-      container.push_back(value);
-    }
-
-    template <typename Container>
-    static constexpr auto pop(Container& container) ->
-      typename Container::value_type
-    {
-      auto item = container.back();
-      container.pop_back();
-      return item;
-    }
-
-    template <typename Container>
-    static constexpr auto peek(Container& container) ->
-      typename Container::value_type&
-    {
-      return container.back();
-    }
-
-    template <typename Container>
-    static constexpr bool empty(const Container& container)
-    {
-      return container.empty();
-    }
-  };
 
   struct TraversalEntry {
     VisitedNode visited_node;
@@ -323,242 +260,112 @@ private:
     } state { ProcessingState::kPending };
   };
 
-  template <>
-  struct ContainerTraits<TraversalOrder::kPostOrder>
-    : ContainerTraits<TraversalOrder::kPreOrder> { };
-
-  //! Collect children of a node into reused buffer
-  void CollectChildrenToBuffer(SceneNodeImpl* node) const
-  {
-    children_buffer_.clear(); // Fast - just resets size for pointer vector
-
-    auto child_handle = node->AsGraphNode().GetFirstChild();
-    if (!child_handle.IsValid()) {
-      return; // Early exit for leaf nodes
-    }
-
-    // Collect all children in a single pass
-    while (child_handle.IsValid()) {
-      auto* child_node = GetNodeImpl(child_handle);
-      if (!child_node) {
-        break; // Invalid handle, stop collecting children
-      }
-      children_buffer_.push_back(VisitedNode {
-        .handle = child_handle,
-        .node_impl = child_node,
-      });
-      child_handle = child_node->AsGraphNode().GetNextSibling();
-    }
-  }
-
   template <TraversalOrder Order, typename Container>
   void InitializeContainerWithRoots(
-    std::span<VisitedNode> roots, Container& container) const
-  {
-    using Traits = ContainerTraits<Order>;
-
-    for (const auto& root : roots) {
-      Traits::push(container,
-        TraversalEntry {
-          .visited_node = root,
-          // For consistency, we set the parent result for root nodes as
-          // 'accepted'. Filters should handle any additional logic for
-          // determining if the node should accept appropriately.
-          .parent_filter_result = FilterResult::kAccept,
-          .state = TraversalEntry::ProcessingState::kPending,
-        });
-    }
-  }
+    std::span<VisitedNode> roots, Container& container) const;
 
   template <TraversalOrder Order, typename Container>
-  void QueueChildrenForTraversal(SceneNodeImpl* parent_node,
-    FilterResult parent_filter_result, Container& container) const
-  {
-    using Traits = ContainerTraits<Order>;
-
-    CollectChildrenToBuffer(parent_node);
-    if (!children_buffer_.empty()) {
-      for (auto& child : children_buffer_) {
-        Traits::push(container,
-          TraversalEntry {
-            .visited_node = child,
-            .parent_filter_result = parent_filter_result,
-            .state = TraversalEntry::ProcessingState::kPending,
-          });
-      }
-    }
-  };
+  void QueueChildrenForTraversal(
+    FilterResult parent_filter_result, Container& container) const;
 
   // Helper to apply the filter and update result
   template <typename FilterFunc>
   auto ApplyNodeFilter(FilterFunc& filter, const TraversalEntry& entry,
-    TraversalResult& result) const -> FilterResult
-  {
-    const auto filter_result
-      = filter(entry.visited_node, entry.parent_filter_result);
-    if (filter_result != FilterResult::kAccept) {
-      ++result.nodes_filtered;
-    }
-    return filter_result;
-  }
+    TraversalResult& result) const -> FilterResult;
 
   template <TraversalOrder Order, typename VisitorFunc, typename Container>
   auto PerformNodeVisit(VisitorFunc& visitor, Container& container,
-    TraversalResult& result, bool dry_run = false) const -> VisitResult
-  {
-    using Traits = ContainerTraits<Order>;
+    TraversalResult& result, bool dry_run = false) const -> VisitResult;
 
-    VisitResult visit_result;
-    if (dry_run) {
-      auto& entry = Traits::peek(container); // Just peek for dry runs
-      visit_result = visitor(entry.visited_node, *scene_, dry_run);
-      DLOG_F(2, "dry-run visit: {} -> {}",
-        entry.visited_node.node_impl->GetName(),
-        nostd::to_string(visit_result));
-      if (visit_result == VisitResult::kContinue) [[likely]] {
-        return visit_result; // Continue traversal
-      }
-
-      // If not kContinue, then fall through to actually visit the node as
-      // if it were not a dry run
-    }
-
-    auto entry = Traits::pop(container); // Remove it now - visiting
-    visit_result = visitor(entry.visited_node, *scene_, false);
-    DLOG_F(2, "visit: {} -> {}", entry.visited_node.node_impl->GetName(),
-      nostd::to_string(visit_result));
-    ++result.nodes_visited;
-
-    if (visit_result == VisitResult::kStop) [[unlikely]] {
-      result.completed = false;
-    }
-    return visit_result;
-  }
+  //! Update the entry for the current node with the node implementation.
+  OXGN_SCN_NDAPI auto UpdateNodeImpl(TraversalEntry& entry) const -> bool;
 
   //! Unified traversal implementation
   template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
   auto TraverseImpl(std::span<VisitedNode> roots, VisitorFunc&& visitor,
-    FilterFunc&& filter) const -> TraversalResult
-  {
-    if (roots.empty()) [[unlikely]] {
-      return TraversalResult {};
-    }
-
-    DLOG_SCOPE_F(2, "Scene Traversal");
-
-    auto& local_visitor = visitor;
-    auto& local_filter = filter;
-
-    using Traits = ContainerTraits<Order>;
-    typename Traits::template container_type<TraversalEntry> container;
-
-    // Optimize for stack-based traversals with pre-allocation
-    if constexpr (Order == TraversalOrder::kPreOrder
-      || Order == TraversalOrder::kPostOrder) {
-      container.reserve(GetOptimalStackCapacity());
-    }
-
-    InitializeContainerWithRoots<Order>(roots, container);
-
-    TraversalResult result {};
-
-    while (!Traits::empty(container)) {
-      // Peek at the entry without removing it
-      auto& entry = Traits::peek(container);
-      // Keep the direct pointer to the node implementation, it will not be
-      // invalidated by the container operations
-      auto* node = entry.visited_node.node_impl;
-
-      const auto filter_result = ApplyNodeFilter(local_filter, entry, result);
-
-      // Handle filtering
-      if (filter_result == FilterResult::kRejectSubTree) {
-        Traits::pop(container); // Remove the entry since we're skipping it
-        continue;
-      }
-      if (filter_result == FilterResult::kReject) {
-        // Remove the entry since we're not visiting it
-        Traits::pop(container);
-        // Still traverse children for rejected nodes
-        QueueChildrenForTraversal<Order>(node, filter_result, container);
-        continue;
-      }
-
-      // Post-order first time seeing this node:
-      // - dry-run to check the visitor intent
-      // - children first
-      if constexpr (Order == TraversalOrder::kPostOrder) {
-        if (entry.state == TraversalEntry::ProcessingState::kPending) {
-          // First time seeing this node - dry run to check visitor intent
-          auto visit_result
-            = PerformNodeVisit<Order>(local_visitor, container, result, true);
-          if (visit_result == VisitResult::kStop) [[unlikely]] {
-            return result;
-          }
-          if (visit_result == VisitResult::kSkipSubtree) {
-            // Skip children and continue
-            continue;
-          }
-          // Continue with children - mark as processed and add children
-          entry.state = TraversalEntry::ProcessingState::kChildrenProcessed;
-          QueueChildrenForTraversal<Order>(node, filter_result, container);
-          continue;
-        }
-      }
-
-      if constexpr (Order == TraversalOrder::kPostOrder) {
-        DCHECK_F(
-          entry.state == TraversalEntry::ProcessingState::kChildrenProcessed,
-          "post-order first pass should not fall through");
-      }
-
-      // Post-order second time seeing this node, or non-post-order cases ->
-      // actual visit of the node
-      auto visit_result
-        = PerformNodeVisit<Order>(local_visitor, container, result, false);
-      if (visit_result == VisitResult::kStop) [[unlikely]] {
-        return result;
-      }
-
-      // Breadth-first and pre-order -> add children if not skipping subtree
-      if constexpr (Order != TraversalOrder::kPostOrder) {
-        if (visit_result != VisitResult::kSkipSubtree) {
-          QueueChildrenForTraversal<Order>(node, filter_result, container);
-        }
-      }
-    }
-    return result;
-  }
+    FilterFunc&& filter) const -> TraversalResult;
 
   template <typename VisitorFunc, typename FilterFunc>
   auto TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
-    VisitorFunc&& visitor, const TraversalOrder order,
-    FilterFunc&& filter) const -> TraversalResult
+    VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
+    -> TraversalResult;
+};
+
+//=== Template Specializations ===--------------------------------------------//
+
+template <>
+struct SceneTraversal::ContainerTraits<TraversalOrder::kBreadthFirst> {
+  template <typename T> using container_type = std::deque<T>;
+
+  template <typename Container>
+  static constexpr void push(
+    Container& container, const typename Container::value_type& value)
   {
-    if (root_impl_nodes.empty()) [[unlikely]] {
-      return TraversalResult {};
-    }
+    container.push_back(value);
+  }
 
-    // Dispatch to appropriate traversal algorithm
-    switch (order) {
-    case TraversalOrder::kBreadthFirst:
-      return TraverseImpl<TraversalOrder::kBreadthFirst>(root_impl_nodes,
-        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
-    case TraversalOrder::kPreOrder:
-      return TraverseImpl<TraversalOrder::kPreOrder>(root_impl_nodes,
-        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
-    case TraversalOrder::kPostOrder:
-      return TraverseImpl<TraversalOrder::kPostOrder>(root_impl_nodes,
-        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
-    }
+  template <typename Container>
+  static constexpr auto pop(Container& container) ->
+    typename Container::value_type
+  {
+    auto item = container.front();
+    container.pop_front();
+    return item;
+  }
 
-    // This should never be reached with valid enum values
-    [[unlikely]] return TraversalResult {};
+  template <typename Container>
+  static constexpr auto peek(Container& container) ->
+    typename Container::value_type&
+  {
+    return container.front();
+  }
+
+  template <typename Container>
+  static constexpr auto empty(const Container& container) -> bool
+  {
+    return container.empty();
   }
 };
 
-//=== Template Implementation
-//===---------------------------------------------//
+// Pre-order and post-order use stack-like behavior (vector)
+template <> struct SceneTraversal::ContainerTraits<TraversalOrder::kPreOrder> {
+  template <typename T> using container_type = std::vector<T>;
+
+  template <typename Container>
+  static constexpr void push(
+    Container& container, const typename Container::value_type& value)
+  {
+    container.push_back(value);
+  }
+
+  template <typename Container>
+  static constexpr auto pop(Container& container) ->
+    typename Container::value_type
+  {
+    auto item = container.back();
+    container.pop_back();
+    return item;
+  }
+
+  template <typename Container>
+  static constexpr auto peek(Container& container) ->
+    typename Container::value_type&
+  {
+    return container.back();
+  }
+
+  template <typename Container>
+  static constexpr auto empty(const Container& container) -> bool
+  {
+    return container.empty();
+  }
+};
+
+template <>
+struct SceneTraversal::ContainerTraits<TraversalOrder::kPostOrder>
+  : ContainerTraits<TraversalOrder::kPreOrder> { };
+
+//=== Template Implementations ===--------------------------------------------//
 
 template <SceneVisitor VisitorFunc, SceneFilter FilterFunc>
 auto SceneTraversal::Traverse(VisitorFunc&& visitor, TraversalOrder order,
@@ -623,6 +430,245 @@ auto SceneTraversal::TraverseHierarchies(std::span<SceneNode> starting_nodes,
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
     order, std::forward<FilterFunc>(filter));
+}
+
+template <TraversalOrder Order, typename Container>
+void SceneTraversal::InitializeContainerWithRoots(
+  std::span<VisitedNode> roots, Container& container) const
+{
+  using Traits = ContainerTraits<Order>;
+
+  for (const auto& root : roots) {
+    Traits::push(container,
+      TraversalEntry {
+        .visited_node = root,
+        // For consistency, we set the parent result for root nodes as
+        // 'accepted'. Filters should handle any additional logic for
+        // determining if the node should accept appropriately.
+        .parent_filter_result = FilterResult::kAccept,
+        .state = TraversalEntry::ProcessingState::kPending,
+      });
+  }
+}
+
+template <TraversalOrder Order, typename Container>
+void SceneTraversal::QueueChildrenForTraversal(
+  const FilterResult parent_filter_result, Container& container) const
+{
+  using Traits = ContainerTraits<Order>;
+
+  if (!children_buffer_.empty()) {
+    for (auto& child : children_buffer_) {
+      Traits::push(container,
+        TraversalEntry {
+          .visited_node = child,
+          .parent_filter_result = parent_filter_result,
+          .state = TraversalEntry::ProcessingState::kPending,
+        });
+    }
+  }
+  DLOG_F(2, "queued: {}", container.size());
+}
+
+template <typename FilterFunc>
+auto SceneTraversal::ApplyNodeFilter(FilterFunc& filter,
+  const TraversalEntry& entry, TraversalResult& result) const -> FilterResult
+{
+  DLOG_SCOPE_FUNCTION(2);
+
+  DCHECK_NOTNULL_F(entry.visited_node.node_impl);
+  DLOG_F(2, "node: {}", entry.visited_node.node_impl->GetName());
+
+  const auto filter_result
+    = filter(entry.visited_node, entry.parent_filter_result);
+  if (filter_result != FilterResult::kAccept) {
+    ++result.nodes_filtered;
+  }
+  DLOG_F(2, "-> {}", nostd::to_string(filter_result));
+  return filter_result;
+}
+
+template <TraversalOrder Order, typename VisitorFunc, typename Container>
+auto SceneTraversal::PerformNodeVisit(VisitorFunc& visitor,
+  Container& container, TraversalResult& result, bool dry_run) const
+  -> VisitResult
+{
+  using Traits = ContainerTraits<Order>;
+
+  // Update the entry for the current node with the node implementation. Peek
+  // only, entries will be removed when processed. Skip the child if it became
+  // invalid due to mutations in the previous siblings visits.
+  auto& entry_ref = Traits::peek(container);
+  DCHECK_NOTNULL_F(entry_ref.visited_node.node_impl);
+
+  DLOG_SCOPE_FUNCTION(2);
+  DLOG_F(2, "node : {}", entry_ref.visited_node.node_impl->GetName());
+
+  VisitResult visit_result;
+  if (dry_run) {
+    DLOG_SCOPE_F(2, "Dry-Run");
+
+    visit_result = visitor(entry_ref.visited_node, *scene_, dry_run);
+    DLOG_F(2, "result: {}", nostd::to_string(visit_result));
+
+    if (visit_result == VisitResult::kContinue) [[likely]] {
+      return visit_result; // Continue traversal
+    }
+
+    // If not kContinue, then fall through to actually visit the node as
+    // if it were not a dry run
+  }
+  DLOG_SCOPE_F(2, "Real-Run");
+
+  // Remove it now - visiting
+  auto entry = Traits::pop(container); // Do not use node_ref - invalidated
+
+  visit_result = visitor(entry.visited_node, *scene_, false);
+  DLOG_F(2, "-> {}", nostd::to_string(visit_result));
+  ++result.nodes_visited;
+
+  if (visit_result == VisitResult::kStop) [[unlikely]] {
+    result.completed = false;
+  }
+  return visit_result;
+}
+
+// NOLINTBEGIN(cppcoreguidelines-missing-std-forward)
+template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
+auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
+  VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult
+// NOLINTEND(cppcoreguidelines-missing-std-forward)
+{
+  if (roots.empty()) [[unlikely]] {
+    return TraversalResult {};
+  }
+
+  DLOG_SCOPE_F(2, "Scene Traversal");
+
+  // Store in local refs because they are used in a loop
+  auto& local_visitor = visitor;
+  auto& local_filter = filter;
+
+  using Traits = ContainerTraits<Order>;
+  typename Traits::template container_type<TraversalEntry> container;
+
+  // Optimize for stack-based traversals with pre-allocation
+  if constexpr (Order == TraversalOrder::kPreOrder
+    || Order == TraversalOrder::kPostOrder) {
+    container.reserve(GetOptimalStackCapacity());
+  }
+
+  InitializeContainerWithRoots<Order>(roots, container);
+
+  TraversalResult result {};
+
+  while (!Traits::empty(container)) {
+    // Peek at the entry without removing it
+    auto& entry_ref = Traits::peek(container);
+
+    // Update the entry for the current node with the node implementation.
+    // Peek only, entries will be removed when processed. Skip the node if it
+    // became invalid due to mutations in the previous siblings visits.
+    if (!UpdateNodeImpl(entry_ref)) [[unlikely]] {
+      const auto& handle = entry_ref.visited_node.handle;
+      DLOG_F(2, "skipping, no longer in scene", to_string_compact(handle));
+      Traits::pop(container);
+      continue;
+    }
+
+    // Keep the direct pointer to the node implementation, it will not be
+    // invalidated by the container operations
+    auto* node = entry_ref.visited_node.node_impl;
+
+    const auto filter_result = ApplyNodeFilter(local_filter, entry_ref, result);
+
+    // Handle filtering
+    if (filter_result == FilterResult::kRejectSubTree) {
+      Traits::pop(container); // Remove the entry since we're skipping it
+      continue;
+    }
+    if (filter_result == FilterResult::kReject) {
+      // Remove the entry since we're not visiting it
+      Traits::pop(container);
+      // Still traverse children for rejected nodes
+      CollectChildrenToBuffer(node);
+      QueueChildrenForTraversal<Order>(filter_result, container);
+      continue;
+    }
+
+    // Post-order first time seeing this node:
+    // - dry-run to check the visitor intent
+    // - children first
+    if constexpr (Order == TraversalOrder::kPostOrder) {
+      if (entry_ref.state == TraversalEntry::ProcessingState::kPending) {
+        // First time seeing this node - dry run to check visitor intent
+        auto visit_result
+          = PerformNodeVisit<Order>(local_visitor, container, result, true);
+        if (visit_result == VisitResult::kStop) [[unlikely]] {
+          return result;
+        }
+        if (visit_result == VisitResult::kSkipSubtree) {
+          // Skip children and continue
+          continue;
+        }
+        // Continue with children - mark as processed and add children
+        entry_ref.state = TraversalEntry::ProcessingState::kChildrenProcessed;
+        node = Traits::peek(container).visited_node.node_impl;
+        CollectChildrenToBuffer(node);
+        QueueChildrenForTraversal<Order>(filter_result, container);
+        continue;
+      }
+    }
+
+    if constexpr (Order == TraversalOrder::kPostOrder) {
+      DCHECK_F(
+        entry_ref.state == TraversalEntry::ProcessingState::kChildrenProcessed,
+        "post-order first pass should not fall through");
+    }
+
+    // Post-order second time seeing this node, or non-post-order cases ->
+    // actual visit of the node
+    auto visit_result
+      = PerformNodeVisit<Order>(local_visitor, container, result, false);
+    if (visit_result == VisitResult::kStop) [[unlikely]] {
+      return result;
+    }
+
+    // Breadth-first and pre-order -> add children if not skipping subtree
+    if constexpr (Order != TraversalOrder::kPostOrder) {
+      if (visit_result != VisitResult::kSkipSubtree) {
+        CollectChildrenToBuffer(node);
+        QueueChildrenForTraversal<Order>(filter_result, container);
+      }
+    }
+  }
+  return result;
+}
+
+template <typename VisitorFunc, typename FilterFunc>
+auto SceneTraversal::TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
+  VisitorFunc&& visitor, const TraversalOrder order, FilterFunc&& filter) const
+  -> TraversalResult
+{
+  if (root_impl_nodes.empty()) [[unlikely]] {
+    return TraversalResult {};
+  }
+
+  // Dispatch to appropriate traversal algorithm
+  switch (order) {
+  case TraversalOrder::kBreadthFirst:
+    return TraverseImpl<TraversalOrder::kBreadthFirst>(root_impl_nodes,
+      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+  case TraversalOrder::kPreOrder:
+    return TraverseImpl<TraversalOrder::kPreOrder>(root_impl_nodes,
+      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+  case TraversalOrder::kPostOrder:
+    return TraverseImpl<TraversalOrder::kPostOrder>(root_impl_nodes,
+      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+  }
+
+  // This should never be reached with valid enum values
+  [[unlikely]] return TraversalResult {};
 }
 
 } // namespace oxygen::scene

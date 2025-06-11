@@ -65,15 +65,72 @@ auto SceneTraversal::GetNodeImpl(const NodeHandle& handle) const
   }
 }
 
+void SceneTraversal::CollectChildrenToBuffer(SceneNodeImpl* node) const
+{
+  children_buffer_.clear(); // Fast - just resets size for pointer vector
+
+  LOG_SCOPE_F(2, "Collect Children");
+  DLOG_F(2, "node: {}", node->GetName());
+
+  auto child_handle = node->AsGraphNode().GetFirstChild();
+  if (!child_handle.IsValid()) {
+    DLOG_F(2, "no children");
+    return; // Early exit for leaf nodes
+  }
+
+  // Collect all children in a single pass.
+  while (child_handle.IsValid()) {
+    auto* child_node = GetNodeImpl(child_handle);
+
+    // Sanity checks
+    DCHECK_NOTNULL_F(child_node,
+      "corrupted scene graph, child `{}` of `{}` is no longer in the scene",
+      to_string_compact(child_handle), node->GetName());
+    DLOG_F(2, " + {}", child_node->GetName());
+
+    children_buffer_.push_back(VisitedNode {
+      .handle = child_handle, // The handle is the only stable thing
+      .node_impl = nullptr, // Do not update the node_impl here, it will be
+      // updated during traversal because the table may
+      // change
+    });
+    child_handle = child_node->AsGraphNode().GetNextSibling();
+  }
+
+  DLOG_F(2, "total: {}", children_buffer_.size());
+}
+
+/*!
+ The implementation for the node being traversed is updated at the last minute
+ to make the traversal algorithm resilient to visitors that mutate the scene
+ graph during traversal.
+*/
+auto SceneTraversal::UpdateNodeImpl(TraversalEntry& entry) const -> bool
+{
+  // Update the entry for the current node with the node implementation.
+  // Peek only, entries will be removed when processed. Skip the node if it
+  // became invalid due to mutations in the previous siblings visits.
+  if (entry.visited_node.node_impl == nullptr) [[likely]] {
+    entry.visited_node.node_impl = GetNodeImpl(entry.visited_node.handle);
+  }
+  return entry.visited_node.node_impl != nullptr;
+}
+
 //=== Transform Update Methods ===--------------------------------------------//
 
+/*!
+ Efficiently updates transforms for all nodes that have dirty transform state.
+ This is equivalent to Scene::Update but uses the optimized traversal system.
+
+ @return Number of nodes that had their transforms updated
+*/
 auto SceneTraversal::UpdateTransforms() -> std::size_t
 {
   std::size_t updated_count
     = 0; // Batch process with dirty transform filter for efficiency
   [[maybe_unused]] auto result = Traverse(
     [&updated_count](const VisitedNode& node, const Scene& scene,
-      bool dry_run) -> VisitResult {
+      const bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "UpdateTransforms uses kPreOrder and should never receive "
         "dry_run=true");
@@ -92,7 +149,11 @@ auto SceneTraversal::UpdateTransforms() -> std::size_t
   return updated_count;
 }
 
-auto SceneTraversal::UpdateTransforms(std::span<SceneNode> starting_nodes)
+/*!
+ @param starting_nodes Starting nodes for transform update traversal
+ @return Number of nodes that had their transforms updated
+*/
+auto SceneTraversal::UpdateTransforms(const std::span<SceneNode> starting_nodes)
   -> std::size_t
 {
   std::size_t updated_count
@@ -100,7 +161,7 @@ auto SceneTraversal::UpdateTransforms(std::span<SceneNode> starting_nodes)
   [[maybe_unused]] auto result = TraverseHierarchies(
     starting_nodes,
     [&updated_count](const VisitedNode& node, const Scene& scene,
-      bool dry_run) -> VisitResult {
+      const bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "UpdateTransforms uses kPreOrder and should never receive "
         "dry_run=true");
@@ -115,7 +176,7 @@ auto SceneTraversal::UpdateTransforms(std::span<SceneNode> starting_nodes)
   return updated_count;
 }
 
-auto oxygen::scene::to_string(FilterResult value) -> const char*
+auto oxygen::scene::to_string(const FilterResult value) -> const char*
 {
   switch (value) {
   case FilterResult::kAccept:
@@ -129,7 +190,7 @@ auto oxygen::scene::to_string(FilterResult value) -> const char*
   return "__NotSupported__";
 }
 
-auto oxygen::scene::to_string(VisitResult value) -> const char*
+auto oxygen::scene::to_string(const VisitResult value) -> const char*
 {
   switch (value) {
   case VisitResult::kContinue:
