@@ -29,16 +29,16 @@ using oxygen::scene::SceneNode;
 /*!
  This method creates a new scene node and adds it to this scene as a root node.
  The created node will have no parent and will be automatically added to the
- scene's root nodes collection.
+ scene's root nodes' collection.
 
- This call will never fail, unless the resource table is full. In such a case,
+ This call will never fail unless the resource table is full. In such a case,
  the application will terminate.
 
  @tparam Args Variadic template arguments forwarded to SceneNodeImpl
  constructor. Must match SceneNodeImpl constructor parameters (e.g., name,
  flags).
 
- @param args Arguments forwarded to SceneNodeImpl constructor. Typically
+ @param args Arguments forwarded to SceneNodeImpl constructor. Typically, it
  includes node name and optional flags.
 
  @return A SceneNode wrapper around the handle of the newly created root node.
@@ -110,7 +110,7 @@ auto Scene::CreateNode(const std::string& name, SceneNode::Flags flags)
 
  @param parent The parent node under which to create the new child node. Must be
  valid and belong to this scene.
- @param args Arguments forwarded to SceneNodeImpl constructor. Typically
+ @param args Arguments forwarded to SceneNodeImpl constructor. Typically, it
  includes node name and optional flags.
 
  @return An optional SceneNode wrapper around the handle of the newly created
@@ -180,7 +180,7 @@ auto Scene::CreateChildNode(const SceneNode& parent,
 }
 
 /*!
- \copydetails CreateChildNode(const SceneNode&, const std::string&)
+ @copydetails CreateChildNode(const SceneNode&, const std::string&)
  @param flags Flags to assign to the new node.
 */
 auto Scene::CreateChildNode(const SceneNode& parent, const std::string& name,
@@ -193,7 +193,7 @@ auto Scene::CreateChildNode(const SceneNode& parent, const std::string& name,
  This method safely destroys a leaf node (a node with no children) from the
  scene. The node is properly unlinked from its parent and siblings, removed from
  the scene's node table, and its handle is invalidated. If the node is a root
- node, it is also removed from the scene's root nodes collection.
+ node, it is also removed from the scene's root nodes' collection.
 
  ### Failure Scenarios
 
@@ -341,11 +341,11 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
       // First, handle the starting node's relationship with its parent/scene
       // before beginning traversal to unlink the entire hierarchy
       if (starting_node.IsRoot()) {
-        // This is an actual scene root node - remove from root nodes collection
+        // This is an actual scene root node - remove from root nodes
         RemoveRootNode(starting_node.GetHandle());
       } else {
         // This node has a parent - unlink it from its parent
-        // This is the only un-linking we need since we're destroying the entire
+        // This is the only unlinking we need since we're destroying the entire
         // subtree
         UnlinkNode(starting_node.GetHandle(), state.node_impl);
       } // Use SceneTraversal with post-order to ensure children are destroyed
@@ -370,13 +370,12 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
           if (removed > 0) {
             ++destroyed_count;
             return VisitResult::kContinue;
-          } else {
-            // Node destruction failed - this shouldn't happen unless the node
-            // was already destroyed or became invalid during traversal
-            DLOG_F(ERROR, "Failed to destroy node: {} (handle: {})", node_name,
-              nostd::to_string(node.handle));
-            return VisitResult::kStop;
           }
+          // Node destruction failed - this shouldn't happen unless the node
+          // was already destroyed or became invalid during traversal
+          DLOG_F(ERROR, "Failed to destroy node: {} (handle: {})", node_name,
+            nostd::to_string(node.handle));
+          return VisitResult::kStop;
         },
         TraversalOrder::kPostOrder); // Post-order guarantees children destroyed
                                      // before parents
@@ -416,8 +415,8 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
  the hierarchy was successfully destroyed, false indicates failure (see
  `DestroyNodeHierarchy()` for failure scenarios).
 
- @note **Partial Success:** Each individual hierarchy destruction is atomic, but
- some may fail.
+ @note **Partial Success: ** Each hierarchy destruction is atomic, but some may
+ fail.
 
  @see DestroyNodeHierarchy() for detailed destruction logic and failure
  scenarios
@@ -822,7 +821,7 @@ auto Scene::CreateHierarchyFrom(
   AddRootNode(cloned_root_handle);
 
   // Return the cloned root as a SceneNode
-  return SceneNode(shared_from_this(), cloned_root_handle);
+  return { shared_from_this(), cloned_root_handle };
 }
 
 /*!

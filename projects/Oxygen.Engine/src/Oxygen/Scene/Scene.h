@@ -73,6 +73,8 @@ class Scene : public Composition, public std::enable_shared_from_this<Scene> {
   //! Implementation of a scene node, stored in a resource table.
   using SceneNodeImpl = SceneNodeImpl;
 
+  constexpr static size_t kInitialCapacity = 1024;
+
 public:
   using NodeTable = ResourceTable<SceneNodeImpl>;
   using SceneId = NodeHandle::SceneId;
@@ -86,7 +88,7 @@ public:
 
   //! Constructs a Scene with the given name and initial capacity hint.
   OXGN_SCN_API explicit Scene(
-    const std::string& name, size_t initial_capacity = 1024);
+    const std::string& name, size_t initial_capacity = kInitialCapacity);
 
   OXGN_SCN_API ~Scene() override;
 
