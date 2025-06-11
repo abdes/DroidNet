@@ -17,12 +17,15 @@
 #define NOLINT_EXPECT_THROW(st, ex) EXPECT_THROW(st, ex) // NOLINT
 #define NOLINT_ASSERT_NO_THROW(st) ASSERT_NO_THROW(st) // NOLINT
 #define NOLINT_EXPECT_NO_THROW(st) EXPECT_NO_THROW(st) // NOLINT
+#define NOLINT_ASSERT_DEATH(st, msg) ASSERT_DEATH(st, msg) // NOLINT
 
-// A void test-function using  ASSERT_ or EXPECT_ calls with a custom message
+// A void test-function using ASSERT_ or EXPECT_ calls with a custom message
 // should be encapsulated by this macro. Example:
 // CHECK_FOR_FAILURES_MSG(MyCheckForEquality(counter, 42), "for counter=42")
-#define CHECK_FOR_FAILURES_MSG(statement, message)                             \
+#define CHECK_FOR_FAILURES_MSG__(statement, message)                           \
   {                                                                            \
     SCOPED_TRACE(message);                                                     \
     ASSERT_NO_FATAL_FAILURE((statement));                                      \
   }
+#define CHECK_FOR_FAILURES_MSG(statement, message)                             \
+  CHECK_FOR_FAILURES_MSG__(statement, message) // NOLINT
