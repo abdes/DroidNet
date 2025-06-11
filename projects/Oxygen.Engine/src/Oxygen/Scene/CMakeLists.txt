@@ -51,6 +51,7 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "Scene.cpp"
+    "Scene_node_factory.cpp"
     "SceneTraversal.cpp"
     "SceneFlags.cpp"
     "SceneNode.cpp"
@@ -61,6 +62,8 @@ target_sources(
     "Detail/StringConverters.cpp"
     "Detail/TransformComponent.cpp"
     "Detail/TransformComponent.h"
+    "Detail/Scene_safecall_impl.h"
+    "Detail/Scene_safecall_impl.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
