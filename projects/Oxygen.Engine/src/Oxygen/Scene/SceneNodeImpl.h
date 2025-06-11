@@ -171,7 +171,8 @@ public:
   //=== Cloning Support ===---------------------------------------------------//
 
   [[nodiscard]] static auto IsCloneable() noexcept -> bool { return true; }
-  OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<SceneNodeImpl> override;
+  // ReSharper disable once CppHidingFunction
+  OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
 
 protected:
   //! Marks the node transform matrices as clean, without updating them.
