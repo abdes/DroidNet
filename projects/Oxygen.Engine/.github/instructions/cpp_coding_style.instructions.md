@@ -29,7 +29,7 @@ Documentation:
 3. Write concise and clear documentation for all public functions, classes, and variables, providing critical information not obvious from the code itself. Avoid duplication.
 4. Use proper punctuation and grammar.
 5. Do not use explicit `brief` tags.
-6. Use `\param` for function parameters, `\return` for return values, `\throws` for exceptions, and `\note` for additional notes.
+6. Use `@param` for function parameters, `@return` for return values, `@throws` for exceptions, and `@note` for additional notes.
 7. Omit detailed documentation for simple functions and classes.
 8. Start with `/*!` for multi-line comments.
 9. Indent subsequent lines by exactly 1 space from the `/*!` line.
