@@ -138,11 +138,14 @@ auto Scene::CreateChildNodeImpl(
       };
       DCHECK_F(
         child_handle.IsValid(), "expecting a valid handle for a new node");
-
       auto* node_impl = &nodes_->ItemAt(child_handle);
 
       LinkChild(
         state.node->GetHandle(), state.node_impl, child_handle, node_impl);
+
+      // Mark parent transform dirty since it now has a new child
+      state.node_impl->MarkTransformDirty();
+
       return SceneNode(shared_from_this(), child_handle);
     });
 }
@@ -229,6 +232,18 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
     LeafNodeCanBeDestroyed(node), [&](const SafeCallState& state) -> bool {
       DCHECK_EQ_F(state.node, &node);
       DCHECK_NOTNULL_F(state.node_impl);
+
+      // Mark parent transform dirty if node has a parent (since parent is
+      // losing a child)
+      if (node.HasParent()) {
+        auto parent_opt = node.GetParent();
+        if (parent_opt.has_value()) {
+          auto parent_impl_opt = GetNodeImpl(*parent_opt);
+          if (parent_impl_opt.has_value()) {
+            parent_impl_opt->get().MarkTransformDirty();
+          }
+        }
+      }
 
       // Properly unlink the node from its parent and siblings
       UnlinkNode(node.GetHandle(), state.node_impl);
@@ -345,6 +360,15 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
         RemoveRootNode(starting_node.GetHandle());
       } else {
         // This node has a parent - unlink it from its parent
+        // Mark parent transform dirty since it's losing a child hierarchy
+        auto parent_opt = starting_node.GetParent();
+        if (parent_opt.has_value()) {
+          auto parent_impl_opt = GetNodeImpl(*parent_opt);
+          if (parent_impl_opt.has_value()) {
+            parent_impl_opt->get().MarkTransformDirty();
+          }
+        }
+
         // This is the only unlinking we need since we're destroying the entire
         // subtree
         UnlinkNode(starting_node.GetHandle(), state.node_impl);
@@ -597,9 +621,11 @@ auto Scene::CreateChildNodeFrom(const SceneNode& parent,
         return std::nullopt; // Cloning failed
       }
       auto [cloned_handle, cloned_node_impl] = *clone;
-
       LinkChild(
         parent.GetHandle(), state.node_impl, cloned_handle, cloned_node_impl);
+
+      // Mark parent transform dirty since it now has a new child
+      state.node_impl->MarkTransformDirty();
 
       return SceneNode(shared_from_this(), cloned_handle);
     });
@@ -720,6 +746,9 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
             = &GetNodeImplRefUnsafe(cloned_parent_handle);
           LinkChild(cloned_parent_handle, cloned_parent_impl, cloned_handle,
             &nodes_->ItemAt(cloned_handle));
+
+          // Mark parent transform dirty since it now has a new child
+          cloned_parent_impl->MarkTransformDirty();
         }
         return VisitResult::kContinue;
       } catch (const std::exception& ex) {
@@ -888,11 +917,14 @@ auto Scene::CreateChildHierarchyFrom(const SceneNode& parent,
       }
       auto [cloned_root_handle, cloned_root_impl] = *clone_result;
       // Update the cloned root's name as requested
-      cloned_root_impl->SetName(new_root_name);
-
-      // CloneHierarchy creates an orphan hierarchy - link it as a child
+      cloned_root_impl->SetName(
+        new_root_name); // CloneHierarchy creates an orphan hierarchy - link it
+                        // as a child
       LinkChild(parent.GetHandle(), state.node_impl, cloned_root_handle,
         cloned_root_impl);
+
+      // Mark parent transform dirty since it now has a new child hierarchy
+      state.node_impl->MarkTransformDirty();
 
       return SceneNode(shared_from_this(), cloned_root_handle);
     });

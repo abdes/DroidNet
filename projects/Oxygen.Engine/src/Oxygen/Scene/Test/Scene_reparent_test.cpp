@@ -60,6 +60,116 @@ protected:
     return scene_->CreateChildNode(parent, name);
   }
 
+  // -----------------------------------------------------------------------------
+  // Common Scene Setups - Ready-to-use hierarchies
+  // -----------------------------------------------------------------------------
+
+  // Pattern: Parent -> Child
+  struct SimpleParentChild {
+    SceneNode parent;
+    SceneNode child;
+  };
+
+  [[nodiscard]] auto CreateSimpleParentChild() const -> SimpleParentChild
+  {
+    auto parent = CreateNode("Parent");
+    auto child_opt = CreateChildNode(parent, "Child");
+    EXPECT_TRUE(child_opt.has_value());
+    return { parent, *child_opt };
+  }
+
+  // Pattern: Parent -> Child1, Child2
+  struct ParentWithTwoChildren {
+    SceneNode parent;
+    SceneNode child1;
+    SceneNode child2;
+  };
+
+  [[nodiscard]] auto CreateParentWithTwoChildren() const
+    -> ParentWithTwoChildren
+  {
+    auto parent = CreateNode("Parent");
+    auto child1_opt = CreateChildNode(parent, "Child1");
+    auto child2_opt = CreateChildNode(parent, "Child2");
+    EXPECT_TRUE(child1_opt.has_value() && child2_opt.has_value());
+    return { parent, *child1_opt, *child2_opt };
+  }
+
+  // Pattern: Root -> Child -> Grandchild (3 generations)
+  struct ThreeGenerationHierarchy {
+    SceneNode root;
+    SceneNode child;
+    SceneNode grandchild;
+  };
+
+  [[nodiscard]] auto CreateThreeGenerationHierarchy() const
+    -> ThreeGenerationHierarchy
+  {
+    auto root = CreateNode("Root");
+    auto child_opt = CreateChildNode(root, "Child");
+    EXPECT_TRUE(child_opt.has_value());
+    auto child = *child_opt;
+    auto grandchild_opt = CreateChildNode(child, "Grandchild");
+    EXPECT_TRUE(grandchild_opt.has_value());
+    return { root, child, *grandchild_opt };
+  }
+
+  // Pattern: Root -> ParentA, ParentB (dual parent structure)
+  struct DualParentStructure {
+    SceneNode root;
+    SceneNode parentA;
+    SceneNode parentB;
+  };
+
+  [[nodiscard]] auto CreateDualParentStructure() const -> DualParentStructure
+  {
+    auto root = CreateNode("Root");
+    auto parentA_opt = CreateChildNode(root, "ParentA");
+    auto parentB_opt = CreateChildNode(root, "ParentB");
+    EXPECT_TRUE(parentA_opt.has_value() && parentB_opt.has_value());
+    return { root, *parentA_opt, *parentB_opt };
+  }
+
+  // Pattern: Root -> ParentA -> Child, Root -> ParentB (with child under
+  // ParentA)
+  struct DualParentWithChild {
+    SceneNode root;
+    SceneNode parentA;
+    SceneNode parentB;
+    SceneNode child;
+  };
+
+  [[nodiscard]] auto CreateDualParentWithChild() const -> DualParentWithChild
+  {
+    auto dual = CreateDualParentStructure();
+    auto child_opt = CreateChildNode(dual.parentA, "Child");
+    EXPECT_TRUE(child_opt.has_value());
+    return { dual.root, dual.parentA, dual.parentB, *child_opt };
+  }
+
+  // Pattern: NodeA -> NodeB -> NodeC -> NodeD -> NodeE (linear chain)
+  struct LinearChain {
+    std::vector<SceneNode> nodes;
+  };
+
+  [[nodiscard]] auto CreateLinearChain(const int depth = 5) const -> LinearChain
+  {
+    std::vector<SceneNode> nodes;
+    auto current = CreateNode("NodeA");
+    nodes.push_back(current);
+
+    const std::vector<std::string> names = { "NodeB", "NodeC", "NodeD", "NodeE",
+      "NodeF", "NodeG", "NodeH", "NodeI", "NodeJ" };
+    for (int i = 1; i < depth && i < static_cast<int>(names.size()) + 1; ++i) {
+      auto child_opt = CreateChildNode(current, names[i - 1]);
+      EXPECT_TRUE(child_opt.has_value());
+      current = *child_opt;
+      nodes.push_back(current);
+    }
+
+    return { std::move(nodes) };
+  }
+
   // Helper: Set up transform with specific values and update as needed
   void SetupNodeTransform(const SceneNode& node,
     const TransformComponent::Vec3& position,
@@ -107,19 +217,41 @@ protected:
     return TransformComponent::Quat { glm::radians(
       TransformComponent::Vec3 { x_deg, y_deg, z_deg }) };
   }
-
   // Helper: Verify node is valid and has expected name
   static void ExpectNodeValidWithName(
     const SceneNode& node, const std::string& name)
   {
-    if (!node.IsValid())
-      FAIL() << "Node should be valid";
+    ASSERT_TRUE(node.IsValid()) << "Node should be valid";
     const auto obj_opt = node.GetObject();
-    if (!obj_opt.has_value())
-      FAIL() << "Node object should be present";
-    if (obj_opt->get().GetName() != name)
-      FAIL() << "Node name mismatch: expected '" << name << "', got '"
-             << obj_opt->get().GetName() << "'";
+    ASSERT_TRUE(obj_opt.has_value()) << "Node object should be present";
+    EXPECT_EQ(obj_opt->get().GetName(), name)
+      << "Node name mismatch: expected '" << name << "', got '"
+      << obj_opt->get().GetName();
+  }
+  // Helper: Verify node is valid, has expected name, and is a root node
+  static void ExpectNodeValidAsRoot(
+    const SceneNode& node, const std::string& name)
+  {
+    ExpectNodeValidWithName(node, name);
+    EXPECT_TRUE(node.IsRoot()) << "Node '" << name << "' should be a root node";
+    EXPECT_FALSE(node.HasParent())
+      << "Root node '" << name << "' should not have a parent";
+  }
+  // Helper: Verify node is valid, has expected parent, and is not a root
+  static void ExpectNodeValidWithParent(
+    const SceneNode& node, const SceneNode& expected_parent)
+  {
+    ASSERT_TRUE(node.IsValid()) << "Node should be valid";
+    ASSERT_TRUE(expected_parent.IsValid()) << "Expected parent should be valid";
+    EXPECT_FALSE(node.IsRoot())
+      << "Node should not be a root (should have parent)";
+    EXPECT_TRUE(node.HasParent()) << "Node should have a parent";
+
+    const auto parent_opt = node.GetParent();
+    ASSERT_TRUE(parent_opt.has_value()) << "Node should have a valid parent";
+
+    EXPECT_EQ(parent_opt->GetHandle(), expected_parent.GetHandle())
+      << "Node has wrong parent (handle mismatch)";
   }
 
   // Helper: Verify vectors are approximately equal
@@ -151,25 +283,19 @@ protected:
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_ValidChildNode_BecomesRoot)
 {
   // Arrange: Create parent-child hierarchy
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
-
-  EXPECT_FALSE(child.IsRoot());
-  EXPECT_TRUE(child.HasParent());
+  const auto hierarchy = CreateSimpleParentChild();
+  EXPECT_FALSE(hierarchy.child.IsRoot());
+  EXPECT_TRUE(hierarchy.child.HasParent());
 
   // Act: Make child a root node
-  const auto result = scene_->MakeNodeRoot(child, false);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, false);
 
   // Assert: Operation should succeed and child becomes root
   EXPECT_TRUE(result);
-  EXPECT_TRUE(child.IsRoot());
-  EXPECT_FALSE(child.HasParent());
-  CHECK_FOR_FAILURES_MSG(
-    ExpectNodeValidWithName(child, "Child"), "child node after making root");
-  CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(parent, "Parent"),
-    "parent node after child made root");
+  EXPECT_TRUE(hierarchy.child.IsRoot());
+  EXPECT_FALSE(hierarchy.child.HasParent());
+  CHECK_FOR_FAILURES(ExpectNodeValidWithName(hierarchy.child, "Child"));
+  CHECK_FOR_FAILURES(ExpectNodeValidWithName(hierarchy.parent, "Parent"));
 }
 
 NOLINT_TEST_F(
@@ -181,12 +307,10 @@ NOLINT_TEST_F(
 
   // Act: Try to make already-root node a root
   const auto result = scene_->MakeNodeRoot(root, false);
-
   // Assert: Operation should succeed with no changes
   EXPECT_TRUE(result);
   EXPECT_TRUE(root.IsRoot());
-  CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(root, "RootNode"),
-    "root node after redundant operation");
+  CHECK_FOR_FAILURES(ExpectNodeValidWithName(root, "RootNode"));
 }
 
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_DeepHierarchy_EntireSubtreeMoved)
@@ -225,23 +349,20 @@ NOLINT_TEST_F(SceneReparentTest,
   MakeNodeRoot_WithoutTransformPreservation_MarksSubtreeDirty)
 {
   // Arrange: Create parent-child with transforms
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
-  SetupNodeTransform(
-    parent, MakeVec3(10, 20, 30), QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
-  SetupNodeTransform(
-    child, MakeVec3(1, 2, 3), QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
+  SetupNodeTransform(hierarchy.parent, MakeVec3(10, 20, 30),
+    QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
+  SetupNodeTransform(hierarchy.child, MakeVec3(1, 2, 3),
+    QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
   UpdateSceneTransforms();
 
   // Act: Make child root without preserving transform
-  const auto result = scene_->MakeNodeRoot(child, false);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, false);
 
   // Assert: Transform should be marked dirty for recalculation
   EXPECT_TRUE(result);
-  auto& child_transform = GetTransformComponent(child);
+  auto& child_transform = GetTransformComponent(hierarchy.child);
   EXPECT_TRUE(child_transform.IsDirty());
 }
 
@@ -249,44 +370,38 @@ NOLINT_TEST_F(SceneReparentTest,
   MakeNodeRoot_WithTransformPreservation_PreservesWorldPosition)
 {
   // Arrange: Create parent-child with transforms
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
   // Set parent transform: position(10,20,30), rotation(45° around X),
   // scale(2,2,2)
-  SetupNodeTransform(
-    parent, MakeVec3(10, 20, 30), QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
+  SetupNodeTransform(hierarchy.parent, MakeVec3(10, 20, 30),
+    QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
   // Set child transform: position(1,2,3), rotation(45° around Y), scale(1,1,1)
-  SetupNodeTransform(
-    child, MakeVec3(1, 2, 3), QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
+  SetupNodeTransform(hierarchy.child, MakeVec3(1, 2, 3),
+    QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
 
   UpdateSceneTransforms(); // Update cached world transforms
 
   // Capture world transform before reparenting
-  auto& child_transform = GetTransformComponent(child);
+  auto& child_transform = GetTransformComponent(hierarchy.child);
   const auto original_world_pos = child_transform.GetWorldPosition();
   const auto original_world_rot = child_transform.GetWorldRotation();
   const auto original_world_scale = child_transform.GetWorldScale();
 
   // Act: Make child root with transform preservation
-  const auto result = scene_->MakeNodeRoot(child, true);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, true);
 
   // Assert: Operation succeeds and world transform is preserved
   EXPECT_TRUE(result);
-  EXPECT_TRUE(child.IsRoot());
+  EXPECT_TRUE(hierarchy.child.IsRoot());
 
   // Assert: Local transform should now equal the captured world transform
-  CHECK_FOR_FAILURES_MSG(
-    ExpectVec3Near(child_transform.GetLocalPosition(), original_world_pos),
-    "preserved world position as local");
-  CHECK_FOR_FAILURES_MSG(
-    ExpectQuatNear(child_transform.GetLocalRotation(), original_world_rot),
-    "preserved world rotation as local");
-  CHECK_FOR_FAILURES_MSG(
-    ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale),
-    "preserved world scale as local");
+  CHECK_FOR_FAILURES(
+    ExpectVec3Near(child_transform.GetLocalPosition(), original_world_pos));
+  CHECK_FOR_FAILURES(
+    ExpectQuatNear(child_transform.GetLocalRotation(), original_world_rot));
+  CHECK_FOR_FAILURES(
+    ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale));
 }
 
 // -----------------------------------------------------------------------------
@@ -296,15 +411,12 @@ NOLINT_TEST_F(SceneReparentTest,
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_UpdatesRootNodesList)
 {
   // Arrange: Create parent-child hierarchy
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
   const auto initial_root_count = scene_->GetRootNodes().size();
 
   // Act: Make child a root node
-  const auto result = scene_->MakeNodeRoot(child, false);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, false);
 
   // Assert: Root nodes list should be updated
   EXPECT_TRUE(result);
@@ -324,15 +436,12 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_UpdatesRootNodesList)
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_PreservesSceneNodeCount)
 {
   // Arrange: Create parent-child hierarchy
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
   const auto initial_node_count = scene_->GetNodeCount();
 
   // Act: Make child a root node
-  const auto result = scene_->MakeNodeRoot(child, false);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, false);
 
   // Assert: Total node count should remain the same
   EXPECT_TRUE(result);
@@ -430,7 +539,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(SceneReparentEdgeTest, MakeNodeRoot_EmptyNameNode_WorksCorrectly)
 {
-  // Arrange: Create nodes with empty and unusual names
+  // Arrange: Create nodes with empty and unusual names (one-off test)
   auto parent = CreateNode(""); // Empty name
   auto child_opt = CreateChildNode(parent, "   "); // Whitespace name
   ASSERT_TRUE(child_opt.has_value());
@@ -442,26 +551,17 @@ NOLINT_TEST_F(SceneReparentEdgeTest, MakeNodeRoot_EmptyNameNode_WorksCorrectly)
   // Assert: Should work despite unusual names
   EXPECT_TRUE(result);
   EXPECT_TRUE(child.IsRoot());
-  CHECK_FOR_FAILURES_MSG(
-    ExpectNodeValidWithName(child, "   "), "child with whitespace name");
+  CHECK_FOR_FAILURES(ExpectNodeValidWithName(child, "   "));
 }
 
 NOLINT_TEST_F(
   SceneReparentEdgeTest, MakeNodeRoot_VeryDeepHierarchy_HandledCorrectly)
 {
   // Arrange: Create very deep hierarchy (15 levels)
-  SceneNode current = CreateNode("Root");
-  std::vector<SceneNode> hierarchy = { current };
-
-  for (int i = 1; i < 15; ++i) {
-    auto child_opt = CreateChildNode(current, "Level" + std::to_string(i));
-    ASSERT_TRUE(child_opt.has_value());
-    current = *child_opt;
-    hierarchy.push_back(current);
-  }
+  const auto deep_chain = CreateLinearChain(15);
 
   // Act: Make deep child a root (moving 14-level subtree)
-  const auto middle_node = hierarchy[7]; // Node at level 7
+  const auto middle_node = deep_chain.nodes[7]; // Node at level 7
   const auto result = scene_->MakeNodeRoot(middle_node, false);
 
   // Assert: Should handle deep hierarchy correctly
@@ -469,9 +569,9 @@ NOLINT_TEST_F(
   EXPECT_TRUE(middle_node.IsRoot());
 
   // Verify subtree structure is preserved
-  for (size_t i = 8; i < hierarchy.size(); ++i) {
-    EXPECT_FALSE(hierarchy[i].IsRoot());
-    EXPECT_TRUE(hierarchy[i].IsValid());
+  for (size_t i = 8; i < deep_chain.nodes.size(); ++i) {
+    EXPECT_FALSE(deep_chain.nodes[i].IsRoot());
+    EXPECT_TRUE(deep_chain.nodes[i].IsValid());
   }
 }
 
@@ -479,38 +579,32 @@ NOLINT_TEST_F(
   SceneReparentEdgeTest, MakeNodeRoot_ImmediatelyAfterCreation_WorksCorrectly)
 {
   // Arrange: Create child and immediately make it root
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
   // Act: Make root immediately without any intervening operations
-  const auto result = scene_->MakeNodeRoot(child, false);
+  const auto result = scene_->MakeNodeRoot(hierarchy.child, true);
 
   // Assert: Should work correctly even with minimal setup
   EXPECT_TRUE(result);
-  EXPECT_TRUE(child.IsRoot());
-  EXPECT_TRUE(child.IsValid());
+  EXPECT_TRUE(hierarchy.child.IsRoot());
+  EXPECT_TRUE(hierarchy.child.IsValid());
 }
 
 NOLINT_TEST_F(SceneReparentEdgeTest,
   MakeNodeRoot_WithTransformPreservation_ZeroScaleHandling)
 {
   // Arrange: Create child with zero scale on one axis
-  auto parent = CreateNode("Parent");
-  auto child_opt = CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value());
-  auto child = *child_opt;
+  const auto hierarchy = CreateSimpleParentChild();
 
-  SetupNodeTransform(
-    parent, MakeVec3(10, 10, 10), QuatFromEuler(0, 0, 0), MakeVec3(1, 1, 1));
-  SetupNodeTransform(child, MakeVec3(0, 0, 0), QuatFromEuler(0, 0, 0),
+  SetupNodeTransform(hierarchy.parent, MakeVec3(10, 10, 10),
+    QuatFromEuler(0, 0, 0), MakeVec3(1, 1, 1));
+  SetupNodeTransform(hierarchy.child, MakeVec3(0, 0, 0), QuatFromEuler(0, 0, 0),
     MakeVec3(0, 1, 1)); // Zero X scale
   UpdateSceneTransforms();
 
   // Act: Should handle zero scale gracefully
   EXPECT_NO_FATAL_FAILURE({
-    const auto result = scene_->MakeNodeRoot(child, true);
+    const auto result = scene_->MakeNodeRoot(hierarchy.child, true);
     EXPECT_TRUE(result);
   });
 }
@@ -540,6 +634,313 @@ NOLINT_TEST_F(
     EXPECT_TRUE(children[i].IsRoot()) << "Child " << i << " should be root";
     EXPECT_TRUE(children[i].IsValid()) << "Child " << i << " should be valid";
   }
+}
+
+// -----------------------------------------------------------------------------
+// ReparentNode Normal Operation Tests
+// -----------------------------------------------------------------------------
+
+NOLINT_TEST_F(
+  SceneReparentTest, ReparentNode_ValidNodes_SucceedsAndMovesHierarchy)
+{
+  // Arrange: Create dual parent structure with child under ParentA
+  const auto hierarchy = CreateDualParentWithChild();
+
+  // Verify initial setup
+  CHECK_FOR_FAILURES(
+    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentA));
+  EXPECT_TRUE(hierarchy.parentA.HasChildren());
+  EXPECT_FALSE(hierarchy.parentB.HasChildren());
+
+  // Act: Reparent child from ParentA to ParentB
+  const auto result
+    = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, false);
+
+  // Assert: Child should now be under ParentB
+  EXPECT_TRUE(result);
+  CHECK_FOR_FAILURES(
+    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentB));
+  EXPECT_FALSE(hierarchy.parentA.HasChildren());
+  EXPECT_TRUE(hierarchy.parentB.HasChildren());
+}
+
+NOLINT_TEST_F(
+  SceneReparentTest, ReparentNode_RootToParent_SucceedsAndUpdatesRootList)
+{
+  // Arrange: Create root node and a parent
+  auto standalone_root = CreateNode("StandaloneRoot");
+  auto parent = CreateNode("Parent");
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(standalone_root, "StandaloneRoot"));
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(parent, "Parent"));
+
+  const auto initial_root_count = scene_->GetRootNodes().size();
+
+  // Act: Reparent standalone root to become child of parent
+  const auto result = scene_->ReparentNode(standalone_root, parent, false);
+
+  // Assert: standalone_root should no longer be a root
+  EXPECT_TRUE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(standalone_root, parent));
+
+  // Root count should decrease by 1
+  EXPECT_EQ(scene_->GetRootNodes().size(), initial_root_count - 1);
+}
+
+NOLINT_TEST_F(
+  SceneReparentTest, ReparentNode_WithEntireSubtree_PreservesInternalStructure)
+{
+  // Arrange: Create hierarchy with subtree: Root -> ParentA -> Child ->
+  // Grandchild, Root -> ParentB
+  const auto dual = CreateDualParentStructure();
+  auto child_opt = CreateChildNode(dual.parentA, "Child");
+  ASSERT_TRUE(child_opt.has_value());
+  auto child = *child_opt;
+
+  auto grandchild_opt = CreateChildNode(child, "Grandchild");
+  ASSERT_TRUE(grandchild_opt.has_value());
+  auto grandchild = *grandchild_opt;
+
+  // Act: Reparent entire child subtree from ParentA to ParentB
+  const auto result = scene_->ReparentNode(child, dual.parentB, false);
+
+  // Assert: Entire subtree moved, internal structure preserved
+  EXPECT_TRUE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(child, dual.parentB));
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(grandchild, child));
+  EXPECT_TRUE(child.HasChildren());
+  EXPECT_FALSE(dual.parentA.HasChildren());
+  EXPECT_TRUE(dual.parentB.HasChildren());
+}
+
+NOLINT_TEST_F(SceneReparentTest,
+  ReparentNode_WithTransformPreservation_MaintainsWorldTransform)
+{
+  // Arrange: Create hierarchy with transforms using DualParentWithChild
+  const auto hierarchy = CreateDualParentWithChild();
+
+  // Set up transforms
+  SetupNodeTransform(hierarchy.parentA, MakeVec3(10, 0, 0),
+    QuatFromEuler(0, 0, 0), MakeVec3(2, 2, 2));
+  SetupNodeTransform(hierarchy.parentB, MakeVec3(0, 10, 0),
+    QuatFromEuler(0, 90, 0), MakeVec3(1, 1, 1));
+  SetupNodeTransform(hierarchy.child, MakeVec3(5, 0, 0), QuatFromEuler(0, 0, 0),
+    MakeVec3(1, 1, 1));
+  UpdateSceneTransforms();
+
+  // Capture world transform before reparenting
+  auto& child_transform = GetTransformComponent(hierarchy.child);
+  const auto original_world_pos = child_transform.GetWorldPosition();
+  const auto original_world_rot = child_transform.GetWorldRotation();
+  const auto original_world_scale = child_transform.GetWorldScale();
+
+  // Act: Reparent with transform preservation
+  const auto result
+    = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, true);
+
+  // Assert: World transform should be preserved
+  EXPECT_TRUE(result);
+  UpdateSceneTransforms(); // Update to get new world transforms
+
+  CHECK_FOR_FAILURES(
+    ExpectVec3Near(child_transform.GetWorldPosition(), original_world_pos));
+  CHECK_FOR_FAILURES(
+    ExpectQuatNear(child_transform.GetWorldRotation(), original_world_rot));
+  CHECK_FOR_FAILURES(
+    ExpectVec3Near(child_transform.GetWorldScale(), original_world_scale));
+}
+
+// -----------------------------------------------------------------------------
+// Cycle Detection Tests (Edge Cases)
+// -----------------------------------------------------------------------------
+
+NOLINT_TEST_F(
+  SceneReparentEdgeTest, ReparentNode_SelfAsParent_DetectsCycleAndFails)
+{
+  // Arrange: Create a simple node
+  auto node = CreateNode("SelfParentNode");
+
+  // Act: Try to make node its own parent
+  const auto result = scene_->ReparentNode(node, node, false);
+  // Assert: Should detect cycle and fail
+  EXPECT_FALSE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(node, "SelfParentNode"));
+}
+
+NOLINT_TEST_F(
+  SceneReparentEdgeTest, ReparentNode_DirectChildAsParent_DetectsCycleAndFails)
+{
+  // Arrange: Create Parent -> Child hierarchy
+  const auto hierarchy = CreateSimpleParentChild();
+
+  // Act: Try to make parent a child of its own child (direct cycle)
+  const auto result
+    = scene_->ReparentNode(hierarchy.parent, hierarchy.child, false);
+
+  // Assert: Should detect cycle and fail
+  EXPECT_FALSE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(hierarchy.parent, "Parent"));
+  CHECK_FOR_FAILURES(
+    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parent));
+}
+
+NOLINT_TEST_F(
+  SceneReparentEdgeTest, ReparentNode_GrandchildAsParent_DetectsCycleAndFails)
+{
+  // Arrange: Create A -> B -> C hierarchy
+  const auto chain = CreateLinearChain(3);
+  auto nodeA = chain.nodes[0]; // "NodeA"
+  auto nodeB = chain.nodes[1]; // "NodeB"
+  auto nodeC = chain.nodes[2]; // "NodeC"
+
+  // Act: Try to make A a child of C (would create cycle: C -> A -> B -> C)
+  const auto result = scene_->ReparentNode(nodeA, nodeC, false);
+
+  // Assert: Should detect cycle and fail
+  EXPECT_FALSE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(nodeA, "NodeA"));
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeB, nodeA));
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeC, nodeB));
+}
+
+NOLINT_TEST_F(
+  SceneReparentEdgeTest, ReparentNode_DeepHierarchyCycle_DetectsCycleAndFails)
+{
+  // Arrange: Create deep hierarchy: A -> B -> C -> D -> E
+  const auto chain = CreateLinearChain(5);
+  auto nodeA = chain.nodes[0]; // "NodeA"
+  auto nodeB = chain.nodes[1]; // "NodeB"
+  auto nodeE = chain.nodes[4]; // "NodeE"
+
+  // Act: Try to make B a child of E (would create cycle through deep hierarchy)
+  const auto result = scene_->ReparentNode(nodeB, nodeE, false);
+
+  // Assert: Should detect cycle and fail, hierarchy unchanged
+  EXPECT_FALSE(result);
+  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(nodeA, "NodeA"));
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeB, nodeA));
+  // NodeE should still be a descendant of NodeA through the chain
+  EXPECT_FALSE(nodeE.IsRoot());
+}
+
+NOLINT_TEST_F(SceneReparentEdgeTest,
+  ReparentNode_ValidReparentingAfterCycleDetection_Succeeds)
+{
+  // Arrange: Create A -> B -> C hierarchy and separate D
+  auto nodeA = CreateNode("NodeA");
+  auto nodeB_opt = CreateChildNode(nodeA, "NodeB");
+  ASSERT_TRUE(nodeB_opt.has_value());
+  auto nodeB = *nodeB_opt;
+
+  auto nodeC_opt = CreateChildNode(nodeB, "NodeC");
+  ASSERT_TRUE(nodeC_opt.has_value());
+  auto nodeC = *nodeC_opt;
+
+  auto nodeD = CreateNode("NodeD");
+
+  // Act: First try invalid operation (would create cycle)
+  const auto invalid_result = scene_->ReparentNode(nodeA, nodeC, false);
+  EXPECT_FALSE(invalid_result);
+
+  // Act: Then try valid operation (no cycle)
+  const auto valid_result = scene_->ReparentNode(nodeC, nodeD, false);
+  // Assert: Valid operation should succeed
+  EXPECT_TRUE(valid_result);
+  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeC, nodeD));
+  EXPECT_FALSE(nodeB.HasChildren()); // B no longer has C as child
+  EXPECT_TRUE(nodeD.HasChildren()); // D now has C as child
+}
+
+// -----------------------------------------------------------------------------
+// ReparentNode Error Handling Tests
+// -----------------------------------------------------------------------------
+
+NOLINT_TEST_F(SceneReparentErrorTest, ReparentNode_InvalidNode_ReturnsFalse)
+{
+  // Arrange: Create valid parent and invalid node
+  auto parent = CreateNode("ValidParent");
+  SceneNode invalid_node;
+  EXPECT_FALSE(invalid_node.IsValid());
+
+  // Act: Try to reparent invalid node
+  const auto result = scene_->ReparentNode(invalid_node, parent, false);
+
+  // Assert: Should fail gracefully
+  EXPECT_FALSE(result);
+}
+
+NOLINT_TEST_F(SceneReparentErrorTest, ReparentNode_InvalidParent_ReturnsFalse)
+{
+  // Arrange: Create valid node and invalid parent
+  auto node = CreateNode("ValidNode");
+  SceneNode invalid_parent;
+  EXPECT_FALSE(invalid_parent.IsValid());
+
+  // Act: Try to reparent to invalid parent
+  const auto result = scene_->ReparentNode(node, invalid_parent, false);
+
+  // Assert: Should fail gracefully
+  EXPECT_FALSE(result);
+}
+
+NOLINT_TEST_F(
+  SceneReparentErrorTest, ReparentNode_LazilyInvalidatedNode_ReturnsFalse)
+{
+  // Arrange: Create nodes then destroy one to trigger lazy invalidation
+  auto parent = CreateNode("Parent");
+  auto node = CreateNode("NodeToDestroy");
+
+  // Destroy the node, making handles invalid
+  scene_->DestroyNodeHierarchy(node);
+
+  // Act: Try to reparent destroyed node
+  const auto result = scene_->ReparentNode(node, parent, false);
+
+  // Assert: Should fail and node should be invalidated
+  EXPECT_FALSE(result);
+  EXPECT_FALSE(node.IsValid());
+}
+
+// -----------------------------------------------------------------------------
+// ReparentNode Cross-Scene Death Tests
+// -----------------------------------------------------------------------------
+
+NOLINT_TEST_F(SceneReparentDeathTest, ReparentNode_NodeFromDifferentScene_Dies)
+{
+  // Arrange: Create node from different scene
+  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
+  auto foreign_node = other_scene->CreateNode("ForeignNode");
+  auto local_parent = CreateNode("LocalParent");
+
+  EXPECT_TRUE(foreign_node.IsValid());
+  EXPECT_TRUE(local_parent.IsValid());
+
+  // Act & Assert: Should terminate program
+  EXPECT_DEATH(
+    {
+      [[maybe_unused]] auto _
+        = scene_->ReparentNode(foreign_node, local_parent, false);
+    },
+    ".*"); // Death message will contain scene ownership check failure
+}
+
+NOLINT_TEST_F(
+  SceneReparentDeathTest, ReparentNode_ParentFromDifferentScene_Dies)
+{
+  // Arrange: Create parent from different scene
+  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
+  auto foreign_parent = other_scene->CreateNode("ForeignParent");
+  auto local_node = CreateNode("LocalNode");
+
+  EXPECT_TRUE(foreign_parent.IsValid());
+  EXPECT_TRUE(local_node.IsValid());
+
+  // Act & Assert: Should terminate program
+  EXPECT_DEATH(
+    {
+      [[maybe_unused]] auto _
+        = scene_->ReparentNode(local_node, foreign_parent, false);
+    },
+    ".*"); // Death message will contain scene ownership check failure
 }
 
 } // namespace

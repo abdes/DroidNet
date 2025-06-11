@@ -29,3 +29,5 @@
   }
 #define CHECK_FOR_FAILURES_MSG(statement, message)                             \
   CHECK_FOR_FAILURES_MSG__(statement, message) // NOLINT
+#define CHECK_FOR_FAILURES(statement)                                          \
+  CHECK_FOR_FAILURES_MSG__(statement, "") // NOLINT
