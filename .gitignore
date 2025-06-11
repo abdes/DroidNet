@@ -412,4 +412,4 @@ FodyWeavers.xsd
 *.sln
 
 Trash/
-Testing/
+/Testing
