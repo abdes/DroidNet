@@ -159,7 +159,7 @@ public:
   auto operator()(SafeCallState& state) -> std::optional<std::string>
   {
     state.node = const_cast<SceneNode*>(&GetNode());
-    if (EnsureScene() && EnsureSceneOwnsNode() && CheckNodeIsValid()
+    if (CheckNodeIsValid() && EnsureScene() && EnsureSceneOwnsNode()
       && PopulateStateWithNodeImpl(state)) [[likely]] {
       // All validations passed
       return std::nullopt;
