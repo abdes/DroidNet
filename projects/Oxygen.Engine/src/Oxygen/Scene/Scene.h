@@ -6,18 +6,14 @@
 
 #pragma once
 
-#include <atomic>
 #include <bitset>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
 #include <type_traits>
-#include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Base/Concepts.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
@@ -492,12 +488,12 @@ public:
     std::span<SceneNode> hierarchy_roots,
     bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
-  // Logging for SafeCall errors using DLOG_F
+  // Logging for SafeCall errors using DLOG_F (debug builds only).
   OXGN_SCN_API static void LogSafeCallError(const char* reason) noexcept;
 
   //=== Traversal ===---------------------------------------------------------//
 
-  // High-performance traversal access
+  // High-performance traversal access.
   OXGN_SCN_NDAPI auto Traverse() const -> const SceneTraversal&;
 
   // TODO: Implement a proper update system for the scene graph.
@@ -558,9 +554,9 @@ private:
   auto CloneNode(const SceneNode& original, const std::string& new_name)
     -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
-  //! Clones an entire hierarchy starting from the given original node, for
-  //! later being attached to a target scene as a root or a child of an existing
-  //! node.
+  //! Clones an entire hierarchy starting from the given original node to create
+  //! an orphaned sub-tree, for later being attached to a target scene as a root
+  //! or a child of an existing node.
   auto CloneHierarchy(const SceneNode& original_node)
     -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
@@ -605,12 +601,16 @@ private:
     SceneNodeImpl* node_impl { nullptr };
   };
 
+  //! Specialization of SafeCall for the Scene class.
   template <typename Self, typename Validator, typename Func>
-  auto SafeCall(Self* self, Validator validator, Func&& func) const noexcept;
+  auto SafeCallImpl(
+    Self* self, Validator validator, Func&& func) const noexcept;
 
+  //! Non-mutable version of the SceneNode SafeCall.
   template <typename Validator, typename Func>
   auto SafeCall(Validator&& validator, Func&& func) const noexcept;
 
+  //! Mutable version of the SceneNode SafeCall.
   template <typename Validator, typename Func>
   auto SafeCall(Validator&& validator, Func&& func) noexcept;
 
@@ -626,11 +626,11 @@ private:
   class NodeIsValidAndInSceneValidator;
   class LeafNodeCanBeDestroyedValidator;
 
-  auto NodeIsValidAndMine(const SceneNode& node) const
+  OXGN_SCN_NDAPI auto NodeIsValidAndMine(const SceneNode& node) const
     -> NodeIsValidAndInSceneValidator;
-  auto NodeIsValidAndInScene(const SceneNode& node) const
+  OXGN_SCN_NDAPI auto NodeIsValidAndInScene(const SceneNode& node) const
     -> NodeIsValidAndInSceneValidator;
-  auto LeafNodeCanBeDestroyed(const SceneNode& node) const
+  OXGN_SCN_NDAPI auto LeafNodeCanBeDestroyed(const SceneNode& node) const
     -> LeafNodeCanBeDestroyedValidator;
 };
 
