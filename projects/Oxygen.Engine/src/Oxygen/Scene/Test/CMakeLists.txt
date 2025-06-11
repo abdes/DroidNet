@@ -58,13 +58,13 @@ m_gtest_program(
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
     "Scene_graph_test.cpp"
-    "Scene_traversal_test.h"
-    "Scene_traversal_test.cpp"
-    "Scene_traversal_basic_test.cpp"
-    "Scene_traversal_visitor_test.cpp"
-    "Scene_traversal_filter_test.cpp"
     "Scene_node_factory_test.cpp"
-    #"Scene_reparent_test.cpp"
+    "Scene_reparent_test.cpp"
+    "Scene_traversal_basic_test.cpp"
+    "Scene_traversal_filter_test.cpp"
+    "Scene_traversal_test.cpp"
+    "Scene_traversal_test.h"
+    "Scene_traversal_visitor_test.cpp"
 )
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 

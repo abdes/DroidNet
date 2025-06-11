@@ -50,33 +50,34 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Scene.cpp"
     "Scene_node_factory.cpp"
-    "SceneTraversal.cpp"
+    "Scene_reparent.cpp"
+    "Scene.cpp"
     "SceneFlags.cpp"
-    "SceneNode.cpp"
     "SceneNode_Transform.cpp"
+    "SceneNode.cpp"
     "SceneNodeImpl.cpp"
-    "Detail/NodeData.h"
+    "SceneTraversal.cpp"
     "Detail/GraphData.h"
+    "Detail/NodeData.h"
+    "Detail/Scene_safecall_impl.cpp"
+    "Detail/Scene_safecall_impl.h"
     "Detail/StringConverters.cpp"
     "Detail/TransformComponent.cpp"
     "Detail/TransformComponent.h"
-    "Detail/Scene_safecall_impl.h"
-    "Detail/Scene_safecall_impl.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
       "api_export.h"
-      "SceneFlags.h"
       "Scene.h"
-      "SceneTraversal.h"
+      "SceneFlags.h"
       "SceneNode.h"
+      "SceneNodeImpl.h"
+      "SceneTraversal.h"
       "Types/Flags.h"
       "Types/NodeHandle.h"
       "Types/SceneFlagEnum.h"
-      "SceneNodeImpl.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
