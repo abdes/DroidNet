@@ -230,7 +230,7 @@ public:
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
-  //! Re-parent a node hierarchy to a new parent within this scene
+  //! Re-parent a node hierarchy to a new parent within this scene.
   /*!
    Changes the parent of an existing node within this scene, moving the
    entire hierarchy rooted at that node. Both nodes must belong to this
@@ -250,20 +250,7 @@ public:
                                          //!< to maintain world position
     ) noexcept -> bool;
 
-  //! Make a node hierarchy a root hierarchy in this scene
-  /*!
-   Makes a node a root node within this scene, moving the entire hierarchy
-   rooted at that node to become a top-level hierarchy.
-
-   \param node Root of hierarchy to make root (must be in this scene)
-   \param preserve_world_transform If true, adjusts local transform to
-   maintain world position
-   \return true if operation succeeded, false if invalid node
-
-   \note **Atomicity:** Only hierarchy pointers are modified without
-         destroying/recreating node data. Either fully succeeds or leaves
-         scene unchanged.
-  */
+  //! Make a node hierarchy a root hierarchy in this scene.
   OXGN_SCN_NDAPI auto MakeNodeRoot(const SceneNode& node,
     bool preserve_world_transform = true) noexcept -> bool;
 
@@ -584,6 +571,10 @@ private:
 
   //! Marks the transform as dirty for a node and all its descendants.
   void MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept;
+
+  //! Preserves the world transform of a node when re-parenting it.
+  void PreserveWorldTransform(
+    const SceneNode& node, SceneNodeImpl* node_impl) noexcept;
 
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.
