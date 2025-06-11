@@ -49,6 +49,21 @@ This document summarizes the key characteristics and best practices observed in 
 - **No Global State:** Manage all state within fixtures or local to tests.
 - **No Hardcoded Dependencies:** Set scene/node names and counts per test, not globally.
 
+## 9. Test Development Discipline
+
+### **CRITICAL: Never Change Implementation to Fix Tests**
+
+- **Test-First Mindset:** When tests fail, first examine whether the test expectations are correct, not the implementation.
+- **Root Cause Analysis:** Always identify the real reason for test failure before making any changes.
+- **Implementation Changes:** Only modify the System Under Test (SUT) when there's a genuine bug in the implementation, never to make tests pass.
+- **Approval Required:** Get explicit approval before changing any implementation code during test development.
+
+### **Common Test Issues and Solutions**
+
+- **State Setup Problems:** Ensure proper initialization sequence (e.g., call `UpdateSceneTransforms()` before testing transform preservation).
+- **Invalid Test Parameters:** Verify test parameters match the intended test scenario (e.g., `preserve_world_transform = false` for basic functionality tests).
+- **Missing Prerequisites:** Check that all required setup steps are performed before the action being tested.
+
 ---
 
 ### Summary Table
@@ -63,6 +78,7 @@ This document summarizes the key characteristics and best practices observed in 
 | Naming/Style          | Descriptive names, consistent variable naming, clear comments                    |
 | API Coverage          | Normal, boundary, error, and cross-object tests                                  |
 | Robustness            | No global state, portable, no hardcoded dependencies                             |
+| **Test Discipline**   | **Never change SUT to fix tests without root cause analysis, proper state setup**      |
 
 ---
 
@@ -74,5 +90,7 @@ This document summarizes the key characteristics and best practices observed in 
 - Cover both normal and edge/error cases.
 - Use descriptive naming and thorough commenting.
 - Ensure tests are robust, portable, and maintainable.
+- **NEVER modify implementation to make tests pass - fix the test or get approval first.**
+- **Always verify proper state setup before testing complex scenarios (e.g., transforms).**
 
-Following these practices will ensure clarity, maintainability, and comprehensive coverage in your test suites.
+Following these practices will ensure clarity, maintainability, comprehensive coverage, and proper testing discipline in your test suites.
