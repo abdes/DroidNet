@@ -174,19 +174,22 @@ public:
 
   //=== Core Traversal API ===----------------------------------------------//
 
-  //! Traverse the entire scene graph from root nodes
+  //! Traverse the entire scene graph from root nodes, using by default, a
+  //! depth-first, pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto Traverse(VisitorFunc&& visitor,
     TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
 
-  //! Traverse from a single root node
+  //! Traverse from a single root node, using by default, a depth-first,
+  //! pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto TraverseHierarchy(SceneNode& starting_node,
     VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
 
-  //! Traverse from specific root nodes
+  //! Traverse from specific root nodes, using by default, a depth-first,
+  //! pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto TraverseHierarchies(std::span<SceneNode> starting_nodes,
     VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,

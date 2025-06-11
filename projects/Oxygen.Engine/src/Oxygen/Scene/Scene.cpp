@@ -1173,7 +1173,11 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
 
   // TODO: Ensure not creating a cyclic dependency
 
-  // If the parent already has a first child, link the new child to it
+  // For a fast and optimized hierarchy linking, we link the new child to always
+  // become the new first child. The implication of this is that there will be
+  // no order guarantee in the collection of children. This is acceptable,
+  // especially knowing that the scene graph will usually undergo several
+  // transformations that will not preserve the creation order of nodes.
   if (const auto first_child_handle
     = parent_impl->AsGraphNode().GetFirstChild();
     first_child_handle.IsValid()) {
