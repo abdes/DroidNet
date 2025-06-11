@@ -629,6 +629,10 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
  If the node must be destroyed, DestroyNode() or DestroyNodeHierarchy() should
  be used after un-linking. If it is simply being detached, it needs to be added
  to the roots set using AddRootNode().
+
+ @note This method does NOT mark transforms as dirty. The calling function is
+ responsible for handling transform dirty flags as appropriate for the specific
+ operation (e.g., preservation vs. recalculation).
 */
 void Scene::UnlinkNode(
   const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept
@@ -680,10 +684,6 @@ void Scene::UnlinkNode(
   node_impl->AsGraphNode().SetParent({});
   node_impl->AsGraphNode().SetNextSibling({});
   node_impl->AsGraphNode().SetPrevSibling({});
-
-  // Mark node_handle's transform as dirty since its hierarchy relationship
-  // changed
-  node_impl->MarkTransformDirty();
 
   LOG_F(3, "node unlinked from hierarchy");
 }
