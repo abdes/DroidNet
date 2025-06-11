@@ -101,18 +101,15 @@ void SceneTraversal::CollectChildrenToBuffer(SceneNodeImpl* node) const
 }
 
 /*!
- The implementation for the node being traversed is updated at the last minute
- to make the traversal algorithm resilient to visitors that mutate the scene
- graph during traversal.
+ The implementation for the node being traversed is updated before a node is
+ visited (or revisited in post-order traversal) to make the traversal algorithm
+ resilient to visitors that mutate the scene graph during traversal.
 */
 auto SceneTraversal::UpdateNodeImpl(TraversalEntry& entry) const -> bool
 {
-  // Update the entry for the current node with the node implementation.
-  // Peek only, entries will be removed when processed. Skip the node if it
-  // became invalid due to mutations in the previous siblings visits.
-  if (entry.visited_node.node_impl == nullptr) [[likely]] {
-    entry.visited_node.node_impl = GetNodeImpl(entry.visited_node.handle);
-  }
+  // Refresh the node impl from handle ALWAYS even if it is not null. Mutations
+  // during child visits will invalidate the pointers
+  entry.visited_node.node_impl = GetNodeImpl(entry.visited_node.handle);
   return entry.visited_node.node_impl != nullptr;
 }
 
