@@ -230,29 +230,20 @@ public:
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
-  //! Re-parent a node hierarchy to a new parent within this scene.
-  /*!
-   Changes the parent of an existing node within this scene, moving the
-   entire hierarchy rooted at that node. Both nodes must belong to this
-   scene.
+  //! Re-parents a node hierarchy to a new parent within this scene, preserving
+  //! all internal relationships within the moved hierarchy.
+  OXGN_SCN_NDAPI auto ReparentNode(const SceneNode& node,
+    const SceneNode& new_parent, bool preserve_world_transform = true) noexcept
+    -> bool;
 
-   \return true if re-parenting succeeded, false if invalid nodes or would
-   create cycle
-
-   \note **Atomicity:** Only hierarchy pointers are modified without
-   destroying/recreating node data. Either fully succeeds or leaves scene
-   unchanged.
-  */
-  OXGN_SCN_NDAPI auto ReparentNode(
-    const SceneNode& node, //!< must be in this scene
-    const SceneNode& new_parent, //! must be in this scene
-    bool preserve_world_transform = true //!< true to adjust local transform
-                                         //!< to maintain world position
-    ) noexcept -> bool;
-
-  //! Make a node hierarchy a root hierarchy in this scene.
+  //! Makes a node a root node within this scene, moving the entire hierarchy
+  //! rooted at that node to become a top-level hierarchy.
   OXGN_SCN_NDAPI auto MakeNodeRoot(const SceneNode& node,
     bool preserve_world_transform = true) noexcept -> bool;
+
+  //! Re-parents multiple node hierarchies to a new parent within this scene.
+  OXGN_SCN_NDAPI auto MakeNodesRoot(std::span<const SceneNode> nodes,
+    bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
   //! Re-parent multiple node hierarchies to a new parent within this
   //! scene
@@ -275,25 +266,6 @@ public:
   OXGN_SCN_NDAPI auto ReparentNodes(std::span<const SceneNode> nodes,
     const SceneNode& new_parent, bool preserve_world_transform = true) noexcept
     -> std::vector<uint8_t>;
-
-  //! Re-parent multiple node hierarchies to become root hierarchies in this
-  //! scene
-  /*!
-   Batch operation for making multiple node hierarchies root hierarchies within
-   this scene. Each node represents the root of a hierarchy that will be moved
-   entirely.
-
-   \param nodes Hierarchy roots to make roots (all must be in this scene)
-   \param preserve_world_transform If true, adjusts local transforms to
-   maintain world position
-   \return Vector indicating success (true) or failure (false) for each
-   node at the same index
-
-   \note **Partial Success:** Each individual operation is atomic, but some may
-         fail.
-  */
-  OXGN_SCN_NDAPI auto MakeNodesRoot(std::span<const SceneNode> nodes,
-    bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
   //=== Node Adoption API (Cross-Scene Operations) ===------------------------//
 
@@ -527,6 +499,10 @@ public:
     -> std::optional<SceneNode>;
 
 private:
+  //! Check result for partial failure of a batch operation.
+  void LogPartialFailure(const std::vector<uint8_t>& results,
+    const std::string& operation_name) const;
+
   //! Creates a new node implementation with the given name and (optional)
   //! flags.
   template <typename... Args>

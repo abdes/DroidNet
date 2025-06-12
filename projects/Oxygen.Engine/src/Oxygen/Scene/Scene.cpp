@@ -10,6 +10,7 @@
 
 #include <fmt/format.h>
 
+#include "Scene.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
@@ -126,6 +127,21 @@ auto Scene::GetName() const noexcept -> std::string_view
 void Scene::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetaData>().SetName(name);
+}
+
+void Scene::LogPartialFailure(
+  const std::vector<uint8_t>& results, const std::string& operation_name) const
+{
+#if defined(NDEBUG)
+  return;
+#else // NDEBUG
+  const auto successful_count = std::ranges::count(results, 1);
+  LOG_F(3, "{} / {} nodes processed", successful_count, results.size());
+  if (static_cast<size_t>(successful_count) != results.size()) {
+    LOG_F(WARNING, "{} partially failed: {} nodes out of {} were not processed",
+      operation_name, results.size() - successful_count, results.size());
+  }
+#endif // NDEBUG
 }
 
 //------------------------------------------------------------------------------

@@ -172,9 +172,6 @@ void Scene::PreserveWorldTransform(const SceneNode& node,
 }
 
 /*!
- Makes a node a root node within this scene, moving the entire hierarchy rooted
- at that node to become a top-level hierarchy.
-
  This operation unlinks the specified node from its current parent (if any) and
  adds it to the scene's root nodes collection. The entire subtree rooted at the
  node is moved as a unit, preserving all internal parent-child relationships
@@ -256,9 +253,48 @@ auto Scene::MakeNodeRoot(
 }
 
 /*!
- Re-parents a node hierarchy to a new parent within this scene, preserving all
- internal relationships within the moved hierarchy.
+ Batch operation that makes multiple nodes root nodes by calling `MakeNodeRoot`
+ for each one. Each node's entire subtree is moved as a unit to the top level.
 
+ ### Failure Scenarios
+
+ Individual operations may fail based on `MakeNodeRoot` criteria.
+
+ @note **Atomicity:** Each `MakeNodeRoot` call is atomic, but the batch
+ processes sequentially. Partial failures result in partial scene updates.
+
+ @param nodes Span of nodes to make root (each must be valid and belong to this
+ scene)
+ @param preserve_world_transform If true, maintains world transform; if false,
+ marks transforms dirty for recalculation
+ @return Vector where each element corresponds to a node: `1` for success, `0`
+ for failure
+
+ @see MakeNodeRoot() for detailed single-node behavior
+*/
+auto Scene::MakeNodesRoot(std::span<const SceneNode> nodes,
+  bool preserve_world_transform) noexcept -> std::vector<uint8_t>
+{
+  DLOG_SCOPE_F(3, "Make Nodes Root");
+
+  // Bailout early if no nodes to destroy
+  if (nodes.empty()) {
+    return {};
+  }
+
+  std::vector<uint8_t> results;
+  results.reserve(nodes.size());
+  for (const auto& node : nodes) {
+    const auto result = MakeNodeRoot(node, preserve_world_transform);
+    results.push_back(result); // NOLINT(*-implicit-bool-conversion)
+  }
+
+  LogPartialFailure(results, "MakeNodesRoot");
+
+  return results;
+}
+
+/*!
  This operation moves the entire subtree rooted at the specified node from its
  current location to become a child of the new parent. The complete hierarchy
  is moved atomically while preserving all parent-child relationships within the

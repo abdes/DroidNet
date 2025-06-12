@@ -303,12 +303,8 @@ auto Scene::DestroyNodes(std::span<SceneNode> nodes) noexcept
     results.push_back(result); // NOLINT(*-implicit-bool-conversion)
   }
 
-  const auto destroyed_count = std::ranges::count(results, 1);
-  DLOG_F(3, "{} / {} nodes destroyed", destroyed_count, results.size());
-  if (static_cast<size_t>(destroyed_count) != results.size()) {
-    LOG_F(WARNING, "DestroyNodes, {} nodes out of {} were not destroyed",
-      results.size() - destroyed_count, results.size());
-  }
+  LogPartialFailure(results, "DestroyNodes");
+
   return results;
 }
 
@@ -463,13 +459,7 @@ auto Scene::DestroyNodeHierarchies(
     results.push_back(result); // NOLINT(*-implicit-bool-conversion)
   }
 
-  const auto destroyed_count = std::ranges::count(results, 1);
-  DLOG_F(3, "{} / {} hierarchies destroyed", destroyed_count, results.size());
-  if (static_cast<size_t>(destroyed_count) != results.size()) {
-    LOG_F(WARNING,
-      "DestroyNodeHierarchies, {} hierarchies out of {} were not destroyed",
-      results.size() - destroyed_count, results.size());
-  }
+  LogPartialFailure(results, "DestroyNodeHierarchies");
 
   return results;
 }
