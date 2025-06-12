@@ -102,7 +102,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
     // Handle the case where all 256 IDs are exhausted
     // This could throw an exception or use a fallback strategy
     throw std::runtime_error(
-      "Cannot create Scene: All 256 scene IDs are in use");
+        "Cannot create Scene: All 256 scene IDs are in use");
   }
   scene_id_ = *id;
 
@@ -129,8 +129,8 @@ void Scene::SetName(const std::string_view name) noexcept
   GetComponent<ObjectMetaData>().SetName(name);
 }
 
-void Scene::LogPartialFailure(
-  const std::vector<uint8_t>& results, const std::string& operation_name) const
+void Scene::LogPartialFailure(const std::vector<uint8_t>& results,
+    const std::string& operation_name) const
 {
 #if defined(NDEBUG)
   return;
@@ -139,7 +139,7 @@ void Scene::LogPartialFailure(
   LOG_F(3, "{} / {} nodes processed", successful_count, results.size());
   if (static_cast<size_t>(successful_count) != results.size()) {
     LOG_F(WARNING, "{} partially failed: {} nodes out of {} were not processed",
-      operation_name, results.size() - successful_count, results.size());
+        operation_name, results.size() - successful_count, results.size());
   }
 #endif // NDEBUG
 }
@@ -171,19 +171,19 @@ void Scene::Clear() noexcept
 }
 
 auto Scene::GetParent(const SceneNode& node) const noexcept
-  -> std::optional<SceneNode>
+    -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndMine(node),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return GetParentUnsafe(node, state.node_impl);
-    });
+        return GetParentUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::GetParentUnsafe(const SceneNode& node,
-  const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -196,8 +196,8 @@ auto Scene::GetParentUnsafe(const SceneNode& node,
 
   // Check the the parent node is still alive
   if (nodes_->Contains(parent_handle)) {
-    return SceneNode(
-      std::const_pointer_cast<Scene>(this->shared_from_this()), parent_handle);
+    return SceneNode(std::const_pointer_cast<Scene>(this->shared_from_this()),
+        parent_handle);
   }
 
   // The parent node is no longer alive, likely due to recent hierarchy
@@ -205,7 +205,7 @@ auto Scene::GetParentUnsafe(const SceneNode& node,
   // destroy all descendants under the starting node, so a node with a valid
   // parent handle cannot exist if it's parent does not.
   DLOG_F(4, "Parent node is no longer there: {} -> child node {} invalidated",
-    nostd::to_string(parent_handle), nostd::to_string(node));
+      nostd::to_string(parent_handle), nostd::to_string(node));
   node.Invalidate();
   return std::nullopt;
 }
@@ -213,16 +213,16 @@ auto Scene::GetParentUnsafe(const SceneNode& node,
 auto Scene::HasParent(const SceneNode& node) const noexcept -> bool
 {
   return SafeCall(
-    NodeIsValidAndMine(node), [&](const SafeCallState& state) -> bool {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      NodeIsValidAndMine(node), [&](const SafeCallState& state) -> bool {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return HasParentUnsafe(node, state.node_impl);
-    });
+        return HasParentUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::HasParentUnsafe(
-  const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool
+    const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -242,7 +242,7 @@ auto Scene::HasParentUnsafe(
   // destroy all descendants under the starting node, so a node with a valid
   // parent handle cannot exist if it's parent does not.
   DLOG_F(4, "Parent node is no longer there: {} -> child node {} invalidated",
-    nostd::to_string(parent_handle), nostd::to_string(node));
+      nostd::to_string(parent_handle), nostd::to_string(node));
   node.Invalidate();
 
   return false;
@@ -251,16 +251,16 @@ auto Scene::HasParentUnsafe(
 auto Scene::HasChildren(const SceneNode& node) const noexcept -> bool
 {
   return SafeCall(
-    NodeIsValidAndMine(node), [&](const SafeCallState& state) -> bool {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      NodeIsValidAndMine(node), [&](const SafeCallState& state) -> bool {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return HasChildrenUnsafe(node, state.node_impl);
-    });
+        return HasChildrenUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::HasChildrenUnsafe(
-  const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool
+    const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -280,26 +280,26 @@ auto Scene::HasChildrenUnsafe(
   // unlink from their parent, so a valid node should never reference an invalid
   // first child.
   DLOG_F(4, "first child node is no longer there: {} -> node {} invalidated",
-    nostd::to_string(child_handle), nostd::to_string(node));
+      nostd::to_string(child_handle), nostd::to_string(node));
   node.Invalidate();
 
   return false;
 }
 
 auto Scene::GetFirstChild(const SceneNode& node) const noexcept
-  -> std::optional<SceneNode>
+    -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndMine(node),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return GetFirstChildUnsafe(node, state.node_impl);
-    });
+        return GetFirstChildUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::GetFirstChildUnsafe(const SceneNode& node,
-  const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -312,7 +312,7 @@ auto Scene::GetFirstChildUnsafe(const SceneNode& node,
 
   if (nodes_->Contains(child_handle)) {
     return SceneNode(
-      std::const_pointer_cast<Scene>(this->shared_from_this()), child_handle);
+        std::const_pointer_cast<Scene>(this->shared_from_this()), child_handle);
   }
 
   // The child node is no longer alive, likely due to recent hierarchy
@@ -320,25 +320,25 @@ auto Scene::GetFirstChildUnsafe(const SceneNode& node,
   // unlink from their parent, so a valid node can't have an invalid first
   // child.
   DLOG_F(4, "first child node is no longer there: {} -> node {} invalidated",
-    nostd::to_string(child_handle), nostd::to_string(node));
+      nostd::to_string(child_handle), nostd::to_string(node));
   node.Invalidate();
   return std::nullopt;
 }
 
 auto Scene::GetNextSibling(const SceneNode& node) const noexcept
-  -> std::optional<SceneNode>
+    -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndMine(node),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return GetNextSiblingUnsafe(node, state.node_impl);
-    });
+        return GetNextSiblingUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::GetNextSiblingUnsafe(const SceneNode& node,
-  const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -350,34 +350,34 @@ auto Scene::GetNextSiblingUnsafe(const SceneNode& node,
   }
 
   if (nodes_->Contains(sibling_handle)) {
-    return SceneNode(
-      std::const_pointer_cast<Scene>(this->shared_from_this()), sibling_handle);
+    return SceneNode(std::const_pointer_cast<Scene>(this->shared_from_this()),
+        sibling_handle);
   }
 
   // The sibling is no longer alive, likely due to recent hierarchy
   // destruction. Lazily invalidate this node. Properly destroyed siblings
   // unlink themselves, so a valid node can't have an invalid sibling.
   DLOG_F(4, "sibling node is no longer there: {} -> node {} invalidated",
-    nostd::to_string(sibling_handle), nostd::to_string(node));
+      nostd::to_string(sibling_handle), nostd::to_string(node));
   node.Invalidate();
 
   return std::nullopt;
 }
 
 auto Scene::GetPrevSibling(const SceneNode& node) const noexcept
-  -> std::optional<SceneNode>
+    -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndMine(node),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &node);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, &node);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return GetPrevSiblingUnsafe(node, state.node_impl);
-    });
+        return GetPrevSiblingUnsafe(node, state.node_impl);
+      });
 }
 
 auto Scene::GetPrevSiblingUnsafe(const SceneNode& node,
-  const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>
 {
   DCHECK_NOTNULL_F(node_impl);
 
@@ -389,15 +389,15 @@ auto Scene::GetPrevSiblingUnsafe(const SceneNode& node,
   }
 
   if (nodes_->Contains(sibling_handle)) {
-    return SceneNode(
-      std::const_pointer_cast<Scene>(this->shared_from_this()), sibling_handle);
+    return SceneNode(std::const_pointer_cast<Scene>(this->shared_from_this()),
+        sibling_handle);
   }
 
   // The sibling node is no longer valid, likely due to recent hierarchy
   // destruction. Invalidate this node lazily. Properly destroyed siblings
   // unlink themselves, so a valid node cannot have an invalid sibling.
   DLOG_F(4, "sibling node is no longer there: {} -> node {} invalidated",
-    nostd::to_string(sibling_handle), nostd::to_string(node));
+      nostd::to_string(sibling_handle), nostd::to_string(node));
   node.Invalidate();
 
   return std::nullopt;
@@ -416,19 +416,20 @@ auto Scene::GetNodeImpl(const SceneNode& node) noexcept -> OptionalRefToImpl
     // If the handle is valid but the node is no longer in the scene, this
     // is a case for lazy invalidation.
     DLOG_F(4, "Node {} is no longer there -> invalidate : {}",
-      to_string_compact(node.GetHandle()), ex.what());
+        to_string_compact(node.GetHandle()), ex.what());
     node.Invalidate();
     return std::nullopt;
   }
 }
 
 auto Scene::GetNodeImpl(const SceneNode& node) const noexcept
-  -> OptionalConstRefToImpl
+    -> OptionalConstRefToImpl
 {
   return const_cast<Scene*>(this)->GetNodeImpl(node);
 }
 
-auto Scene::GetNodeImplRef(const NodeHandle& handle) noexcept -> SceneNodeImpl&
+auto Scene::GetNodeImplRef(const NodeHandle& handle) const noexcept
+    -> SceneNodeImpl&
 {
   // This is a logic error, should be fixed in the code. An invalid handle
   // should not be used anymore.
@@ -441,25 +442,14 @@ auto Scene::GetNodeImplRef(const NodeHandle& handle) noexcept -> SceneNodeImpl&
   }
 }
 
-auto Scene::GetNodeImplRef(const NodeHandle& handle) const noexcept
-  -> const SceneNodeImpl&
-{
-  return const_cast<Scene*>(this)->GetNodeImplRef(handle);
-}
-
-auto Scene::GetNodeImplRefUnsafe(const NodeHandle& handle) -> SceneNodeImpl&
+auto Scene::GetNodeImplRefUnsafe(const NodeHandle& handle) const
+    -> SceneNodeImpl&
 {
   return nodes_->ItemAt(handle);
 }
 
-auto Scene::GetNodeImplRefUnsafe(const NodeHandle& handle) const
-  -> const SceneNodeImpl&
-{
-  return const_cast<Scene*>(this)->GetNodeImplRef(handle);
-}
-
 auto Scene::GetNode(const NodeHandle& handle) const noexcept
-  -> std::optional<SceneNode>
+    -> std::optional<SceneNode>
 {
   if (!nodes_->Contains(handle)) {
     return std::nullopt;
@@ -493,7 +483,7 @@ auto Scene::GetChildrenCount(const SceneNode& parent) const noexcept -> size_t
   // This is a logic error, should be fixed in the code. An invalid handle
   // should not be used anymore.
   CHECK_F(
-    parent.IsValid(), "Parent node handle is not valid for GetChildrenCount");
+      parent.IsValid(), "Parent node handle is not valid for GetChildrenCount");
 
   const auto parent_impl_opt = GetNodeImpl(parent);
   if (!parent_impl_opt) {
@@ -505,7 +495,7 @@ auto Scene::GetChildrenCount(const SceneNode& parent) const noexcept -> size_t
   // clearly an indication of a logic error, and should be fixed in the code.
   size_t count = 0;
   auto current_child_handle
-    = parent_impl_opt->get().AsGraphNode().GetFirstChild();
+      = parent_impl_opt->get().AsGraphNode().GetFirstChild();
   while (current_child_handle.IsValid()) {
     auto& child_node_impl = GetNodeImplRef(current_child_handle);
     ++count;
@@ -515,7 +505,7 @@ auto Scene::GetChildrenCount(const SceneNode& parent) const noexcept -> size_t
 }
 
 auto Scene::GetChildren(const SceneNode& parent) const
-  -> std::vector<NodeHandle>
+    -> std::vector<NodeHandle>
 {
   // This is a logic error, should be fixed in the code. An invalid handle
   // should not be used anymore.
@@ -530,7 +520,7 @@ auto Scene::GetChildren(const SceneNode& parent) const
   // clearly an indication of a logic error, and should be fixed in the code.
   std::vector<NodeHandle> children;
   auto current_child_handle
-    = parent_impl_opt->get().AsGraphNode().GetFirstChild();
+      = parent_impl_opt->get().AsGraphNode().GetFirstChild();
   while (current_child_handle.IsValid()) {
     const auto& child_impl = GetNodeImplRef(current_child_handle);
     children.push_back(current_child_handle);
@@ -543,7 +533,7 @@ void Scene::AddRootNode(const NodeHandle& node)
 {
   // Ensure no duplicate root nodes
   DCHECK_F(std::ranges::find(root_nodes_, node) == root_nodes_.end(),
-    "duplicate root node detected");
+      "duplicate root node detected");
   root_nodes_.push_back(node);
 }
 
@@ -560,8 +550,8 @@ void Scene::EnsureRootNodesValid() const noexcept
     DCHECK_F(handle.IsValid(), "expecting a valid root node handle");
     // This is also a bug that needs fixing.
     DCHECK_F(nodes_->Contains(handle),
-      "expecting root nodes to be in the scene or not in the root nodes "
-      "set");
+        "expecting root nodes to be in the scene or not in the root nodes "
+        "set");
   }
 #endif // NDEBUG
 }
@@ -574,7 +564,7 @@ auto Scene::GetRootNodes() const -> std::vector<SceneNode>
   nodes.reserve(root_nodes_.size());
   for (const auto& handle : root_nodes_) {
     nodes.emplace_back(
-      std::const_pointer_cast<Scene>(shared_from_this()), handle);
+        std::const_pointer_cast<Scene>(shared_from_this()), handle);
   }
   return nodes;
 }
@@ -598,8 +588,8 @@ auto Scene::GetRootHandles() const -> std::span<const NodeHandle>
  preservation or dirty marking as appropriate for their use case.
 */
 void Scene::LinkChild(const NodeHandle& parent_handle,
-  SceneNodeImpl* parent_impl, const NodeHandle& child_handle,
-  SceneNodeImpl* child_impl) noexcept
+    SceneNodeImpl* parent_impl, const NodeHandle& child_handle,
+    SceneNodeImpl* child_impl) noexcept
 {
   DCHECK_F(parent_handle.IsValid());
   DCHECK_NOTNULL_F(parent_impl);
@@ -613,9 +603,9 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
 
   DLOG_SCOPE_F(3, "Link Child Node");
   DLOG_F(3, "child node `{}`: {}", child_impl->GetName(),
-    to_string_compact(child_handle));
+      to_string_compact(child_handle));
   DLOG_F(3, "parent node: `{}`: {}", parent_impl->GetName(),
-    to_string_compact(parent_handle));
+      to_string_compact(parent_handle));
 
   // TODO: Ensure not creating a cyclic dependency
 
@@ -625,8 +615,8 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
   // especially knowing that the scene graph will usually undergo several
   // transformations that will not preserve the creation order of nodes.
   if (const auto first_child_handle
-    = parent_impl->AsGraphNode().GetFirstChild();
-    first_child_handle.IsValid()) {
+      = parent_impl->AsGraphNode().GetFirstChild();
+      first_child_handle.IsValid()) {
     // Set the new child's next sibling to the current first child
     child_impl->AsGraphNode().SetNextSibling(first_child_handle);
     // Set the current first child's previous sibling to the new child
@@ -650,28 +640,28 @@ void Scene::LinkChild(const NodeHandle& parent_handle,
  preservation or dirty marking as appropriate for their use case.
 */
 void Scene::UnlinkNode(
-  const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept
+    const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept
 {
   DCHECK_F(node_handle.IsValid());
   DCHECK_NOTNULL_F(node_impl);
 
   DLOG_SCOPE_F(3, "Unlink Node");
   DLOG_F(
-    3, "node `{}`: {}", node_impl->GetName(), to_string_compact(node_handle));
+      3, "node `{}`: {}", node_impl->GetName(), to_string_compact(node_handle));
 
   // Get parent, next sibling, and previous sibling handles
   const NodeHandle parent_handle = node_impl->AsGraphNode().GetParent();
   const NodeHandle next_sibling_handle
-    = node_impl->AsGraphNode().GetNextSibling();
+      = node_impl->AsGraphNode().GetNextSibling();
   const NodeHandle prev_sibling_handle
-    = node_impl->AsGraphNode().GetPrevSibling();
+      = node_impl->AsGraphNode().GetPrevSibling();
 
   // Update the parent's first_child pointer if this node_handle is the first
   // child
   if (parent_handle.IsValid()) {
     auto& parent_impl = GetNodeImplRef(parent_handle);
     DLOG_F(3, "parent `{}`: {}", parent_impl.GetName(),
-      to_string_compact(parent_handle));
+        to_string_compact(parent_handle));
     if (parent_impl.AsGraphNode().GetFirstChild() == node_handle) {
       // This node_handle is the first child of its parent
       // Update parent to point to the next sibling as its first child
@@ -683,7 +673,7 @@ void Scene::UnlinkNode(
   if (prev_sibling_handle.IsValid()) {
     auto& prev_sibling_impl = GetNodeImplRef(prev_sibling_handle);
     DLOG_F(3, "prev sibling `{}`: {}", prev_sibling_impl.GetName(),
-      to_string_compact(prev_sibling_handle));
+        to_string_compact(prev_sibling_handle));
     prev_sibling_impl.AsGraphNode().SetNextSibling(next_sibling_handle);
   }
 
@@ -691,7 +681,7 @@ void Scene::UnlinkNode(
   if (next_sibling_handle.IsValid()) {
     auto& next_sibling_impl = GetNodeImplRef(next_sibling_handle);
     DLOG_F(3, "next sibling `{}`: {}", next_sibling_impl.GetName(),
-      to_string_compact(next_sibling_handle));
+        to_string_compact(next_sibling_handle));
     next_sibling_impl.AsGraphNode().SetPrevSibling(prev_sibling_handle);
   }
   // Reset the node_handle's parent, next sibling, and previous sibling
@@ -744,7 +734,7 @@ void ProcessDirtyFlags(const Scene& scene) noexcept
 //! Marks the transform as dirty for a node and all its descendants
 //! (non-recursive).
 void MarkSubtreeTransformDirty(
-  Scene& scene, const NodeHandle& root_handle) noexcept
+    Scene& scene, const NodeHandle& root_handle) noexcept
 {
   std::vector<SceneNodeImpl*> stack;
   size_t count = 0;
@@ -758,11 +748,11 @@ void MarkSubtreeTransformDirty(
     while (child_handle.IsValid()) {
       stack.push_back(&scene.GetNodeImplRef(child_handle));
       child_handle
-        = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
+          = scene.GetNodeImplRef(child_handle).AsGraphNode().GetNextSibling();
     }
   }
   DLOG_F(2, "Marked {} nodes as transform dirty (subtree rooted at: {})", count,
-    scene.GetNodeImplRef(root_handle).GetName());
+      scene.GetNodeImplRef(root_handle).GetName());
 }
 
 } // namespace
@@ -771,6 +761,8 @@ void Scene::MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept
 {
   ::MarkSubtreeTransformDirty(*this, root_handle);
 }
+
+auto Scene::Traverse() const -> SceneTraversal { return SceneTraversal(*this); }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
 void Scene::Update(const bool skip_dirty_flags) noexcept

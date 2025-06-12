@@ -23,8 +23,6 @@
 
 namespace oxygen::scene {
 
-class Scene;
-
 //=== Traversal Types ===-----------------------------------------------------//
 
 //! Context structure providing both handle and implementation for traversal
@@ -84,14 +82,14 @@ OXGN_SCN_API auto to_string(VisitResult value) -> const char*;
 
 template <typename Visitor>
 concept SceneVisitor = requires(Visitor v, const VisitedNode& visited_node,
-  const Scene& scene, bool dry_run) {
+    const Scene& scene, bool dry_run) {
   { v(visited_node, scene, dry_run) } -> std::convertible_to<VisitResult>;
 };
 
 // Update SceneFilter concept to accept VisitedNode and parent_filter_result
 template <typename Filter>
 concept SceneFilter = requires(Filter f, const VisitedNode& visited_node,
-  FilterResult parent_filter_result) {
+    FilterResult parent_filter_result) {
   {
     f(visited_node, parent_filter_result)
   } -> std::convertible_to<FilterResult>;
@@ -102,7 +100,7 @@ concept SceneFilter = requires(Filter f, const VisitedNode& visited_node,
 //! Filter that accepts all nodes.
 struct AcceptAllFilter {
   constexpr auto operator()(const VisitedNode& /*visited_node*/,
-    FilterResult /*parent_filter_result*/) const noexcept -> FilterResult
+      FilterResult /*parent_filter_result*/) const noexcept -> FilterResult
   {
     return FilterResult::kAccept;
   }
@@ -125,8 +123,8 @@ static_assert(SceneFilter<AcceptAllFilter>);
    up-to-date, allowing it to compute its own world transform.
 */
 struct DirtyTransformFilter {
-  OXGN_SCN_API auto operator()(const VisitedNode& visited_node,
-    FilterResult parent_filter_result) const noexcept -> FilterResult;
+  OXGN_SCN_NDAPI auto operator()(const VisitedNode& visited_node,
+      FilterResult parent_filter_result) const noexcept -> FilterResult;
 };
 static_assert(SceneFilter<DirtyTransformFilter>);
 
@@ -136,14 +134,8 @@ static_assert(SceneFilter<DirtyTransformFilter>);
  entire sub-tree below a node if it's not visible.
 */
 struct VisibleFilter {
-  auto operator()(const VisitedNode& visited_node,
-    FilterResult /*parent_filter_result*/) const noexcept -> FilterResult
-  {
-    const auto& flags = visited_node.node_impl->GetFlags();
-    return flags.GetEffectiveValue(SceneNodeFlags::kVisible)
-      ? FilterResult::kAccept
-      : FilterResult::kRejectSubTree;
-  }
+  OXGN_SCN_NDAPI auto operator()(const VisitedNode& visited_node,
+      FilterResult /*parent_filter_result*/) const noexcept -> FilterResult;
 };
 static_assert(SceneFilter<VisibleFilter>);
 
@@ -178,22 +170,22 @@ public:
   //! depth-first, pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto Traverse(VisitorFunc&& visitor,
-    TraversalOrder order = TraversalOrder::kPreOrder,
-    FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
+      TraversalOrder order = TraversalOrder::kPreOrder,
+      FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
 
   //! Traverse from a single root node, using by default, a depth-first,
   //! pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto TraverseHierarchy(SceneNode& starting_node,
-    VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
-    FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
+      VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
+      FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
 
   //! Traverse from specific root nodes, using by default, a depth-first,
   //! pre-order traversal, visiting all nodes.
   template <SceneVisitor VisitorFunc, SceneFilter FilterFunc = AcceptAllFilter>
   [[nodiscard]] auto TraverseHierarchies(std::span<SceneNode> starting_nodes,
-    VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
-    FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
+      VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
+      FilterFunc&& filter = AcceptAllFilter {}) -> TraversalResult;
 
   //=== Convenience Methods ===---------------------------------------------//
 
@@ -213,7 +205,7 @@ public:
    \return Number of nodes that had their transforms updated
   */
   OXGN_SCN_NDAPI auto UpdateTransforms(std::span<SceneNode> starting_nodes)
-    -> std::size_t;
+      -> std::size_t;
 
 private:
   const Scene* scene_;
@@ -224,25 +216,10 @@ private:
 
   //! Get valid node pointer from handle
   OXGN_SCN_API auto GetNodeImpl(const NodeHandle& handle) const
-    -> SceneNodeImpl*;
+      -> SceneNodeImpl*;
 
   //! Calculate optimal stack capacity based on scene size
-  [[nodiscard]] auto GetOptimalStackCapacity() const -> std::size_t
-  {
-    // NOLINTBEGIN(*-magic-numbers)
-    const auto node_count = scene_->GetNodeCount();
-    if (node_count <= 64) {
-      return 32;
-    }
-    if (node_count <= 256) {
-      return 64;
-    }
-    if (node_count <= 1024) {
-      return 128;
-    }
-    return 256; // Cap at reasonable size for deep scenes
-    // NOLINTEND(*-magic-numbers)
-  }
+  OXGN_SCN_NDAPI auto GetOptimalStackCapacity() const -> std::size_t;
 
   //! Container type selection based on traversal order. Will select a
   //! std::vector (better memory locality) for depth-first traversals and a
@@ -262,20 +239,20 @@ private:
 
   template <TraversalOrder Order, typename Container>
   void InitializeContainerWithRoots(
-    std::span<VisitedNode> roots, Container& container) const;
+      std::span<VisitedNode> roots, Container& container) const;
 
   template <TraversalOrder Order, typename Container>
   void QueueChildrenForTraversal(
-    FilterResult parent_filter_result, Container& container) const;
+      FilterResult parent_filter_result, Container& container) const;
 
   // Helper to apply the filter and update result
   template <typename FilterFunc>
   auto ApplyNodeFilter(FilterFunc& filter, const TraversalEntry& entry,
-    TraversalResult& result) const -> FilterResult;
+      TraversalResult& result) const -> FilterResult;
 
   template <TraversalOrder Order, typename VisitorFunc, typename Container>
   auto PerformNodeVisit(VisitorFunc& visitor, Container& container,
-    TraversalResult& result, bool dry_run = false) const -> VisitResult;
+      TraversalResult& result, bool dry_run = false) const -> VisitResult;
 
   //! Update the entry for the current node with the node implementation.
   OXGN_SCN_NDAPI auto UpdateNodeImpl(TraversalEntry& entry) const -> bool;
@@ -283,12 +260,12 @@ private:
   //! Unified traversal implementation
   template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
   auto TraverseImpl(std::span<VisitedNode> roots, VisitorFunc&& visitor,
-    FilterFunc&& filter) const -> TraversalResult;
+      FilterFunc&& filter) const -> TraversalResult;
 
   template <typename VisitorFunc, typename FilterFunc>
   auto TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
-    VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
-    -> TraversalResult;
+      VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
+      -> TraversalResult;
 };
 
 //=== Template Specializations ===--------------------------------------------//
@@ -299,14 +276,14 @@ struct SceneTraversal::ContainerTraits<TraversalOrder::kBreadthFirst> {
 
   template <typename Container>
   static constexpr void push(
-    Container& container, const typename Container::value_type& value)
+      Container& container, const typename Container::value_type& value)
   {
     container.push_back(value);
   }
 
   template <typename Container>
   static constexpr auto pop(Container& container) ->
-    typename Container::value_type
+      typename Container::value_type
   {
     auto item = container.front();
     container.pop_front();
@@ -315,7 +292,7 @@ struct SceneTraversal::ContainerTraits<TraversalOrder::kBreadthFirst> {
 
   template <typename Container>
   static constexpr auto peek(Container& container) ->
-    typename Container::value_type&
+      typename Container::value_type&
   {
     return container.front();
   }
@@ -333,14 +310,14 @@ template <> struct SceneTraversal::ContainerTraits<TraversalOrder::kPreOrder> {
 
   template <typename Container>
   static constexpr void push(
-    Container& container, const typename Container::value_type& value)
+      Container& container, const typename Container::value_type& value)
   {
     container.push_back(value);
   }
 
   template <typename Container>
   static constexpr auto pop(Container& container) ->
-    typename Container::value_type
+      typename Container::value_type
   {
     auto item = container.back();
     container.pop_back();
@@ -349,7 +326,7 @@ template <> struct SceneTraversal::ContainerTraits<TraversalOrder::kPreOrder> {
 
   template <typename Container>
   static constexpr auto peek(Container& container) ->
-    typename Container::value_type&
+      typename Container::value_type&
   {
     return container.back();
   }
@@ -369,7 +346,7 @@ struct SceneTraversal::ContainerTraits<TraversalOrder::kPostOrder>
 
 template <SceneVisitor VisitorFunc, SceneFilter FilterFunc>
 auto SceneTraversal::Traverse(VisitorFunc&& visitor, TraversalOrder order,
-  FilterFunc&& filter) -> TraversalResult
+    FilterFunc&& filter) -> TraversalResult
 {
   auto root_handles = scene_->GetRootHandles();
   if (root_handles.empty()) [[unlikely]] {
@@ -381,38 +358,39 @@ auto SceneTraversal::Traverse(VisitorFunc&& visitor, TraversalOrder order,
   std::vector<VisitedNode> root_impl_nodes;
   root_impl_nodes.reserve(root_handles.size());
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
-    [this](const NodeHandle& handle) {
-      return VisitedNode { .handle = handle, .node_impl = GetNodeImpl(handle) };
-    });
+      [this](const NodeHandle& handle) {
+        return VisitedNode { .handle = handle,
+          .node_impl = GetNodeImpl(handle) };
+      });
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+      order, std::forward<FilterFunc>(filter));
 }
 
 template <SceneVisitor VisitorFunc, SceneFilter FilterFunc>
 auto SceneTraversal::TraverseHierarchy(SceneNode& starting_node,
-  VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter)
-  -> TraversalResult
+    VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter)
+    -> TraversalResult
 {
   if (!starting_node.IsValid()) {
     DLOG_F(WARNING, "TraverseHierarchy starting from an invalid node.");
     return TraversalResult {};
   }
   CHECK_F(scene_->Contains(starting_node),
-    "Starting node for traversal must be part of this scene");
+      "Starting node for traversal must be part of this scene");
 
-  std::array root_impl_nodes { VisitedNode {
-    .handle = starting_node.GetHandle(),
-    .node_impl = GetNodeImpl(starting_node.GetHandle()) } };
+  std::array root_impl_nodes { VisitedNode { .handle
+      = starting_node.GetHandle(),
+      .node_impl = GetNodeImpl(starting_node.GetHandle()) } };
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+      order, std::forward<FilterFunc>(filter));
 }
 
 template <SceneVisitor VisitorFunc, SceneFilter FilterFunc>
 auto SceneTraversal::TraverseHierarchies(std::span<SceneNode> starting_nodes,
-  VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter)
-  -> TraversalResult
+    VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter)
+    -> TraversalResult
 {
   if (starting_nodes.empty()) [[unlikely]] {
     return TraversalResult {};
@@ -421,50 +399,50 @@ auto SceneTraversal::TraverseHierarchies(std::span<SceneNode> starting_nodes,
   std::vector<VisitedNode> root_impl_nodes;
   root_impl_nodes.reserve(starting_nodes.size());
   std::ranges::transform(starting_nodes, std::back_inserter(root_impl_nodes),
-    [this](const SceneNode& node) {
-      CHECK_F(scene_->Contains(node),
-        "Starting nodes for traversal must be part of this scene");
-      return VisitedNode { .handle = node.GetHandle(),
-        .node_impl = GetNodeImpl(node.GetHandle()) };
-    });
+      [this](const SceneNode& node) {
+        CHECK_F(scene_->Contains(node),
+            "Starting nodes for traversal must be part of this scene");
+        return VisitedNode { .handle = node.GetHandle(),
+          .node_impl = GetNodeImpl(node.GetHandle()) };
+      });
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+      order, std::forward<FilterFunc>(filter));
 }
 
 template <TraversalOrder Order, typename Container>
 void SceneTraversal::InitializeContainerWithRoots(
-  std::span<VisitedNode> roots, Container& container) const
+    std::span<VisitedNode> roots, Container& container) const
 {
   using Traits = ContainerTraits<Order>;
 
   for (const auto& root : roots) {
     Traits::push(container,
-      TraversalEntry {
-        .visited_node = root,
-        // For consistency, we set the parent result for root nodes as
-        // 'accepted'. Filters should handle any additional logic for
-        // determining if the node should accept appropriately.
-        .parent_filter_result = FilterResult::kAccept,
-        .state = TraversalEntry::ProcessingState::kPending,
-      });
+        TraversalEntry {
+            .visited_node = root,
+            // For consistency, we set the parent result for root nodes as
+            // 'accepted'. Filters should handle any additional logic for
+            // determining if the node should accept appropriately.
+            .parent_filter_result = FilterResult::kAccept,
+            .state = TraversalEntry::ProcessingState::kPending,
+        });
   }
 }
 
 template <TraversalOrder Order, typename Container>
 void SceneTraversal::QueueChildrenForTraversal(
-  const FilterResult parent_filter_result, Container& container) const
+    const FilterResult parent_filter_result, Container& container) const
 {
   using Traits = ContainerTraits<Order>;
 
   if (!children_buffer_.empty()) {
     for (auto& child : children_buffer_) {
       Traits::push(container,
-        TraversalEntry {
-          .visited_node = child,
-          .parent_filter_result = parent_filter_result,
-          .state = TraversalEntry::ProcessingState::kPending,
-        });
+          TraversalEntry {
+              .visited_node = child,
+              .parent_filter_result = parent_filter_result,
+              .state = TraversalEntry::ProcessingState::kPending,
+          });
     }
   }
   DLOG_F(2, "queued: {}", container.size());
@@ -472,7 +450,7 @@ void SceneTraversal::QueueChildrenForTraversal(
 
 template <typename FilterFunc>
 auto SceneTraversal::ApplyNodeFilter(FilterFunc& filter,
-  const TraversalEntry& entry, TraversalResult& result) const -> FilterResult
+    const TraversalEntry& entry, TraversalResult& result) const -> FilterResult
 {
   DLOG_SCOPE_FUNCTION(2);
 
@@ -480,7 +458,7 @@ auto SceneTraversal::ApplyNodeFilter(FilterFunc& filter,
   DLOG_F(2, "node: {}", entry.visited_node.node_impl->GetName());
 
   const auto filter_result
-    = filter(entry.visited_node, entry.parent_filter_result);
+      = filter(entry.visited_node, entry.parent_filter_result);
   if (filter_result != FilterResult::kAccept) {
     ++result.nodes_filtered;
   }
@@ -490,8 +468,8 @@ auto SceneTraversal::ApplyNodeFilter(FilterFunc& filter,
 
 template <TraversalOrder Order, typename VisitorFunc, typename Container>
 auto SceneTraversal::PerformNodeVisit(VisitorFunc& visitor,
-  Container& container, TraversalResult& result, bool dry_run) const
-  -> VisitResult
+    Container& container, TraversalResult& result, bool dry_run) const
+    -> VisitResult
 {
   using Traits = ContainerTraits<Order>;
 
@@ -536,7 +514,7 @@ auto SceneTraversal::PerformNodeVisit(VisitorFunc& visitor,
 // NOLINTBEGIN(cppcoreguidelines-missing-std-forward)
 template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
 auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
-  VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult
+    VisitorFunc&& visitor, FilterFunc&& filter) const -> TraversalResult
 // NOLINTEND(cppcoreguidelines-missing-std-forward)
 {
   if (roots.empty()) [[unlikely]] {
@@ -554,7 +532,7 @@ auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
 
   // Optimize for stack-based traversals with pre-allocation
   if constexpr (Order == TraversalOrder::kPreOrder
-    || Order == TraversalOrder::kPostOrder) {
+      || Order == TraversalOrder::kPostOrder) {
     container.reserve(GetOptimalStackCapacity());
   }
 
@@ -603,7 +581,7 @@ auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
       if (entry_ref.state == TraversalEntry::ProcessingState::kPending) {
         // First time seeing this node - dry run to check visitor intent
         auto visit_result
-          = PerformNodeVisit<Order>(local_visitor, container, result, true);
+            = PerformNodeVisit<Order>(local_visitor, container, result, true);
         if (visit_result == VisitResult::kStop) [[unlikely]] {
           return result;
         }
@@ -621,15 +599,15 @@ auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
     }
 
     if constexpr (Order == TraversalOrder::kPostOrder) {
-      DCHECK_F(
-        entry_ref.state == TraversalEntry::ProcessingState::kChildrenProcessed,
-        "post-order first pass should not fall through");
+      DCHECK_F(entry_ref.state
+              == TraversalEntry::ProcessingState::kChildrenProcessed,
+          "post-order first pass should not fall through");
     }
 
     // Post-order second time seeing this node, or non-post-order cases ->
     // actual visit of the node
     auto visit_result
-      = PerformNodeVisit<Order>(local_visitor, container, result, false);
+        = PerformNodeVisit<Order>(local_visitor, container, result, false);
     if (visit_result == VisitResult::kStop) [[unlikely]] {
       return result;
     }
@@ -647,8 +625,8 @@ auto SceneTraversal::TraverseImpl(std::span<VisitedNode> roots,
 
 template <typename VisitorFunc, typename FilterFunc>
 auto SceneTraversal::TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
-  VisitorFunc&& visitor, const TraversalOrder order, FilterFunc&& filter) const
-  -> TraversalResult
+    VisitorFunc&& visitor, const TraversalOrder order,
+    FilterFunc&& filter) const -> TraversalResult
 {
   if (root_impl_nodes.empty()) [[unlikely]] {
     return TraversalResult {};
@@ -658,13 +636,13 @@ auto SceneTraversal::TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
   switch (order) {
   case TraversalOrder::kBreadthFirst:
     return TraverseImpl<TraversalOrder::kBreadthFirst>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
   case TraversalOrder::kPreOrder:
     return TraverseImpl<TraversalOrder::kPreOrder>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
   case TraversalOrder::kPostOrder:
     return TraverseImpl<TraversalOrder::kPostOrder>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+        std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
   }
 
   // This should never be reached with valid enum values
