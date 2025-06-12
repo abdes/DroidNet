@@ -571,12 +571,10 @@ private:
 
   //! Marks the transform as dirty for a node and all its descendants.
   void MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept;
+
   //! Preserves the world transform of a node when re-parenting it.
-  void PreserveWorldTransform(
-    const SceneNode& node, SceneNodeImpl* node_impl) noexcept;
-  //! Preserves the world transform of a node when reparenting to a new parent.
-  void PreserveWorldTransformForReparenting(
-    SceneNodeImpl* node_impl, SceneNodeImpl* new_parent_impl) noexcept;
+  void PreserveWorldTransform(const SceneNode& node, SceneNodeImpl* node_impl,
+    SceneNodeImpl* new_parent_impl = nullptr) noexcept;
 
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.

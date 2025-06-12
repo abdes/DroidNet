@@ -20,53 +20,154 @@ using Quat = TransformComponent::Quat;
 //------------------------------------------------------------------------------
 
 /*!
- Preserves world transform during hierarchy changes by leveraging Oxygen's
- cached transform system.
+ Checks if reparenting a node would create a cycle in the hierarchy.
 
- This method captures the cached world transform values (which remain valid
- until the next Scene::Update() cycle) and sets them as the new local transform.
- This ensures visual continuity when nodes are reparented, preventing objects
- from appearing to "jump" to new positions.
+ This method traverses upward from the potential new parent to see if the node
+ being reparented appears in the ancestor chain. If it does, then making the
+ node a child of new_parent would create a cycle.
 
- The method works because Oxygen caches world transforms in SceneNodeImpl during
- the Update() cycle, so GetWorldPosition/Rotation/Scale() return accurate cached
- values even after hierarchy changes, until the next Update() recalculates them.
+ For example, if we have: A -> B -> C and we try to reparent A under C,
+ this would create a cycle: C -> A -> B -> C.
 
- @param node The node whose world transform should be preserved (used for root
- check)
- @param node_impl Pointer to the node's implementation containing cached
- transforms
-
- @note This is a general-purpose helper used by both MakeNodeRoot() and
-       ReparentNode() operations
- @note SetLocalTransform() automatically marks transforms as dirty
- @note For root nodes, UpdateWorldTransformAsRoot() ensures immediate cache
- consistency
+ @param node The node that would be reparented
+ @param new_parent The potential new parent
+ @return true if reparenting would create a cycle, false if safe
 */
-void Scene::PreserveWorldTransform(
-  const SceneNode& node, SceneNodeImpl* node_impl) noexcept
+auto Scene::WouldCreateCycle(
+  const SceneNode& node, const SceneNode& new_parent) const noexcept -> bool
+{
+  DCHECK_F(node.GetHandle().GetSceneId() == new_parent.GetHandle().GetSceneId(),
+    "don't call WouldCreateCycle if node and new parent are not in the same "
+    "scene");
+
+  // A node cannot be its own parent
+  if (node.GetHandle() == new_parent.GetHandle()) {
+    return true;
+  }
+
+  // Traverse up the ancestor chain from new_parent
+  auto current_ancestor = new_parent;
+  while (current_ancestor.HasParent()) {
+    const auto parent_opt = current_ancestor.GetParent();
+    if (!parent_opt.has_value()) {
+      // Invalid parent found, break to avoid infinite loop
+      break;
+    }
+
+    current_ancestor = *parent_opt;
+
+    // If we find the node in the ancestor chain, it would create a cycle
+    if (current_ancestor.GetHandle() == node.GetHandle()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/*!
+ This method ensures visual continuity when nodes are reparented or made root,
+ preventing objects from appearing to "jump" to new positions. It leverages
+ Oxygen's cached transform system.
+
+ If `new_parent_impl` is provided (reparenting):
+ - It calculates the local transform needed for `node_impl` to maintain its
+   current world transform relative to `new_parent_impl`.
+ - The calculation uses inverse transforms:
+   - local_position = inverse(parent_world_transform) * world_position
+   - local_rotation = inverse(parent_world_rotation) * world_rotation
+   - local_scale = world_scale / parent_world_scale (component-wise)
+
+ If `new_parent_impl` is null (e.g., making a node root):
+ - It captures the node's cached world transform and sets it as the new local
+   transform.
+ - If the node is a root, `UpdateWorldTransformAsRoot()` is called to ensure
+   immediate cache consistency.
+
+ The method relies on world transforms being cached during the Update() cycle.
+ `GetWorldPosition/Rotation/Scale()` return accurate cached values even after
+ hierarchy changes, until the next Update() recalculates them.
+
+ @param node The node whose world transform should be preserved. Used for root
+ check when `new_parent_impl` is null.
+ @param node_impl Pointer to the node's implementation containing cached
+ transforms.
+ @param new_parent_impl Optional. Pointer to the new parent's implementation. If
+ provided, calculates transform relative to this new parent. If nullptr,
+ preserves world transform by setting it as local (for root nodes or similar
+ scenarios).
+
+ @note Skips preservation if relevant transforms are dirty (e.g., node's own
+       transform, or new parent's transform in reparenting case).
+*/
+void Scene::PreserveWorldTransform(const SceneNode& node,
+  SceneNodeImpl* node_impl,
+  SceneNodeImpl* new_parent_impl /* = nullptr */) noexcept
 {
   auto& transform_component = node_impl->GetComponent<TransformComponent>();
 
-  // Skip preservation if transforms are dirty (never been updated)
-  // This handles cases where newly created nodes are immediately reparented
+  // Skip preservation if the node's own transforms are dirty (never been
+  // updated)
   if (node_impl->IsTransformDirty()) {
     return;
   }
 
-  // Capture cached world transform (valid until next Update() cycle)
+  // Capture node's current cached world transform (valid until next Update()
+  // cycle)
   const auto world_position = transform_component.GetWorldPosition();
   const auto world_rotation = transform_component.GetWorldRotation();
   const auto world_scale = transform_component.GetWorldScale();
 
-  // Set captured world transform as new local transform (automatically marks
-  // dirty)
-  transform_component.SetLocalTransform(
-    world_position, world_rotation, world_scale);
+  // Reparenting case: Calculate the new local transform relative to the new
+  // parent.
+  if (new_parent_impl) {
 
-  // For root nodes, update world transform cache immediately for consistency
-  if (node.IsRoot()) {
-    transform_component.UpdateWorldTransformAsRoot();
+    // Skip preservation if the new parent's transforms are dirty
+    if (new_parent_impl->IsTransformDirty()) {
+      return;
+    }
+
+    auto& new_parent_transform
+      = new_parent_impl->GetComponent<TransformComponent>();
+
+    // Get new parent's world transform
+    const auto parent_world_position = new_parent_transform.GetWorldPosition();
+    const auto parent_world_rotation = new_parent_transform.GetWorldRotation();
+    const auto parent_world_scale = new_parent_transform.GetWorldScale();
+
+    // Calculate local transform needed to maintain world transform under new
+    // parent
+    const auto inverse_parent_rotation = glm::inverse(parent_world_rotation);
+    // Note: Ensure parent_world_scale components are not zero to avoid division
+    // by zero. Assuming Vec3 has component-wise division.
+    const Vec3 inverse_parent_scale = Vec3(1.0f) / parent_world_scale;
+
+    // Transform world position to local space of new parent
+    const auto relative_position = world_position - parent_world_position;
+    const auto local_position
+      = inverse_parent_rotation * (relative_position * inverse_parent_scale);
+
+    // Calculate local rotation relative to parent
+    const auto local_rotation = inverse_parent_rotation * world_rotation;
+
+    // Calculate local scale relative to parent
+    const auto local_scale = world_scale * inverse_parent_scale;
+
+    // Set calculated local transform (automatically marks dirty)
+    transform_component.SetLocalTransform(
+      local_position, local_rotation, local_scale);
+  }
+  // Make root case: Set world transform as local transform
+  else {
+    // Set captured world transform as new local transform (automatically marks
+    // dirty)
+    transform_component.SetLocalTransform(
+      world_position, world_rotation, world_scale);
+
+    // For root nodes, update world transform cache immediately for consistency.
+    if (node.IsRoot()) {
+      transform_component.UpdateWorldTransformAsRoot();
+    }
   }
 }
 
@@ -145,7 +246,7 @@ auto Scene::MakeNodeRoot(
       // Apply transform preservation or mark for recalculation after hierarchy
       // changes
       if (preserve_world_transform) {
-        PreserveWorldTransform(node, state.node_impl);
+        PreserveWorldTransform(node, state.node_impl, nullptr);
       } else {
         MarkSubtreeTransformDirty(node.GetHandle());
       }
@@ -216,11 +317,15 @@ auto Scene::ReparentNode(const SceneNode& node, const SceneNode& new_parent,
           // Check for potential cycles before making any changes
           if (WouldCreateCycle(node, new_parent)) {
             return false;
-          } // Preserve world transform before hierarchy changes if requested
+          }
+
+          // Preserve world transform before hierarchy changes if requested
           if (preserve_world_transform) {
-            PreserveWorldTransformForReparenting(
-              node_state.node_impl, parent_state.node_impl);
-          } // Unlink the node from its current parent (or root nodes if it's a
+            PreserveWorldTransform(
+              node, node_state.node_impl, parent_state.node_impl);
+          }
+
+          // Unlink the node from its current parent (or root nodes if it's a
           // root)
           if (node.IsRoot()) {
             RemoveRootNode(node.GetHandle());
@@ -251,107 +356,4 @@ auto Scene::ReparentNode(const SceneNode& node, const SceneNode& new_parent,
           return true;
         });
     });
-}
-
-/*!
- Preserves world transform during reparenting by calculating the local transform
- needed to maintain the same world position under a new parent.
-
- This method uses Oxygen's cached transform system to capture the node's current
- world transform, then calculates what local transform is needed relative to the
- new parent to maintain the same world position. This ensures visual continuity
- during reparenting operations.
-
- The calculation uses inverse transforms:
- - local_position = inverse(parent_world_transform) * world_position
- - local_rotation = inverse(parent_world_rotation) * world_rotation
- - local_scale = world_scale / parent_world_scale
- @param node_impl Pointer to the node's implementation
- @param new_parent_impl Pointer to the new parent's implementation
-*/
-void Scene::PreserveWorldTransformForReparenting(
-  SceneNodeImpl* node_impl, SceneNodeImpl* new_parent_impl) noexcept
-{
-  auto& transform_component = node_impl->GetComponent<TransformComponent>();
-  auto& new_parent_transform
-    = new_parent_impl->GetComponent<TransformComponent>();
-
-  // Skip preservation if either node's transforms are dirty (never been
-  // updated) This handles cases where newly created nodes are immediately
-  // reparented
-  if (node_impl->IsTransformDirty() || new_parent_impl->IsTransformDirty()) {
-    return;
-  }
-
-  // Capture cached world transform (valid until next Update() cycle)
-  const auto world_position = transform_component.GetWorldPosition();
-  const auto world_rotation = transform_component.GetWorldRotation();
-  const auto world_scale = transform_component.GetWorldScale();
-
-  // Get new parent's world transform
-  const auto parent_world_position = new_parent_transform.GetWorldPosition();
-  const auto parent_world_rotation = new_parent_transform.GetWorldRotation();
-  const auto parent_world_scale = new_parent_transform.GetWorldScale();
-
-  // Calculate local transform needed to maintain world transform under new
-  // parent local_position = inverse(parent_world_transform) * world_position
-  const auto inverse_parent_rotation = glm::inverse(parent_world_rotation);
-  const auto inverse_parent_scale = Vec3(1.0f) / parent_world_scale;
-
-  // Transform world position to local space of new parent
-  const auto relative_position = world_position - parent_world_position;
-  const auto local_position
-    = inverse_parent_rotation * (relative_position * inverse_parent_scale);
-
-  // Calculate local rotation relative to parent
-  const auto local_rotation = inverse_parent_rotation * world_rotation;
-
-  // Calculate local scale relative to parent
-  const auto local_scale = world_scale * inverse_parent_scale;
-
-  // Set calculated local transform (automatically marks dirty)
-  transform_component.SetLocalTransform(
-    local_position, local_rotation, local_scale);
-}
-
-/*!
- Checks if reparenting a node would create a cycle in the hierarchy.
-
- This method traverses upward from the potential new parent to see if the node
- being reparented appears in the ancestor chain. If it does, then making the
- node a child of new_parent would create a cycle.
-
- For example, if we have: A -> B -> C and we try to reparent A under C,
- this would create a cycle: C -> A -> B -> C.
-
- @param node The node that would be reparented
- @param new_parent The potential new parent
- @return true if reparenting would create a cycle, false if safe
-*/
-auto Scene::WouldCreateCycle(
-  const SceneNode& node, const SceneNode& new_parent) const noexcept -> bool
-{
-  // A node cannot be its own parent
-  if (node.GetHandle() == new_parent.GetHandle()) {
-    return true;
-  }
-
-  // Traverse up the ancestor chain from new_parent
-  auto current_ancestor = new_parent;
-  while (current_ancestor.HasParent()) {
-    const auto parent_opt = current_ancestor.GetParent();
-    if (!parent_opt.has_value()) {
-      // Invalid parent found, break to avoid infinite loop
-      break;
-    }
-
-    current_ancestor = *parent_opt;
-
-    // If we find the node in the ancestor chain, it would create a cycle
-    if (current_ancestor.GetHandle() == node.GetHandle()) {
-      return true;
-    }
-  }
-
-  return false;
 }
