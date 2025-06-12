@@ -13,6 +13,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
+#include "./Fixtures/SceneTest.h"
+
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::detail::TransformComponent;
@@ -23,7 +25,7 @@ namespace {
 // Scene Reparenting Tests - MakeNodeRoot Functionality
 //=============================================================================
 
-class SceneReparentTest : public testing::Test {
+class SceneReparentTest : public ::testing::Test {
 protected:
   void SetUp() override
   {
@@ -45,8 +47,8 @@ protected:
   // Helper to create a to-be lazily invalidated node for testing. Creates a
   // node, stores its handle, then destroys it, and returns a new node with the
   // stored handle.
-  [[nodiscard]] auto CreateLazyInvalidationNode(
-    const std::string& name = "InvalidNode") const -> SceneNode
+  [[nodiscard]] auto CreateLazyInvalidationNode(const std::string& name
+      = "InvalidNode") const -> SceneNode
   {
     auto node = scene_->CreateNode(name);
     const auto handle = node.GetHandle();
@@ -55,7 +57,7 @@ protected:
   }
 
   [[nodiscard]] auto CreateChildNode(const SceneNode& parent,
-    const std::string& name) const -> std::optional<SceneNode>
+      const std::string& name) const -> std::optional<SceneNode>
   {
     return scene_->CreateChildNode(parent, name);
   }
@@ -86,7 +88,7 @@ protected:
   };
 
   [[nodiscard]] auto CreateParentWithTwoChildren() const
-    -> ParentWithTwoChildren
+      -> ParentWithTwoChildren
   {
     auto parent = CreateNode("Parent");
     auto child1_opt = CreateChildNode(parent, "Child1");
@@ -103,7 +105,7 @@ protected:
   };
 
   [[nodiscard]] auto CreateThreeGenerationHierarchy() const
-    -> ThreeGenerationHierarchy
+      -> ThreeGenerationHierarchy
   {
     auto root = CreateNode("Root");
     auto child_opt = CreateChildNode(root, "Child");
@@ -172,9 +174,9 @@ protected:
 
   // Helper: Set up transform with specific values and update as needed
   void SetupNodeTransform(const SceneNode& node,
-    const TransformComponent::Vec3& position,
-    const TransformComponent::Quat& rotation,
-    const TransformComponent::Vec3& scale) const
+      const TransformComponent::Vec3& position,
+      const TransformComponent::Quat& rotation,
+      const TransformComponent::Vec3& scale) const
   {
     auto node_impl_opt = node.GetObject();
     ASSERT_TRUE(node_impl_opt.has_value());
@@ -188,7 +190,7 @@ protected:
   {
     auto node_impl_opt = node.GetObject();
     EXPECT_TRUE(node_impl_opt.has_value())
-      << "Node should have valid implementation";
+        << "Node should have valid implementation";
     return node_impl_opt->get().GetComponent<TransformComponent>();
   }
 
@@ -200,63 +202,63 @@ protected:
 
   // Helper: Create test vectors and quaternions
   static constexpr auto MakeVec3(const float x, const float y, const float z)
-    -> TransformComponent::Vec3
+      -> TransformComponent::Vec3
   {
     return TransformComponent::Vec3 { x, y, z };
   }
 
   static auto MakeQuat(const float w, const float x, const float y,
-    const float z) -> TransformComponent::Quat
+      const float z) -> TransformComponent::Quat
   {
     return TransformComponent::Quat { w, x, y, z };
   }
 
   static auto QuatFromEuler(const float x_deg, const float y_deg,
-    const float z_deg) -> TransformComponent::Quat
+      const float z_deg) -> TransformComponent::Quat
   {
     return TransformComponent::Quat { glm::radians(
-      TransformComponent::Vec3 { x_deg, y_deg, z_deg }) };
+        TransformComponent::Vec3 { x_deg, y_deg, z_deg }) };
   }
   // Helper: Verify node is valid and has expected name
   static void ExpectNodeValidWithName(
-    const SceneNode& node, const std::string& name)
+      const SceneNode& node, const std::string& name)
   {
     ASSERT_TRUE(node.IsValid()) << "Node should be valid";
     const auto obj_opt = node.GetObject();
     ASSERT_TRUE(obj_opt.has_value()) << "Node object should be present";
     EXPECT_EQ(obj_opt->get().GetName(), name)
-      << "Node name mismatch: expected '" << name << "', got '"
-      << obj_opt->get().GetName();
+        << "Node name mismatch: expected '" << name << "', got '"
+        << obj_opt->get().GetName();
   }
   // Helper: Verify node is valid, has expected name, and is a root node
   static void ExpectNodeValidAsRoot(
-    const SceneNode& node, const std::string& name)
+      const SceneNode& node, const std::string& name)
   {
     ExpectNodeValidWithName(node, name);
     EXPECT_TRUE(node.IsRoot()) << "Node '" << name << "' should be a root node";
     EXPECT_FALSE(node.HasParent())
-      << "Root node '" << name << "' should not have a parent";
+        << "Root node '" << name << "' should not have a parent";
   }
   // Helper: Verify node is valid, has expected parent, and is not a root
   static void ExpectNodeValidWithParent(
-    const SceneNode& node, const SceneNode& expected_parent)
+      const SceneNode& node, const SceneNode& expected_parent)
   {
     ASSERT_TRUE(node.IsValid()) << "Node should be valid";
     ASSERT_TRUE(expected_parent.IsValid()) << "Expected parent should be valid";
     EXPECT_FALSE(node.IsRoot())
-      << "Node should not be a root (should have parent)";
+        << "Node should not be a root (should have parent)";
     EXPECT_TRUE(node.HasParent()) << "Node should have a parent";
 
     const auto parent_opt = node.GetParent();
     ASSERT_TRUE(parent_opt.has_value()) << "Node should have a valid parent";
 
     EXPECT_EQ(parent_opt->GetHandle(), expected_parent.GetHandle())
-      << "Node has wrong parent (handle mismatch)";
+        << "Node has wrong parent (handle mismatch)";
   }
 
   // Helper: Verify vectors are approximately equal
   static void ExpectVec3Near(const TransformComponent::Vec3& actual,
-    const TransformComponent::Vec3& expected, const float tolerance = 1e-5f)
+      const TransformComponent::Vec3& expected, const float tolerance = 1e-5f)
   {
     EXPECT_NEAR(actual.x, expected.x, tolerance);
     EXPECT_NEAR(actual.y, expected.y, tolerance);
@@ -265,7 +267,7 @@ protected:
 
   // Helper: Verify quaternions are approximately equal
   static void ExpectQuatNear(const TransformComponent::Quat& actual,
-    const TransformComponent::Quat& expected, const float tolerance = 1e-5f)
+      const TransformComponent::Quat& expected, const float tolerance = 1e-5f)
   {
     EXPECT_NEAR(actual.w, expected.w, tolerance);
     EXPECT_NEAR(actual.x, expected.x, tolerance);
@@ -299,7 +301,7 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_ValidChildNode_BecomesRoot)
 }
 
 NOLINT_TEST_F(
-  SceneReparentTest, MakeNodeRoot_AlreadyRootNode_SucceedsImmediately)
+    SceneReparentTest, MakeNodeRoot_AlreadyRootNode_SucceedsImmediately)
 {
   // Arrange: Create root node
   auto root = CreateNode("RootNode");
@@ -346,15 +348,15 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_DeepHierarchy_EntireSubtreeMoved)
 }
 
 NOLINT_TEST_F(SceneReparentTest,
-  MakeNodeRoot_WithoutTransformPreservation_MarksSubtreeDirty)
+    MakeNodeRoot_WithoutTransformPreservation_MarksSubtreeDirty)
 {
   // Arrange: Create parent-child with transforms
   const auto hierarchy = CreateSimpleParentChild();
 
   SetupNodeTransform(hierarchy.parent, MakeVec3(10, 20, 30),
-    QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
+      QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
   SetupNodeTransform(hierarchy.child, MakeVec3(1, 2, 3),
-    QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
+      QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
   UpdateSceneTransforms();
 
   // Act: Make child root without preserving transform
@@ -367,7 +369,7 @@ NOLINT_TEST_F(SceneReparentTest,
 }
 
 NOLINT_TEST_F(SceneReparentTest,
-  MakeNodeRoot_WithTransformPreservation_PreservesWorldPosition)
+    MakeNodeRoot_WithTransformPreservation_PreservesWorldPosition)
 {
   // Arrange: Create parent-child with transforms
   const auto hierarchy = CreateSimpleParentChild();
@@ -375,10 +377,10 @@ NOLINT_TEST_F(SceneReparentTest,
   // Set parent transform: position(10,20,30), rotation(45° around X),
   // scale(2,2,2)
   SetupNodeTransform(hierarchy.parent, MakeVec3(10, 20, 30),
-    QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
+      QuatFromEuler(45, 0, 0), MakeVec3(2, 2, 2));
   // Set child transform: position(1,2,3), rotation(45° around Y), scale(1,1,1)
   SetupNodeTransform(hierarchy.child, MakeVec3(1, 2, 3),
-    QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
+      QuatFromEuler(0, 45, 0), MakeVec3(1, 1, 1));
 
   UpdateSceneTransforms(); // Update cached world transforms
 
@@ -397,11 +399,11 @@ NOLINT_TEST_F(SceneReparentTest,
 
   // Assert: Local transform should now equal the captured world transform
   CHECK_FOR_FAILURES(
-    ExpectVec3Near(child_transform.GetLocalPosition(), original_world_pos));
+      ExpectVec3Near(child_transform.GetLocalPosition(), original_world_pos));
   CHECK_FOR_FAILURES(
-    ExpectQuatNear(child_transform.GetLocalRotation(), original_world_rot));
+      ExpectQuatNear(child_transform.GetLocalRotation(), original_world_rot));
   CHECK_FOR_FAILURES(
-    ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale));
+      ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale));
 }
 
 NOLINT_TEST_F(SceneReparentTest, MakeNodesRoot_ValidNodes_AllSucceed)
@@ -474,10 +476,10 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_UpdatesRootNodesList)
   // Assert: Child should be findable in root nodes
   const auto root_nodes = scene_->GetRootNodes();
   const auto found_child = std::find_if(
-    root_nodes.begin(), root_nodes.end(), [&](const SceneNode& node) {
-      auto obj_opt = node.GetObject();
-      return obj_opt.has_value() && obj_opt->get().GetName() == "Child";
-    });
+      root_nodes.begin(), root_nodes.end(), [&](const SceneNode& node) {
+        auto obj_opt = node.GetObject();
+        return obj_opt.has_value() && obj_opt->get().GetName() == "Child";
+      });
   EXPECT_NE(found_child, root_nodes.end());
 }
 
@@ -516,7 +518,7 @@ NOLINT_TEST_F(SceneReparentErrorTest, MakeNodeRoot_InvalidNode_ReturnsFalse)
 }
 
 NOLINT_TEST_F(
-  SceneReparentErrorTest, MakeNodeRoot_LazilyInvalidatedNode_ReturnsFalse)
+    SceneReparentErrorTest, MakeNodeRoot_LazilyInvalidatedNode_ReturnsFalse)
 {
   // Arrange: Create node then destroy it to trigger lazy invalidation
   auto node = CreateNode("TestNode");
@@ -534,7 +536,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  SceneReparentErrorTest, MakeNodesRoot_EmptySpan_ReturnsEmptyVector)
+    SceneReparentErrorTest, MakeNodesRoot_EmptySpan_ReturnsEmptyVector)
 {
   // Arrange: Empty span of nodes
   std::vector<SceneNode> empty_nodes;
@@ -561,8 +563,8 @@ NOLINT_TEST_F(SceneReparentDeathTest, MakeNodeRoot_NodeFromDifferentScene_Dies)
 
   // Act & Assert: Should terminate program
   EXPECT_DEATH(
-    { [[maybe_unused]] auto _ = scene_->MakeNodeRoot(foreign_node, false); },
-    ".*"); // Death message will contain scene ownership check failure
+      { [[maybe_unused]] auto _ = scene_->MakeNodeRoot(foreign_node, false); },
+      ".*"); // Death message will contain scene ownership check failure
 }
 
 NOLINT_TEST_F(SceneReparentDeathTest, ReparentNode_NodeFromDifferentScene_Dies)
@@ -577,15 +579,15 @@ NOLINT_TEST_F(SceneReparentDeathTest, ReparentNode_NodeFromDifferentScene_Dies)
 
   // Act & Assert: Should terminate program
   EXPECT_DEATH(
-    {
-      [[maybe_unused]] auto _
-        = scene_->ReparentNode(foreign_node, local_parent, false);
-    },
-    ".*"); // Death message will contain scene ownership check failure
+      {
+        [[maybe_unused]] auto _
+            = scene_->ReparentNode(foreign_node, local_parent, false);
+      },
+      ".*"); // Death message will contain scene ownership check failure
 }
 
 NOLINT_TEST_F(
-  SceneReparentDeathTest, ReparentNode_ParentFromDifferentScene_Dies)
+    SceneReparentDeathTest, ReparentNode_ParentFromDifferentScene_Dies)
 {
   // Arrange: Create parent from different scene
   auto other_scene = std::make_shared<Scene>("OtherScene", 64);
@@ -597,11 +599,11 @@ NOLINT_TEST_F(
 
   // Act & Assert: Should terminate program
   EXPECT_DEATH(
-    {
-      [[maybe_unused]] auto _
-        = scene_->ReparentNode(local_node, foreign_parent, false);
-    },
-    ".*"); // Death message will contain scene ownership check failure
+      {
+        [[maybe_unused]] auto _
+            = scene_->ReparentNode(local_node, foreign_parent, false);
+      },
+      ".*"); // Death message will contain scene ownership check failure
 }
 
 // -----------------------------------------------------------------------------
@@ -610,8 +612,8 @@ NOLINT_TEST_F(
 
 class SceneReparentEdgeTest : public SceneReparentTest { };
 
-NOLINT_TEST_F(
-  SceneReparentEdgeTest, MakeNodeRoot_NodeWithManyChildren_PreservesAllChildren)
+NOLINT_TEST_F(SceneReparentEdgeTest,
+    MakeNodeRoot_NodeWithManyChildren_PreservesAllChildren)
 {
   // Arrange: Create node with many children
   auto parent = CreateNode("Parent");
@@ -655,7 +657,7 @@ NOLINT_TEST_F(SceneReparentEdgeTest, MakeNodeRoot_EmptyNameNode_WorksCorrectly)
 }
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, MakeNodeRoot_VeryDeepHierarchy_HandledCorrectly)
+    SceneReparentEdgeTest, MakeNodeRoot_VeryDeepHierarchy_HandledCorrectly)
 {
   // Arrange: Create very deep hierarchy (15 levels)
   const auto deep_chain = CreateLinearChain(15);
@@ -676,7 +678,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, MakeNodeRoot_ImmediatelyAfterCreation_WorksCorrectly)
+    SceneReparentEdgeTest, MakeNodeRoot_ImmediatelyAfterCreation_WorksCorrectly)
 {
   // Arrange: Create child and immediately make it root
   const auto hierarchy = CreateSimpleParentChild();
@@ -691,15 +693,15 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(SceneReparentEdgeTest,
-  MakeNodeRoot_WithTransformPreservation_ZeroScaleHandling)
+    MakeNodeRoot_WithTransformPreservation_ZeroScaleHandling)
 {
   // Arrange: Create child with zero scale on one axis
   const auto hierarchy = CreateSimpleParentChild();
 
   SetupNodeTransform(hierarchy.parent, MakeVec3(10, 10, 10),
-    QuatFromEuler(0, 0, 0), MakeVec3(1, 1, 1));
+      QuatFromEuler(0, 0, 0), MakeVec3(1, 1, 1));
   SetupNodeTransform(hierarchy.child, MakeVec3(0, 0, 0), QuatFromEuler(0, 0, 0),
-    MakeVec3(0, 1, 1)); // Zero X scale
+      MakeVec3(0, 1, 1)); // Zero X scale
   UpdateSceneTransforms();
 
   // Act: Should handle zero scale gracefully
@@ -710,7 +712,7 @@ NOLINT_TEST_F(SceneReparentEdgeTest,
 }
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, MakeNodeRoot_MultipleConcurrentOperations_AllSucceed)
+    SceneReparentEdgeTest, MakeNodeRoot_MultipleConcurrentOperations_AllSucceed)
 {
   // Arrange: Create multiple sibling nodes
   auto parent = CreateNode("Parent");
@@ -741,31 +743,31 @@ NOLINT_TEST_F(
 // -----------------------------------------------------------------------------
 
 NOLINT_TEST_F(
-  SceneReparentTest, ReparentNode_ValidNodes_SucceedsAndMovesHierarchy)
+    SceneReparentTest, ReparentNode_ValidNodes_SucceedsAndMovesHierarchy)
 {
   // Arrange: Create dual parent structure with child under ParentA
   const auto hierarchy = CreateDualParentWithChild();
 
   // Verify initial setup
   CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentA));
+      ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentA));
   EXPECT_TRUE(hierarchy.parentA.HasChildren());
   EXPECT_FALSE(hierarchy.parentB.HasChildren());
 
   // Act: Reparent child from ParentA to ParentB
   const auto result
-    = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, false);
+      = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, false);
 
   // Assert: Child should now be under ParentB
   EXPECT_TRUE(result);
   CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentB));
+      ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentB));
   EXPECT_FALSE(hierarchy.parentA.HasChildren());
   EXPECT_TRUE(hierarchy.parentB.HasChildren());
 }
 
 NOLINT_TEST_F(
-  SceneReparentTest, ReparentNode_RootToParent_SucceedsAndUpdatesRootList)
+    SceneReparentTest, ReparentNode_RootToParent_SucceedsAndUpdatesRootList)
 {
   // Arrange: Create root node and a parent
   auto standalone_root = CreateNode("StandaloneRoot");
@@ -786,8 +788,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(scene_->GetRootNodes().size(), initial_root_count - 1);
 }
 
-NOLINT_TEST_F(
-  SceneReparentTest, ReparentNode_WithEntireSubtree_PreservesInternalStructure)
+NOLINT_TEST_F(SceneReparentTest,
+    ReparentNode_WithEntireSubtree_PreservesInternalStructure)
 {
   // Arrange: Create hierarchy with subtree: Root -> ParentA -> Child ->
   // Grandchild, Root -> ParentB
@@ -813,18 +815,18 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(SceneReparentTest,
-  ReparentNode_WithTransformPreservation_MaintainsWorldTransform)
+    ReparentNode_WithTransformPreservation_MaintainsWorldTransform)
 {
   // Arrange: Create hierarchy with transforms using DualParentWithChild
   const auto hierarchy = CreateDualParentWithChild();
 
   // Set up transforms
   SetupNodeTransform(hierarchy.parentA, MakeVec3(10, 0, 0),
-    QuatFromEuler(0, 0, 0), MakeVec3(2, 2, 2));
+      QuatFromEuler(0, 0, 0), MakeVec3(2, 2, 2));
   SetupNodeTransform(hierarchy.parentB, MakeVec3(0, 10, 0),
-    QuatFromEuler(0, 90, 0), MakeVec3(1, 1, 1));
+      QuatFromEuler(0, 90, 0), MakeVec3(1, 1, 1));
   SetupNodeTransform(hierarchy.child, MakeVec3(5, 0, 0), QuatFromEuler(0, 0, 0),
-    MakeVec3(1, 1, 1));
+      MakeVec3(1, 1, 1));
   UpdateSceneTransforms();
 
   // Capture world transform before reparenting
@@ -835,18 +837,18 @@ NOLINT_TEST_F(SceneReparentTest,
 
   // Act: Reparent with transform preservation
   const auto result
-    = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, true);
+      = scene_->ReparentNode(hierarchy.child, hierarchy.parentB, true);
 
   // Assert: World transform should be preserved
   EXPECT_TRUE(result);
   UpdateSceneTransforms(); // Update to get new world transforms
 
   CHECK_FOR_FAILURES(
-    ExpectVec3Near(child_transform.GetWorldPosition(), original_world_pos));
+      ExpectVec3Near(child_transform.GetWorldPosition(), original_world_pos));
   CHECK_FOR_FAILURES(
-    ExpectQuatNear(child_transform.GetWorldRotation(), original_world_rot));
+      ExpectQuatNear(child_transform.GetWorldRotation(), original_world_rot));
   CHECK_FOR_FAILURES(
-    ExpectVec3Near(child_transform.GetWorldScale(), original_world_scale));
+      ExpectVec3Near(child_transform.GetWorldScale(), original_world_scale));
 }
 
 // -----------------------------------------------------------------------------
@@ -854,7 +856,7 @@ NOLINT_TEST_F(SceneReparentTest,
 // -----------------------------------------------------------------------------
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, ReparentNode_SelfAsParent_DetectsCycleAndFails)
+    SceneReparentEdgeTest, ReparentNode_SelfAsParent_DetectsCycleAndFails)
 {
   // Arrange: Create a simple node
   auto node = CreateNode("SelfParentNode");
@@ -866,25 +868,25 @@ NOLINT_TEST_F(
   CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(node, "SelfParentNode"));
 }
 
-NOLINT_TEST_F(
-  SceneReparentEdgeTest, ReparentNode_DirectChildAsParent_DetectsCycleAndFails)
+NOLINT_TEST_F(SceneReparentEdgeTest,
+    ReparentNode_DirectChildAsParent_DetectsCycleAndFails)
 {
   // Arrange: Create Parent -> Child hierarchy
   const auto hierarchy = CreateSimpleParentChild();
 
   // Act: Try to make parent a child of its own child (direct cycle)
   const auto result
-    = scene_->ReparentNode(hierarchy.parent, hierarchy.child, false);
+      = scene_->ReparentNode(hierarchy.parent, hierarchy.child, false);
 
   // Assert: Should detect cycle and fail
   EXPECT_FALSE(result);
   CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(hierarchy.parent, "Parent"));
   CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parent));
+      ExpectNodeValidWithParent(hierarchy.child, hierarchy.parent));
 }
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, ReparentNode_GrandchildAsParent_DetectsCycleAndFails)
+    SceneReparentEdgeTest, ReparentNode_GrandchildAsParent_DetectsCycleAndFails)
 {
   // Arrange: Create A -> B -> C hierarchy
   const auto chain = CreateLinearChain(3);
@@ -903,7 +905,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  SceneReparentEdgeTest, ReparentNode_DeepHierarchyCycle_DetectsCycleAndFails)
+    SceneReparentEdgeTest, ReparentNode_DeepHierarchyCycle_DetectsCycleAndFails)
 {
   // Arrange: Create deep hierarchy: A -> B -> C -> D -> E
   const auto chain = CreateLinearChain(5);
@@ -923,7 +925,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(SceneReparentEdgeTest,
-  ReparentNode_ValidReparentingAfterCycleDetection_Succeeds)
+    ReparentNode_ValidReparentingAfterCycleDetection_Succeeds)
 {
   // Arrange: Create A -> B -> C hierarchy and separate D
   auto nodeA = CreateNode("NodeA");
@@ -983,7 +985,7 @@ NOLINT_TEST_F(SceneReparentErrorTest, ReparentNode_InvalidParent_ReturnsFalse)
 }
 
 NOLINT_TEST_F(
-  SceneReparentErrorTest, ReparentNode_LazilyInvalidatedNode_ReturnsFalse)
+    SceneReparentErrorTest, ReparentNode_LazilyInvalidatedNode_ReturnsFalse)
 {
   // Arrange: Create nodes then destroy one to trigger lazy invalidation
   auto parent = CreateNode("Parent");
@@ -1000,8 +1002,8 @@ NOLINT_TEST_F(
   EXPECT_FALSE(node.IsValid());
 }
 
-NOLINT_TEST_F(
-  SceneReparentErrorTest, MakeNodesRoot_MixedValidInvalid_ReportsPartialFailure)
+NOLINT_TEST_F(SceneReparentErrorTest,
+    MakeNodesRoot_MixedValidInvalid_ReportsPartialFailure)
 {
   // Arrange: Create mix of valid and invalid nodes
   const auto hierarchy = CreateSimpleParentChild();
@@ -1020,7 +1022,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(invalid_node.IsValid());
   EXPECT_TRUE(hierarchy.parent.IsValid());
   EXPECT_TRUE(
-    lazy_invalid_node.IsValid()); // Still appears valid until accessed
+      lazy_invalid_node.IsValid()); // Still appears valid until accessed
 
   // Act: Try to make mixed nodes root
   const auto results = scene_->MakeNodesRoot(mixed_nodes, false);
