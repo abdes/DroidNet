@@ -25,7 +25,7 @@ void SceneNode::LogSafeCallError(const char* reason) const noexcept
 {
   try {
     DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",
-      nostd::to_string(*this), reason);
+        nostd::to_string(*this), reason);
   } catch (...) {
     // If logging fails, we can do nothing about it
     (void)0;
@@ -46,7 +46,7 @@ protected:
     return *node_;
   }
 
-  [[nodiscard]] auto GetScene() const noexcept -> Scene*
+  [[nodiscard]] auto GetScene() const noexcept -> const Scene*
   {
     DCHECK_F(!node_->scene_weak_.expired());
     return node_->scene_weak_.lock().get();
@@ -61,7 +61,7 @@ protected:
   {
     if (node_->scene_weak_.expired()) [[unlikely]] {
       result_ = fmt::format(
-        "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
+          "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
       return false;
     }
     state.scene = node_->scene_weak_.lock().get();
@@ -77,7 +77,7 @@ protected:
     // the reason why validation failed.
     if (!GetNode().IsValid()) [[unlikely]] {
       result_ = fmt::format(
-        "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
+          "node({}) is invalid", nostd::to_string(GetNode().GetHandle()));
       return false;
     }
     result_.reset();
@@ -96,7 +96,7 @@ protected:
       return true;
     } catch (const std::exception&) {
       result_ = fmt::format("node({}) is no longer in scene",
-        nostd::to_string(GetNode().GetHandle()));
+          nostd::to_string(GetNode().GetHandle()));
       node_->Invalidate();
       return false;
     }
@@ -137,7 +137,7 @@ public:
   {
     state.node = const_cast<SceneNode*>(&GetNode());
     if (CheckSceneNotExpired(state) && CheckNodeIsValid()
-      && PopulateStateWithNodeImpl(state)) [[likely]] {
+        && PopulateStateWithNodeImpl(state)) [[likely]] {
       return std::nullopt;
     }
     return GetResult();
@@ -165,7 +165,7 @@ auto SceneNode::NodeIsValidAndInScene() const -> NodeIsValidAndInSceneValidator
 */
 SceneNode::SceneNode()
   : Resource(
-      NodeHandle { NodeHandle::kInvalidIndex, NodeHandle::kInvalidSceneId })
+        NodeHandle { NodeHandle::kInvalidIndex, NodeHandle::kInvalidSceneId })
 {
 }
 
@@ -178,9 +178,9 @@ SceneNode::SceneNode()
  @param scene_weak A weak pointer (not expired) to the Scene this node is
  associated with.
 */
-SceneNode::SceneNode(std::weak_ptr<Scene> scene_weak)
+SceneNode::SceneNode(std::weak_ptr<const Scene> scene_weak)
   : Resource(
-      NodeHandle { NodeHandle::kInvalidIndex, scene_weak.lock()->GetId() })
+        NodeHandle { NodeHandle::kInvalidIndex, scene_weak.lock()->GetId() })
   , scene_weak_(std::move(scene_weak))
 {
 }
@@ -193,7 +193,8 @@ SceneNode::SceneNode(std::weak_ptr<Scene> scene_weak)
   @param handle A valid NodeHandle for this SceneNode.
   associated with.
 */
-SceneNode::SceneNode(std::weak_ptr<Scene> scene_weak, const NodeHandle& handle)
+SceneNode::SceneNode(
+    std::weak_ptr<const Scene> scene_weak, const NodeHandle& handle)
   : Resource(handle)
   , scene_weak_(std::move(scene_weak))
 {
@@ -213,7 +214,7 @@ auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
     return fmt::format("SN({}, stale)", to_string_compact(node.GetHandle()));
   }
   return fmt::format("SN({}, n='{}')", to_string_compact(node.GetHandle()),
-    impl->get().GetName());
+      impl->get().GetName());
 #else // defined(NDEBUG)
   return fmt::format("SN({})", to_string_compact(node.GetHandle()));
 #endif // defined(NDEBUG)
@@ -227,13 +228,13 @@ auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
 auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> OptionalConstRefToImpl {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> OptionalConstRefToImpl {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetNodeImplRefUnsafe(GetHandle());
-    });
+        return state.scene->GetNodeImplRefUnsafe(GetHandle());
+      });
 }
 
 /*!
@@ -242,13 +243,13 @@ auto SceneNode::GetObject() const noexcept -> OptionalConstRefToImpl
 auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> OptionalRefToImpl {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> OptionalRefToImpl {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetNodeImplRefUnsafe(GetHandle());
-    });
+        return state.scene->GetNodeImplRefUnsafe(GetHandle());
+      });
 }
 
 /*!
@@ -258,13 +259,13 @@ auto SceneNode::GetObject() noexcept -> OptionalRefToImpl
 auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> OptionalConstRefToFlags {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> OptionalConstRefToFlags {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.node_impl->GetFlags();
-    });
+        return state.node_impl->GetFlags();
+      });
 }
 
 /*!
@@ -273,85 +274,85 @@ auto SceneNode::GetFlags() const noexcept -> OptionalConstRefToFlags
 auto SceneNode::GetFlags() noexcept -> OptionalRefToFlags
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> OptionalRefToFlags {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> OptionalRefToFlags {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.node_impl->GetFlags();
-    });
+        return state.node_impl->GetFlags();
+      });
 }
 
 auto SceneNode::GetParent() const noexcept -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetParentUnsafe(*this, state.node_impl);
-    });
+        return state.scene->GetParentUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::GetFirstChild() const noexcept -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetFirstChildUnsafe(*this, state.node_impl);
-    });
+        return state.scene->GetFirstChildUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::GetNextSibling() const noexcept -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetNextSiblingUnsafe(*this, state.node_impl);
-    });
+        return state.scene->GetNextSiblingUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::GetPrevSibling() const noexcept -> std::optional<SceneNode>
 {
   return SafeCall(NodeIsValidAndInScene(),
-    [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+      [&](const SafeCallState& state) noexcept -> std::optional<SceneNode> {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->GetPrevSiblingUnsafe(*this, state.node_impl);
-    });
+        return state.scene->GetPrevSiblingUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::HasParent() const noexcept -> bool
 {
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+  return SafeCall(NodeIsValidAndInScene(),
+      [&](const SafeCallState& state) noexcept -> bool {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->HasParentUnsafe(*this, state.node_impl);
-    });
+        return state.scene->HasParentUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::HasChildren() const noexcept -> bool
 {
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
+  return SafeCall(NodeIsValidAndInScene(),
+      [&](const SafeCallState& state) noexcept -> bool {
+        DCHECK_EQ_F(state.node, this);
+        DCHECK_NOTNULL_F(state.scene);
+        DCHECK_NOTNULL_F(state.node_impl);
 
-      return state.scene->HasChildrenUnsafe(*this, state.node_impl);
-    });
+        return state.scene->HasChildrenUnsafe(*this, state.node_impl);
+      });
 }
 
 auto SceneNode::IsRoot() const noexcept -> bool { return !HasParent(); }
@@ -377,5 +378,5 @@ auto SceneNode::GetTransform() noexcept -> Transform
 auto SceneNode::GetTransform() const noexcept -> Transform
 {
   return Transform(
-    const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
+      const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
 }

@@ -66,13 +66,13 @@ public:
   using Flags = SceneNodeImpl::Flags;
 
   using OptionalRefToImpl
-    = std::optional<std::reference_wrapper<SceneNodeImpl>>;
+      = std::optional<std::reference_wrapper<SceneNodeImpl>>;
   using OptionalConstRefToImpl
-    = std::optional<std::reference_wrapper<const SceneNodeImpl>>;
+      = std::optional<std::reference_wrapper<const SceneNodeImpl>>;
 
   using OptionalRefToFlags = std::optional<std::reference_wrapper<Flags>>;
   using OptionalConstRefToFlags
-    = std::optional<std::reference_wrapper<const Flags>>;
+      = std::optional<std::reference_wrapper<const Flags>>;
 
   //! Forward declaration for Transform interface.
   //! @see SceneNode::Transform for full documentation.
@@ -88,12 +88,12 @@ public:
 
   //! Creates an \b invalid SceneNode, associated with the given \b valid scene,
   //! and an invalid handle.
-  explicit OXGN_SCN_API SceneNode(std::weak_ptr<Scene> scene_weak);
+  explicit OXGN_SCN_API SceneNode(std::weak_ptr<const Scene> scene_weak);
 
   //! Creates a SceneNode, associated with the given, \b valid scene and with
   //! the given \b valid \p handle.
   OXGN_SCN_API SceneNode(
-    std::weak_ptr<Scene> scene_weak, const NodeHandle& handle);
+      std::weak_ptr<const Scene> scene_weak, const NodeHandle& handle);
 
   ~SceneNode() override = default;
 
@@ -106,11 +106,11 @@ public:
 
   //! Gets the first child of this node in the scene hierarchy.
   OXGN_SCN_NDAPI auto GetFirstChild() const noexcept
-    -> std::optional<SceneNode>;
+      -> std::optional<SceneNode>;
   OXGN_SCN_NDAPI auto GetNextSibling() const noexcept
-    -> std::optional<SceneNode>;
+      -> std::optional<SceneNode>;
   OXGN_SCN_NDAPI auto GetPrevSibling() const noexcept
-    -> std::optional<SceneNode>;
+      -> std::optional<SceneNode>;
   OXGN_SCN_NDAPI auto HasParent() const noexcept -> bool;
   OXGN_SCN_NDAPI auto HasChildren() const noexcept -> bool;
   OXGN_SCN_NDAPI auto IsRoot() const noexcept -> bool;
@@ -145,14 +145,14 @@ private:
   // Logging for SafeCall errors using DLOG_F
   void LogSafeCallError(const char* reason) const noexcept;
 
-  std::weak_ptr<Scene> scene_weak_ {};
+  std::weak_ptr<const Scene> scene_weak_ {};
 
   //=== Validation Helpers ===------------------------------------------------//
 
   // SafeCallState struct to hold validated pointers and eliminate redundant
   // lookups
   struct SafeCallState {
-    Scene* scene { nullptr };
+    const Scene* scene { nullptr };
     SceneNode* node = nullptr;
     SceneNodeImpl* node_impl = nullptr;
   };
@@ -162,12 +162,12 @@ private:
   {
     SafeCallState state;
     auto result = oxygen::SafeCall(
-      *self,
-      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
-        return validator(state);
-      },
-      [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { return func(state); });
+        *self,
+        [&](auto&& /*self_ref*/) -> std::optional<std::string> {
+          return validator(state);
+        },
+        [func = std::forward<Func>(func), &state](
+            auto&& /*self_ref*/) mutable noexcept { return func(state); });
 
     // Extract the actual value from the oxygen::SafeCall result. This would
     // work with operations that return std::options<T> or bool or a default
@@ -182,14 +182,14 @@ private:
   auto SafeCall(Validator&& validator, Func&& func) const noexcept
   {
     return SafeCall(
-      this, std::forward<Validator>(validator), std::forward<Func>(func));
+        this, std::forward<Validator>(validator), std::forward<Func>(func));
   }
 
   template <typename Validator, typename Func>
   auto SafeCall(Validator&& validator, Func&& func) noexcept
   {
     return SafeCall(
-      this, std::forward<Validator>(validator), std::forward<Func>(func));
+        this, std::forward<Validator>(validator), std::forward<Func>(func));
   }
 
   // Validators for SafeCall operations
@@ -200,7 +200,7 @@ private:
 
   [[nodiscard]] auto NodeIsValid() const -> NodeIsValidValidator;
   [[nodiscard]] auto NodeIsValidAndInScene() const
-    -> NodeIsValidAndInSceneValidator;
+      -> NodeIsValidAndInSceneValidator;
 };
 
 auto OXGN_SCN_API to_string(const SceneNode& node) noexcept -> std::string;
@@ -284,7 +284,7 @@ public:
 
   //! Sets all local transformation components atomically.
   OXGN_SCN_API auto SetLocalTransform(const Vec3& position,
-    const Quat& rotation, const Vec3& scale) noexcept -> bool;
+      const Quat& rotation, const Vec3& scale) noexcept -> bool;
 
   //! Sets the local position (translation component).
   OXGN_SCN_API auto SetLocalPosition(const Vec3& position) noexcept -> bool;
@@ -310,11 +310,11 @@ public:
 
   //! Applies a translation (movement) to the current position.
   OXGN_SCN_API auto Translate(const Vec3& offset, bool local = true) noexcept
-    -> bool;
+      -> bool;
 
   //! Applies a rotation to the current orientation.
   OXGN_SCN_API auto Rotate(const Quat& rotation, bool local = true) noexcept
-    -> bool;
+      -> bool;
 
   //! Applies a scaling factor to the current scale.
   OXGN_SCN_API auto Scale(const Vec3& scale_factor) noexcept -> bool;
@@ -340,7 +340,7 @@ public:
 
   //! Orients the node to look at a target position.
   OXGN_SCN_API auto LookAt(const Vec3& target_position,
-    const Vec3& up_direction = Vec3(0, 1, 0)) noexcept -> bool;
+      const Vec3& up_direction = Vec3(0, 1, 0)) noexcept -> bool;
 
 private:
   //! Pointer to the SceneNode this Transform operates on.
@@ -373,12 +373,12 @@ private:
   {
     SafeCallState state;
     auto result = oxygen::SafeCall(
-      *(self->node_),
-      [&](auto&& /*self_ref*/) -> std::optional<std::string> {
-        return validator(state);
-      },
-      [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { return func(state); });
+        *(self->node_),
+        [&](auto&& /*self_ref*/) -> std::optional<std::string> {
+          return validator(state);
+        },
+        [func = std::forward<Func>(func), &state](
+            auto&& /*self_ref*/) mutable noexcept { return func(state); });
 
     // Extract the actual value from the oxygen::SafeCall result. This would
     // work with operations that return std::options<T> or bool or a default
