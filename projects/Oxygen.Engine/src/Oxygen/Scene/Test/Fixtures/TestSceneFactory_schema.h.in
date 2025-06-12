@@ -1,0 +1,19 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <string>
+
+namespace oxygen::scene::testing {
+
+//! Complete JSON Schema for TestSceneFactory (Draft-7 compatible)
+//! The schema is included directly from the .json file at compile time
+constexpr const char* kTestSceneFactorySchema = R"schema(
+@SCHEMA_CONTENT@
+)schema";
+
+} // namespace oxygen::scene::testing
