@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 // #include <Oxygen/Scene/Scene.h>
-#include "SceneQuery.h"
 #include <Oxygen/Scene/SceneQuery.h>
 
 using oxygen::scene::SceneQuery;
