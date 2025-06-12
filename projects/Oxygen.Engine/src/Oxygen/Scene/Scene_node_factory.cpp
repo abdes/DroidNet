@@ -236,9 +236,8 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
       // Mark parent transform dirty if node has a parent (since parent is
       // losing a child)
       if (node.HasParent()) {
-        auto parent_opt = node.GetParent();
-        if (parent_opt.has_value()) {
-          auto parent_impl_opt = GetNodeImpl(*parent_opt);
+        if (const auto parent_opt = node.GetParent(); parent_opt.has_value()) {
+          const auto parent_impl_opt = GetNodeImpl(*parent_opt);
           if (parent_impl_opt.has_value()) {
             parent_impl_opt->get().MarkTransformDirty();
           }
@@ -301,7 +300,7 @@ auto Scene::DestroyNodes(std::span<SceneNode> nodes) noexcept
 
   for (SceneNode& node : nodes) {
     const auto result = DestroyNode(node);
-    results.push_back(result);
+    results.push_back(result); // NOLINT(*-implicit-bool-conversion)
   }
 
   const auto destroyed_count = std::ranges::count(results, 1);
@@ -361,9 +360,9 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
       } else {
         // This node has a parent - unlink it from its parent
         // Mark parent transform dirty since it's losing a child hierarchy
-        auto parent_opt = starting_node.GetParent();
+        const auto parent_opt = starting_node.GetParent();
         if (parent_opt.has_value()) {
-          auto parent_impl_opt = GetNodeImpl(*parent_opt);
+          const auto parent_impl_opt = GetNodeImpl(*parent_opt);
           if (parent_impl_opt.has_value()) {
             parent_impl_opt->get().MarkTransformDirty();
           }
@@ -388,7 +387,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
           } // Real visit: destroy the node after its children have been
             // destroyed
           // Capture node name before destruction for logging
-          std::string node_name = std::string(node.node_impl->GetName());
+          const std::string node_name = std::string(node.node_impl->GetName());
 
           const auto removed = nodes_->Erase(node.handle);
           if (removed > 0) {
@@ -461,7 +460,7 @@ auto Scene::DestroyNodeHierarchies(
 
   for (SceneNode& hierarchy_root : hierarchy_roots) {
     const auto result = DestroyNodeHierarchy(hierarchy_root);
-    results.push_back(result);
+    results.push_back(result); // NOLINT(*-implicit-bool-conversion)
   }
 
   const auto destroyed_count = std::ranges::count(results, 1);
@@ -709,14 +708,15 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
         "CloneHierarchy uses kPreOrder and should never receive dry_run=true");
 
       auto orig_parent_handle = node.node_impl->AsGraphNode().GetParent();
-      std::string name = std::string(node.node_impl->GetName());
+      const std::string name = std::string(node.node_impl->GetName());
 
       try {
         // Clone the node directly from impl
-        auto cloned_impl = node.node_impl->Clone();
+        const auto cloned_impl = node.node_impl->Clone();
         cloned_impl->SetName(name);
-        NodeHandle cloned_handle { nodes_->Insert(std::move(*cloned_impl)),
-          GetId() };
+        const NodeHandle cloned_handle {
+          nodes_->Insert(std::move(*cloned_impl)), GetId()
+        };
         DCHECK_F(
           cloned_handle.IsValid(), "expecting a valid handle for cloned node");
 
@@ -730,7 +730,7 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
           // Do NOT add to root nodes - create as orphan hierarchy
         } else {
           // Link to already-cloned parent
-          auto it = handle_map.find(orig_parent_handle);
+          const auto it = handle_map.find(orig_parent_handle);
           if (it == handle_map.end()) {
             // This should never happen with depth-first traversal and a valid
             // hierarchy If it does, it indicates corruption in the source
@@ -741,7 +741,7 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
               nostd::to_string(orig_parent_handle), name);
             return VisitResult::kStop;
           }
-          NodeHandle cloned_parent_handle = it->second;
+          const NodeHandle cloned_parent_handle = it->second;
           SceneNodeImpl* cloned_parent_impl
             = &GetNodeImplRefUnsafe(cloned_parent_handle);
           LinkChild(cloned_parent_handle, cloned_parent_impl, cloned_handle,
