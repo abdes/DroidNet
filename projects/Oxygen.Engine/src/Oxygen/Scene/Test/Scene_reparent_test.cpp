@@ -404,6 +404,54 @@ NOLINT_TEST_F(SceneReparentTest,
     ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale));
 }
 
+NOLINT_TEST_F(SceneReparentTest, MakeNodesRoot_ValidNodes_AllSucceed)
+{
+  // Arrange: Create multiple parent-child hierarchies
+  const auto hierarchy1 = CreateSimpleParentChild();
+  const auto hierarchy2 = CreateParentWithTwoChildren();
+
+  // Create a standalone root that's already root
+  auto standalone_root = CreateNode("StandaloneRoot");
+
+  // Collect nodes to make root
+  std::vector<SceneNode> nodes_to_root = {
+    hierarchy1.child, // child node
+    hierarchy2.child1, // another child node
+    hierarchy2.child2, // yet another child node
+    standalone_root // already root node
+  };
+
+  // Verify initial state
+  EXPECT_FALSE(hierarchy1.child.IsRoot());
+  EXPECT_FALSE(hierarchy2.child1.IsRoot());
+  EXPECT_FALSE(hierarchy2.child2.IsRoot());
+  EXPECT_TRUE(standalone_root.IsRoot());
+
+  const auto initial_root_count = scene_->GetRootNodes().size();
+
+  // Act: Make all nodes root
+  const auto results = scene_->MakeNodesRoot(nodes_to_root, false);
+
+  // Assert: All operations should succeed
+  ASSERT_EQ(results.size(), nodes_to_root.size());
+  for (size_t i = 0; i < results.size(); ++i) {
+    EXPECT_EQ(results[i], 1) << "Operation " << i << " should succeed";
+  }
+
+  // Assert: All nodes should now be root
+  EXPECT_TRUE(hierarchy1.child.IsRoot());
+  EXPECT_TRUE(hierarchy2.child1.IsRoot());
+  EXPECT_TRUE(hierarchy2.child2.IsRoot());
+  EXPECT_TRUE(standalone_root.IsRoot());
+
+  // Assert: Root count should increase by 3 (standalone_root was already root)
+  EXPECT_EQ(scene_->GetRootNodes().size(), initial_root_count + 3);
+
+  // Assert: Original parents should lose their children
+  EXPECT_FALSE(hierarchy1.parent.HasChildren());
+  EXPECT_FALSE(hierarchy2.parent.HasChildren());
+}
+
 // -----------------------------------------------------------------------------
 // Scene State Consistency Tests
 // -----------------------------------------------------------------------------
@@ -485,6 +533,19 @@ NOLINT_TEST_F(
   EXPECT_FALSE(node.IsValid());
 }
 
+NOLINT_TEST_F(
+  SceneReparentErrorTest, MakeNodesRoot_EmptySpan_ReturnsEmptyVector)
+{
+  // Arrange: Empty span of nodes
+  std::vector<SceneNode> empty_nodes;
+
+  // Act: Try to make empty span root
+  const auto results = scene_->MakeNodesRoot(empty_nodes, false);
+
+  // Assert: Should return empty vector
+  EXPECT_TRUE(results.empty());
+}
+
 // -----------------------------------------------------------------------------
 // Death Tests
 // -----------------------------------------------------------------------------
@@ -501,6 +562,45 @@ NOLINT_TEST_F(SceneReparentDeathTest, MakeNodeRoot_NodeFromDifferentScene_Dies)
   // Act & Assert: Should terminate program
   EXPECT_DEATH(
     { [[maybe_unused]] auto _ = scene_->MakeNodeRoot(foreign_node, false); },
+    ".*"); // Death message will contain scene ownership check failure
+}
+
+NOLINT_TEST_F(SceneReparentDeathTest, ReparentNode_NodeFromDifferentScene_Dies)
+{
+  // Arrange: Create node from different scene
+  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
+  auto foreign_node = other_scene->CreateNode("ForeignNode");
+  auto local_parent = CreateNode("LocalParent");
+
+  EXPECT_TRUE(foreign_node.IsValid());
+  EXPECT_TRUE(local_parent.IsValid());
+
+  // Act & Assert: Should terminate program
+  EXPECT_DEATH(
+    {
+      [[maybe_unused]] auto _
+        = scene_->ReparentNode(foreign_node, local_parent, false);
+    },
+    ".*"); // Death message will contain scene ownership check failure
+}
+
+NOLINT_TEST_F(
+  SceneReparentDeathTest, ReparentNode_ParentFromDifferentScene_Dies)
+{
+  // Arrange: Create parent from different scene
+  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
+  auto foreign_parent = other_scene->CreateNode("ForeignParent");
+  auto local_node = CreateNode("LocalNode");
+
+  EXPECT_TRUE(foreign_parent.IsValid());
+  EXPECT_TRUE(local_node.IsValid());
+
+  // Act & Assert: Should terminate program
+  EXPECT_DEATH(
+    {
+      [[maybe_unused]] auto _
+        = scene_->ReparentNode(local_node, foreign_parent, false);
+    },
     ".*"); // Death message will contain scene ownership check failure
 }
 
@@ -900,47 +1000,43 @@ NOLINT_TEST_F(
   EXPECT_FALSE(node.IsValid());
 }
 
-// -----------------------------------------------------------------------------
-// ReparentNode Cross-Scene Death Tests
-// -----------------------------------------------------------------------------
-
-NOLINT_TEST_F(SceneReparentDeathTest, ReparentNode_NodeFromDifferentScene_Dies)
-{
-  // Arrange: Create node from different scene
-  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
-  auto foreign_node = other_scene->CreateNode("ForeignNode");
-  auto local_parent = CreateNode("LocalParent");
-
-  EXPECT_TRUE(foreign_node.IsValid());
-  EXPECT_TRUE(local_parent.IsValid());
-
-  // Act & Assert: Should terminate program
-  EXPECT_DEATH(
-    {
-      [[maybe_unused]] auto _
-        = scene_->ReparentNode(foreign_node, local_parent, false);
-    },
-    ".*"); // Death message will contain scene ownership check failure
-}
-
 NOLINT_TEST_F(
-  SceneReparentDeathTest, ReparentNode_ParentFromDifferentScene_Dies)
+  SceneReparentErrorTest, MakeNodesRoot_MixedValidInvalid_ReportsPartialFailure)
 {
-  // Arrange: Create parent from different scene
-  auto other_scene = std::make_shared<Scene>("OtherScene", 64);
-  auto foreign_parent = other_scene->CreateNode("ForeignParent");
-  auto local_node = CreateNode("LocalNode");
+  // Arrange: Create mix of valid and invalid nodes
+  const auto hierarchy = CreateSimpleParentChild();
+  auto invalid_node = CreateNodeWithInvalidHandle();
+  auto lazy_invalid_node = CreateLazyInvalidationNode("LazyInvalid");
 
-  EXPECT_TRUE(foreign_parent.IsValid());
-  EXPECT_TRUE(local_node.IsValid());
+  std::vector<SceneNode> mixed_nodes = {
+    hierarchy.child, // valid child node
+    invalid_node, // invalid node handle
+    hierarchy.parent, // valid root node (already root)
+    lazy_invalid_node // lazily invalidated node
+  };
 
-  // Act & Assert: Should terminate program
-  EXPECT_DEATH(
-    {
-      [[maybe_unused]] auto _
-        = scene_->ReparentNode(local_node, foreign_parent, false);
-    },
-    ".*"); // Death message will contain scene ownership check failure
+  // Verify initial state
+  EXPECT_TRUE(hierarchy.child.IsValid());
+  EXPECT_FALSE(invalid_node.IsValid());
+  EXPECT_TRUE(hierarchy.parent.IsValid());
+  EXPECT_TRUE(
+    lazy_invalid_node.IsValid()); // Still appears valid until accessed
+
+  // Act: Try to make mixed nodes root
+  const auto results = scene_->MakeNodesRoot(mixed_nodes, false);
+
+  // Assert: Results vector should match input size
+  ASSERT_EQ(results.size(), mixed_nodes.size());
+
+  // Assert: Expected success/failure pattern
+  EXPECT_EQ(results[0], 1) << "Valid child should succeed";
+  EXPECT_EQ(results[1], 0) << "Invalid node should fail";
+  EXPECT_EQ(results[2], 1) << "Valid root should succeed";
+  EXPECT_EQ(results[3], 0) << "Lazily invalid node should fail";
+
+  // Assert: Only valid operations should have taken effect
+  EXPECT_TRUE(hierarchy.child.IsRoot()) << "Valid child should now be root";
+  EXPECT_TRUE(hierarchy.parent.IsRoot()) << "Parent should remain root";
 }
 
 } // namespace
