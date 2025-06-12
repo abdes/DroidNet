@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Scene.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
@@ -392,4 +393,50 @@ auto Scene::ReparentNode(const SceneNode& node, const SceneNode& new_parent,
           return true;
         });
     });
+}
+
+/*!
+ Batch operation that reparents multiple nodes to a new parent by calling
+ `ReparentNode` for each one. Each node's entire subtree is moved as a unit
+ under the new parent.
+
+ Individual operations may fail based on `ReparentNode` criteria (invalid nodes,
+ cycle detection, etc.). If any operations fail, a warning will be logged
+ indicating partial success.
+
+ @note **Atomicity:** Each `ReparentNode` call is atomic, but the batch
+ processes sequentially. Partial failures result in partial scene updates.
+
+ @param nodes Span of nodes to reparent (each must be valid and belong to this
+ scene)
+ @param new_parent The new parent node (must be valid and belong to this scene)
+ @param preserve_world_transform If true, maintains world transform; if false,
+ marks transforms dirty for recalculation
+ @return Vector where each element corresponds to a node: `1` for success, `0`
+ for failure
+
+ @see ReparentNode() for detailed single-node behavior
+*/
+auto Scene::ReparentNodes(std::span<const SceneNode> nodes,
+  const SceneNode& new_parent, bool preserve_world_transform) noexcept
+  -> std::vector<uint8_t>
+{
+  DLOG_SCOPE_F(3, "Reparent Nodes");
+
+  // Bailout early if no nodes to destroy
+  if (nodes.empty()) {
+    return {};
+  }
+
+  std::vector<uint8_t> results;
+  results.reserve(nodes.size());
+  for (const auto& node : nodes) {
+    const auto result
+      = ReparentNode(node, new_parent, preserve_world_transform);
+    results.push_back(result); // NOLINT(*-implicit-bool-conversion)
+  }
+
+  LogPartialFailure(results, "ReparentNodes");
+
+  return results;
 }

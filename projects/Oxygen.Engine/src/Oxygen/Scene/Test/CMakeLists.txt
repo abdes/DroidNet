@@ -9,6 +9,10 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED)
+find_package(nlohmann_json_schema_validator REQUIRED)
+
+add_subdirectory("Fixtures")
 
 # ==============================================================================
 # Build instructions
@@ -52,9 +56,39 @@ m_gtest_program(
     "SceneNode_test.cpp"
     "SceneNode_Transform_test.cpp"
 )
+# m_gtest_program(
+#   SceneFixturesExample
+#   SOURCES
+#     "Fixtures/Exampleusage_test.cpp"
+# )
+m_gtest_program(
+  TestSceneFactoryExample
+  SOURCES
+    "Fixtures/TestSceneFactory.h"
+    "Fixtures/TestSceneFactory.cpp"
+    "Fixtures/TestSceneFactory_example.cpp"
+)
+add_dependencies(
+  "${META_MODULE_NAME}.TestSceneFactoryExample.Tests"
+  "${META_MODULE_NAME}.TestSceneFactorySchema"
+)
+target_link_libraries(
+  "${META_MODULE_NAME}.TestSceneFactoryExample.Tests"
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
 m_gtest_program(
   Scene
   SOURCES
+    "Fixtures/SceneTest.h"
+    "Fixtures/SceneTestFixtures.h"
+    "Fixtures/SceneCloningTest.h"
+    "Fixtures/SceneReparentTest.h"
+    "Fixtures/SceneFlagsTest.h"
+    "Fixtures/SceneTraversalTest.h"
+    "Fixtures/TestSceneFactory.h"
+    "Fixtures/TestSceneFactory.cpp"
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
     "Scene_graph_test.cpp"
@@ -65,6 +99,16 @@ m_gtest_program(
     "Scene_traversal_test.cpp"
     "Scene_traversal_test.h"
     "Scene_traversal_visitor_test.cpp"
+)
+add_dependencies(
+  "${META_MODULE_NAME}.Scene.Tests"
+  "${META_MODULE_NAME}.TestSceneFactorySchema"
+)
+target_link_libraries(
+  "${META_MODULE_NAME}.Scene.Tests"
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
 )
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 
