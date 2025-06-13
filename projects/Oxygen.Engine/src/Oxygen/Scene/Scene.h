@@ -25,7 +25,7 @@ template <typename T> class ResourceTable;
 namespace oxygen::scene {
 
 // Forward declaration of SceneTraversal.
-class SceneTraversal;
+template <typename SceneT> class SceneTraversal;
 
 //! Root of the Oxygen scene graph.
 /*!
@@ -80,15 +80,18 @@ public:
   using SceneId = NodeHandle::SceneId;
 
   using OptionalRefToImpl
-      = std::optional<std::reference_wrapper<SceneNodeImpl>>;
+    = std::optional<std::reference_wrapper<SceneNodeImpl>>;
   using OptionalConstRefToImpl
-      = std::optional<std::reference_wrapper<const SceneNodeImpl>>;
+    = std::optional<std::reference_wrapper<const SceneNodeImpl>>;
+
+  using NonMutatingTraversal = SceneTraversal<const Scene>;
+  using MutatingTraversal = SceneTraversal<Scene>;
 
   //=== Basic API ===---------------------------------------------------------//
 
   //! Constructs a Scene with the given name and initial capacity hint.
   OXGN_SCN_API explicit Scene(
-      const std::string& name, size_t initial_capacity = kInitialCapacity);
+    const std::string& name, size_t initial_capacity = kInitialCapacity);
 
   OXGN_SCN_API ~Scene() override;
 
@@ -108,39 +111,39 @@ public:
 
   //! Creates a new root node with the given \p name and \p flags.
   OXGN_SCN_NDAPI auto CreateNode(
-      const std::string& name, SceneNode::Flags flags) -> SceneNode;
+    const std::string& name, SceneNode::Flags flags) -> SceneNode;
 
   //! Creates a new child node with the given \p name and default flags, under
   //! the given \p parent.
-  OXGN_SCN_NDAPI auto CreateChildNode(const SceneNode& parent,
-      const std::string& name) noexcept -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto CreateChildNode(SceneNode& parent,
+    const std::string& name) noexcept -> std::optional<SceneNode>;
 
   //! Creates a new child node with the given \p name and \p flags, under the
   //! given \p parent.
-  OXGN_SCN_NDAPI auto CreateChildNode(const SceneNode& parent,
-      const std::string& name, SceneNode::Flags flags) noexcept
-      -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto CreateChildNode(
+    SceneNode& parent, const std::string& name, SceneNode::Flags flags) noexcept
+    -> std::optional<SceneNode>;
 
   //! Creates a new root node by cloning the given \p original node.
-  OXGN_SCN_NDAPI auto CreateNodeFrom(const SceneNode& original,
-      const std::string& new_name) -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto CreateNodeFrom(SceneNode& original,
+    const std::string& new_name) -> std::optional<SceneNode>;
 
   //! Creates a new child node by cloning the given original node under
   //! the specified parent.
-  OXGN_SCN_NDAPI auto CreateChildNodeFrom(const SceneNode& parent,
-      const SceneNode& original, const std::string& new_name)
-      -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto CreateChildNodeFrom(
+    SceneNode& parent, SceneNode& original, const std::string& new_name)
+    -> std::optional<SceneNode>;
 
   //! Creates a new root node by cloning an entire node hierarchy from the
   //! given root.
   OXGN_SCN_NDAPI auto CreateHierarchyFrom(const SceneNode& original_root,
-      const std::string& new_root_name) -> SceneNode;
+    const std::string& new_root_name) -> SceneNode;
 
   //! Creates a new child hierarchy by cloning an entire node hierarchy
   //! under the given parent.
-  OXGN_SCN_NDAPI auto CreateChildHierarchyFrom(const SceneNode& parent,
-      const SceneNode& original_root, const std::string& new_root_name)
-      -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto CreateChildHierarchyFrom(SceneNode& parent,
+    const SceneNode& original_root, const std::string& new_root_name)
+    -> std::optional<SceneNode>;
 
   //=== Node Factories - Destruction ===--------------------------------------//
 
@@ -150,7 +153,7 @@ public:
   //! Destroys multiple leaf nodes in a batch operation. Failure of on node does
   //! not affect others.
   OXGN_SCN_API auto DestroyNodes(std::span<SceneNode> nodes) noexcept
-      -> std::vector<uint8_t>;
+    -> std::vector<uint8_t>;
 
   //! Destroys the given node and all its descendants.
   OXGN_SCN_API auto DestroyNodeHierarchy(SceneNode& root) noexcept -> bool;
@@ -168,7 +171,7 @@ public:
          other hierarchies.
   */
   OXGN_SCN_API auto DestroyNodeHierarchies(
-      std::span<SceneNode> hierarchy_roots) noexcept -> std::vector<uint8_t>;
+    std::span<SceneNode> hierarchy_roots) noexcept -> std::vector<uint8_t>;
 
   //=== Graph Queries ===-----------------------------------------------------//
 
@@ -191,67 +194,67 @@ public:
 
   // Hierarchy management
 
-  OXGN_SCN_NDAPI auto GetParent(const SceneNode& node) const noexcept
-      -> std::optional<SceneNode>;
-  OXGN_SCN_NDAPI auto GetParentUnsafe(const SceneNode& node,
-      const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
-  OXGN_SCN_NDAPI auto HasParent(const SceneNode& node) const noexcept -> bool;
+  OXGN_SCN_NDAPI auto GetParent(SceneNode& node) const noexcept
+    -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto HasParent(SceneNode& node) const noexcept -> bool;
+  OXGN_SCN_NDAPI auto HasChildren(SceneNode& node) const noexcept -> bool;
+  OXGN_SCN_NDAPI auto GetFirstChild(SceneNode& node) const noexcept
+    -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto GetNextSibling(SceneNode& node) const noexcept
+    -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto GetPrevSibling(SceneNode& node) const noexcept
+    -> std::optional<SceneNode>;
+
+  OXGN_SCN_NDAPI auto GetParentUnsafe(SceneNode& node,
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
   OXGN_SCN_NDAPI auto HasParentUnsafe(
-      const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool;
-  OXGN_SCN_NDAPI auto HasChildren(const SceneNode& node) const noexcept -> bool;
+    SceneNode& node, const SceneNodeImpl* node_impl) const -> bool;
   OXGN_SCN_NDAPI auto HasChildrenUnsafe(
-      const SceneNode& node, const SceneNodeImpl* node_impl) const -> bool;
-  OXGN_SCN_NDAPI auto GetFirstChild(const SceneNode& node) const noexcept
-      -> std::optional<SceneNode>;
-  auto GetFirstChildUnsafe(const SceneNode& node,
-      const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
-  OXGN_SCN_NDAPI auto GetNextSibling(const SceneNode& node) const noexcept
-      -> std::optional<SceneNode>;
-  auto GetNextSiblingUnsafe(const SceneNode& node,
-      const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
-  OXGN_SCN_NDAPI auto GetPrevSibling(const SceneNode& node) const noexcept
-      -> std::optional<SceneNode>;
-  auto GetPrevSiblingUnsafe(const SceneNode& node,
-      const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
+    SceneNode& node, const SceneNodeImpl* node_impl) const -> bool;
+  OXGN_SCN_NDAPI auto GetFirstChildUnsafe(SceneNode& node,
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto GetNextSiblingUnsafe(SceneNode& node,
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto GetPrevSiblingUnsafe(SceneNode& node,
+    const SceneNodeImpl* node_impl) const -> std::optional<SceneNode>;
 
   OXGN_SCN_NDAPI auto GetRootNodes() const -> std::vector<SceneNode>;
   OXGN_SCN_NDAPI auto GetRootHandles() const -> std::span<const NodeHandle>;
 
   OXGN_SCN_NDAPI auto GetChildrenCount(const SceneNode& parent) const noexcept
-      -> size_t;
+    -> size_t;
   OXGN_SCN_NDAPI auto GetChildren(const SceneNode& parent) const
-      -> std::vector<NodeHandle>;
+    -> std::vector<NodeHandle>;
 
   // Node search and query
   OXGN_SCN_NDAPI auto FindNodeByName(std::string_view name) const
-      -> std::optional<SceneNode>;
+    -> std::optional<SceneNode>;
 
   OXGN_SCN_NDAPI auto FindNodesByName(std::string_view name) const
-      -> std::vector<SceneNode>;
+    -> std::vector<SceneNode>;
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
   //! Re-parents a node hierarchy to a new parent within this scene, preserving
   //! all internal relationships within the moved hierarchy.
-  OXGN_SCN_NDAPI auto ReparentNode(const SceneNode& node,
-      const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ReparentNode(SceneNode& node, SceneNode& new_parent,
+    bool preserve_world_transform = true) noexcept -> bool;
 
   //! Re-parent multiple node hierarchies to the same new parent within this
   //! scene.
-  OXGN_SCN_NDAPI auto ReparentNodes(std::span<const SceneNode> nodes,
-      const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+  OXGN_SCN_NDAPI auto ReparentNodes(std::span<SceneNode> nodes,
+    SceneNode& new_parent, bool preserve_world_transform = true) noexcept
+    -> std::vector<uint8_t>;
 
   //! Makes a node a root node within this scene, moving the entire hierarchy
   //! rooted at that node to become a top-level hierarchy.
-  OXGN_SCN_NDAPI auto MakeNodeRoot(const SceneNode& node,
-      bool preserve_world_transform = true) noexcept -> bool;
+  OXGN_SCN_NDAPI auto MakeNodeRoot(
+    SceneNode& node, bool preserve_world_transform = true) noexcept -> bool;
 
   //! Make multiple nodes root nodes within this scene, moving their entire
   //! hierarchies to become top-level hierarchies.
-  OXGN_SCN_NDAPI auto MakeNodesRoot(std::span<const SceneNode> nodes,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+  OXGN_SCN_NDAPI auto MakeNodesRoot(std::span<SceneNode> nodes,
+    bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
   //=== Node Adoption API (Cross-Scene Operations) ===------------------------//
 
@@ -276,7 +279,7 @@ public:
          cleanup.
   */
   OXGN_SCN_NDAPI auto AdoptNode(SceneNode& node, const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> bool;
+    bool preserve_world_transform = true) noexcept -> bool;
 
   //! Adopt a node from any scene and make it a root node in this scene
   /*!
@@ -296,7 +299,7 @@ public:
          cleanup.
   */
   OXGN_SCN_NDAPI auto AdoptNodeAsRoot(
-      SceneNode& node, bool preserve_world_transform = true) noexcept -> bool;
+    SceneNode& node, bool preserve_world_transform = true) noexcept -> bool;
 
   //! Adopt multiple nodes from any scenes and re-parent them to a new
   //! parent in this scene
@@ -317,8 +320,8 @@ public:
    may fail.
   */
   OXGN_SCN_NDAPI auto AdoptNodes(std::span<SceneNode> nodes,
-      const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+    const SceneNode& new_parent, bool preserve_world_transform = true) noexcept
+    -> std::vector<uint8_t>;
 
   //! Adopt multiple nodes from any scenes and make them root nodes in
   //! this scene
@@ -337,7 +340,7 @@ public:
          fail.
   */
   OXGN_SCN_NDAPI auto AdoptNodesAsRoot(std::span<SceneNode> nodes,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+    bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
   //=== Hierarchy Adoption API (Cross-Scene Operations) ===------====-------//
 
@@ -365,8 +368,8 @@ public:
          hierarchy, then source cleanup.
   */
   OXGN_SCN_NDAPI auto AdoptHierarchy(SceneNode& hierarchy_root,
-      const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> bool;
+    const SceneNode& new_parent, bool preserve_world_transform = true) noexcept
+    -> bool;
 
   //! Adopt an entire node hierarchy from any scene as a new root
   //! hierarchy in this scene
@@ -389,7 +392,7 @@ public:
          hierarchy, then source cleanup.
   */
   OXGN_SCN_NDAPI auto AdoptHierarchyAsRoot(SceneNode& hierarchy_root,
-      bool preserve_world_transform = true) noexcept -> bool;
+    bool preserve_world_transform = true) noexcept -> bool;
 
   //! Adopt multiple complete hierarchies from any scenes and re-parent
   //! them in this scene
@@ -411,8 +414,8 @@ public:
          atomic, but some may fail.
   */
   OXGN_SCN_NDAPI auto AdoptHierarchies(std::span<SceneNode> hierarchy_roots,
-      const SceneNode& new_parent,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+    const SceneNode& new_parent, bool preserve_world_transform = true) noexcept
+    -> std::vector<uint8_t>;
 
   //! Adopt multiple complete hierarchies from any scenes as new root
   //! hierarchies in this scene
@@ -432,8 +435,8 @@ public:
          atomic, but some may fail.
   */
   OXGN_SCN_NDAPI auto AdoptHierarchiesAsRoot(
-      std::span<SceneNode> hierarchy_roots,
-      bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
+    std::span<SceneNode> hierarchy_roots,
+    bool preserve_world_transform = true) noexcept -> std::vector<uint8_t>;
 
   // Logging for SafeCall errors using DLOG_F (debug builds only).
   OXGN_SCN_API static void LogSafeCallError(const char* reason) noexcept;
@@ -441,7 +444,10 @@ public:
   //=== Traversal ===---------------------------------------------------------//
 
   // High-performance traversal access.
-  OXGN_SCN_NDAPI auto Traverse() const -> SceneTraversal;
+  OXGN_SCN_NDAPI auto Traverse() const -> NonMutatingTraversal;
+
+  // High-performance traversal access.
+  OXGN_SCN_NDAPI auto Traverse() -> MutatingTraversal;
 
   // TODO: Implement a proper update system for the scene graph.
   OXGN_SCN_API void Update(bool skip_dirty_flags = false) noexcept;
@@ -457,9 +463,9 @@ public:
    Expects the node to be valid, or it will terminate the program.
   */
   OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) noexcept
-      -> OptionalRefToImpl;
+    -> OptionalRefToImpl;
   OXGN_SCN_NDAPI auto GetNodeImpl(const SceneNode& node) const noexcept
-      -> OptionalConstRefToImpl;
+    -> OptionalConstRefToImpl;
   //! @}
 
   //! @{
@@ -469,21 +475,25 @@ public:
    terminate the program.
   */
   OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) const noexcept
-      -> SceneNodeImpl&;
+    -> const SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto GetNodeImplRef(const NodeHandle& handle) noexcept
+    -> SceneNodeImpl&;
 
   OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle) const
-      -> SceneNodeImpl&;
+    -> const SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const NodeHandle& handle)
+    -> SceneNodeImpl&;
   //! @}
 
   //! Provides a SceneNode for a NodeHandle, or std::nullopt if the \p
   //! handle does not correspond to an existing node.
   OXGN_SCN_NDAPI auto GetNode(const NodeHandle& handle) const noexcept
-      -> std::optional<SceneNode>;
+    -> std::optional<SceneNode>;
 
 private:
   //! Check result for partial failure of a batch operation.
   void LogPartialFailure(const std::vector<uint8_t>& results,
-      const std::string& operation_name) const;
+    const std::string& operation_name) const;
 
   //! Creates a new node implementation with the given name and (optional)
   //! flags.
@@ -493,52 +503,56 @@ private:
   //! Creates a new node implementation with the given name and (optional)
   //! flags, then links it to the given parent node as a child.
   template <typename... Args>
-  auto CreateChildNodeImpl(const SceneNode& parent, Args&&... args) noexcept
-      -> std::optional<SceneNode>;
+  auto CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
+    -> std::optional<SceneNode>;
 
   //! Clones the given original node to create an orphaned node, for later being
   //! linked to a parent node or added to the roots collection.
-  auto CloneNode(const SceneNode& original, const std::string& new_name)
-      -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
+  auto CloneNode(SceneNode& original, const std::string& new_name)
+    -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
   //! Clones an entire hierarchy starting from the given original node to create
   //! an orphaned sub-tree, for later being attached to a target scene as a root
   //! or a child of an existing node.
-  auto CloneHierarchy(const SceneNode& original_node)
-      -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
+  auto CloneHierarchy(const SceneNode& starting_node)
+    -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>;
 
   //! Links a child node to a parent node in the hierarchy. Both of them must be
   //! valid and belong to this scene. The child node must be an orphan, newly
   //! created or resulting from a prior call to UnlinkNode().
   void LinkChild(const NodeHandle& parent_handle, SceneNodeImpl* parent_impl,
-      const NodeHandle& child_handle, SceneNodeImpl* child_impl) noexcept;
+    const NodeHandle& child_handle, SceneNodeImpl* child_impl) noexcept;
 
   //! Un-links a node_handle from its parent and siblings, making it an orphan.
   //! Follow-up action is required to destroy it, add it to the roots, or
   //! re-parent it.
   void UnlinkNode(
-      const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept;
+    const NodeHandle& node_handle, SceneNodeImpl* node_impl) noexcept;
 
   void AddRootNode(const NodeHandle& node);
   void RemoveRootNode(const NodeHandle& node);
   void EnsureRootNodesValid() const noexcept;
 
+  auto RelativeIsAlive(const NodeHandle& relative,
+    const SceneNode& target) const -> std::optional<SceneNode>;
+
+  auto RelativeIsAliveOrInvalidateTarget(const NodeHandle& relative,
+    SceneNode& target) const -> std::optional<SceneNode>;
+
   //! Check if re-parenting would create a cycle in the hierarchy
-  [[nodiscard]] auto WouldCreateCycle(const SceneNode& node,
-      const SceneNode& new_parent) const noexcept -> bool;
+  [[nodiscard]] auto WouldCreateCycle(
+    const SceneNode& node, const SceneNode& new_parent) const noexcept -> bool;
 
   //! Marks the transform as dirty for a node and all its descendants.
   void MarkSubtreeTransformDirty(const NodeHandle& root_handle) noexcept;
 
   //! Preserves the world transform of a node when re-parenting it.
-  void PreserveWorldTransform(const SceneNode& node, SceneNodeImpl* node_impl,
-      SceneNodeImpl* new_parent_impl = nullptr) noexcept;
+  static void PreserveWorldTransform(SceneNode& node, SceneNodeImpl* node_impl,
+    SceneNodeImpl* new_parent_impl = nullptr) noexcept;
 
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.
   std::vector<NodeHandle> root_nodes_;
-
-  SceneTraversal* traversal_;
 
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;
@@ -555,7 +569,7 @@ private:
   //! Specialization of SafeCall for the Scene class.
   template <typename Self, typename Validator, typename Func>
   auto SafeCallImpl(
-      Self* self, Validator validator, Func&& func) const noexcept;
+    Self* self, Validator validator, Func&& func) const noexcept;
 
   //! Non-mutable version of the SceneNode SafeCall.
   template <typename Validator, typename Func>
@@ -572,17 +586,17 @@ private:
   */
   [[nodiscard]] auto IsOwnerOf(const SceneNode& node) const -> bool;
 
-  class BaseNodeValidator;
-  class NodeIsValidValidator;
-  class NodeIsValidAndInSceneValidator;
-  class LeafNodeCanBeDestroyedValidator;
+  class BaseNodeValidator; // Mutating due to lazy invalidation
+  class NodeIsValidValidator; // Mutating due to lazy invalidation
+  class NodeIsValidAndInSceneValidator; // Mutating due to lazy invalidation
+  class LeafNodeCanBeDestroyedValidator; // Mutating due to lazy invalidation
 
-  OXGN_SCN_NDAPI auto NodeIsValidAndMine(const SceneNode& node) const
-      -> NodeIsValidAndInSceneValidator;
-  OXGN_SCN_NDAPI auto NodeIsValidAndInScene(const SceneNode& node) const
-      -> NodeIsValidAndInSceneValidator;
-  OXGN_SCN_NDAPI auto LeafNodeCanBeDestroyed(const SceneNode& node) const
-      -> LeafNodeCanBeDestroyedValidator;
+  OXGN_SCN_NDAPI auto NodeIsValidAndMine(SceneNode& node) const
+    -> NodeIsValidAndInSceneValidator;
+  OXGN_SCN_NDAPI auto NodeIsValidAndInScene(SceneNode& node) const
+    -> NodeIsValidAndInSceneValidator;
+  OXGN_SCN_NDAPI auto LeafNodeCanBeDestroyed(SceneNode& node) const
+    -> LeafNodeCanBeDestroyedValidator;
 };
 
 } // namespace oxygen::scene

@@ -99,10 +99,9 @@ auto Scene::WouldCreateCycle(
  scenarios).
 
  @note Skips preservation if relevant transforms are dirty (e.g., node's own
-       transform, or new parent's transform in reparenting case).
+       transform, or new parent's transform in re-parenting case).
 */
-void Scene::PreserveWorldTransform(const SceneNode& node,
-  SceneNodeImpl* node_impl,
+void Scene::PreserveWorldTransform(SceneNode& node, SceneNodeImpl* node_impl,
   SceneNodeImpl* new_parent_impl /* = nullptr */) noexcept
 {
   auto& transform_component = node_impl->GetComponent<TransformComponent>();
@@ -119,7 +118,7 @@ void Scene::PreserveWorldTransform(const SceneNode& node,
   const auto world_rotation = transform_component.GetWorldRotation();
   const auto world_scale = transform_component.GetWorldScale();
 
-  // Reparenting case: Calculate the new local transform relative to the new
+  // Re-parenting case: Calculate the new local transform relative to the new
   // parent.
   if (new_parent_impl) {
 
@@ -216,7 +215,7 @@ void Scene::PreserveWorldTransform(const SceneNode& node,
  @see PreserveWorldTransform() for the transform preservation implementation
 */
 auto Scene::MakeNodeRoot(
-  const SceneNode& node, bool preserve_world_transform) noexcept -> bool
+  SceneNode& node, bool preserve_world_transform) noexcept -> bool
 {
   return SafeCall(
     NodeIsValidAndMine(node), [&](const SafeCallState& state) -> bool {
@@ -273,7 +272,7 @@ auto Scene::MakeNodeRoot(
 
  @see MakeNodeRoot() for detailed single-node behavior
 */
-auto Scene::MakeNodesRoot(std::span<const SceneNode> nodes,
+auto Scene::MakeNodesRoot(std::span<SceneNode> nodes,
   bool preserve_world_transform) noexcept -> std::vector<uint8_t>
 {
   DLOG_SCOPE_F(3, "Make Nodes Root");
@@ -285,7 +284,7 @@ auto Scene::MakeNodesRoot(std::span<const SceneNode> nodes,
 
   std::vector<uint8_t> results;
   results.reserve(nodes.size());
-  for (const auto& node : nodes) {
+  for (auto& node : nodes) {
     const auto result = MakeNodeRoot(node, preserve_world_transform);
     results.push_back(result); // NOLINT(*-implicit-bool-conversion)
   }
@@ -344,7 +343,7 @@ auto Scene::MakeNodesRoot(std::span<const SceneNode> nodes,
  @see LinkChild() for the underlying hierarchy linking operation
  @see PreserveWorldTransform() for the transform preservation implementation
 */
-auto Scene::ReparentNode(const SceneNode& node, const SceneNode& new_parent,
+auto Scene::ReparentNode(SceneNode& node, SceneNode& new_parent,
   bool preserve_world_transform) noexcept -> bool
 {
   return SafeCall(
@@ -417,9 +416,8 @@ auto Scene::ReparentNode(const SceneNode& node, const SceneNode& new_parent,
 
  @see ReparentNode() for detailed single-node behavior
 */
-auto Scene::ReparentNodes(std::span<const SceneNode> nodes,
-  const SceneNode& new_parent, bool preserve_world_transform) noexcept
-  -> std::vector<uint8_t>
+auto Scene::ReparentNodes(std::span<SceneNode> nodes, SceneNode& new_parent,
+  bool preserve_world_transform) noexcept -> std::vector<uint8_t>
 {
   DLOG_SCOPE_F(3, "Reparent Nodes");
 
@@ -430,7 +428,7 @@ auto Scene::ReparentNodes(std::span<const SceneNode> nodes,
 
   std::vector<uint8_t> results;
   results.reserve(nodes.size());
-  for (const auto& node : nodes) {
+  for (auto& node : nodes) {
     const auto result
       = ReparentNode(node, new_parent, preserve_world_transform);
     results.push_back(result); // NOLINT(*-implicit-bool-conversion)

@@ -26,10 +26,10 @@ protected:
   {
     // Reset factory to clean state and configure for our tests
     TestSceneFactory::Instance()
-        .Reset()
-        .SetDefaultCapacity(128)
-        .GetNameGenerator()
-        .SetPrefix("Test");
+      .Reset()
+      .SetDefaultCapacity(128)
+      .GetNameGenerator()
+      .SetPrefix("Test");
   }
 
   void TearDown() override
@@ -60,7 +60,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, CreateSingleNode)
 NOLINT_TEST_F(TestSceneFactoryExample, CreateParentChild)
 {
   auto scene
-      = TestSceneFactory::Instance().CreateParentChildScene("ParentChildTest");
+    = TestSceneFactory::Instance().CreateParentChildScene("ParentChildTest");
 
   EXPECT_EQ(scene->GetNodeCount(), 2);
 
@@ -80,7 +80,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, CreateParentChild)
 NOLINT_TEST_F(TestSceneFactoryExample, CreateLinearChain)
 {
   auto scene
-      = TestSceneFactory::Instance().CreateLinearChainScene("ChainTest", 4);
+    = TestSceneFactory::Instance().CreateLinearChainScene("ChainTest", 4);
 
   EXPECT_EQ(scene->GetNodeCount(), 4);
 
@@ -114,7 +114,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, CreateLinearChain)
 NOLINT_TEST_F(TestSceneFactoryExample, DefaultNameGenerator)
 {
   auto scene = TestSceneFactory::Instance().CreateParentWithChildrenScene(
-      "DefaultNaming", 3);
+    "DefaultNaming", 3);
 
   // Default generator should create meaningful names
   auto roots = scene->GetRootNodes();
@@ -129,12 +129,12 @@ NOLINT_TEST_F(TestSceneFactoryExample, DefaultNameGenerator)
 NOLINT_TEST_F(TestSceneFactoryExample, PositionalNameGenerator)
 {
   TestSceneFactory::Instance()
-      .SetNameGenerator(std::make_unique<PositionalNameGenerator>())
-      .GetNameGenerator()
-      .SetPrefix("Node");
+    .SetNameGenerator(std::make_unique<PositionalNameGenerator>())
+    .GetNameGenerator()
+    .SetPrefix("Node");
 
   auto scene = TestSceneFactory::Instance().CreateParentWithChildrenScene(
-      "PositionalNaming", 3);
+    "PositionalNaming", 3);
 
   auto roots = scene->GetRootNodes();
   ASSERT_EQ(roots.size(), 1);
@@ -149,12 +149,11 @@ NOLINT_TEST_F(TestSceneFactoryExample, PositionalNameGenerator)
 NOLINT_TEST_F(TestSceneFactoryExample, ChainableConfiguration)
 {
   // Test fluent interface
-  auto scene
-      = TestSceneFactory::Instance()
-            .Reset()
-            .SetDefaultCapacity(64)
-            .SetNameGenerator(std::make_unique<PositionalNameGenerator>())
-            .CreateSingleNodeScene("ChainTest");
+  auto scene = TestSceneFactory::Instance()
+                 .Reset()
+                 .SetDefaultCapacity(64)
+                 .SetNameGenerator(std::make_unique<PositionalNameGenerator>())
+                 .CreateSingleNodeScene("ChainTest");
 
   EXPECT_EQ(scene->GetName(), "ChainTest");
   EXPECT_EQ(scene->GetNodeCount(), 1);
@@ -180,8 +179,8 @@ NOLINT_TEST_F(TestSceneFactoryExample, SimpleTemplate)
 
   TestSceneFactory::Instance().RegisterTemplate("simple", simple_template);
 
-  auto scene = TestSceneFactory::Instance().CreateFromTemplate(
-      "simple", "TemplateTest");
+  auto scene
+    = TestSceneFactory::Instance().CreateFromTemplate("simple", "TemplateTest");
 
   ASSERT_NE(scene, nullptr);
   EXPECT_EQ(scene->GetName(), "TemplateTest");
@@ -279,21 +278,20 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
   TestSceneFactory::Instance().RegisterTemplate("complex", complex_template);
 
   auto scene = TestSceneFactory::Instance().CreateFromTemplate(
-      "complex", "ComplexScene");
+    "complex", "ComplexScene");
 
   ASSERT_NE(scene, nullptr);
   EXPECT_EQ(scene->GetNodeCount(),
-      8); // Player + 3 children + Rifle + Environment + 2 children
+    8); // Player + 3 children + Rifle + Environment + 2 children
 
   auto roots = scene->GetRootNodes();
   EXPECT_EQ(roots.size(), 2); // Player and Environment
 
   // Validate Player hierarchy
-  auto player_it
-      = std::find_if(roots.begin(), roots.end(), [](const SceneNode& node) {
-          auto obj = node.GetObject();
-          return obj.has_value() && obj->get().GetName() == "Player";
-        });
+  auto player_it = std::ranges::find_if(roots, [](SceneNode& node) {
+    const auto obj = node.GetObject();
+    return obj.has_value() && obj->get().GetName() == "Player";
+  });
   ASSERT_NE(player_it, roots.end());
 
   auto player = *player_it;
@@ -371,7 +369,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, DirectJsonCreation)
   })";
 
   auto scene = TestSceneFactory::Instance().CreateFromJson(
-      scene_json, "DirectJsonScene");
+    scene_json, "DirectJsonScene");
 
   ASSERT_NE(scene, nullptr);
   EXPECT_EQ(scene->GetName(), "DirectJsonScene");
@@ -433,7 +431,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
   })";
 
   auto scene
-      = TestSceneFactory::Instance().CreateFromJson(mixed_json, "MixedScene");
+    = TestSceneFactory::Instance().CreateFromJson(mixed_json, "MixedScene");
 
   ASSERT_NE(scene, nullptr);
   EXPECT_EQ(scene->GetNodeCount(), 4); // Root + 3 children
@@ -478,24 +476,23 @@ NOLINT_TEST_F(TestSceneFactoryExample, JsonErrorHandling)
 {
   // Test malformed JSON
   NOLINT_EXPECT_THROW([[maybe_unused]] auto _
-      = TestSceneFactory::Instance().CreateFromJson(
-          "invalid json", "ErrorScene"),
-      std::invalid_argument);
+    = TestSceneFactory::Instance().CreateFromJson("invalid json", "ErrorScene"),
+    std::invalid_argument);
 
   // Test invalid template registration
   NOLINT_EXPECT_THROW(
-      TestSceneFactory::Instance().RegisterTemplate("bad", "not json"),
-      std::invalid_argument);
+    TestSceneFactory::Instance().RegisterTemplate("bad", "not json"),
+    std::invalid_argument);
 
   // Test non-object root
   NOLINT_EXPECT_THROW([[maybe_unused]] auto _
-      = TestSceneFactory::Instance().CreateFromJson("[]", "ArrayScene"),
-      std::invalid_argument);
+    = TestSceneFactory::Instance().CreateFromJson("[]", "ArrayScene"),
+    std::invalid_argument);
 
   // Test template that's not an object
   NOLINT_EXPECT_THROW(
-      TestSceneFactory::Instance().RegisterTemplate("array", "[]"),
-      std::invalid_argument);
+    TestSceneFactory::Instance().RegisterTemplate("array", "[]"),
+    std::invalid_argument);
 }
 
 NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
@@ -537,7 +534,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
               }}
             ]
           }})",
-        i, i * 2.0f, i * 3.0f, 2.0f + i * 0.5f, i, i, 2.0f + i * 0.5f);
+      i, i * 2.0f, i * 3.0f, 2.0f + i * 0.5f, i, i, 2.0f + i * 0.5f);
   }
 
   large_scene += R"(
@@ -547,7 +544,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   })";
 
   auto scene
-      = TestSceneFactory::Instance().CreateFromJson(large_scene, "CityScene");
+    = TestSceneFactory::Instance().CreateFromJson(large_scene, "CityScene");
 
   ASSERT_NE(scene, nullptr);
   EXPECT_EQ(scene->GetNodeCount(), 31); // City + 10 buildings + 20 sub-objects
@@ -570,7 +567,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   auto building_obj = first_building->GetObject();
   ASSERT_TRUE(building_obj.has_value());
   EXPECT_EQ(building_obj->get().GetName(),
-      "Building9"); // Last created building becomes first child
+    "Building9"); // Last created building becomes first child
 
   // Each building should have 2 children (door and roof)
   EXPECT_TRUE(first_building->HasChildren());
@@ -590,7 +587,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
 
   while (current_building.has_value()) {
     auto current_building_obj
-        = current_building->GetObject(); // Renamed to avoid shadowing
+      = current_building->GetObject(); // Renamed to avoid shadowing
     ASSERT_TRUE(current_building_obj.has_value());
 
     const auto& name = current_building_obj->get().GetName();
@@ -608,9 +605,9 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   for (int i = 0; i < 10; ++i) {
     const auto expected_name = fmt::format("Building{}", i);
     EXPECT_TRUE(
-        std::find(building_names.begin(), building_names.end(), expected_name)
-        != building_names.end())
-        << "Missing building: " << expected_name;
+      std::find(building_names.begin(), building_names.end(), expected_name)
+      != building_names.end())
+      << "Missing building: " << expected_name;
   }
 }
 

@@ -38,7 +38,7 @@ namespace {
         validator_.set_root_schema(schema_json);
       } catch (const std::exception& e) {
         throw std::runtime_error(
-            "Failed to parse embedded schema: " + std::string(e.what()));
+          "Failed to parse embedded schema: " + std::string(e.what()));
       }
     }
 
@@ -65,7 +65,7 @@ namespace {
   //! Validates JSON against the embedded schema using proper JSON Schema
   //! validation
   auto ValidateJsonAgainstSchema(const json& json_data)
-      -> std::optional<std::string>
+    -> std::optional<std::string>
   {
     try {
       return SchemaValidator::Instance().Validate(json_data);
@@ -95,26 +95,26 @@ namespace {
 
   // Forward declarations to resolve dependencies
   auto CreateSceneFromJson(const TestSceneFactory& factory,
-      std::string_view scene_name, std::size_t capacity,
-      const nlohmann::json& json_template) -> std::shared_ptr<Scene>;
+    std::string_view scene_name, std::size_t capacity,
+    const nlohmann::json& json_template) -> std::shared_ptr<Scene>;
 
   auto CreateNodeFromJson(const TestSceneFactory& factory,
-      const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
-      const std::optional<SceneNode>& parent) -> SceneNode;
+    const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
+    std::optional<SceneNode> parent) -> SceneNode;
 
   void CreateChildrenFromJson(const TestSceneFactory& factory,
-      const std::shared_ptr<Scene>& scene, const SceneNode& parent,
-      const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes);
+    const std::shared_ptr<Scene>& scene, SceneNode& parent,
+    const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes);
 
   void ApplyNodeProperties(
-      const SceneNode& node, const nlohmann::json& properties);
+    const SceneNode& node, const nlohmann::json& properties);
 
   // Function implementations
 
   //! Creates a scene and populates it from JSON specification.
   auto CreateSceneFromJson(const TestSceneFactory& factory,
-      std::string_view scene_name, std::size_t capacity,
-      const nlohmann::json& json_template) -> std::shared_ptr<Scene>
+    std::string_view scene_name, std::size_t capacity,
+    const nlohmann::json& json_template) -> std::shared_ptr<Scene>
   {
     auto scene = std::make_shared<Scene>(std::string(scene_name), capacity);
 
@@ -137,8 +137,8 @@ namespace {
 
   //! Creates a single node from JSON specification.
   auto CreateNodeFromJson(const TestSceneFactory& factory,
-      const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
-      const std::optional<SceneNode>& parent) -> SceneNode
+    const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
+    std::optional<SceneNode> parent) -> SceneNode
   {
     if (!node_spec.is_object()) {
       throw std::invalid_argument("Node specification must be an object");
@@ -173,7 +173,7 @@ namespace {
     if (node_spec.contains("children") && node_spec["children"].is_array()) {
       std::vector<SceneNode> children_nodes;
       CreateChildrenFromJson(
-          factory, scene, node, node_spec["children"], children_nodes);
+        factory, scene, node, node_spec["children"], children_nodes);
     }
 
     return node;
@@ -181,8 +181,8 @@ namespace {
 
   //! Recursively creates children from JSON specification.
   void CreateChildrenFromJson(const TestSceneFactory& factory,
-      const std::shared_ptr<Scene>& scene, const SceneNode& parent,
-      const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes)
+    const std::shared_ptr<Scene>& scene, SceneNode& parent,
+    const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes)
   {
     if (!children_spec.is_array()) {
       throw std::invalid_argument("Children specification must be an array");
@@ -196,17 +196,17 @@ namespace {
 
   //! Applies node properties from JSON.
   void ApplyNodeProperties(
-      const SceneNode& node, const nlohmann::json& properties)
+    const SceneNode& node, const nlohmann::json& properties)
   {
     // Apply transform properties if specified
     if (properties.contains("transform")
-        && properties["transform"].is_object()) {
+      && properties["transform"].is_object()) {
       const auto& transform_json = properties["transform"];
       auto transform = node.GetTransform();
 
       // Position
       if (transform_json.contains("position")
-          && transform_json["position"].is_array()) {
+        && transform_json["position"].is_array()) {
         const auto& pos = transform_json["position"];
         if (pos.size() >= 3) {
           const glm::vec3 position { pos[0].get<float>(), pos[1].get<float>(),
@@ -217,7 +217,7 @@ namespace {
 
       // Scale
       if (transform_json.contains("scale")
-          && transform_json["scale"].is_array()) {
+        && transform_json["scale"].is_array()) {
         const auto& scale_json = transform_json["scale"];
         if (scale_json.size() >= 3) {
           const glm::vec3 scale { scale_json[0].get<float>(),
@@ -228,7 +228,7 @@ namespace {
 
       // Rotation (Euler angles in degrees)
       if (transform_json.contains("rotation")
-          && transform_json["rotation"].is_array()) {
+        && transform_json["rotation"].is_array()) {
         const auto& rot = transform_json["rotation"];
         if (rot.size() >= 3) {
           const auto euler_degrees = glm::vec3 { rot[0].get<float>(),
@@ -270,7 +270,7 @@ TestSceneFactory::TestSceneFactory()
 }
 
 auto TestSceneFactory::CreateDefaultNameGenerator()
-    -> std::unique_ptr<NameGenerator>
+  -> std::unique_ptr<NameGenerator>
 {
   return std::make_unique<DefaultNameGenerator>();
 }
@@ -294,7 +294,7 @@ auto TestSceneFactory::GetNameGenerator() const -> const NameGenerator&
 }
 
 auto TestSceneFactory::SetDefaultCapacity(std::size_t capacity)
-    -> TestSceneFactory&
+  -> TestSceneFactory&
 {
   default_capacity_ = capacity;
   return *this;
@@ -316,7 +316,7 @@ auto TestSceneFactory::Reset() -> TestSceneFactory&
 //=== Scene Creation Helpers ===--------------------------------------------//
 
 auto TestSceneFactory::CreateScene(std::string_view scene_name) const
-    -> std::shared_ptr<Scene>
+  -> std::shared_ptr<Scene>
 {
   if (default_capacity_.has_value()) {
     return std::make_shared<Scene>(std::string(scene_name), *default_capacity_);
@@ -332,7 +332,7 @@ auto TestSceneFactory::GenerateNodeName(int index) const -> std::string
 //=== Common Pattern Shortcuts ===--------------------------------------------//
 
 auto TestSceneFactory::CreateSingleNodeScene(std::string_view scene_name) const
-    -> std::shared_ptr<Scene>
+  -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -344,7 +344,7 @@ auto TestSceneFactory::CreateSingleNodeScene(std::string_view scene_name) const
 }
 
 auto TestSceneFactory::CreateParentChildScene(std::string_view scene_name) const
-    -> std::shared_ptr<Scene>
+  -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -359,8 +359,7 @@ auto TestSceneFactory::CreateParentChildScene(std::string_view scene_name) const
 }
 
 auto TestSceneFactory::CreateParentWithChildrenScene(
-    std::string_view scene_name, int child_count) const
-    -> std::shared_ptr<Scene>
+  std::string_view scene_name, int child_count) const -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -380,7 +379,7 @@ auto TestSceneFactory::CreateParentWithChildrenScene(
 }
 
 auto TestSceneFactory::CreateLinearChainScene(
-    std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
+  std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -405,7 +404,7 @@ auto TestSceneFactory::CreateLinearChainScene(
 }
 
 auto TestSceneFactory::CreateBinaryTreeScene(
-    std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
+  std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -429,7 +428,7 @@ auto TestSceneFactory::CreateBinaryTreeScene(
     std::vector<SceneNode> next_level;
     UpdateNamingContext(level, true); // Multiple siblings at each level
 
-    for (const auto& parent : current_level) {
+    for (auto& parent : current_level) {
       // Create left child
       const auto left_name = GenerateNodeName(name_index++);
       auto left_opt = scene->CreateChildNode(parent, left_name);
@@ -452,7 +451,7 @@ auto TestSceneFactory::CreateBinaryTreeScene(
 }
 
 auto TestSceneFactory::CreateForestScene(std::string_view scene_name,
-    int root_count, int children_per_root) const -> std::shared_ptr<Scene>
+  int root_count, int children_per_root) const -> std::shared_ptr<Scene>
 {
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
@@ -479,7 +478,7 @@ auto TestSceneFactory::CreateForestScene(std::string_view scene_name,
 //=== Template Management ===-------------------------------------------------//
 
 auto TestSceneFactory::RegisterTemplate(const std::string& name,
-    const std::string& json_template) -> TestSceneFactory&
+  const std::string& json_template) -> TestSceneFactory&
 {
   try {
     // Parse and validate JSON
@@ -488,22 +487,22 @@ auto TestSceneFactory::RegisterTemplate(const std::string& name,
     // Validate against schema using proper JSON Schema validation
     if (auto validation_error = ValidateJsonAgainstSchema(json)) {
       throw std::invalid_argument(
-          "JSON Schema validation failed: " + *validation_error);
+        "JSON Schema validation failed: " + *validation_error);
     }
 
     // Cache the parsed template
     templates_[name]
-        = std::make_unique<Template>(std::move(json), json_template);
+      = std::make_unique<Template>(std::move(json), json_template);
     return *this;
   } catch (const nlohmann::json::parse_error& e) {
     throw std::invalid_argument(
-        "Invalid JSON template: " + std::string(e.what()));
+      "Invalid JSON template: " + std::string(e.what()));
   }
 }
 
 auto TestSceneFactory::CreateFromTemplate(const std::string& template_name,
-    std::string_view scene_name, std::size_t capacity) const
-    -> std::shared_ptr<Scene>
+  std::string_view scene_name, std::size_t capacity) const
+  -> std::shared_ptr<Scene>
 {
   auto it = templates_.find(template_name);
   if (it == templates_.end()) {
@@ -512,15 +511,15 @@ auto TestSceneFactory::CreateFromTemplate(const std::string& template_name,
 
   // Use the cached parsed JSON directly
   return CreateSceneFromJson(
-      *this, scene_name, capacity, it->second->parsed_json);
+    *this, scene_name, capacity, it->second->parsed_json);
 }
 
 //=== JSON Scene Creation
 //===---------------------------------------------------//
 
 auto TestSceneFactory::CreateFromJson(const std::string& json_template,
-    std::string_view scene_name, std::size_t capacity) const
-    -> std::shared_ptr<Scene>
+  std::string_view scene_name, std::size_t capacity) const
+  -> std::shared_ptr<Scene>
 {
   try {
     auto json = nlohmann::json::parse(json_template);
@@ -528,7 +527,7 @@ auto TestSceneFactory::CreateFromJson(const std::string& json_template,
     // Validate against schema using proper JSON Schema validation
     if (auto validation_error = ValidateJsonAgainstSchema(json)) {
       throw std::invalid_argument(
-          "JSON Schema validation failed: " + *validation_error);
+        "JSON Schema validation failed: " + *validation_error);
     }
 
     return CreateSceneFromJson(*this, scene_name, capacity, json);
@@ -547,7 +546,7 @@ auto TestSceneFactory::GetJsonSchema() -> std::string_view
 
 //! Validates a JSON string against the schema without creating a scene
 auto TestSceneFactory::ValidateJson(const std::string& json_string)
-    -> std::optional<std::string>
+  -> std::optional<std::string>
 {
   try {
     auto json = nlohmann::json::parse(json_string);
@@ -559,13 +558,13 @@ auto TestSceneFactory::ValidateJson(const std::string& json_string)
 
 //! Updates name generator context using modern C++20 concepts.
 void TestSceneFactory::UpdateNamingContext(
-    int depth, bool multiple_siblings_expected) const
+  int depth, bool multiple_siblings_expected) const
 {
   if constexpr (ContextAwareNameGenerator<
-                    std::remove_reference_t<decltype(*name_generator_)>>) {
+                  std::remove_reference_t<decltype(*name_generator_)>>) {
     // This won't compile if the generator doesn't support context
     auto* context_aware
-        = static_cast<DefaultNameGenerator*>(name_generator_.get());
+      = static_cast<DefaultNameGenerator*>(name_generator_.get());
     context_aware->SetDepth(depth);
     context_aware->SetMultipleSiblingsExpected(multiple_siblings_expected);
   }

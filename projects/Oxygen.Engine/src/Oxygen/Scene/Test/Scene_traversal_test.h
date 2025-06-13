@@ -35,16 +35,17 @@ protected:
   void SetUp() override
   {
     scene_ = std::make_shared<Scene>("TraversalTestScene", 1024);
-    traversal_ = std::make_unique<SceneTraversal>(*scene_);
   }
 
   void TearDown() override
   {
-    traversal_.reset();
     scene_.reset();
     visited_nodes_.clear();
     visit_order_.clear();
   }
+
+  // Helper method to get traversal when needed
+  auto GetTraversal() -> Scene::MutatingTraversal { return scene_->Traverse(); }
 
   // Helper: Create a scene node with proper flags
   [[nodiscard]] auto CreateNode(const std::string& name,
@@ -69,7 +70,7 @@ protected:
 
   // Helper: Create child node
   [[nodiscard]] auto CreateChildNode(
-    const SceneNode& parent, const std::string& name) const -> SceneNode
+    SceneNode& parent, const std::string& name) const -> SceneNode
   {
     auto child_opt = scene_->CreateChildNode(parent, name);
     EXPECT_TRUE(child_opt.has_value());
@@ -88,7 +89,7 @@ protected:
 
   // Helper: Create invisible child node
   [[nodiscard]] auto CreateInvisibleChildNode(
-    const SceneNode& parent, const std::string& name) const -> SceneNode
+    SceneNode& parent, const std::string& name) const -> SceneNode
   {
     const auto flags = SceneNode::Flags {}.SetFlag(
       SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
@@ -109,8 +110,8 @@ protected:
   // Helper: Visit tracking visitor
   auto CreateTrackingVisitor()
   {
-    return [this](const VisitedNode& node, const Scene& /*scene*/,
-             bool dry_run) -> VisitResult {
+    auto v
+      = [this](const MutableVisitedNode& node, bool dry_run) -> VisitResult {
       if (!dry_run) {
         visited_nodes_.push_back(node.node_impl);
         visit_order_.emplace_back(
@@ -118,13 +119,14 @@ protected:
       }
       return VisitResult::kContinue;
     };
+    static_assert(oxygen::scene::MutatingSceneVisitor<decltype(v)>);
+    return v;
   }
 
   // Helper: Visit tracking visitor with early termination
   auto CreateEarlyTerminationVisitor(const std::string& stop_at_name)
   {
-    return [this, stop_at_name](const VisitedNode& node, const Scene& /*scene*/,
-             bool dry_run) -> VisitResult {
+    return [this, stop_at_name](const auto& node, bool dry_run) -> VisitResult {
       if (!dry_run) {
         visited_nodes_.push_back(node.node_impl);
         visit_order_.emplace_back(
@@ -138,23 +140,23 @@ protected:
   // Helper: Visit tracking visitor with subtree skipping
   auto CreateSubtreeSkippingVisitor(const std::string& skip_subtree_of)
   {
-    return [this, skip_subtree_of](const VisitedNode& node,
-             const Scene& /*scene*/, bool dry_run) -> VisitResult {
-      if (!dry_run) {
-        visited_nodes_.push_back(node.node_impl);
-        visit_order_.emplace_back(
-          node.node_impl->GetName()); // Convert string_view to string
-      }
-      return node.node_impl->GetName() == skip_subtree_of
-        ? VisitResult::kSkipSubtree
-        : VisitResult::kContinue;
-    };
+    return
+      [this, skip_subtree_of](const auto& node, bool dry_run) -> VisitResult {
+        if (!dry_run) {
+          visited_nodes_.push_back(node.node_impl);
+          visit_order_.emplace_back(
+            node.node_impl->GetName()); // Convert string_view to string
+        }
+        return node.node_impl->GetName() == skip_subtree_of
+          ? VisitResult::kSkipSubtree
+          : VisitResult::kContinue;
+      };
   }
 
   // Helper: Create a filter that rejects specific nodes
   static auto CreateRejectFilter(const std::vector<std::string>& reject_names)
   {
-    return [reject_names](const VisitedNode& visited_node,
+    return [reject_names](auto& visited_node,
              FilterResult /*parent_filter_result*/) -> FilterResult {
       if (visited_node.node_impl == nullptr) {
         return FilterResult::kReject; // Safety check for null pointer
@@ -172,7 +174,7 @@ protected:
   static auto CreateRejectSubtreeFilter(
     const std::vector<std::string>& reject_subtree_names)
   {
-    return [reject_subtree_names](const VisitedNode& visited_node,
+    return [reject_subtree_names](const auto& visited_node,
              FilterResult /*parent_filter_result*/) -> FilterResult {
       for (const auto& name : reject_subtree_names) {
         if (visited_node.node_impl->GetName() == name) {
@@ -234,7 +236,6 @@ protected:
   }
 
   std::shared_ptr<Scene> scene_;
-  std::unique_ptr<SceneTraversal> traversal_;
   std::vector<SceneNodeImpl*> visited_nodes_;
   std::vector<std::string> visit_order_;
 };

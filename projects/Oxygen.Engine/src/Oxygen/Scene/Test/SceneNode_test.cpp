@@ -131,21 +131,6 @@ NOLINT_TEST_F(SceneNodeImplObjectTest, GetObject_ReturnsValidImplementation)
 }
 
 NOLINT_TEST_F(
-  SceneNodeImplObjectTest, GetObjectConst_ReturnsValidImplementation)
-{
-  // Arrange: Create a test node and get const reference
-  const auto node = scene_->CreateNode("TestNode");
-  const auto& const_node = node;
-
-  // Act: Get implementation through const reference
-  const auto impl = const_node.GetObject();
-
-  // Assert: Const access should work correctly
-  ASSERT_TRUE(impl.has_value());
-  EXPECT_EQ(impl->get().GetName(), "TestNode");
-}
-
-NOLINT_TEST_F(
   SceneNodeImplObjectTest, GetObjectWithValidNode_AccessesImplementation)
 {
   // Arrange: Create a valid test node
@@ -193,21 +178,6 @@ NOLINT_TEST_F(SceneNodeFlagsTest, GetFlags_ReturnsValidFlagsWithDefaults)
   EXPECT_FALSE(flag_ref.GetEffectiveValue(SceneNodeFlags::kStatic));
 }
 
-NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsConst_ReturnsValidFlags)
-{
-  // Arrange: Create a test node and get const reference
-  const auto node = scene_->CreateNode("TestNode");
-  const auto& const_node = node;
-
-  // Act: Get flags through const reference
-  const auto flags = const_node.GetFlags();
-
-  // Assert: Const flags access should work correctly
-  ASSERT_TRUE(flags.has_value());
-  const auto& flag_ref = flags->get();
-  EXPECT_TRUE(flag_ref.GetEffectiveValue(SceneNodeFlags::kVisible));
-}
-
 NOLINT_TEST_F(SceneNodeFlagsTest, GetFlagsWithValidNode_AccessesCustomFlags)
 {
   // Arrange: Create node with custom flags
@@ -249,10 +219,10 @@ class SceneNodeGraphTest : public SceneNodeTestBase { };
 NOLINT_TEST_F(SceneNodeGraphTest, ParentChildRelationship_NavigationWorks)
 {
   // Arrange: Create parent and child nodes
-  const auto parent = scene_->CreateNode("Parent");
-  const auto child_opt = scene_->CreateChildNode(parent, "Child");
+  auto parent = scene_->CreateNode("Parent");
+  auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
-  const auto& child = child_opt.value();
+  auto& child = child_opt.value();
 
   // Act & Assert: Test parent navigation from child
   const auto child_parent = child.GetParent();
@@ -304,7 +274,7 @@ NOLINT_TEST_F(SceneNodeGraphTest, SiblingRelationships_NavigationWorks)
 NOLINT_TEST_F(SceneNodeGraphTest, RootNode_BehavesCorrectly)
 {
   // Arrange: Create a root node
-  const auto root = scene_->CreateNode("Root");
+  auto root = scene_->CreateNode("Root");
 
   // Act & Assert: Root node should have expected properties
   EXPECT_TRUE(root.IsRoot());
@@ -425,13 +395,13 @@ NOLINT_TEST_F(
 {
   // Arrange: Create parent-child hierarchy
   auto parent = scene_->CreateNode("Parent");
-  const auto child1_opt = scene_->CreateChildNode(parent, "Child1");
-  const auto child2_opt = scene_->CreateChildNode(parent, "Child2");
+  auto child1_opt = scene_->CreateChildNode(parent, "Child1");
+  auto child2_opt = scene_->CreateChildNode(parent, "Child2");
 
   ASSERT_TRUE(child1_opt.has_value());
   ASSERT_TRUE(child2_opt.has_value());
-  const auto& child1 = child1_opt.value();
-  const auto& child2 = child2_opt.value();
+  auto& child1 = child1_opt.value();
+  auto& child2 = child2_opt.value();
   ASSERT_TRUE(scene_->Contains(child1));
   ASSERT_TRUE(scene_->Contains(child2));
 

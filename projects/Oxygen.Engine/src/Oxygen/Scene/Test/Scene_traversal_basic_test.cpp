@@ -41,7 +41,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, EmptySceneTraversal)
   scene_->Clear();
 
   // Act: Traverse the empty scene
-  const auto result = traversal_->Traverse(CreateTrackingVisitor());
+  const auto result = GetTraversal().Traverse(CreateTrackingVisitor());
 
   // Assert: No nodes should be visited
   CHECK_FOR_FAILURES_MSG(
@@ -57,7 +57,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, SingleNodeTraversal)
   auto single_node = CreateNode("single");
 
   // Act: Traverse the scene with one node
-  const auto result = traversal_->Traverse(CreateTrackingVisitor());
+  const auto result = GetTraversal().Traverse(CreateTrackingVisitor());
 
   // Assert: Single node should be visited
   CHECK_FOR_FAILURES_MSG(

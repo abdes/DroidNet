@@ -45,7 +45,7 @@ protected:
     return scene_->CreateNode(name, flags);
   }
 
-  [[nodiscard]] auto CreateChildNode(const SceneNode& parent,
+  [[nodiscard]] auto CreateChildNode(SceneNode& parent,
     const std::string& name) const -> std::optional<SceneNode>
   {
     return scene_->CreateChildNode(parent, name);
@@ -70,19 +70,14 @@ protected:
   {
     return scene_->DestroyNodeHierarchy(node);
   }
+
   void ClearScene() const { scene_->Clear(); }
 
   static void ExpectNodeValidWithName(
     const SceneNode& node, const std::string& name)
   {
-    if (!node.IsValid())
-      FAIL() << "Node should be valid";
-    const auto obj_opt = node.GetObject();
-    if (!obj_opt.has_value())
-      FAIL() << "Node object should be present";
-    if (obj_opt->get().GetName() != name)
-      FAIL() << "Node name mismatch: expected '" << name << "', got '"
-             << obj_opt->get().GetName() << "'";
+    EXPECT_TRUE(node.IsValid());
+    EXPECT_EQ(node.GetName(), name);
   }
 
   static void ExpectNodeLazyInvalidated(SceneNode& node)
@@ -204,7 +199,7 @@ NOLINT_TEST_F(
   // Arrange: The most reasonable way to recreate this situation is to destroy a
   // hierarchy and then attempt to act on a node that is not the hierarchy
   // starting node.
-  const auto parent = CreateNode("Parent");
+  auto parent = CreateNode("Parent");
   auto destroy_root = scene_->CreateChildNode(parent, "DestroyRoot");
   auto child = scene_->CreateChildNode(*destroy_root, "DanglingChild");
   auto grandchild = scene_->CreateChildNode(*child, "DanglingGrandChild");
@@ -228,7 +223,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneBasicErrorTest, GetFirstChild_InvalidHandle_ReturnsNullOpt)
 {
   // Arrange:
-  const SceneNode invalid_node = CreateNodeWithInvalidHandle();
+  SceneNode invalid_node = CreateNodeWithInvalidHandle();
 
   // Act:
   const auto child = scene_->GetFirstChild(invalid_node);
@@ -239,7 +234,7 @@ NOLINT_TEST_F(SceneBasicErrorTest, GetFirstChild_InvalidHandle_ReturnsNullOpt)
 
 NOLINT_TEST_F(SceneBasicErrorTest, GetParent_InvalidHandle_ReturnsNullOpt)
 {
-  const SceneNode invalid_node = CreateNodeWithInvalidHandle();
+  auto invalid_node = CreateNodeWithInvalidHandle();
 
   // Act:
   const auto parent = scene_->GetParent(invalid_node);
@@ -250,7 +245,7 @@ NOLINT_TEST_F(SceneBasicErrorTest, GetParent_InvalidHandle_ReturnsNullOpt)
 
 NOLINT_TEST_F(SceneBasicErrorTest, GetNextSibling_InvalidHandle_ReturnsNullOpt)
 {
-  const SceneNode invalid_node = CreateNodeWithInvalidHandle();
+  auto invalid_node = CreateNodeWithInvalidHandle();
 
   // Act:
   const auto sibling = scene_->GetNextSibling(invalid_node);
@@ -261,7 +256,7 @@ NOLINT_TEST_F(SceneBasicErrorTest, GetNextSibling_InvalidHandle_ReturnsNullOpt)
 
 NOLINT_TEST_F(SceneBasicErrorTest, GetPrevSibling_InvalidHandle_ReturnsNullOpt)
 {
-  const SceneNode invalid_node = CreateNodeWithInvalidHandle();
+  auto invalid_node = CreateNodeWithInvalidHandle();
 
   // Act:
   const auto sibling = scene_->GetPrevSibling(invalid_node);
@@ -377,27 +372,27 @@ NOLINT_TEST_F(SceneBasicTest, SceneClear)
                 // previously
   // created nodes are invalidated and not contained.
   EXPECT_EQ(scene_->GetNodeCount(), 0);
-  CHECK_FOR_FAILURES_MSG(ExpectSceneEmpty(), "for SceneClear scene empty");
+  CHECK_FOR_FAILURES_MSG(ExpectSceneEmpty(), "for SceneClear scene empty")
   CHECK_FOR_FAILURES_MSG(
-    ExpectNodeNotInScene(parent), "for SceneClear parent not in scene");
+    ExpectNodeNotInScene(parent), "for SceneClear parent not in scene")
   CHECK_FOR_FAILURES_MSG(
-    ExpectNodeLazyInvalidated(parent), "for SceneClear parent invalidation");
+    ExpectNodeLazyInvalidated(parent), "for SceneClear parent invalidation")
   if (child1_opt.has_value()) {
     CHECK_FOR_FAILURES_MSG(ExpectNodeNotInScene(child1_opt.value()),
-      "for SceneClear child1 not in scene");
+      "for SceneClear child1 not in scene")
     CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(child1_opt.value()),
-      "for SceneClear child1 invalidation");
+      "for SceneClear child1 invalidation")
   }
   if (child2_opt.has_value()) {
     CHECK_FOR_FAILURES_MSG(ExpectNodeNotInScene(child2_opt.value()),
-      "for SceneClear child2 not in scene");
+      "for SceneClear child2 not in scene")
     CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(child2_opt.value()),
-      "for SceneClear child2 invalidation");
+      "for SceneClear child2 invalidation")
   }
   CHECK_FOR_FAILURES_MSG(
-    ExpectNodeNotInScene(standalone), "for SceneClear standalone not in scene");
+    ExpectNodeNotInScene(standalone), "for SceneClear standalone not in scene")
   CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(standalone),
-    "for SceneClear standalone invalidation");
+    "for SceneClear standalone invalidation")
 }
 
 // -----------------------------------------------------------------------------

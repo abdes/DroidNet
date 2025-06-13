@@ -107,7 +107,7 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
-  add_subdirectory("Benchmarks")
+  #add_subdirectory("Benchmarks")
 endif()
 
 # ------------------------------------------------------------------------------

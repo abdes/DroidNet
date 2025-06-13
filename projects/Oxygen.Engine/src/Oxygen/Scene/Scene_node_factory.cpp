@@ -124,8 +124,8 @@ auto Scene::CreateNode(const std::string& name, SceneNode::Flags flags)
  @see SceneNodeImpl constructor for valid argument combinations
 */
 template <typename... Args>
-auto Scene::CreateChildNodeImpl(
-  const SceneNode& parent, Args&&... args) noexcept -> std::optional<SceneNode>
+auto Scene::CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
+  -> std::optional<SceneNode>
 {
   DLOG_SCOPE_F(3, "Create Child Node");
   return SafeCall(NodeIsValidAndMine(parent),
@@ -176,8 +176,8 @@ auto Scene::CreateChildNodeImpl(
 
  @see SceneNodeImpl::kDefaultFlags for default flags assigned to the new node.
 */
-auto Scene::CreateChildNode(const SceneNode& parent,
-  const std::string& name) noexcept -> std::optional<SceneNode>
+auto Scene::CreateChildNode(SceneNode& parent, const std::string& name) noexcept
+  -> std::optional<SceneNode>
 {
   return CreateChildNodeImpl(parent, name);
 }
@@ -186,7 +186,7 @@ auto Scene::CreateChildNode(const SceneNode& parent,
  @copydetails CreateChildNode(const SceneNode&, const std::string&)
  @param flags Flags to assign to the new node.
 */
-auto Scene::CreateChildNode(const SceneNode& parent, const std::string& name,
+auto Scene::CreateChildNode(SceneNode& parent, const std::string& name,
   const SceneNode::Flags flags) noexcept -> std::optional<SceneNode>
 {
   return CreateChildNodeImpl(parent, name, flags);
@@ -367,21 +367,22 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
         // This is the only unlinking we need since we're destroying the entire
         // subtree
         UnlinkNode(starting_node.GetHandle(), state.node_impl);
-      } // Use SceneTraversal with post-order to ensure children are destroyed
-        // before parents
-      SceneTraversal traversal(*this);
+      }
+
+      // Use SceneTraversal with post-order to ensure children are destroyed
+      // before parents
+      MutatingTraversal traversal(shared_from_this());
       size_t destroyed_count = 0;
 
       const auto traversal_result = traversal.TraverseHierarchy(
         starting_node,
-        [&](
-          const VisitedNode& node, const Scene&, bool dry_run) -> VisitResult {
+        [&](const auto& node, bool dry_run) -> VisitResult {
           if (dry_run) {
             // During dry-run, we always want to continue to process children
             // first before destroying this node (post-order behavior)
             return VisitResult::kContinue;
-          } // Real visit: destroy the node after its children have been
-            // destroyed
+          }
+          // Real visit: destroy the node after its children have been destroyed
           // Capture node name before destruction for logging
           const std::string node_name = std::string(node.node_impl->GetName());
 
@@ -495,7 +496,7 @@ auto Scene::DestroyNodeHierarchies(
  cloned node, and the second item is the corresponding SceneNodeImpl object;
  std::nullopt otherwise.
 */
-auto Scene::CloneNode(const SceneNode& original, const std::string& new_name)
+auto Scene::CloneNode(SceneNode& original, const std::string& new_name)
   -> std::optional<std::pair<NodeHandle, SceneNodeImpl*>>
 {
   DLOG_SCOPE_F(3, "Clone Node");
@@ -541,8 +542,8 @@ auto Scene::CloneNode(const SceneNode& original, const std::string& new_name)
  @return An optional SceneNode wrapper around the handle of the newly created
  node when successful; std::nullopt otherwise.
 */
-auto Scene::CreateNodeFrom(const SceneNode& original,
-  const std::string& new_name) -> std::optional<SceneNode>
+auto Scene::CreateNodeFrom(SceneNode& original, const std::string& new_name)
+  -> std::optional<SceneNode>
 {
   DLOG_SCOPE_F(3, "Clone Into Parent");
   return SafeCall(NodeIsValidAndInScene(original),
@@ -594,9 +595,8 @@ auto Scene::CreateNodeFrom(const SceneNode& original,
  @return An optional SceneNode wrapper around the handle of the newly created
  node when successful; std::nullopt otherwise.
 */
-auto Scene::CreateChildNodeFrom(const SceneNode& parent,
-  const SceneNode& original, const std::string& new_name)
-  -> std::optional<SceneNode>
+auto Scene::CreateChildNodeFrom(SceneNode& parent, SceneNode& original,
+  const std::string& new_name) -> std::optional<SceneNode>
 {
   DLOG_SCOPE_F(3, "Clone Into Parent");
   return SafeCall(NodeIsValidAndMine(parent),
@@ -690,15 +690,15 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
   SceneNodeImpl* root_cloned_impl = nullptr;
   bool root_cloned = false;
   std::vector<NodeHandle> cloned_nodes; // Track for cleanup on failure
-  SceneTraversal traversal(*starting_node.scene_weak_.lock());
+  const NonMutatingTraversal traversal(starting_node.scene_weak_.lock());
   const auto traversal_result = traversal.TraverseHierarchy(
-    const_cast<SceneNode&>(starting_node),
-    [&](const VisitedNode& node, const Scene&, bool dry_run) -> VisitResult {
+    starting_node,
+    [&](const auto& node, bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "CloneHierarchy uses kPreOrder and should never receive dry_run=true");
 
       auto orig_parent_handle = node.node_impl->AsGraphNode().GetParent();
-      const std::string name = std::string(node.node_impl->GetName());
+      const std::string name { node.node_impl->GetName() };
 
       try {
         // Clone the node directly from impl
@@ -890,7 +890,7 @@ auto Scene::CreateHierarchyFrom(
  @see CreateHierarchyFrom() for cloning a hierarchy as a new root
  @see CreateChildNodeFrom() for cloning individual nodes as children
 */
-auto Scene::CreateChildHierarchyFrom(const SceneNode& parent,
+auto Scene::CreateChildHierarchyFrom(SceneNode& parent,
   const SceneNode& original_root, const std::string& new_root_name)
   -> std::optional<SceneNode>
 {

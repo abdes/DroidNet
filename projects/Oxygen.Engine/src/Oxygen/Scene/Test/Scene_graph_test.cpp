@@ -46,8 +46,7 @@ protected:
 
   // Helper: Collect all children of a node into a set for order-agnostic
   // comparison
-  static auto CollectChildrenHandles(const SceneNode& parent)
-    -> std::set<NodeHandle>
+  static auto CollectChildrenHandles(SceneNode& parent) -> std::set<NodeHandle>
   {
     auto children = std::set<NodeHandle> {};
     auto current = parent.GetFirstChild();
@@ -59,8 +58,7 @@ protected:
   }
 
   // Helper: Verify parent-child relationship exists
-  static void ExpectParentChildRelationship(
-    const SceneNode& parent, const SceneNode& child)
+  static void ExpectParentChildRelationship(SceneNode& parent, SceneNode& child)
   {
     // Child should know its parent
     const auto child_parent = child.GetParent();
@@ -75,7 +73,7 @@ protected:
   }
 
   // Helper: Verify hierarchy state flags for a node
-  static void ExpectHierarchyState(const SceneNode& node, const bool is_root,
+  static void ExpectHierarchyState(SceneNode& node, const bool is_root,
     const bool has_parent, const bool has_children)
   {
     EXPECT_EQ(node.IsRoot(), is_root)
@@ -107,16 +105,16 @@ protected:
 
   // Helper: Verify all nodes in a list have the same parent
   static void ExpectAllHaveSameParent(
-    const std::vector<SceneNode>& nodes, const SceneNode& expected_parent)
+    std::vector<SceneNode> nodes, SceneNode& expected_parent)
   {
-    for (const auto& node : nodes) {
+    for (auto& node : nodes) {
       ExpectParentChildRelationship(expected_parent, node);
     }
   }
 
   // Helper: Verify expected children count matches actual
   void ExpectChildrenCount(
-    const SceneNode& parent, const std::size_t expected_count) const
+    SceneNode& parent, const std::size_t expected_count) const
   {
     const auto children = CollectChildrenHandles(parent);
     EXPECT_EQ(children.size(), expected_count)
@@ -135,10 +133,10 @@ protected:
 NOLINT_TEST_F(SceneGraphTest, ParentChildRelationship_BasicNavigationWorks)
 {
   // Arrange: Create parent and child nodes
-  const auto parent = scene_->CreateNode("Parent");
-  const auto child_opt = scene_->CreateChildNode(parent, "Child");
+  auto parent = scene_->CreateNode("Parent");
+  auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
-  const auto& child = child_opt.value();
+  auto& child = child_opt.value();
 
   // Act: Verify parent-child relationship
 
@@ -155,7 +153,7 @@ NOLINT_TEST_F(SceneGraphTest, SingleChild_ParentNavigationWorks)
   // Arrange: Create simple parent-child relationship
   auto [parent, children] = CreateSimpleFamily("Parent", { "OnlyChild" });
   ASSERT_EQ(children.size(), 1);
-  const auto only_child = children[0];
+  auto only_child = children[0];
 
   // Act: Check parent's first child navigation
   const auto first_child = parent.GetFirstChild();
@@ -202,11 +200,11 @@ NOLINT_TEST_F(
   ASSERT_EQ(children.size(), 2);
 
   // Act: Get first child and navigate to second
-  const auto first_child = parent.GetFirstChild();
+  auto first_child = parent.GetFirstChild();
   ASSERT_TRUE(first_child.has_value());
-  const auto second_child_opt = first_child->GetNextSibling();
+  auto second_child_opt = first_child->GetNextSibling();
   ASSERT_TRUE(second_child_opt.has_value());
-  const auto& second_child = second_child_opt.value();
+  auto& second_child = second_child_opt.value();
 
   // Act: Navigate back from second to first
   const auto back_to_first_opt = second_child.GetPrevSibling();
@@ -229,8 +227,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneGraphTest, RootNodes_BehaviorIsCorrect)
 {
   // Arrange: Create multiple independent root nodes
-  const auto root1 = scene_->CreateNode("Root1");
-  const auto root2 = scene_->CreateNode("Root2");
+  auto root1 = scene_->CreateNode("Root1");
+  auto root2 = scene_->CreateNode("Root2");
 
   // Act: Check root node properties
 
@@ -248,7 +246,7 @@ NOLINT_TEST_F(SceneGraphTest, RootNodes_BehaviorIsCorrect)
 NOLINT_TEST_F(SceneGraphTest, RootNodeCollection_AllRootsFound)
 {
   // Arrange: Create multiple root nodes
-  const auto root1 = scene_->CreateNode("Root1");
+  auto root1 = scene_->CreateNode("Root1");
   const auto root2 = scene_->CreateNode("Root2");
   const auto root3 = scene_->CreateNode("Root3");
 
@@ -311,13 +309,13 @@ NOLINT_TEST_F(SceneGraphTest, RootNodeDestruction_RemovedFromRootCollection)
 NOLINT_TEST_F(SceneGraphTest, ThreeGenerationHierarchy_NavigationWorks)
 {
   // Arrange: Create root -> child -> grandchild hierarchy
-  const auto root = scene_->CreateNode("Root");
-  const auto child_opt = scene_->CreateChildNode(root, "Child");
+  auto root = scene_->CreateNode("Root");
+  auto child_opt = scene_->CreateChildNode(root, "Child");
   ASSERT_TRUE(child_opt.has_value());
-  const auto& child = child_opt.value();
-  const auto grandchild_opt = scene_->CreateChildNode(child, "Grandchild");
+  auto& child = child_opt.value();
+  auto grandchild_opt = scene_->CreateChildNode(child, "Grandchild");
   ASSERT_TRUE(grandchild_opt.has_value());
-  const auto& grandchild = grandchild_opt.value();
+  auto& grandchild = grandchild_opt.value();
 
   // Act: Verify hierarchy relationships
 
@@ -358,7 +356,7 @@ NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
   ASSERT_TRUE(grandchild3_opt.has_value());
   auto grandchild1 = grandchild1_opt.value();
   auto grandchild2 = grandchild2_opt.value();
-  const auto& grandchild3 = grandchild3_opt.value();
+  auto& grandchild3 = grandchild3_opt.value();
 
   // Act: Verify complete tree structure
 
@@ -424,7 +422,7 @@ NOLINT_TEST_F(
   SceneGraphTest, ChildrenCountAndEnumeration_IncrementalVerification)
 {
   // Arrange: Start with parent and no children
-  const auto parent = scene_->CreateNode("Parent");
+  auto parent = scene_->CreateNode("Parent");
   ExpectChildrenCount(parent, 0);
   auto children = scene_->GetChildren(parent);
   EXPECT_TRUE(children.empty());
@@ -459,7 +457,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneGraphTest, NodeDestruction_RemovesFromHierarchy)
 {
   // Arrange: Create parent with child
-  const auto parent = scene_->CreateNode("Parent");
+  auto parent = scene_->CreateNode("Parent");
   const auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
   auto child = child_opt.value();
@@ -480,7 +478,7 @@ NOLINT_TEST_F(SceneGraphTest, NodeDestruction_RemovesFromHierarchy)
 NOLINT_TEST_F(SceneGraphTest, InvalidNodeNavigation_ReturnsEmptyOptionals)
 {
   // Arrange: Create node then destroy its validity
-  const auto parent = scene_->CreateNode("Parent");
+  auto parent = scene_->CreateNode("Parent");
   const auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
   auto child = child_opt.value();
@@ -612,7 +610,7 @@ NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
   // Arrange: Create parent with many children (testing sibling list
   // integrity)
   constexpr std::size_t child_count = 50;
-  const auto parent = scene_->CreateNode("Parent");
+  auto parent = scene_->CreateNode("Parent");
   auto children = std::vector<SceneNode> {};
 
   for (std::size_t i = 0; i < child_count; ++i) {
@@ -635,7 +633,7 @@ NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
   ExpectChildrenCount(parent, child_count);
 
   // Assert: All children should still have correct parent
-  for (const auto& child : children) {
+  for (auto& child : children) {
     ExpectParentChildRelationship(parent, child);
   }
 }

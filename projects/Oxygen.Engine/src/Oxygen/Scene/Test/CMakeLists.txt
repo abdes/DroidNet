@@ -111,6 +111,7 @@ target_link_libraries(
     nlohmann_json_schema_validator
 )
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
+m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
 
 # -- Example Scene Graph -------------------------------------------------------
 

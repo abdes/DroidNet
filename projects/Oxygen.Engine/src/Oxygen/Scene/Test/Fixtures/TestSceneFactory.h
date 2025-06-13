@@ -26,13 +26,13 @@ struct Template;
 //! Concept for name generators that support hierarchical context
 template <typename T>
 concept ContextAwareNameGenerator
-    = requires(T& generator, int depth, bool multiple_siblings) {
-        { generator.SetDepth(depth) } -> std::same_as<void>;
-        {
-          generator.SetMultipleSiblingsExpected(multiple_siblings)
-        } -> std::same_as<void>;
-        { generator.IncrementNodeCount() } -> std::same_as<void>;
-      };
+  = requires(T& generator, int depth, bool multiple_siblings) {
+      { generator.SetDepth(depth) } -> std::same_as<void>;
+      {
+        generator.SetMultipleSiblingsExpected(multiple_siblings)
+      } -> std::same_as<void>;
+      { generator.IncrementNodeCount() } -> std::same_as<void>;
+    };
 
 //! Interface for generating node names in test scene factories.
 class NameGenerator {
@@ -75,7 +75,7 @@ public:
   {
     // Generate role-based names that don't encode parent-child relationships
     const std::string role_name
-        = DetermineRoleBasedName(prefix_, current_depth_);
+      = DetermineRoleBasedName(prefix_, current_depth_);
 
     // For single nodes of a type, omit the index
     if (index == 0 && !multiple_siblings_expected_) {
@@ -105,7 +105,7 @@ public:
 
 private:
   [[nodiscard]] auto DetermineRoleBasedName(
-      const std::string& prefix, int depth) const -> std::string
+    const std::string& prefix, int depth) const -> std::string
   {
     // Provide semantic names based on common graph patterns and depth
     if (prefix == "Node") {
@@ -180,8 +180,8 @@ private:
     const std::vector<std::string> names = { "First", "Second", "Third",
       "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth" };
     return (index < static_cast<int>(names.size()))
-        ? names[index]
-        : "Item" + std::to_string(index);
+      ? names[index]
+      : "Item" + std::to_string(index);
   }
 
   std::string prefix_;
@@ -249,51 +249,51 @@ public:
   //! Creates a scene graph from a JSON template string.
   //! Throws std::invalid_argument if JSON is malformed or doesn't match schema.
   [[nodiscard]] auto CreateFromJson(const std::string& json_template,
-      std::string_view scene_name = "TestScene",
-      std::size_t capacity = 1024) const -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene",
+    std::size_t capacity = 1024) const -> std::shared_ptr<Scene>;
 
   //=== Common Pattern Shortcuts ===------------------------------------------//
 
   //! Creates a scene with a single root node.
-  [[nodiscard]] auto CreateSingleNodeScene(std::string_view scene_name
-      = "TestScene") const -> std::shared_ptr<Scene>;
+  [[nodiscard]] auto CreateSingleNodeScene(
+    std::string_view scene_name = "TestScene") const -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a parent and single child.
-  [[nodiscard]] auto CreateParentChildScene(std::string_view scene_name
-      = "TestScene") const -> std::shared_ptr<Scene>;
+  [[nodiscard]] auto CreateParentChildScene(
+    std::string_view scene_name = "TestScene") const -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a parent and multiple children.
   [[nodiscard]] auto CreateParentWithChildrenScene(
-      std::string_view scene_name = "TestScene", int child_count = 2) const
-      -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene", int child_count = 2) const
+    -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a linear chain of nodes (A -> B -> C -> ...).
   [[nodiscard]] auto CreateLinearChainScene(
-      std::string_view scene_name = "TestScene", int depth = 3) const
-      -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene", int depth = 3) const
+    -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a binary tree structure.
   [[nodiscard]] auto CreateBinaryTreeScene(
-      std::string_view scene_name = "TestScene", int depth = 2) const
-      -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene", int depth = 2) const
+    -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a forest (multiple root nodes with children).
   [[nodiscard]] auto CreateForestScene(
-      std::string_view scene_name = "TestScene", int root_count = 2,
-      int children_per_root = 2) const -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene", int root_count = 2,
+    int children_per_root = 2) const -> std::shared_ptr<Scene>;
 
   //=== Template Management ===-----------------------------------------------//
 
   //! Registers a named JSON template for reuse.
   //! Throws std::invalid_argument if template is invalid.
   auto RegisterTemplate(const std::string& name,
-      const std::string& json_template) -> TestSceneFactory&;
+    const std::string& json_template) -> TestSceneFactory&;
 
   //! Creates a scene from a registered template.
   //! Returns nullptr if template doesn't exist.
   [[nodiscard]] auto CreateFromTemplate(const std::string& template_name,
-      std::string_view scene_name = "TestScene",
-      std::size_t capacity = 1024) const -> std::shared_ptr<Scene>;
+    std::string_view scene_name = "TestScene",
+    std::size_t capacity = 1024) const -> std::shared_ptr<Scene>;
 
   //=== Schema Validation ===-------------------------------------------------//
 
@@ -304,7 +304,7 @@ public:
   //! Validates a JSON string against the embedded schema without creating a
   //! scene. Returns nullopt if valid, or an error message if invalid.
   [[nodiscard]] static auto ValidateJson(const std::string& json_string)
-      -> std::optional<std::string>;
+    -> std::optional<std::string>;
 
 private:
   TestSceneFactory();
@@ -314,7 +314,7 @@ private:
 
   //! Creates a scene with appropriate capacity based on default setting.
   [[nodiscard]] auto CreateScene(std::string_view scene_name) const
-      -> std::shared_ptr<Scene>;
+    -> std::shared_ptr<Scene>;
 
   //! Generates a unique name with index using current name generator.
   [[nodiscard]] auto GenerateNodeName(int index) const -> std::string;
