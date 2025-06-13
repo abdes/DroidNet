@@ -7,15 +7,16 @@
 #pragma once
 
 #include <concepts>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::scene::testing {
@@ -38,6 +39,11 @@ concept ContextAwareNameGenerator
 class NameGenerator {
 public:
   virtual ~NameGenerator() = default;
+
+  NameGenerator() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(NameGenerator)
+  OXYGEN_DEFAULT_MOVABLE(NameGenerator)
 
   //! Generates a name for a node with the given index.
   /*!
@@ -71,11 +77,10 @@ class DefaultNameGenerator : public NameGenerator {
 public:
   DefaultNameGenerator() = default;
 
-  [[nodiscard]] auto GenerateName(int index) const -> std::string override
+  [[nodiscard]] auto GenerateName(const int index) const -> std::string override
   {
     // Generate role-based names that don't encode parent-child relationships
-    const std::string role_name
-      = DetermineRoleBasedName(prefix_, current_depth_);
+    std::string role_name = DetermineRoleBasedName(prefix_, current_depth_);
 
     // For single nodes of a type, omit the index
     if (index == 0 && !multiple_siblings_expected_) {
@@ -96,16 +101,16 @@ public:
   void SetPrefix(const std::string& prefix) override { prefix_ = prefix; }
 
   // Context setters for intelligent naming - satisfy the concept
-  void SetDepth(int depth) { current_depth_ = depth; }
-  void SetMultipleSiblingsExpected(bool expected)
+  void SetDepth(const int depth) { current_depth_ = depth; }
+  void SetMultipleSiblingsExpected(const bool expected)
   {
     multiple_siblings_expected_ = expected;
   }
   void IncrementNodeCount() { current_node_count_++; }
 
 private:
-  [[nodiscard]] auto DetermineRoleBasedName(
-    const std::string& prefix, int depth) const -> std::string
+  [[nodiscard]] static auto DetermineRoleBasedName(
+    const std::string& prefix, const int depth) -> std::string
   {
     // Provide semantic names based on common graph patterns and depth
     if (prefix == "Node") {
@@ -145,9 +150,9 @@ private:
   }
 
   std::string prefix_ = "Node";
-  mutable int current_depth_ = 0;
-  mutable int current_node_count_ = 0;
-  mutable bool multiple_siblings_expected_ = false;
+  int current_depth_ = 0;
+  int current_node_count_ = 0;
+  bool multiple_siblings_expected_ = false;
 };
 
 // Verify DefaultNameGenerator satisfies the concept
@@ -157,7 +162,7 @@ static_assert(ContextAwareNameGenerator<DefaultNameGenerator>);
 //! identification.
 class PositionalNameGenerator : public NameGenerator {
 public:
-  [[nodiscard]] auto GenerateName(int index) const -> std::string override
+  [[nodiscard]] auto GenerateName(const int index) const -> std::string override
   {
     const std::string position_name = GenerateSequentialName(index);
     return prefix_.empty() ? position_name : prefix_ + position_name;
@@ -175,13 +180,13 @@ public:
   // generators
 
 private:
-  [[nodiscard]] auto GenerateSequentialName(int index) const -> std::string
+  [[nodiscard]] static auto GenerateSequentialName(const int index)
+    -> std::string
   {
     const std::vector<std::string> names = { "First", "Second", "Third",
       "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth" };
-    return (index < static_cast<int>(names.size()))
-      ? names[index]
-      : "Item" + std::to_string(index);
+    return std::cmp_less(index, names.size()) ? names[index]
+                                              : "Item" + std::to_string(index);
   }
 
   std::string prefix_;
@@ -334,7 +339,7 @@ private:
   std::optional<std::size_t> default_capacity_;
 
   //! Default name generator instance.
-  static std::unique_ptr<NameGenerator> CreateDefaultNameGenerator();
+  static auto CreateDefaultNameGenerator() -> std::unique_ptr<NameGenerator>;
 };
 
 } // namespace oxygen::scene::testing

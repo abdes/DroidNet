@@ -11,9 +11,10 @@
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Scene/SceneNode.h>
+
 #include "./TestSceneFactory.h"
 #include "./TestSceneFactory_schema.h"
-#include <Oxygen/Scene/SceneNode.h>
 
 using nlohmann::json;
 using nlohmann::json_schema::json_validator;
@@ -45,7 +46,7 @@ namespace {
     auto Validate(const json& instance) const -> std::optional<std::string>
     {
       try {
-        validator_.validate(instance);
+        [[maybe_unused]] auto _ = validator_.validate(instance);
         return std::nullopt; // Validation successful
       } catch (const std::exception& e) {
         return std::string(e.what());
@@ -79,10 +80,10 @@ namespace {
 //=== Template Implementation ===--------------------------------------------//
 
 struct Template {
-  nlohmann::json parsed_json;
+  json parsed_json;
   std::string original_string; // Keep for debugging/logging
 
-  Template(nlohmann::json json, std::string original)
+  Template(json json, std::string original)
     : parsed_json(std::move(json))
     , original_string(std::move(original))
   {
@@ -96,25 +97,24 @@ namespace {
   // Forward declarations to resolve dependencies
   auto CreateSceneFromJson(const TestSceneFactory& factory,
     std::string_view scene_name, std::size_t capacity,
-    const nlohmann::json& json_template) -> std::shared_ptr<Scene>;
+    const json& json_template) -> std::shared_ptr<Scene>;
 
   auto CreateNodeFromJson(const TestSceneFactory& factory,
-    const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
+    const std::shared_ptr<Scene>& scene, const json& node_spec,
     std::optional<SceneNode> parent) -> SceneNode;
 
   void CreateChildrenFromJson(const TestSceneFactory& factory,
     const std::shared_ptr<Scene>& scene, SceneNode& parent,
-    const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes);
+    const json& children_spec, std::vector<SceneNode>& all_nodes);
 
-  void ApplyNodeProperties(
-    const SceneNode& node, const nlohmann::json& properties);
+  void ApplyNodeProperties(const SceneNode& node, const json& properties);
 
   // Function implementations
 
   //! Creates a scene and populates it from JSON specification.
   auto CreateSceneFromJson(const TestSceneFactory& factory,
     std::string_view scene_name, std::size_t capacity,
-    const nlohmann::json& json_template) -> std::shared_ptr<Scene>
+    const json& json_template) -> std::shared_ptr<Scene>
   {
     auto scene = std::make_shared<Scene>(std::string(scene_name), capacity);
 
@@ -137,7 +137,7 @@ namespace {
 
   //! Creates a single node from JSON specification.
   auto CreateNodeFromJson(const TestSceneFactory& factory,
-    const std::shared_ptr<Scene>& scene, const nlohmann::json& node_spec,
+    const std::shared_ptr<Scene>& scene, const json& node_spec,
     std::optional<SceneNode> parent) -> SceneNode
   {
     if (!node_spec.is_object()) {
@@ -157,7 +157,7 @@ namespace {
     // Create the node
     SceneNode node;
     if (parent.has_value()) {
-      auto child_opt = scene->CreateChildNode(*parent, node_name);
+      auto child_opt = scene->CreateChildNode(parent.value(), node_name);
       if (!child_opt.has_value()) {
         throw std::runtime_error("Failed to create child node: " + node_name);
       }
@@ -182,7 +182,7 @@ namespace {
   //! Recursively creates children from JSON specification.
   void CreateChildrenFromJson(const TestSceneFactory& factory,
     const std::shared_ptr<Scene>& scene, SceneNode& parent,
-    const nlohmann::json& children_spec, std::vector<SceneNode>& all_nodes)
+    const json& children_spec, std::vector<SceneNode>& all_nodes)
   {
     if (!children_spec.is_array()) {
       throw std::invalid_argument("Children specification must be an array");
@@ -195,8 +195,7 @@ namespace {
   }
 
   //! Applies node properties from JSON.
-  void ApplyNodeProperties(
-    const SceneNode& node, const nlohmann::json& properties)
+  void ApplyNodeProperties(const SceneNode& node, const json& properties)
   {
     // Apply transform properties if specified
     if (properties.contains("transform")
@@ -482,7 +481,7 @@ auto TestSceneFactory::RegisterTemplate(const std::string& name,
 {
   try {
     // Parse and validate JSON
-    auto json = nlohmann::json::parse(json_template);
+    auto json = json::parse(json_template);
 
     // Validate against schema using proper JSON Schema validation
     if (auto validation_error = ValidateJsonAgainstSchema(json)) {
@@ -494,7 +493,7 @@ auto TestSceneFactory::RegisterTemplate(const std::string& name,
     templates_[name]
       = std::make_unique<Template>(std::move(json), json_template);
     return *this;
-  } catch (const nlohmann::json::parse_error& e) {
+  } catch (const json::parse_error& e) {
     throw std::invalid_argument(
       "Invalid JSON template: " + std::string(e.what()));
   }
@@ -522,7 +521,7 @@ auto TestSceneFactory::CreateFromJson(const std::string& json_template,
   -> std::shared_ptr<Scene>
 {
   try {
-    auto json = nlohmann::json::parse(json_template);
+    auto json = json::parse(json_template);
 
     // Validate against schema using proper JSON Schema validation
     if (auto validation_error = ValidateJsonAgainstSchema(json)) {
@@ -531,7 +530,7 @@ auto TestSceneFactory::CreateFromJson(const std::string& json_template,
     }
 
     return CreateSceneFromJson(*this, scene_name, capacity, json);
-  } catch (const nlohmann::json::parse_error& e) {
+  } catch (const json::parse_error& e) {
     throw std::invalid_argument("Invalid JSON: " + std::string(e.what()));
   }
 }
@@ -549,9 +548,9 @@ auto TestSceneFactory::ValidateJson(const std::string& json_string)
   -> std::optional<std::string>
 {
   try {
-    auto json = nlohmann::json::parse(json_string);
+    auto json = json::parse(json_string);
     return ValidateJsonAgainstSchema(json);
-  } catch (const nlohmann::json::parse_error& e) {
+  } catch (const json::parse_error& e) {
     return "JSON parsing error: " + std::string(e.what());
   }
 }
