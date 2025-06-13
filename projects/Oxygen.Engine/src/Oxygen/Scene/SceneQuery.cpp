@@ -31,7 +31,7 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
   auto path_filter = CreatePathFilter(path_segments);
 
   traversal_.Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
+      [&](const ConstVisitedNode& visited, const Scene&, bool) -> VisitResult {
         result = SceneNode { std::shared_ptr<const Scene>(scene_),
           visited.handle };
         return VisitResult::kStop; // Early termination
@@ -46,9 +46,9 @@ auto SceneQuery::FindFirstByPath(const SceneNode& context,
 {
 }
 */
-SceneQuery::SceneQuery(const Scene& scene)
-  : scene_(&scene)
-  , traversal_(scene)
+SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene_weak)
+  : scene_weak_(scene_weak)
+  , traversal_(scene_weak)
 {
 }
 
@@ -86,7 +86,7 @@ auto SceneQuery::BatchEnd(
   return result;
 }
 
-auto SceneQuery::ProcessBatchedNode(const VisitedNode& visited,
+auto SceneQuery::ProcessBatchedNode(const ConstVisitedNode& visited,
   const Scene& scene, bool dry_run) const noexcept -> VisitResult
 {
   if (dry_run) {
@@ -118,22 +118,22 @@ auto SceneQuery::ProcessBatchedNode(const VisitedNode& visited,
 }
 
 auto SceneQuery::ExecuteBatchFindFirst(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> std::optional<SceneNode>
 {
   std::optional<SceneNode> result;
   batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kFindFirst,
     .result_destination = &result,
-    .result_handler = [&result, scene = scene_](const VisitedNode& visited) {
-      result
-        = SceneNode { std::shared_ptr<const Scene>(scene), visited.handle };
-    } });
+    .result_handler
+    = [&result, scene = scene_weak_](const ConstVisitedNode& visited) {
+        result = SceneNode { scene.lock(), visited.handle };
+      } });
   return result; // Will be populated during ExecuteBatch
 }
 
 auto SceneQuery::ExecuteBatchCount(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> oxygen::scene::QueryResult
 {
   QueryResult result;
@@ -142,13 +142,13 @@ auto SceneQuery::ExecuteBatchCount(
     .type = BatchOperation::Type::kCount,
     .result_destination = &result,
     .result_handler
-    = [&result](const VisitedNode& visited) { ++result.nodes_matched; },
+    = [&result](const ConstVisitedNode& visited) { ++result.nodes_matched; },
   });
   return result; // Will be updated during ExecuteBatch
 }
 
 auto SceneQuery::ExecuteBatchAny(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> std::optional<bool>
 {
   std::optional<bool> result;
@@ -156,27 +156,27 @@ auto SceneQuery::ExecuteBatchAny(
     .predicate = predicate,
     .type = BatchOperation::Type::kAny,
     .result_destination = &result,
-    .result_handler = [&result](const VisitedNode& visited) { result = true; },
+    .result_handler
+    = [&result](const ConstVisitedNode& visited) { result = true; },
   });
   return result; // Will be updated during ExecuteBatch
 }
 
 auto SceneQuery::ExecuteImmediateFindFirst(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> std::optional<SceneNode>
 {
   std::optional<SceneNode> result;
-  auto query_filter
-    = [&predicate](const VisitedNode& visited, FilterResult) -> FilterResult {
+  auto query_filter = [&predicate](const ConstVisitedNode& visited,
+                        FilterResult) -> FilterResult {
     if (predicate(visited)) {
       return FilterResult::kAccept;
     }
     return FilterResult::kReject;
   };
   traversal_.Traverse(
-    [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-      result
-        = SceneNode { std::shared_ptr<const Scene>(scene_), visited.handle };
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+      result = SceneNode { scene_weak_.lock(), visited.handle };
       return VisitResult::kStop;
     },
     TraversalOrder::kPreOrder, query_filter);
@@ -184,11 +184,11 @@ auto SceneQuery::ExecuteImmediateFindFirst(
 }
 
 auto SceneQuery::ExecuteImmediateCount(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> oxygen::scene::QueryResult
 {
   QueryResult result;
-  auto count_filter = [&result, &predicate](const VisitedNode& visited,
+  auto count_filter = [&result, &predicate](const ConstVisitedNode& visited,
                         FilterResult) -> FilterResult {
     ++result.nodes_examined;
     if (predicate(visited)) {
@@ -197,7 +197,7 @@ auto SceneQuery::ExecuteImmediateCount(
     return FilterResult::kReject;
   };
   auto traversal_result = traversal_.Traverse(
-    [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       ++result.nodes_matched;
       return VisitResult::kContinue;
     },
@@ -207,19 +207,19 @@ auto SceneQuery::ExecuteImmediateCount(
 }
 
 auto SceneQuery::ExecuteImmediateAny(
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> std::optional<bool>
 {
   bool found = false;
-  auto any_filter
-    = [&predicate](const VisitedNode& visited, FilterResult) -> FilterResult {
+  auto any_filter = [&predicate](const ConstVisitedNode& visited,
+                      FilterResult) -> FilterResult {
     if (predicate(visited)) {
       return FilterResult::kAccept;
     }
     return FilterResult::kReject;
   };
   traversal_.Traverse(
-    [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       found = true;
       return VisitResult::kStop;
     },
@@ -228,18 +228,18 @@ auto SceneQuery::ExecuteImmediateAny(
 }
 
 auto SceneQuery::ExecuteImmediateCollect(auto& container,
-  const std::function<bool(const VisitedNode&)>& predicate) const noexcept
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> QueryResult
 {
   QueryResult result {};
-  auto queryFilter = [&result, &predicate](const VisitedNode& visited,
+  auto queryFilter = [&result, &predicate](const ConstVisitedNode& visited,
                        FilterResult) -> FilterResult {
     ++result.nodes_examined;
     return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
   };
-  auto visitHandler = [this, &container, &result](const VisitedNode& visited,
-                        const Scene&, bool) -> VisitResult {
-    container.emplace_back(scene_.lock(), visited.handle);
+  auto visitHandler = [this, &container, &result](
+                        const ConstVisitedNode& visited, bool) -> VisitResult {
+    container.emplace_back(scene_weak_.lock(), visited.handle);
     ++result.nodes_matched;
     return VisitResult::kContinue;
   };

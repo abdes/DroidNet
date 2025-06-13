@@ -103,8 +103,7 @@ auto Scene::SafeCall(Validator&& validator, Func&& func) noexcept
 */
 class Scene::BaseNodeValidator {
 public:
-  BaseNodeValidator(
-    const Scene* target_scene, const SceneNode& target_node) noexcept
+  BaseNodeValidator(const Scene* target_scene, SceneNode& target_node) noexcept
     : scene_(target_scene)
     , node_(&target_node)
   {
@@ -118,10 +117,7 @@ protected:
   }
 
   //! Returns the target node reference for validation operations.
-  [[nodiscard]] auto GetNode() const noexcept -> const SceneNode&
-  {
-    return *node_;
-  }
+  [[nodiscard]] auto GetNode() const noexcept -> SceneNode& { return *node_; }
 
   //! Returns and moves the current validation error result.
   [[nodiscard]] auto GetResult() noexcept { return std::move(result_); }
@@ -144,14 +140,14 @@ protected:
 private:
   std::optional<std::string> result_ {};
   const Scene* scene_;
-  const SceneNode* node_;
+  SceneNode* node_;
 };
 
 //! A validator that checks if a SceneNode is valid and belongs to the \p scene.
 class Scene::NodeIsValidAndInSceneValidator : public BaseNodeValidator {
 public:
   explicit NodeIsValidAndInSceneValidator(
-    const Scene* target_scene, const SceneNode& target_node) noexcept
+    const Scene* target_scene, SceneNode& target_node) noexcept
     : BaseNodeValidator(target_scene, target_node)
   {
   }
@@ -172,14 +168,14 @@ public:
 class Scene::LeafNodeCanBeDestroyedValidator : public BaseNodeValidator {
 public:
   explicit LeafNodeCanBeDestroyedValidator(
-    const Scene* target_scene, const SceneNode& target_node) noexcept
+    const Scene* target_scene, SceneNode& target_node) noexcept
     : BaseNodeValidator(target_scene, target_node)
   {
   }
 
   auto operator()(SafeCallState& state) -> std::optional<std::string>
   {
-    state.node = const_cast<SceneNode*>(&GetNode());
+    state.node = &GetNode();
     if (EnsureScene() && EnsureSceneOwnsNode()
       && PopulateStateWithNodeImpl(state) && EnsureNodeHasNoChildren())
       [[likely]] {

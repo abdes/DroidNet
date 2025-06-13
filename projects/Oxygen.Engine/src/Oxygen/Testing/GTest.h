@@ -22,12 +22,12 @@
 // A void test-function using ASSERT_ or EXPECT_ calls with a custom message
 // should be encapsulated by this macro. Example:
 // CHECK_FOR_FAILURES_MSG(MyCheckForEquality(counter, 42), "for counter=42")
-#define CHECK_FOR_FAILURES_MSG__(statement, message)                           \
+#define CHECK_FOR_FAILURES_MSG_IMPL(statement, message)                        \
   {                                                                            \
     SCOPED_TRACE(message);                                                     \
     ASSERT_NO_FATAL_FAILURE((statement));                                      \
   }
 #define CHECK_FOR_FAILURES_MSG(statement, message)                             \
-  CHECK_FOR_FAILURES_MSG__(statement, message) // NOLINT
+  CHECK_FOR_FAILURES_MSG_IMPL(statement, message) // NOLINT
 #define CHECK_FOR_FAILURES(statement)                                          \
-  CHECK_FOR_FAILURES_MSG__(statement, "") // NOLINT
+  CHECK_FOR_FAILURES_MSG_IMPL(statement, "") // NOLINT

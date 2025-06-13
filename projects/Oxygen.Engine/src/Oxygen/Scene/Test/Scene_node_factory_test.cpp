@@ -47,7 +47,7 @@ protected:
     return scene_->CreateNode(name, flags);
   }
 
-  [[nodiscard]] auto CreateChildNode(const SceneNode& parent,
+  [[nodiscard]] auto CreateChildNode(SceneNode& parent,
     const std::string& name) const -> std::optional<SceneNode>
   {
     return scene_->CreateChildNode(parent, name);
@@ -62,8 +62,7 @@ protected:
   {
     return scene_->DestroyNodeHierarchy(node);
   }
-  static void ExpectNodeValidWithName(
-    const SceneNode& node, const std::string& name)
+  static void ExpectNodeValidWithName(SceneNode& node, const std::string& name)
   {
     EXPECT_TRUE(node.IsValid()) << "Node should be valid";
     const auto obj_opt = node.GetObject();
@@ -121,7 +120,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_BasicName_Succeeds)
   // Arrange: Scene is ready for use (fixture setup).
 
   // Act: Create a single node with a specific name.
-  const auto node = CreateNode("TestNode");
+  auto node = CreateNode("TestNode");
   // Assert: Verify the node is valid, has the correct name, and scene
   // statistics are updated.
   CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(node, "TestNode"),
@@ -134,7 +133,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_EmptyName_Succeeds)
   // Arrange: Scene is ready for use (fixture setup).
 
   // Act: Create a node with an empty name.
-  const auto node = CreateNode("");
+  auto node = CreateNode("");
   // Assert: Node should be valid and have an empty name.
   CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(node, ""),
     "expecting node to be valid with empty name");
@@ -184,16 +183,16 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_BasicParent_Succeeds)
 {
   // Arrange: Create a parent node and verify its validity.
   // Scene graph: Parent -> Child
-  const auto parent = CreateNode("Parent");
+  auto parent = CreateNode("Parent");
   EXPECT_TRUE(parent.IsValid());
 
   // Act: Create a child node for the previously created parent.
-  const auto child_opt = CreateChildNode(parent, "Child");
+  auto child_opt = CreateChildNode(parent, "Child");
 
   // Assert: Verify the child was created, both parent and child are valid
   // with correct names, and scene node count is updated.
   // ASSERT_TRUE(child_opt.has_value());
-  const auto& child = child_opt.value();
+  auto& child = child_opt.value();
   CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(parent, "Parent"),
     "expecting parent node to be valid with correct name");
   CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(child, "Child"),
@@ -205,7 +204,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
 {
   // Arrange: Create a parent node and define custom flags for child
   // Scene graph: Parent -> CustomChild
-  const auto parent = CreateNode("Parent");
+  auto parent = CreateNode("Parent");
   EXPECT_TRUE(parent.IsValid());
 
   const auto custom_flags = SceneNode::Flags {}
@@ -215,12 +214,11 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
                                 SceneFlag {}.SetEffectiveValueBit(true));
 
   // Act: Create a child node with custom flags
-  const auto child_opt
-    = scene_->CreateChildNode(parent, "CustomChild", custom_flags);
+  auto child_opt = scene_->CreateChildNode(parent, "CustomChild", custom_flags);
 
   // Assert: Verify child was created with correct flags
   // ASSERT_TRUE(child_opt.has_value());
-  const auto& child = child_opt.value();
+  auto& child = child_opt.value();
   CHECK_FOR_FAILURES_MSG(ExpectNodeValidWithName(child, "CustomChild"),
     "expecting child node to be valid with correct name");
 
@@ -393,7 +391,7 @@ NOLINT_TEST_F(
   SceneAsNodeFactoryErrorTest, CreateChildNode_InvalidParentHandle_Fails)
 {
   // Arrange: Create node with an invalid handle
-  const auto invalid_node = CreateNodeWithInvalidHandle();
+  auto invalid_node = CreateNodeWithInvalidHandle();
 
   // Act: Attempt to create a child node with an invalid parent.
   const auto child = scene_->CreateChildNode(invalid_node, "Child");
@@ -425,7 +423,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryErrorTest,
   CreateChildNodeWithFlags_InvalidParentHandle_Fails)
 {
   // Arrange: Create node with an invalid handle and custom flags
-  const auto invalid_node = CreateNodeWithInvalidHandle();
+  auto invalid_node = CreateNodeWithInvalidHandle();
   const auto custom_flags = SceneNode::Flags {}.SetFlag(
     SceneNodeFlags::kStatic, SceneFlag {}.SetEffectiveValueBit(true));
 
@@ -511,7 +509,7 @@ NOLINT_TEST_F(
 {
   // Arrange: Create a parent node in another scene.
   const auto other_scene = std::make_shared<Scene>("OtherScene", 1);
-  const auto foreign_parent = other_scene->CreateNode("ForeignParent");
+  auto foreign_parent = other_scene->CreateNode("ForeignParent");
 
   // Act and Assert: Attempt to create a child node with a foreign parent
   NOLINT_ASSERT_DEATH([[maybe_unused]] auto _
@@ -524,7 +522,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryDeathTest,
 {
   // Arrange: Create a parent node in another scene
   const auto other_scene = std::make_shared<Scene>("OtherScene", 1);
-  const auto foreign_parent = other_scene->CreateNode("ForeignParent");
+  auto foreign_parent = other_scene->CreateNode("ForeignParent");
 
   const auto custom_flags = SceneNode::Flags {}.SetFlag(
     SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
@@ -649,7 +647,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(child1_opt.has_value());
 
   auto root2 = CreateNode("Root2");
-  const auto child2_opt = CreateChildNode(root2, "Child2");
+  auto child2_opt = CreateChildNode(root2, "Child2");
   const auto grandchild2_opt
     = CreateChildNode(child2_opt.value(), "Grandchild2");
   ASSERT_TRUE(child2_opt.has_value());

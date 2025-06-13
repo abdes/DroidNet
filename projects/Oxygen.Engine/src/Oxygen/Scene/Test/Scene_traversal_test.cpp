@@ -21,8 +21,10 @@
 #include "./Scene_traversal_test.h"
 
 using oxygen::scene::AcceptAllFilter;
+using oxygen::scene::ConstVisitedNode;
 using oxygen::scene::DirtyTransformFilter;
 using oxygen::scene::FilterResult;
+using oxygen::scene::MutableVisitedNode;
 using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
@@ -33,7 +35,6 @@ using oxygen::scene::SceneTraversal;
 using oxygen::scene::TraversalOrder;
 using oxygen::scene::TraversalResult;
 using oxygen::scene::VisibleFilter;
-using oxygen::scene::VisitedNode;
 using oxygen::scene::VisitResult;
 
 using oxygen::scene::testing::SceneTraversalBasicTest;
@@ -89,7 +90,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromSingleRoot)
 {
   // Act: Traverse from root1 only
   const auto result
-    = traversal_->TraverseHierarchy(root1_, CreateTrackingVisitor());
+    = GetTraversal().TraverseHierarchy(root1_, CreateTrackingVisitor());
 
   // Assert: Only root1's hierarchy should be visited
   ExpectTraversalResult(result, 4, 0, true);
@@ -105,7 +106,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromMultipleRoots)
 
   // Act: Traverse from multiple specific roots
   const auto result
-    = traversal_->TraverseHierarchies(roots, CreateTrackingVisitor());
+    = GetTraversal().TraverseHierarchies(roots, CreateTrackingVisitor());
 
   // Assert: Only specified roots' hierarchies should be visited
   ExpectTraversalResult(result, 5, 0, true);
@@ -120,7 +121,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromEmptyRootList)
 
   // Act: Traverse from empty root list
   const auto result
-    = traversal_->TraverseHierarchies(empty_roots, CreateTrackingVisitor());
+    = GetTraversal().TraverseHierarchies(empty_roots, CreateTrackingVisitor());
 
   // Assert: No nodes should be visited
   ExpectTraversalResult(result, 0, 0, true);
@@ -135,7 +136,7 @@ NOLINT_TEST_F(SceneTraversalFromRootsTest, TraverseFromInvalidHandle)
 
   // Act: Traverse from invalid handle
   const auto result
-    = traversal_->TraverseHierarchy(invalid_node, CreateTrackingVisitor());
+    = GetTraversal().TraverseHierarchy(invalid_node, CreateTrackingVisitor());
 
   // Assert: No nodes should be visited
   ExpectTraversalResult(result, 0, 0, true);
@@ -178,7 +179,7 @@ protected:
   }
 
   // Helper: Check if a node's transform is dirty
-  static auto IsNodeTransformDirty(const SceneNode& node) -> bool
+  static auto IsNodeTransformDirty(SceneNode& node) -> bool
   {
     const auto impl = node.GetObject();
     if (!impl.has_value())
@@ -201,7 +202,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, DirtyTransformFilter)
   MarkNodeTransformDirty(nodeC_);
 
   // Act: Traverse with dirty transform filter
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(),
+  const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
     TraversalOrder::kPreOrder, DirtyTransformFilter {});
 
   // Assert: A, and C are visited; only B is filtered out
@@ -222,7 +223,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
     SceneFlag {}.SetEffectiveValueBit(true));
 
   // Act: Update transforms using convenience method
-  const auto updated_count = traversal_->UpdateTransforms();
+  const auto updated_count = GetTraversal().UpdateTransforms();
 
   // Assert: A, and B are dirty and should be updated
   EXPECT_EQ(updated_count, 2);
@@ -247,7 +248,7 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
 
   // Act: Update transforms only from nodeA's subtree
   std::vector<SceneNode> roots = { nodeA_ };
-  const auto updated_count = traversal_->UpdateTransforms(roots);
+  const auto updated_count = GetTraversal().UpdateTransforms(roots);
 
   // Assert: Only A and C should be updated, B should remain dirty
   EXPECT_EQ(updated_count, 2);
@@ -286,7 +287,7 @@ protected:
 NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, VisibleFilter)
 {
   // Act: Traverse with VisibleFilter
-  const auto result = traversal_->Traverse(
+  const auto result = GetTraversal().Traverse(
     CreateTrackingVisitor(), TraversalOrder::kPreOrder, VisibleFilter {});
 
   // Assert: Only visible_root should be visited; invisible_node rejects
@@ -304,7 +305,7 @@ NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, DirtyTransformFilter)
   MarkNodeTransformDirty(visible_child_);
 
   // Act: Traverse with DirtyTransformFilter
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(),
+  const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
     TraversalOrder::kPreOrder, DirtyTransformFilter {});
 
   // Assert: Only nodes with dirty transforms should be visited
@@ -330,7 +331,7 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, DeepHierarchyTraversal)
   }
 
   // Act: Traverse the deep hierarchy
-  const auto result = traversal_->Traverse(CreateTrackingVisitor());
+  const auto result = GetTraversal().Traverse(CreateTrackingVisitor());
 
   // Assert: All 100 nodes should be visited without stack overflow
   ExpectTraversalResult(result, 100, 0, true);
@@ -345,14 +346,14 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, WideHierarchyTraversal)
 {
   // Arrange: Create a wide hierarchy (many children at root level)
   scene_->Clear();
-  const SceneNode root = CreateNode("root");
+  auto root = CreateNode("root");
   for (int i = 0; i < 100; ++i) {
     [[maybe_unused]] auto _
       = CreateChildNode(root, "child_" + std::to_string(i));
   }
 
   // Act: Traverse the wide hierarchy
-  const auto result = traversal_->Traverse(
+  const auto result = GetTraversal().Traverse(
     CreateTrackingVisitor(), TraversalOrder::kBreadthFirst);
 
   // Assert: All 101 nodes should be visited (root + 100 children)
@@ -366,15 +367,17 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, WideHierarchyTraversal)
 NOLINT_TEST_F(SceneTraversalEdgeCaseTest, FilterRejectingAllNodes)
 {
   // Arrange: Create simple hierarchy
-  const auto root = CreateNode("root");
+  auto root = CreateNode("root");
   [[maybe_unused]] auto _ = CreateChildNode(root, "child");
   // Act: Traverse with filter that rejects all nodes
   auto reject_all_filter
-    = [](const VisitedNode& /*visited_node*/,
+    = [](const MutableVisitedNode& /*visited_node*/,
         FilterResult /*parent_filter_result*/) -> FilterResult {
     return FilterResult::kRejectSubTree;
   };
-  const auto result = traversal_->Traverse(
+  static_assert(
+    oxygen::scene::MutatingSceneFilter<decltype(reject_all_filter)>);
+  const auto result = GetTraversal().Traverse(
     CreateTrackingVisitor(), TraversalOrder::kPreOrder, reject_all_filter);
 
   // Assert: No nodes should be visited, but filter count depends on
@@ -390,19 +393,18 @@ NOLINT_TEST_F(SceneTraversalEdgeCaseTest, FilterRejectingAllNodes)
 NOLINT_TEST_F(SceneTraversalEdgeCaseTest, VisitorStoppingImmediately)
 {
   // Arrange: Create simple hierarchy
-  const auto root = CreateNode("root");
+  auto root = CreateNode("root");
   [[maybe_unused]] auto _ = CreateChildNode(root, "child");
   // Act: Traverse with visitor that stops immediately
   auto immediate_stop_visitor
-    = [this](const VisitedNode& node, const Scene& /*scene*/,
-        bool dry_run) -> VisitResult {
+    = [this](const MutableVisitedNode& node, bool dry_run) -> VisitResult {
     if (!dry_run) {
       visit_order_.emplace_back(
         node.node_impl->GetName()); // Convert string_view to string
     }
     return VisitResult::kStop;
   };
-  const auto result = traversal_->Traverse(immediate_stop_visitor);
+  const auto result = GetTraversal().Traverse(immediate_stop_visitor);
 
   // Assert: Only first node should be visited
   ExpectTraversalResult(result, 1, 0, false);
@@ -485,7 +487,7 @@ protected:
 NOLINT_TEST_F(SceneTraversalComplexTest, CombinedFilterAndVisitorControl)
 {
   // Act: Traverse with visible filter and subtree skipping at A
-  const auto result = traversal_->Traverse(CreateSubtreeSkippingVisitor("A"),
+  const auto result = GetTraversal().Traverse(CreateSubtreeSkippingVisitor("A"),
     TraversalOrder::kPreOrder, VisibleFilter {});
 
   // Assert: Should visit root, A (but skip its subtree), B, F
@@ -504,7 +506,7 @@ NOLINT_TEST_F(SceneTraversalComplexTest, DirtyTransformUpdateInComplexHierarchy)
   MarkNodeTransformDirty(nodeK_);
 
   // Act: Update only dirty transforms
-  const auto updated_count = traversal_->UpdateTransforms();
+  const auto updated_count = GetTraversal().UpdateTransforms();
 
   // Assert: Should update all dirty subtrees (A, D, E, J, F, K)
   EXPECT_EQ(updated_count, 6);
@@ -519,7 +521,7 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
   MarkNodeTransformDirty(
     nodeK_); // Custom filter: node must be dirty and visible
   auto dirty_and_visible
-    = [](const VisitedNode& visited_node,
+    = [](const MutableVisitedNode& visited_node,
         FilterResult /*parent_filter_result*/) -> FilterResult {
     const auto& node = *visited_node.node_impl;
     const auto& flags = node.GetFlags();
@@ -535,11 +537,11 @@ NOLINT_TEST_F(SceneTraversalComplexTest, UpdateTransformsWithVisibleFilter)
   };
   // Act: Update transforms with custom filter
   auto updated_names = std::vector<std::string> {};
-  const auto updated_count = traversal_->Traverse(
-    [&updated_names](const VisitedNode& node, const Scene& scene,
-      bool dry_run) -> VisitResult {
+  const auto updated_count = GetTraversal().Traverse(
+    [this, &updated_names](
+      const MutableVisitedNode& node, bool dry_run) -> VisitResult {
       if (!dry_run && node.node_impl->IsTransformDirty()) {
-        node.node_impl->UpdateTransforms(scene);
+        node.node_impl->UpdateTransforms(*scene_);
         updated_names.emplace_back(node.node_impl->GetName());
       }
       return VisitResult::kContinue;

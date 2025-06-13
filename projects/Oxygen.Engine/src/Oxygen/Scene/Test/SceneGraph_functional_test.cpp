@@ -117,7 +117,7 @@ protected:
   }
 
   // Helper: Recursively verify node hierarchy integrity
-  static void VerifyNodeHierarchyIntegrity(const SceneNode& node)
+  static void VerifyNodeHierarchyIntegrity(SceneNode& node)
   {
     EXPECT_TRUE(node.IsValid());
 
@@ -254,7 +254,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(vehicle.HasChildren());
   EXPECT_EQ(scene_->GetChildrenCount(vehicle), 5);
 
-  for (const auto& part : parts) {
+  for (auto& part : parts) {
     EXPECT_FALSE(part.IsRoot());
     EXPECT_TRUE(part.HasParent());
     EXPECT_FALSE(part.HasChildren());
@@ -282,7 +282,7 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, ComplexHierarchy_MultiLevelNesting)
   // Act: Create Player as child of World
   auto player_opt = scene_->CreateChildNode(world, "Player");
   ASSERT_TRUE(player_opt.has_value());
-  const auto& player = player_opt.value();
+  auto& player = player_opt.value();
 
   // Act: Create Player's main body parts
   auto head_opt = scene_->CreateChildNode(player, "Head");
@@ -293,9 +293,9 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, ComplexHierarchy_MultiLevelNesting)
   ASSERT_TRUE(body_opt.has_value());
   ASSERT_TRUE(legs_opt.has_value());
 
-  const auto& head = head_opt.value();
-  const auto& body = body_opt.value();
-  const auto& legs = legs_opt.value();
+  auto& head = head_opt.value();
+  auto& body = body_opt.value();
+  auto& legs = legs_opt.value();
 
   // Act: Create arms under body
   auto left_arm_opt = scene_->CreateChildNode(body, "LeftArm");

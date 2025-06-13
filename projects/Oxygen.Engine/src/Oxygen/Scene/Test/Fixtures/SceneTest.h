@@ -38,20 +38,19 @@ protected:
   }
 
   [[nodiscard]] auto CreateNode(
-      const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
+    const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
   {
     return scene_->CreateNode(name, flags);
   }
 
-  [[nodiscard]] auto CreateChildNode(const SceneNode& parent,
-      const std::string& name) const -> std::optional<SceneNode>
+  [[nodiscard]] auto CreateChildNode(SceneNode& parent,
+    const std::string& name) const -> std::optional<SceneNode>
   {
     return scene_->CreateChildNode(parent, name);
   }
 
-  [[nodiscard]] auto CreateChildNode(const SceneNode& parent,
-      const std::string& name, const SceneNode::Flags& flags) const
-      -> std::optional<SceneNode>
+  [[nodiscard]] auto CreateChildNode(SceneNode& parent, const std::string& name,
+    const SceneNode::Flags& flags) const -> std::optional<SceneNode>
   {
     return scene_->CreateChildNode(parent, name, flags);
   }
@@ -69,8 +68,8 @@ protected:
   // Helper to create a to-be lazily invalidated node for testing. Creates a
   // node, stores its handle, then destroys it, and returns a new node with the
   // stored handle.
-  [[nodiscard]] auto CreateLazyInvalidationNode(const std::string& name
-      = "InvalidNode") const -> SceneNode
+  [[nodiscard]] auto CreateLazyInvalidationNode(
+    const std::string& name = "InvalidNode") const -> SceneNode
   {
     auto node = scene_->CreateNode(name);
     const auto handle = node.GetHandle();
@@ -82,51 +81,51 @@ protected:
 
   //! Creates a node with specific visibility setting.
   [[nodiscard]] auto CreateVisibleNode(
-      const std::string& name, bool visible = true) const -> SceneNode
+    const std::string& name, bool visible = true) const -> SceneNode
   {
     const auto flags = SceneNode::Flags {}
-                           .SetFlag(SceneNodeFlags::kVisible,
-                               SceneFlag {}.SetEffectiveValueBit(visible))
-                           .SetFlag(SceneNodeFlags::kStatic,
-                               SceneFlag {}.SetEffectiveValueBit(false));
+                         .SetFlag(SceneNodeFlags::kVisible,
+                           SceneFlag {}.SetEffectiveValueBit(visible))
+                         .SetFlag(SceneNodeFlags::kStatic,
+                           SceneFlag {}.SetEffectiveValueBit(false));
     return scene_->CreateNode(name, flags);
   }
 
   //! Creates an invisible node.
   [[nodiscard]] auto CreateInvisibleNode(const std::string& name) const
-      -> SceneNode
+    -> SceneNode
   {
     return CreateVisibleNode(name, false);
   }
 
   //! Creates a static node.
   [[nodiscard]] auto CreateStaticNode(const std::string& name) const
-      -> SceneNode
+    -> SceneNode
   {
     const auto flags = SceneNode::Flags {}
-                           .SetFlag(SceneNodeFlags::kVisible,
-                               SceneFlag {}.SetEffectiveValueBit(true))
-                           .SetFlag(SceneNodeFlags::kStatic,
-                               SceneFlag {}.SetEffectiveValueBit(true));
+                         .SetFlag(SceneNodeFlags::kVisible,
+                           SceneFlag {}.SetEffectiveValueBit(true))
+                         .SetFlag(SceneNodeFlags::kStatic,
+                           SceneFlag {}.SetEffectiveValueBit(true));
     return scene_->CreateNode(name, flags);
   }
 
   //! Creates a child node with specific visibility.
-  [[nodiscard]] auto CreateVisibleChildNode(const SceneNode& parent,
-      const std::string& name, bool visible = true) const
-      -> std::optional<SceneNode>
+  [[nodiscard]] auto CreateVisibleChildNode(
+    SceneNode& parent, const std::string& name, bool visible = true) const
+    -> std::optional<SceneNode>
   {
     const auto flags = SceneNode::Flags {}
-                           .SetFlag(SceneNodeFlags::kVisible,
-                               SceneFlag {}.SetEffectiveValueBit(visible))
-                           .SetFlag(SceneNodeFlags::kStatic,
-                               SceneFlag {}.SetEffectiveValueBit(false));
+                         .SetFlag(SceneNodeFlags::kVisible,
+                           SceneFlag {}.SetEffectiveValueBit(visible))
+                         .SetFlag(SceneNodeFlags::kStatic,
+                           SceneFlag {}.SetEffectiveValueBit(false));
     return scene_->CreateChildNode(parent, name, flags);
   }
 
   //! Creates an invisible child node.
-  [[nodiscard]] auto CreateInvisibleChildNode(const SceneNode& parent,
-      const std::string& name) const -> std::optional<SceneNode>
+  [[nodiscard]] auto CreateInvisibleChildNode(SceneNode& parent,
+    const std::string& name) const -> std::optional<SceneNode>
   {
     return CreateVisibleChildNode(parent, name, false);
   }
@@ -155,8 +154,7 @@ protected:
   // See Oxygen/Testing/GTest.h for details.
 
   //! Validates that a node is valid and has the expected name.
-  static void ExpectNodeValidWithName(
-      const SceneNode& node, const std::string& name)
+  static void ExpectNodeValidWithName(SceneNode& node, const std::string& name)
   {
     EXPECT_TRUE(node.IsValid());
     const auto obj_opt = node.GetObject();
@@ -186,7 +184,7 @@ protected:
 
   //! Validates that multiple node handles are unique.
   static void ExpectHandlesUnique(
-      const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
+    const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
   {
     EXPECT_NE(n1.GetHandle(), n2.GetHandle());
     EXPECT_NE(n2.GetHandle(), n3.GetHandle());
@@ -208,8 +206,7 @@ protected:
   }
 
   //! Validates that a node is valid, has expected name, and is a root node.
-  static void ExpectNodeValidAsRoot(
-      const SceneNode& node, const std::string& name)
+  static void ExpectNodeValidAsRoot(SceneNode& node, const std::string& name)
   {
     ExpectNodeValidWithName(node, name);
     EXPECT_TRUE(node.IsRoot());
@@ -218,7 +215,7 @@ protected:
 
   //! Validates that a node is valid, has expected parent, and is not a root.
   static void ExpectNodeValidWithParent(
-      const SceneNode& node, const SceneNode& expected_parent)
+    SceneNode& node, const SceneNode& expected_parent)
   {
     ASSERT_TRUE(node.IsValid());
     ASSERT_TRUE(expected_parent.IsValid());
@@ -232,7 +229,7 @@ protected:
   }
 
   //! Validates that a node has no parent (is a root node).
-  static void ExpectNodeIsRoot(const SceneNode& node)
+  static void ExpectNodeIsRoot(SceneNode& node)
   {
     const auto parent_opt = node.GetParent();
     EXPECT_FALSE(parent_opt.has_value());
@@ -240,13 +237,13 @@ protected:
   }
 
   //! Validates transform values for a node.
-  static void ExpectTransformValues(const SceneNode& node,
-      const glm::vec3& expected_position, const glm::vec3& expected_scale)
+  static void ExpectTransformValues(SceneNode& node,
+    const glm::vec3& expected_position, const glm::vec3& expected_scale)
   {
     const auto impl_opt = node.GetObject();
     ASSERT_TRUE(impl_opt.has_value());
     const auto& transform
-        = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
+      = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
     EXPECT_EQ(transform.GetLocalPosition(), expected_position);
     EXPECT_EQ(transform.GetLocalScale(), expected_scale);
   }
@@ -254,28 +251,28 @@ protected:
   //=== Transform Helpers ===-------------------------------------------------//
 
   //! Sets up transform with specific values.
-  void SetupNodeTransform(const SceneNode& node,
-      const scene::detail::TransformComponent::Vec3& position,
-      const scene::detail::TransformComponent::Quat& rotation,
-      const scene::detail::TransformComponent::Vec3& scale) const
+  void SetupNodeTransform(SceneNode& node,
+    const detail::TransformComponent::Vec3& position,
+    const detail::TransformComponent::Quat& rotation,
+    const detail::TransformComponent::Vec3& scale) const
   {
     auto node_impl_opt = node.GetObject();
     ASSERT_TRUE(node_impl_opt.has_value());
 
-    auto& transform = node_impl_opt->get()
-                          .GetComponent<scene::detail::TransformComponent>();
+    auto& transform
+      = node_impl_opt->get().GetComponent<scene::detail::TransformComponent>();
     transform.SetLocalTransform(position, rotation, scale);
   }
 
   //! Gets transform component from node.
-  auto GetTransformComponent(const SceneNode& node) const
-      -> scene::detail::TransformComponent&
+  auto GetTransformComponent(SceneNode& node) const
+    -> scene::detail::TransformComponent&
   {
     auto node_impl_opt = node.GetObject();
     EXPECT_TRUE(node_impl_opt.has_value())
-        << "Node should have valid implementation";
+      << "Node should have valid implementation";
     return node_impl_opt->get()
-        .GetComponent<scene::detail::TransformComponent>();
+      .GetComponent<scene::detail::TransformComponent>();
   }
 
   //! Updates scene transforms to ensure cached world values are valid.
@@ -286,7 +283,7 @@ protected:
 
   //! Creates a node with a specific position.
   [[nodiscard]] auto CreateNodeWithPosition(
-      const std::string& name, const glm::vec3& position) const -> SceneNode
+    const std::string& name, const glm::vec3& position) const -> SceneNode
   {
     auto node = CreateNode(name);
     SetNodePosition(node, position);
@@ -299,7 +296,7 @@ protected:
     const auto impl_opt = node.GetObject();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
-        = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
+      = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
     transform.SetLocalPosition(position);
   }
 
@@ -309,18 +306,18 @@ protected:
     const auto impl_opt = node.GetObject();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
-        = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
+      = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
     transform.SetLocalScale(scale);
   }
 
   //! Sets both position and scale for a node.
   static void SetNodeTransformValues(
-      SceneNode& node, const glm::vec3& position, const glm::vec3& scale)
+    SceneNode& node, const glm::vec3& position, const glm::vec3& scale)
   {
     const auto impl_opt = node.GetObject();
     ASSERT_TRUE(impl_opt.has_value());
     auto& transform
-        = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
+      = impl_opt->get().GetComponent<scene::detail::TransformComponent>();
     transform.SetLocalPosition(position);
     transform.SetLocalScale(scale);
   }
@@ -357,7 +354,7 @@ protected:
   };
 
   [[nodiscard]] auto CreateParentWithTwoChildren() const
-      -> ParentWithTwoChildren
+    -> ParentWithTwoChildren
   {
     auto parent = CreateNode("Parent");
     auto child1_opt = CreateChildNode(parent, "Child1");
@@ -374,7 +371,7 @@ protected:
   };
 
   [[nodiscard]] auto CreateThreeGenerationHierarchy() const
-      -> ThreeGenerationHierarchy
+    -> ThreeGenerationHierarchy
   {
     auto root = CreateNode("Root");
     auto child_opt = CreateChildNode(root, "Child");
@@ -450,9 +447,9 @@ protected:
 
   //! Creates a three-level hierarchy.
   [[nodiscard]] auto CreateThreeLevelHierarchy(
-      const std::string& grandparent_name = "Grandparent",
-      const std::string& parent_name = "Parent",
-      const std::string& child_name = "Child") const -> ThreeLevelHierarchy
+    const std::string& grandparent_name = "Grandparent",
+    const std::string& parent_name = "Parent",
+    const std::string& child_name = "Child") const -> ThreeLevelHierarchy
   {
     auto grandparent = CreateNode(grandparent_name);
     auto parent_opt = CreateChildNode(grandparent, parent_name);
@@ -474,17 +471,17 @@ protected:
 
   //! Creates a hierarchy with mixed visibility settings.
   [[nodiscard]] auto CreateMixedVisibilityHierarchy() const
-      -> MixedVisibilityHierarchy
+    -> MixedVisibilityHierarchy
   {
     auto root = CreateVisibleNode("Root");
     auto visible_child_opt = CreateVisibleChildNode(root, "VisibleChild", true);
     auto invisible_child_opt
-        = CreateVisibleChildNode(root, "InvisibleChild", false);
+      = CreateVisibleChildNode(root, "InvisibleChild", false);
     EXPECT_TRUE(visible_child_opt.has_value());
     EXPECT_TRUE(invisible_child_opt.has_value());
 
     auto visible_grandchild_opt = CreateVisibleChildNode(
-        visible_child_opt.value(), "VisibleGrandchild", true);
+      visible_child_opt.value(), "VisibleGrandchild", true);
     EXPECT_TRUE(visible_grandchild_opt.has_value());
 
     return { std::move(root), std::move(visible_child_opt.value()),
@@ -516,7 +513,7 @@ protected:
     for (const auto& name : special_names) {
       auto node = CreateNode(name);
       CHECK_FOR_FAILURES_MSG(
-          ExpectNodeValidWithName(node, name), "TestSpecialCharacterNames");
+        ExpectNodeValidWithName(node, name), "TestSpecialCharacterNames");
     }
   }
 };

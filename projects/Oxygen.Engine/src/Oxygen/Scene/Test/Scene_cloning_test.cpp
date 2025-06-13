@@ -46,7 +46,7 @@ protected:
   }
 
   static void ExpectNodeValidWithName(
-    const SceneNode& node, const std::string& expected_name)
+    SceneNode& node, const std::string& expected_name)
   {
     EXPECT_TRUE(node.IsValid());
     const auto impl_opt = node.GetObject();
@@ -64,7 +64,7 @@ protected:
     transform.SetLocalScale(scale);
   }
 
-  static void ExpectTransformValues(const SceneNode& node,
+  static void ExpectTransformValues(SceneNode& node,
     const glm::vec3& expected_position, const glm::vec3& expected_scale)
   {
     const auto impl_opt = node.GetObject();
@@ -87,12 +87,12 @@ NOLINT_TEST_F(
   SceneSingleNodeCloningTest, CloneSingleNode_CreatesValidCloneWithNewName)
 {
   // Arrange
-  const auto original = source_scene_->CreateNode("OriginalNode");
+  auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(original.IsValid())
     << "Original node should be valid after creation.";
 
   // Act
-  const auto cloned = target_scene_->CreateNodeFrom(original, "ClonedNode");
+  auto cloned = target_scene_->CreateNodeFrom(original, "ClonedNode");
 
   // Assert
   EXPECT_TRUE(cloned.has_value());
@@ -104,12 +104,12 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   CloneSingleNodeWithinSameScene_ProducesIndependentNodes)
 {
   // Arrange
-  const auto original = source_scene_->CreateNode("OriginalNode");
+  auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(original.IsValid())
     << "Original node should be valid after creation.";
 
   // Act
-  const auto cloned = source_scene_->CreateNodeFrom(original, "ClonedNode");
+  auto cloned = source_scene_->CreateNodeFrom(original, "ClonedNode");
 
   // Assert
   EXPECT_TRUE(original.IsValid())
@@ -164,18 +164,18 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   CreateChildNodeFrom_ValidParentAndOriginal_CreatesChildClone)
 {
   // Arrange
-  const auto parent = target_scene_->CreateNode("Parent");
-  const auto original = source_scene_->CreateNode("OriginalNode");
+  auto parent = target_scene_->CreateNode("Parent");
+  auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(parent.IsValid());
   ASSERT_TRUE(original.IsValid());
 
   // Act
-  const auto child_clone_opt
+  auto child_clone_opt
     = target_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
 
   // Assert
   ASSERT_TRUE(child_clone_opt.has_value());
-  const auto& child_clone = child_clone_opt.value();
+  auto& child_clone = child_clone_opt.value();
 
   ExpectNodeValidWithName(child_clone, "ChildClone");
   EXPECT_FALSE(child_clone.IsRoot());
@@ -194,7 +194,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   CreateChildNodeFrom_CrossSceneCloning_PreservesComponentData)
 {
   // Arrange
-  const auto parent = target_scene_->CreateNode("Parent");
+  auto parent = target_scene_->CreateNode("Parent");
   ASSERT_TRUE(parent.IsValid());
 
   auto original = source_scene_->CreateNode("OriginalNode");
@@ -228,19 +228,19 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   CreateChildNodeFrom_SameSceneCloning_ProducesIndependentChild)
 {
   // Arrange
-  const auto parent = source_scene_->CreateNode("Parent");
-  const auto original = source_scene_->CreateNode("OriginalNode");
+  auto parent = source_scene_->CreateNode("Parent");
+  auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(parent.IsValid());
   ASSERT_TRUE(original.IsValid());
   EXPECT_TRUE(original.IsRoot());
 
   // Act
-  const auto child_clone_opt
+  auto child_clone_opt
     = source_scene_->CreateChildNodeFrom(parent, original, "ChildClone");
 
   // Assert
   ASSERT_TRUE(child_clone_opt.has_value());
-  const auto& child_clone = child_clone_opt.value();
+  auto& child_clone = child_clone_opt.value();
 
   EXPECT_TRUE(original.IsValid());
   EXPECT_TRUE(child_clone.IsValid());
@@ -258,7 +258,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   CreateChildNodeFrom_ClonedChildAndOriginalAreIndependent)
 {
   // Arrange
-  const auto parent = target_scene_->CreateNode("Parent");
+  auto parent = target_scene_->CreateNode("Parent");
   auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(parent.IsValid());
   ASSERT_TRUE(original.IsValid());
@@ -300,8 +300,8 @@ NOLINT_TEST_F(SceneHierarchyCloningTest,
 
   ASSERT_TRUE(child1_opt.has_value());
   ASSERT_TRUE(child2_opt.has_value());
-  const auto& child1 = child1_opt.value();
-  const auto& child2 = child2_opt.value();
+  auto& child1 = child1_opt.value();
+  auto& child2 = child2_opt.value();
 
   EXPECT_TRUE(parent.GetFirstChild().has_value());
   EXPECT_TRUE(child1.GetParent().has_value());
@@ -349,8 +349,8 @@ NOLINT_TEST_F(SceneHierarchyCloningTest,
   // Assert
   ASSERT_TRUE(child1_opt.has_value());
   ASSERT_TRUE(child2_opt.has_value());
-  const auto& child1 = child1_opt.value();
-  const auto& child2 = child2_opt.value();
+  auto& child1 = child1_opt.value();
+  auto& child2 = child2_opt.value();
 
   EXPECT_EQ(child1.GetParent().value().GetHandle(), parent.GetHandle());
   EXPECT_EQ(child2.GetParent().value().GetHandle(), parent.GetHandle());
@@ -372,7 +372,7 @@ NOLINT_TEST_F(
   SceneCloningErrorTest, CreateChildNodeFrom_InvalidParent_TriggersDeath)
 {
   // Arrange
-  const auto original = source_scene_->CreateNode("OriginalNode");
+  auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(original.IsValid());
 
   auto invalid_parent = target_scene_->CreateNode("ParentNode");
@@ -391,8 +391,8 @@ NOLINT_TEST_F(SceneCloningErrorTest,
   CreateChildNodeFrom_ParentFromDifferentScene_TriggersDeath)
 {
   // Arrange
-  const auto parent_in_source = source_scene_->CreateNode("Parent");
-  const auto original = target_scene_->CreateNode("OriginalNode");
+  auto parent_in_source = source_scene_->CreateNode("Parent");
+  auto original = target_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(parent_in_source.IsValid());
   ASSERT_TRUE(original.IsValid());
 
@@ -408,7 +408,7 @@ NOLINT_TEST_F(SceneCloningErrorTest,
 NOLINT_TEST_F(SceneCloningErrorTest, CreateChildNodeFrom_InvalidOriginal_Fails)
 {
   // Arrange
-  const auto parent = target_scene_->CreateNode("Parent");
+  auto parent = target_scene_->CreateNode("Parent");
   ASSERT_TRUE(parent.IsValid());
 
   auto invalid_original = source_scene_->CreateNode("OriginalNode");

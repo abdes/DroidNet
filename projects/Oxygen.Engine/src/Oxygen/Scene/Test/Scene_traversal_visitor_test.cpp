@@ -43,7 +43,8 @@ class SceneTraversalVisitorTest
 NOLINT_TEST_P(SceneTraversalVisitorTest, FullTraversal)
 {
   // Act: Traverse using post-order (children-first) traversal
-  const auto result = traversal_->Traverse(CreateTrackingVisitor(), GetParam());
+  const auto result
+    = GetTraversal().Traverse(CreateTrackingVisitor(), GetParam());
 
   // Assert: All nodes should be visited with no filtering
   CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, GetNodeCount(), 0, true),
@@ -63,7 +64,7 @@ NOLINT_TEST_P(SceneTraversalVisitorTest, EarlyTermination)
 
   // Act: Stop traversal when we reach node "A"
   const auto result
-    = traversal_->Traverse(CreateEarlyTerminationVisitor("A"), GetParam());
+    = GetTraversal().Traverse(CreateEarlyTerminationVisitor("A"), GetParam());
 
   // Assert: Should have stopped at "A"
   EXPECT_FALSE(result.completed)
@@ -99,7 +100,7 @@ NOLINT_TEST_P(SceneTraversalVisitorTest, SubtreeSkipping)
 
   // Act: Skip subtree of node "A" (should skip C and D)
   const auto result
-    = traversal_->Traverse(CreateSubtreeSkippingVisitor("A"), GetParam());
+    = GetTraversal().Traverse(CreateSubtreeSkippingVisitor("A"), GetParam());
 
   // Assert: Should complete but skip A's children
   CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, 4, 0, true),

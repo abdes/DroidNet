@@ -41,44 +41,43 @@ protected:
 
   /// Validates that two nodes have equivalent content but different handles.
   static void ExpectNodesEquivalent(
-      const SceneNode& original, const SceneNode& cloned)
+    const SceneNode& original, const SceneNode& cloned)
   {
     // Should have different handles (different scenes/instances)
     EXPECT_NE(original.GetHandle(), cloned.GetHandle())
-        << "Cloned node should have different handle";
+      << "Cloned node should have different handle";
 
     // Should have equivalent names and properties
     const auto orig_obj_opt = original.GetObject();
     const auto cloned_obj_opt = cloned.GetObject();
 
     ASSERT_TRUE(orig_obj_opt.has_value())
-        << "Original node should have valid object";
+      << "Original node should have valid object";
     ASSERT_TRUE(cloned_obj_opt.has_value())
-        << "Cloned node should have valid object";
+      << "Cloned node should have valid object";
 
     EXPECT_EQ(orig_obj_opt->get().GetName(), cloned_obj_opt->get().GetName())
-        << "Cloned node should have same name";
+      << "Cloned node should have same name";
 
     // Compare transforms
     const auto& orig_transform
-        = orig_obj_opt->get().GetComponent<scene::detail::TransformComponent>();
+      = orig_obj_opt->get().GetComponent<scene::detail::TransformComponent>();
     const auto& cloned_transform
-        = cloned_obj_opt->get()
-              .GetComponent<scene::detail::TransformComponent>();
+      = cloned_obj_opt->get().GetComponent<scene::detail::TransformComponent>();
 
     EXPECT_EQ(
-        orig_transform.GetLocalPosition(), cloned_transform.GetLocalPosition())
-        << "Cloned node should have same position";
+      orig_transform.GetLocalPosition(), cloned_transform.GetLocalPosition())
+      << "Cloned node should have same position";
     EXPECT_EQ(
-        orig_transform.GetLocalRotation(), cloned_transform.GetLocalRotation())
-        << "Cloned node should have same rotation";
+      orig_transform.GetLocalRotation(), cloned_transform.GetLocalRotation())
+      << "Cloned node should have same rotation";
     EXPECT_EQ(orig_transform.GetLocalScale(), cloned_transform.GetLocalScale())
-        << "Cloned node should have same scale";
+      << "Cloned node should have same scale";
   }
 
   /// Validates that a hierarchy has been cloned correctly.
   void ExpectHierarchyClonedCorrectly(
-      const SceneNode& original_root, const SceneNode& cloned_root)
+    const SceneNode& original_root, const SceneNode& cloned_root)
   {
     // Validate root nodes
     ExpectNodesEquivalent(original_root, cloned_root);
@@ -92,19 +91,19 @@ protected:
 
     // Should have same number of nodes
     EXPECT_EQ(original_nodes.size(), cloned_nodes.size())
-        << "Cloned hierarchy should have same number of nodes";
+      << "Cloned hierarchy should have same number of nodes";
 
     // Validate each node pair
     for (const auto& [name, original_node] : original_nodes) {
       auto cloned_it = cloned_nodes.find(name);
       ASSERT_NE(cloned_it, cloned_nodes.end())
-          << "Cloned hierarchy should contain node: " << name;
+        << "Cloned hierarchy should contain node: " << name;
 
       ExpectNodesEquivalent(original_node, cloned_it->second);
 
       // Validate parent-child relationships
       ExpectParentChildRelationshipsMatch(
-          original_node, cloned_it->second, original_nodes, cloned_nodes);
+        original_node, cloned_it->second, original_nodes, cloned_nodes);
     }
   }
 
@@ -112,7 +111,7 @@ protected:
   void ExpectScenesEquivalent(const Scene& original, const Scene& cloned)
   {
     EXPECT_EQ(original.GetNodeCount(), cloned.GetNodeCount())
-        << "Cloned scene should have same node count";
+      << "Cloned scene should have same node count";
 
     // Note: Names might be different for cloned scenes
     // Focus on structural equivalence rather than exact name matching
@@ -121,8 +120,8 @@ protected:
   //=== Cloning Helper Methods ===--------------------------------------------//
 
   /// Recursively collects all nodes in a hierarchy.
-  static void CollectHierarchyNodes(const SceneNode& root,
-      std::unordered_map<std::string, SceneNode>& node_map)
+  static void CollectHierarchyNodes(
+    const SceneNode& root, std::unordered_map<std::string, SceneNode>& node_map)
   {
     const auto obj_opt = root.GetObject();
     if (!obj_opt.has_value()) {
@@ -143,9 +142,9 @@ protected:
   /// Validates that parent-child relationships match between original and
   /// cloned hierarchies.
   static void ExpectParentChildRelationshipsMatch(
-      const SceneNode& original_node, const SceneNode& cloned_node,
-      const std::unordered_map<std::string, SceneNode>& original_nodes,
-      const std::unordered_map<std::string, SceneNode>& cloned_nodes)
+    const SceneNode& original_node, const SceneNode& cloned_node,
+    const std::unordered_map<std::string, SceneNode>& original_nodes,
+    const std::unordered_map<std::string, SceneNode>& cloned_nodes)
   {
     // Check parent relationships
     const auto orig_parent_opt = original_node.GetParent();
@@ -153,20 +152,20 @@ protected:
 
     if (orig_parent_opt.has_value()) {
       ASSERT_TRUE(cloned_parent_opt.has_value())
-          << "Cloned node should have parent if original has parent";
+        << "Cloned node should have parent if original has parent";
 
       const auto orig_parent_obj = orig_parent_opt->GetObject();
       const auto cloned_parent_obj = cloned_parent_opt->GetObject();
 
       if (orig_parent_obj.has_value() && cloned_parent_obj.has_value()) {
-        EXPECT_EQ(orig_parent_obj->get().GetName(),
-            cloned_parent_obj->get().GetName())
-            << "Cloned node should have parent with same name";
+        EXPECT_EQ(
+          orig_parent_obj->get().GetName(), cloned_parent_obj->get().GetName())
+          << "Cloned node should have parent with same name";
       }
     } else {
       EXPECT_FALSE(cloned_parent_opt.has_value())
-          << "Cloned node should not have parent if original doesn't have "
-             "parent";
+        << "Cloned node should not have parent if original doesn't have "
+           "parent";
     }
 
     // Check child count
@@ -186,7 +185,7 @@ protected:
     }
 
     EXPECT_EQ(orig_child_count, cloned_child_count)
-        << "Cloned node should have same number of children";
+      << "Cloned node should have same number of children";
   }
 
   //=== Common Cloning Scenarios ===------------------------------------------//
@@ -198,9 +197,9 @@ protected:
 
     // Add some transform data to make cloning more interesting
     SetTransformValues(
-        setup.parent, { 1.0f, 2.0f, 3.0f }, { 0.5f, 1.0f, 1.5f });
+      setup.parent, { 1.0f, 2.0f, 3.0f }, { 0.5f, 1.0f, 1.5f });
     SetTransformValues(
-        setup.child, { -1.0f, 0.0f, 1.0f }, { 2.0f, 2.0f, 2.0f });
+      setup.child, { -1.0f, 0.0f, 1.0f }, { 2.0f, 2.0f, 2.0f });
 
     return setup;
   }
@@ -209,13 +208,13 @@ protected:
   [[nodiscard]] auto CreateComplexCloningHierarchy() const -> ThreeLevelSetup
   {
     auto setup = CreateThreeLevelHierarchy(
-        "CloneGrandparent", "CloneParent", "CloneChild");
+      "CloneGrandparent", "CloneParent", "CloneChild");
 
     // Set different transforms for each level
     SetTransformValues(
-        setup.grandparent, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+      setup.grandparent, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
     SetTransformValues(
-        setup.parent, { 5.0f, 0.0f, 0.0f }, { 0.8f, 0.8f, 0.8f });
+      setup.parent, { 5.0f, 0.0f, 0.0f }, { 0.8f, 0.8f, 0.8f });
     SetTransformValues(setup.child, { 0.0f, 3.0f, 0.0f }, { 1.2f, 1.2f, 1.2f });
 
     return setup;
@@ -228,8 +227,8 @@ protected:
   };
 
   /// Creates a wide hierarchy for cloning tests.
-  [[nodiscard]] auto CreateWideCloningHierarchy(std::size_t num_children
-      = 5) const -> WideCloningSetup
+  [[nodiscard]] auto CreateWideCloningHierarchy(
+    std::size_t num_children = 5) const -> WideCloningSetup
   {
     auto root = CreateNode("WideRoot");
     std::vector<SceneNode> children;
@@ -243,7 +242,7 @@ protected:
       // Set unique transform for each child
       const float offset = static_cast<float>(i);
       SetTransformValues(child_opt.value(), { offset, 0.0f, 0.0f },
-          { 1.0f + offset * 0.1f, 1.0f, 1.0f });
+        { 1.0f + offset * 0.1f, 1.0f, 1.0f });
 
       children.push_back(std::move(child_opt.value()));
     }

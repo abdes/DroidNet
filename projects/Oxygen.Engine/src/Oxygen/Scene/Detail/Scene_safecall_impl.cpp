@@ -29,13 +29,13 @@ void Scene::LogSafeCallError(const char* reason) noexcept
 }
 static_assert(oxygen::HasLogSafeCallError<Scene>);
 
-auto Scene::NodeIsValidAndMine(const SceneNode& node) const
+auto Scene::NodeIsValidAndMine(SceneNode& node) const
   -> NodeIsValidAndInSceneValidator
 {
   return NodeIsValidAndInSceneValidator(this, node);
 }
 
-auto Scene::NodeIsValidAndInScene(const SceneNode& node) const
+auto Scene::NodeIsValidAndInScene(SceneNode& node) const
   -> NodeIsValidAndInSceneValidator
 {
   const Scene* scene { nullptr };
@@ -45,7 +45,7 @@ auto Scene::NodeIsValidAndInScene(const SceneNode& node) const
   return NodeIsValidAndInSceneValidator(scene, node);
 }
 
-auto Scene::LeafNodeCanBeDestroyed(const SceneNode& node) const
+auto Scene::LeafNodeCanBeDestroyed(SceneNode& node) const
   -> LeafNodeCanBeDestroyedValidator
 {
   return LeafNodeCanBeDestroyedValidator(this, node);

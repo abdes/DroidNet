@@ -163,7 +163,7 @@ void PrintTransformInfo(
 }
 
 // Helper to print a node's name and visibility, with ASCII tree structure
-void PrintNodeInfo(const SceneNode& node, const std::string& prefix,
+void PrintNodeInfo(SceneNode& node, const std::string& prefix,
   const bool is_last, const bool is_root = false)
 {
   std::cout << prefix;
@@ -185,7 +185,7 @@ void PrintNodeInfo(const SceneNode& node, const std::string& prefix,
 }
 
 // Recursive tree printer with ASCII tree drawing
-void PrintTree(const SceneNode& node, const std::string& prefix = "",
+void PrintTree(SceneNode& node, const std::string& prefix = "",
   const bool is_last = true, const bool is_root = true)
 {
   PrintNodeInfo(node, prefix, is_last, is_root);
@@ -308,7 +308,7 @@ void RunBasicSceneDemo(DemoState& state)
 
 // Creates a node with transform component (guaranteed by Scene)
 auto CreateTransformNode(Scene& scene, const std::string& name,
-  const SceneNode* parent = nullptr) -> SceneNode
+  SceneNode* parent = nullptr) -> SceneNode
 {
   auto node = parent != nullptr ? scene.CreateChildNode(*parent, name).value()
                                 : scene.CreateNode(name);
@@ -465,7 +465,7 @@ void SetupAnimatedScene(DemoState& state)
   state.animated_nodes.push_back(root);
 
   // Create orbital parent (revolves around origin)
-  const auto orbital_parent
+  auto orbital_parent
     = CreateTransformNode(*state.animation_scene, "OrbitalParent", &root);
   state.animated_nodes.push_back(orbital_parent);
 
@@ -532,7 +532,7 @@ void RunAnimationDemo(DemoState& state)
     SimulateAnimationFrame(state, time);
 
     // Display current transform states (this is the "present" phase)
-    for (const auto& node : state.animated_nodes) {
+    for (auto& node : state.animated_nodes) {
       if (const auto obj = node.GetObject()) {
         PrintTransformInfo(node, std::string(obj->get().GetName()));
       }
@@ -559,10 +559,9 @@ void RunCleanupDemo(DemoState& state)
 {
   PrintSubSection("Parent Lookup (Original Demo)");
   std::cout << "  Parent of 'Grandchild': ";
-  if (const auto parent_opt = state.grandchild->GetParent()) {
+  if (auto parent_opt = state.grandchild->GetParent()) {
     // Safe parent access
-    const auto& parent = *parent_opt;
-    const auto parent_obj = parent.GetObject();
+    const auto parent_obj = parent_opt->GetObject();
     if (parent_obj && parent_obj->get().GetName() == "Child1") {
       std::cout << parent_obj->get().GetName() << " (ok)\n";
     } else {
