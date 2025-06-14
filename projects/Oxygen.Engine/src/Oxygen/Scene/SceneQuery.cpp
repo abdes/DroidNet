@@ -67,20 +67,9 @@ auto SceneQuery::BatchEnd(
   result.nodes_examined
     = traversal_result.nodes_visited; // Visited = examined for batch
   result.completed = traversal_result.completed;
-
   // Count total matches across all operations
   for (const auto& op : batch_operations_) {
-    if (op.type == BatchOperation::Type::kCollect
-      || op.type == BatchOperation::Type::kCount) {
-      // For these operations, the result_handler already counted matches
-      // We'd need to track this during execution - simplified for now
-      ++result.total_matches;
-    } else if (op.type == BatchOperation::Type::kFindFirst
-      || op.type == BatchOperation::Type::kAny) {
-      if (op.has_terminated) { // Found a match
-        ++result.total_matches;
-      }
-    }
+    result.total_matches += op.match_count;
   }
 
   return result;
@@ -95,10 +84,10 @@ auto SceneQuery::ProcessBatchedNode(const ConstVisitedNode& visited,
 
   // Process all operations that matched this node
   bool any_operation_wants_to_continue = false;
-
   for (auto& op : batch_operations_) {
     if (!op.has_terminated && op.matched_current_node) {
       op.result_handler(visited); // Execute the result logic
+      ++op.match_count; // Track the match for BatchResult calculation
 
       // Check if this operation wants to terminate (FindFirst, Any)
       if (op.type == BatchOperation::Type::kFindFirst
@@ -125,10 +114,11 @@ auto SceneQuery::ExecuteBatchFindFirst(
   batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kFindFirst,
     .result_destination = &result,
-    .result_handler
-    = [&result, scene = scene_weak_](const ConstVisitedNode& visited) {
+    .result_handler =
+      [&result, scene = scene_weak_](const ConstVisitedNode& visited) {
         result = SceneNode { scene.lock(), visited.handle };
-      } });
+      },
+    .match_count = 0 });
   return result; // Will be populated during ExecuteBatch
 }
 
@@ -137,13 +127,12 @@ auto SceneQuery::ExecuteBatchCount(
   -> oxygen::scene::QueryResult
 {
   QueryResult result;
-  batch_operations_.push_back(BatchOperation {
-    .predicate = predicate,
+  batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kCount,
     .result_destination = &result,
     .result_handler
     = [&result](const ConstVisitedNode& visited) { ++result.nodes_matched; },
-  });
+    .match_count = 0 });
   return result; // Will be updated during ExecuteBatch
 }
 
@@ -152,13 +141,12 @@ auto SceneQuery::ExecuteBatchAny(
   -> std::optional<bool>
 {
   std::optional<bool> result;
-  batch_operations_.push_back(BatchOperation {
-    .predicate = predicate,
+  batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kAny,
     .result_destination = &result,
     .result_handler
     = [&result](const ConstVisitedNode& visited) { result = true; },
-  });
+    .match_count = 0 });
   return result; // Will be updated during ExecuteBatch
 }
 

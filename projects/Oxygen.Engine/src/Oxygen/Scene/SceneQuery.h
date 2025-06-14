@@ -79,8 +79,7 @@ public:
   template <typename BatchFunc>
   auto ExecuteBatch(BatchFunc&& batch_func) const noexcept -> BatchResult;
 
-private:
-  // Batch operation storage for building composite filter
+private: // Batch operation storage for building composite filter
   struct BatchOperation {
     std::function<bool(const ConstVisitedNode&)> predicate;
     enum class Type : uint8_t {
@@ -93,6 +92,8 @@ private:
     std::function<void(const ConstVisitedNode&)> result_handler;
     bool has_terminated = false; // Track if this operation should stop
     mutable bool matched_current_node = false;
+    mutable std::size_t match_count
+      = 0; // Track number of matches for this operation
   };
 
   std::weak_ptr<const Scene> scene_weak_;
@@ -331,6 +332,18 @@ auto SceneQuery::ExecuteBatchCollect(Container& container,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> QueryResult
 {
+  QueryResult result;
+  batch_operations_.push_back(BatchOperation { .predicate = predicate,
+    .type = BatchOperation::Type::kCollect,
+    .result_destination = &result,
+    .result_handler =
+      [&container, &result, scene = scene_weak_](
+        const ConstVisitedNode& visited) {
+        container.emplace_back(scene.lock(), visited.handle);
+        ++result.nodes_matched;
+      },
+    .match_count = 0 });
+  return result; // Will be updated during ExecuteBatch
 }
 
 /*
