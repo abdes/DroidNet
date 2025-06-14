@@ -1,4 +1,186 @@
-# SceneQuery Design Summary
+# SceneQuery Implementation Status & Design
+
+## Current Implementation Status
+
+### ✅ Implemented Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Core Query Construction | ✅ Complete | `SceneQuery(std::shared_ptr<const Scene>)` |
+| Const-Correct Predicate-Based FindFirst | ✅ Complete | Uses `ConstVisitedNode` for read-only queries |
+| Const-Correct Predicate-Based Collect | 🔄 Partial | Immediate mode complete, batch mode incomplete |
+| Const-Correct Predicate-Based Count | ✅ Complete | Returns `QueryResult` with metrics |
+| Const-Correct Predicate-Based Any | ✅ Complete | Early termination optimization |
+| Batch Execution Framework | 🔄 Partial | Core framework complete, ExecuteBatchCollect missing |
+| Query Result Types | ✅ Complete | `QueryResult` and `BatchResult` |
+| Scene Lifetime Safety | ✅ Complete | `weak_ptr` validation |
+| Dual Execution Modes | ✅ Complete | Automatic batch/immediate routing |
+| Type-Erased Batch Operations | ✅ Complete | `BatchOperation` struct with result handlers |
+| Const-Correct SceneTraversal Integration | ✅ Complete | `SceneTraversal<const Scene>` for read-only operations |
+| Scene Integration | ✅ Complete | `Scene::Query()` entry point implemented |
+
+### 🔄 Partially Implemented
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Const-Correct Predicate-Based Collect | 🔄 Partial | Immediate mode complete, batch mode incomplete |
+
+### ❌ Not Yet Implemented
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| Path-Based Queries | ❌ Commented Out | Complex path parsing/navigation logic |
+| `ExecuteBatchCollect` | ❌ Empty Implementation | Batch collection logic incomplete |
+| Path Wildcard Support | ❌ Missing | `ParsePath`, `CreatePathFilter` helpers |
+
+### 🚫 Intentionally Excluded from Batch Operations
+
+| Feature | Status | Design Rationale |
+|---------|--------|------------------|
+| Path-Based Queries in Batches | 🚫 By Design | Direct navigation incompatible with batched traversal |
+
+## Key Design Choices Implemented
+
+### 1. Const-Correct Dual Execution Architecture
+
+The implementation uses a `batch_active_` flag to route calls with full const
+correctness:
+
+```cpp
+template <std::predicate<const ConstVisitedNode&> Predicate>
+auto FindFirst(Predicate&& predicate) const noexcept -> std::optional<SceneNode>;
+
+template <typename BatchFunc>
+auto ExecuteBatch(BatchFunc&& batch_func) const noexcept -> BatchResult;
+```
+
+**Implementation**:
+- Uses `ConstVisitedNode` for read-only scene graph access
+- `SceneTraversal<const Scene>` enforces compile-time immutability
+- Automatic const deduction based on Scene type via template specialization
+
+### 2. User-Controlled Memory Allocation
+
+```cpp
+template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
+auto Collect(Container& container, Predicate&& predicate) const noexcept -> QueryResult;
+```
+
+**Implementation**: Users provide containers, eliminating forced allocations and
+enabling custom allocators.
+
+### 3. Type-Safe Const-Correct Visitor/Filter Concepts
+
+**Implementation**:
+- Compile-time const correctness validation via SceneTraversal concepts
+- Automatic visitor type deduction (`ConstVisitedNode` vs `MutableVisitedNode`)
+- Template concepts enforce correct parameter types at compile time
+
+### 4. Type-Erased Batch Operations
+
+```cpp
+struct BatchOperation {
+  std::function<bool(const ConstVisitedNode&)> predicate;
+  enum class Type : uint8_t { kFindFirst, kCollect, kCount, kAny } type;
+  void* result_destination; // Type-erased for flexibility
+  std::function<void(const ConstVisitedNode&)> result_handler;
+  bool has_terminated = false;
+  mutable bool matched_current_node = false;
+};
+```
+
+**Implementation**: Lambda captures maintain type safety while allowing storage
+in a single container.
+
+### 4. Performance-First Implementation Patterns
+
+**Immediate Execution**:
+- Direct `SceneTraversal` integration with custom filters
+- `VisitResult::kStop` for early termination in FindFirst/Any
+- Separate node examination counting in filters
+
+**Batch Execution**:
+- 4-phase execution: `BatchBegin()` → `CreateCompositeFilter()` → `Execute()` →
+  `BatchEnd()`
+- Composite filtering with per-operation match flags
+- Single traversal for multiple queries
+
+### 5. Result Types with Performance Metrics
+
+```cpp
+struct QueryResult {
+  std::size_t nodes_examined = 0;
+  std::size_t nodes_matched = 0;
+  bool completed = true;
+  explicit operator bool() const noexcept { return completed; }
+};
+
+struct BatchResult {
+  std::size_t nodes_examined = 0;
+  std::size_t total_matches = 0;
+  bool completed = true;
+  explicit operator bool() const noexcept { return completed; }
+};
+```
+
+**Implementation**: Provide performance insights while maintaining lightweight
+operation.
+
+## Public API Summary
+
+### Core Query Methods (✅ Implemented)
+
+| Method | Return Type | Implementation Status |
+|--------|-------------|----------------------|
+| `FindFirst<Predicate>(pred)` | `std::optional<SceneNode>` | ✅ Complete - Both paths work |
+| `Collect<Container, Predicate>(container, pred)` | `QueryResult` | ✅ Immediate complete, batch incomplete |
+| `Count<Predicate>(pred)` | `QueryResult` | ✅ Complete - Both paths work |
+| `Any<Predicate>(pred)` | `std::optional<bool>` | ✅ Complete - Both paths work |
+| `ExecuteBatch<BatchFunc>(func)` | `BatchResult` | ✅ Framework complete, collect missing |
+
+### Path-Based Methods (❌ Not Implemented)
+
+| Method | Return Type | Status |
+|--------|-------------|--------|
+| `FindFirstByPath(path)` | `std::optional<SceneNode>` | ❌ Commented out |
+| `FindFirstByPath(context, path)` | `std::optional<SceneNode>` | ❌ Commented out |
+| `CollectByPath<Container>(container, pattern)` | `QueryResult` | ❌ Commented out |
+
+## Implementation Analysis
+
+### What Works Well
+
+| Aspect | Implementation Quality | Notes |
+|--------|----------------------|-------|
+| Const Correctness | ✅ Excellent | Complete compile-time immutability via `ConstVisitedNode` |
+| Scene Lifetime Management | ✅ Robust | `weak_ptr` prevents dangling references |
+| Batch Framework | ✅ Solid | 4-phase execution is well-structured |
+| Type Safety | ✅ Excellent | Template predicates with concepts and auto const deduction |
+| Early Termination | ✅ Effective | `VisitResult::kStop` and `has_terminated` flags |
+| Memory Control | ✅ Excellent | User-provided containers eliminate allocations |
+
+### Current Issues
+
+| Issue | Severity | Description |
+|-------|----------|-------------|
+| Incomplete Batch Collect | 🔴 High | `ExecuteBatchCollect` is empty |
+| BatchResult Total Matches | 🟡 Medium | Calculation logic is simplified/incomplete |
+
+### Architectural Strengths
+
+1. **Const Correctness**: Complete compile-time immutability guarantees via
+   `SceneTraversal<const Scene>`
+2. **Clear Separation**: Batch vs immediate execution paths are well-separated
+3. **Consistent Patterns**: All methods follow the same routing logic with type
+   safety
+4. **Performance Focus**: Single traversal for batches, early termination with
+   const-correct visitors
+5. **Type Safety**: Template predicates with concept constraints and automatic
+   const deduction
+6. **Error Handling**: Consistent `weak_ptr` expiry checking with const-safe
+   validation
+7. **Seamless Integration**: `Scene::Query()` provides intuitive access following
+   established engine patterns like `Scene::Traverse()`
 
 ## Objectives
 
@@ -80,64 +262,94 @@ while maintaining consistency with established engine patterns.
    performance improvements like spatial indexing, caching layers, or
    specialized data structures without API changes.
 
-## Design Goals
+## Design Goals vs Implementation
 
-1. **Zero-Copy Performance**: Eliminate unnecessary copying of ResourceTable
-   data during searches
+### ✅ Achieved Goals
 
-2. **Early Termination**: Support immediate termination when search criteria are
-   met (e.g., find first match)
+| Goal | Implementation | Notes |
+|------|----------------|-------|
+| Zero-Copy Performance | ✅ Complete | SceneNode references, no data copying |
+| Early Termination | ✅ Complete | `VisitResult::kStop` in FindFirst/Any |
+| User-Controlled Allocation | ✅ Complete | Container parameters in all collection methods |
+| Leverage Existing Infrastructure | ✅ Complete | Built on const-correct `SceneTraversal<const Scene>` |
+| Architectural Consistency | ✅ Complete | Follows `Scene::Traverse()` pattern with const correctness |
+| Robust Error Handling | ✅ Complete | `weak_ptr` validation, noexcept design |
+| Performance Monitoring | ✅ Complete | `nodes_examined`/`nodes_matched` metrics |
+| Google C++ Standards | ✅ Complete | Consistent naming, concepts usage, const correctness |
+| **Const Correctness** | ✅ **Complete** | **Compile-time immutability via `ConstVisitedNode`** |
+| **Scene Integration** | ✅ **Complete** | **`Scene::Query()` follows established engine patterns** |
 
-3. **User-Controlled Allocation**: Allow users to decide when, how, and where to
-   allocate result containers
+### 🔄 Partially Achieved Goals
 
-4. **Leverage Existing Infrastructure**: Reuse SceneTraversal's proven
-   performance patterns and Scene's SafeCall validation without duplication
+| Goal | Status | What's Missing |
+|------|--------|----------------|
+| Clear Separation of Concerns | 🔄 Mostly | Path queries not yet implemented |
+| Extensibility | 🔄 Framework Ready | Path system needs completion |
 
-5. **Architectural Consistency**: Follow the established `Scene::Traverse()` →
-   `SceneTraversal` pattern for specialized operations
+### ❌ Goals Not Yet Addressed
 
-6. **Clear Separation of Concerns**: Distinguish between:
-   - **SceneTraversal**: Sequential access over all nodes (like iterating a
-     container)
-   - **SceneQuery**: Random access to specific nodes matching criteria (like
-     searching/filtering a container)
+| Goal | Status | Blocker |
+|------|--------|---------|
+| Complete Path Query Support | ❌ Deferred | Complex parsing logic not implemented |
 
-7. **Robust Error Handling**: Inherit Scene's comprehensive SafeCall validation
-   through existing SceneNode API usage
+## Design Evolution
 
-8. **Performance Monitoring**: Provide insights into query performance to
-   identify optimization opportunities
+The implementation focused on the core predicate-based query system first,
+establishing:
 
-9. **Extensibility**: Support future enhancements like indexing, caching, and
-   specialized search patterns
+1. **Solid Foundation**: Dual execution modes with clean routing
+2. **Performance First**: Single traversal batching with early termination
+3. **Memory Safety**: User-controlled allocation patterns
+4. **Type Safety**: Template predicates with concept constraints
+5. **Const Correctness**: Complete immutability guarantees via
+   `SceneTraversal<const Scene>`
 
-10. **Google C++ Standards Compliance**: Follow established naming conventions
-    and patterns used throughout the codebase
+### Recent Const Correctness Overhaul
+
+**Major Enhancement**: SceneTraversal underwent a comprehensive const
+correctness redesign:
+
+- **Template Specialization**: `SceneTraversal<const Scene>` for read-only
+  operations
+- **Visitor Type Deduction**: Automatic `ConstVisitedNode` vs
+  `MutableVisitedNode` selection
+- **Concept-Based Validation**: Compile-time enforcement of const correctness
+- **Query Immutability**: All SceneQuery operations are now guaranteed read-only
+
+**Impact on SceneQuery**:
+- Enhanced type safety with zero runtime overhead
+- Clear separation between read-only queries and mutating operations
+- Compile-time validation prevents accidental scene modifications
+- Better integration with const Scene instances
+
+**Strategic Decision**: Path queries were deferred to focus on a robust,
+const-correct core system rather than attempting everything simultaneously.
 
 ## Selected Design: Single Entry Point with Performance Focus
 
 ### Design Philosophy
 
 Following the established pattern in the codebase where `Scene::Traverse()`
-provides access to a rich `SceneTraversal` interface, we chose a single entry
-point approach:
+provides access to a rich `SceneTraversal` interface, we implemented a single
+entry point approach:
 
 ```cpp
-// Single entry point (like Traverse())
-auto Query() const -> const SceneQuery&;
+// Single entry point (implemented in Scene class)
+auto Query() const -> SceneQuery;
 ```
 
-### Draft API Design - Core Features
+**Implementation Status**: ✅ **Complete** - The `Scene::Query()` method is now implemented and returns a `SceneQuery` instance configured for the scene.
+
+### Implemented API Design - Core Features
 
 ```cpp
 class SceneQuery {
 public:
-  // Core search operations for current development needs
-  template <std::predicate<const VisitedNode&> Predicate>
+  // Core search operations implemented with const correctness
+  template <std::predicate<const ConstVisitedNode&> Predicate>
   auto FindFirst(Predicate&& pred) const noexcept -> std::optional<SceneNode>;
 
-  template <typename Container, std::predicate<const VisitedNode&> Predicate>
+  template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
   auto Collect(Container& container, Predicate&& pred) const noexcept
       -> QueryResult;
 
@@ -238,17 +450,52 @@ struct QueryResult {
 };
 ```
 
+### Scene Integration Usage Examples
+
+With the implemented `Scene::Query()` method, the SceneQuery API integrates seamlessly into existing workflows:
+
+```cpp
+// Basic integration - get query interface from scene
+auto scene = std::make_shared<Scene>("GameWorld");
+auto query = scene->Query();
+
+// Single query operations
+auto player = query.FindFirst([](const auto& visited) {
+  return visited.node.GetName() == "Player";
+});
+
+std::vector<SceneNode> enemies;
+auto result = query.Collect(enemies, [](const auto& visited) {
+  return visited.node.GetName().starts_with("Enemy");
+});
+
+// Batch operations for performance
+auto batch_result = query.ExecuteBatch([&](auto& q) {
+  player = q.FindFirst(player_predicate);
+  auto enemy_count = q.Count(enemy_predicate);
+  auto has_powerups = q.Any(powerup_predicate);
+});
+
+// Const-correct usage with const scenes
+void AnalyzeScene(const std::shared_ptr<const Scene>& scene) {
+  auto query = scene->Query(); // Returns SceneQuery for const Scene
+  // All query operations are guaranteed read-only
+  auto stats = query.Count([](const auto& visited) { return true; });
+}
+```
+
 ## Batch Query Execution
 
 The batch execution capability allows multiple queries to be executed in a
 single SceneTraversal pass, providing significant performance benefits for
 multi-query scenarios.
 
-**Note**: Path-based queries (`FindFirstByPath`, `CollectByPath`) are **not
-supported** in batch execution due to their optimized direct navigation
-algorithms. Attempting to use path queries within `ExecuteBatch` will trigger a
-runtime assertion. Path queries should be executed individually for optimal
-performance.
+**Design Decision**: Path-based queries (`FindFirstByPath`, `CollectByPath`) are
+**intentionally excluded** from batch execution by design. Path queries use
+optimized direct navigation algorithms that are fundamentally incompatible with
+the traversal-based batching approach. Attempting to use path queries within
+`ExecuteBatch` will trigger an immediate batch rejection/assertion. Path queries
+must be executed individually for optimal performance.
 
 ### Core Batch Concept
 
@@ -283,11 +530,13 @@ struct BatchOperation {
 
 ### Key Batch Execution Benefits
 
-1. **Performance Multiplication**: N queries execute in 1 traversal instead of N traversals
+1. **Performance Multiplication**: N queries execute in 1 traversal instead of N
+   traversals
 2. **Efficient Filtering**: Each predicate tested once per node, results flagged
 3. **Smart Termination**: Stops when all FindFirst/Any operations complete
 4. **Cache Efficiency**: Single pass maximizes cache locality
-5. **Zero Overhead**: When not in batch mode, behaves exactly like immediate queries
+5. **Zero Overhead**: When not in batch mode, behaves exactly like immediate
+   queries
 6. **Type Safety**: Lambda capture maintains full type safety
 7. **Memory Control**: User manages all container allocations upfront
 
@@ -296,7 +545,8 @@ struct BatchOperation {
 - **Time Complexity**: O(n) for n nodes regardless of number of queries in batch
 - **Memory**: User-controlled allocation for all result containers
 - **Cache Performance**: Single traversal maximizes cache hit rates
-- **Scalability**: Performance improvement scales linearly with number of queries
+- **Scalability**: Performance improvement scales linearly with number of
+  queries
 
 ### When to Use Batch Execution
 
@@ -311,6 +561,56 @@ struct BatchOperation {
 - Conditional logic between queries
 - Early termination based on first query result
 - Debugging or development scenarios
+- **Path-based navigation is required** (FindFirstByPath, CollectByPath)
+
+## Design Decisions & Rationale
+
+### Path Query Exclusion from Batch Operations
+
+**Decision**: Path-based queries are architecturally incompatible with batch
+execution.
+
+**Rationale**:
+- Path queries use optimized direct navigation (O(depth) complexity)
+- Batch operations require full traversal (O(n) complexity)
+- Mixing navigation patterns would eliminate performance benefits
+- Implementation complexity would significantly increase without proportional
+  benefit
+
+**Impact**:
+- Path queries must be executed individually
+- Batch operations limited to predicate-based queries only
+- Clear separation of concerns between navigation and traversal patterns
+
+### Single Traversal Batch Architecture
+
+**Decision**: All batch operations execute in a single composite traversal pass
+with const correctness.
+
+**Rationale**:
+- Eliminates the N-traversals problem for N queries
+- Maximizes cache locality and memory efficiency
+- Provides predictable performance characteristics
+- Scales linearly regardless of batch query count
+- Maintains compile-time immutability guarantees
+
+### Const Correctness Architecture
+
+**Decision**: Complete const correctness via template specialization and
+automatic type deduction.
+
+**Rationale**:
+- `SceneTraversal<const Scene>` enforces read-only operations at compile time
+- `VisitedNodeT<std::is_const_v<SceneT>>` automatically deduces correct visitor
+  node type
+- Template concepts validate const correctness without runtime overhead
+- Clear separation between querying (read-only) and modification operations
+
+**Implementation Benefits**:
+- Zero runtime cost for const correctness validation
+- Prevents accidental scene mutations during queries
+- Better integration with const Scene instances
+- Enhanced type safety and developer experience
 
 ## Path Query Syntax
 
@@ -337,549 +637,115 @@ query.CollectByPath(all_weapons, "**/Weapon");      // All weapons in scene
 query.CollectByPath(all_weapons, "Player/*/Weapon"); // All weapons under Player's children
 ```
 
-## Usage Examples
+## Usage Examples (Current Implementation)
+
+### ✅ Working Examples (Const-Correct Implementation)
 
 ```cpp
-auto& query = scene.Query();
+// NOTE: Scene::Query() not yet implemented - assume query object exists
+auto& query = scene.Query(); // TODO: Add to Scene class
 
-// Single queries (existing functionality)
-if (auto player = query.FindFirst([](const VisitedNode& visited) {
+// ✅ Const-correct predicate-based queries (IMPLEMENTED)
+if (auto player = query.FindFirst([](const ConstVisitedNode& visited) {
+    // visited.node_impl is const SceneNodeImpl* - no mutations possible
     return visited.node_impl->GetName() == "Player";
 })) {
     // Use player node - already validated by Scene API
 }
 
-// Path-based queries (absolute paths)
-if (auto weapon = query.FindFirstByPath("World/Player/Equipment/Weapon")) {
-    // Direct hierarchical navigation
-}
-
-// Path-based queries (relative paths)
-if (auto player = query.FindFirst([](const VisitedNode& visited) {
-    return visited.node_impl->GetName() == "Player";
-})) {
-    if (auto weapon = query.FindFirstByPath(*player, "Equipment/Weapon")) {
-        // Relative navigation from specific node
-    }
-}
-
-// Wildcard path queries
-std::vector<SceneNode> all_weapons;
-auto result = query.CollectByPath(all_weapons, "**/Weapon"); // Any Weapon at any depth
-if (result) {
-    std::cout << "Found " << result.nodes_matched << " weapons\n";
-}
-
-// User-controlled allocation with predicates
+// ✅ User-controlled allocation with const-correct predicates (IMPLEMENTED)
 std::vector<SceneNode> enemies;
-enemies.reserve(expected_count); // User manages memory
-auto result = query.Collect(enemies, [](const VisitedNode& visited) {
+enemies.reserve(50); // User manages memory
+auto result = query.Collect(enemies, [](const ConstVisitedNode& visited) {
+    // Compile-time const correctness enforced
     return visited.node_impl->HasTag("enemy");
 });
 
-// Batch execution - multiple queries in single traversal pass
-std::vector<SceneNode> enemies_batch, pickups, interactive_objects;
-enemies_batch.reserve(50);
-pickups.reserve(20);
-interactive_objects.reserve(10);
+// ✅ Count and Any operations with const correctness (IMPLEMENTED)
+auto enemy_count = query.Count([](const ConstVisitedNode& v) {
+    // v.node_impl->Mutate(); // ❌ Compile error - const correctness enforced
+    return v.node_impl->HasTag("enemy");
+});
 
+auto has_player = query.Any([](const ConstVisitedNode& v) {
+    return v.node_impl->GetName() == "Player";
+});
+
+// ✅ Const-correct batch execution (FRAMEWORK IMPLEMENTED, collect incomplete)
 SceneNode player;
 size_t destructible_count = 0;
 bool has_explosions = false;
 
 auto batch_result = query.ExecuteBatch([&](auto& q) {
-    // All these queries execute in a single traversal pass
-    player = q.FindFirst([](const VisitedNode& v) {
+    // ✅ These work in batch mode with const correctness
+    player = q.FindFirst([](const ConstVisitedNode& v) {
         return v.node_impl->GetName() == "Player";
     }).value_or(SceneNode{});
 
-    q.Collect(enemies_batch, [](const VisitedNode& v) {
-        return v.node_impl->HasTag("enemy");
-    });
-
-    q.Collect(pickups, [](const VisitedNode& v) {
-        return v.node_impl->HasTag("pickup");
-    });
-
-    q.Collect(interactive_objects, [](const VisitedNode& v) {
-        return v.node_impl->HasTag("interactive");
-    });
-
-    auto count_result = q.Count([](const VisitedNode& v) {
+    auto count_result = q.Count([](const ConstVisitedNode& v) {
+        // Const-correct access - no scene mutations possible
         return v.node_impl->HasTag("destructible");
     });
     destructible_count = count_result.nodes_matched;
 
-    has_explosions = q.Any([](const VisitedNode& v) {
+    has_explosions = q.Any([](const ConstVisitedNode& v) {
         return v.node_impl->HasTag("explosion");
     }).value_or(false);
+
+    // ❌ This doesn't work yet - ExecuteBatchCollect is empty
+    // std::vector<SceneNode> enemies;
+    // q.Collect(enemies, enemy_predicate); // Not implemented
+
+    // ❌ Path queries not supported in batches (by design)
+    // auto weapon = q.FindFirstByPath("Player/Weapon"); // Will fail
 });
 
 if (batch_result) {
     std::cout << "Batch examined " << batch_result.nodes_examined << " nodes\n";
-    std::cout << "Found " << enemies_batch.size() << " enemies\n";
-    std::cout << "Found " << pickups.size() << " pickups\n";
-    std::cout << "Found " << interactive_objects.size() << " interactive objects\n";
-    std::cout << "Destructible count: " << destructible_count << "\n";
-    std::cout << "Has explosions: " << has_explosions << "\n";
+    std::cout << "Found " << batch_result.total_matches << " total matches\n";
 }
 ```
 
-## Implementation Strategy
-
-The core implementation leverages SceneTraversal's exception-free performance
-patterns and built-in filtering system while delegating all validation to
-existing Scene API:
+### 🔒 Const Correctness Benefits
 
 ```cpp
-// Predicate-based implementation using SceneTraversal's filtering
-template <std::predicate<const VisitedNode&> Predicate>
-auto SceneQuery::FindFirst(Predicate&& pred) const noexcept
-    -> std::optional<SceneNode>
-{
-  if (scene_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
+// ✅ Guaranteed read-only operations
+query.FindFirst([](const ConstVisitedNode& visited) {
+    auto name = visited.node_impl->GetName();     // ✅ Read access OK
+    auto flags = visited.node_impl->GetFlags();   // ✅ Read access OK
+    // visited.node_impl->SetName("New");         // ❌ Compile error
+    // visited.node_impl->SetFlags(flags);        // ❌ Compile error
+    return name == "Target";
+});
 
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchFindFirst(
-        std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-  }
-
-  // Use private helper for immediate execution
-  return ExecuteImmediateFindFirst(
-      std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-}
-
-template <typename Container, std::predicate<const VisitedNode&> Predicate>
-auto SceneQuery::Collect(Container& container, Predicate&& pred) const noexcept
-    -> QueryResult
-{
-  if (scene_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
-
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchCollect(container,
-        std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-  }
-
-  // Use private helper for immediate execution
-  return ExecuteImmediateCollect(container,
-      std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-}
-
-// Private helper to process the lambda logic for immediate execution.
-QueryResult SceneQuery::ExecuteImmediateCollect(auto& container,
-    const std::function<bool(const VisitedNode&)>& predicate) const noexcept
-{
-  QueryResult result {};
-  auto queryFilter = [&result, &predicate](const VisitedNode& visited,
-                         FilterResult) -> FilterResult {
-    ++result.nodes_examined;
-    return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
-  };
-  auto visitHandler = [this, &container, &result](const VisitedNode& visited,
-                          const Scene&, bool) -> VisitResult {
-    container.emplace_back(scene_.lock(), visited.handle);
-    ++result.nodes_matched;
-    return VisitResult::kContinue;
-  };
-  auto traversalResult = GetTraversal().Traverse(
-      visitHandler, TraversalOrder::kPreOrder, queryFilter);
-  result.completed = traversalResult.completed;
-  return result;
-}
-
-// Private helper for batch operation setup for FindFirst
-auto SceneQuery::ExecuteBatchFindFirst(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-    -> std::optional<SceneNode>
-{
-  std::optional<SceneNode> result;
-  batch_operations_.push_back(BatchOperation { .predicate = pred,
-      .type = BatchOperation::Type::FindFirst,
-      .result_destination = &result,
-      .result_handler = [&result, scene = scene_](const VisitedNode& visited) {
-        result = SceneNode { scene.lock(), visited.handle };
-      } });
-  return result; // Will be populated during ExecuteBatch
-}
-
-// Private helper for immediate execution of FindFirst
-auto SceneQuery::ExecuteImmediateFindFirst(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-    -> std::optional<SceneNode>
-{
-  std::optional<SceneNode> result;
-  auto query_filter
-      = [&pred](const VisitedNode& visited, FilterResult) -> FilterResult {
-    if (pred(visited)) {
-      return FilterResult::kAccept;
-    }
-    return FilterResult::kReject;
-  };
-  GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        result = SceneNode { scene_.lock(), visited.handle };
-        return VisitResult::kStop;
-      },
-      TraversalOrder::kPreOrder, query_filter);
-  return result;
-}
-
-// Private helper for immediate execution of Count
-QueryResult SceneQuery::ExecuteImmediateCount(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-{
-  QueryResult result;
-  auto count_filter = [&result, &pred](const VisitedNode& visited,
-                          FilterResult) -> FilterResult {
-    ++result.nodes_examined;
-    if (pred(visited)) {
-      return FilterResult::kAccept;
-    }
-    return FilterResult::kReject;
-  };
-  auto traversal_result = GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        ++result.nodes_matched;
-        return VisitResult::kContinue;
-      },
-      TraversalOrder::kPreOrder, count_filter);
-  result.completed = traversal_result.completed;
-  return result;
-}
-
-// Private helper for immediate execution of Any
-auto SceneQuery::ExecuteImmediateAny(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-    -> std::optional<bool>
-{
-  bool found = false;
-  auto any_filter
-      = [&pred](const VisitedNode& visited, FilterResult) -> FilterResult {
-    if (pred(visited)) {
-      return FilterResult::kAccept;
-    }
-    return FilterResult::kReject;
-  };
-  GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        found = true;
-        return VisitResult::kStop;
-      },
-      TraversalOrder::kPreOrder, any_filter);
-  return found;
-}
-
-// Optimized path navigation (single result, direct navigation when possible)
-auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
-    -> std::optional<SceneNode>
-{
-  if (scene_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
-
-  // Parse path into segments
-  auto path_segments = ParsePath(path);
-  if (path_segments.empty()) {
-    return std::nullopt;
-  }
-
-  auto scene_ptr = scene_.lock();
-
-  // For simple absolute paths without wildcards, use direct navigation
-  if (path_segments[0].is_absolute && !HasWildcards(path_segments)) {
-    return NavigatePathDirectly(scene_ptr, path_segments);
-  }
-
-  // For complex paths with wildcards, use filtered traversal
-  std::optional<SceneNode> result;
-  auto path_filter = CreatePathFilter(path_segments);
-
-  GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        result = SceneNode { scene_ptr, visited.handle };
-        return VisitResult::kStop; // Early termination
-      },
-      TraversalOrder::kPreOrder, path_filter);
-
-  return result;
-}
-
-// Path collection with pattern matching
-template <typename Container>
-auto SceneQuery::CollectByPath(Container& container,
-    std::string_view path_pattern) const noexcept -> QueryResult
-{
-  if (scene_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
-
-  if (batch_active_) {
-    // Use private helper for batch operation setup (not supported, but for API
-    // symmetry)
-    return ExecuteBatchCollectByPath(container, path_pattern);
-  }
-
-  // Use private helper for immediate execution
-  return ExecuteImmediateCollectByPath(container, path_pattern);
-}
-
-// Private helper for immediate execution of CollectByPath
-// (moved from original CollectByPath body)
-template <typename Container>
-QueryResult SceneQuery::ExecuteImmediateCollectByPath(
-    Container& container, std::string_view path_pattern) const noexcept
-{
-  QueryResult result;
-  // Parse path pattern
-  auto pattern = ParsePathPattern(path_pattern);
-  if (!pattern.is_valid) {
-    result.completed = false;
-    return result;
-  }
-  // Create specialized filter for path matching with early subtree rejection
-  auto path_filter = [&](const VisitedNode& visited,
-                         FilterResult parent_result) -> FilterResult {
-    ++result.nodes_examined;
-    if (MatchesPathPattern(visited, pattern)) {
-      return FilterResult::kAccept;
-    }
-    return ShouldTraverseForPattern(visited, pattern)
-        ? FilterResult::kReject
-        : FilterResult::kRejectSubTree;
-  };
-  auto traversal_result = GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        container.emplace_back(scene_.lock(), visited.handle);
-        ++result.nodes_matched;
-        return VisitResult::kContinue;
-      },
-      TraversalOrder::kPreOrder, path_filter);
-  result.completed = traversal_result.completed;
-  return result;
-}
-
-// Private helper for batch operation setup (not supported, but for API
-// symmetry)
-template <typename Container>
-QueryResult SceneQuery::ExecuteBatchCollectByPath(
-    Container& container, std::string_view path_pattern) const noexcept
-{
-  // Path-based queries are not supported in batch mode; trigger assertion or
-  // return incomplete result (You may want to add an assert or error log here)
-  return QueryResult { .completed = false };
-}
-
-// Count implementation using filtering for efficiency
-template <std::predicate<const VisitedNode&> Predicate>
-auto SceneQuery::Count(Predicate&& pred) const noexcept -> QueryResult
-{
-  if (scene_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
-
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchCount(
-        std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-  }
-
-  // Use private helper for immediate execution
-  return ExecuteImmediateCount(
-      std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-}
-
-// Any implementation with aggressive early termination
-template <std::predicate<const VisitedNode&> Predicate>
-auto SceneQuery::Any(Predicate&& pred) const noexcept -> std::optional<bool>
-{
-  if (scene_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
-
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchAny(
-        std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-  }
-
-  // Use private helper for immediate execution
-  return ExecuteImmediateAny(
-      std::function<bool(const VisitedNode&)>(std::forward<Predicate>(pred)));
-}
-
-// Private helper for batch operation setup for Count
-QueryResult SceneQuery::ExecuteBatchCount(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-{
-  QueryResult result;
-  batch_operations_.push_back(BatchOperation { .predicate = pred,
-      .type = BatchOperation::Type::Count,
-      .result_destination = &result,
-      .result_handler
-      = [&result](const VisitedNode& visited) { ++result.nodes_matched; } });
-  return result; // Will be updated during ExecuteBatch
-}
-
-// Private helper for batch operation setup for Any
-std::optional<bool> SceneQuery::ExecuteBatchAny(
-    const std::function<bool(const VisitedNode&)>& pred) const noexcept
-{
-  std::optional<bool> result;
-  batch_operations_.push_back(BatchOperation { .predicate = pred,
-      .type = BatchOperation::Type::Any,
-      .result_destination = &result,
-      .result_handler
-      = [&result](const VisitedNode& visited) { result = true; } });
-  return result; // Will be updated during ExecuteBatch
-}
-
-// ExecuteBatch implementation with clear 4-phase approach
-template <typename BatchFunc>
-auto SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
-    -> BatchResult
-{
-  if (scene_.expired()) [[unlikely]] {
-    return BatchResult { .completed = false };
-  }
-
-  // Phase 1: Initialize batch state, counters, clear previous operations
-  BatchBegin();
-
-  // Phase 2: Execute lambda to collect operations and create composite filter
-  auto composite_filter
-      = CreateCompositeFilter(std::forward<BatchFunc>(batch_func));
-
-  if (batch_operations_.empty()) {
-    BatchEnd();
-    return BatchResult {};
-  }
-
-  // Phase 3: Execute single traversal with composite filter
-  auto traversal_result = Execute(composite_filter);
-
-  // Phase 4: Consolidate results and cleanup
-  auto result = BatchEnd(traversal_result);
-
-  return result;
-}
-
-// Phase 1: Initialize batch state
-auto SceneQuery::BatchBegin() const noexcept -> void
-{
-  batch_operations_.clear();
-  batch_active_ = true;
-}
-
-// Phase 2: Execute lambda and create composite filter
-template <typename BatchFunc>
-auto SceneQuery::CreateCompositeFilter(BatchFunc&& batch_func) const noexcept
-    -> auto
-{
-  // Execute the lambda - this will populate batch_operations_
-  batch_func(*this); // Pass query as batch interface
-
-  // Create composite filter from collected operations
-  return [this](const VisitedNode& visited,
-             FilterResult parent_result) -> FilterResult {
-    // SceneTraversal guarantees node_impl is valid - no null checks needed
-    bool any_operation_interested = false;
-
-    // Test all predicates once and flag matches
-    for (auto& op : batch_operations_) {
-      op.matched_current_node = false; // Reset flag
-
-      if (!op.has_terminated && op.predicate(visited)) {
-        op.matched_current_node = true;
-        any_operation_interested = true;
-      }
-    }
-
-    return any_operation_interested ? FilterResult::kAccept
-                                    : FilterResult::kReject;
-  };
-}
-
-// Phase 3: Execute traversal with batched operations
-template <typename CompositeFilter>
-auto SceneQuery::Execute(CompositeFilter&& composite_filter) const noexcept
-    -> TraversalResult
-{
-  return GetTraversal().Traverse(
-      [this](const VisitedNode& visited, const Scene& scene,
-          bool dry_run) -> VisitResult {
-        return ProcessBatchedNode(visited, scene, dry_run);
-      },
-      TraversalOrder::kPreOrder,
-      std::forward<CompositeFilter>(composite_filter));
-}
-
-// Private helper method for processing nodes during batch execution
-auto SceneQuery::ProcessBatchedNode(const VisitedNode& visited,
-    const Scene& scene, bool dry_run) const noexcept -> VisitResult
-{
-  if (dry_run) {
-    return VisitResult::kContinue; // No dry-run logic needed for queries
-  }
-
-  // Process all operations that matched this node
-  bool any_operation_wants_to_continue = false;
-
-  for (auto& op : batch_operations_) {
-    if (!op.has_terminated && op.matched_current_node) {
-      op.result_handler(visited); // Execute the result logic
-
-      // Check if this operation wants to terminate (FindFirst, Any)
-      if (op.type == BatchOperation::Type::FindFirst
-          || op.type == BatchOperation::Type::Any) {
-        op.has_terminated = true;
-      }
-
-      if (!op.has_terminated) {
-        any_operation_wants_to_continue = true;
-      }
-    }
-  }
-
-  // Continue only if at least one operation is still active
-  return any_operation_wants_to_continue ? VisitResult::kContinue
-                                         : VisitResult::kStop;
-}
-
-// Phase 4: Consolidate results and cleanup
-auto SceneQuery::BatchEnd(
-    const TraversalResult& traversal_result) const noexcept -> BatchResult
-{
-  batch_active_ = false;
-
-  BatchResult result;
-  result.nodes_examined
-      = traversal_result.nodes_visited; // Visited = examined for batch
-  result.completed = traversal_result.completed;
-
-  // Count total matches across all operations
-  for (const auto& op : batch_operations_) {
-    if (op.type == BatchOperation::Type::Collect
-        || op.type == BatchOperation::Type::Count) {
-      // For these operations, the result_handler already counted matches
-      // We'd need to track this during execution - simplified for now
-      ++result.total_matches;
-    } else if (op.type == BatchOperation::Type::FindFirst
-        || op.type == BatchOperation::Type::Any) {
-      if (op.has_terminated) { // Found a match
-        ++result.total_matches;
-      }
-    }
-  }
-
-  return result;
-}
+// ✅ Type safety with automatic const deduction
+SceneTraversal<const Scene> traversal(scene);    // Read-only traversal
+// Uses ConstVisitedNode automatically based on Scene template parameter
 ```
+
+### ❌ Not Yet Working Examples
+
+```cpp
+// ❌ Path-based queries (NOT IMPLEMENTED - commented out)
+// auto weapon = query.FindFirstByPath("World/Player/Equipment/Weapon");
+// auto inventory = query.FindFirstByPath(player, "Equipment/Inventory");
+
+// ❌ Wildcard path queries (NOT IMPLEMENTED)
+// std::vector<SceneNode> all_weapons;
+// query.CollectByPath(all_weapons, "**/Weapon");
+
+// ✅ Scene integration (IMPLEMENTED)
+auto query = scene->Query(); // Scene::Query() returns SceneQuery instance
+```
+
+### Architectural Constraints
+
+**Batch Mode Limitation**: Path-based queries are fundamentally incompatible
+with batch execution. The batch system is designed around full scene traversal
+with composite filtering, while path queries use direct navigation algorithms
+optimized for specific hierarchical access patterns. This architectural
+constraint is enforced at runtime to prevent performance degradation and
+maintain clear separation between navigation and search operations.
 
 ## Key Implementation Insights
 
@@ -945,8 +811,8 @@ auto SceneQuery::BatchEnd(
 ## Potential Concerns & Mitigations
 
 ### 1. Query Performance vs Linear Search
-**Concern**: Complex predicates on unindexed searches could be slow for large scenes.
-**Mitigation**:
+**Concern**: Complex predicates on unindexed searches could be slow for large
+scenes. **Mitigation**:
 - QueryResult provides performance metrics for optimization decisions
 - Built-in methods (FindByName) leverage existing Scene optimizations
 - Future spatial/component indexing can be added transparently
@@ -969,8 +835,7 @@ auto SceneQuery::BatchEnd(
 - Future path compilation to predicate functions
 
 ### 4. Predicate Complexity
-**Concern**: Complex user predicates might dominate query time.
-**Mitigation**:
+**Concern**: Complex user predicates might dominate query time. **Mitigation**:
 - SceneTraversal's filtering minimizes predicate calls
 - Built-in convenience methods for common patterns
 - Performance monitoring identifies expensive predicates

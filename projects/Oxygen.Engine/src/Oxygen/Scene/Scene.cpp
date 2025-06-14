@@ -16,6 +16,7 @@
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
+#include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
 using oxygen::scene::NodeHandle;
@@ -698,6 +699,25 @@ auto Scene::Traverse() const -> NonMutatingTraversal
 auto Scene::Traverse() -> MutatingTraversal
 {
   return MutatingTraversal(shared_from_this());
+}
+
+/*!
+ Provides access to the SceneQuery API for efficient scene graph queries
+ including batch operations, predicate-based searches, and optimized traversals.
+
+ @return SceneQuery instance configured for this scene
+
+ <b>Usage</b>:
+ ```cpp
+   auto query = scene->Query();
+   auto node = query.FindFirst([](const auto& visited) {
+     return visited.node.GetName() == "TargetNode";
+   });
+ ```
+*/
+auto Scene::Query() const -> SceneQuery
+{
+  return SceneQuery(shared_from_this());
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

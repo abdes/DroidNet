@@ -24,7 +24,7 @@ template <typename T> class ResourceTable;
 
 namespace oxygen::scene {
 
-// Forward declaration of SceneTraversal.
+class SceneQuery;
 template <typename SceneT> class SceneTraversal;
 
 //! Root of the Oxygen scene graph.
@@ -226,12 +226,8 @@ public:
   OXGN_SCN_NDAPI auto GetChildren(const SceneNode& parent) const
     -> std::vector<NodeHandle>;
 
-  // Node search and query
-  OXGN_SCN_NDAPI auto FindNodeByName(std::string_view name) const
-    -> std::optional<SceneNode>;
-
-  OXGN_SCN_NDAPI auto FindNodesByName(std::string_view name) const
-    -> std::vector<SceneNode>;
+  //! Creates a high-performance query interface for this scene.
+  OXGN_SCN_API auto Query() const -> SceneQuery;
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
