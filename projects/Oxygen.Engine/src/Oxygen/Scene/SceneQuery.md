@@ -8,10 +8,10 @@
 |---------|--------|-------|
 | Core Query Construction | ✅ Complete | `SceneQuery(std::shared_ptr<const Scene>)` |
 | Const-Correct Predicate-Based FindFirst | ✅ Complete | Uses `ConstVisitedNode` for read-only queries |
-| Const-Correct Predicate-Based Collect | 🔄 Partial | Immediate mode complete, batch mode incomplete |
+| Const-Correct Predicate-Based Collect | ✅ Complete | Both immediate and batch modes implemented |
 | Const-Correct Predicate-Based Count | ✅ Complete | Returns `QueryResult` with metrics |
 | Const-Correct Predicate-Based Any | ✅ Complete | Early termination optimization |
-| Batch Execution Framework | 🔄 Partial | Core framework complete, ExecuteBatchCollect missing |
+| Batch Execution Framework | ✅ Complete | Core framework and ExecuteBatchCollect implemented |
 | Query Result Types | ✅ Complete | `QueryResult` and `BatchResult` |
 | Scene Lifetime Safety | ✅ Complete | `weak_ptr` validation |
 | Dual Execution Modes | ✅ Complete | Automatic batch/immediate routing |
@@ -21,16 +21,13 @@
 
 ### 🔄 Partially Implemented
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Const-Correct Predicate-Based Collect | 🔄 Partial | Immediate mode complete, batch mode incomplete |
+*All core batch and immediate query features are now complete.*
 
 ### ❌ Not Yet Implemented
 
 | Feature | Status | Reason |
 |---------|--------|--------|
 | Path-Based Queries | ❌ Commented Out | Complex path parsing/navigation logic |
-| `ExecuteBatchCollect` | ❌ Empty Implementation | Batch collection logic incomplete |
 | Path Wildcard Support | ❌ Missing | `ParsePath`, `CreatePathFilter` helpers |
 
 ### 🚫 Intentionally Excluded from Batch Operations
@@ -132,11 +129,11 @@ operation.
 
 | Method | Return Type | Implementation Status |
 |--------|-------------|----------------------|
-| `FindFirst<Predicate>(pred)` | `std::optional<SceneNode>` | ✅ Complete - Both paths work |
-| `Collect<Container, Predicate>(container, pred)` | `QueryResult` | ✅ Immediate complete, batch incomplete |
-| `Count<Predicate>(pred)` | `QueryResult` | ✅ Complete - Both paths work |
-| `Any<Predicate>(pred)` | `std::optional<bool>` | ✅ Complete - Both paths work |
-| `ExecuteBatch<BatchFunc>(func)` | `BatchResult` | ✅ Framework complete, collect missing |
+| `FindFirst<Predicate>(pred)` | `std::optional<SceneNode>` | ✅ Complete - Both batch and immediate paths |
+| `Collect<Container, Predicate>(container, pred)` | `QueryResult` | ✅ Complete - Both batch and immediate paths |
+| `Count<Predicate>(pred)` | `QueryResult` | ✅ Complete - Both batch and immediate paths |
+| `Any<Predicate>(pred)` | `std::optional<bool>` | ✅ Complete - Both batch and immediate paths |
+| `ExecuteBatch<BatchFunc>(func)` | `BatchResult` | ✅ Complete - All operations implemented with accurate match tracking |
 
 ### Path-Based Methods (❌ Not Implemented)
 
@@ -161,10 +158,12 @@ operation.
 
 ### Current Issues
 
-| Issue | Severity | Description |
-|-------|----------|-------------|
-| Incomplete Batch Collect | 🔴 High | `ExecuteBatchCollect` is empty |
-| BatchResult Total Matches | 🟡 Medium | Calculation logic is simplified/incomplete |
+*All core batch execution issues have been resolved.*
+
+| Issue | Status | Description |
+|-------|--------|-------------|
+| ~~Incomplete Batch Collect~~ | ✅ **Resolved** | `ExecuteBatchCollect` implemented with proper container handling |
+| ~~BatchResult Total Matches~~ | ✅ **Resolved** | Fixed calculation logic with per-operation match tracking |
 
 ### Architectural Strengths
 
@@ -181,6 +180,26 @@ operation.
    validation
 7. **Seamless Integration**: `Scene::Query()` provides intuitive access following
    established engine patterns like `Scene::Traverse()`
+
+### Recent Improvements (✅ Completed)
+
+**ExecuteBatchCollect Implementation**:
+- Complete batch collection functionality following established patterns
+- User-provided container support with automatic SceneNode construction
+- Proper match counting and result tracking
+- Consistent API with other batch operations
+
+**BatchResult Match Tracking Enhancement**:
+- Added `match_count` field to `BatchOperation` struct
+- Accurate total_matches calculation by summing per-operation counters
+- Fixed simplified/incomplete logic with proper match aggregation
+- Performance metrics now provide meaningful batch operation insights
+
+**Implementation Benefits**:
+- **Complete Batch System**: All core query operations now support both immediate and batch execution
+- **Accurate Metrics**: BatchResult.total_matches provides precise match counts across all operations
+- **Consistent Patterns**: ExecuteBatchCollect follows the same design as other batch operations
+- **Performance Optimization**: Batch operations achieve N queries → 1 traversal efficiency
 
 ## Objectives
 
@@ -508,7 +527,10 @@ optimized traversal.
 // Key benefit: N queries → 1 traversal instead of N traversals
 auto result = query.ExecuteBatch([&](auto& q) {
     player = q.FindFirst(player_predicate);      // Operation 1
-    q.Collect(enemies, enemy_predicate);         // Operation 2
+    q.Collect(enemies, enemy_predicate);         // Operation 2 (now implemented)
+    auto enemy_count = q.Count(threat_predicate); // Operation 3
+    found = q.Any(explosion_predicate);          // Operation 4
+}); // Single traversal executes all 4 operations with accurate match tracking
     count = q.Count(pickup_predicate);           // Operation 3
     found = q.Any(explosion_predicate);          // Operation 4
 }); // Single traversal executes all 4 operations
@@ -686,15 +708,13 @@ auto batch_result = query.ExecuteBatch([&](auto& q) {
         // Const-correct access - no scene mutations possible
         return v.node_impl->HasTag("destructible");
     });
-    destructible_count = count_result.nodes_matched;
-
-    has_explosions = q.Any([](const ConstVisitedNode& v) {
+    destructible_count = count_result.nodes_matched;    has_explosions = q.Any([](const ConstVisitedNode& v) {
         return v.node_impl->HasTag("explosion");
     }).value_or(false);
 
-    // ❌ This doesn't work yet - ExecuteBatchCollect is empty
-    // std::vector<SceneNode> enemies;
-    // q.Collect(enemies, enemy_predicate); // Not implemented
+    // ✅ Batch collect now works - ExecuteBatchCollect implemented
+    std::vector<SceneNode> enemies;
+    q.Collect(enemies, enemy_predicate); // Fully implemented
 
     // ❌ Path queries not supported in batches (by design)
     // auto weapon = q.FindFirstByPath("Player/Weapon"); // Will fail
