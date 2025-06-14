@@ -63,18 +63,16 @@ public:
   template <std::predicate<const ConstVisitedNode&> Predicate>
   auto Any(Predicate&& predicate) const noexcept -> std::optional<bool>;
 
-  /*
   auto FindFirstByPath(std::string_view path) const noexcept
-      -> std::optional<SceneNode>;
+    -> std::optional<SceneNode>;
 
-  auto FindFirstByPath(
-      const SceneNode& context, std::string_view relative_path) const noexcept
-      -> std::optional<SceneNode>;
+  auto FindFirstByPath(const SceneNode& context,
+    std::string_view relative_path) const noexcept -> std::optional<SceneNode>;
 
   template <typename Container>
   auto CollectByPath(Container& container,
-      std::string_view path_pattern) const noexcept -> QueryResult;
-*/
+    std::string_view path_pattern) const noexcept -> QueryResult;
+
   // Batch execution - execute multiple queries in single traversal pass
   template <typename BatchFunc>
   auto ExecuteBatch(BatchFunc&& batch_func) const noexcept -> BatchResult;
@@ -151,6 +149,24 @@ private: // Batch operation storage for building composite filter
   template <typename Container>
   auto ExecuteImmediateCollectByPath(Container& container,
     std::string_view path_pattern) const noexcept -> QueryResult;
+  // Private implementation helper
+  auto ExecuteImmediateCollectByPathImpl(
+    std::function<void(const SceneNode&)> add_to_container,
+    std::string_view path_pattern) const noexcept -> QueryResult;
+
+  // Type-erased implementation helpers for batch operations
+  auto ExecuteBatchImpl(
+    std::function<void(const SceneQuery&)> batch_func) const noexcept
+    -> BatchResult;
+
+  auto CreateCompositeFilterImpl(
+    std::function<void(const SceneQuery&)> batch_func) const noexcept
+    -> std::function<FilterResult(const ConstVisitedNode&, FilterResult)>;
+
+  auto ExecuteBatchCollectImpl(
+    std::function<void(const SceneNode&)> add_to_container,
+    const std::function<bool(const ConstVisitedNode&)>& predicate)
+    const noexcept -> QueryResult;
 
   OXGN_SCN_NDAPI auto ExecuteImmediateFindFirst(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
@@ -159,7 +175,6 @@ private: // Batch operation storage for building composite filter
   auto ExecuteImmediateCount(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> QueryResult;
-
   auto ExecuteImmediateAny(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> std::optional<bool>;
@@ -241,80 +256,38 @@ auto SceneQuery::Any(Predicate&& predicate) const noexcept
     std::forward<Predicate>(predicate)));
 }
 
-/*
 template <typename Container>
 auto SceneQuery::CollectByPath(Container& container,
-    std::string_view path_pattern) const noexcept -> QueryResult
+  std::string_view path_pattern) const noexcept -> QueryResult
 {
-  if (scene_.expired()) [[unlikely]] {
+  if (scene_weak_.expired()) [[unlikely]] {
     return QueryResult { .completed = false };
   }
 
   if (batch_active_) {
-    // Use private helper for batch operation setup (not supported, but for API
-    // symmetry)
+    // Use private helper for batch operation setup
     return ExecuteBatchCollectByPath(container, path_pattern);
   }
 
   // Use private helper for immediate execution
   return ExecuteImmediateCollectByPath(container, path_pattern);
 }
-*/
 
 template <typename BatchFunc>
 auto SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
   -> BatchResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return BatchResult { .completed = false };
-  }
-
-  // Phase 1: Initialize batch state, counters, clear previous operations
-  BatchBegin();
-
-  // Phase 2: Execute lambda to collect operations and create composite filter
-  auto composite_filter
-    = CreateCompositeFilter(std::forward<BatchFunc>(batch_func));
-
-  if (batch_operations_.empty()) {
-    BatchEnd();
-    return BatchResult {};
-  }
-
-  // Phase 3: Execute single traversal with composite filter
-  auto traversal_result = Execute(composite_filter);
-
-  // Phase 4: Consolidate results and cleanup
-  auto result = BatchEnd(traversal_result);
-
-  return result;
+  // Type-erased wrapper - all complex logic moved to .cpp
+  return ExecuteBatchImpl(std::function<void(const SceneQuery&)>(
+    std::forward<BatchFunc>(batch_func)));
 }
 
 template <typename BatchFunc>
 auto SceneQuery::CreateCompositeFilter(BatchFunc&& batch_func) const noexcept
 {
-  // Execute the lambda - this will populate batch_operations_
-  batch_func(*this); // Pass query as batch interface
-
-  // Create composite filter from collected operations
-  return [this](const ConstVisitedNode& visited,
-           FilterResult parent_result) -> FilterResult {
-    // SceneTraversal guarantees node_impl is valid - no null checks needed
-    bool any_operation_interested = false;
-
-    // Test all predicates once and flag matches
-    for (auto& op : batch_operations_) {
-      op.matched_current_node = false; // Reset flag
-
-      if (!op.has_terminated && op.predicate(visited)) {
-        op.matched_current_node = true;
-        any_operation_interested = true;
-      }
-    }
-
-    return any_operation_interested ? FilterResult::kAccept
-                                    : FilterResult::kReject;
-  };
+  // Type-erased wrapper - complex filter creation logic moved to .cpp
+  return CreateCompositeFilterImpl(std::function<void(const SceneQuery&)>(
+    std::forward<BatchFunc>(batch_func)));
 }
 
 template <typename CompositeFilter>
@@ -332,62 +305,29 @@ auto SceneQuery::ExecuteBatchCollect(Container& container,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> QueryResult
 {
-  QueryResult result;
-  batch_operations_.push_back(BatchOperation { .predicate = predicate,
-    .type = BatchOperation::Type::kCollect,
-    .result_destination = &result,
-    .result_handler =
-      [&container, &result, scene = scene_weak_](
-        const ConstVisitedNode& visited) {
-        container.emplace_back(scene.lock(), visited.handle);
-        ++result.nodes_matched;
-      },
-    .match_count = 0 });
-  return result; // Will be updated during ExecuteBatch
+  // Type-erased wrapper - batch operation setup logic moved to .cpp
+  return ExecuteBatchCollectImpl(
+    [&container](const SceneNode& node) { container.emplace_back(node); },
+    predicate);
 }
 
-/*
+template <typename Container>
+auto SceneQuery::ExecuteImmediateCollectByPath(Container& container,
+  std::string_view path_pattern) const noexcept -> QueryResult
+{
+  // Call the implementation helper that handles path parsing
+  return ExecuteImmediateCollectByPathImpl(
+    [&container](const SceneNode& node) { container.emplace_back(node); },
+    path_pattern);
+}
+
 template <typename Container>
 auto SceneQuery::ExecuteBatchCollectByPath(Container& container,
-    std::string_view path_pattern) const noexcept -> QueryResult
+  std::string_view path_pattern) const noexcept -> QueryResult
 {
   // Path-based queries are not supported in batch mode; trigger assertion or
   // return incomplete result (You may want to add an assert or error log here)
   return QueryResult { .completed = false };
 }
-
-template <typename Container>
-auto SceneQuery::ExecuteImmediateCollectByPath(Container& container,
-    std::string_view path_pattern) const noexcept -> QueryResult
-{
-  QueryResult result;
-  // Parse path pattern
-  auto pattern = ParsePathPattern(path_pattern);
-  if (!pattern.is_valid) {
-    result.completed = false;
-    return result;
-  }
-  // Create specialized filter for path matching with early subtree rejection
-  auto path_filter = [&](const VisitedNode& visited,
-                         FilterResult parent_result) -> FilterResult {
-    ++result.nodes_examined;
-    if (MatchesPathPattern(visited, pattern)) {
-      return FilterResult::kAccept;
-    }
-    return ShouldTraverseForPattern(visited, pattern)
-        ? FilterResult::kReject
-        : FilterResult::kRejectSubTree;
-  };
-  auto traversal_result = GetTraversal().Traverse(
-      [&](const VisitedNode& visited, const Scene&, bool) -> VisitResult {
-        container.emplace_back(scene_.lock(), visited.handle);
-        ++result.nodes_matched;
-        return VisitResult::kContinue;
-      },
-      TraversalOrder::kPreOrder, path_filter);
-  result.completed = traversal_result.completed;
-  return result;
-}
-*/
 
 } // namespace oxygen::scene
