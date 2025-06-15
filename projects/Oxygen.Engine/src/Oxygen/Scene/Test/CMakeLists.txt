@@ -113,6 +113,12 @@ target_link_libraries(
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
 m_gtest_program(
+  PathParser
+  SOURCES
+    "PathMatcher/Fixtures/PathParserTest.h"
+    "PathMatcher/PathParser_test.cpp"
+)
+m_gtest_program(
   PathMatcher
   SOURCES
     "PathMatcher/Fixtures/PathMatcherTest.h"
