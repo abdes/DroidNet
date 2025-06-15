@@ -313,8 +313,7 @@ auto detail::FormatSceneTreeCore(const Scene& scene,
 {
   // Create traversal instance
   const auto scene_ptr = scene.shared_from_this();
-  const SceneTraversal traversal(
-    std::const_pointer_cast<const Scene>(scene_ptr));
+  const SceneTraversal traversal(scene_ptr);
 
   // Create visitor
   ScenePrintVisitor visitor(options);
