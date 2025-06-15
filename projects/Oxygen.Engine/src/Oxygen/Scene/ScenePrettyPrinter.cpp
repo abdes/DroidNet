@@ -222,7 +222,6 @@ namespace {
         return VisitResult::kContinue;
       }
 
-      // Store for later formatting (we collect in breadth-first order)
       nodes_with_depth_.emplace_back(std::move(node), visited_node.depth);
 
       return VisitResult::kContinue;

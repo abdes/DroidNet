@@ -260,24 +260,17 @@ private:
 template <bool DebugOnly = false> struct StdoutPrinter {
   void WriteLine(std::string_view line)
   {
-    if constexpr (DebugOnly) {
-#ifndef NDEBUG
-      std::cout << line << '\n';
-#endif
-    } else {
-      std::cout << line << '\n';
-    }
+    // This code is active if:
+    // 1. StdoutPrinter<false> is used (any build).
+    // 2. StdoutPrinter<true> is used in a DEBUG build (NDEBUG is not defined).
+    // In a RELEASE build with StdoutPrinter<true>, the specialization is used.
+    std::cout << line << '\n';
   }
 
   void Flush()
   {
-    if constexpr (DebugOnly) {
-#ifndef NDEBUG
-      std::cout.flush();
-#endif
-    } else {
-      std::cout.flush();
-    }
+    // Similar logic as WriteLine.
+    std::cout.flush();
   }
 };
 
@@ -285,24 +278,17 @@ template <bool DebugOnly = false> struct StdoutPrinter {
 template <bool DebugOnly = false> struct StderrPrinter {
   void WriteLine(std::string_view line)
   {
-    if constexpr (DebugOnly) {
-#ifndef NDEBUG
-      std::cerr << line << '\n';
-#endif
-    } else {
-      std::cerr << line << '\n';
-    }
+    // This code is active if:
+    // 1. StderrPrinter<false> is used (any build).
+    // 2. StderrPrinter<true> is used in a DEBUG build (NDEBUG is not defined).
+    // In a RELEASE build with StderrPrinter<true>, the specialization is used.
+    std::cerr << line << '\n';
   }
 
   void Flush()
   {
-    if constexpr (!DebugOnly) {
-      std::cerr.flush();
-    } else {
-#ifndef NDEBUG
-      std::cerr.flush();
-#endif
-    }
+    // Similar logic as WriteLine.
+    std::cerr.flush();
   }
 };
 
@@ -322,9 +308,13 @@ private:
 };
 
 //! Output to string buffer
-struct StringPrinter {
+template <bool DebugOnly = false> struct StringPrinter { // Made template
   void WriteLine(std::string_view line)
   {
+    // This code is active if:
+    // 1. StringPrinter<false> is used (any build).
+    // 2. StringPrinter<true> is used in a DEBUG build (NDEBUG is not defined).
+    // In a RELEASE build with StringPrinter<true>, the specialization is used.
     buffer_ += line;
     buffer_ += '\n';
   }
@@ -349,58 +339,36 @@ template <bool DebugOnly = false> struct LoggerPrinter {
 
   void WriteLine(std::string_view line) const
   {
+    // This code is active if:
+    // 1. LoggerPrinter<false> is used (any build).
+    // 2. LoggerPrinter<true> is used in a DEBUG build (NDEBUG is not defined).
+    // In a RELEASE build with LoggerPrinter<true>, the specialization is used.
+
     const auto line_str = std::string(line);
 
-    if constexpr (DebugOnly) {
-      // Use DLOG_F macros - compile-time branch
-      switch (verbosity_) {
-      case loguru::Verbosity_INFO:
-        DLOG_F(INFO, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_WARNING:
-        DLOG_F(WARNING, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_ERROR:
-        DLOG_F(ERROR, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_1:
-        DLOG_F(1, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_2:
-        DLOG_F(2, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_3:
-        DLOG_F(3, "%s", line_str.c_str());
-        break;
-      default:
-        DLOG_F(INFO, "%s", line_str.c_str());
-        break;
-      }
-    } else {
-      // Use LOG_F macros - compile-time branch
-      switch (verbosity_) {
-      case loguru::Verbosity_INFO:
-        LOG_F(INFO, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_WARNING:
-        LOG_F(WARNING, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_ERROR:
-        LOG_F(ERROR, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_1:
-        LOG_F(1, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_2:
-        LOG_F(2, "%s", line_str.c_str());
-        break;
-      case loguru::Verbosity_3:
-        LOG_F(3, "%s", line_str.c_str());
-        break;
-      default:
-        LOG_F(INFO, "%s", line_str.c_str());
-        break;
-      }
+    // Use LOG_F macros - compile-time branch
+    switch (verbosity_) {
+    case loguru::Verbosity_INFO:
+      LOG_F(INFO, "%s", line_str.c_str());
+      break;
+    case loguru::Verbosity_WARNING:
+      LOG_F(WARNING, "%s", line_str.c_str());
+      break;
+    case loguru::Verbosity_ERROR:
+      LOG_F(ERROR, "%s", line_str.c_str());
+      break;
+    case loguru::Verbosity_1:
+      LOG_F(1, "%s", line_str.c_str());
+      break;
+    case loguru::Verbosity_2:
+      LOG_F(2, "%s", line_str.c_str());
+      break;
+    case loguru::Verbosity_3:
+      LOG_F(3, "%s", line_str.c_str());
+      break;
+    default:
+      LOG_F(INFO, "%s", line_str.c_str());
+      break;
     }
   }
 
@@ -450,7 +418,7 @@ template <> struct LoggerPrinter<true> {
 };
 
 template <> struct StringPrinter<true> {
-  explicit StringPrinter(loguru::Verbosity = loguru::Verbosity_INFO) { }
+  explicit StringPrinter() { }
   void WriteLine(std::string_view)
   {
     // Completely empty - optimized away
@@ -470,14 +438,23 @@ template <> struct StringPrinter<true> {
 static_assert(LinePrinter<StdoutPrinter<false>>);
 static_assert(LinePrinter<StderrPrinter<false>>);
 static_assert(LinePrinter<StreamPrinter>);
-static_assert(LinePrinter<StringPrinter>);
+static_assert(LinePrinter<StringPrinter<false>>);
 static_assert(LinePrinter<LoggerPrinter<false>>);
-static_assert(BufferedLinePrinter<StringPrinter>);
+static_assert(BufferedLinePrinter<StringPrinter<false>>);
+
+// Also check the DebugOnly = true versions for completeness in debug builds
+#ifndef NDEBUG
+static_assert(LinePrinter<StdoutPrinter<true>>);
+static_assert(LinePrinter<StderrPrinter<true>>);
+static_assert(LinePrinter<StringPrinter<true>>);
+static_assert(LinePrinter<LoggerPrinter<true>>);
+static_assert(BufferedLinePrinter<StringPrinter<true>>);
+#endif
 
 //=== Convenient Type Aliases ===---------------------------------------------//
 
 //! Common printer type aliases for convenience
-using StringScenePrinter = ScenePrettyPrinter<StringPrinter>;
+using StringScenePrinter = ScenePrettyPrinter<StringPrinter<false>>;
 using StdoutScenePrinter = ScenePrettyPrinter<StdoutPrinter<false>>;
 using StderrScenePrinter = ScenePrettyPrinter<StderrPrinter<false>>;
 using DebugStdoutScenePrinter = ScenePrettyPrinter<StdoutPrinter<true>>;
