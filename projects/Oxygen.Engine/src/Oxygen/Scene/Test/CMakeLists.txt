@@ -12,7 +12,7 @@ find_package(GTest REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 
-add_subdirectory("Fixtures")
+add_subdirectory("Helpers")
 
 # ==============================================================================
 # Build instructions
@@ -39,6 +39,20 @@ add_test(NAME "Oxygen.Scene Link Test" COMMAND "Oxygen.Scene.LinkTest")
 
 include(GTestHelpers)
 
+# Macro to add common dependencies and libraries for TestSceneFactory-based tests
+macro(add_test_scene_factory_dependencies target_name)
+  add_dependencies(
+    "${META_MODULE_NAME}.${target_name}.Tests"
+    "${META_MODULE_NAME}.TestSceneFactorySchema"
+  )
+  target_link_libraries(
+    "${META_MODULE_NAME}.${target_name}.Tests"
+    PRIVATE
+      nlohmann_json::nlohmann_json
+      nlohmann_json_schema_validator
+  )
+endmacro()
+
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
 m_gtest_program(
   SceneFlags
@@ -56,68 +70,14 @@ m_gtest_program(
     "SceneNode_test.cpp"
     "SceneNode_Transform_test.cpp"
 )
-# m_gtest_program(
-#   SceneFixturesExample
-#   SOURCES
-#     "Fixtures/Exampleusage_test.cpp"
-# )
-m_gtest_program(
-  TestSceneFactoryExample
-  SOURCES
-    "Fixtures/TestSceneFactory.h"
-    "Fixtures/TestSceneFactory.cpp"
-    "Fixtures/TestSceneFactory_example.cpp"
-)
-add_dependencies(
-  "${META_MODULE_NAME}.TestSceneFactoryExample.Tests"
-  "${META_MODULE_NAME}.TestSceneFactorySchema"
-)
-target_link_libraries(
-  "${META_MODULE_NAME}.TestSceneFactoryExample.Tests"
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-m_gtest_program(
-  Scene
-  SOURCES
-    "Fixtures/SceneTest.h"
-    "Fixtures/SceneTestFixtures.h"
-    "Fixtures/SceneCloningTest.h"
-    "Fixtures/SceneReparentTest.h"
-    "Fixtures/SceneFlagsTest.h"
-    "Fixtures/SceneTraversalTest.h"
-    "Fixtures/TestSceneFactory.h"
-    "Fixtures/TestSceneFactory.cpp"
-    "Scene_basic_test.cpp"
-    "Scene_cloning_test.cpp"
-    "Scene_graph_test.cpp"
-    "Scene_node_factory_test.cpp"
-    "Scene_reparent_test.cpp"
-    "Scene_traversal_basic_test.cpp"
-    "Scene_traversal_filter_test.cpp"
-    "Scene_traversal_test.cpp"
-    "Scene_traversal_test.h"
-    "Scene_traversal_visitor_test.cpp"
-)
-add_dependencies(
-  "${META_MODULE_NAME}.Scene.Tests"
-  "${META_MODULE_NAME}.TestSceneFactorySchema"
-)
-target_link_libraries(
-  "${META_MODULE_NAME}.Scene.Tests"
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
-m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
+
 m_gtest_program(
   PathParser
   SOURCES
     "PathMatcher/Fixtures/PathParserTest.h"
     "PathMatcher/PathParser_test.cpp"
 )
+
 m_gtest_program(
   PathMatcher
   SOURCES
@@ -127,6 +87,45 @@ m_gtest_program(
     "PathMatcher/PathMatcher_match_test.cpp"
     "PathMatcher/PathParser_test.cpp"
 )
+
+# -- Complex Scene Tests -------------------------------------------------------
+m_gtest_program(
+  TestSceneFactoryExample
+  SOURCES
+    ${TEST_FACTORY_SOURCES}
+    "Helpers/TestSceneFactory_example.cpp"
+)
+add_test_scene_factory_dependencies(TestSceneFactoryExample)
+
+m_gtest_program(
+  SceneBasic
+  SOURCES
+    ${TEST_FACTORY_SOURCES}
+    "Scene_basic_test.cpp"
+    "Scene_cloning_test.cpp"
+    "Scene_graph_test.cpp"
+    "Scene_nodes_test.cpp"
+    "Scene_reparent_test.cpp"
+    "Scene_traversal_basic_test.cpp"
+)
+add_test_scene_factory_dependencies(SceneBasic)
+
+m_gtest_program(
+  SceneTraversal
+  SOURCES
+    ${TEST_FACTORY_SOURCES}
+    "Scene_traversal_filter_test.cpp"
+    "Scene_traversal_test.cpp"
+    "Scene_traversal_test.h"
+    "Scene_traversal_visitor_test.cpp"
+)
+add_test_scene_factory_dependencies(SceneTraversal)
+
+m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
+add_test_scene_factory_dependencies(SceneGraphFunctional)
+
+m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
+add_test_scene_factory_dependencies(SceneQuery)
 
 # -- Example Scene Graph -------------------------------------------------------
 
