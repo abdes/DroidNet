@@ -97,10 +97,17 @@ public:
 };
 
 //! Base test fixture providing common helpers for PathMatcher testing.
-class PathMatcherTest : public ::testing::Test {
+class PathMatcherBasicTest : public ::testing::Test {
 protected:
-  void SetUp() override { }
-  void TearDown() override { }
+  void SetUp() override
+  {
+    // Common setup logic can go here if needed
+  }
+
+  void TearDown() override
+  {
+    // Common teardown logic can go here if needed
+  }
 
   //! Helper to create a simple linear hierarchy.
   [[nodiscard]] auto CreateLinearHierarchy(
@@ -168,34 +175,28 @@ protected:
   }
 };
 
-//! Test fixture for basic matching scenarios.
-class PathMatcherBasicTest : public PathMatcherTest {
-protected:
-  void SetUp() override { PathMatcherTest::SetUp(); }
-};
-
 //! Test fixture for wildcard matching scenarios.
-class PathMatcherWildcardTest : public PathMatcherTest {
+class PathMatcherWildcardTest : public PathMatcherBasicTest {
 protected:
-  void SetUp() override { PathMatcherTest::SetUp(); }
+  void SetUp() override { PathMatcherBasicTest::SetUp(); }
 };
 
 //! Test fixture for state management scenarios.
-class PathMatcherStateTest : public PathMatcherTest {
+class PathMatcherStateTest : public PathMatcherBasicTest {
 protected:
-  void SetUp() override { PathMatcherTest::SetUp(); }
+  void SetUp() override { PathMatcherBasicTest::SetUp(); }
 };
 
 //! Test fixture for error and edge case scenarios.
-class PathMatcherErrorTest : public PathMatcherTest {
+class PathMatcherErrorTest : public PathMatcherBasicTest {
 protected:
-  void SetUp() override { PathMatcherTest::SetUp(); }
+  void SetUp() override { PathMatcherBasicTest::SetUp(); }
 };
 
 //! Test fixture for case sensitivity scenarios.
-class PathMatcherCaseTest : public PathMatcherTest {
+class PathMatcherCaseTest : public PathMatcherBasicTest {
 protected:
-  void SetUp() override { PathMatcherTest::SetUp(); }
+  void SetUp() override { PathMatcherBasicTest::SetUp(); }
 };
 
 } // namespace oxygen::scene::detail::query::testing

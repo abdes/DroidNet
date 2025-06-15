@@ -16,7 +16,7 @@ using oxygen::scene::detail::query::ParsedPath;
 using oxygen::scene::detail::query::ParsePath;
 using oxygen::scene::detail::query::PathErrorInfo;
 using oxygen::scene::detail::query::PathSegment;
-using oxygen::scene::detail::query::testing::PathMatcherTest;
+using oxygen::scene::detail::query::testing::PathMatcherBasicTest;
 
 namespace {
 
@@ -24,7 +24,7 @@ namespace {
 // PathSegment Tests
 // -----------------------------------------------------------------------------
 
-class PathSegementTest : public PathMatcherTest { };
+class PathSegementTest : public PathMatcherBasicTest { };
 
 NOLINT_TEST_F(PathSegementTest, PathSegmentEqualityAndInequality)
 {
@@ -73,7 +73,7 @@ NOLINT_TEST_F(PathSegementTest, PathSegmentEdgeCases)
 // ParsedPath Tests
 // -----------------------------------------------------------------------------
 
-class ParsedPathTest : public PathMatcherTest { };
+class ParsedPathTest : public PathMatcherBasicTest { };
 
 NOLINT_TEST_F(ParsedPathTest, SgementsCollectionAccessors)
 {
@@ -119,7 +119,7 @@ NOLINT_TEST_F(ParsedPathTest, SgementsCollectionAccessors)
 // Name Matchers Tests
 // -----------------------------------------------------------------------------
 
-class NameMatchersTest : public PathMatcherTest { };
+class NameMatchersTest : public PathMatcherBasicTest { };
 
 NOLINT_TEST_F(NameMatchersTest, CaseSensitiveMatcher)
 {
