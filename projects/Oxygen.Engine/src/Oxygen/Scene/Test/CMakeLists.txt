@@ -39,20 +39,6 @@ add_test(NAME "Oxygen.Scene Link Test" COMMAND "Oxygen.Scene.LinkTest")
 
 include(GTestHelpers)
 
-# Macro to add common dependencies and libraries for TestSceneFactory-based tests
-macro(add_test_scene_factory_dependencies target_name)
-  add_dependencies(
-    "${META_MODULE_NAME}.${target_name}.Tests"
-    "${META_MODULE_NAME}.TestSceneFactorySchema"
-  )
-  target_link_libraries(
-    "${META_MODULE_NAME}.${target_name}.Tests"
-    PRIVATE
-      nlohmann_json::nlohmann_json
-      nlohmann_json_schema_validator
-  )
-endmacro()
-
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
 m_gtest_program(
   SceneFlags
@@ -89,13 +75,33 @@ m_gtest_program(
 )
 
 # -- Complex Scene Tests -------------------------------------------------------
+
+# Macro to add common dependencies and libraries for TestSceneFactory-based tests
+macro(add_test_scene_factory_dependencies target_name)
+  target_sources(
+    ${target_name}
+    PRIVATE
+    "${TEST_FACTORY_SOURCES}"
+  )
+  add_dependencies(
+    ${target_name}
+    "${META_MODULE_NAME}.TestSceneFactorySchema"
+  )
+  target_link_libraries(
+    ${target_name}
+    PRIVATE
+      nlohmann_json::nlohmann_json
+      nlohmann_json_schema_validator
+  )
+endmacro()
+
 m_gtest_program(
   TestSceneFactoryExample
   SOURCES
     ${TEST_FACTORY_SOURCES}
     "Helpers/TestSceneFactory_example.cpp"
 )
-add_test_scene_factory_dependencies(TestSceneFactoryExample)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.TestSceneFactoryExample.Tests)
 
 m_gtest_program(
   SceneBasic
@@ -108,7 +114,7 @@ m_gtest_program(
     "Scene_reparent_test.cpp"
     "Scene_traversal_basic_test.cpp"
 )
-add_test_scene_factory_dependencies(SceneBasic)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneBasic.Tests)
 
 m_gtest_program(
   SceneTraversal
@@ -119,13 +125,13 @@ m_gtest_program(
     "Scene_traversal_test.h"
     "Scene_traversal_visitor_test.cpp"
 )
-add_test_scene_factory_dependencies(SceneTraversal)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneTraversal.Tests)
 
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
-add_test_scene_factory_dependencies(SceneGraphFunctional)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneGraphFunctional.Tests)
 
 m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
-add_test_scene_factory_dependencies(SceneQuery)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneQuery.Tests)
 
 # -- Example Scene Graph -------------------------------------------------------
 
@@ -147,3 +153,25 @@ target_link_libraries(
     oxygen::scene
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
 )
+
+# -- Scene Graph Pretty Printer ------------------------------------------------
+
+add_executable("Oxygen.Scene.PrettyPrinter" "ScenePrettyPrinter_example.cpp")
+set_target_properties(
+  "Oxygen.Scene.PrettyPrinter"
+  PROPERTIES
+    FOLDER
+      "Testing"
+)
+target_compile_options(
+  "Oxygen.Scene.PrettyPrinter"
+  PRIVATE
+    ${OXYGEN_COMMON_CXX_FLAGS}
+)
+target_link_libraries(
+  "Oxygen.Scene.PrettyPrinter"
+  PRIVATE
+    oxygen::scene
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::ts-init>
+)
+add_test_scene_factory_dependencies(Oxygen.Scene.PrettyPrinter)
