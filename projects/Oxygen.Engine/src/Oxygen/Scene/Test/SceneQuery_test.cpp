@@ -45,4 +45,43 @@ NOLINT_TEST_F(SceneQueryBasicTest, FindFirst_ReturnsNodeWithMatchingName)
   EXPECT_EQ(result->GetName(), "Player");
 }
 
+NOLINT_TEST_F(
+  SceneQueryBasicTest, FindFirstByPath_WithNewPathMatcher_ReturnsCorrectNode)
+{
+  // Arrange - Create a hierarchical structure
+  auto world = scene_->CreateNode("World");
+  auto player = scene_->CreateChildNode(world, "Player");
+  auto equipment = scene_->CreateChildNode(*player, "Equipment");
+  auto weapon = scene_->CreateChildNode(*equipment, "Weapon");
+
+  SceneQuery query(scene_);
+
+  // Act - Use path-based query with new PathMatcher
+  auto result = query.FindFirstByPath("World/Player/Equipment/Weapon");
+
+  // Assert
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetName(), "Weapon");
+}
+
+NOLINT_TEST_F(
+  SceneQueryBasicTest, FindFirstByPath_WithWildcards_ReturnsCorrectNode)
+{
+  // Arrange - Create multiple nodes with similar structure
+  auto world = scene_->CreateNode("World");
+  auto player1 = scene_->CreateChildNode(world, "Player1");
+  auto player2 = scene_->CreateChildNode(world, "Player2");
+  auto weapon1 = scene_->CreateChildNode(*player1, "Weapon");
+  auto weapon2 = scene_->CreateChildNode(*player2, "Weapon");
+
+  SceneQuery query(scene_);
+
+  // Act - Use wildcard path query with new PathMatcher
+  auto result = query.FindFirstByPath("World/*/Weapon");
+
+  // Assert - Should find one of the weapons
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetName(), "Weapon");
+}
+
 } // namespace

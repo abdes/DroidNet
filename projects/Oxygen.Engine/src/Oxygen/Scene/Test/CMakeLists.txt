@@ -112,6 +112,15 @@ target_link_libraries(
 )
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
+m_gtest_program(
+  PathMatcher
+  SOURCES
+    "PathMatcher/Fixtures/PathMatcherTest.h"
+    "PathMatcher/Fixtures/PathParserTest.h"
+    "PathMatcher/PathMatcher_basic_test.cpp"
+    "PathMatcher/PathMatcher_match_test.cpp"
+    "PathMatcher/PathParser_test.cpp"
+)
 
 # -- Example Scene Graph -------------------------------------------------------
 

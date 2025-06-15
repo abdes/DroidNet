@@ -74,6 +74,8 @@ template <bool IsConst> struct VisitedNodeT {
   NodeHandle handle;
   //! Reference to the node implementation
   add_const_if_t<SceneNodeImpl, IsConst>* node_impl { nullptr };
+  //! Hierarchical depth of this node (0 = root level)
+  std::size_t depth { 0 };
 };
 using MutableVisitedNode = VisitedNodeT<false>;
 using ConstVisitedNode = VisitedNodeT<true>;
@@ -367,9 +369,8 @@ private:
   mutable std::vector<VisitedNode> children_buffer_;
 
   //=== Private Helper Methods ===--------------------------------------------//
-
   //! Collect children of a node into reused buffer
-  void CollectChildrenToBuffer(NodeImpl* node) const;
+  void CollectChildrenToBuffer(NodeImpl* node, std::size_t parent_depth) const;
 
   //! Get valid node pointer from handle
   auto GetNodeImpl(const NodeHandle& handle) const;
@@ -467,7 +468,8 @@ auto SceneTraversal<SceneT>::GetOptimalStackCapacity() const -> std::size_t
 }
 
 template <typename SceneT>
-void SceneTraversal<SceneT>::CollectChildrenToBuffer(NodeImpl* node) const
+void SceneTraversal<SceneT>::CollectChildrenToBuffer(
+  NodeImpl* node, std::size_t parent_depth) const
 {
   children_buffer_.clear(); // Fast - just resets size for pointer vector
 
@@ -479,6 +481,8 @@ void SceneTraversal<SceneT>::CollectChildrenToBuffer(NodeImpl* node) const
     DLOG_F(2, "no children");
     return; // Early exit for leaf nodes
   }
+
+  const auto child_depth = parent_depth + 1;
 
   // Collect all children in a single pass.
   while (child_handle.IsValid()) {
@@ -495,6 +499,7 @@ void SceneTraversal<SceneT>::CollectChildrenToBuffer(NodeImpl* node) const
       .node_impl = nullptr, // Do not update the node_impl here, it will be
       // updated during traversal because the table may
       // change
+      .depth = child_depth // Set the correct depth for children
     });
     child_handle = child_node->AsGraphNode().GetNextSibling();
   }
@@ -598,7 +603,9 @@ auto SceneTraversal<SceneT>::Traverse(VisitorFunc&& visitor,
   root_impl_nodes.reserve(root_handles.size());
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
     [this](const NodeHandle& handle) {
-      return VisitedNode { .handle = handle, .node_impl = GetNodeImpl(handle) };
+      return VisitedNode {
+        .handle = handle, .node_impl = GetNodeImpl(handle), .depth = 0
+      };
     });
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
@@ -621,12 +628,12 @@ auto SceneTraversal<SceneT>::TraverseHierarchy(Node& starting_node,
   DCHECK_F(!scene_weak_.expired());
   CHECK_F(scene_weak_.lock()->Contains(starting_node),
     "Starting node for traversal must be part of this scene");
-
   using VisitorNode = VisitedNodeT<std::is_const_v<SceneT>>;
   std::array root_impl_nodes {
     VisitorNode {
       .handle = starting_node.GetHandle(),
       .node_impl = GetNodeImpl(starting_node.GetHandle()),
+      .depth = 0,
     },
   };
 
@@ -654,7 +661,8 @@ auto SceneTraversal<SceneT>::TraverseHierarchies(std::span<Node> starting_nodes,
       CHECK_F(scene_weak_.lock()->Contains(node),
         "Starting nodes for traversal must be part of this scene");
       return VisitedNode { .handle = node.GetHandle(),
-        .node_impl = GetNodeImpl(node.GetHandle()) };
+        .node_impl = GetNodeImpl(node.GetHandle()),
+        .depth = 0 };
     });
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
@@ -813,9 +821,11 @@ auto SceneTraversal<SceneT>::TraverseImpl(std::span<VisitedNode> roots,
       continue;
     }
 
-    // Keep the direct pointer to the node implementation, it will not be
-    // invalidated by the container operations
+    // Keep the direct pointer to the node implementation and the current depth.
+    // Visitors may mutate the scene graph while we traverse it, and make the
+    // entry_ref invalid.
     auto* node = entry_ref.visited_node.node_impl;
+    auto current_depth = entry_ref.visited_node.depth;
 
     const auto filter_result = ApplyNodeFilter(local_filter, entry_ref, result);
 
@@ -828,7 +838,7 @@ auto SceneTraversal<SceneT>::TraverseImpl(std::span<VisitedNode> roots,
       // Remove the entry since we're not visiting it
       Traits::pop(container);
       // Still traverse children for rejected nodes
-      CollectChildrenToBuffer(node);
+      CollectChildrenToBuffer(node, current_depth);
       QueueChildrenForTraversal<Order>(filter_result, container);
       continue;
     }
@@ -850,8 +860,7 @@ auto SceneTraversal<SceneT>::TraverseImpl(std::span<VisitedNode> roots,
         }
         // Continue with children - mark as processed and add children
         entry_ref.state = TraversalEntry::ProcessingState::kChildrenProcessed;
-        node = Traits::peek(container).visited_node.node_impl;
-        CollectChildrenToBuffer(node);
+        CollectChildrenToBuffer(node, current_depth);
         QueueChildrenForTraversal<Order>(filter_result, container);
         continue;
       }
@@ -864,7 +873,9 @@ auto SceneTraversal<SceneT>::TraverseImpl(std::span<VisitedNode> roots,
     }
 
     // Post-order second time seeing this node, or non-post-order cases ->
-    // actual visit of the node
+    // actual visit of the node.
+    // WARNING: This may mutate the scene graph, DO NOT use entry_ref or peek()
+    // on the container after this point.
     auto visit_result
       = PerformNodeVisit<Order>(local_visitor, container, result, false);
     if (visit_result == VisitResult::kStop) [[unlikely]] {
@@ -874,7 +885,8 @@ auto SceneTraversal<SceneT>::TraverseImpl(std::span<VisitedNode> roots,
     // Breadth-first and pre-order -> add children if not skipping subtree
     if constexpr (Order != TraversalOrder::kPostOrder) {
       if (visit_result != VisitResult::kSkipSubtree) {
-        CollectChildrenToBuffer(node);
+        // Use the saved node pointer and current depth
+        CollectChildrenToBuffer(node, current_depth);
         QueueChildrenForTraversal<Order>(filter_result, container);
       }
     }
