@@ -1,0 +1,520 @@
+{
+  "metadata": {
+    "name": "Cyberpunk City District",
+    "description": "A futuristic cyberpunk city scene with buildings, vehicles, NPCs, and atmospheric elements"
+  },
+  "nodes": [
+    {
+      "name": "CityDistrict_Alpha",
+      "transform": {
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "children": [
+        {
+          "name": "Infrastructure",
+          "transform": {
+            "position": [0, 0, 0]
+          },
+          "children": [
+            {
+              "name": "Streets",
+              "transform": {
+                "position": [0, 0.1, 0]
+              },
+              "children": [
+                {
+                  "name": "MainAvenue",
+                  "transform": {
+                    "position": [0, 0, 0],
+                    "scale": [100, 0.2, 8]
+                  }
+                },
+                {
+                  "name": "SideStreet_North",
+                  "transform": {
+                    "position": [0, 0, 25],
+                    "rotation": [0, 90, 0],
+                    "scale": [50, 0.2, 6]
+                  }
+                },
+                {
+                  "name": "SideStreet_South",
+                  "transform": {
+                    "position": [0, 0, -25],
+                    "rotation": [0, 90, 0],
+                    "scale": [50, 0.2, 6]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Utilities",
+              "transform": {
+                "position": [0, 0, 0]
+              },
+              "children": [
+                {
+                  "name": "PowerGrid",
+                  "transform": {
+                    "position": [0, 8, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "PowerLine_Main",
+                      "transform": {
+                        "position": [0, 0, 0],
+                        "scale": [80, 0.1, 0.1]
+                      }
+                    },
+                    {
+                      "name": "PowerPole_01",
+                      "transform": {
+                        "position": [-30, 0, 0],
+                        "scale": [0.3, 12, 0.3]
+                      }
+                    },
+                    {
+                      "name": "PowerPole_02",
+                      "transform": {
+                        "position": [0, 0, 0],
+                        "scale": [0.3, 12, 0.3]
+                      }
+                    },
+                    {
+                      "name": "PowerPole_03",
+                      "transform": {
+                        "position": [30, 0, 0],
+                        "scale": [0.3, 12, 0.3]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "StreetLights",
+                  "transform": {
+                    "position": [0, 0, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "StreetLight_01",
+                      "transform": {
+                        "position": [-20, 0, 10],
+                        "scale": [0.2, 6, 0.2]
+                      }
+                    },
+                    {
+                      "name": "StreetLight_02",
+                      "transform": {
+                        "position": [0, 0, 10],
+                        "scale": [0.2, 6, 0.2]
+                      }
+                    },
+                    {
+                      "name": "StreetLight_03",
+                      "transform": {
+                        "position": [20, 0, 10],
+                        "scale": [0.2, 6, 0.2]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Buildings",
+          "transform": {
+            "position": [0, 0, 0]
+          },
+          "children": [
+            {
+              "name": "Skyscraper_Central",
+              "transform": {
+                "position": [0, 0, 0],
+                "scale": [8, 50, 8]
+              },
+              "children": [
+                {
+                  "name": "Foundation",
+                  "transform": {
+                    "position": [0, -1, 0],
+                    "scale": [1.2, 0.1, 1.2]
+                  }
+                },
+                {
+                  "name": "MainStructure",
+                  "transform": {
+                    "position": [0, 0, 0],
+                    "scale": [1, 1, 1]
+                  }
+                },
+                {
+                  "name": "Antenna",
+                  "transform": {
+                    "position": [0, 1.1, 0],
+                    "scale": [0.02, 0.3, 0.02]
+                  }
+                },
+                {
+                  "name": "WindowLights",
+                  "transform": {
+                    "position": [0, 0, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "Floor_10_Lights",
+                      "transform": {
+                        "position": [0, 0.4, 0],
+                        "scale": [0.9, 0.02, 0.9]
+                      }
+                    },
+                    {
+                      "name": "Floor_20_Lights",
+                      "transform": {
+                        "position": [0, 0.8, 0],
+                        "scale": [0.9, 0.02, 0.9]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "CommercialBlock_East",
+              "transform": {
+                "position": [40, 0, 0],
+                "rotation": [0, 15, 0]
+              },
+              "children": [
+                {
+                  "name": "ShoppingComplex",
+                  "transform": {
+                    "position": [0, 0, 0],
+                    "scale": [12, 6, 20]
+                  },
+                  "children": [
+                    {
+                      "name": "MainEntrance",
+                      "transform": {
+                        "position": [0, 0, 1.1],
+                        "scale": [0.3, 0.8, 0.05]
+                      }
+                    },
+                    {
+                      "name": "SignageHolo",
+                      "transform": {
+                        "position": [0, 1.2, 1.1],
+                        "scale": [0.8, 0.3, 0.01]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "ParkingGarage",
+                  "transform": {
+                    "position": [8, 0, 0],
+                    "scale": [6, 4, 12]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ResidentialTower_West",
+              "transform": {
+                "position": [-35, 0, 15],
+                "rotation": [0, -20, 0],
+                "scale": [6, 30, 6]
+              },
+              "children": [
+                {
+                  "name": "Balconies",
+                  "transform": {
+                    "position": [0, 0, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "Balcony_Floor_5",
+                      "transform": {
+                        "position": [0.6, 0.3, 0],
+                        "scale": [0.15, 0.02, 0.8]
+                      }
+                    },
+                    {
+                      "name": "Balcony_Floor_10",
+                      "transform": {
+                        "position": [0.6, 0.6, 0],
+                        "scale": [0.15, 0.02, 0.8]
+                      }
+                    },
+                    {
+                      "name": "Balcony_Floor_15",
+                      "transform": {
+                        "position": [0.6, 0.9, 0],
+                        "scale": [0.15, 0.02, 0.8]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Vehicles",
+          "transform": {
+            "position": [0, 0.5, 0]
+          },
+          "children": [
+            {
+              "name": "FlyingCars",
+              "transform": {
+                "position": [0, 15, 0]
+              },
+              "children": [
+                {
+                  "name": "Sedan_Hover_01",
+                  "transform": {
+                    "position": [-5, 0, 3],
+                    "rotation": [0, 45, 0],
+                    "scale": [2, 0.8, 4]
+                  }
+                },
+                {
+                  "name": "Taxi_Hover_01",
+                  "transform": {
+                    "position": [8, 2, -2],
+                    "rotation": [0, -30, 0],
+                    "scale": [2.2, 0.9, 4.5]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GroundVehicles",
+              "transform": {
+                "position": [0, 0, 0]
+              },
+              "children": [
+                {
+                  "name": "Truck_Cargo",
+                  "transform": {
+                    "position": [15, 0, 0],
+                    "rotation": [0, 90, 0],
+                    "scale": [3, 2, 8]
+                  }
+                },
+                {
+                  "name": "Bike_Electric",
+                  "transform": {
+                    "position": [-10, 0, 5],
+                    "rotation": [0, -60, 0],
+                    "scale": [0.6, 1, 1.8]
+                  }
+                },
+                {
+                  "name": "Police_Cruiser",
+                  "transform": {
+                    "position": [25, 0, -8],
+                    "rotation": [0, 180, 0],
+                    "scale": [2.5, 1.2, 5]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "NPCs",
+          "transform": {
+            "position": [0, 1, 0]
+          },
+          "children": [
+            {
+              "name": "Pedestrians",
+              "transform": {
+                "position": [0, 0, 0]
+              },
+              "children": [
+                {
+                  "name": "Businessman_01",
+                  "transform": {
+                    "position": [5, 0, 8],
+                    "rotation": [0, 120, 0],
+                    "scale": [0.6, 1.8, 0.6]
+                  }
+                },
+                {
+                  "name": "Cyberpunk_Hacker",
+                  "transform": {
+                    "position": [-8, 0, 12],
+                    "rotation": [0, -45, 0],
+                    "scale": [0.7, 1.7, 0.7]
+                  }
+                },
+                {
+                  "name": "Street_Vendor",
+                  "transform": {
+                    "position": [12, 0, -5],
+                    "rotation": [0, 0, 0],
+                    "scale": [0.8, 1.6, 0.8]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Security",
+              "transform": {
+                "position": [0, 0, 0]
+              },
+              "children": [
+                {
+                  "name": "SecurityDroid_Alpha",
+                  "transform": {
+                    "position": [0, 0, 20],
+                    "rotation": [0, 0, 0],
+                    "scale": [1, 2.2, 1]
+                  }
+                },
+                {
+                  "name": "Guard_Human",
+                  "transform": {
+                    "position": [35, 0, 10],
+                    "rotation": [0, 90, 0],
+                    "scale": [0.9, 1.9, 0.9]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Atmosphere",
+          "transform": {
+            "position": [0, 0, 0]
+          },
+          "children": [
+            {
+              "name": "Lighting",
+              "transform": {
+                "position": [0, 30, 0]
+              },
+              "children": [
+                {
+                  "name": "Neon_Signs",
+                  "transform": {
+                    "position": [0, -15, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "CyberCafe_Sign",
+                      "transform": {
+                        "position": [20, 0, 25],
+                        "rotation": [0, -90, 0],
+                        "scale": [3, 1, 0.1]
+                      }
+                    },
+                    {
+                      "name": "DataHub_Sign",
+                      "transform": {
+                        "position": [-25, 5, 0],
+                        "rotation": [0, 90, 0],
+                        "scale": [4, 1.5, 0.1]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Ambient_Glow",
+                  "transform": {
+                    "position": [0, 0, 0],
+                    "scale": [50, 10, 50]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Weather_Effects",
+              "transform": {
+                "position": [0, 20, 0]
+              },
+              "children": [
+                {
+                  "name": "Acid_Rain",
+                  "transform": {
+                    "position": [0, 0, 0],
+                    "scale": [100, 20, 100]
+                  }
+                },
+                {
+                  "name": "Smog_Layer",
+                  "transform": {
+                    "position": [0, 10, 0],
+                    "scale": [120, 5, 120]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Props",
+              "transform": {
+                "position": [0, 0, 0]
+              },
+              "children": [
+                {
+                  "name": "Trash_Containers",
+                  "transform": {
+                    "position": [0, 0, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "Dumpster_01",
+                      "transform": {
+                        "position": [22, 1, 15],
+                        "rotation": [0, 30, 0],
+                        "scale": [2, 1.5, 1]
+                      }
+                    },
+                    {
+                      "name": "RecycleBin_Smart",
+                      "transform": {
+                        "position": [-15, 1, 8],
+                        "scale": [0.8, 1.2, 0.8]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Vending_Machines",
+                  "transform": {
+                    "position": [0, 1, 0]
+                  },
+                  "children": [
+                    {
+                      "name": "CyberDrink_Vendor",
+                      "transform": {
+                        "position": [30, 0, 18],
+                        "rotation": [0, 180, 0],
+                        "scale": [1, 2, 0.8]
+                      }
+                    },
+                    {
+                      "name": "Neural_Boost_Station",
+                      "transform": {
+                        "position": [-20, 0, -10],
+                        "rotation": [0, 45, 0],
+                        "scale": [1.2, 2.5, 1]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
