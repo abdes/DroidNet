@@ -52,6 +52,9 @@ target_sources(
   PRIVATE
     "Detail/GraphData.h"
     "Detail/NodeData.h"
+    "Detail/PathMatcher.h"
+    "Detail/PathParser.cpp"
+    "Detail/PathParser.h"
     "Detail/Scene_safecall_impl.cpp"
     "Detail/Scene_safecall_impl.h"
     "Detail/StringConverters.cpp"

@@ -7,6 +7,8 @@
 // #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 
+#include <Oxygen/Scene/Detail/PathMatcher.h>
+#include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <algorithm>
 #include <string_view>
@@ -20,134 +22,19 @@ using oxygen::scene::SceneTraversal;
 
 namespace {
 
-//=== Path Query Implementation Details ===-----------------------------------//
+} // namespace
 
-//! Individual path component with wildcard matching flags
+namespace oxygen::scene {
+
+//! ADL-compatible GetNodeName for ConstVisitedNode integration with PathMatcher
 /*!
- Represents a single segment of a hierarchical path used for scene node
- navigation. Supports exact name matching and wildcard patterns.
-*/
-struct PathSegment {
-  //! Node name or wildcard pattern for this path segment
-  std::string name;
-  //! true if this segment is "*" (matches direct children only)
-  bool is_wildcard_single = false;
-  //! true if this segment is "**" (matches at any depth)
-  bool is_wildcard_recursive = false;
-  //! true if this is the first segment of an absolute path
-  bool is_absolute = false;
-};
-
-//! Complete parsed path representation with validation state
-/*!
- Contains all path segments and metadata about the parsed path structure,
- including wildcard detection and validation status.
-*/
-struct ParsedPath {
-  //! Ordered sequence of path segments from root to target
-  std::vector<PathSegment> segments;
-  //! true if path parsing succeeded and segments are valid
-  bool is_valid = false;
-  //! true if any segment contains wildcard patterns
-  bool has_wildcards = false;
-};
-
-/*!
- Parses a hierarchical path string into structured segments with wildcard
- detection and validation. Supports both absolute and relative path formats.
-
- @param path Path string to parse (e.g., "World/Player" or "/UI/*\/Button")
- @return ParsedPath structure with segments and metadata
-
- ### Path Format Rules
- - Forward slash "/" separates path segments
- - Leading "/" indicates absolute path from scene root
- - "*" wildcard matches any single direct child
- - "**" wildcard matches any node at any depth below current level
- - Empty segments are ignored (e.g., "A//B" becomes "A/B")
-
- ### Performance Characteristics
- - Time Complexity: O(n) where n is path string length
- - Memory: Allocates storage for each path segment
- - Validation: Performs basic syntax checking during parsing
-
- ### Usage Examples
- ```cpp
- auto simple = ParsePath("World/Player/Equipment");    // No wildcards
- auto wildcard = ParsePath("*\/Enemy");                 // Single wildcard
- auto recursive = ParsePath("**\/Weapon");              // Recursive wildcard
- auto absolute = ParsePath("/UI/HUD/HealthBar");       // Absolute path
- ```
-
- @note Empty paths return invalid ParsedPath with is_valid = false
- @see NavigatePathDirectly for optimized navigation of simple paths
-*/
-auto ParsePath(std::string_view path) -> ParsedPath
-{
-  ParsedPath result;
-
-  if (path.empty()) {
-    return result;
-  }
-
-  // Handle absolute path
-  bool is_absolute = path.starts_with('/');
-  if (is_absolute) {
-    path.remove_prefix(1);
-  }
-
-  // Split by '/' and create segments
-  std::string_view remaining = path;
-  bool first_segment = true;
-
-  while (!remaining.empty()) {
-    auto pos = remaining.find('/');
-    std::string_view segment_view = remaining.substr(0, pos);
-
-    if (!segment_view.empty()) {
-      PathSegment segment;
-      segment.name = std::string(segment_view);
-      segment.is_absolute = first_segment && is_absolute;
-
-      // Check for wildcards
-      if (segment.name == "*") {
-        segment.is_wildcard_single = true;
-        result.has_wildcards = true;
-      } else if (segment.name == "**") {
-        segment.is_wildcard_recursive = true;
-        result.has_wildcards = true;
-      }
-
-      result.segments.push_back(std::move(segment));
-      first_segment = false;
-    }
-
-    if (pos == std::string_view::npos) {
-      break;
-    }
-    remaining.remove_prefix(pos + 1);
-  }
-
-  result.is_valid = !result.segments.empty();
-  return result;
-}
-
-/*!
- Extracts the node name from a visited node through its implementation.
- Provides safe access to node metadata during traversal operations.
+ Enables ConstVisitedNode to work directly with concept-based PathMatcher
+ without requiring adapter types or data structure conversion.
 
  @param visited Visited node containing handle and implementation reference
  @return Node name as string view, empty if node_impl is null
-
- ### Performance Characteristics
- - Time Complexity: O(1) direct member access
- - Memory: Zero allocations, returns view of existing string
- - Safety: Null-safe implementation returns empty view for invalid nodes
-
- @note This function assumes the node_impl is valid as guaranteed by
- SceneTraversal during normal traversal operations
 */
-auto GetNodeName(const ConstVisitedNode& visited) -> std::string_view
+auto GetNodeName(const ConstVisitedNode& visited) noexcept -> std::string_view
 {
   // Access node name through SceneNodeImpl
   if (visited.node_impl) {
@@ -156,298 +43,20 @@ auto GetNodeName(const ConstVisitedNode& visited) -> std::string_view
   return {};
 }
 
-//=== Path Navigation Implementation ===--------------------------------------//
-
+//! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher
 /*!
- Performs optimized direct navigation through scene hierarchy for simple paths
- without wildcard patterns. Uses parent-child relationships for efficient
- traversal.
+ Enables ConstVisitedNode to work directly with concept-based PathMatcher
+ by providing access to the hierarchical depth tracked during traversal.
 
- @param scene Scene instance containing the nodes to navigate
- @param path Parsed path structure (must not contain wildcards)
- @return Optional SceneNode if path exists, nullopt if not found
-
- ### Navigation Strategy
- - Starts from scene root nodes
- - Iteratively searches children at each level for name matches
- - Maintains current level nodes for next iteration
- - Early termination on path segment mismatch
-
- ### Performance Characteristics
- - Time Complexity: O(depth × children_per_level)
- - Memory: O(children_per_level) for temporary level storage
- - Optimization: Direct parent-child navigation (no full traversal)
-
- @note This function requires !path.has_wildcards for optimal performance
- @see NavigatePathDirectlyFromContext for relative path navigation
+ @param visited Visited node containing depth information from traversal
+ @return Hierarchical depth of the node (0 = root level)
 */
-auto NavigatePathDirectly(std::shared_ptr<const Scene> scene,
-  const ParsedPath& path) -> std::optional<SceneNode>
+auto GetDepth(const ConstVisitedNode& visited) noexcept -> std::size_t
 {
-  if (!scene || path.segments.empty() || path.has_wildcards) {
-    return std::nullopt;
-  }
-
-  // Start from root nodes
-  auto root_nodes = scene->GetRootNodes();
-  std::vector<SceneNode> current_level = std::move(root_nodes);
-
-  for (const auto& segment : path.segments) {
-    std::vector<SceneNode> next_level;
-
-    // Search current level for matching nodes
-    for (const auto& node : current_level) {
-      if (auto node_impl = scene->GetNodeImpl(node)) {
-        if (node_impl->get().GetName() == segment.name) {
-          // Found match, get its children for next iteration
-          if (&segment == &path.segments.back()) {
-            // This is the final segment, return the node
-            return node;
-          } else {
-            // Get children for next level
-            auto child_handles = scene->GetChildren(node);
-            for (const auto& child_handle : child_handles) {
-              if (auto child_node = scene->GetNode(child_handle)) {
-                next_level.push_back(*child_node);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (next_level.empty()) {
-      return std::nullopt; // Path not found
-    }
-
-    current_level = std::move(next_level);
-  }
-
-  return std::nullopt;
+  return visited.depth;
 }
 
-/*!
- Performs optimized direct navigation through scene hierarchy for relative paths
- starting from a specific context node. Uses parent-child relationships for
- efficient traversal.
-
- @param scene Scene instance containing the nodes to navigate
- @param context Starting node for relative path navigation
- @param path Parsed path structure (must not contain wildcards)
- @return Optional SceneNode if path exists, nullopt if not found
-
- ### Navigation Strategy
- - Starts from context node's children
- - Iteratively searches children at each level for name matches
- - Maintains current level nodes for next iteration
- - Early termination on path segment mismatch
-
- ### Performance Characteristics
- - Time Complexity: O(depth × children_per_level)
- - Memory: O(children_per_level) for temporary level storage
- - Optimization: Direct parent-child navigation from context
-
- @note This function requires !path.has_wildcards for optimal performance
- @see NavigatePathDirectly for absolute path navigation from scene root
-*/
-auto NavigatePathDirectlyFromContext(std::shared_ptr<const Scene> scene,
-  const SceneNode& context, const ParsedPath& path) -> std::optional<SceneNode>
-{
-  if (!scene || path.segments.empty() || path.has_wildcards) {
-    return std::nullopt;
-  }
-
-  // Start from context node's children
-  auto children_handles = scene->GetChildren(context);
-  std::vector<SceneNode> current_level;
-  for (const auto& child_handle : children_handles) {
-    if (auto child_node = scene->GetNode(child_handle)) {
-      current_level.push_back(*child_node);
-    }
-  }
-
-  for (const auto& segment : path.segments) {
-    std::vector<SceneNode> next_level;
-
-    // Search current level for matching nodes
-    for (const auto& node : current_level) {
-      if (auto node_impl = scene->GetNodeImpl(node)) {
-        if (node_impl->get().GetName() == segment.name) {
-          // Found match, get its children for next iteration
-          if (&segment == &path.segments.back()) {
-            // This is the final segment, return the node
-            return node;
-          } else {
-            // Get children for next level
-            auto child_handles_inner = scene->GetChildren(node);
-            for (const auto& child_handle : child_handles_inner) {
-              if (auto child_node = scene->GetNode(child_handle)) {
-                next_level.push_back(*child_node);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (next_level.empty()) {
-      return std::nullopt; // Path not found
-    }
-
-    current_level = std::move(next_level);
-  }
-
-  return std::nullopt;
-}
-
-//=== Wildcard Pattern Matching ===-------------------------------------------//
-
-//! State tracking for wildcard pattern matching during traversal
-/*!
- Maintains context during recursive pattern matching operations, tracking
- progress through path segments and wildcard matching states.
-*/
-struct PatternState {
-  //! Current position in the pattern segments being matched
-  size_t segment_index = 0;
-  //! true if currently processing a recursive wildcard ("**") match
-  bool in_recursive_match = false;
-  //! Path traversed so far (used for debugging and validation)
-  std::vector<std::string> visited_path;
-};
-
-/*!
- Tests whether a visited node matches the current pattern segment during
- wildcard-enabled path traversal operations.
-
- @param visited Node being tested for pattern match
- @param pattern Complete parsed path pattern with potential wildcards
- @param state Current matching state including segment position
- @return true if node matches current pattern segment, false otherwise
-
- ### Pattern Matching Rules
- - Exact name match for literal segments
- - "*" wildcard matches any single node name
- - "**" wildcard activates recursive matching mode
- - Updates state for recursive wildcard processing
-
- ### Performance Characteristics
- - Time Complexity: O(1) for name comparison
- - Memory: Zero allocations during comparison
- - State Management: Updates pattern state for recursive wildcards
-
- @note This function modifies state.in_recursive_match for "**" patterns
- @see ShouldContinueTraversal for traversal continuation logic
-*/
-auto MatchesPattern(const ConstVisitedNode& visited, const ParsedPath& pattern,
-  PatternState& state) -> bool
-{
-  if (state.segment_index >= pattern.segments.size()) {
-    return false;
-  }
-
-  const auto& segment = pattern.segments[state.segment_index];
-  auto node_name = GetNodeName(visited);
-
-  if (segment.is_wildcard_single) {
-    // "*" matches any single node name
-    return true;
-  } else if (segment.is_wildcard_recursive) {
-    // "**" matches any sequence of nodes
-    state.in_recursive_match = true;
-    return true;
-  } else {
-    // Exact name match
-    return node_name == segment.name;
-  }
-}
-
-/*!
- Determines whether traversal should continue based on current pattern matching
- state and remaining segments to process.
-
- @param visited Current node being processed (unused for logic)
- @param pattern Complete parsed path pattern (unused for logic)
- @param state Current matching state including segment position
- @return true if traversal should continue, false to terminate
-
- ### Continuation Logic
- - Always continue during recursive wildcard matching
- - Continue if pattern segments remain unprocessed
- - Terminate when pattern is fully matched
-
- ### Performance Characteristics
- - Time Complexity: O(1) state checking
- - Memory: Zero allocations
- - Early Termination: Enables efficient traversal pruning
-
- @note Currently unused parameters are marked [[maybe_unused]]
- @see MatchesPattern for pattern matching logic
-*/
-auto ShouldContinueTraversal([[maybe_unused]] const ConstVisitedNode& visited,
-  [[maybe_unused]] const ParsedPath& pattern, const PatternState& state) -> bool
-{
-  // Always continue if we're in a recursive wildcard
-  if (state.in_recursive_match) {
-    return true;
-  }
-
-  // Continue if we haven't reached the end of the pattern
-  return state.segment_index < pattern.segments.size();
-}
-
-//=== Path-based Query Predicates ===-----------------------------------------//
-
-/*!
- Creates a predicate function for path-based node filtering during traversal
- operations. Handles both simple exact matching and wildcard patterns.
-
- @param parsed_path Parsed path structure with segments and wildcard flags
- @return Function object that tests nodes against the path pattern
-
- ### Predicate Behavior
- - Returns false for invalid parsed paths
- - Optimized exact matching for single-segment simple paths
- - Complex pattern matching for wildcard-enabled paths
- - Stateful matching for recursive wildcards
-
- ### Performance Characteristics
- - Simple paths: O(1) direct name comparison
- - Wildcard patterns: O(1) per node with state management
- - Memory: Captures parsed_path by value in closure
-
- ### Usage Examples
- ```cpp
- auto parsed = ParsePath("World/Player");
- auto predicate = CreatePathPredicate(parsed);
- bool matches = predicate(visited_node);
- ```
-
- @note Generated predicates are suitable for use with traversal filters
- @see ParsePath for path parsing and validation
-*/
-auto CreatePathPredicate(const ParsedPath& parsed_path)
-  -> std::function<bool(const ConstVisitedNode&)>
-{
-  return [parsed_path](const ConstVisitedNode& visited) -> bool {
-    if (!parsed_path.is_valid) {
-      return false;
-    }
-
-    // For now, implement simple exact matching
-    // More sophisticated pattern matching can be added later
-    if (!parsed_path.has_wildcards && parsed_path.segments.size() == 1) {
-      auto node_name = GetNodeName(visited);
-      return node_name == parsed_path.segments[0].name;
-    }
-
-    // For wildcard patterns, implement more complex matching logic
-    PatternState state;
-    return MatchesPattern(visited, parsed_path, state);
-  };
-}
-
-} // namespace
+} // namespace oxygen::scene
 
 SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene_weak)
   : scene_weak_(scene_weak)
@@ -541,12 +150,14 @@ auto SceneQuery::ProcessBatchedNode(const ConstVisitedNode& visited,
  @return Optional SceneNode placeholder (populated during ExecuteBatch)
 
  ### Batch Operation Registration
+
  - Creates BatchOperation with FindFirst type and termination behavior
  - Configures result handler to capture first matching SceneNode
  - Sets up automatic termination after first successful match
  - Returns placeholder result updated during batch execution
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) operation registration
  - Memory: Single BatchOperation allocation in operations vector
  - Execution: Deferred until ExecuteBatch processes all operations
@@ -578,12 +189,14 @@ auto SceneQuery::ExecuteBatchFindFirst(
  @return QueryResult placeholder (populated during ExecuteBatch)
 
  ### Batch Operation Registration
+
  - Creates BatchOperation with Count type and continuous execution
  - Configures result handler to increment nodes_matched counter
  - Sets up full traversal behavior (no early termination)
  - Returns placeholder result updated during batch execution
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) operation registration
  - Memory: Single BatchOperation allocation in operations vector
  - Execution: Deferred until ExecuteBatch processes all operations
@@ -599,8 +212,11 @@ auto SceneQuery::ExecuteBatchCount(
   batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kCount,
     .result_destination = &result,
-    .result_handler
-    = [&result](const ConstVisitedNode& visited) { ++result.nodes_matched; },
+    .result_handler =
+      [&result](const ConstVisitedNode& /*visited*/) {
+        // Simple counting, no use of visited node
+        ++result.nodes_matched;
+      },
     .match_count = 0 });
   return result; // Will be updated during ExecuteBatch
 }
@@ -613,12 +229,14 @@ auto SceneQuery::ExecuteBatchCount(
  @return Optional bool placeholder (populated during ExecuteBatch)
 
  ### Batch Operation Registration
+
  - Creates BatchOperation with Any type and termination behavior
  - Configures result handler to set existence flag to true
  - Sets up automatic termination after first successful match
  - Returns placeholder result updated during batch execution
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) operation registration
  - Memory: Single BatchOperation allocation in operations vector
  - Execution: Deferred until ExecuteBatch processes all operations
@@ -634,8 +252,11 @@ auto SceneQuery::ExecuteBatchAny(
   batch_operations_.push_back(BatchOperation { .predicate = predicate,
     .type = BatchOperation::Type::kAny,
     .result_destination = &result,
-    .result_handler
-    = [&result](const ConstVisitedNode& visited) { result = true; },
+    .result_handler =
+      [&result](const ConstVisitedNode& /*visited*/) {
+        // Execution is deferred, no use of visited node
+        result = true;
+      },
     .match_count = 0 });
   return result; // Will be updated during ExecuteBatch
 }
@@ -648,12 +269,14 @@ auto SceneQuery::ExecuteBatchAny(
  @return Optional SceneNode containing first match, nullopt if no matches
 
  ### Execution Strategy
+
  - Creates accept/reject filter based on predicate evaluation
  - Uses visitor that captures first matching node and stops traversal
  - Leverages VisitResult::kStop for optimal early termination
  - Constructs SceneNode from scene reference and node handle
 
  ### Performance Characteristics
+
  - Time Complexity: O(k) where k is position of first match
  - Memory: Single SceneNode allocation for result
  - Optimization: Early termination prevents unnecessary traversal
@@ -690,12 +313,14 @@ auto SceneQuery::ExecuteImmediateFindFirst(
  @return QueryResult with nodes_examined, nodes_matched, and completion status
 
  ### Execution Strategy
+
  - Creates counting filter that tracks examined and accepted nodes
  - Uses visitor that increments match counter and continues traversal
  - Maintains separate counters for examination and matching statistics
  - Leverages full traversal for complete count accuracy
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) full scene traversal required
  - Memory: Zero allocations beyond QueryResult structure
  - Metrics: Comprehensive performance tracking for optimization
@@ -717,8 +342,11 @@ auto SceneQuery::ExecuteImmediateCount(
     return FilterResult::kReject;
   };
   auto traversal_result = traversal_.Traverse(
-    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
-      ++result.nodes_matched;
+    [&](const ConstVisitedNode& /*visited*/, bool dry_run) -> VisitResult {
+      // Simple counting, no use of visited node, increment if not dry run
+      if (!dry_run) {
+        ++result.nodes_examined;
+      }
       return VisitResult::kContinue;
     },
     TraversalOrder::kPreOrder, count_filter);
@@ -734,12 +362,14 @@ auto SceneQuery::ExecuteImmediateCount(
  @return Optional bool: true if any match found, false if no matches
 
  ### Execution Strategy
+
  - Creates accept/reject filter based on predicate evaluation
  - Uses visitor that sets found flag and stops on first match
  - Leverages VisitResult::kStop for optimal early termination
  - Returns boolean result for existence testing
 
  ### Performance Characteristics
+
  - Time Complexity: O(k) where k is position of first match
  - Memory: Single boolean allocation for result tracking
  - Optimization: Early termination prevents unnecessary traversal
@@ -760,7 +390,9 @@ auto SceneQuery::ExecuteImmediateAny(
     return FilterResult::kReject;
   };
   traversal_.Traverse(
-    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+    [&](const ConstVisitedNode& /*visited*/, bool /*dry_run*/) -> VisitResult {
+      // Stop immediately as our filter has found a match. It does not matter if
+      // it's a dry_run or not
       found = true;
       return VisitResult::kStop;
     },
@@ -777,17 +409,20 @@ auto SceneQuery::ExecuteImmediateAny(
  @return QueryResult with nodes_examined, nodes_matched, and completion status
 
  ### Execution Strategy
+
  - Creates counting filter that tracks examined and accepted nodes
- - Uses visitor that emplaces SceneNodes and continues traversal
+ - Uses a visitor that adds scene nodes and continues traversal
  - Maintains separate counters for examination and collection statistics
  - Leverages full traversal for complete collection accuracy
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) full scene traversal required
  - Memory: User-controlled allocation via provided container
  - Container Agnostic: Works with any container supporting emplace_back
 
  ### Container Requirements
+
  - Must support emplace_back(SceneNode) operation
  - Examples: std::vector<SceneNode>, std::deque<SceneNode>
 
@@ -824,16 +459,19 @@ auto SceneQuery::ExecuteImmediateCollect(auto& container,
  @return Optional SceneNode if path exists, nullopt if path not found
 
  ### Path Navigation
+
  - Uses direct parent-child navigation for simple paths (O(depth) complexity)
  - Falls back to traversal-based search for wildcard patterns (O(n) complexity)
  - Supports forward slash separator for hierarchical navigation
 
  ### Performance Characteristics
+
  - Simple paths: O(depth) via direct navigation
  - Wildcard patterns: O(n) via filtered traversal
  - Memory: Zero allocations during navigation
 
  ### Usage Examples
+
  ```cpp
  // Direct path navigation
  auto weapon = query.FindFirstByPath("World/Player/Equipment/Weapon");
@@ -854,20 +492,43 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
   }
 
   auto scene = scene_weak_.lock();
-  auto parsed_path = ParsePath(path);
 
-  if (!parsed_path.is_valid) {
+  // Use new PathParser for parsing
+  auto parsed_path = detail::query::ParsePath(path);
+  if (!parsed_path.IsValid()) {
     return std::nullopt;
   }
+  // Use streaming PathMatcher with scene traversal
+  detail::query::PathMatcher matcher(parsed_path);
+  detail::query::PatternMatchState match_state;
 
-  // Try direct navigation first (faster for simple paths)
-  if (!parsed_path.has_wildcards) {
-    return NavigatePathDirectly(scene, parsed_path);
-  }
+  std::optional<SceneNode> found_node;
+  // Traverse scene and use streaming matcher
+  SceneTraversal<const Scene> traversal(scene_weak_.lock());
+  traversal.Traverse(
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+      auto result = matcher.Match(visited, match_state);
 
-  // Fall back to traversal-based search for wildcard patterns
-  auto path_predicate = CreatePathPredicate(parsed_path);
-  return ExecuteImmediateFindFirst(path_predicate);
+      switch (result) {
+      case detail::query::MatchResult::kCompleteMatch:
+        // Found our target!
+        found_node = SceneNode { scene_weak_.lock(), visited.handle };
+        return VisitResult::kStop; // Stop traversal
+
+      case detail::query::MatchResult::kPartialMatch:
+        // Continue deeper in this subtree
+        return VisitResult::kContinue;
+
+      case detail::query::MatchResult::kNoMatch:
+        // This path doesn't match, skip this subtree
+        return VisitResult::kSkipSubtree;
+      }
+
+      return VisitResult::kContinue; // Should never reach here
+    },
+    TraversalOrder::kPreOrder);
+
+  return found_node;
 }
 
 /*!
@@ -879,16 +540,19 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
  @return Optional SceneNode if path exists, nullopt if path not found
 
  ### Relative Path Rules
+
  - Path navigation starts from context node's children
  - Relative paths should not begin with "/" (absolute marker)
  - Uses same optimization strategy as absolute paths
 
  ### Performance Characteristics
+
  - Simple paths: O(depth) via direct navigation from context
  - Wildcard patterns: O(subtree) via filtered traversal
  - Memory: Zero allocations during navigation
 
  ### Usage Examples
+
  ```cpp
  auto player = query.FindFirstByPath("World/Player");
  if (player) {
@@ -909,25 +573,16 @@ auto SceneQuery::FindFirstByPath(const SceneNode& context,
   }
 
   auto scene = scene_weak_.lock();
-  auto parsed_path = ParsePath(relative_path);
 
-  if (!parsed_path.is_valid || parsed_path.segments.empty()) {
+  // Use new PathParser for parsing
+  auto parsed_path = detail::query::ParsePath(relative_path);
+  if (!parsed_path.IsValid()) {
     return std::nullopt;
   }
 
-  // Relative paths should not be absolute
-  if (parsed_path.segments[0].is_absolute) {
-    return std::nullopt;
-  }
-  // Try direct navigation first (faster for simple paths)
-  if (!parsed_path.has_wildcards) {
-    return NavigatePathDirectlyFromContext(scene, context, parsed_path);
-  }
-
-  // Fall back to traversal-based search for wildcard patterns
-  // TODO: Implement context-aware wildcard search
-  auto path_predicate = CreatePathPredicate(parsed_path);
-  return ExecuteImmediateFindFirst(path_predicate);
+  // TODO: Implement relative path support with new PathMatcher
+  // For now, relative paths with wildcards are not supported
+  return std::nullopt;
 }
 
 /*!
@@ -939,12 +594,14 @@ auto SceneQuery::FindFirstByPath(const SceneNode& context,
  @return QueryResult with performance metrics and completion status
 
  ### Implementation Strategy
+
  - Parses path pattern and validates structure
  - Creates path-based predicate for traversal filtering
  - Uses type-erased container insertion via function parameter
  - Tracks performance metrics during traversal
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) for full scene traversal with wildcard patterns
  - Memory: Allocates nodes in user-provided container
  - Metrics: Tracks nodes examined and matched for performance analysis
@@ -960,32 +617,45 @@ auto SceneQuery::ExecuteImmediateCollectByPathImpl(
     return QueryResult { .completed = false };
   }
 
-  auto parsed_path = ParsePath(path_pattern);
-  if (!parsed_path.is_valid) {
+  // Use new PathParser for parsing
+  auto parsed_path = detail::query::ParsePath(path_pattern);
+  if (!parsed_path.IsValid()) {
     return QueryResult { .completed = false };
   }
+  // Use streaming PathMatcher with scene traversal
+  detail::query::PathMatcher matcher(parsed_path);
+  detail::query::PatternMatchState match_state;
+  QueryResult result;
 
-  auto path_predicate = CreatePathPredicate(parsed_path);
+  // Traverse scene and use streaming matcher
+  SceneTraversal<const Scene> traversal(scene_weak_.lock());
+  auto traversal_result = traversal.Traverse(
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+      ++result.nodes_examined;
+      auto match_result = matcher.Match(visited, match_state);
 
-  // Create a temporary container-agnostic collection logic
-  QueryResult result {};
-  auto queryFilter = [&result, &path_predicate](const ConstVisitedNode& visited,
-                       FilterResult) -> FilterResult {
-    ++result.nodes_examined;
-    return path_predicate(visited) ? FilterResult::kAccept
-                                   : FilterResult::kReject;
-  };
+      switch (match_result) {
+      case detail::query::MatchResult::kCompleteMatch:
+        // Found a match! Add to collection
+        add_to_container(SceneNode { scene_weak_.lock(), visited.handle });
+        ++result.nodes_matched;
+        // Continue traversal to find more matches
+        return VisitResult::kContinue;
 
-  auto visitHandler = [&add_to_container, &result, scene = scene_weak_](
-                        const ConstVisitedNode& visited, bool) -> VisitResult {
-    add_to_container(SceneNode { scene.lock(), visited.handle });
-    ++result.nodes_matched;
-    return VisitResult::kContinue;
-  };
+      case detail::query::MatchResult::kPartialMatch:
+        // Continue deeper in this subtree
+        return VisitResult::kContinue;
 
-  auto traversalResult
-    = traversal_.Traverse(visitHandler, TraversalOrder::kPreOrder, queryFilter);
-  result.completed = traversalResult.completed;
+      case detail::query::MatchResult::kNoMatch:
+        // This path doesn't match, skip this subtree
+        return VisitResult::kSkipSubtree;
+      }
+
+      return VisitResult::kContinue; // Should never reach here
+    },
+    TraversalOrder::kPreOrder);
+
+  result.completed = traversal_result.completed;
   return result;
 }
 
@@ -999,17 +669,20 @@ auto SceneQuery::ExecuteImmediateCollectByPathImpl(
  @return BatchResult with aggregated metrics from all batch operations
 
  ### Four-Phase Execution Process
+
  1. **Initialize**: Clear previous operations and set batch state
  2. **Collect**: Execute batch_func to populate operation queue
  3. **Execute**: Single traversal with composite filter and result handling
  4. **Consolidate**: Aggregate results and cleanup batch state
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) single traversal for all operations
  - Memory: Accumulates operations in batch_operations_ vector
  - Optimization: Composite filtering eliminates redundant traversals
 
  ### Error Handling
+
  - Returns failed BatchResult if scene is expired
  - Handles empty operation sets gracefully
  - Maintains operation state consistency across phases
@@ -1057,17 +730,20 @@ auto SceneQuery::ExecuteBatchImpl(
  @return Composite filter function for use with SceneTraversal
 
  ### Composite Filter Strategy
+
  - Executes batch_func to populate batch_operations_ vector
  - Tests all active operation predicates against each visited node
  - Sets matched_current_node flags for subsequent result handling
  - Returns Accept if any operation shows interest in the node
 
  ### Performance Characteristics
+
  - Time Complexity: O(operations) per node evaluation
  - Memory: Zero allocations during filter evaluation
  - State Management: Updates operation match flags for processing
 
  ### Filter Logic
+
  - Skips terminated operations (FindFirst, Any after first match)
  - Tests all remaining predicates against current node
  - Sets operation-specific match flags for ProcessBatchedNode
@@ -1113,12 +789,14 @@ auto SceneQuery::CreateCompositeFilterImpl(
  @return QueryResult with performance metrics (updated during ExecuteBatch)
 
  ### Batch Operation Registration
+
  - Creates BatchOperation with Collect type and provided predicate
  - Configures result handler to use type-erased container insertion
  - Tracks match count for QueryResult aggregation
  - Returns placeholder result updated during batch execution
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) operation registration
  - Memory: Single BatchOperation allocation in operations vector
  - Execution: Deferred until ExecuteBatch processes all operations

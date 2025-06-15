@@ -19,6 +19,28 @@ namespace oxygen::scene {
 
 class Scene;
 
+//! ADL-compatible GetNodeName for ConstVisitedNode integration with PathMatcher
+/*!
+ Enables ConstVisitedNode to work directly with concept-based PathMatcher
+ without requiring adapter types or data structure conversion.
+
+ @param visited Visited node containing handle and implementation reference
+ @return Node name as string view, empty if node_impl is null
+*/
+OXGN_SCN_API [[nodiscard]] auto GetNodeName(
+  const ConstVisitedNode& visited) noexcept -> std::string_view;
+
+//! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher
+/*!
+ Enables ConstVisitedNode to work directly with concept-based PathMatcher
+ by providing access to the hierarchical depth tracked during traversal.
+
+ @param visited Visited node containing depth information from traversal
+ @return Hierarchical depth of the node (0 = root level)
+*/
+OXGN_SCN_API [[nodiscard]] auto GetDepth(
+  const ConstVisitedNode& visited) noexcept -> std::size_t;
+
 //=== Query Result Types ===--------------------------------------------------//
 
 //! Result type for batch query operations containing aggregated metrics
@@ -177,11 +199,11 @@ public:
   auto Any(Predicate&& predicate) const noexcept -> std::optional<bool>;
 
   //! Find first node by absolute path from scene root
-  auto FindFirstByPath(std::string_view path) const noexcept
+  OXGN_SCN_NDAPI auto FindFirstByPath(std::string_view path) const noexcept
     -> std::optional<SceneNode>;
 
   //! Find first node by relative path from context node
-  auto FindFirstByPath(const SceneNode& context,
+  OXGN_SCN_NDAPI auto FindFirstByPath(const SceneNode& context,
     std::string_view relative_path) const noexcept -> std::optional<SceneNode>;
 
   //! Collect all nodes matching path pattern with wildcard support
@@ -352,11 +374,13 @@ private:
  found
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) to O(n) with aggressive early termination
  - Memory: Zero allocations during search
  - Traversal: Stops at first match using VisitResult::kStop
 
  ### Usage Examples
+
  ```cpp
  // Find player node by name
  auto player = query.FindFirst([](const auto& visited) {
@@ -402,11 +426,13 @@ auto SceneQuery::FindFirst(Predicate&& predicate) const noexcept
  @return QueryResult with performance metrics and completion status
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) for full scene traversal
  - Memory: User-controlled via container parameter
  - Allocation: Zero framework allocations, only user container growth
 
  ### Usage Examples
+
  ```cpp
  // Collect all enemies with custom allocator
  std::vector<SceneNode> enemies;
@@ -458,11 +484,13 @@ auto SceneQuery::Collect(
  @return QueryResult with match count in nodes_matched field
 
  ### Performance Characteristics
+
  - Time Complexity: O(n) for full scene traversal
  - Memory: Zero allocations
  - Result: Count available in QueryResult::nodes_matched
 
  ### Usage Examples
+
  ```cpp
  // Count visible objects for performance monitoring
  auto visible_count = query.Count([](const auto& visited) {
@@ -508,11 +536,13 @@ auto SceneQuery::Count(Predicate&& predicate) const noexcept -> QueryResult
  error
 
  ### Performance Characteristics
+
  - Time Complexity: O(1) to O(n) with early termination
  - Memory: Zero allocations
  - Traversal: Stops at first match using VisitResult::kStop
 
  ### Usage Examples
+
  ```cpp
  // Check if scene has any explosions
  auto has_explosions = query.Any([](const auto& visited) {
@@ -547,42 +577,40 @@ auto SceneQuery::Any(Predicate&& predicate) const noexcept
     std::forward<Predicate>(predicate)));
 }
 
-/*!
- Searches the scene graph for all nodes matching the specified path pattern,
- supporting both single-level (*) and recursive (**) wildcards.
-
- @tparam Container Any container type supporting emplace_back(SceneNode)
- @param container User-provided container to store matching nodes
- @param path_pattern Path pattern with optional wildcards
- @return QueryResult with performance metrics and completion status
-
- ### Wildcard Patterns
- - `*` matches any direct child name at that level
- - `**` matches any sequence of nodes at any depth
- - Exact names match only nodes with that specific name
-
- ### Performance Characteristics
- - Simple patterns: May use direct navigation optimization
- - Wildcard patterns: Full traversal with pattern matching
- - Memory: User-controlled via container parameter
-
- ### Usage Examples
- ```cpp
- std::vector<SceneNode> all_enemies;
-
- // Collect all direct children named "Enemy"
- query.CollectByPath(all_enemies, "*\/Enemy");
-
- // Collect all "Weapon" nodes at any depth
- query.CollectByPath(all_enemies, "**\/Weapon");
-
- // Collect all enemies under any direct child of "Level"
- query.CollectByPath(all_enemies, "Level/*\/Enemy");
- ```
-
- @note Path queries are not supported in batch mode (ExecuteBatch)
- @see FindFirstByPath for single node path navigation
-*/
+/// Searches the scene graph for all nodes matching the specified path pattern,
+/// supporting both single-level (*) and recursive (**) wildcards.
+///
+/// @tparam Container Any container type supporting emplace_back(SceneNode)
+/// @param container User-provided container to store matching nodes
+/// @param path_pattern Path pattern with optional wildcards
+/// @return QueryResult with performance metrics and completion status
+///
+/// ### Wildcard Patterns
+/// - `*` matches any direct child name at that level
+/// - `**` matches any sequence of nodes at any depth
+/// - Exact names match only nodes with that specific name
+///
+/// ### Performance Characteristics
+/// - Simple patterns: May use direct navigation optimization
+/// - Wildcard patterns: Full traversal with pattern matching
+/// - Memory: User-controlled via container parameter
+///
+/// ### Usage Examples
+/// ```cpp
+/// std::vector<SceneNode> all_enemies;
+///
+/// // Collect all direct children named "Enemy"
+/// query.CollectByPath(all_enemies, "*/Enemy");
+///
+/// // Collect all "Weapon" nodes at any depth
+/// query.CollectByPath(all_enemies, "**/Weapon");
+///
+/// // Collect all enemies under any direct child of "Level"
+/// query.CollectByPath(all_enemies, "Level/*/Enemy");
+/// ```
+///
+/// @note Path queries are not supported in batch mode (ExecuteBatch)
+/// @see FindFirstByPath for single node path navigation
 template <typename Container>
 auto SceneQuery::CollectByPath(Container& container,
   std::string_view path_pattern) const noexcept -> QueryResult
@@ -610,24 +638,28 @@ auto SceneQuery::CollectByPath(Container& container,
  @return BatchResult with aggregated metrics from all batch operations
 
  ### Batch Architecture
+
  1. **Preparation Phase**: Collect all query operations via lambda execution
  2. **Composite Filtering**: Create unified filter testing all predicates
  3. **Single Traversal**: Execute all operations in one scene pass
  4. **Result Aggregation**: Combine metrics and results
 
  ### Performance Benefits
+
  - **N queries → 1 traversal**: Eliminates redundant scene traversal overhead
  - **Cache Efficiency**: Single pass maximizes CPU cache locality
  - **Early Termination**: Stops when all FindFirst/Any operations complete
  - **Memory Efficiency**: User controls all result container allocation
 
  ### Supported Operations in Batch
+
  - FindFirst: Stops at first match, flags operation as terminated
  - Collect: Accumulates all matches throughout traversal
  - Count: Increments counter for each match
  - Any: Stops at first match, flags operation as terminated
 
  ### Usage Examples
+
  ```cpp
  SceneNode player;
  std::vector<SceneNode> enemies, powerups;
