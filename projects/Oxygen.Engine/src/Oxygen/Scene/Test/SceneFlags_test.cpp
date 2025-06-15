@@ -70,11 +70,10 @@ protected:
 NOLINT_TEST_F(SceneFlagsBasicTest, DefaultConstruction_AllFlagsAreFalse)
 {
   // Arrange: Default constructed flags container (done in SetUp)
-
   // Act: Check all flag values
 
   // Assert: All flags should have false effective values by default
-  ExpectAllFlagsEffectiveValue(flags_, false);
+  GCHECK_F(ExpectAllFlagsEffectiveValue(flags_, false));
 }
 
 NOLINT_TEST_F(SceneFlagsBasicTest, SetFlag_CompleteStateIsPreserved)
@@ -152,12 +151,11 @@ NOLINT_TEST_F(SceneFlagsBasicTest, Clear_ResetsAllFlagsToDefault)
   flags_.SetLocalValue(TestFlag::kVisible, true);
   flags_.SetLocalValue(TestFlag::kLocked, true);
   flags_.ProcessDirtyFlags();
-
   // Act: Clear all flags
   flags_.Clear();
 
   // Assert: All flags should be false
-  ExpectAllFlagsEffectiveValue(flags_, false);
+  GCHECK_F(ExpectAllFlagsEffectiveValue(flags_, false));
 }
 
 NOLINT_TEST_F(SceneFlagsBasicTest, Equality_WorksCorrectly)
@@ -264,7 +262,7 @@ NOLINT_TEST_F(SceneFlagsBasicTest, BulkSetLocalValue_AllFlagsModified)
   flags_.ProcessDirtyFlags();
 
   // Assert: All flags should now be true
-  ExpectAllFlagsEffectiveValue(flags_, true);
+  GCHECK_F(ExpectAllFlagsEffectiveValue(flags_, true));
 }
 
 NOLINT_TEST_F(SceneFlagsBasicTest, ClearDirtyFlags_OnlyDirtyBitsCleared)
@@ -773,12 +771,11 @@ NOLINT_TEST_F(SceneFlagsEdgeCaseTest, SetRaw_WithZeroValue)
   flags_.SetLocalValue(TestFlag::kVisible, true);
   flags_.SetLocalValue(TestFlag::kLocked, true);
   flags_.ProcessDirtyFlags();
-
   // Act: Set raw to zero (all flags false, no inheritance, no dirty bits)
   flags_.SetRaw(0);
 
   // Assert: All flags should be in default state
-  ExpectAllFlagsEffectiveValue(flags_, false);
+  GCHECK_F(ExpectAllFlagsEffectiveValue(flags_, false));
   for (std::size_t i = 0; i < static_cast<std::size_t>(TestFlag::kCount); ++i) {
     const auto flag = static_cast<TestFlag>(i);
     EXPECT_FALSE(flags_.IsDirty(flag));

@@ -93,7 +93,7 @@ NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_VisibleSetCorrectly)
   const auto& flags = node.GetFlags();
 
   // Act/Assert: Visible flag should be true and not inherited
-  ExpectFlagState(flags, SceneNodeFlags::kVisible, true, false);
+  GCHECK_F(ExpectFlagState(flags, SceneNodeFlags::kVisible, true, false));
 }
 
 NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_StaticSetCorrectly)
@@ -103,7 +103,7 @@ NOLINT_TEST_F(SceneNodeImplDefaultFlagsTest, DefaultFlags_StaticSetCorrectly)
   const auto& flags = node.GetFlags();
 
   // Act/Assert: Static flag should be false and not inherited
-  ExpectFlagState(flags, SceneNodeFlags::kStatic, false, false);
+  GCHECK_F(ExpectFlagState(flags, SceneNodeFlags::kStatic, false, false));
 }
 
 NOLINT_TEST_F(
@@ -114,9 +114,15 @@ NOLINT_TEST_F(
   const auto& flags = node.GetFlags();
 
   // Act/Assert: Shadow-related flags should be false but inherited
-  ExpectFlagState(flags, SceneNodeFlags::kCastsShadows, false, true);
-  ExpectFlagState(flags, SceneNodeFlags::kReceivesShadows, false, true);
-  ExpectFlagState(flags, SceneNodeFlags::kRayCastingSelectable, false, true);
+  TRACE_GCHECK_F(
+    ExpectFlagState(flags, SceneNodeFlags::kCastsShadows, false, true),
+    "CastsShadows");
+  TRACE_GCHECK_F(
+    ExpectFlagState(flags, SceneNodeFlags::kReceivesShadows, false, true),
+    "ReceivesShadows");
+  TRACE_GCHECK_F(
+    ExpectFlagState(flags, SceneNodeFlags::kRayCastingSelectable, false, true),
+    "RayCastingSelectable");
 }
 
 NOLINT_TEST_F(

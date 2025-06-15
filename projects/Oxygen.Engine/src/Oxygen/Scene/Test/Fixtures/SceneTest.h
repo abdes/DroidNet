@@ -148,8 +148,8 @@ protected:
 
   // NB: In order to ensure that a failure in a helper is properly propagated to
   // the test cases that called it, it is important to wrap any call to a helper
-  // that includes EXPECT_* or ASSERT_* macros in a CHECK_FOR_FAILURES or
-  // CHECK_FOR_FAILURES_MSG macro.
+  // that includes EXPECT_* or ASSERT_* macros in a GCHECK_F or
+  // TRACE_GCHECK_F macro.
   //
   // See Oxygen/Testing/GTest.h for details.
 
@@ -512,7 +512,7 @@ protected:
 
     for (const auto& name : special_names) {
       auto node = CreateNode(name);
-      CHECK_FOR_FAILURES_MSG(
+      TRACE_GCHECK_F(
         ExpectNodeValidWithName(node, name), "TestSpecialCharacterNames");
     }
   }

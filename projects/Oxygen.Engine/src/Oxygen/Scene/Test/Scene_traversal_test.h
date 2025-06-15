@@ -275,21 +275,21 @@ protected:
     switch (order) {
     case TraversalOrder::kPreOrder:
       // Pre-order: parent before children
-      CHECK_FOR_FAILURES_MSG(
+      TRACE_GCHECK_F(
         ExpectContainsExactlyNodes({ "root", "A", "C", "D", "B", "E" }),
-        "Pre-order traversal should visit parent before children");
+        "pre-order");
       break;
     case TraversalOrder::kPostOrder:
       // Post-order: children before parent
-      CHECK_FOR_FAILURES_MSG(
+      TRACE_GCHECK_F(
         ExpectContainsExactlyNodes({ "C", "D", "A", "E", "B", "root" }),
-        "Post-order traversal should visit children before parent");
+        "post-order");
       break;
     case TraversalOrder::kBreadthFirst:
       // Breadth-first: level by level
-      CHECK_FOR_FAILURES_MSG(
+      TRACE_GCHECK_F(
         ExpectContainsExactlyNodes({ "root", "A", "B", "C", "D", "E" }),
-        "Breadth-first traversal should visit nodes level by level");
+        "breadth-first");
       break;
     }
   }

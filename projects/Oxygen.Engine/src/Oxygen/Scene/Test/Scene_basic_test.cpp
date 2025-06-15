@@ -366,33 +366,26 @@ NOLINT_TEST_F(SceneBasicTest, SceneClear)
   auto standalone = CreateNode("Standalone");
   EXPECT_EQ(scene_->GetNodeCount(), 4);
   EXPECT_FALSE(scene_->IsEmpty());
-
   // Act: Clear the entire scene.
   ClearScene(); // Assert: Verify scene is empty, node count is zero, and all
                 // previously
   // created nodes are invalidated and not contained.
   EXPECT_EQ(scene_->GetNodeCount(), 0);
-  CHECK_FOR_FAILURES_MSG(ExpectSceneEmpty(), "for SceneClear scene empty")
-  CHECK_FOR_FAILURES_MSG(
-    ExpectNodeNotInScene(parent), "for SceneClear parent not in scene")
-  CHECK_FOR_FAILURES_MSG(
-    ExpectNodeLazyInvalidated(parent), "for SceneClear parent invalidation")
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "empty")
+  TRACE_GCHECK_F(ExpectNodeNotInScene(parent), "parent-scene")
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(parent), "parent-invalid")
   if (child1_opt.has_value()) {
-    CHECK_FOR_FAILURES_MSG(ExpectNodeNotInScene(child1_opt.value()),
-      "for SceneClear child1 not in scene")
-    CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(child1_opt.value()),
-      "for SceneClear child1 invalidation")
+    TRACE_GCHECK_F(ExpectNodeNotInScene(child1_opt.value()), "child1-scene")
+    TRACE_GCHECK_F(
+      ExpectNodeLazyInvalidated(child1_opt.value()), "child1-invalid")
   }
   if (child2_opt.has_value()) {
-    CHECK_FOR_FAILURES_MSG(ExpectNodeNotInScene(child2_opt.value()),
-      "for SceneClear child2 not in scene")
-    CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(child2_opt.value()),
-      "for SceneClear child2 invalidation")
+    TRACE_GCHECK_F(ExpectNodeNotInScene(child2_opt.value()), "child2-scene")
+    TRACE_GCHECK_F(
+      ExpectNodeLazyInvalidated(child2_opt.value()), "child2-invalid")
   }
-  CHECK_FOR_FAILURES_MSG(
-    ExpectNodeNotInScene(standalone), "for SceneClear standalone not in scene")
-  CHECK_FOR_FAILURES_MSG(ExpectNodeLazyInvalidated(standalone),
-    "for SceneClear standalone invalidation")
+  TRACE_GCHECK_F(ExpectNodeNotInScene(standalone), "standalone-scene")
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(standalone), "standalone-invalid")
 }
 
 // -----------------------------------------------------------------------------

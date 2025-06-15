@@ -44,7 +44,7 @@ NOLINT_TEST_F(PathMatcherBasicTest, SimpleLiteralPath_MatchesExactSequence)
   auto nodes = CreateLinearHierarchy({ "foo", "bar", "baz" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected exact sequence match");
 }
 
@@ -55,7 +55,7 @@ NOLINT_TEST_F(PathMatcherBasicTest, SingleSegmentPath_MatchesSingleNode)
   auto nodes = CreateLinearHierarchy({ "root" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected single segment match");
 }
 
@@ -66,7 +66,7 @@ NOLINT_TEST_F(PathMatcherBasicTest, LiteralMismatch_FailsAtIncorrectSegment)
   auto nodes = CreateLinearHierarchy({ "foo", "wrong", "baz" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectMatchFailsAt(matcher, nodes, 1),
+  TRACE_GCHECK_F(ExpectMatchFailsAt(matcher, nodes, 1),
     "Expected failure at 'wrong' segment");
 }
 
@@ -81,7 +81,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, SingleWildcard_MatchesAnyNodeName)
   PathMatcher matcher("foo/*/baz");
   auto nodes = CreateLinearHierarchy({ "foo", "anything", "baz" });
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected single wildcard match");
 }
 
@@ -92,7 +92,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, MultipleWildcards_MatchIndependently)
   auto nodes = CreateLinearHierarchy({ "start", "middle", "end" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected multiple wildcards to match");
 }
 
@@ -103,7 +103,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, OnlySingleWildcard_MatchesSingleNode)
   auto nodes = CreateLinearHierarchy({ "anything" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected single wildcard to match any node");
 }
 
@@ -120,7 +120,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, RecursiveWildcard_MatchesDeepHierarchy)
                  .Build();
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected recursive wildcard to match deep hierarchy");
 }
 
@@ -131,7 +131,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, RecursiveWildcard_MatchesZeroNodes)
   auto nodes = CreateLinearHierarchy({ "start", "end" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected recursive wildcard to match zero nodes");
 }
 
@@ -148,7 +148,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, OnlyRecursiveWildcard_MatchesEverything)
                  .Build();
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected recursive wildcard to match everything");
 }
 
@@ -165,7 +165,7 @@ NOLINT_TEST_F(
                  .Build();
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected trailing recursive wildcard to match remainder");
 }
 
@@ -181,7 +181,7 @@ NOLINT_TEST_F(PathMatcherWildcardTest, MixedPattern_CombinesAllWildcardTypes)
                  .AddChild("file.txt") // literal match
                  .Build();
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected mixed pattern to combine all wildcard types");
 }
 
@@ -198,7 +198,7 @@ NOLINT_TEST_F(PathMatcherStateTest, StateReset_AllowsReuse)
   PatternMatchState state;
 
   // Act - first complete match
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected first complete match");
 
   // Act - reset and match again
@@ -210,7 +210,7 @@ NOLINT_TEST_F(PathMatcherStateTest, StateReset_AllowsReuse)
   EXPECT_EQ(state.last_depth, -1) << "Last depth should reset to -1";
 
   // Act & Assert - can match again
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected reuse after reset to work");
 }
 
@@ -276,7 +276,7 @@ NOLINT_TEST_F(PathMatcherErrorTest, LiteralStars_NotTreatedAsWildcards)
   auto nodes = CreateLinearHierarchy({ "foo", "***", "bar" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected literal stars to match exactly");
   EXPECT_FALSE(matcher.HasWildcards()) << "Literal *** should not be wildcard";
 }
@@ -288,7 +288,7 @@ NOLINT_TEST_F(PathMatcherErrorTest, LiteralStarPattern_NotTreatedAsWildcard)
   auto nodes = CreateLinearHierarchy({ "*a*" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, nodes),
     "Expected literal star pattern to match exactly");
   EXPECT_FALSE(matcher.HasWildcards()) << "Literal *a* should not be wildcard";
 }
@@ -326,7 +326,7 @@ NOLINT_TEST_F(PathMatcherCaseTest, CaseSensitive_RequiresExactCase)
   auto wrong_case_nodes = CreateLinearHierarchy({ "foo", "bar" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectMatchFailsAt(matcher, wrong_case_nodes, 0),
+  TRACE_GCHECK_F(ExpectMatchFailsAt(matcher, wrong_case_nodes, 0),
     "Expected case mismatch failure");
 }
 
@@ -337,7 +337,7 @@ NOLINT_TEST_F(PathMatcherCaseTest, CaseInsensitive_IgnoresCase)
   auto mixed_case_nodes = CreateLinearHierarchy({ "foo", "BAR" });
 
   // Act & Assert
-  CHECK_FOR_FAILURES_MSG(ExpectCompleteMatch(matcher, mixed_case_nodes),
+  TRACE_GCHECK_F(ExpectCompleteMatch(matcher, mixed_case_nodes),
     "Expected case insensitive match");
 }
 

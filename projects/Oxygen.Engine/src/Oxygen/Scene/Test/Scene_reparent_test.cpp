@@ -295,8 +295,8 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_ValidChildNode_BecomesRoot)
   EXPECT_TRUE(result);
   EXPECT_TRUE(hierarchy.child.IsRoot());
   EXPECT_FALSE(hierarchy.child.HasParent());
-  CHECK_FOR_FAILURES(ExpectNodeValidWithName(hierarchy.child, "Child"));
-  CHECK_FOR_FAILURES(ExpectNodeValidWithName(hierarchy.parent, "Parent"));
+  GCHECK_F(ExpectNodeValidWithName(hierarchy.child, "Child"));
+  GCHECK_F(ExpectNodeValidWithName(hierarchy.parent, "Parent"));
 }
 
 NOLINT_TEST_F(
@@ -311,7 +311,7 @@ NOLINT_TEST_F(
   // Assert: Operation should succeed with no changes
   EXPECT_TRUE(result);
   EXPECT_TRUE(root.IsRoot());
-  CHECK_FOR_FAILURES(ExpectNodeValidWithName(root, "RootNode"));
+  GCHECK_F(ExpectNodeValidWithName(root, "RootNode"));
 }
 
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_DeepHierarchy_EntireSubtreeMoved)
@@ -397,11 +397,11 @@ NOLINT_TEST_F(SceneReparentTest,
   EXPECT_TRUE(hierarchy.child.IsRoot());
 
   // Assert: Local transform should now equal the captured world transform
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectVec3Near(child_transform.GetLocalPosition(), original_world_pos));
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectQuatNear(child_transform.GetLocalRotation(), original_world_rot));
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectVec3Near(child_transform.GetLocalScale(), original_world_scale));
 }
 
@@ -652,7 +652,7 @@ NOLINT_TEST_F(SceneReparentEdgeTest, MakeNodeRoot_EmptyNameNode_WorksCorrectly)
   // Assert: Should work despite unusual names
   EXPECT_TRUE(result);
   EXPECT_TRUE(child.IsRoot());
-  CHECK_FOR_FAILURES(ExpectNodeValidWithName(child, "   "));
+  GCHECK_F(ExpectNodeValidWithName(child, "   "));
 }
 
 NOLINT_TEST_F(
@@ -748,8 +748,7 @@ NOLINT_TEST_F(
   auto hierarchy = CreateDualParentWithChild();
 
   // Verify initial setup
-  CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentA));
+  GCHECK_F(ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentA));
   EXPECT_TRUE(hierarchy.parentA.HasChildren());
   EXPECT_FALSE(hierarchy.parentB.HasChildren());
 
@@ -759,8 +758,7 @@ NOLINT_TEST_F(
 
   // Assert: Child should now be under ParentB
   EXPECT_TRUE(result);
-  CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentB));
+  GCHECK_F(ExpectNodeValidWithParent(hierarchy.child, hierarchy.parentB));
   EXPECT_FALSE(hierarchy.parentA.HasChildren());
   EXPECT_TRUE(hierarchy.parentB.HasChildren());
 }
@@ -771,8 +769,8 @@ NOLINT_TEST_F(
   // Arrange: Create root node and a parent
   auto standalone_root = CreateNode("StandaloneRoot");
   auto parent = CreateNode("Parent");
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(standalone_root, "StandaloneRoot"));
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(parent, "Parent"));
+  GCHECK_F(ExpectNodeValidAsRoot(standalone_root, "StandaloneRoot"));
+  GCHECK_F(ExpectNodeValidAsRoot(parent, "Parent"));
 
   const auto initial_root_count = scene_->GetRootNodes().size();
 
@@ -781,7 +779,7 @@ NOLINT_TEST_F(
 
   // Assert: standalone_root should no longer be a root
   EXPECT_TRUE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(standalone_root, parent));
+  GCHECK_F(ExpectNodeValidWithParent(standalone_root, parent));
 
   // Root count should decrease by 1
   EXPECT_EQ(scene_->GetRootNodes().size(), initial_root_count - 1);
@@ -806,8 +804,8 @@ NOLINT_TEST_F(
 
   // Assert: Entire subtree moved, internal structure preserved
   EXPECT_TRUE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(child, dual.parentB));
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(grandchild, child));
+  GCHECK_F(ExpectNodeValidWithParent(child, dual.parentB));
+  GCHECK_F(ExpectNodeValidWithParent(grandchild, child));
   EXPECT_TRUE(child.HasChildren());
   EXPECT_FALSE(dual.parentA.HasChildren());
   EXPECT_TRUE(dual.parentB.HasChildren());
@@ -842,11 +840,11 @@ NOLINT_TEST_F(SceneReparentTest,
   EXPECT_TRUE(result);
   UpdateSceneTransforms(); // Update to get new world transforms
 
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectVec3Near(child_transform.GetWorldPosition(), original_world_pos));
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectQuatNear(child_transform.GetWorldRotation(), original_world_rot));
-  CHECK_FOR_FAILURES(
+  GCHECK_F(
     ExpectVec3Near(child_transform.GetWorldScale(), original_world_scale));
 }
 
@@ -864,7 +862,7 @@ NOLINT_TEST_F(
   const auto result = scene_->ReparentNode(node, node, false);
   // Assert: Should detect cycle and fail
   EXPECT_FALSE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(node, "SelfParentNode"));
+  GCHECK_F(ExpectNodeValidAsRoot(node, "SelfParentNode"));
 }
 
 NOLINT_TEST_F(
@@ -879,9 +877,8 @@ NOLINT_TEST_F(
 
   // Assert: Should detect cycle and fail
   EXPECT_FALSE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(hierarchy.parent, "Parent"));
-  CHECK_FOR_FAILURES(
-    ExpectNodeValidWithParent(hierarchy.child, hierarchy.parent));
+  GCHECK_F(ExpectNodeValidAsRoot(hierarchy.parent, "Parent"));
+  GCHECK_F(ExpectNodeValidWithParent(hierarchy.child, hierarchy.parent));
 }
 
 NOLINT_TEST_F(
@@ -898,9 +895,9 @@ NOLINT_TEST_F(
 
   // Assert: Should detect cycle and fail
   EXPECT_FALSE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(nodeA, "NodeA"));
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeB, nodeA));
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeC, nodeB));
+  GCHECK_F(ExpectNodeValidAsRoot(nodeA, "NodeA"));
+  GCHECK_F(ExpectNodeValidWithParent(nodeB, nodeA));
+  GCHECK_F(ExpectNodeValidWithParent(nodeC, nodeB));
 }
 
 NOLINT_TEST_F(
@@ -917,8 +914,8 @@ NOLINT_TEST_F(
 
   // Assert: Should detect cycle and fail, hierarchy unchanged
   EXPECT_FALSE(result);
-  CHECK_FOR_FAILURES(ExpectNodeValidAsRoot(nodeA, "NodeA"));
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeB, nodeA));
+  GCHECK_F(ExpectNodeValidAsRoot(nodeA, "NodeA"));
+  GCHECK_F(ExpectNodeValidWithParent(nodeB, nodeA));
   // NodeE should still be a descendant of NodeA through the chain
   EXPECT_FALSE(nodeE.IsRoot());
 }
@@ -946,7 +943,7 @@ NOLINT_TEST_F(SceneReparentEdgeTest,
   const auto valid_result = scene_->ReparentNode(nodeC, nodeD, false);
   // Assert: Valid operation should succeed
   EXPECT_TRUE(valid_result);
-  CHECK_FOR_FAILURES(ExpectNodeValidWithParent(nodeC, nodeD));
+  GCHECK_F(ExpectNodeValidWithParent(nodeC, nodeD));
   EXPECT_FALSE(nodeB.HasChildren()); // B no longer has C as child
   EXPECT_TRUE(nodeD.HasChildren()); // D now has C as child
 }
