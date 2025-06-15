@@ -61,9 +61,9 @@ TEST_P(SceneTraversalFilterTest, RejectSpecificNodes)
     TraversalOrder::kPreOrder, CreateRejectFilter({ "A", "E" }));
 
   // Assert: A and E should be filtered out but their children still visited
-  CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, 4, 2, true),
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 2, true),
     "Rejecting specific nodes should not stop traversal of their children");
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "B", "C", "D" }, { "A", "E" }),
     "visited nodes mismatch");
 }
@@ -77,9 +77,9 @@ TEST_P(SceneTraversalFilterTest, RejectSubtreeOfSpecificNodes)
     TraversalOrder::kPreOrder, CreateRejectSubtreeFilter({ "A" }));
 
   // Assert: A and its children (C, D) should be filtered out
-  CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, 3, 1, true),
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 3, 1, true),
     "A and its children (C, D) should be filtered out");
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "B", "E" }, { "A", "C", "D" }),
     "visited nodes mismatch");
 }
@@ -93,9 +93,9 @@ TEST_P(SceneTraversalFilterTest, RejectSubtreeInBreadthFirst)
     TraversalOrder::kBreadthFirst, CreateRejectSubtreeFilter({ "B" }));
 
   // Assert: B and its children should be filtered out
-  CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, 4, 1, true),
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 1, true),
     "B and its children should be filtered out");
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "A", "C", "D" }, { "B", "E" }),
     "visited nodes mismatch");
 }

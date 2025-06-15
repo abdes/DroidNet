@@ -64,7 +64,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, DefaultConstruction_AllBitsAreFalse)
   // Act: No action needed for default construction test
 
   // Assert: Verify all bits are false and raw value is zero
-  ExpectAllBitsState(flag_, false, false, false, false, false);
+  GCHECK_F(ExpectAllBitsState(flag_, false, false, false, false, false));
   EXPECT_EQ(flag_.GetRaw(), 0);
 }
 
@@ -91,7 +91,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, BitSetters_ModifyIndividualBitsCorrectly)
   flag_.SetPendingValueBit(true);
 
   // Assert: All bits should now be true
-  ExpectAllBitsState(flag_, true, true, true, true, true);
+  GCHECK_F(ExpectAllBitsState(flag_, true, true, true, true, true));
 }
 
 NOLINT_TEST_F(SceneFlagBasicTest, RawAccess_SetAndGetRawValueCorrectly)
@@ -107,7 +107,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, RawAccess_SetAndGetRawValueCorrectly)
   flag_.SetRaw(0);
 
   // Assert: All bits should be false after raw reset
-  ExpectAllBitsState(flag_, false, false, false, false, false);
+  GCHECK_F(ExpectAllBitsState(flag_, false, false, false, false, false));
 }
 
 NOLINT_TEST_F(
@@ -213,7 +213,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_InitializesCorrectly)
   constexpr auto flag = SceneFlag(all_bits_set);
 
   // Assert: All bits should be set correctly
-  ExpectAllBitsState(flag, true, true, true, true, true);
+  GCHECK_F(ExpectAllBitsState(flag, true, true, true, true, true));
   EXPECT_EQ(flag.GetRaw(), all_bits_set);
 }
 
@@ -226,7 +226,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_MasksUpperBits)
   constexpr auto flag = SceneFlag(upper_bits_set);
 
   // Assert: Upper bits should be masked out, all flag bits should be false
-  ExpectAllBitsState(flag, false, false, false, false, false);
+  GCHECK_F(ExpectAllBitsState(flag, false, false, false, false, false));
   EXPECT_EQ(flag.GetRaw(), 0);
 }
 
@@ -241,7 +241,7 @@ NOLINT_TEST_F(SceneFlagBasicTest, ConstructorFromRawBits_SpecificBitPattern)
   constexpr auto flag = SceneFlag(specific_bits);
 
   // Assert: Only specified bits should be set
-  ExpectAllBitsState(flag, true, false, true, false, false);
+  GCHECK_F(ExpectAllBitsState(flag, true, false, true, false, false));
   EXPECT_EQ(flag.GetRaw(), specific_bits);
 }
 

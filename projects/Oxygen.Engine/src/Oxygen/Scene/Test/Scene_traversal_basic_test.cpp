@@ -44,7 +44,7 @@ NOLINT_TEST_F(SceneTraversalBasicTest, EmptySceneTraversal)
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor());
 
   // Assert: No nodes should be visited
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectTraversalResult(result, 0, 0, true), "No nodes should be visited");
   EXPECT_TRUE(visit_order_.empty());
 }
@@ -60,9 +60,9 @@ NOLINT_TEST_F(SceneTraversalBasicTest, SingleNodeTraversal)
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor());
 
   // Assert: Single node should be visited
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectTraversalResult(result, 1, 0, true), "Single node should be visited");
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(
     ExpectVisitedNodes({ "single" }), "Single node should be visited");
 }
 

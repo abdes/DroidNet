@@ -41,18 +41,16 @@ class SceneTraversalVisitorTest
 
 // TraversalOrderComparison as a parameterized test
 NOLINT_TEST_P(SceneTraversalVisitorTest, FullTraversal)
-{
-  // Act: Traverse using post-order (children-first) traversal
+{ // Act: Traverse using post-order (children-first) traversal
   const auto result
     = GetTraversal().Traverse(CreateTrackingVisitor(), GetParam());
 
   // Assert: All nodes should be visited with no filtering
-  CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, GetNodeCount(), 0, true),
-    "All nodes should be visited");
+  TRACE_GCHECK_F(
+    ExpectTraversalResult(result, GetNodeCount(), 0, true), "all-visited");
 
   // Verify complete semantic ordering using enhanced helper
-  CHECK_FOR_FAILURES_MSG(
-    ExpectSemanticOrdering(GetParam()), "Semantic ordering must be correct");
+  TRACE_GCHECK_F(ExpectSemanticOrdering(GetParam()), "semantic-order");
 }
 
 // EarlyTerminationAllOrders as a parameterized test
@@ -87,8 +85,8 @@ NOLINT_TEST_P(SceneTraversalVisitorTest, EarlyTermination)
     expected_nodes = { "root", "B", "A" };
     break;
   }
-  CHECK_FOR_FAILURES_MSG(ExpectContainsExactlyNodes(expected_nodes),
-    "Should visit only the expected nodes before early termination");
+  TRACE_GCHECK_F(
+    ExpectContainsExactlyNodes(expected_nodes), "early-termination");
 }
 
 // SubtreeSkippingAllOrders as a parameterized test
@@ -101,13 +99,11 @@ NOLINT_TEST_P(SceneTraversalVisitorTest, SubtreeSkipping)
   // Act: Skip subtree of node "A" (should skip C and D)
   const auto result
     = GetTraversal().Traverse(CreateSubtreeSkippingVisitor("A"), GetParam());
-
   // Assert: Should complete but skip A's children
-  CHECK_FOR_FAILURES_MSG(ExpectTraversalResult(result, 4, 0, true),
-    "TraversalResult for subtree skipping");
-  CHECK_FOR_FAILURES_MSG(
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 0, true), "subtree-result");
+  TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "A", "B", "E" }, { "C", "D" }),
-    "Should visit A but not its children C and D");
+    "subtree-skip");
 }
 
 INSTANTIATE_TEST_SUITE_P(AllOrders, SceneTraversalVisitorTest,

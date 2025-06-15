@@ -92,10 +92,9 @@ NOLINT_TEST_F(NodeDataTest, CopyConstructor_PreservesAllData)
 
   // Act: Create copy using copy constructor
   const auto copy = NodeData(original);
-
   // Assert: Verify all data is copied correctly, including the clean
   // transform state
-  ExpectNodeDataState(copy, original.flags_);
+  GCHECK_F(ExpectNodeDataState(copy, original.flags_));
 }
 
 //------------------------------------------------------------------------------
@@ -110,9 +109,8 @@ NOLINT_TEST_F(NodeDataTest, CopyAssignment_PreservesAllData)
 
   // Act: Assign original to target using copy assignment
   target = original;
-
   // Assert: Verify target now matches original's state completely
-  ExpectNodeDataState(target, original.flags_);
+  GCHECK_F(ExpectNodeDataState(target, original.flags_));
 }
 
 //------------------------------------------------------------------------------
@@ -128,10 +126,9 @@ NOLINT_TEST_F(NodeDataTest, MoveConstructor_TransfersDataAndInvalidatesSource)
 
   // Act: Move construct new object from original
   const auto moved = NodeData(std::move(original));
-
   // Assert: Verify data transferred to moved object and original is in valid
   // moved-from state
-  ExpectNodeDataState(moved, expected_flags);
+  GCHECK_F(ExpectNodeDataState(moved, expected_flags));
   // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from
   // object
   EXPECT_FALSE(original.flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
@@ -150,10 +147,9 @@ NOLINT_TEST_F(NodeDataTest, MoveAssignment_TransfersDataAndInvalidatesSource)
 
   // Act: Move assign original to target
   target = std::move(original);
-
   // Assert: Verify data transferred to target and original is in valid
   // moved-from state
-  ExpectNodeDataState(target, expected_flags);
+  GCHECK_F(ExpectNodeDataState(target, expected_flags));
   // NOLINTNEXTLINE(bugprone-use-after-move) - testing the state of moved-from
   // object
   EXPECT_FALSE(original.flags_.GetEffectiveValue(SceneNodeFlags::kVisible));
@@ -172,10 +168,9 @@ NOLINT_TEST_F(NodeDataTest, SelfMoveAssignment_HandledCorrectly)
   // Act: Perform self move-assignment (edge case that should be handled
   // gracefully)
   node_data = std::move(node_data); // NOLINT(clang-diagnostic-self-move)
-
   // Assert: Verify object remains in valid, unchanged state after
   // self-assignment
-  ExpectNodeDataState(node_data, expected_flags);
+  GCHECK_F(ExpectNodeDataState(node_data, expected_flags));
 }
 
 //------------------------------------------------------------------------------
@@ -244,10 +239,9 @@ NOLINT_TEST_F(NodeDataTest, ComplexFlagConfiguration_CopyAndCloneWork)
   const auto cloned = node_data.Clone();
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
-
   // Assert: Verify both copy and clone preserve complex flag configuration
-  ExpectNodeDataState(copy, complex_flags);
-  ExpectNodeDataState(*cloned_node_data, complex_flags);
+  GCHECK_F(ExpectNodeDataState(copy, complex_flags));
+  GCHECK_F(ExpectNodeDataState(*cloned_node_data, complex_flags));
 }
 
 //------------------------------------------------------------------------------
@@ -264,9 +258,8 @@ NOLINT_TEST_F(NodeDataTest, AllFlagsDefaultConfiguration_CloneWorks)
   const auto cloned = node_data.Clone();
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
-
   // Assert: Verify clone preserves default flag state and clean transform
-  ExpectNodeDataState(*cloned_node_data, all_default);
+  GCHECK_F(ExpectNodeDataState(*cloned_node_data, all_default));
 }
 
 NOLINT_TEST_F(

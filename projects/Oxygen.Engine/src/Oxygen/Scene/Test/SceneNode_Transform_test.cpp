@@ -148,7 +148,8 @@ NOLINT_TEST_F(
   SetTransformValues(node, initial_pos, initial_scale);
 
   // Act: Verify initial values are set
-  ExpectTransformValues(node, initial_pos, initial_scale);
+  TRACE_GCHECK_F(
+    ExpectTransformValues(node, initial_pos, initial_scale), "initial");
 
   // Act: Modify transform values
   constexpr auto new_pos = glm::vec3 { 10.0F, 20.0F, 30.0F };
@@ -156,7 +157,7 @@ NOLINT_TEST_F(
   SetTransformValues(node, new_pos, new_scale);
 
   // Assert: New values should be preserved
-  ExpectTransformValues(node, new_pos, new_scale);
+  TRACE_GCHECK_F(ExpectTransformValues(node, new_pos, new_scale), "new");
 }
 
 } // namespace

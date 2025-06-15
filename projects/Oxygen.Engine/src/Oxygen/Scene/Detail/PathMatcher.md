@@ -556,11 +556,11 @@ NOLINT_TEST(PathParserPerformanceTest, ParsingPerformance) {
 - **Performance**: ⚠️ Basic validation present, needs automated benchmarks
 
 #### Test Macro Usage (Current Implementation)
-The current test implementation correctly uses `CHECK_FOR_FAILURES_MSG` to wrap helper function calls that contain `EXPECT_*` assertions:
+The current test implementation correctly uses `TRACE_CHECK_F` to wrap helper function calls that contain `EXPECT_*` assertions:
 
 ```cpp
 // ✅ CORRECT: Current implementation wraps helper methods that contain assertions
-CHECK_FOR_FAILURES_MSG(
+TRACE_CHECK_F(
     ExpectCompleteMatch(matcher, nodes), "Expected exact sequence match");
 
 // The helper method ExpectCompleteMatch contains EXPECT_* calls:
@@ -578,4 +578,4 @@ auto ExpectCompleteMatch(const PathMatcher<MatcherType>& matcher,
 }
 ```
 
-This usage is correct and follows best practices for the `CHECK_FOR_FAILURES_MSG` macro.
+This usage is correct and follows best practices for the `TRACE_CHECK_F` macro.
