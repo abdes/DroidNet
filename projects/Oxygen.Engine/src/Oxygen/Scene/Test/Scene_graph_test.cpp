@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
@@ -24,6 +25,7 @@ using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::testing::TestSceneFactory;
 
 //------------------------------------------------------------------------------
 // Anonymous namespace for test isolation
@@ -56,7 +58,6 @@ protected:
     }
     return children;
   }
-
   // Helper: Verify parent-child relationship exists
   static void ExpectParentChildRelationship(SceneNode& parent, SceneNode& child)
   {
@@ -71,7 +72,6 @@ protected:
     EXPECT_TRUE(children.contains(child.GetHandle()))
       << "Parent should contain this child";
   }
-
   // Helper: Verify hierarchy state flags for a node
   static void ExpectHierarchyState(SceneNode& node, const bool is_root,
     const bool has_parent, const bool has_children)
@@ -90,6 +90,7 @@ protected:
     -> std::pair<SceneNode, std::vector<SceneNode>>
   {
     auto parent = scene_->CreateNode(parent_name);
+    EXPECT_TRUE(parent.IsValid()) << "Parent creation should succeed";
     auto children = std::vector<SceneNode> {};
 
     for (const auto& child_name : child_names) {
@@ -141,11 +142,14 @@ NOLINT_TEST_F(SceneGraphTest, ParentChildRelationship_BasicNavigationWorks)
   // Act: Verify parent-child relationship
 
   // Assert: Navigation should work in both directions
-  ExpectParentChildRelationship(parent, child);
+  TRACE_GCHECK_F(
+    ExpectParentChildRelationship(parent, child), "parent-child-link");
 
   // Assert: Hierarchy state should be correct
-  ExpectHierarchyState(parent, true, false, true); // root with children
-  ExpectHierarchyState(child, false, true, false); // has parent, no children
+  TRACE_GCHECK_F(ExpectHierarchyState(parent, true, false, true),
+    "parent-state"); // root with children
+  TRACE_GCHECK_F(ExpectHierarchyState(child, false, true, false),
+    "child-state"); // has parent, no children
 }
 
 NOLINT_TEST_F(SceneGraphTest, SingleChild_ParentNavigationWorks)
@@ -185,10 +189,10 @@ NOLINT_TEST_F(SceneGraphTest, MultipleChildren_SiblingNavigationWorks)
   EXPECT_EQ(found_children, expected_children);
 
   // Assert: All children should have the same parent
-  ExpectAllHaveSameParent(children, parent);
+  TRACE_GCHECK_F(ExpectAllHaveSameParent(children, parent), "same-parent");
 
   // Assert: Parent should report correct children count
-  ExpectChildrenCount(parent, 3);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 3), "children-count");
 }
 
 NOLINT_TEST_F(
@@ -231,10 +235,11 @@ NOLINT_TEST_F(SceneGraphTest, RootNodes_BehaviorIsCorrect)
   auto root2 = scene_->CreateNode("Root2");
 
   // Act: Check root node properties
-
   // Assert: Root nodes should have correct hierarchy state
-  ExpectHierarchyState(root1, true, false, false);
-  ExpectHierarchyState(root2, true, false, false);
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(root1, true, false, false), "root1-state");
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(root2, true, false, false), "root2-state");
 
   // Assert: Root nodes should have no navigation options
   EXPECT_FALSE(root1.GetParent().has_value());
@@ -318,21 +323,21 @@ NOLINT_TEST_F(SceneGraphTest, ThreeGenerationHierarchy_NavigationWorks)
   auto& grandchild = grandchild_opt.value();
 
   // Act: Verify hierarchy relationships
-
   // Assert: Root level (has children, no parent)
-  ExpectHierarchyState(root, true, false, true);
-  ExpectParentChildRelationship(root, child);
+  TRACE_GCHECK_F(ExpectHierarchyState(root, true, false, true), "root-state");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(root, child), "root-child");
 
   // Assert: Middle level (has parent and children)
-  ExpectHierarchyState(child, false, true, true);
-  ExpectParentChildRelationship(root, child);
-  ExpectParentChildRelationship(
-    child, grandchild); // NOLINT(readability-suspicious-call-argument)
+  TRACE_GCHECK_F(ExpectHierarchyState(child, false, true, true), "child-state");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(root, child), "root-child-rel");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(child, grandchild),
+    "child-grandchild"); // NOLINT(readability-suspicious-call-argument)
 
   // Assert: Leaf level (has parent, no children)
-  ExpectHierarchyState(grandchild, false, true, false);
-  ExpectParentChildRelationship(
-    child, grandchild); // NOLINT(readability-suspicious-call-argument)
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(grandchild, false, true, false), "grandchild-state");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(child, grandchild),
+    "child-grandchild-rel"); // NOLINT(readability-suspicious-call-argument)
 }
 
 NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
@@ -362,27 +367,33 @@ NOLINT_TEST_F(SceneGraphTest, ComplexTreeStructure_TopologyIsCorrect)
 
   // Assert: Total node count
   EXPECT_EQ(scene_->GetNodeCount(), 6);
-
   // Assert: Root level verification
-  ExpectHierarchyState(root, true, false, true);
-  ExpectChildrenCount(root, 2);
-  ExpectAllHaveSameParent({ child1, child2 }, root);
+  TRACE_GCHECK_F(ExpectHierarchyState(root, true, false, true), "root-state");
+  TRACE_GCHECK_F(ExpectChildrenCount(root, 2), "root-children");
+  TRACE_GCHECK_F(
+    ExpectAllHaveSameParent({ child1, child2 }, root), "root-parent");
 
   // Assert: Child1 branch verification
-  ExpectHierarchyState(child1, false, true, true);
-  ExpectChildrenCount(child1, 2);
-  ExpectAllHaveSameParent({ grandchild1, grandchild2 }, child1);
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(child1, false, true, true), "child1-state");
+  TRACE_GCHECK_F(ExpectChildrenCount(child1, 2), "child1-children");
+  TRACE_GCHECK_F(ExpectAllHaveSameParent({ grandchild1, grandchild2 }, child1),
+    "child1-parent");
 
   // Assert: Child2 branch verification
-  ExpectHierarchyState(child2, false, true, true);
-  ExpectChildrenCount(child2, 1);
-  ExpectParentChildRelationship(
-    child2, grandchild3); // NOLINT(readability-suspicious-call-argument)
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(child2, false, true, true), "child2-state");
+  TRACE_GCHECK_F(ExpectChildrenCount(child2, 1), "child2-children");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(child2, grandchild3),
+    "child2-grandchild3"); // NOLINT(readability-suspicious-call-argument)
 
   // Assert: Leaf nodes verification
-  ExpectHierarchyState(grandchild1, false, true, false);
-  ExpectHierarchyState(grandchild2, false, true, false);
-  ExpectHierarchyState(grandchild3, false, true, false);
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(grandchild1, false, true, false), "gc1-state");
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(grandchild2, false, true, false), "gc2-state");
+  TRACE_GCHECK_F(
+    ExpectHierarchyState(grandchild3, false, true, false), "gc3-state");
 }
 
 //------------------------------------------------------------------------------
@@ -420,25 +431,24 @@ NOLINT_TEST_F(SceneGraphTest, SceneHierarchyAPI_MatchesDirectNavigation)
 
 NOLINT_TEST_F(
   SceneGraphTest, ChildrenCountAndEnumeration_IncrementalVerification)
-{
-  // Arrange: Start with parent and no children
+{ // Arrange: Start with parent and no children
   auto parent = scene_->CreateNode("Parent");
-  ExpectChildrenCount(parent, 0);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 0), "initial-count");
   auto children = scene_->GetChildren(parent);
   EXPECT_TRUE(children.empty());
 
   // Act & Assert: Add children one by one and verify count increases
   const auto child1_opt = scene_->CreateChildNode(parent, "Child1");
   ASSERT_TRUE(child1_opt.has_value());
-  ExpectChildrenCount(parent, 1);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 1), "after-child1");
 
   const auto child2_opt = scene_->CreateChildNode(parent, "Child2");
   ASSERT_TRUE(child2_opt.has_value());
-  ExpectChildrenCount(parent, 2);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 2), "after-child2");
 
   const auto child3_opt = scene_->CreateChildNode(parent, "Child3");
   ASSERT_TRUE(child3_opt.has_value());
-  ExpectChildrenCount(parent, 3);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 3), "after-child3");
 
   // Act: Get final children collection
   children = scene_->GetChildren(parent);
@@ -461,17 +471,17 @@ NOLINT_TEST_F(SceneGraphTest, NodeDestruction_RemovesFromHierarchy)
   const auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
   auto child = child_opt.value();
-
   // Arrange: Verify initial relationship
-  ExpectParentChildRelationship(parent, child);
-  ExpectChildrenCount(parent, 1);
+  TRACE_GCHECK_F(
+    ExpectParentChildRelationship(parent, child), "initial-relation");
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 1), "initial-count");
 
   // Act: Destroy child node
   scene_->DestroyNode(child);
 
   // Assert: Child should be invalid and removed from parent's children
   EXPECT_FALSE(child.IsValid());
-  ExpectChildrenCount(parent, 0);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, 0), "after-destroy");
   EXPECT_FALSE(parent.GetFirstChild().has_value());
 }
 
@@ -508,12 +518,11 @@ NOLINT_TEST_F(SceneGraphTest, HierarchicalDestruction_AllDescendantsInvalidated)
   const auto grandchild_opt = scene_->CreateChildNode(child, "Grandchild");
   ASSERT_TRUE(grandchild_opt.has_value());
   auto grandchild = grandchild_opt.value();
-
   // Arrange: Verify initial hierarchy
   EXPECT_EQ(scene_->GetNodeCount(), 3);
-  ExpectParentChildRelationship(root, child);
-  ExpectParentChildRelationship(
-    child, grandchild); // NOLINT(readability-suspicious-call-argument)
+  TRACE_GCHECK_F(ExpectParentChildRelationship(root, child), "root-child");
+  TRACE_GCHECK_F(ExpectParentChildRelationship(child, grandchild),
+    "child-grandchild"); // NOLINT(readability-suspicious-call-argument)
 
   // Act: Destroy entire hierarchy starting from root
   const auto destroy_result = scene_->DestroyNodeHierarchy(root);
@@ -571,7 +580,6 @@ NOLINT_TEST_F(SceneGraphTest, DeepHierarchy_NavigationPerformance)
   // Arrange: Create a chain of 10 nodes for depth testing
   auto current = scene_->CreateNode("Root");
   auto nodes = std::vector { current };
-
   for (int i = 1; i < 10; ++i) {
     auto child_opt
       = scene_->CreateChildNode(current, "Node" + std::to_string(i));
@@ -630,11 +638,12 @@ NOLINT_TEST_F(SceneGraphTest, LargeFamily_SiblingNavigationCompletes)
 
   // Assert: Should find all children through sibling navigation
   EXPECT_EQ(found_count, child_count);
-  ExpectChildrenCount(parent, child_count);
+  TRACE_GCHECK_F(ExpectChildrenCount(parent, child_count), "children-count");
 
   // Assert: All children should still have correct parent
   for (auto& child : children) {
-    ExpectParentChildRelationship(parent, child);
+    TRACE_GCHECK_F(
+      ExpectParentChildRelationship(parent, child), child.GetName());
   }
 }
 
