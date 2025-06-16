@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "./SceneTest.h"
 #include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
@@ -33,58 +34,8 @@ namespace {
 // Scene Basic Functionality Tests
 //=============================================================================
 
-class SceneAsNodeFactoryTest : public testing::Test {
+class SceneAsNodeFactoryTest : public oxygen::scene::testing::SceneTest {
 protected:
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestScene"); }
-
-  void TearDown() override { scene_.reset(); }
-
-  // Smart helper methods for node creation
-  [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
-  {
-    auto node = scene_->CreateNode(name);
-    EXPECT_TRUE(node.IsValid()) << "Failed to create node: " << name;
-    return node;
-  }
-
-  [[nodiscard]] auto CreateNode(
-    const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
-  {
-    auto node = scene_->CreateNode(name, flags);
-    EXPECT_TRUE(node.IsValid()) << "Failed to create node with flags: " << name;
-    return node;
-  }
-
-  [[nodiscard]] auto CreateChildNode(SceneNode& parent,
-    const std::string& name) const -> std::optional<SceneNode>
-  {
-    auto child = scene_->CreateChildNode(parent, name);
-    if (child.has_value()) {
-      EXPECT_TRUE(child->IsValid())
-        << "Created child node is invalid: " << name;
-    }
-    return child;
-  }
-
-  auto DestroyNode(SceneNode& node) const -> bool
-  {
-    const auto result = scene_->DestroyNode(node);
-    if (result) {
-      EXPECT_FALSE(scene_->Contains(node))
-        << "Node still in scene after destruction";
-    }
-    return result;
-  }
-
-  auto DestroyNodeHierarchy(SceneNode& node) const -> bool
-  {
-    const auto result = scene_->DestroyNodeHierarchy(node);
-    if (result) {
-      EXPECT_FALSE(scene_->Contains(node))
-        << "Node hierarchy still in scene after destruction";
-    }
-    return result;
-  } // Simple helper for creating parent-child hierarchy without validation
   auto CreateParentChildPair(const std::string& parent_name,
     const std::string& child_name) const -> std::pair<SceneNode, SceneNode>
   {
@@ -93,6 +44,7 @@ protected:
     EXPECT_TRUE(child_opt.has_value());
     return std::make_pair(parent, child_opt.value());
   }
+
   // Helper method for creating test scenes with TestSceneFactory (removed
   // validation)
   auto CreateTestSceneWithFactory(const std::string& scene_name,
@@ -102,31 +54,6 @@ protected:
     return child_count == 1
       ? factory.CreateSingleNodeScene(scene_name)
       : factory.CreateParentWithChildrenScene(scene_name, child_count);
-  }
-  static void ExpectNodeValidWithName(
-    const SceneNode& node, const std::string& name)
-  {
-    EXPECT_TRUE(node.IsValid()) << "Node should be valid";
-    EXPECT_EQ(node.GetName(), name) << "Node name mismatch: expected '" << name
-                                    << "', got '" << node.GetName() << "'";
-  }
-
-  static void ExpectNodeLazyInvalidated(SceneNode& node)
-  {
-    // Node may appear valid, but after GetObject() it should be invalidated
-    if (node.IsValid()) {
-      const auto obj_opt = node.GetObject();
-      EXPECT_FALSE(obj_opt.has_value())
-        << "Node should not have a valid object after destruction/clear";
-      EXPECT_FALSE(node.IsValid())
-        << "Node should be invalidated after failed access (lazy invalidation)";
-    }
-  }
-
-  void ExpectNodeNotInScene(const SceneNode& node) const
-  {
-    EXPECT_FALSE(scene_->Contains(node))
-      << "Node should not be contained in scene";
   }
 
   static void ExpectHandlesUnique(
@@ -139,13 +66,6 @@ protected:
     EXPECT_NE(n1.GetHandle(), n3.GetHandle())
       << "Node handles should be unique (n1 vs n3)";
   }
-
-  void ExpectSceneEmpty() const
-  {
-    EXPECT_TRUE(scene_->IsEmpty()) << "Scene should be empty";
-    EXPECT_EQ(scene_->GetNodeCount(), 0) << "Scene node count should be zero";
-  }
-  std::shared_ptr<Scene> scene_; // NOLINT(*-non-private-member-*)
 };
 
 //=============================================================================
@@ -164,7 +84,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_BasicName_Succeeds)
   auto node = CreateNode("TestNode");
   // Assert: Verify the node is valid, has the correct name, and scene
   // statistics are updated.
-  TRACE_GCHECK_F(ExpectNodeValidWithName(node, "TestNode"), "node-valid-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(node, "TestNode"), "node-valid-name");
   EXPECT_EQ(scene_->GetNodeCount(), 1);
 }
 
@@ -175,7 +95,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_EmptyName_Succeeds)
   // Act: Create a node with an empty name.
   auto node = CreateNode("");
   // Assert: Node should be valid and have an empty name.
-  TRACE_GCHECK_F(ExpectNodeValidWithName(node, ""), "empty-name-node");
+  TRACE_GCHECK_F(ExpectNodeWithName(node, ""), "empty-name-node");
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_WithCustomFlags_Succeeds)
@@ -225,8 +145,8 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_BasicParent_Succeeds)
   // Act: (hierarchy creation is part of arrange)
 
   // Assert: Verify the relationship is established correctly
-  TRACE_GCHECK_F(ExpectNodeValidWithName(parent, "Parent"), "parent-valid");
-  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "Child"), "child-valid");
+  TRACE_GCHECK_F(ExpectNodeWithName(parent, "Parent"), "parent-valid");
+  TRACE_GCHECK_F(ExpectNodeWithName(child, "Child"), "child-valid");
   EXPECT_EQ(scene_->GetNodeCount(), 2);
 }
 
@@ -246,7 +166,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
   // Assert: Verify child was created with correct flags
   ASSERT_TRUE(child_opt.has_value());
   auto& child = child_opt.value();
-  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "CustomChild"), "child-valid");
+  TRACE_GCHECK_F(ExpectNodeWithName(child, "CustomChild"), "child-valid");
 
   const auto flags_opt = child.GetFlags();
   ASSERT_TRUE(flags_opt.has_value());

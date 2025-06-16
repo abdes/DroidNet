@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "./SceneTest.h"
 #include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
@@ -32,20 +33,8 @@ using oxygen::scene::testing::TestSceneFactory;
 //------------------------------------------------------------------------------
 namespace {
 
-class SceneGraphTest : public testing::Test {
+class SceneGraphTest : public oxygen::scene::testing::SceneTest {
 protected:
-  void SetUp() override
-  {
-    // Arrange: Create test scene for all graph tests
-    scene_ = std::make_shared<Scene>("TestScene", 1024);
-  }
-
-  void TearDown() override
-  {
-    // Clean up: Reset scene pointer to ensure proper cleanup
-    scene_.reset();
-  }
-
   // Helper: Collect all children of a node into a set for order-agnostic
   // comparison
   static auto CollectChildrenHandles(SceneNode& parent) -> std::set<NodeHandle>
@@ -58,6 +47,7 @@ protected:
     }
     return children;
   }
+
   // Helper: Verify parent-child relationship exists
   static void ExpectParentChildRelationship(SceneNode& parent, SceneNode& child)
   {
@@ -72,6 +62,7 @@ protected:
     EXPECT_TRUE(children.contains(child.GetHandle()))
       << "Parent should contain this child";
   }
+
   // Helper: Verify hierarchy state flags for a node
   static void ExpectHierarchyState(SceneNode& node, const bool is_root,
     const bool has_parent, const bool has_children)
@@ -123,8 +114,6 @@ protected:
     EXPECT_EQ(scene_->GetChildrenCount(parent), expected_count)
       << "Scene API should report same children count";
   }
-
-  std::shared_ptr<Scene> scene_;
 };
 
 //------------------------------------------------------------------------------

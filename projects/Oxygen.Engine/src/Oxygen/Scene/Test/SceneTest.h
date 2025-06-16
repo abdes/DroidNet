@@ -154,14 +154,10 @@ protected:
   // See Oxygen/Testing/GTest.h for details.
 
   //! Validates that a node is valid and has the expected name.
-  static void ExpectNodeValidWithName(SceneNode& node, const std::string& name)
+  static void ExpectNodeWithName(const SceneNode& node, const std::string& name)
   {
     EXPECT_TRUE(node.IsValid());
-    const auto obj_opt = node.GetObject();
-    EXPECT_TRUE(obj_opt.has_value());
-    if (obj_opt.has_value()) {
-      EXPECT_EQ(obj_opt->get().GetName(), name);
-    }
+    EXPECT_EQ(node.GetName(), name);
   }
 
   //! Validates that a node has been lazy-invalidated (appears valid but object
@@ -182,15 +178,6 @@ protected:
     EXPECT_FALSE(scene_->Contains(node));
   }
 
-  //! Validates that multiple node handles are unique.
-  static void ExpectHandlesUnique(
-    const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
-  {
-    EXPECT_NE(n1.GetHandle(), n2.GetHandle());
-    EXPECT_NE(n2.GetHandle(), n3.GetHandle());
-    EXPECT_NE(n1.GetHandle(), n3.GetHandle());
-  }
-
   //! Validates that the scene is empty.
   void ExpectSceneEmpty() const
   {
@@ -208,7 +195,7 @@ protected:
   //! Validates that a node is valid, has expected name, and is a root node.
   static void ExpectNodeValidAsRoot(SceneNode& node, const std::string& name)
   {
-    ExpectNodeValidWithName(node, name);
+    ExpectNodeWithName(node, name);
     EXPECT_TRUE(node.IsRoot());
     EXPECT_FALSE(node.HasParent());
   }
@@ -491,15 +478,6 @@ protected:
 
   //=== Error Testing Helpers ===--------------------------------------------//
 
-  //! Creates multiple nodes and validates they all have unique handles.
-  void ValidateUniqueHandles() const
-  {
-    auto node1 = CreateNode("Node1");
-    auto node2 = CreateNode("Node2");
-    auto node3 = CreateNode("Node3");
-    ExpectHandlesUnique(node1, node2, node3);
-  }
-
   //! Tests various special character combinations in node names.
   void TestSpecialCharacterNames() const
   {
@@ -513,36 +491,9 @@ protected:
     for (const auto& name : special_names) {
       auto node = CreateNode(name);
       TRACE_GCHECK_F(
-        ExpectNodeValidWithName(node, name), "TestSpecialCharacterNames");
+        ExpectNodeWithName(node, name), "TestSpecialCharacterNames");
     }
   }
 };
-
-//=== Categorized Test Fixtures ===----------------------------------------//
-
-/// Base class for basic functionality tests.
-class SceneBasicTest : public SceneTest { };
-
-/// Base class for error condition tests.
-class SceneErrorTest : public SceneTest { };
-
-/// Base class for death tests (for assertion failures).
-class SceneDeathTest : public SceneTest { };
-
-/// Base class for edge case tests.
-class SceneEdgeCaseTest : public SceneTest { };
-
-/// Base class for performance/stress tests.
-class ScenePerformanceTest : public SceneTest {
-protected:
-  void SetUp() override
-  {
-    // Use larger scene capacity for performance tests
-    scene_ = std::make_shared<Scene>("PerformanceTestScene", 4096);
-  }
-};
-
-/// Base class for functional integration tests.
-class SceneFunctionalTest : public SceneTest { };
 
 } // namespace oxygen::scene::testing

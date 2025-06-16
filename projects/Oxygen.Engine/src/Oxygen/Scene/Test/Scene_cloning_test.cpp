@@ -10,6 +10,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "./SceneTest.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
@@ -31,7 +32,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Base fixture for all scene cloning tests
 //------------------------------------------------------------------------------
-class SceneCloningTestBase : public testing::Test {
+class SceneCloningTestBase : public oxygen::scene::testing::SceneTest {
 protected:
   void SetUp() override
   {
@@ -43,15 +44,6 @@ protected:
   {
     source_scene_.reset();
     target_scene_.reset();
-  }
-
-  static void ExpectNodeValidWithName(
-    SceneNode& node, const std::string& expected_name)
-  {
-    EXPECT_TRUE(node.IsValid());
-    const auto impl_opt = node.GetObject();
-    ASSERT_TRUE(impl_opt.has_value());
-    EXPECT_EQ(impl_opt->get().GetName(), expected_name);
   }
 
   static void SetTransformValues(
@@ -95,9 +87,8 @@ NOLINT_TEST_F(
   auto cloned = target_scene_->CreateNodeFrom(original, "ClonedNode");
   // Assert
   EXPECT_TRUE(cloned.has_value());
-  TRACE_GCHECK_F(ExpectNodeValidWithName(*cloned, "ClonedNode"), "cloned-name");
-  TRACE_GCHECK_F(
-    ExpectNodeValidWithName(original, "OriginalNode"), "original-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(*cloned, "ClonedNode"), "cloned-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(original, "OriginalNode"), "original-name");
 }
 
 NOLINT_TEST_F(SceneSingleNodeCloningTest,
@@ -118,9 +109,8 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   EXPECT_TRUE(cloned->IsValid()) << "Cloned node should be valid.";
   EXPECT_NE(original.GetHandle(), cloned->GetHandle())
     << "Handles must differ for independent nodes.";
-  TRACE_GCHECK_F(
-    ExpectNodeValidWithName(original, "OriginalNode"), "original-name");
-  TRACE_GCHECK_F(ExpectNodeValidWithName(*cloned, "ClonedNode"), "cloned-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(original, "OriginalNode"), "original-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(*cloned, "ClonedNode"), "cloned-name");
 }
 
 NOLINT_TEST_F(SceneSingleNodeCloningTest,
@@ -147,8 +137,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   original_impl.SetName("ModifiedOriginal");
   SetTransformValues(original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
 
-  TRACE_GCHECK_F(
-    ExpectNodeValidWithName(*cloned, "ClonedNode"), "clone-unchanged");
+  TRACE_GCHECK_F(ExpectNodeWithName(*cloned, "ClonedNode"), "clone-unchanged");
   TRACE_GCHECK_F(
     ExpectTransformValues(*cloned, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
     "clone-transform");
@@ -160,8 +149,8 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   cloned_impl.SetName("ModifiedClone");
   SetTransformValues(*cloned, { 100.0f, 200.0f, 300.0f }, { 3.0f, 3.0f, 3.0f });
 
-  TRACE_GCHECK_F(ExpectNodeValidWithName(original, "ModifiedOriginal"),
-    "original-unchanged");
+  TRACE_GCHECK_F(
+    ExpectNodeWithName(original, "ModifiedOriginal"), "original-unchanged");
   TRACE_GCHECK_F(ExpectTransformValues(
                    original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f }),
     "original-transform");
@@ -183,8 +172,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   ASSERT_TRUE(child_clone_opt.has_value());
   auto& child_clone = child_clone_opt.value();
 
-  TRACE_GCHECK_F(
-    ExpectNodeValidWithName(child_clone, "ChildClone"), "child-name");
+  TRACE_GCHECK_F(ExpectNodeWithName(child_clone, "ChildClone"), "child-name");
   EXPECT_FALSE(child_clone.IsRoot());
   EXPECT_TRUE(child_clone.HasParent());
 
