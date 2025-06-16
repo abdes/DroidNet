@@ -19,13 +19,10 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/api_export.h>
 
-// Forward declarations
 namespace oxygen::scene {
+
 class Scene;
 class SceneNode;
-} // namespace oxygen::scene
-
-namespace oxygen::scene {
 
 //=== Public API Enums ===----------------------------------------------------//
 
