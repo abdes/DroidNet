@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
@@ -24,6 +25,7 @@ using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::testing::TestSceneFactory;
 
 namespace {
 
@@ -34,45 +36,81 @@ namespace {
 class SceneAsNodeFactoryTest : public testing::Test {
 protected:
   void SetUp() override { scene_ = std::make_shared<Scene>("TestScene"); }
+
   void TearDown() override { scene_.reset(); }
 
+  // Smart helper methods for node creation
   [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
   {
-    return scene_->CreateNode(name);
+    auto node = scene_->CreateNode(name);
+    EXPECT_TRUE(node.IsValid()) << "Failed to create node: " << name;
+    return node;
   }
 
   [[nodiscard]] auto CreateNode(
     const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
   {
-    return scene_->CreateNode(name, flags);
+    auto node = scene_->CreateNode(name, flags);
+    EXPECT_TRUE(node.IsValid()) << "Failed to create node with flags: " << name;
+    return node;
   }
 
   [[nodiscard]] auto CreateChildNode(SceneNode& parent,
     const std::string& name) const -> std::optional<SceneNode>
   {
-    return scene_->CreateChildNode(parent, name);
+    auto child = scene_->CreateChildNode(parent, name);
+    if (child.has_value()) {
+      EXPECT_TRUE(child->IsValid())
+        << "Created child node is invalid: " << name;
+    }
+    return child;
   }
 
   auto DestroyNode(SceneNode& node) const -> bool
   {
-    return scene_->DestroyNode(node);
+    const auto result = scene_->DestroyNode(node);
+    if (result) {
+      EXPECT_FALSE(scene_->Contains(node))
+        << "Node still in scene after destruction";
+    }
+    return result;
   }
 
   auto DestroyNodeHierarchy(SceneNode& node) const -> bool
   {
-    return scene_->DestroyNodeHierarchy(node);
+    const auto result = scene_->DestroyNodeHierarchy(node);
+    if (result) {
+      EXPECT_FALSE(scene_->Contains(node))
+        << "Node hierarchy still in scene after destruction";
+    }
+    return result;
+  } // Simple helper for creating parent-child hierarchy without validation
+  auto CreateParentChildPair(const std::string& parent_name,
+    const std::string& child_name) const -> std::pair<SceneNode, SceneNode>
+  {
+    auto parent = CreateNode(parent_name);
+    auto child_opt = CreateChildNode(parent, child_name);
+    EXPECT_TRUE(child_opt.has_value());
+    return std::make_pair(parent, child_opt.value());
   }
-  static void ExpectNodeValidWithName(SceneNode& node, const std::string& name)
+  // Helper method for creating test scenes with TestSceneFactory (removed
+  // validation)
+  auto CreateTestSceneWithFactory(const std::string& scene_name,
+    int child_count = 1) const -> std::shared_ptr<Scene>
+  {
+    auto& factory = TestSceneFactory::Instance();
+    return child_count == 1
+      ? factory.CreateSingleNodeScene(scene_name)
+      : factory.CreateParentWithChildrenScene(scene_name, child_count);
+  }
+  static void ExpectNodeValidWithName(
+    const SceneNode& node, const std::string& name)
   {
     EXPECT_TRUE(node.IsValid()) << "Node should be valid";
-    const auto obj_opt = node.GetObject();
-    EXPECT_TRUE(obj_opt.has_value()) << "Node object should be present";
-    if (obj_opt.has_value()) {
-      EXPECT_EQ(obj_opt->get().GetName(), name)
-        << "Node name mismatch: expected '" << name << "', got '"
-        << obj_opt->get().GetName() << "'";
-    }
+    EXPECT_EQ(node.GetName(), name) << "Node name mismatch: expected '" << name
+                                    << "', got '" << node.GetName() << "'";
   }
+
   static void ExpectNodeLazyInvalidated(SceneNode& node)
   {
     // Node may appear valid, but after GetObject() it should be invalidated
@@ -84,11 +122,13 @@ protected:
         << "Node should be invalidated after failed access (lazy invalidation)";
     }
   }
+
   void ExpectNodeNotInScene(const SceneNode& node) const
   {
     EXPECT_FALSE(scene_->Contains(node))
       << "Node should not be contained in scene";
   }
+
   static void ExpectHandlesUnique(
     const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
   {
@@ -99,6 +139,7 @@ protected:
     EXPECT_NE(n1.GetHandle(), n3.GetHandle())
       << "Node handles should be unique (n1 vs n3)";
   }
+
   void ExpectSceneEmpty() const
   {
     EXPECT_TRUE(scene_->IsEmpty()) << "Scene should be empty";
@@ -123,8 +164,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_BasicName_Succeeds)
   auto node = CreateNode("TestNode");
   // Assert: Verify the node is valid, has the correct name, and scene
   // statistics are updated.
-  TRACE_GCHECK_F(ExpectNodeValidWithName(node, "TestNode"),
-    "expecting node to be valid with correct name");
+  TRACE_GCHECK_F(ExpectNodeValidWithName(node, "TestNode"), "node-valid-name");
   EXPECT_EQ(scene_->GetNodeCount(), 1);
 }
 
@@ -135,8 +175,7 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_EmptyName_Succeeds)
   // Act: Create a node with an empty name.
   auto node = CreateNode("");
   // Assert: Node should be valid and have an empty name.
-  TRACE_GCHECK_F(ExpectNodeValidWithName(node, ""),
-    "expecting node to be valid with empty name");
+  TRACE_GCHECK_F(ExpectNodeValidWithName(node, ""), "empty-name-node");
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_WithCustomFlags_Succeeds)
@@ -175,38 +214,26 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateNode_Multiple_Succeeds)
   EXPECT_TRUE(node2.IsValid());
   EXPECT_TRUE(node3.IsValid());
   EXPECT_EQ(scene_->GetNodeCount(), 3);
-  TRACE_GCHECK_F(ExpectHandlesUnique(node1, node2, node3),
-    "expecting node handles to be unique");
+  TRACE_GCHECK_F(ExpectHandlesUnique(node1, node2, node3), "unique-handles");
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_BasicParent_Succeeds)
 {
-  // Arrange: Create a parent node and verify its validity.
-  // Scene graph: Parent -> Child
-  auto parent = CreateNode("Parent");
-  EXPECT_TRUE(parent.IsValid());
+  // Arrange: Create parent-child hierarchy
+  const auto [parent, child] = CreateParentChildPair("Parent", "Child");
 
-  // Act: Create a child node for the previously created parent.
-  auto child_opt = CreateChildNode(parent, "Child");
+  // Act: (hierarchy creation is part of arrange)
 
-  // Assert: Verify the child was created, both parent and child are valid
-  // with correct names, and scene node count is updated.
-  // ASSERT_TRUE(child_opt.has_value());
-  auto& child = child_opt.value();
-  TRACE_GCHECK_F(ExpectNodeValidWithName(parent, "Parent"),
-    "expecting parent node to be valid with correct name");
-  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "Child"),
-    "expecting child node to be valid with correct name");
+  // Assert: Verify the relationship is established correctly
+  TRACE_GCHECK_F(ExpectNodeValidWithName(parent, "Parent"), "parent-valid");
+  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "Child"), "child-valid");
   EXPECT_EQ(scene_->GetNodeCount(), 2);
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
 {
   // Arrange: Create a parent node and define custom flags for child
-  // Scene graph: Parent -> CustomChild
   auto parent = CreateNode("Parent");
-  EXPECT_TRUE(parent.IsValid());
-
   const auto custom_flags = SceneNode::Flags {}
                               .SetFlag(SceneNodeFlags::kVisible,
                                 SceneFlag {}.SetEffectiveValueBit(false))
@@ -217,10 +244,9 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
   auto child_opt = scene_->CreateChildNode(parent, "CustomChild", custom_flags);
 
   // Assert: Verify child was created with correct flags
-  // ASSERT_TRUE(child_opt.has_value());
+  ASSERT_TRUE(child_opt.has_value());
   auto& child = child_opt.value();
-  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "CustomChild"),
-    "expecting child node to be valid with correct name");
+  TRACE_GCHECK_F(ExpectNodeValidWithName(child, "CustomChild"), "child-valid");
 
   const auto flags_opt = child.GetFlags();
   ASSERT_TRUE(flags_opt.has_value());
@@ -236,59 +262,40 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, CreateChildNode_WithCustomFlags_Succeeds)
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNode_SingleNode_Succeeds)
 {
-  // Arrange: Create a single node and verify its initial valid state and
-  // scene count.
+  // Arrange: Create a single node
   auto node = CreateNode("NodeToDestroy");
-  EXPECT_TRUE(node.IsValid());
   EXPECT_EQ(scene_->GetNodeCount(), 1);
 
-  // Act: Destroy the created node.
+  // Act: Destroy the created node
   const bool destroyed = DestroyNode(node);
-  // Assert: Verify successful destruction, node invalidation, and scene
-  // emptiness.
+
+  // Assert: Verify successful destruction and scene state
   EXPECT_TRUE(destroyed);
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node),
-    "expecting node to be invalidated after destruction");
-  TRACE_GCHECK_F(
-    ExpectSceneEmpty(), "expecting scene to be empty after node destruction");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node), "node-invalidated");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "scene-empty");
 }
 
 NOLINT_TEST_F(
   SceneAsNodeFactoryTest, DestroyNodeHierarchy_ParentWithChildren_Succeeds)
 {
-  // Arrange: Create a parent node and two child nodes.
-  // Scene graph:
-  //   Parent
-  //   ├── Child1
-  //   └── Child2
+  // Arrange: Create a parent node with two children
   auto parent = CreateNode("Parent");
   const auto child1_opt = CreateChildNode(parent, "Child1");
   const auto child2_opt = CreateChildNode(parent, "Child2");
-  ASSERT_TRUE(child1_opt.has_value());
-  ASSERT_TRUE(child2_opt.has_value());
+  ASSERT_TRUE(child1_opt.has_value() && child2_opt.has_value());
   auto child1 = child1_opt.value();
   auto child2 = child2_opt.value();
   EXPECT_EQ(scene_->GetNodeCount(), 3);
 
-  // Act: Destroy the parent node and its entire hierarchy.
+  // Act: Destroy the parent node and its entire hierarchy
   const bool destroyed = DestroyNodeHierarchy(parent);
-  // Assert: Verify successful destruction, scene emptiness, and invalidation
-  // of parent and all children.
+
+  // Assert: Verify complete hierarchy destruction
   EXPECT_TRUE(destroyed);
-  TRACE_GCHECK_F(ExpectSceneEmpty(),
-    "expecting scene to be empty after hierarchy destruction");
-  TRACE_GCHECK_F(
-    ExpectNodeNotInScene(parent), "expecting parent node not to be in scene");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(parent),
-    "expecting parent node to be invalidated");
-  TRACE_GCHECK_F(
-    ExpectNodeNotInScene(child1), "expecting child1 node not to be in scene");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(child1),
-    "expecting child1 node to be invalidated");
-  TRACE_GCHECK_F(
-    ExpectNodeNotInScene(child2), "expecting child2 node not to be in scene");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(child2),
-    "expecting child2 node to be invalidated");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "scene-empty");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(parent), "parent-invalid");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(child1), "child1-invalid");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(child2), "child2-invalid");
 }
 
 //=============================================================================
@@ -332,14 +339,14 @@ protected:
 
 NOLINT_TEST_F(SceneAsNodeFactoryErrorTest, DestroyNode_NonExistentNode_Fails)
 {
-  // Arrange: Create a node then destroy it, making it non-existent.
+  // Arrange: Create a node then destroy it to make it non-existent
   auto node = CreateLazyInvalidationNode("NonExistentNode");
 
-  // Act: Destroy the node, making it non-existent for a later operation.
+  // Act: Attempt to destroy the non-existent node
   const auto result = scene_->DestroyNode(node);
 
-  // Assert: Verify the result is false, indicating failed destruction.
-  EXPECT_FALSE(result) << "Destroying a non-existent node should return false";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(result);
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryErrorTest, DestroyNode_InvalidHandle_Fails)
@@ -350,22 +357,21 @@ NOLINT_TEST_F(SceneAsNodeFactoryErrorTest, DestroyNode_InvalidHandle_Fails)
   // Act: Attempt to destroy the invalid node
   const auto result = scene_->DestroyNode(invalid_node);
 
-  // Assert: Verify the result is false, indicating failed destruction.
-  EXPECT_FALSE(result) << "Destroying an invalid node should return false";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(result);
 }
 
 NOLINT_TEST_F(
   SceneAsNodeFactoryErrorTest, DestroyNodeHierarchy_InvalidStartingNode_Fails)
 {
-  // Arrange: Create a node with an invalid handle.
-  SceneNode invalid_root = CreateNodeWithInvalidHandle();
+  // Arrange: Create a node with an invalid handle
+  auto invalid_root = CreateNodeWithInvalidHandle();
 
   // Act: Attempt to destroy hierarchy with invalid root
   const auto result = scene_->DestroyNodeHierarchy(invalid_root);
 
-  // Assert: operation should fail, returning false.
-  EXPECT_FALSE(result) << "Destroying a hierarchy starting with an invalid "
-                          "node should return false";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(result);
 }
 
 // -----------------------------------------------------------------------------
@@ -382,9 +388,8 @@ NOLINT_TEST_F(
   // Act: Attempt to create child for non-existent parent
   const auto child = scene_->CreateChildNode(node, "Child");
 
-  // Assert: Should fail
-  EXPECT_FALSE(child.has_value())
-    << "Creating a child for a non-existent node should return nullopt";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(child.has_value());
 }
 
 NOLINT_TEST_F(
@@ -393,30 +398,27 @@ NOLINT_TEST_F(
   // Arrange: Create node with an invalid handle
   auto invalid_node = CreateNodeWithInvalidHandle();
 
-  // Act: Attempt to create a child node with an invalid parent.
+  // Act: Attempt to create a child node with an invalid parent
   const auto child = scene_->CreateChildNode(invalid_node, "Child");
 
-  // Assert: Verify the result is false, indicating failed creation.
-  EXPECT_FALSE(child.has_value())
-    << "Creating a child for an invalid node should return nullopt";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(child.has_value());
 }
 
 NOLINT_TEST_F(
   SceneAsNodeFactoryErrorTest, CreateChildNodeWithFlags_NonExistentParent_Fails)
 {
-  // Arrange: Create a node then destroy it
+  // Arrange: Create a node then destroy it, and prepare custom flags
   auto node = CreateNode("Node");
   EXPECT_TRUE(scene_->DestroyNode(node));
-
   const auto custom_flags = SceneNode::Flags {}.SetFlag(
     SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(false));
 
   // Act: Attempt to create child with custom flags for non-existent parent
   const auto child = scene_->CreateChildNode(node, "Child", custom_flags);
 
-  // Assert: Should fail
-  EXPECT_FALSE(child.has_value()) << "Creating a child with flags for a "
-                                     "non-existent node should return nullopt";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(child.has_value());
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryErrorTest,
@@ -431,9 +433,8 @@ NOLINT_TEST_F(SceneAsNodeFactoryErrorTest,
   const auto child
     = scene_->CreateChildNode(invalid_node, "Child", custom_flags);
 
-  // Assert: Should fail
-  EXPECT_FALSE(child.has_value())
-    << "Creating a child with flags for an invalid node should return nullopt";
+  // Assert: Verify the operation fails
+  EXPECT_FALSE(child.has_value());
 }
 
 // -----------------------------------------------------------------------------
@@ -541,15 +542,13 @@ NOLINT_TEST_F(SceneAsNodeFactoryDeathTest,
 NOLINT_TEST_F(SceneAsNodeFactoryDeathTest, DestroyNode_WithChildren_Death)
 {
   // Arrange: Create parent with child
-  // Scene graph: ParentWithChild -> Child
   auto parent = scene_->CreateNode("ParentWithChild");
-  ASSERT_TRUE(parent.IsValid()); // Ensure parent is valid
+  ASSERT_TRUE(parent.IsValid());
   const auto child_opt = scene_->CreateChildNode(parent, "Child");
-  ASSERT_TRUE(child_opt.has_value()
-    && child_opt->IsValid()); // Ensure child is valid and created
+  ASSERT_TRUE(child_opt.has_value() && child_opt->IsValid());
 
-  // Act and Assert: This should trigger: GCHECK_F(!node.HasChildren(), "node
-  // has children, use DestroyNodeHierarchy() instead");
+  // Act and Assert: Attempting to destroy parent with children should trigger
+  // assertion
   NOLINT_ASSERT_DEATH(scene_->DestroyNode(parent), ".*has children.*");
 }
 
@@ -600,25 +599,20 @@ NOLINT_TEST_F(
   auto node2 = CreateNode("Node2");
   auto node3 = CreateNode("Node3");
   EXPECT_EQ(scene_->GetNodeCount(), 3);
-
   std::vector<SceneNode> nodes_to_destroy = { node1, node2, node3 };
 
   // Act: Destroy all nodes in batch
   const auto results = scene_->DestroyNodes(nodes_to_destroy);
 
-  // Assert: Destruction should succeed
+  // Assert: Verify all destructions succeeded
   ASSERT_EQ(results.size(), 3);
   EXPECT_EQ(results[0], 1); // node1 destroyed
   EXPECT_EQ(results[1], 1); // node2 destroyed
   EXPECT_EQ(results[2], 1); // node3 destroyed
-  TRACE_GCHECK_F(
-    ExpectSceneEmpty(), "expecting scene to be empty after batch destruction");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node1),
-    "expecting node1 to be invalidated after destruction");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node2),
-    "expecting node2 to be invalidated after destruction");
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node3),
-    "expecting node3 to be invalidated after destruction");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "scene-empty");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node1), "node1-invalid");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node2), "node2-invalid");
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(node3), "node3-invalid");
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNodes_EmptySpan_Succeeds)
@@ -628,46 +622,26 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNodes_EmptySpan_Succeeds)
 
   // Act: Destroy empty span
   const auto results = scene_->DestroyNodes(empty_nodes);
+
   // Assert: Should return empty result vector
   EXPECT_TRUE(results.empty());
-  TRACE_GCHECK_F(
-    ExpectSceneEmpty(), "expecting scene to remain empty with empty node span");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "scene-remains-empty");
 }
 
 NOLINT_TEST_F(
   SceneAsNodeFactoryTest, DestroyNodeHierarchies_MultipleHierarchies_Succeeds)
 {
-  // Arrange: Create multiple hierarchies
-  // Scene graph:
-  //   Root1        Root2           Root3
-  //   └── Child1   ├── Child2
-  //                └── Grandchild2
-  auto root1 = CreateNode("Root1");
-  const auto child1_opt = CreateChildNode(root1, "Child1");
-  ASSERT_TRUE(child1_opt.has_value());
-
-  auto root2 = CreateNode("Root2");
-  auto child2_opt = CreateChildNode(root2, "Child2");
-  const auto grandchild2_opt
-    = CreateChildNode(child2_opt.value(), "Grandchild2");
-  ASSERT_TRUE(child2_opt.has_value());
-  ASSERT_TRUE(grandchild2_opt.has_value());
-
-  auto root3 = CreateNode("Root3"); // Single node hierarchy
-
-  EXPECT_EQ(scene_->GetNodeCount(), 6);
-  std::vector<SceneNode> hierarchy_roots = { root1, root2, root3 };
+  // Arrange: Create multiple hierarchies using factory
+  auto& factory = TestSceneFactory::Instance();
+  scene_ = factory.CreateForestScene(
+    "MultiHierarchy", 3, 2); // 3 roots, 2 children each
+  auto hierarchy_roots = scene_->GetRootNodes();
 
   // Act: Destroy all hierarchies in batch
   const auto results = scene_->DestroyNodeHierarchies(hierarchy_roots);
 
-  // Assert: Destruction should succeed
-  ASSERT_EQ(results.size(), 3);
-  EXPECT_EQ(results[0], 1); // root1 hierarchy destroyed
-  EXPECT_EQ(results[1], 1); // root2 hierarchy destroyed
-  EXPECT_EQ(results[2], 1); // root3 hierarchy destroyed
-  TRACE_GCHECK_F(ExpectSceneEmpty(),
-    "expecting scene to be empty after batch hierarchy destruction");
+  // Assert: Verify complete destruction
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "forest-destroyed");
 }
 
 NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNodeHierarchies_EmptySpan_Succeeds)
@@ -677,10 +651,10 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNodeHierarchies_EmptySpan_Succeeds)
 
   // Act: Destroy empty span
   const auto results = scene_->DestroyNodeHierarchies(empty_hierarchies);
+
   // Assert: Should return empty result vector
   EXPECT_TRUE(results.empty());
-  TRACE_GCHECK_F(ExpectSceneEmpty(),
-    "expecting scene to remain empty with empty hierarchy span");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "scene-remains-empty");
 }
 
 // -----------------------------------------------------------------------------
@@ -690,9 +664,9 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, DestroyNodeHierarchies_EmptySpan_Succeeds)
 NOLINT_TEST_F(SceneAsNodeFactoryTest, NodeStatistics_ThroughOperations_Succeeds)
 {
   // Arrange: Start with an empty scene
-  TRACE_GCHECK_F(ExpectSceneEmpty(), "expecting scene to start empty");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "start-empty");
 
-  // Act & Assert: Create nodes and verify counts
+  // Act & Assert: Create nodes and verify counts incrementally
   auto node1 = CreateNode("Node1");
   EXPECT_EQ(scene_->GetNodeCount(), 1);
   EXPECT_FALSE(scene_->IsEmpty());
@@ -719,51 +693,25 @@ NOLINT_TEST_F(SceneAsNodeFactoryTest, NodeStatistics_ThroughOperations_Succeeds)
   auto node2_copy = node2;
   const bool last_destroyed = DestroyNode(node2_copy);
   EXPECT_TRUE(last_destroyed);
-  TRACE_GCHECK_F(
-    ExpectSceneEmpty(), "expecting scene to be empty after all operations");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "final-empty");
 }
 
 NOLINT_TEST_F(
   SceneAsNodeFactoryTest, DestroyNodeHierarchy_LargeComplexHierarchy_Succeeds)
 {
-  // Arrange: Create a deep hierarchy (4 levels of children, 9 nodes total)
-  // Scene graph:
-  //   Root
-  //   ├── Level0_Child1
-  //   │   ├── Level1_Child1
-  //   │   │   ├── Level2_Child1
-  //   │   │   │   ├── Level3_Child1
-  //   │   │   │   └── Level3_Child2
-  //   │   │   └── Level2_Child2
-  //   │   └── Level1_Child2
-  //   └── Level0_Child2
-  auto root = CreateNode("Root");
-  auto current_parent = root;
+  // Arrange: Create a complex binary tree hierarchy using TestSceneFactory
+  auto& factory = TestSceneFactory::Instance();
+  scene_ = factory.CreateBinaryTreeScene("BinaryTree", 3);
+  auto roots = scene_->GetRootNodes();
+  ASSERT_FALSE(roots.empty());
+  auto root = roots[0];
 
-  // Create 4 levels of children (2 children per level)
-  for (int level = 0; level < 4; ++level) {
-    auto child1_opt
-      = CreateChildNode(current_parent, fmt::format("Level{}_Child1", level));
-    auto child2_opt
-      = CreateChildNode(current_parent, fmt::format("Level{}_Child2", level));
-    ASSERT_TRUE(child1_opt.has_value());
-    ASSERT_TRUE(child2_opt.has_value());
-
-    if (level < 3) { // Only set the next parent for first 3 levels
-      current_parent = child1_opt.value();
-    }
-  }
-  const auto initial_count = scene_->GetNodeCount();
-  EXPECT_EQ(
-    initial_count, 9); // Should have created 9 nodes (root + 4 levels with 2
-                       // children each, but only one branch deepens)
-
-  // Act: Destroy the entire hierarchy
+  // Act: Destroy the entire complex hierarchy
   const bool destroyed = DestroyNodeHierarchy(root);
-  // Assert: All nodes should be destroyed
+
+  // Assert: Verify complete destruction
   EXPECT_TRUE(destroyed);
-  TRACE_GCHECK_F(ExpectSceneEmpty(),
-    "expecting scene to be empty after large hierarchy destruction");
+  TRACE_GCHECK_F(ExpectSceneEmpty(), "binary-tree-destroyed");
 }
 
 } // namespace
