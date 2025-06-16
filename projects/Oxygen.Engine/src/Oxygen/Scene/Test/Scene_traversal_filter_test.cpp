@@ -46,10 +46,10 @@ TEST_P(SceneTraversalFilterTest, AcceptAllFilter)
   // Act: Traverse with AcceptAllFilter
   const auto result = GetTraversal().Traverse(
     CreateTrackingVisitor(), TraversalOrder::kPreOrder, AcceptAllFilter {});
-
   // Assert: All nodes should be visited
-  ExpectTraversalResult(result, 6, 0, true);
-  ExpectContainsAllNodes({ "root", "A", "B", "C", "D", "E" });
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 6, 0, true), "accept-result");
+  TRACE_GCHECK_F(ExpectContainsAllNodes({ "root", "A", "B", "C", "D", "E" }),
+    "accept-nodes");
 }
 
 //! Tests that rejecting specific nodes with a filter excludes them but still
@@ -59,13 +59,11 @@ TEST_P(SceneTraversalFilterTest, RejectSpecificNodes)
   // Act: Traverse rejecting nodes A and E
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
     TraversalOrder::kPreOrder, CreateRejectFilter({ "A", "E" }));
-
   // Assert: A and E should be filtered out but their children still visited
-  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 2, true),
-    "Rejecting specific nodes should not stop traversal of their children");
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 2, true), "reject-result");
   TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "B", "C", "D" }, { "A", "E" }),
-    "visited nodes mismatch");
+    "reject-nodes");
 }
 
 //! Tests that rejecting a subtree with a filter excludes the node and all its
@@ -75,13 +73,11 @@ TEST_P(SceneTraversalFilterTest, RejectSubtreeOfSpecificNodes)
   // Act: Traverse rejecting subtree of node A
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
     TraversalOrder::kPreOrder, CreateRejectSubtreeFilter({ "A" }));
-
   // Assert: A and its children (C, D) should be filtered out
-  TRACE_GCHECK_F(ExpectTraversalResult(result, 3, 1, true),
-    "A and its children (C, D) should be filtered out");
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 3, 1, true), "subtree-result");
   TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "B", "E" }, { "A", "C", "D" }),
-    "visited nodes mismatch");
+    "subtree-nodes");
 }
 
 //! Tests that rejecting a subtree in breadth-first traversal excludes the node
@@ -91,13 +87,11 @@ TEST_P(SceneTraversalFilterTest, RejectSubtreeInBreadthFirst)
   // Act: Traverse rejecting subtree of node B in breadth-first
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
     TraversalOrder::kBreadthFirst, CreateRejectSubtreeFilter({ "B" }));
-
   // Assert: B and its children should be filtered out
-  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 1, true),
-    "B and its children should be filtered out");
+  TRACE_GCHECK_F(ExpectTraversalResult(result, 4, 1, true), "breadth-result");
   TRACE_GCHECK_F(
     ExpectContainsExactlyNodes({ "root", "A", "C", "D" }, { "B", "E" }),
-    "visited nodes mismatch");
+    "breadth-nodes");
 }
 
 INSTANTIATE_TEST_SUITE_P(AllOrders, SceneTraversalFilterTest,
