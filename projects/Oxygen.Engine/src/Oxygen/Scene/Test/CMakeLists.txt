@@ -130,7 +130,20 @@ add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneTraversal.Tests)
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneGraphFunctional.Tests)
 
-m_gtest_program(SceneQuery SOURCES "SceneQuery_test.cpp")
+m_gtest_program(
+  SceneQuery
+  SOURCES
+    "Query/SceneQueryTestBase.h"
+    "Query/SceneQueryTestBase.cpp"
+    "Query/SceneQuery_construction_test.cpp"
+    "Query/SceneQuery_immediate_test.cpp"
+    "Query/SceneQuery_path_test.cpp"
+    "Query/SceneQuery_error_test.cpp"
+    "Query/SceneQuery_performance_test.cpp"
+    "Query/SceneQuery_integration_test.cpp"
+    "Query/SceneQuery_adl_test.cpp"
+    "Query/SceneQuery_result_test.cpp"
+)
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneQuery.Tests)
 
 # -- Example Scene Graph -------------------------------------------------------
