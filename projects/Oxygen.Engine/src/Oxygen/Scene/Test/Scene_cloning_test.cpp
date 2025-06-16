@@ -10,7 +10,6 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
@@ -26,7 +25,6 @@ using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::TransformComponent;
-using oxygen::scene::testing::TestSceneFactory;
 
 namespace {
 
@@ -288,6 +286,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   TRACE_GCHECK_F(ExpectTransformValues(
                    child_clone, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
     "clone-unchanged");
+
   SetTransformValues(
     child_clone, { 100.0f, 200.0f, 300.0f }, { 3.0f, 3.0f, 3.0f });
   TRACE_GCHECK_F(ExpectTransformValues(
