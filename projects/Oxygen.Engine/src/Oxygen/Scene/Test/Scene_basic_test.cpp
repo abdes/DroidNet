@@ -9,6 +9,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "./SceneTest.h"
 #include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
@@ -31,88 +32,7 @@ namespace {
 // Scene Basic Functionality Tests
 //=============================================================================
 
-class SceneBasicTest : public testing::Test {
-protected:
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestScene", 1024); }
-
-  void TearDown() override { scene_.reset(); }
-  [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
-  {
-    return scene_->CreateNode(name);
-  }
-
-  [[nodiscard]] auto CreateNode(
-    const std::string& name, const SceneNode::Flags& flags) const -> SceneNode
-  {
-    return scene_->CreateNode(name, flags);
-  }
-
-  [[nodiscard]] auto CreateChildNode(SceneNode& parent,
-    const std::string& name) const -> std::optional<SceneNode>
-  {
-    return scene_->CreateChildNode(parent, name);
-  }
-
-  [[nodiscard]] auto CreateNodeWithInvalidScene() const -> SceneNode
-  {
-    return {};
-  }
-
-  [[nodiscard]] auto CreateNodeWithInvalidHandle() const -> SceneNode
-  {
-    return SceneNode(scene_);
-  }
-
-  auto DestroyNode(SceneNode& node) const -> bool
-  {
-    return scene_->DestroyNode(node);
-  }
-
-  auto DestroyNodeHierarchy(SceneNode& node) const -> bool
-  {
-    return scene_->DestroyNodeHierarchy(node);
-  }
-
-  void ClearScene() const { scene_->Clear(); }
-  static void ExpectNodeValidWithName(
-    const SceneNode& node, const std::string& name)
-  {
-    EXPECT_TRUE(node.IsValid());
-    EXPECT_EQ(node.GetName(), name);
-  }
-
-  static void ExpectNodeLazyInvalidated(SceneNode& node)
-  {
-    // Node may appear valid, but after GetObject() it should be invalidated
-    if (node.IsValid()) {
-      if (const auto obj_opt = node.GetObject(); obj_opt.has_value())
-        FAIL() << "Node should not have a valid object after "
-                  "destruction/clear";
-      if (node.IsValid())
-        FAIL() << "Node should be invalidated after failed access "
-                  "(lazy invalidation)";
-    }
-  }
-
-  static void ExpectHandlesUnique(
-    const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
-  {
-    EXPECT_NE(n1.GetHandle(), n2.GetHandle());
-    EXPECT_NE(n2.GetHandle(), n3.GetHandle());
-    EXPECT_NE(n1.GetHandle(), n3.GetHandle());
-  }
-  // Complex validation helper that benefits from TRACE_GCHECK_F
-  static void ValidateNodeObjectWithName(
-    SceneNode& node, const std::string& expected_name)
-  {
-    EXPECT_TRUE(node.IsValid()) << "Node should be valid";
-    const auto obj = node.GetObject();
-    ASSERT_TRUE(obj.has_value()) << "Node should have a valid object";
-    EXPECT_EQ(obj->get().GetName(), expected_name)
-      << "Node name should match expected";
-  }
-  std::shared_ptr<Scene> scene_;
-};
+class SceneBasicTest : public oxygen::scene::testing::SceneTest { };
 
 // -----------------------------------------------------------------------------
 // Scene Construction and Metadata Tests
@@ -426,15 +346,12 @@ NOLINT_TEST_F(SceneBasicTest, SpecialCharacterNames)
 
   // Assert: Verify all nodes are valid and their names are correctly stored
   // and retrieved, preserving special characters.
-  TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node1, "Node@#$%"), "node1-special-chars");
-  TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node2, "Node With Spaces"), "node2-spaces");
-  TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node3, "Node\tWith\nSpecial\rChars"),
+  TRACE_GCHECK_F(ExpectNodeWithName(node1, "Node@#$%"), "node1-special-chars");
+  TRACE_GCHECK_F(ExpectNodeWithName(node2, "Node With Spaces"), "node2-spaces");
+  TRACE_GCHECK_F(ExpectNodeWithName(node3, "Node\tWith\nSpecial\rChars"),
     "node3-control-chars");
-  TRACE_GCHECK_F(ValidateNodeObjectWithName(node4, "Node_with-symbols.123"),
-    "node4-symbols");
+  TRACE_GCHECK_F(
+    ExpectNodeWithName(node4, "Node_with-symbols.123"), "node4-symbols");
 }
 
 NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
@@ -447,8 +364,7 @@ NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
 
   // Assert: Verify the node is valid and its name is correctly stored and
   // retrieved, matching the long string.
-  TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node, long_name), "long-name-validation");
+  TRACE_GCHECK_F(ExpectNodeWithName(node, long_name), "long-name-validation");
 }
 
 NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
@@ -465,12 +381,12 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
   // Assert: Verify all nodes are valid and their names are correctly stored
   // and retrieved, preserving Unicode characters.
   TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node1, "Node_こんにちは"), "japanese-chars");
+    ExpectNodeWithName(node1, "Node_こんにちは"), "japanese-chars");
 
   // ReSharper disable once StringLiteralTypo
   TRACE_GCHECK_F(
-    ValidateNodeObjectWithName(node2, "Node_Здравствуй"), "cyrillic-chars");
-  TRACE_GCHECK_F(ValidateNodeObjectWithName(node3, "Node_🚀🌟"), "emoji-chars");
+    ExpectNodeWithName(node2, "Node_Здравствуй"), "cyrillic-chars");
+  TRACE_GCHECK_F(ExpectNodeWithName(node3, "Node_🚀🌟"), "emoji-chars");
 }
 
 } // namespace

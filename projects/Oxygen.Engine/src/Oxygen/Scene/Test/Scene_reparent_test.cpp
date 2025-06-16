@@ -14,7 +14,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "./Fixtures/SceneTest.h"
+#include "./SceneTest.h"
 
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
@@ -221,7 +221,7 @@ protected:
       TransformComponent::Vec3 { x_deg, y_deg, z_deg }) };
   }
   // Helper: Verify node is valid and has expected name
-  static void ExpectNodeValidWithName(SceneNode& node, const std::string& name)
+  static void ExpectNodeWithName(SceneNode& node, const std::string& name)
   {
     ASSERT_TRUE(node.IsValid()) << "Node should be valid";
     const auto obj_opt = node.GetObject();
@@ -233,7 +233,7 @@ protected:
   // Helper: Verify node is valid, has expected name, and is a root node
   static void ExpectNodeValidAsRoot(SceneNode& node, const std::string& name)
   {
-    ExpectNodeValidWithName(node, name);
+    ExpectNodeWithName(node, name);
     EXPECT_TRUE(node.IsRoot()) << "Node '" << name << "' should be a root node";
     EXPECT_FALSE(node.HasParent())
       << "Root node '" << name << "' should not have a parent";
@@ -295,8 +295,8 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_ValidChildNode_BecomesRoot)
   EXPECT_TRUE(result);
   EXPECT_TRUE(hierarchy.child.IsRoot());
   EXPECT_FALSE(hierarchy.child.HasParent());
-  GCHECK_F(ExpectNodeValidWithName(hierarchy.child, "Child"));
-  GCHECK_F(ExpectNodeValidWithName(hierarchy.parent, "Parent"));
+  GCHECK_F(ExpectNodeWithName(hierarchy.child, "Child"));
+  GCHECK_F(ExpectNodeWithName(hierarchy.parent, "Parent"));
 }
 
 NOLINT_TEST_F(
@@ -311,7 +311,7 @@ NOLINT_TEST_F(
   // Assert: Operation should succeed with no changes
   EXPECT_TRUE(result);
   EXPECT_TRUE(root.IsRoot());
-  GCHECK_F(ExpectNodeValidWithName(root, "RootNode"));
+  GCHECK_F(ExpectNodeWithName(root, "RootNode"));
 }
 
 NOLINT_TEST_F(SceneReparentTest, MakeNodeRoot_DeepHierarchy_EntireSubtreeMoved)
@@ -652,7 +652,7 @@ NOLINT_TEST_F(SceneReparentEdgeTest, MakeNodeRoot_EmptyNameNode_WorksCorrectly)
   // Assert: Should work despite unusual names
   EXPECT_TRUE(result);
   EXPECT_TRUE(child.IsRoot());
-  GCHECK_F(ExpectNodeValidWithName(child, "   "));
+  GCHECK_F(ExpectNodeWithName(child, "   "));
 }
 
 NOLINT_TEST_F(
