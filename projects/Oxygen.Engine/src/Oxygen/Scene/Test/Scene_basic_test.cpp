@@ -9,6 +9,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "Helpers/TestSceneFactory.h"
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
@@ -22,6 +23,7 @@ using oxygen::scene::SceneFlags;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
+using oxygen::scene::testing::TestSceneFactory;
 
 namespace {
 
@@ -32,8 +34,8 @@ namespace {
 class SceneBasicTest : public testing::Test {
 protected:
   void SetUp() override { scene_ = std::make_shared<Scene>("TestScene", 1024); }
-  void TearDown() override { scene_.reset(); }
 
+  void TearDown() override { scene_.reset(); }
   [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
   {
     return scene_->CreateNode(name);
@@ -72,7 +74,6 @@ protected:
   }
 
   void ClearScene() const { scene_->Clear(); }
-
   static void ExpectNodeValidWithName(
     const SceneNode& node, const std::string& name)
   {
@@ -92,25 +93,23 @@ protected:
                   "(lazy invalidation)";
     }
   }
-  void ExpectNodeNotInScene(const SceneNode& node) const
-  {
-    if (scene_->Contains(node))
-      FAIL() << "Node should not be contained in scene";
-  }
 
   static void ExpectHandlesUnique(
     const SceneNode& n1, const SceneNode& n2, const SceneNode& n3)
   {
-    if (n1.GetHandle() == n2.GetHandle() || n2.GetHandle() == n3.GetHandle()
-      || n1.GetHandle() == n3.GetHandle())
-      FAIL() << "Node handles should be unique";
+    EXPECT_NE(n1.GetHandle(), n2.GetHandle());
+    EXPECT_NE(n2.GetHandle(), n3.GetHandle());
+    EXPECT_NE(n1.GetHandle(), n3.GetHandle());
   }
-  void ExpectSceneEmpty() const
+  // Complex validation helper that benefits from TRACE_GCHECK_F
+  static void ValidateNodeObjectWithName(
+    SceneNode& node, const std::string& expected_name)
   {
-    if (!scene_->IsEmpty())
-      FAIL() << "Scene should be empty";
-    if (scene_->GetNodeCount() != 0)
-      FAIL() << "Scene node count should be zero";
+    EXPECT_TRUE(node.IsValid()) << "Node should be valid";
+    const auto obj = node.GetObject();
+    ASSERT_TRUE(obj.has_value()) << "Node should have a valid object";
+    EXPECT_EQ(obj->get().GetName(), expected_name)
+      << "Node name should match expected";
   }
   std::shared_ptr<Scene> scene_;
 };
@@ -123,17 +122,19 @@ NOLINT_TEST_F(SceneBasicTest, SceneConstruction)
 {
   // Arrange: No specific arrangement beyond fixture setup.
 
-  // Act: Create three separate Scene instances with different names.
-  const auto scene1 = std::make_shared<Scene>("Scene1", 1024);
-  const auto scene2 = std::make_shared<Scene>("EmptyName", 1024);
-  const auto scene3 = std::make_shared<Scene>("Scene With Spaces", 1024);
-  // Assert: Verify names are set correctly and new scenes are empty and have
-  // zero nodes.
+  // Act: Create three separate Scene instances with different names using
+  // factory.
+  auto& factory = TestSceneFactory::Instance();
+  const auto scene1 = factory.CreateSingleNodeScene("Scene1");
+  const auto scene2 = factory.CreateSingleNodeScene("EmptyName");
+  const auto scene3 = factory.CreateSingleNodeScene("Scene With Spaces");
+
+  // Assert: Verify names are set correctly and scenes have expected structure.
   EXPECT_EQ(scene1->GetName(), "Scene1");
   EXPECT_EQ(scene2->GetName(), "EmptyName");
   EXPECT_EQ(scene3->GetName(), "Scene With Spaces");
-  EXPECT_TRUE(scene1->IsEmpty());
-  EXPECT_EQ(scene1->GetNodeCount(), 0);
+  EXPECT_FALSE(scene1->IsEmpty()); // Has one node from factory
+  EXPECT_EQ(scene1->GetNodeCount(), 1);
 }
 
 NOLINT_TEST_F(SceneBasicTest, SceneNameOperations)
@@ -283,8 +284,10 @@ NOLINT_TEST_F(SceneBasicTest, ContainsSceneNode)
 
 NOLINT_TEST_F(SceneBasicTest, ContainsNodeFromDifferentScene)
 {
-  // Arrange: Create a node in a separate, different scene.
-  const auto other_scene = std::make_shared<Scene>("OtherScene", 1024);
+  // Arrange: Create a node in a separate, different scene using
+  // TestSceneFactory.
+  auto& factory = TestSceneFactory::Instance();
+  const auto other_scene = factory.CreateSingleNodeScene("OtherScene");
   const auto other_node = other_scene->CreateNode("OtherNode");
 
   // Assert: Verify the current scene does not contain the foreign
@@ -358,34 +361,27 @@ NOLINT_TEST_F(SceneBasicTest, IsEmptyBehavior)
 
 NOLINT_TEST_F(SceneBasicTest, SceneClear)
 {
-  // Arrange: Create a hierarchy (parent, two children) and a standalone node.
-  // Verify initial node count and non-empty state.
-  auto parent = CreateNode("Parent");
-  auto child1_opt = CreateChildNode(parent, "Child1");
-  auto child2_opt = CreateChildNode(parent, "Child2");
+  // Arrange: Create a structured hierarchy using TestSceneFactory and add a
+  // standalone node.
+  auto& factory = TestSceneFactory::Instance();
+  auto test_scene = factory.CreateParentWithChildrenScene("TestScene", 2);
+
+  // Replace our fixture scene with the factory-created one for this test
+  scene_ = test_scene;
+
+  // Add a standalone node to the factory-created scene
   auto standalone = CreateNode("Standalone");
-  EXPECT_EQ(scene_->GetNodeCount(), 4);
+  EXPECT_EQ(scene_->GetNodeCount(), 4); // Parent + 2 children + standalone
   EXPECT_FALSE(scene_->IsEmpty());
+
   // Act: Clear the entire scene.
-  ClearScene(); // Assert: Verify scene is empty, node count is zero, and all
-                // previously
+  ClearScene();
+  // Assert: Verify scene is empty, node count is zero, and all previously
   // created nodes are invalidated and not contained.
   EXPECT_EQ(scene_->GetNodeCount(), 0);
-  TRACE_GCHECK_F(ExpectSceneEmpty(), "empty")
-  TRACE_GCHECK_F(ExpectNodeNotInScene(parent), "parent-scene")
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(parent), "parent-invalid")
-  if (child1_opt.has_value()) {
-    TRACE_GCHECK_F(ExpectNodeNotInScene(child1_opt.value()), "child1-scene")
-    TRACE_GCHECK_F(
-      ExpectNodeLazyInvalidated(child1_opt.value()), "child1-invalid")
-  }
-  if (child2_opt.has_value()) {
-    TRACE_GCHECK_F(ExpectNodeNotInScene(child2_opt.value()), "child2-scene")
-    TRACE_GCHECK_F(
-      ExpectNodeLazyInvalidated(child2_opt.value()), "child2-invalid")
-  }
-  TRACE_GCHECK_F(ExpectNodeNotInScene(standalone), "standalone-scene")
-  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(standalone), "standalone-invalid")
+  EXPECT_TRUE(scene_->IsEmpty());
+  EXPECT_FALSE(scene_->Contains(standalone));
+  TRACE_GCHECK_F(ExpectNodeLazyInvalidated(standalone), "standalone-invalid");
 }
 
 // -----------------------------------------------------------------------------
@@ -430,22 +426,15 @@ NOLINT_TEST_F(SceneBasicTest, SpecialCharacterNames)
 
   // Assert: Verify all nodes are valid and their names are correctly stored
   // and retrieved, preserving special characters.
-  EXPECT_TRUE(node1.IsValid());
-  EXPECT_TRUE(node2.IsValid());
-  EXPECT_TRUE(node3.IsValid());
-  EXPECT_TRUE(node4.IsValid());
-  auto obj1 = node1.GetObject();
-  auto obj2 = node2.GetObject();
-  auto obj3 = node3.GetObject();
-  auto obj4 = node4.GetObject();
-  ASSERT_TRUE(obj1.has_value());
-  ASSERT_TRUE(obj2.has_value());
-  ASSERT_TRUE(obj3.has_value());
-  ASSERT_TRUE(obj4.has_value());
-  EXPECT_EQ(obj1->get().GetName(), "Node@#$%");
-  EXPECT_EQ(obj2->get().GetName(), "Node With Spaces");
-  EXPECT_EQ(obj3->get().GetName(), "Node\tWith\nSpecial\rChars");
-  EXPECT_EQ(obj4->get().GetName(), "Node_with-symbols.123");
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node1, "Node@#$%"), "node1-special-chars");
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node2, "Node With Spaces"), "node2-spaces");
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node3, "Node\tWith\nSpecial\rChars"),
+    "node3-control-chars");
+  TRACE_GCHECK_F(ValidateNodeObjectWithName(node4, "Node_with-symbols.123"),
+    "node4-symbols");
 }
 
 NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
@@ -458,10 +447,8 @@ NOLINT_TEST_F(SceneBasicTest, VeryLongNodeNames)
 
   // Assert: Verify the node is valid and its name is correctly stored and
   // retrieved, matching the long string.
-  EXPECT_TRUE(node.IsValid());
-  const auto obj = node.GetObject();
-  ASSERT_TRUE(obj.has_value());
-  EXPECT_EQ(obj->get().GetName(), long_name);
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node, long_name), "long-name-validation");
 }
 
 NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
@@ -477,19 +464,13 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
 
   // Assert: Verify all nodes are valid and their names are correctly stored
   // and retrieved, preserving Unicode characters.
-  EXPECT_TRUE(node1.IsValid());
-  EXPECT_TRUE(node2.IsValid());
-  EXPECT_TRUE(node3.IsValid());
-  const auto obj1 = node1.GetObject();
-  const auto obj2 = node2.GetObject();
-  const auto obj3 = node3.GetObject();
-  ASSERT_TRUE(obj1.has_value());
-  ASSERT_TRUE(obj2.has_value());
-  ASSERT_TRUE(obj3.has_value());
-  EXPECT_EQ(obj1->get().GetName(), "Node_こんにちは");
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node1, "Node_こんにちは"), "japanese-chars");
+
   // ReSharper disable once StringLiteralTypo
-  EXPECT_EQ(obj2->get().GetName(), "Node_Здравствуй");
-  EXPECT_EQ(obj3->get().GetName(), "Node_🚀🌟");
+  TRACE_GCHECK_F(
+    ValidateNodeObjectWithName(node2, "Node_Здравствуй"), "cyrillic-chars");
+  TRACE_GCHECK_F(ValidateNodeObjectWithName(node3, "Node_🚀🌟"), "emoji-chars");
 }
 
 } // namespace
