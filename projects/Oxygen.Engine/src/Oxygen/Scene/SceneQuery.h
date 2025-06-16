@@ -262,11 +262,11 @@ private:
   //=== Private Implementation Helpers ===------------------------------------//
 
   //! Initialize batch execution state and clear previous operations
-  auto BatchBegin() const noexcept -> void;
+  OXGN_SCN_API void BatchBegin() const noexcept;
 
   //! Finalize batch execution and aggregate results
-  auto BatchEnd(const TraversalResult& traversal_result) const noexcept
-    -> BatchResult;
+  OXGN_SCN_NDAPI auto BatchEnd(
+    const TraversalResult& traversal_result) const noexcept -> BatchResult;
 
   //! Create composite filter from batch operations (type-erased wrapper)
   template <typename BatchFunc>
@@ -278,8 +278,8 @@ private:
     -> TraversalResult;
 
   //! Process node during batch execution with result handling
-  auto ProcessBatchedNode(const ConstVisitedNode& visited, const Scene& scene,
-    bool dry_run) const noexcept -> VisitResult;
+  OXGN_SCN_NDAPI auto ProcessBatchedNode(const ConstVisitedNode& visited,
+    const Scene& scene, bool dry_run) const noexcept -> VisitResult;
 
   //=== Immediate Execution Helpers ===---------------------------------------//
 
@@ -289,12 +289,12 @@ private:
     const noexcept -> std::optional<SceneNode>;
 
   //! Type-erased immediate count implementation
-  auto ExecuteImmediateCount(
+  OXGN_SCN_NDAPI auto ExecuteImmediateCount(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> QueryResult;
 
   //! Type-erased immediate any implementation
-  auto ExecuteImmediateAny(
+  OXGN_SCN_NDAPI auto ExecuteImmediateAny(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> std::optional<bool>;
 
@@ -309,7 +309,7 @@ private:
     std::string_view path_pattern) const noexcept -> QueryResult;
 
   //! Implementation helper for immediate path-based collect (type-erased)
-  auto ExecuteImmediateCollectByPathImpl(
+  OXGN_SCN_NDAPI auto ExecuteImmediateCollectByPathImpl(
     std::function<void(const SceneNode&)> add_to_container,
     std::string_view path_pattern) const noexcept -> QueryResult;
 
@@ -333,29 +333,29 @@ private:
     const noexcept -> std::optional<SceneNode>;
 
   //! Execute batch count operation setup
-  auto ExecuteBatchCount(
+  OXGN_SCN_NDAPI auto ExecuteBatchCount(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> QueryResult;
 
   //! Execute batch any operation setup
-  auto ExecuteBatchAny(
+  OXGN_SCN_NDAPI auto ExecuteBatchAny(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> std::optional<bool>;
 
   //=== Type-Erased Implementation Helpers ===--------------------------------//
 
   //! Type-erased batch execution implementation
-  auto ExecuteBatchImpl(
+  OXGN_SCN_NDAPI auto ExecuteBatchImpl(
     std::function<void(const SceneQuery&)> batch_func) const noexcept
     -> BatchResult;
 
   //! Type-erased composite filter creation implementation
-  auto CreateCompositeFilterImpl(
+  OXGN_SCN_NDAPI auto CreateCompositeFilterImpl(
     std::function<void(const SceneQuery&)> batch_func) const noexcept
     -> std::function<FilterResult(const ConstVisitedNode&, FilterResult)>;
 
   //! Type-erased batch collect implementation
-  auto ExecuteBatchCollectImpl(
+  OXGN_SCN_NDAPI auto ExecuteBatchCollectImpl(
     std::function<void(const SceneNode&)> add_to_container,
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> QueryResult;
@@ -575,6 +575,57 @@ auto SceneQuery::Any(Predicate&& predicate) const noexcept
   // Use private helper for immediate execution
   return ExecuteImmediateAny(std::function<bool(const ConstVisitedNode&)>(
     std::forward<Predicate>(predicate)));
+}
+
+/*!
+ Executes immediate Collect operation using dedicated scene traversal with
+ comprehensive node collection into user-provided container.
+
+ @param container Reference to user-provided container for collecting nodes
+ @param predicate Node filtering function to test each visited node
+ @return QueryResult with nodes_examined, nodes_matched, and completion status
+
+ ### Execution Strategy
+
+ - Creates counting filter that tracks examined and accepted nodes
+ - Uses a visitor that adds scene nodes and continues traversal
+ - Maintains separate counters for examination and collection statistics
+ - Leverages full traversal for complete collection accuracy
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(n) full scene traversal required
+ - Memory: User-controlled allocation via provided container
+ - Container Agnostic: Works with any container supporting emplace_back
+
+ ### Container Requirements
+
+ - Must support emplace_back(SceneNode) operation
+ - Examples: std::vector<SceneNode>, std::deque<SceneNode>
+
+ @note This function is used when not in batch mode for immediate results
+ @see ExecuteBatchCollectImpl for batch mode equivalent
+*/
+auto SceneQuery::ExecuteImmediateCollect(auto& container,
+  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+  -> QueryResult
+{
+  QueryResult result {};
+  auto queryFilter = [&result, &predicate](const ConstVisitedNode& visited,
+                       FilterResult) -> FilterResult {
+    ++result.nodes_examined;
+    return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
+  };
+  auto visitHandler = [this, &container, &result](
+                        const ConstVisitedNode& visited, bool) -> VisitResult {
+    container.emplace_back(scene_weak_.lock(), visited.handle);
+    ++result.nodes_matched;
+    return VisitResult::kContinue;
+  };
+  auto traversalResult
+    = traversal_.Traverse(visitHandler, TraversalOrder::kPreOrder, queryFilter);
+  result.completed = traversalResult.completed;
+  return result;
 }
 
 /// Searches the scene graph for all nodes matching the specified path pattern,

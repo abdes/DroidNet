@@ -142,5 +142,8 @@
       "source": "Git Bash"
     }
   },
-  "terminal.integrated.defaultProfile.windows": "PowerShell"
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "testMate.cpp.test.executables": "out/build/bin/Debug/*.Tests.exe",
+  "testMate.cpp.log.logpanel": true,
+  "testMate.cpp.test.stderrDecorator": false
 }

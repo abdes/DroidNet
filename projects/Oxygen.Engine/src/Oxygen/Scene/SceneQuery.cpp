@@ -401,57 +401,6 @@ auto SceneQuery::ExecuteImmediateAny(
 }
 
 /*!
- Executes immediate Collect operation using dedicated scene traversal with
- comprehensive node collection into user-provided container.
-
- @param container Reference to user-provided container for collecting nodes
- @param predicate Node filtering function to test each visited node
- @return QueryResult with nodes_examined, nodes_matched, and completion status
-
- ### Execution Strategy
-
- - Creates counting filter that tracks examined and accepted nodes
- - Uses a visitor that adds scene nodes and continues traversal
- - Maintains separate counters for examination and collection statistics
- - Leverages full traversal for complete collection accuracy
-
- ### Performance Characteristics
-
- - Time Complexity: O(n) full scene traversal required
- - Memory: User-controlled allocation via provided container
- - Container Agnostic: Works with any container supporting emplace_back
-
- ### Container Requirements
-
- - Must support emplace_back(SceneNode) operation
- - Examples: std::vector<SceneNode>, std::deque<SceneNode>
-
- @note This function is used when not in batch mode for immediate results
- @see ExecuteBatchCollectImpl for batch mode equivalent
-*/
-auto SceneQuery::ExecuteImmediateCollect(auto& container,
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> QueryResult
-{
-  QueryResult result {};
-  auto queryFilter = [&result, &predicate](const ConstVisitedNode& visited,
-                       FilterResult) -> FilterResult {
-    ++result.nodes_examined;
-    return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
-  };
-  auto visitHandler = [this, &container, &result](
-                        const ConstVisitedNode& visited, bool) -> VisitResult {
-    container.emplace_back(scene_weak_.lock(), visited.handle);
-    ++result.nodes_matched;
-    return VisitResult::kContinue;
-  };
-  auto traversalResult
-    = traversal_.Traverse(visitHandler, TraversalOrder::kPreOrder, queryFilter);
-  result.completed = traversalResult.completed;
-  return result;
-}
-
-/*!
  Navigates the scene hierarchy using an absolute path specification,
  starting from scene root nodes. Optimized for simple paths without wildcards.
 
