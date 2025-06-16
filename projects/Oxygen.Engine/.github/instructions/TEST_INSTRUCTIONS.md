@@ -14,11 +14,11 @@ This document summarizes the key characteristics and best practices observed in 
 
 - **Test Fixtures:** Derive fixtures from `::testing::Test` (e.g., `SceneBasicTest`, `SceneBasicErrorTest`, `SceneBasicDeathTest`) for shared setup/teardown and helpers.
 - **Setup/TearDown:** Use `SetUp()` and `TearDown()` for resource management.
-- Use alternate macros NOLINT_* from GTest.h include file to disable linter warnings.
+- Use alternate macros NOLINT\_\* from GTest.h include file to disable linter warnings.
 
 ## 3. Helper Methods
 
-- **Reusable Helpers:** Implement helper methods for common actions (e.g., `CreateNode`, `DestroyNode`, `ExpectNodeValidWithName`).
+- **Reusable Helpers:** Implement helper methods for common actions (e.g., `CreateNode`, `DestroyNode`, `ExpectNodeWithName`).
 - **Encapsulation:** Encapsulate repetitive logic and assertions in helpers to improve readability and maintainability.
 
 ## 4. Thorough and Focused Test Cases
@@ -68,17 +68,17 @@ This document summarizes the key characteristics and best practices observed in 
 
 ### Summary Table
 
-| Aspect                | Practice/Pattern                                                                 |
-|-----------------------|----------------------------------------------------------------------------------|
-| Structure             | Grouped by functionality, section headers, anonymous namespace                   |
-| Fixtures              | Setup/teardown, shared helpers, multiple fixtures for different test types       |
-| Helpers               | Encapsulate common logic, improve readability                                    |
-| Test Cases            | AAA pattern, single responsibility, edge/error cases, death tests                |
-| Assertions            | Strong, descriptive, custom failure messages                                     |
-| Naming/Style          | Descriptive names, consistent variable naming, clear comments                    |
-| API Coverage          | Normal, boundary, error, and cross-object tests                                  |
-| Robustness            | No global state, portable, no hardcoded dependencies                             |
-| **Test Discipline**   | **Never change SUT to fix tests without root cause analysis, proper state setup**      |
+| Aspect              | Practice/Pattern                                                                  |
+| ------------------- | --------------------------------------------------------------------------------- |
+| Structure           | Grouped by functionality, section headers, anonymous namespace                    |
+| Fixtures            | Setup/teardown, shared helpers, multiple fixtures for different test types        |
+| Helpers             | Encapsulate common logic, improve readability                                     |
+| Test Cases          | AAA pattern, single responsibility, edge/error cases, death tests                 |
+| Assertions          | Strong, descriptive, custom failure messages                                      |
+| Naming/Style        | Descriptive names, consistent variable naming, clear comments                     |
+| API Coverage        | Normal, boundary, error, and cross-object tests                                   |
+| Robustness          | No global state, portable, no hardcoded dependencies                              |
+| **Test Discipline** | **Never change SUT to fix tests without root cause analysis, proper state setup** |
 
 ---
 
