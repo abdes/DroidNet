@@ -102,10 +102,19 @@
     "valarray": "cpp",
     "strstream": "cpp"
   },
-  "editor.rulers": [80, 120],
-  "Lua.diagnostics.globals": ["link_lib_suffix", "workspace_root"],
+  "editor.rulers": [
+    80,
+    120
+  ],
+  "Lua.diagnostics.globals": [
+    "link_lib_suffix",
+    "workspace_root"
+  ],
   "C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/compile_commands.json",
-  "C_Cpp.default.includePath": ["${workspaceFolder}/src", "~/.conan2/**"],
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/src",
+    "~/.conan2/**"
+  ],
   "C_Cpp.default.cppStandard": "c++20",
   "C_Cpp.default.cStandard": "c17",
   "C_Cpp.intelliSenseEngine": "default",
@@ -125,9 +134,7 @@
       "icon": "terminal-powershell",
       "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
       "args": [
-        "-NoExit",
-        "-Command",
-        "& \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64"
+        "-NoExit"
       ]
     },
     "Command Prompt": {
