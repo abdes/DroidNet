@@ -61,9 +61,11 @@ protected:
 
   //! Create complex hierarchy from JSON template
   auto CreateComplexHierarchyFromJson() -> void;
-
   //! Create game-like scene hierarchy for realistic testing
   auto CreateGameSceneHierarchy() -> void;
+
+  //! Create multi-player hierarchy for scoped traversal testing
+  auto CreateMultiPlayerHierarchy() -> void;
 
   //=== Node Creation Helpers ===---------------------------------------------//
 
@@ -169,9 +171,11 @@ private:
 
   //! Get JSON template for complex test hierarchy
   [[nodiscard]] static auto GetComplexHierarchyJson() -> std::string;
-
   //! Get JSON template for game scene hierarchy
   [[nodiscard]] static auto GetGameSceneJson() -> std::string;
+
+  //! Get JSON template for multi-player hierarchy
+  [[nodiscard]] static auto GetMultiPlayerHierarchyJson() -> std::string;
 };
 
 //=== Template Implementation ===--------------------------------------------//
