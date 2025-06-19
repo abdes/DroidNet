@@ -82,6 +82,14 @@ auto SceneQueryTestBase::CreateGameSceneHierarchy() -> void
   CreateQuery();
 }
 
+auto SceneQueryTestBase::CreateMultiPlayerHierarchy() -> void
+{
+  const auto json = GetMultiPlayerHierarchyJson();
+  scene_ = GetFactory().CreateFromJson(json, "MultiPlayerHierarchy");
+  ASSERT_NE(scene_, nullptr);
+  CreateQuery();
+}
+
 //=== Node Creation Helpers ===---------------------------------------------//
 
 auto SceneQueryTestBase::CreateVisibleNode(const std::string& name) const
@@ -278,6 +286,55 @@ auto SceneQueryTestBase::GetGameSceneJson() -> std::string
           {"name": "MainMenu"},
           {"name": "HealthBar"},
           {"name": "Inventory"}
+        ]
+      }
+    ]
+  })";
+}
+
+auto SceneQueryTestBase::GetMultiPlayerHierarchyJson() -> std::string
+{
+  return R"({
+    "metadata": {
+      "name": "MultiPlayerHierarchy"
+    },
+    "nodes": [
+      {
+        "name": "GameWorld",
+        "children": [
+          {
+            "name": "Player1",
+            "flags": {"visible": true},
+            "children": [
+              {"name": "Weapon", "flags": {"visible": true}},
+              {"name": "Shield", "flags": {"visible": true}},
+              {"name": "Armor", "flags": {"visible": false}}
+            ]
+          },
+          {
+            "name": "Player2",
+            "flags": {"visible": true},
+            "children": [
+              {"name": "Weapon", "flags": {"visible": true}},
+              {"name": "Bow", "flags": {"visible": true}},
+              {"name": "Quiver", "flags": {"visible": false}}
+            ]
+          },
+          {
+            "name": "NPCs",
+            "children": [
+              {"name": "Merchant", "flags": {"visible": true}},
+              {"name": "Guard", "flags": {"visible": true}}
+            ]
+          },
+          {
+            "name": "Environment",
+            "children": [
+              {"name": "Tree1", "flags": {"visible": true}},
+              {"name": "Tree2", "flags": {"visible": true}},
+              {"name": "Rock", "flags": {"visible": true}}
+            ]
+          }
         ]
       }
     ]
