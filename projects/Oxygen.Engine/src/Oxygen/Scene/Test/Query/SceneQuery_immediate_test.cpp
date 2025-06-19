@@ -18,14 +18,7 @@ namespace {
 
   //=== Immediate Mode Test Fixture ===---------------------------------------//
 
-  class SceneQueryImmediateTest : public SceneQueryTestBase {
-  protected:
-    void SetUp() override
-    {
-      // Create a rich hierarchy for immediate mode testing
-      CreateComplexHierarchyFromJson();
-    }
-  };
+  class SceneQueryImmediateTest : public SceneQueryTestBase { };
 
   //=== FindFirst Tests ===---------------------------------------------------//
 
@@ -34,6 +27,7 @@ namespace {
   {
     // Arrange: Use complex hierarchy from JSON
     // Hierarchy: World -> Environment -> Buildings -> [House1, House2, Office]
+    CreateComplexHierarchyFromJson();
 
     // Act: Find first building
     auto result = query_->FindFirst(NodeNameStartsWith("House"));
@@ -46,6 +40,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
   {
     // Arrange: Complex hierarchy loaded
+    CreateComplexHierarchyFromJson();
 
     // Act: Search for non-existent node
     auto result = query_->FindFirst(NodeNameEquals("NonExistentNode"));
@@ -72,6 +67,7 @@ namespace {
     SceneQueryImmediateTest, FindFirst_WithComplexHierarchy_TraversesCorrectly)
   {
     // Arrange: Complex hierarchy from JSON template
+    CreateComplexHierarchyFromJson();
 
     // Act: Find deeply nested node
     auto result = query_->FindFirst(NodeNameEquals("Office"));
@@ -85,6 +81,7 @@ namespace {
     SceneQueryImmediateTest, FindFirst_WithRootNode_FindsImmediately)
   {
     // Arrange: Complex hierarchy with "World" root
+    CreateComplexHierarchyFromJson();
 
     // Act: Find root node
     auto result = query_->FindFirst(NodeNameEquals("World"));
@@ -117,6 +114,7 @@ namespace {
     SceneQueryImmediateTest, Collect_WithNoMatches_ReturnsEmptyContainer)
   {
     // Arrange: Complex hierarchy
+    CreateComplexHierarchyFromJson();
     std::vector<SceneNode> nodes;
 
     // Act: Collect non-existent nodes
@@ -156,12 +154,13 @@ namespace {
   NOLINT_TEST_F(SceneQueryImmediateTest,
     Collect_WithPreallocatedContainer_PreservesExistingElements)
   {
+    // Arrange: Game scene with multiple potions
+    CreateGameSceneHierarchy();
+
     // Arrange: Create extra node manually and add to container
     auto extra_node = CreateVisibleNode("ExtraNode");
     std::vector<SceneNode> nodes;
     nodes.push_back(extra_node);
-
-    CreateGameSceneHierarchy();
 
     // Act: Collect potions into pre-filled container
     auto result = query_->Collect(nodes, NodeNameStartsWith("Potion"));
@@ -192,6 +191,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
   {
     // Arrange: Complex hierarchy
+    CreateComplexHierarchyFromJson();
 
     // Act: Count non-existent nodes
     auto result = query_->Count(NodeNameEquals("NonExistent"));
@@ -222,6 +222,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
   {
     // Arrange: Complex hierarchy with known node
+    CreateComplexHierarchyFromJson();
 
     // Act: Check if any node is named "World"
     auto result = query_->Any(NodeNameEquals("World"));
@@ -234,6 +235,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
   {
     // Arrange: Complex hierarchy
+    CreateComplexHierarchyFromJson();
 
     // Act: Check for non-existent node
     auto result = query_->Any(NodeNameEquals("NonExistent"));
