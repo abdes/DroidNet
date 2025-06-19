@@ -29,6 +29,13 @@ void SceneQueryTestBase::TearDown()
 
 //=== Scene Creation Helpers ===--------------------------------------------//
 
+auto SceneQueryTestBase::CreateEmptyScene() -> void
+{
+  scene_ = GetFactory().CreateEmptyScene("SimpleScene");
+  ASSERT_NE(scene_, nullptr);
+  CreateQuery();
+}
+
 auto SceneQueryTestBase::CreateSimpleScene() -> void
 {
   scene_ = GetFactory().CreateSingleNodeScene("SimpleScene");
@@ -45,6 +52,10 @@ auto SceneQueryTestBase::CreateParentChildScene() -> void
 
 auto SceneQueryTestBase::CreateLinearChainScene(int depth) -> void
 {
+  auto name_generator = std::make_unique<DefaultNameGenerator>();
+  name_generator->SetPrefix("Node");
+  GetFactory().SetNameGenerator<DefaultNameGenerator>(
+    std::move(name_generator));
   scene_ = GetFactory().CreateLinearChainScene("LinearChainScene", depth);
   ASSERT_NE(scene_, nullptr);
   CreateQuery();
@@ -62,22 +73,6 @@ auto SceneQueryTestBase::CreateForestScene(
 {
   scene_ = GetFactory().CreateForestScene(
     "ForestScene", root_count, children_per_root);
-  ASSERT_NE(scene_, nullptr);
-  CreateQuery();
-}
-
-auto SceneQueryTestBase::CreateComplexHierarchyFromJson() -> void
-{
-  const auto json = GetComplexHierarchyJson();
-  scene_ = GetFactory().CreateFromJson(json, "ComplexHierarchy");
-  ASSERT_NE(scene_, nullptr);
-  CreateQuery();
-}
-
-auto SceneQueryTestBase::CreateGameSceneHierarchy() -> void
-{
-  const auto json = GetGameSceneJson();
-  scene_ = GetFactory().CreateFromJson(json, "GameScene");
   ASSERT_NE(scene_, nullptr);
   CreateQuery();
 }
@@ -237,55 +232,6 @@ auto SceneQueryTestBase::GetComplexHierarchyJson() -> std::string
               {"name": "ParticleSystem2"}
             ]
           }
-        ]
-      }
-    ]
-  })";
-}
-
-auto SceneQueryTestBase::GetGameSceneJson() -> std::string
-{
-  return R"({
-    "metadata": {
-      "name": "GameScene"
-    },
-    "nodes": [
-      {
-        "name": "Level1",
-        "children": [
-          {
-            "name": "Player",
-            "flags": {"visible": true, "static": false},
-            "children": [
-              {"name": "Weapon"},
-              {"name": "Shield"}
-            ]
-          },
-          {
-            "name": "Enemies",
-            "children": [
-              {"name": "Enemy1", "flags": {"visible": true}},
-              {"name": "Enemy2", "flags": {"visible": false}},
-              {"name": "Enemy3", "flags": {"visible": true}}
-            ]
-          },
-          {
-            "name": "Items",
-            "children": [
-              {"name": "Potion1"},
-              {"name": "Potion2"},
-              {"name": "Key"}
-            ]
-          }
-        ]
-      },
-      {
-        "name": "UI",
-        "flags": {"static": true},
-        "children": [
-          {"name": "MainMenu"},
-          {"name": "HealthBar"},
-          {"name": "Inventory"}
         ]
       }
     ]
