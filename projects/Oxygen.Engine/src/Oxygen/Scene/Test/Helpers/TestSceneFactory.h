@@ -7,6 +7,7 @@
 #pragma once
 
 #include <concepts>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -120,9 +121,9 @@ private:
       case 1:
         return "Child";
       case 2:
-        return "Grandchild";
+        return "GrandChild";
       case 3:
-        return "GreatGrandchild";
+        return "GreatGrandChild";
       default:
         return "Level" + std::to_string(depth) + "Node";
       }
@@ -211,23 +212,31 @@ public:
   auto operator=(TestSceneFactory&&) -> TestSceneFactory& = delete;
 
   //=== Configuration ===-----------------------------------------------------//
-
   //! Sets a custom name generator with full type safety.
   template <typename T>
     requires std::derived_from<T, NameGenerator>
   auto SetNameGenerator(std::unique_ptr<T> generator) -> TestSceneFactory&
   {
     name_generator_ = std::move(generator);
+
+    // Store appropriate context updater based on type
+    if constexpr (ContextAwareNameGenerator<T>) {
+      context_updater_ = CreateContextUpdater();
+    } else {
+      context_updater_ = [](NameGenerator*, int, bool) {
+        /* No-op for non-context-aware generators */
+      };
+    }
+
     return *this;
   }
-
   //! Creates and sets a name generator of the specified type.
   template <typename T, typename... Args>
     requires std::derived_from<T, NameGenerator>
   auto SetNameGenerator(Args&&... args) -> TestSceneFactory&
   {
-    name_generator_ = std::make_unique<T>(std::forward<Args>(args)...);
-    return *this;
+    auto generator = std::make_unique<T>(std::forward<Args>(args)...);
+    return SetNameGenerator(std::move(generator));
   }
 
   //! Resets to default name generator.
@@ -258,6 +267,10 @@ public:
     std::size_t capacity = 1024) const -> std::shared_ptr<Scene>;
 
   //=== Common Pattern Shortcuts ===------------------------------------------//
+
+  //! Creates a scene with a single root node.
+  [[nodiscard]] auto CreateEmptyScene(
+    std::string_view scene_name = "TestScene") const -> std::shared_ptr<Scene>;
 
   //! Creates a scene with a single root node.
   [[nodiscard]] auto CreateSingleNodeScene(
@@ -331,15 +344,20 @@ private:
 
   //! Registry of named JSON templates (cached and parsed).
   mutable std::unordered_map<std::string, std::unique_ptr<Template>> templates_;
-
   //! Current name generator (never null).
   std::unique_ptr<NameGenerator> name_generator_;
 
+  //! Context update function (type-erased for RTTI-free operation).
+  std::function<void(NameGenerator*, int, bool)> context_updater_;
+
   //! Default capacity for shortcut scene creation methods.
   std::optional<std::size_t> default_capacity_;
-
   //! Default name generator instance.
   static auto CreateDefaultNameGenerator() -> std::unique_ptr<NameGenerator>;
+
+  //! Default context updater for DefaultNameGenerator.
+  static auto CreateContextUpdater()
+    -> std::function<void(NameGenerator*, int, bool)>;
 };
 
 } // namespace oxygen::scene::testing
