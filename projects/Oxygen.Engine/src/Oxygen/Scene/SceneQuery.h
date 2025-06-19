@@ -18,25 +18,12 @@ namespace oxygen::scene {
 
 class Scene;
 
-//! ADL-compatible GetNodeName for ConstVisitedNode integration with PathMatcher
-/*!
- Enables ConstVisitedNode to work directly with concept-based PathMatcher
- without requiring adapter types or data structure conversion.
-
- @param visited Visited node containing handle and implementation reference
- @return Node name as string view, empty if node_impl is null
-*/
+//! ADL-compatible GetNodeName for ConstVisitedNode integration with
+//! PathMatcher.
 OXGN_SCN_API [[nodiscard]] std::string_view GetNodeName(
   const ConstVisitedNode& visited) noexcept;
 
-//! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher
-/*!
- Enables ConstVisitedNode to work directly with concept-based PathMatcher
- by providing access to the hierarchical depth tracked during traversal.
-
- @param visited Visited node containing depth information from traversal
- @return Hierarchical depth of the node (0 = root level)
-*/
+//! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher.
 OXGN_SCN_API [[nodiscard]] std::size_t GetDepth(
   const ConstVisitedNode& visited) noexcept;
 
@@ -169,6 +156,19 @@ public:
   //! Construct a scene query interface for the given scene
   OXGN_SCN_API explicit SceneQuery(std::shared_ptr<const Scene> scene);
 
+  //=== Traversal Scope Configuration API ===--------------------------------//
+
+  //! Reset traversal scope to the entire scene.
+  OXGN_SCN_API SceneQuery& ResetTraversalScope() noexcept;
+
+  //! Add a single hierarchy to the traversal scope.
+  OXGN_SCN_API SceneQuery& AddToTraversalScope(
+    const SceneNode& starting_node) noexcept;
+
+  //! Add multiple hierarchies to the traversal scope.
+  OXGN_SCN_API SceneQuery& AddToTraversalScope(
+    std::span<const SceneNode> starting_nodes) noexcept;
+
   //=== Core Query API ===----------------------------------------------------//
 
   //! Find the first node matching the given predicate with early termination
@@ -193,10 +193,6 @@ public:
   OXGN_SCN_NDAPI auto FindFirstByPath(std::string_view path) const noexcept
     -> std::optional<SceneNode>;
 
-  //! Find first node by relative path from context node
-  OXGN_SCN_NDAPI auto FindFirstByPath(const SceneNode& context,
-    std::string_view relative_path) const noexcept -> std::optional<SceneNode>;
-
   //! Collect all nodes matching path pattern with wildcard support
   template <typename Container>
   QueryResult CollectByPath(
@@ -218,7 +214,31 @@ private:
   mutable bool batch_active_ = false;
   //! BroadcastChannel-based batch coordinator (type-erased pointer)
   mutable void* batch_coordinator_ = nullptr;
-  //=== Private Implementation Helpers ===------------------------------------//
+
+  //=== Traversal Execution ===-----------------------------------------------//
+
+  //! Scoped traversal starting nodes (empty means full scene traversal)
+  mutable std::vector<SceneNode> traversal_scope_;
+
+  //! Helper to determine if scoped traversal is active
+  [[nodiscard]] bool IsScopedTraversal() const noexcept
+  {
+    return !traversal_scope_.empty();
+  }
+
+  //! Execute traversal using current scope configuration
+  template <typename VisitorFunc, typename FilterFunc>
+  TraversalResult ExecuteTraversal(
+    VisitorFunc&& visitor, FilterFunc&& filter) const
+  {
+    if (IsScopedTraversal()) {
+      return traversal_.TraverseHierarchies(traversal_scope_,
+        std::forward<VisitorFunc>(visitor), TraversalOrder::kPreOrder,
+        std::forward<FilterFunc>(filter));
+    }
+    return traversal_.Traverse(std::forward<VisitorFunc>(visitor),
+      TraversalOrder::kPreOrder, std::forward<FilterFunc>(filter));
+  }
 
   //=== Immediate Execution Helpers ===---------------------------------------//
 
@@ -236,6 +256,7 @@ private:
   OXGN_SCN_NDAPI auto ExecuteImmediateAny(
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> std::optional<bool>;
+
   //! Execute immediate collect operation with direct traversal
   QueryResult ExecuteImmediateCollect(auto& container,
     const std::function<bool(const ConstVisitedNode&)>& predicate)
@@ -525,14 +546,13 @@ QueryResult SceneQuery::ExecuteImmediateCollect(auto& container,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
 {
   QueryResult result {};
-  auto traversal_result = traversal_.Traverse(
+  auto traversal_result = ExecuteTraversal(
     [this, &container, &result](
       const ConstVisitedNode& visited, bool) -> VisitResult {
       container.emplace_back(scene_weak_.lock(), visited.handle);
       ++result.nodes_matched;
       return VisitResult::kContinue;
     },
-    TraversalOrder::kPreOrder,
     [&result, &predicate](
       const ConstVisitedNode& visited, FilterResult) -> FilterResult {
       ++result.nodes_examined;
