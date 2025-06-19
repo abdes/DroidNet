@@ -44,6 +44,9 @@ protected:
 
   //=== Scene Creation Helpers ===--------------------------------------------//
 
+  //! Create an empty scene
+  auto CreateEmptyScene() -> void;
+
   //! Create a simple single-node scene for basic testing
   auto CreateSimpleScene() -> void;
 
@@ -58,12 +61,6 @@ protected:
 
   //! Create a forest (multiple root nodes) for multi-root testing
   auto CreateForestScene(int root_count = 3, int children_per_root = 2) -> void;
-
-  //! Create complex hierarchy from JSON template
-  auto CreateComplexHierarchyFromJson() -> void;
-
-  //! Create game-like scene hierarchy for realistic testing
-  auto CreateGameSceneHierarchy() -> void;
 
   //! Create multi-player hierarchy for scoped traversal testing
   auto CreateMultiPlayerHierarchy() -> void;
