@@ -105,8 +105,10 @@ struct NodeData {
 //! BroadcastChannel-based batch coordinator following the established pattern
 class BatchQueryExecutor {
 public:
-  explicit BatchQueryExecutor(std::weak_ptr<const Scene> scene)
+  explicit BatchQueryExecutor(std::weak_ptr<const Scene> scene,
+    std::vector<SceneNode> traversal_scope = {})
     : scene_weak_(std::move(scene))
+    , traversal_scope_(std::move(traversal_scope))
   {
   }
 
@@ -266,7 +268,7 @@ private:
 
       // Start the scene traversal coroutine
       nursery.Start([this, &writer, &traversal]() -> oxygen::co::Co<> {
-        co_await TraverseSceneAsync(writer, traversal);
+        co_await TraverseSceneAsync(writer, traversal, traversal_scope_);
         co_return;
       });
 
@@ -276,26 +278,42 @@ private:
     co_return;
   }
 
-  //! Traverse scene and broadcast nodes
+  //! Traverse scene and broadcast nodes using scoped traversal when applicable
   static oxygen::co::Co<> TraverseSceneAsync(
     oxygen::co::detail::channel::BroadcastingWriter<NodeData>& writer,
-    const SceneTraversal<const Scene>& traversal)
-  { // Collect all nodes first to determine total count
+    const SceneTraversal<const Scene>& traversal,
+    const std::vector<SceneNode>& traversal_scope)
+  {
+    // Collect all nodes first to determine total count
     std::vector<ConstVisitedNode> nodes_to_broadcast;
-    auto traversal_result = traversal.Traverse(
-      [&nodes_to_broadcast](
-        const ConstVisitedNode& visited, bool dry_run) -> VisitResult {
-        if (!dry_run) {
-          nodes_to_broadcast.push_back(visited);
-        }
-        return VisitResult::kContinue;
-      },
-      TraversalOrder::kPreOrder,
-      [](const ConstVisitedNode& visited,
-        FilterResult previous_result) -> FilterResult {
-        return FilterResult::kAccept; // Accept all nodes for broadcast
-      });
-    (void)traversal_result; // Suppress unused variable warning
+
+    // Extract common visitor and filter to avoid code duplication (DRY)
+    auto collect_visitor
+      = [&nodes_to_broadcast](
+          const ConstVisitedNode& visited, bool dry_run) -> VisitResult {
+      if (!dry_run) {
+        nodes_to_broadcast.push_back(visited);
+      }
+      return VisitResult::kContinue;
+    };
+
+    auto accept_all_filter = [](const ConstVisitedNode& visited,
+                               FilterResult previous_result) -> FilterResult {
+      return FilterResult::kAccept; // Accept all nodes for broadcast
+    };
+
+    // Choose traversal method based on scope configuration
+    if (traversal_scope.empty()) {
+      // Use full scene traversal
+      auto traversal_result = traversal.Traverse(
+        collect_visitor, TraversalOrder::kPreOrder, accept_all_filter);
+      (void)traversal_result; // Suppress unused variable warning
+    } else {
+      // Use scoped traversal
+      auto traversal_result = traversal.TraverseHierarchies(traversal_scope,
+        collect_visitor, TraversalOrder::kPreOrder, accept_all_filter);
+      (void)traversal_result; // Suppress unused variable warning
+    }
 
     // Send each node through the broadcast channel
     for (size_t i = 0; i < nodes_to_broadcast.size(); ++i) {
@@ -319,6 +337,7 @@ private:
   }
 
   std::weak_ptr<const Scene> scene_weak_;
+  std::vector<SceneNode> traversal_scope_;
   std::vector<
     std::function<oxygen::co::Co<>(oxygen::co::BroadcastChannel<NodeData>&)>>
     operations_;
@@ -337,10 +356,9 @@ BatchResult SceneQuery::ExecuteBatchImpl(
 
   // Initialize batch state
   batch_active_ = true;
-
   try {
-    // Create BroadcastChannel coordinator
-    BatchQueryExecutor coordinator(scene_weak_);
+    // Create BroadcastChannel coordinator with current traversal scope
+    BatchQueryExecutor coordinator(scene_weak_, traversal_scope_);
 
     // Store coordinator reference for batch operations
     batch_coordinator_ = &coordinator;

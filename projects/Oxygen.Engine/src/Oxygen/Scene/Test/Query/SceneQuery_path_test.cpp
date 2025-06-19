@@ -100,21 +100,6 @@ namespace {
   }
 
   NOLINT_TEST_F(
-    SceneQueryPathTest, FindFirstByPath_WithValidRelativePath_FindsFromContext)
-  {
-    // Arrange: Get Level1 as context node
-    auto level1 = query_->FindFirst(NodeNameEquals("Level1"));
-    ASSERT_TRUE(level1.has_value());
-
-    // Act: Find player relative to Level1
-    auto result = query_->FindFirstByPath(level1.value(), "Player");
-
-    // Assert: Should find player under Level1
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(result->GetName(), "Player");
-  }
-
-  NOLINT_TEST_F(
     SceneQueryPathTest, FindFirstByPath_WithDeepPath_FindsCorrectNode)
   {
     // Arrange: Deep path to equipment
@@ -146,19 +131,6 @@ namespace {
 
     // Act: Try to find with empty path
     auto result = query_->FindFirstByPath("");
-
-    // Assert: Should return nullopt
-    EXPECT_FALSE(result.has_value());
-  }
-
-  NOLINT_TEST_F(
-    SceneQueryPathTest, FindFirstByPath_WithInvalidContext_ReturnsNullopt)
-  {
-    // Arrange: Create invalid context node
-    SceneNode invalid_context;
-
-    // Act: Try to find with invalid context
-    auto result = query_->FindFirstByPath(invalid_context, "Player");
 
     // Assert: Should return nullopt
     EXPECT_FALSE(result.has_value());

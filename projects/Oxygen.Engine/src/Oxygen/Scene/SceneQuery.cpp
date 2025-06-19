@@ -7,6 +7,7 @@
 // #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Detail/PathMatcher.h>
 #include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -16,6 +17,7 @@
 #include <vector>
 
 using oxygen::scene::ConstVisitedNode;
+using oxygen::scene::QueryResult;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneQuery;
@@ -35,7 +37,7 @@ namespace oxygen::scene {
  @param visited Visited node containing handle and implementation reference
  @return Node name as string view, empty if node_impl is null
 */
-auto GetNodeName(const ConstVisitedNode& visited) noexcept -> std::string_view
+std::string_view GetNodeName(const ConstVisitedNode& visited) noexcept
 {
   // Access node name through SceneNodeImpl
   if (visited.node_impl) {
@@ -52,7 +54,7 @@ auto GetNodeName(const ConstVisitedNode& visited) noexcept -> std::string_view
  @param visited Visited node containing depth information from traversal
  @return Hierarchical depth of the node (0 = root level)
 */
-auto GetDepth(const ConstVisitedNode& visited) noexcept -> std::size_t
+std::size_t GetDepth(const ConstVisitedNode& visited) noexcept
 {
   return visited.depth;
 }
@@ -60,13 +62,14 @@ auto GetDepth(const ConstVisitedNode& visited) noexcept -> std::size_t
 } // namespace oxygen::scene
 
 namespace {
-auto CheckScene(std::shared_ptr<const Scene> scene)
-  -> std::shared_ptr<const Scene>
+std::shared_ptr<const Scene> CheckScene(std::shared_ptr<const Scene> scene)
 {
   CHECK_F(scene != nullptr, "scene cannot be null");
   return scene;
 }
 } // namespace
+
+//=== Construction / Destruction =============================================//
 
 /*!
  @param scene Shared pointer to the scene to be queried (const for
@@ -80,6 +83,83 @@ SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene)
   , traversal_(std::move(scene))
 {
 }
+
+//=== Traversal Scope Configuration Implementation ===========================//
+
+/*!
+ Resets the query scope to traverse the entire scene graph starting from all
+ root nodes. This clears any previously configured scope restrictions.
+
+ @return Reference to this SceneQuery for method chaining
+*/
+SceneQuery& SceneQuery::ResetTraversalScope() noexcept
+{
+  traversal_scope_.clear();
+  return *this;
+}
+
+/*!
+ Adds the hierarchy starting from the specified node to the query traversal
+ scope. If this is the first call to AddToTraversalScope, it will change from
+ full-scene traversal to scoped traversal.
+
+ @param starting_node Root node of the hierarchy to add to scope
+ @return Reference to this SceneQuery for method chaining
+
+ ### Usage Examples
+
+ ```cpp
+ auto query = scene->Query();
+
+ // Scope to player hierarchy only
+ query.ResetTraversalScope().AddToTraversalScope(player_node);
+ auto player_weapons = query.Collect(weapons, weapon_predicate);
+ ```
+
+ @note The node must be part of the scene associated with this SceneQuery
+*/
+SceneQuery& SceneQuery::AddToTraversalScope(
+  const SceneNode& starting_node) noexcept
+{
+  traversal_scope_.push_back(starting_node);
+  return *this;
+}
+
+/*!
+ Adds the hierarchies starting from the specified nodes to the query traversal
+ scope. If this is the first call to AddToTraversalScope, it will change from
+ full-scene traversal to scoped traversal.
+
+ @param starting_nodes Root nodes of the hierarchies to add to scope
+ @return Reference to this SceneQuery for method chaining
+
+ ### Usage Examples
+
+ ```cpp
+ auto query = scene->Query();
+ std::array important_nodes = {player_node, enemy_root, ui_root};
+
+ // Scope to multiple hierarchies
+ query.ResetTraversalScope().AddToTraversalScope(important_nodes);
+ auto all_objects = query.Collect(objects, any_predicate);
+ ```
+
+ @note All nodes must be part of the scene associated with this SceneQuery
+*/
+SceneQuery& SceneQuery::AddToTraversalScope(
+  std::span<const SceneNode> starting_nodes) noexcept
+{
+  // Reserve space to avoid multiple reallocations
+  traversal_scope_.reserve(traversal_scope_.size() + starting_nodes.size());
+
+  // Add all nodes to scope
+  traversal_scope_.insert(
+    traversal_scope_.end(), starting_nodes.begin(), starting_nodes.end());
+
+  return *this;
+}
+
+//=== Query Methods Implementations ==========================================//
 
 /*!
  Executes immediate FindFirst operation using dedicated scene traversal with
@@ -104,9 +184,8 @@ SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene)
  @note This function is used when not in batch mode for immediate results
  @see ExecuteBatchFindFirst for batch mode equivalent
 */
-auto SceneQuery::ExecuteImmediateFindFirst(
+std::optional<SceneNode> SceneQuery::ExecuteImmediateFindFirst(
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> std::optional<SceneNode>
 {
   std::optional<SceneNode> result;
   auto query_filter = [&predicate](const ConstVisitedNode& visited,
@@ -116,12 +195,12 @@ auto SceneQuery::ExecuteImmediateFindFirst(
     }
     return FilterResult::kReject;
   };
-  auto traversal_result = traversal_.Traverse(
+  auto traversal_result = ExecuteTraversal(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       result = SceneNode { scene_weak_.lock(), visited.handle };
       return VisitResult::kStop;
     },
-    TraversalOrder::kPreOrder, query_filter);
+    query_filter);
   (void)traversal_result; // Suppress unused variable warning
   return result;
 }
@@ -149,9 +228,8 @@ auto SceneQuery::ExecuteImmediateFindFirst(
  @note This function is used when not in batch mode for immediate results
  @see ExecuteBatchCount for batch mode equivalent
 */
-auto SceneQuery::ExecuteImmediateCount(
+QueryResult SceneQuery::ExecuteImmediateCount(
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> oxygen::scene::QueryResult
 {
   QueryResult result;
   auto count_filter = [&result, &predicate](const ConstVisitedNode& visited,
@@ -162,7 +240,7 @@ auto SceneQuery::ExecuteImmediateCount(
     }
     return FilterResult::kReject;
   };
-  auto traversal_result = traversal_.Traverse(
+  auto traversal_result = ExecuteTraversal(
     [&](const ConstVisitedNode& visited, bool dry_run) -> VisitResult {
       // Simple counting, no use of visited node, increment if not dry run
       if (!dry_run) {
@@ -173,7 +251,7 @@ auto SceneQuery::ExecuteImmediateCount(
       }
       return VisitResult::kContinue;
     },
-    TraversalOrder::kPreOrder, count_filter);
+    count_filter);
   result.completed = traversal_result.completed;
   return result;
 }
@@ -201,9 +279,8 @@ auto SceneQuery::ExecuteImmediateCount(
  @note This function is used when not in batch mode for immediate results
  @see ExecuteBatchAny for batch mode equivalent
 */
-auto SceneQuery::ExecuteImmediateAny(
+std::optional<bool> SceneQuery::ExecuteImmediateAny(
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> std::optional<bool>
 {
   bool found = false;
   auto any_filter = [&predicate](const ConstVisitedNode& visited,
@@ -213,14 +290,14 @@ auto SceneQuery::ExecuteImmediateAny(
     }
     return FilterResult::kReject;
   };
-  auto traversal_result = traversal_.Traverse(
+  auto traversal_result = ExecuteTraversal(
     [&](const ConstVisitedNode& /*visited*/, bool /*dry_run*/) -> VisitResult {
       // Stop immediately as our filter has found a match. It does not matter if
       // it's a dry_run or not
       found = true;
       return VisitResult::kStop;
     },
-    TraversalOrder::kPreOrder, any_filter);
+    any_filter);
   (void)traversal_result; // Suppress unused variable warning
   return found;
 }
@@ -258,8 +335,8 @@ auto SceneQuery::ExecuteImmediateAny(
  @note Path queries are not supported in batch mode (ExecuteBatch)
  @see FindFirstByPath(const SceneNode&, std::string_view) for relative paths
 */
-auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
-  -> std::optional<SceneNode>
+std::optional<SceneNode> SceneQuery::FindFirstByPath(
+  std::string_view path) const noexcept
 {
   if (scene_weak_.expired()) [[unlikely]] {
     return std::nullopt;
@@ -279,7 +356,7 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
   std::optional<SceneNode> found_node;
   // Traverse scene and use streaming matcher
   SceneTraversal<const Scene> traversal(scene_weak_.lock());
-  auto traversal_result = traversal.Traverse(
+  auto traversal_result = ExecuteTraversal(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       auto result = matcher.Match(visited, match_state);
 
@@ -299,64 +376,10 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
       }
       return VisitResult::kContinue; // Should never reach here
     },
-    TraversalOrder::kPreOrder);
+    AcceptAllFilter {});
   (void)traversal_result; // Suppress unused variable warning
 
   return found_node;
-}
-
-/*!
- Navigates the scene hierarchy using a relative path specification,
- starting from the children of the specified context node.
-
- @param context Starting node for relative path navigation
- @param relative_path Relative path string (e.g., "Equipment/Weapon")
- @return Optional SceneNode if path exists, nullopt if path not found
-
- ### Relative Path Rules
-
- - Path navigation starts from context node's children
- - Relative paths should not begin with "/" (absolute marker)
- - Uses same optimization strategy as absolute paths
-
- ### Performance Characteristics
-
- - Simple paths: O(depth) via direct navigation from context
- - Wildcard patterns: O(subtree) via filtered traversal
- - Memory: Zero allocations during navigation
-
- ### Usage Examples
-
- ```cpp
- auto player = query.FindFirstByPath("World/Player");
- if (player) {
-   // Find weapon relative to player
-   auto weapon = query.FindFirstByPath(*player, "Equipment/Weapon");
-   auto inventory = query.FindFirstByPath(*player, "UI/Inventory");
- }
- ```
-
- @note Path queries are not supported in batch mode (ExecuteBatch)
- @see FindFirstByPath(std::string_view) for absolute paths
-*/
-auto SceneQuery::FindFirstByPath(const SceneNode& /*context*/,
-  std::string_view relative_path) const noexcept -> std::optional<SceneNode>
-{
-  if (scene_weak_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
-
-  auto scene = scene_weak_.lock();
-
-  // Use new PathParser for parsing
-  auto parsed_path = detail::query::ParsePath(relative_path);
-  if (!parsed_path.IsValid()) {
-    return std::nullopt;
-  }
-
-  // TODO: Implement relative path support with new PathMatcher
-  // For now, relative paths with wildcards are not supported
-  return std::nullopt;
 }
 
 /*!
@@ -383,9 +406,9 @@ auto SceneQuery::FindFirstByPath(const SceneNode& /*context*/,
  @note This function enables container-agnostic path-based collection
  @see CollectByPath template methods for type-safe public interface
 */
-auto SceneQuery::ExecuteImmediateCollectByPathImpl(
+QueryResult SceneQuery::ExecuteImmediateCollectByPathImpl(
   std::function<void(const SceneNode&)> add_to_container,
-  std::string_view path_pattern) const noexcept -> QueryResult
+  std::string_view path_pattern) const noexcept
 {
   if (scene_weak_.expired()) [[unlikely]] {
     return QueryResult { .completed = false };
@@ -401,9 +424,8 @@ auto SceneQuery::ExecuteImmediateCollectByPathImpl(
   detail::query::PatternMatchState match_state;
   QueryResult result;
 
-  // Traverse scene and use streaming matcher
-  SceneTraversal<const Scene> traversal(scene_weak_.lock());
-  auto traversal_result = traversal.Traverse(
+  // Use ExecuteTraversal to respect traversal scope
+  auto traversal_result = ExecuteTraversal(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       ++result.nodes_examined;
       auto match_result = matcher.Match(visited, match_state);
@@ -427,7 +449,7 @@ auto SceneQuery::ExecuteImmediateCollectByPathImpl(
 
       return VisitResult::kContinue; // Should never reach here
     },
-    TraversalOrder::kPreOrder);
+    AcceptAllFilter {});
 
   result.completed = traversal_result.completed;
   return result;
