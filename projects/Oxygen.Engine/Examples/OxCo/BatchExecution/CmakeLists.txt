@@ -1,0 +1,17 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+set(
+  OXCO_BATCH_COMMON_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/Common/shared_utilities.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Common/shared_examples.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Common/BatchExecutionEventLoop.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Common.h"
+)
+
+add_subdirectory("YieldAwaiter")
+add_subdirectory("BroadcastChannel")
+add_subdirectory("RepeatableShared")
