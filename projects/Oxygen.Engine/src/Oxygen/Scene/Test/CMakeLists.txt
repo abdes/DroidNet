@@ -133,16 +133,17 @@ add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneGraphFunctional.Tes
 m_gtest_program(
   SceneQuery
   SOURCES
-    "Query/SceneQueryTestBase.h"
-    "Query/SceneQueryTestBase.cpp"
-    "Query/SceneQuery_construction_test.cpp"
-    "Query/SceneQuery_immediate_test.cpp"
-    "Query/SceneQuery_path_test.cpp"
-    "Query/SceneQuery_error_test.cpp"
-    "Query/SceneQuery_performance_test.cpp"
-    "Query/SceneQuery_integration_test.cpp"
     "Query/SceneQuery_adl_test.cpp"
+    "Query/SceneQuery_batch_test.cpp"
+    "Query/SceneQuery_construction_test.cpp"
+    "Query/SceneQuery_error_test.cpp"
+    "Query/SceneQuery_immediate_test.cpp"
+    "Query/SceneQuery_integration_test.cpp"
+    "Query/SceneQuery_path_test.cpp"
+    "Query/SceneQuery_performance_test.cpp"
     "Query/SceneQuery_result_test.cpp"
+    "Query/SceneQueryTestBase.cpp"
+    "Query/SceneQueryTestBase.h"
 )
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneQuery.Tests)
 

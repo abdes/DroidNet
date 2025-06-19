@@ -70,7 +70,6 @@ target_sources(
     "SceneNodeImpl.cpp"
     "SceneQuery.cpp"
     "SceneQueryBatch.cpp"
-    "SceneTraversal.cpp"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -83,9 +82,11 @@ target_sources(
       "ScenePrettyPrinter.h"
       "SceneQuery.h"
       "SceneTraversal.h"
+      "SceneTraversalBase.h"
       "Types/Flags.h"
       "Types/NodeHandle.h"
       "Types/SceneFlagEnum.h"
+      "Types/Traversal.h"
 )
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
@@ -103,8 +104,9 @@ target_link_libraries(
   PUBLIC
     glm::glm
     oxygen::base
-    oxygen::core
     oxygen::composition
+    oxygen::core
+    oxygen::oxco
 )
 
 # ------------------------------------------------------------------------------
