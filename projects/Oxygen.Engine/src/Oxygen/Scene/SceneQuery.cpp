@@ -11,6 +11,7 @@
 #include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <algorithm>
+#include <cstdlib>
 #include <string_view>
 #include <vector>
 
@@ -58,207 +59,26 @@ auto GetDepth(const ConstVisitedNode& visited) noexcept -> std::size_t
 
 } // namespace oxygen::scene
 
-SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene_weak)
-  : scene_weak_(scene_weak)
-  , traversal_(scene_weak)
+namespace {
+auto CheckScene(std::shared_ptr<const Scene> scene)
+  -> std::shared_ptr<const Scene>
 {
+  CHECK_F(scene != nullptr, "scene cannot be null");
+  return scene;
 }
+} // namespace
 
 /*!
- Prepares the query object for batch execution by clearing any previous
- batch operations and setting the batch_active flag. This marks the beginning
- of the batch collection phase.
+ @param scene Shared pointer to the scene to be queried (const for
+ read-only operations)
+
+ @note The scene must remain valid for the lifetime of this SceneQuery object.
+ Query operations will fail gracefully if the scene is destroyed.
 */
-auto SceneQuery::BatchBegin() const noexcept -> void
+SceneQuery::SceneQuery(std::shared_ptr<const Scene> scene)
+  : scene_weak_(CheckScene(scene))
+  , traversal_(std::move(scene))
 {
-  batch_operations_.clear();
-  batch_active_ = true;
-}
-
-/*!
- Processes the traversal results and aggregates metrics from all batch
- operations into a single BatchResult. Clears the batch_active flag and
- calculates total matches across all operations.
-
- @param traversal_result Result from the batch traversal execution
- @return BatchResult with aggregated metrics and completion status
-*/
-auto SceneQuery::BatchEnd(
-  const TraversalResult& traversal_result) const noexcept -> BatchResult
-{
-  batch_active_ = false;
-
-  BatchResult result;
-  result.nodes_examined
-    = traversal_result.nodes_visited; // Visited = examined for batch
-  result.completed = traversal_result.completed;
-  // Count total matches across all operations
-  for (const auto& op : batch_operations_) {
-    result.total_matches += op.match_count;
-  }
-
-  return result;
-}
-
-//! Process node during batch execution with result handling
-/*!
- Visitor function called for each accepted node during batch traversal.
- Executes result handlers for operations that matched the current node.
- Controls traversal continuation based on operation termination states.
-
- @param visited Current node being processed with handle and implementation
- @param scene Scene reference for SceneNode construction in result handlers
- @param dry_run Whether this is a dry run (unused for queries)
- @return VisitResult controlling traversal continuation
-*/
-auto SceneQuery::ProcessBatchedNode(const ConstVisitedNode& visited,
-  const Scene& scene, bool dry_run) const noexcept -> VisitResult
-{
-  if (dry_run) {
-    return VisitResult::kContinue; // No dry-run logic needed for queries
-  }
-
-  // Process all operations that matched this node
-  bool any_operation_wants_to_continue = false;
-  for (auto& op : batch_operations_) {
-    if (!op.has_terminated && op.matched_current_node) {
-      op.result_handler(visited); // Execute the result logic
-      ++op.match_count; // Track the match for BatchResult calculation
-
-      // Check if this operation wants to terminate (FindFirst, Any)
-      if (op.type == BatchOperation::Type::kFindFirst
-        || op.type == BatchOperation::Type::kAny) {
-        op.has_terminated = true;
-      }
-
-      if (!op.has_terminated) {
-        any_operation_wants_to_continue = true;
-      }
-    }
-  }
-
-  // Continue only if at least one operation is still active
-  return any_operation_wants_to_continue ? VisitResult::kContinue
-                                         : VisitResult::kStop;
-}
-
-/*!
- Registers a FindFirst operation for batch execution with early termination
- behavior and result capture configuration.
-
- @param predicate Node filtering function for matching logic
- @return Optional SceneNode placeholder (populated during ExecuteBatch)
-
- ### Batch Operation Registration
-
- - Creates BatchOperation with FindFirst type and termination behavior
- - Configures result handler to capture first matching SceneNode
- - Sets up automatic termination after first successful match
- - Returns placeholder result updated during batch execution
-
- ### Performance Characteristics
-
- - Time Complexity: O(1) operation registration
- - Memory: Single BatchOperation allocation in operations vector
- - Execution: Deferred until ExecuteBatch processes all operations
-
- @note This function registers the operation but defers execution
- @see ExecuteBatch for actual traversal and result population
-*/
-auto SceneQuery::ExecuteBatchFindFirst(
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> std::optional<SceneNode>
-{
-  std::optional<SceneNode> result;
-  batch_operations_.push_back(BatchOperation { .predicate = predicate,
-    .type = BatchOperation::Type::kFindFirst,
-    .result_destination = &result,
-    .result_handler =
-      [&result, scene = scene_weak_](const ConstVisitedNode& visited) {
-        result = SceneNode { scene.lock(), visited.handle };
-      },
-    .match_count = 0 });
-  return result; // Will be populated during ExecuteBatch
-}
-
-/*!
- Registers a Count operation for batch execution with comprehensive match
- counting and performance metric tracking.
-
- @param predicate Node filtering function for matching logic
- @return QueryResult placeholder (populated during ExecuteBatch)
-
- ### Batch Operation Registration
-
- - Creates BatchOperation with Count type and continuous execution
- - Configures result handler to increment nodes_matched counter
- - Sets up full traversal behavior (no early termination)
- - Returns placeholder result updated during batch execution
-
- ### Performance Characteristics
-
- - Time Complexity: O(1) operation registration
- - Memory: Single BatchOperation allocation in operations vector
- - Execution: Deferred until ExecuteBatch processes all operations
-
- @note This function registers the operation but defers execution
- @see ExecuteBatch for actual traversal and result population
-*/
-auto SceneQuery::ExecuteBatchCount(
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> oxygen::scene::QueryResult
-{
-  QueryResult result;
-  batch_operations_.push_back(BatchOperation { .predicate = predicate,
-    .type = BatchOperation::Type::kCount,
-    .result_destination = &result,
-    .result_handler =
-      [&result](const ConstVisitedNode& /*visited*/) {
-        // Simple counting, no use of visited node
-        ++result.nodes_matched;
-      },
-    .match_count = 0 });
-  return result; // Will be updated during ExecuteBatch
-}
-
-/*!
- Registers an Any operation for batch execution with early termination
- behavior and existence checking configuration.
-
- @param predicate Node filtering function for matching logic
- @return Optional bool placeholder (populated during ExecuteBatch)
-
- ### Batch Operation Registration
-
- - Creates BatchOperation with Any type and termination behavior
- - Configures result handler to set existence flag to true
- - Sets up automatic termination after first successful match
- - Returns placeholder result updated during batch execution
-
- ### Performance Characteristics
-
- - Time Complexity: O(1) operation registration
- - Memory: Single BatchOperation allocation in operations vector
- - Execution: Deferred until ExecuteBatch processes all operations
-
- @note This function registers the operation but defers execution
- @see ExecuteBatch for actual traversal and result population
-*/
-auto SceneQuery::ExecuteBatchAny(
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> std::optional<bool>
-{
-  std::optional<bool> result;
-  batch_operations_.push_back(BatchOperation { .predicate = predicate,
-    .type = BatchOperation::Type::kAny,
-    .result_destination = &result,
-    .result_handler =
-      [&result](const ConstVisitedNode& /*visited*/) {
-        // Execution is deferred, no use of visited node
-        result = true;
-      },
-    .match_count = 0 });
-  return result; // Will be updated during ExecuteBatch
 }
 
 /*!
@@ -296,12 +116,13 @@ auto SceneQuery::ExecuteImmediateFindFirst(
     }
     return FilterResult::kReject;
   };
-  traversal_.Traverse(
+  auto traversal_result = traversal_.Traverse(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       result = SceneNode { scene_weak_.lock(), visited.handle };
       return VisitResult::kStop;
     },
     TraversalOrder::kPreOrder, query_filter);
+  (void)traversal_result; // Suppress unused variable warning
   return result;
 }
 
@@ -342,10 +163,13 @@ auto SceneQuery::ExecuteImmediateCount(
     return FilterResult::kReject;
   };
   auto traversal_result = traversal_.Traverse(
-    [&](const ConstVisitedNode& /*visited*/, bool dry_run) -> VisitResult {
+    [&](const ConstVisitedNode& visited, bool dry_run) -> VisitResult {
       // Simple counting, no use of visited node, increment if not dry run
       if (!dry_run) {
-        ++result.nodes_examined;
+        // Check if this node matches the predicate
+        if (predicate(visited)) {
+          ++result.nodes_matched;
+        }
       }
       return VisitResult::kContinue;
     },
@@ -389,7 +213,7 @@ auto SceneQuery::ExecuteImmediateAny(
     }
     return FilterResult::kReject;
   };
-  traversal_.Traverse(
+  auto traversal_result = traversal_.Traverse(
     [&](const ConstVisitedNode& /*visited*/, bool /*dry_run*/) -> VisitResult {
       // Stop immediately as our filter has found a match. It does not matter if
       // it's a dry_run or not
@@ -397,6 +221,7 @@ auto SceneQuery::ExecuteImmediateAny(
       return VisitResult::kStop;
     },
     TraversalOrder::kPreOrder, any_filter);
+  (void)traversal_result; // Suppress unused variable warning
   return found;
 }
 
@@ -454,7 +279,7 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
   std::optional<SceneNode> found_node;
   // Traverse scene and use streaming matcher
   SceneTraversal<const Scene> traversal(scene_weak_.lock());
-  traversal.Traverse(
+  auto traversal_result = traversal.Traverse(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
       auto result = matcher.Match(visited, match_state);
 
@@ -472,10 +297,10 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
         // This path doesn't match, skip this subtree
         return VisitResult::kSkipSubtree;
       }
-
       return VisitResult::kContinue; // Should never reach here
     },
     TraversalOrder::kPreOrder);
+  (void)traversal_result; // Suppress unused variable warning
 
   return found_node;
 }
@@ -514,7 +339,7 @@ auto SceneQuery::FindFirstByPath(std::string_view path) const noexcept
  @note Path queries are not supported in batch mode (ExecuteBatch)
  @see FindFirstByPath(std::string_view) for absolute paths
 */
-auto SceneQuery::FindFirstByPath(const SceneNode& context,
+auto SceneQuery::FindFirstByPath(const SceneNode& /*context*/,
   std::string_view relative_path) const noexcept -> std::optional<SceneNode>
 {
   if (scene_weak_.expired()) [[unlikely]] {
@@ -635,41 +460,11 @@ auto SceneQuery::ExecuteImmediateCollectByPathImpl(
  - Returns failed BatchResult if scene is expired
  - Handles empty operation sets gracefully
  - Maintains operation state consistency across phases
-
  @note This function enables type-erased batch execution for template interface
  @see ExecuteBatch template method for type-safe public interface
 */
-auto SceneQuery::ExecuteBatchImpl(
-  std::function<void(const SceneQuery&)> batch_func) const noexcept
-  -> BatchResult
-{
-  if (scene_weak_.expired()) [[unlikely]] {
-    return BatchResult { .completed = false };
-  }
-
-  // Phase 1: Initialize batch state, counters, clear previous operations
-  BatchBegin();
-  // Phase 2: Execute lambda to collect operations and create composite filter
-  auto composite_filter = CreateCompositeFilterImpl(batch_func);
-  if (batch_operations_.empty()) {
-    auto empty_result
-      = TraversalResult { .nodes_visited = 0, .completed = true };
-    return BatchEnd(empty_result);
-  } // Phase 3: Execute single traversal with composite filter
-  auto traversal_result = traversal_.Traverse(
-    [this](const ConstVisitedNode& visited, bool dry_run) -> VisitResult {
-      // ProcessBatchedNode expects a Scene& parameter, but we can get it from
-      // scene_weak_
-      auto scene = scene_weak_.lock();
-      return ProcessBatchedNode(visited, *scene, dry_run);
-    },
-    TraversalOrder::kPreOrder, composite_filter);
-
-  // Phase 4: Consolidate results and cleanup
-  auto result = BatchEnd(traversal_result);
-
-  return result;
-}
+// Implementation moved to SceneQueryBatch.cpp for coroutine-based batch
+// processing
 
 /*!
  Creates a composite filter function that evaluates all batch operation
@@ -701,33 +496,8 @@ auto SceneQuery::ExecuteBatchImpl(
  @note This function enables efficient multi-predicate evaluation
  @see ProcessBatchedNode for result handling of matched operations
 */
-auto SceneQuery::CreateCompositeFilterImpl(
-  std::function<void(const SceneQuery&)> batch_func) const noexcept
-  -> std::function<FilterResult(const ConstVisitedNode&, FilterResult)>
-{
-  // Execute the lambda - this will populate batch_operations_
-  batch_func(*this); // Pass query as batch interface
-
-  // Create composite filter from collected operations
-  return [this](const ConstVisitedNode& visited,
-           FilterResult parent_result) -> FilterResult {
-    // SceneTraversal guarantees node_impl is valid - no null checks needed
-    bool any_operation_interested = false;
-
-    // Test all predicates once and flag matches
-    for (auto& op : batch_operations_) {
-      op.matched_current_node = false; // Reset flag
-
-      if (!op.has_terminated && op.predicate(visited)) {
-        op.matched_current_node = true;
-        any_operation_interested = true;
-      }
-    }
-
-    return any_operation_interested ? FilterResult::kAccept
-                                    : FilterResult::kReject;
-  };
-}
+// Implementation moved to SceneQueryBatch.cpp for coroutine-based batch
+// processing
 
 /*!
  Internal implementation for batch collection operations using type-erased
@@ -753,21 +523,5 @@ auto SceneQuery::CreateCompositeFilterImpl(
  @note This function registers the operation but defers execution
  @see ExecuteBatch for actual traversal and result population
 */
-auto SceneQuery::ExecuteBatchCollectImpl(
-  std::function<void(const SceneNode&)> add_to_container,
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
-  -> QueryResult
-{
-  QueryResult result;
-  batch_operations_.push_back(BatchOperation { .predicate = predicate,
-    .type = BatchOperation::Type::kCollect,
-    .result_destination = &result,
-    .result_handler =
-      [add_to_container, &result, scene = scene_weak_](
-        const ConstVisitedNode& visited) {
-        add_to_container(SceneNode { scene.lock(), visited.handle });
-        ++result.nodes_matched;
-      },
-    .match_count = 0 });
-  return result; // Will be updated during ExecuteBatch
-}
+// Implementation moved to SceneQueryBatch.cpp for coroutine-based batch
+// processing

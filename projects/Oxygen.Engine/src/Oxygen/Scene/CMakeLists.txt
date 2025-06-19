@@ -69,6 +69,7 @@ target_sources(
     "SceneNode.cpp"
     "SceneNodeImpl.cpp"
     "SceneQuery.cpp"
+    "SceneQueryBatch.cpp"
     "SceneTraversal.cpp"
   PUBLIC
     FILE_SET HEADERS

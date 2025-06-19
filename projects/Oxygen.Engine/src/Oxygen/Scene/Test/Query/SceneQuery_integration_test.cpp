@@ -16,14 +16,7 @@ namespace {
 
   //=== Integration Test Fixture =============================================//
 
-  class SceneQueryIntegrationTest : public SceneQueryTestBase {
-  protected:
-    void SetUp() override
-    {
-      // Create comprehensive game-like scene for integration testing
-      CreateGameSceneHierarchy();
-    }
-  };
+  class SceneQueryIntegrationTest : public SceneQueryTestBase { };
 
   //=== Complex Hierarchy Tests ==============================================//
 
@@ -32,38 +25,38 @@ namespace {
   {
     // Arrange: Create deep nested hierarchy using JSON
     const auto deep_json = R"({
-    "metadata": {
-      "name": "DeepHierarchy"
-    },
-    "nodes": [
-      {
-        "name": "L0",
-        "children": [
-          {
-            "name": "L1",
-            "children": [
-              {
-                "name": "L2",
-                "children": [
-                  {
-                    "name": "L3",
-                    "children": [
-                      {
-                        "name": "L4",
-                        "children": [
-                          {"name": "L5_Target"}
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  })";
+      "metadata": {
+        "name": "DeepHierarchy"
+      },
+      "nodes": [
+        {
+          "name": "L0",
+          "children": [
+            {
+              "name": "L1",
+              "children": [
+                {
+                  "name": "L2",
+                  "children": [
+                    {
+                      "name": "L3",
+                      "children": [
+                        {
+                          "name": "L4",
+                          "children": [
+                            {"name": "L5_Target"}
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    })";
 
     scene_ = GetFactory().CreateFromJson(deep_json, "DeepHierarchy");
     CreateQuery();
@@ -84,10 +77,10 @@ namespace {
     ASSERT_TRUE(deep_target.has_value());
     EXPECT_EQ(deep_target->GetName(), "L5_Target");
 
-    // Should find all 7 nodes (L0 through L5_Target)
+    // Should find all 6 nodes (L0 through L5_Target)
     auto all_count
       = query_->Count([](const ConstVisitedNode&) { return true; });
-    EXPECT_EQ(all_count.nodes_matched, 7);
+    EXPECT_EQ(all_count.nodes_matched, 6);
   }
 
   NOLINT_TEST_F(
@@ -121,6 +114,7 @@ namespace {
   {
     // Arrange: Use game scene with mixed visibility flags
     // Game scene has visible and invisible enemies
+    CreateGameSceneHierarchy();
 
     // Act: Query based on visibility flags
     auto visible_enemies = query_->Count([](const ConstVisitedNode& visited) {
@@ -156,6 +150,7 @@ namespace {
     SceneQueryIntegrationTest, Query_GameObjectSearch_FindsPlayerAndEnemies)
   {
     // Arrange: Game scene with player and enemies
+    CreateGameSceneHierarchy();
 
     // Act: Simulate typical game queries
     auto player_search = query_->ExecuteBatch([&](const auto& q) {
@@ -202,40 +197,40 @@ namespace {
   {
     // Arrange: Create asset-like hierarchy using JSON
     const auto asset_json = R"({
-    "scene": {
-      "name": "AssetHierarchy",
-      "nodes": [
-        {
-          "name": "Assets",
-          "children": [
-            {
-              "name": "Textures",
-              "children": [
-                {"name": "diffuse_texture.png"},
-                {"name": "normal_texture.png"},
-                {"name": "specular_texture.png"}
-              ]
-            },
-            {
-              "name": "Models",
-              "children": [
-                {"name": "character_model.fbx"},
-                {"name": "weapon_model.fbx"},
-                {"name": "environment_model.fbx"}
-              ]
-            },
-            {
-              "name": "Sounds",
-              "children": [
-                {"name": "footstep_sound.wav"},
-                {"name": "gunshot_sound.wav"}
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  })";
+      "scene": {
+        "name": "AssetHierarchy",
+        "nodes": [
+          {
+            "name": "Assets",
+            "children": [
+              {
+                "name": "Textures",
+                "children": [
+                  {"name": "diffuse_texture.png"},
+                  {"name": "normal_texture.png"},
+                  {"name": "specular_texture.png"}
+                ]
+              },
+              {
+                "name": "Models",
+                "children": [
+                  {"name": "character_model.fbx"},
+                  {"name": "weapon_model.fbx"},
+                  {"name": "environment_model.fbx"}
+                ]
+              },
+              {
+                "name": "Sounds",
+                "children": [
+                  {"name": "footstep_sound.wav"},
+                  {"name": "gunshot_sound.wav"}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    })";
 
     scene_ = GetFactory().CreateFromJson(asset_json, "AssetHierarchy");
     CreateQuery();
@@ -281,6 +276,7 @@ namespace {
   {
     // Arrange: Scene with mixed visible/invisible objects for rendering
     // optimization
+    CreateGameSceneHierarchy();
 
     // Act: Identify renderable objects
     auto rendering_batch = query_->ExecuteBatch([&](const auto& q) {
@@ -335,6 +331,7 @@ namespace {
     SceneQueryIntegrationTest, Query_WithPathAndPredicates_CombinedApproach)
   {
     // Arrange: Use both path-based and predicate-based queries together
+    CreateGameSceneHierarchy();
 
     // Act: Combine path and predicate approaches
 
@@ -378,6 +375,7 @@ namespace {
     Query_HierarchicalSearch_ParentChildRelationships)
   {
     // Arrange: Test hierarchical relationships
+    CreateGameSceneHierarchy();
 
     // Act: Find nodes based on parent-child relationships
     auto hierarchy_analysis = query_->ExecuteBatch([&](const auto& q) {
@@ -419,6 +417,7 @@ namespace {
     Query_ComplexGameplayScenario_MultipleSystemsIntegration)
   {
     // Arrange: Simulate complex gameplay scenario requiring multiple queries
+    CreateGameSceneHierarchy();
 
     // Act: Simulate game systems working together
     struct GameSystemQueries {
