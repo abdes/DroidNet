@@ -127,6 +127,13 @@ m_gtest_program(
 )
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneTraversal.Tests)
 
+m_gtest_program(
+  SceneAsyncTraversal
+  SOURCES
+    "AsyncTraversal/SceneTraversalAsync_test.cpp"
+)
+add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneAsyncTraversal.Tests)
+
 m_gtest_program(SceneGraphFunctional SOURCES "SceneGraph_functional_test.cpp")
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.SceneGraphFunctional.Tests)
 

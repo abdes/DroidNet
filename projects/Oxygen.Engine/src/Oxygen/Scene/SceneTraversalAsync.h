@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -26,24 +27,25 @@
 
 namespace oxygen::scene {
 
-//=== Concept for Visitors ===------------------------------------------------//
+//=== Concept for Async Visitors ===------------------------------------------//
 
-//! Concept for a visitor that can be used in scene traversal. Automatically
-//! deduces the constness of the VisitedNode based on the Scene type.
+//! Concept for an async visitor that can be used in scene traversal.
+//! Automatically deduces the constness of the VisitedNode based on the Scene
+//! type.
 template <typename Visitor, typename SceneT>
-concept SceneVisitorT = requires(Visitor v,
-  const VisitedNodeT<std::is_const_v<SceneT>>& visited_node, // const-correct
-  bool dry_run) {
-  { v(visited_node, dry_run) } -> std::convertible_to<VisitResult>;
+concept AsyncSceneVisitorT = requires(Visitor v,
+  const VisitedNodeT<std::is_const_v<SceneT>>& visited_node, bool dry_run) {
+  { v(visited_node, dry_run) } -> std::same_as<co::Co<VisitResult>>;
 };
 template <typename Visitor>
-concept MutatingSceneVisitor = SceneVisitorT<Visitor, Scene>;
+concept MutatingAsyncSceneVisitor = AsyncSceneVisitorT<Visitor, Scene>;
 template <typename Visitor>
-concept NonMutatingSceneVisitor = SceneVisitorT<Visitor, const Scene>;
+concept NonMutatingAsyncSceneVisitor = AsyncSceneVisitorT<Visitor, const Scene>;
 
-//=== High-Performance Scene Graph Traversal ===------------------------------//
+//=== High-Performance Scene Graph Async Traversal ===------------------------//
 
-//! High-performance scene graph traversal interface
+//! High-performance asynchronous scene graph traversal, supporting vsitors
+//! implemented as co-routines.
 /*!
  Provides optimized, non-recursive traversal algorithms working directly with
  SceneNodeImpl pointers for maximum performance in batch operations.
@@ -71,71 +73,53 @@ concept NonMutatingSceneVisitor = SceneVisitorT<Visitor, const Scene>;
  may result in crashes or inconsistent results.
 */
 template <typename SceneT>
-class SceneTraversal : public detail::SceneTraversalBase<SceneT> {
+class AsyncSceneTraversal : public detail::SceneTraversalBase<SceneT> {
   using Base = detail::SceneTraversalBase<SceneT>;
 
 public:
   using Node = typename Base::Node;
   using VisitedNode = typename Base::VisitedNode;
 
-  explicit SceneTraversal(const std::shared_ptr<SceneT>& scene)
+  explicit AsyncSceneTraversal(const std::shared_ptr<SceneT>& scene)
     : Base(scene)
   {
   }
 
-  ~SceneTraversal() override = default;
+  ~AsyncSceneTraversal() override = default;
 
-  OXYGEN_DEFAULT_COPYABLE(SceneTraversal)
-  OXYGEN_DEFAULT_MOVABLE(SceneTraversal)
+  OXYGEN_DEFAULT_COPYABLE(AsyncSceneTraversal)
+  OXYGEN_DEFAULT_MOVABLE(AsyncSceneTraversal)
 
   //=== Core Traversal API ===----------------------------------------------//
 
   //! Traverse the entire scene graph from root nodes, using by default, a
   //! depth-first, pre-order traversal.
   template <typename VisitorFunc, typename FilterFunc = AcceptAllFilter>
-    requires SceneVisitorT<VisitorFunc, SceneT>
+    requires AsyncSceneVisitorT<VisitorFunc, SceneT>
     && SceneFilterT<FilterFunc, SceneT>
-  [[nodiscard]] TraversalResult Traverse(VisitorFunc&& visitor,
+  [[nodiscard]] co::Co<TraversalResult> TraverseAsync(VisitorFunc&& visitor,
     TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) const;
 
   //! Traverse from a single hierarchy starting at \p starting_node, using by
   //! default, a depth-first, pre-order traversal.
   template <typename VisitorFunc, typename FilterFunc = AcceptAllFilter>
-    requires SceneVisitorT<VisitorFunc, SceneT>
+    requires AsyncSceneVisitorT<VisitorFunc, SceneT>
     && SceneFilterT<FilterFunc, SceneT>
-  [[nodiscard]] TraversalResult TraverseHierarchy(const Node& starting_node,
-    VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
+  [[nodiscard]] TraversalResult TraverseHierarchyAsync(
+    const Node& starting_node, VisitorFunc&& visitor,
+    TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) const;
 
   //! Traverse multiple hierarchies, starting at the nodes provided in \p
   //! starting_nodes, using by default, a depth-first, pre-order traversal.
   template <typename VisitorFunc, typename FilterFunc = AcceptAllFilter>
-    requires SceneVisitorT<VisitorFunc, SceneT>
+    requires AsyncSceneVisitorT<VisitorFunc, SceneT>
     && SceneFilterT<FilterFunc, SceneT>
-  [[nodiscard]] TraversalResult TraverseHierarchies(
+  [[nodiscard]] co::Co<TraversalResult> TraverseHierarchiesAsync(
     std::span<const Node> starting_nodes, VisitorFunc&& visitor,
     TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) const;
-
-  //=== Convenience Methods ===---------------------------------------------//
-
-  //! Update transforms for all dirty nodes using optimized traversal
-  /*!
-   Efficiently updates transforms for all nodes that have dirty transform
-   state. This is equivalent to Scene::Update but uses the optimized traversal
-   system.
-
-   \return Number of nodes that had their transforms updated
-  */
-  std::size_t UpdateTransforms();
-
-  //! Update transforms for dirty nodes from specific roots
-  /*!
-   \param starting_nodes Starting nodes for transform update traversal
-   \return Number of nodes that had their transforms updated
-  */
-  std::size_t UpdateTransforms(std::span<SceneNode> starting_nodes);
 
 private:
   using Base::ApplyNodeFilter;
@@ -152,41 +136,43 @@ private:
   //=== Private Helper Methods ===--------------------------------------------//
 
   template <TraversalOrder Order, typename VisitorFunc, typename Container>
-  VisitResult PerformNodeVisit(VisitorFunc& visitor, Container& container,
-    TraversalResult& result, bool dry_run = false) const;
+  co::Co<VisitResult> PerformNodeVisitAsync(VisitorFunc& visitor,
+    Container& container, TraversalResult& result, bool dry_run = false) const;
 
   //! Unified traversal implementation
   template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
-  TraversalResult TraverseImpl(std::span<VisitedNode> roots,
+  co::Co<TraversalResult> TraverseImplAsync(std::span<VisitedNode> roots,
     VisitorFunc&& visitor, FilterFunc&& filter) const;
 
   template <typename VisitorFunc, typename FilterFunc>
-  TraversalResult TraverseDispatch(std::span<VisitedNode> root_impl_nodes,
-    VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const;
+  co::Co<TraversalResult> TraverseDispatchAsync(
+    std::span<VisitedNode> root_impl_nodes, VisitorFunc&& visitor,
+    TraversalOrder order, FilterFunc&& filter) const;
 };
 
 //=== Template Deduction Guides ===-------------------------------------------//
 
-SceneTraversal(std::shared_ptr<Scene>) -> SceneTraversal<Scene>;
-SceneTraversal(std::shared_ptr<const Scene>) -> SceneTraversal<const Scene>;
+AsyncSceneTraversal(std::shared_ptr<Scene>) -> AsyncSceneTraversal<Scene>;
+AsyncSceneTraversal(std::shared_ptr<const Scene>)
+  -> AsyncSceneTraversal<const Scene>;
 
 //=== Template Implementations ===--------------------------------------------//
 
 template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
-  requires SceneVisitorT<VisitorFunc, SceneT>
+  requires AsyncSceneVisitorT<VisitorFunc, SceneT>
   && SceneFilterT<FilterFunc, SceneT>
-TraversalResult SceneTraversal<SceneT>::Traverse(
+co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseAsync(
   VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
 {
   if (IsSceneExpired()) [[unlikely]] {
     DLOG_F(ERROR, "SceneTraversal called on an expired scene");
-    return TraversalResult {};
+    co_return TraversalResult {};
   }
 
   auto root_handles = GetScene().GetRootHandles();
   if (root_handles.empty()) [[unlikely]] {
-    return TraversalResult {};
+    co_return TraversalResult {};
   }
 
   // We're traversing the root nodes of our scene. No need to be paranoid with
@@ -200,15 +186,16 @@ TraversalResult SceneTraversal<SceneT>::Traverse(
       };
     });
 
-  return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+  co_return co_await TraverseDispatchAsync(root_impl_nodes,
+    std::forward<VisitorFunc>(visitor), order,
+    std::forward<FilterFunc>(filter));
 }
 
 template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
-  requires SceneVisitorT<VisitorFunc, SceneT>
+  requires AsyncSceneVisitorT<VisitorFunc, SceneT>
   && SceneFilterT<FilterFunc, SceneT>
-TraversalResult SceneTraversal<SceneT>::TraverseHierarchy(
+TraversalResult AsyncSceneTraversal<SceneT>::TraverseHierarchyAsync(
   const Node& starting_node, VisitorFunc&& visitor, TraversalOrder order,
   FilterFunc&& filter) const
 {
@@ -228,20 +215,21 @@ TraversalResult SceneTraversal<SceneT>::TraverseHierarchy(
     },
   };
 
-  return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+  return TraverseDispatchAsync(root_impl_nodes,
+    std::forward<VisitorFunc>(visitor), order,
+    std::forward<FilterFunc>(filter));
 }
 
 template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
-  requires SceneVisitorT<VisitorFunc, SceneT>
+  requires AsyncSceneVisitorT<VisitorFunc, SceneT>
   && SceneFilterT<FilterFunc, SceneT>
-TraversalResult SceneTraversal<SceneT>::TraverseHierarchies(
+co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseHierarchiesAsync(
   std::span<const Node> starting_nodes, VisitorFunc&& visitor,
   TraversalOrder order, FilterFunc&& filter) const
 {
   if (starting_nodes.empty()) [[unlikely]] {
-    return TraversalResult {};
+    co_return TraversalResult {};
   }
   DCHECK_F(!IsSceneExpired());
 
@@ -256,14 +244,16 @@ TraversalResult SceneTraversal<SceneT>::TraverseHierarchies(
         .depth = 0 };
     });
 
-  return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
-    order, std::forward<FilterFunc>(filter));
+  co_return co_await TraverseDispatchAsync(root_impl_nodes,
+    std::forward<VisitorFunc>(visitor), order,
+    std::forward<FilterFunc>(filter));
 }
 
 template <typename SceneT>
 template <TraversalOrder Order, typename VisitorFunc, typename Container>
-VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
-  Container& container, TraversalResult& result, bool dry_run) const
+co::Co<VisitResult> AsyncSceneTraversal<SceneT>::PerformNodeVisitAsync(
+  VisitorFunc& visitor, Container& container, TraversalResult& result,
+  bool dry_run) const
 {
   using Traits = ContainerTraits<Order>;
 
@@ -280,11 +270,11 @@ VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
   if (dry_run) {
     DLOG_SCOPE_F(2, "Dry-Run");
 
-    visit_result = visitor(entry_ref.visited_node, dry_run);
+    visit_result = co_await visitor(entry_ref.visited_node, dry_run);
     DLOG_F(2, "result: {}", nostd::to_string(visit_result));
 
     if (visit_result == VisitResult::kContinue) [[likely]] {
-      return visit_result; // Continue traversal
+      co_return visit_result; // Continue traversal
     }
 
     // If not kContinue, then fall through to actually visit the node as
@@ -295,26 +285,26 @@ VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
   // Remove it now - visiting
   auto entry = Traits::pop(container); // Do not use node_ref - invalidated
 
-  visit_result = visitor(entry.visited_node, false);
+  visit_result = co_await visitor(entry.visited_node, false);
   DLOG_F(2, "-> {}", nostd::to_string(visit_result));
   ++result.nodes_visited;
 
   if (visit_result == VisitResult::kStop) [[unlikely]] {
     result.completed = false;
   }
-  return visit_result;
+  co_return visit_result;
 }
 
 // NOLINTBEGIN(*-missing-std-forward) - used inside loop
 template <typename SceneT>
 template <TraversalOrder Order, typename VisitorFunc, typename FilterFunc>
-TraversalResult SceneTraversal<SceneT>::TraverseImpl(
+co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
   std::span<VisitedNode> roots, VisitorFunc&& visitor,
   FilterFunc&& filter) const
 // NOLINTEND(*-missing-std-forward)
 {
   if (roots.empty()) [[unlikely]] {
-    return TraversalResult { .completed = true };
+    co_return TraversalResult { .completed = true };
   }
 
   DLOG_SCOPE_F(2, "Scene Traversal");
@@ -371,10 +361,10 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
     if constexpr (Order == TraversalOrder::kPostOrder) {
       if (entry_ref.state == TraversalEntry::ProcessingState::kPending) {
         // First time seeing this node - dry run to check visitor intent
-        auto visit_result
-          = PerformNodeVisit<Order>(local_visitor, container, result, true);
+        auto visit_result = co_await PerformNodeVisitAsync<Order>(
+          local_visitor, container, result, true);
         if (visit_result == VisitResult::kStop) [[unlikely]] {
-          return result;
+          co_return result;
         }
         if (visit_result == VisitResult::kSkipSubtree) {
           // Skip children and continue
@@ -398,10 +388,10 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
     // actual visit of the node.
     // WARNING: This may mutate the scene graph, DO NOT use entry_ref or peek()
     // on the container after this point.
-    auto visit_result
-      = PerformNodeVisit<Order>(local_visitor, container, result, false);
+    auto visit_result = co_await PerformNodeVisitAsync<Order>(
+      local_visitor, container, result, false);
     if (visit_result == VisitResult::kStop) [[unlikely]] {
-      return result;
+      co_return result;
     }
 
     // Breadth-first and pre-order -> add children if not skipping subtree
@@ -412,96 +402,40 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
         QueueChildrenForTraversal<Order>(filter_result, container);
       }
     }
+
+    co_await oxygen::co::kYield; // Yield to allow other coroutines to run
   }
-  return result;
+  co_return result;
 }
 
 template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
-TraversalResult SceneTraversal<SceneT>::TraverseDispatch(
+co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseDispatchAsync(
   std::span<VisitedNode> root_impl_nodes, VisitorFunc&& visitor,
   const TraversalOrder order, FilterFunc&& filter) const
 {
   if (root_impl_nodes.empty()) [[unlikely]] {
-    return TraversalResult {};
+    co_return TraversalResult {};
   }
 
   // Dispatch to appropriate traversal algorithm
   switch (order) {
   case TraversalOrder::kBreadthFirst:
-    return TraverseImpl<TraversalOrder::kBreadthFirst>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+    co_return co_await TraverseImplAsync<TraversalOrder::kBreadthFirst>(
+      root_impl_nodes, std::forward<VisitorFunc>(visitor),
+      std::forward<FilterFunc>(filter));
   case TraversalOrder::kPreOrder:
-    return TraverseImpl<TraversalOrder::kPreOrder>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+    co_return co_await TraverseImplAsync<TraversalOrder::kPreOrder>(
+      root_impl_nodes, std::forward<VisitorFunc>(visitor),
+      std::forward<FilterFunc>(filter));
   case TraversalOrder::kPostOrder:
-    return TraverseImpl<TraversalOrder::kPostOrder>(root_impl_nodes,
-      std::forward<VisitorFunc>(visitor), std::forward<FilterFunc>(filter));
+    co_return co_await TraverseImplAsync<TraversalOrder::kPostOrder>(
+      root_impl_nodes, std::forward<VisitorFunc>(visitor),
+      std::forward<FilterFunc>(filter));
   }
 
   // This should never be reached with valid enum values
-  [[unlikely]] return TraversalResult {};
-}
-
-//=== Transform Update Methods ===--------------------------------------------//
-
-/*!
- Efficiently updates transforms for all nodes that have dirty transform state.
- This is equivalent to Scene::Update but uses the optimized traversal system.
-
- @return Number of nodes that had their transforms updated
-*/
-template <typename SceneT>
-std::size_t SceneTraversal<SceneT>::UpdateTransforms()
-{
-  std::size_t updated_count
-    = 0; // Batch process with dirty transform filter for efficiency
-  [[maybe_unused]] auto result = Traverse(
-    [&](const auto& node, const bool dry_run) -> VisitResult {
-      DCHECK_F(!dry_run,
-        "UpdateTransforms uses kPreOrder and should never receive "
-        "dry_run=true");
-
-      DCHECK_NOTNULL_F(node.node_impl);
-      LOG_SCOPE_F(2, "For Node");
-      LOG_F(2, "name = {}", node.node_impl->GetName());
-      LOG_F(2, "is root: {}", node.node_impl->AsGraphNode().IsRoot());
-
-      node.node_impl->UpdateTransforms(GetScene());
-      ++updated_count;
-      return VisitResult::kContinue;
-    },
-    TraversalOrder::kPreOrder, DirtyTransformFilter {});
-
-  return updated_count;
-}
-
-/*!
- @param starting_nodes Starting nodes for transform update traversal
- @return Number of nodes that had their transforms updated
-*/
-template <typename SceneT>
-std::size_t SceneTraversal<SceneT>::UpdateTransforms(
-  const std::span<SceneNode> starting_nodes)
-{
-  std::size_t updated_count
-    = 0; // Batch process from specific roots with dirty transform filter
-  [[maybe_unused]] auto result = TraverseHierarchies(
-    starting_nodes,
-    [this, &updated_count](
-      const MutableVisitedNode& node, const bool dry_run) -> VisitResult {
-      DCHECK_F(!dry_run,
-        "UpdateTransforms uses kPreOrder and should never receive "
-        "dry_run=true");
-
-      DCHECK_NOTNULL_F(node.node_impl);
-      node.node_impl->UpdateTransforms(GetScene());
-      ++updated_count;
-      return VisitResult::kContinue;
-    },
-    TraversalOrder::kPreOrder, DirtyTransformFilter {});
-
-  return updated_count;
+  [[unlikely]] co_return TraversalResult {};
 }
 
 } // namespace oxygen::scene
