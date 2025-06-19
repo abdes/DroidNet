@@ -61,6 +61,7 @@ protected:
 
   //! Create complex hierarchy from JSON template
   auto CreateComplexHierarchyFromJson() -> void;
+
   //! Create game-like scene hierarchy for realistic testing
   auto CreateGameSceneHierarchy() -> void;
 
