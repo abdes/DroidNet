@@ -334,7 +334,7 @@ public:
   template <typename VisitorFunc, typename FilterFunc = AcceptAllFilter>
     requires SceneVisitorT<VisitorFunc, SceneT>
     && SceneFilterT<FilterFunc, SceneT>
-  [[nodiscard]] auto TraverseHierarchy(Node& starting_node,
+  [[nodiscard]] auto TraverseHierarchy(const Node& starting_node,
     VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) const -> TraversalResult;
 
@@ -343,7 +343,7 @@ public:
   template <typename VisitorFunc, typename FilterFunc = AcceptAllFilter>
     requires SceneVisitorT<VisitorFunc, SceneT>
     && SceneFilterT<FilterFunc, SceneT>
-  [[nodiscard]] auto TraverseHierarchies(std::span<Node> starting_nodes,
+  [[nodiscard]] auto TraverseHierarchies(std::span<const Node> starting_nodes,
     VisitorFunc&& visitor, TraversalOrder order = TraversalOrder::kPreOrder,
     FilterFunc&& filter = AcceptAllFilter {}) const -> TraversalResult;
 
@@ -622,7 +622,7 @@ template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
   requires SceneVisitorT<VisitorFunc, SceneT>
   && SceneFilterT<FilterFunc, SceneT>
-auto SceneTraversal<SceneT>::TraverseHierarchy(Node& starting_node,
+auto SceneTraversal<SceneT>::TraverseHierarchy(const Node& starting_node,
   VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
   -> TraversalResult
 {
@@ -651,9 +651,9 @@ template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
   requires SceneVisitorT<VisitorFunc, SceneT>
   && SceneFilterT<FilterFunc, SceneT>
-auto SceneTraversal<SceneT>::TraverseHierarchies(std::span<Node> starting_nodes,
-  VisitorFunc&& visitor, TraversalOrder order, FilterFunc&& filter) const
-  -> TraversalResult
+auto SceneTraversal<SceneT>::TraverseHierarchies(
+  std::span<const Node> starting_nodes, VisitorFunc&& visitor,
+  TraversalOrder order, FilterFunc&& filter) const -> TraversalResult
 {
   if (starting_nodes.empty()) [[unlikely]] {
     return TraversalResult {};
