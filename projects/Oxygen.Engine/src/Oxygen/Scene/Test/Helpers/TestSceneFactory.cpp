@@ -11,7 +11,9 @@
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 
 #include "./TestSceneFactory.h"
 #include "./TestSceneFactory_schema.h"
@@ -134,7 +136,6 @@ namespace {
 
     return scene;
   }
-
   //! Creates a single node from JSON specification.
   auto CreateNodeFromJson(const TestSceneFactory& factory,
     const std::shared_ptr<Scene>& scene, const json& node_spec,
@@ -154,16 +155,52 @@ namespace {
       node_name = factory.GetNameGenerator().GenerateName(auto_index++);
     }
 
-    // Create the node
+    // Extract flags from JSON if specified
+    SceneNode::Flags node_flags = SceneNodeImpl::kDefaultFlags;
+    if (node_spec.contains("flags") && node_spec["flags"].is_object()) {
+      const auto& flags_json = node_spec["flags"];
+
+      // Parse visibility flag
+      if (flags_json.contains("visible")
+        && flags_json["visible"].is_boolean()) {
+        bool visible = flags_json["visible"].get<bool>();
+        node_flags = node_flags.SetFlag(
+          SceneNodeFlags::kVisible, SceneFlag {}.SetEffectiveValueBit(visible));
+      }
+
+      // Parse other common flags as needed
+      if (flags_json.contains("static") && flags_json["static"].is_boolean()) {
+        bool is_static = flags_json["static"].get<bool>();
+        node_flags = node_flags.SetFlag(SceneNodeFlags::kStatic,
+          SceneFlag {}.SetEffectiveValueBit(is_static));
+      }
+
+      if (flags_json.contains("castsShadows")
+        && flags_json["castsShadows"].is_boolean()) {
+        bool casts_shadows = flags_json["castsShadows"].get<bool>();
+        node_flags = node_flags.SetFlag(SceneNodeFlags::kCastsShadows,
+          SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+      }
+
+      if (flags_json.contains("receivesShadows")
+        && flags_json["receivesShadows"].is_boolean()) {
+        bool receives_shadows = flags_json["receivesShadows"].get<bool>();
+        node_flags = node_flags.SetFlag(SceneNodeFlags::kReceivesShadows,
+          SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+      }
+    }
+
+    // Create the node with the appropriate flags
     SceneNode node;
     if (parent.has_value()) {
-      auto child_opt = scene->CreateChildNode(parent.value(), node_name);
+      auto child_opt
+        = scene->CreateChildNode(parent.value(), node_name, node_flags);
       if (!child_opt.has_value()) {
         throw std::runtime_error("Failed to create child node: " + node_name);
       }
       node = *child_opt;
     } else {
-      node = scene->CreateNode(node_name);
+      node = scene->CreateNode(node_name, node_flags);
     }
 
     // Apply node properties
