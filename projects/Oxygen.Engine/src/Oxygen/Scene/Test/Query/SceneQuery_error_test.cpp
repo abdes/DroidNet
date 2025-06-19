@@ -18,11 +18,7 @@ namespace {
 
   class SceneQueryErrorTest : public SceneQueryTestBase {
   protected:
-    void SetUp() override
-    {
-      // Create complex scene for error testing
-      CreateGameSceneHierarchy();
-    }
+    void SetUp() override { }
   };
 
   //=== Scene Lifetime Tests =================================================//

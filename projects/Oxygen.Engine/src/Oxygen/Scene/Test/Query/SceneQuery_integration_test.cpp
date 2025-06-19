@@ -16,7 +16,67 @@ namespace {
 
   //=== Integration Test Fixture =============================================//
 
-  class SceneQueryIntegrationTest : public SceneQueryTestBase { };
+  class SceneQueryIntegrationTest : public SceneQueryTestBase {
+  protected:
+    void SetUp() override { }
+
+    auto CreateGameSceneHierarchy() -> void
+    {
+      const auto json = GetGameSceneJson();
+      scene_ = GetFactory().CreateFromJson(json, "GameScene");
+      ASSERT_NE(scene_, nullptr);
+      CreateQuery();
+    }
+
+    auto GetGameSceneJson() -> std::string
+    {
+      return R"({
+        "metadata": {
+          "name": "GameScene"
+        },
+        "nodes": [
+          {
+            "name": "Level1",
+            "children": [
+              {
+                "name": "Player",
+                "flags": {"visible": true, "static": false},
+                "children": [
+                  {"name": "Weapon"},
+                  {"name": "Shield"}
+                ]
+              },
+              {
+                "name": "Enemies",
+                "children": [
+                  {"name": "Enemy1", "flags": {"visible": true}},
+                  {"name": "Enemy2", "flags": {"visible": false}},
+                  {"name": "Enemy3", "flags": {"visible": true}}
+                ]
+              },
+              {
+                "name": "Items",
+                "children": [
+                  {"name": "Potion1"},
+                  {"name": "Potion2"},
+                  {"name": "Key"}
+                ]
+              }
+            ]
+          },
+          {
+            "name": "UI",
+            "flags": {"static": true},
+            "children": [
+              {"name": "MainMenu"},
+              {"name": "HealthBar"},
+              {"name": "Inventory"}
+            ]
+          }
+        ]
+      })";
+    }
+  };
 
   //=== Complex Hierarchy Tests ==============================================//
 
@@ -112,8 +172,7 @@ namespace {
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_WithComplexFlags_FiltersCorrectly)
   {
-    // Arrange: Use game scene with mixed visibility flags
-    // Game scene has visible and invisible enemies
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Query based on visibility flags
@@ -149,7 +208,7 @@ namespace {
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_GameObjectSearch_FindsPlayerAndEnemies)
   {
-    // Arrange: Game scene with player and enemies
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Simulate typical game queries
@@ -274,8 +333,7 @@ namespace {
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_SceneOptimization_IdentifiesRenderables)
   {
-    // Arrange: Scene with mixed visible/invisible objects for rendering
-    // optimization
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Identify renderable objects
@@ -330,7 +388,7 @@ namespace {
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_WithPathAndPredicates_CombinedApproach)
   {
-    // Arrange: Use both path-based and predicate-based queries together
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Combine path and predicate approaches
@@ -374,7 +432,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryIntegrationTest,
     Query_HierarchicalSearch_ParentChildRelationships)
   {
-    // Arrange: Test hierarchical relationships
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Find nodes based on parent-child relationships
@@ -416,7 +474,7 @@ namespace {
   NOLINT_TEST_F(SceneQueryIntegrationTest,
     Query_ComplexGameplayScenario_MultipleSystemsIntegration)
   {
-    // Arrange: Simulate complex gameplay scenario requiring multiple queries
+    // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Simulate game systems working together

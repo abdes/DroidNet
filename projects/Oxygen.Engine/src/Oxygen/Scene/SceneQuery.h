@@ -12,6 +12,7 @@
 #include <optional>
 
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/SceneTraversalAsync.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
@@ -154,7 +155,7 @@ struct QueryResult {
 class SceneQuery {
 public:
   //! Construct a scene query interface for the given scene
-  OXGN_SCN_API explicit SceneQuery(std::shared_ptr<const Scene> scene);
+  OXGN_SCN_API explicit SceneQuery(const std::shared_ptr<const Scene>& scene);
 
   //=== Traversal Scope Configuration API ===--------------------------------//
 
@@ -208,6 +209,7 @@ private:
 
   //! Const-correct traversal interface
   SceneTraversal<const Scene> traversal_;
+  AsyncSceneTraversal<const Scene> async_traversal_;
 
   // Batch execution state (mutable for const methods)
   //! Batch mode execution flag
