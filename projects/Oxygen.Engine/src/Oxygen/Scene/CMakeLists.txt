@@ -82,6 +82,7 @@ target_sources(
       "ScenePrettyPrinter.h"
       "SceneQuery.h"
       "SceneTraversal.h"
+      "SceneTraversalAsync.h"
       "SceneTraversalBase.h"
       "Types/Flags.h"
       "Types/NodeHandle.h"

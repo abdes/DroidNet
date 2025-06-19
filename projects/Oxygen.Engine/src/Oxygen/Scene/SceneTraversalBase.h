@@ -233,6 +233,24 @@ protected:
     return entry.visited_node.node_impl != nullptr;
   }
 
+  template <typename FilterFunc>
+  FilterResult ApplyNodeFilter(FilterFunc& filter, const TraversalEntry& entry,
+    TraversalResult& result) const
+  {
+    DLOG_SCOPE_FUNCTION(2);
+
+    DCHECK_NOTNULL_F(entry.visited_node.node_impl);
+    DLOG_F(2, "node: {}", entry.visited_node.node_impl->GetName());
+
+    const auto filter_result
+      = filter(entry.visited_node, entry.parent_filter_result);
+    if (filter_result != FilterResult::kAccept) {
+      ++result.nodes_filtered;
+    }
+    DLOG_F(2, "-> {}", nostd::to_string(filter_result));
+    return filter_result;
+  }
+
   std::weak_ptr<SceneT> scene_weak_;
   mutable std::vector<VisitedNode> children_buffer_;
 };
