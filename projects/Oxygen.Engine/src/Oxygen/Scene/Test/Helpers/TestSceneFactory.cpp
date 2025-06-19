@@ -302,6 +302,7 @@ auto TestSceneFactory::Instance() -> TestSceneFactory&
 
 TestSceneFactory::TestSceneFactory()
   : name_generator_(CreateDefaultNameGenerator())
+  , context_updater_(CreateContextUpdater())
 {
 }
 
@@ -311,11 +312,22 @@ auto TestSceneFactory::CreateDefaultNameGenerator()
   return std::make_unique<DefaultNameGenerator>();
 }
 
+auto TestSceneFactory::CreateContextUpdater()
+  -> std::function<void(NameGenerator*, int, bool)>
+{
+  return [](NameGenerator* gen, int depth, bool multiple_siblings) {
+    auto* typed_gen = static_cast<DefaultNameGenerator*>(gen);
+    typed_gen->SetDepth(depth);
+    typed_gen->SetMultipleSiblingsExpected(multiple_siblings);
+  };
+}
+
 //=== Configuration Methods ===-----------------------------------------------//
 
 auto TestSceneFactory::ResetNameGenerator() -> TestSceneFactory&
 {
   name_generator_ = CreateDefaultNameGenerator();
+  context_updater_ = CreateContextUpdater();
   return *this;
 }
 
@@ -344,6 +356,7 @@ auto TestSceneFactory::GetDefaultCapacity() const -> std::optional<std::size_t>
 auto TestSceneFactory::Reset() -> TestSceneFactory&
 {
   name_generator_ = CreateDefaultNameGenerator();
+  context_updater_ = CreateContextUpdater();
   default_capacity_.reset();
   templates_.clear();
   return *this;
@@ -366,6 +379,13 @@ auto TestSceneFactory::GenerateNodeName(int index) const -> std::string
 }
 
 //=== Common Pattern Shortcuts ===--------------------------------------------//
+
+auto TestSceneFactory::CreateEmptyScene(std::string_view scene_name) const
+  -> std::shared_ptr<Scene>
+{
+  auto scene = CreateScene(scene_name);
+  return scene;
+}
 
 auto TestSceneFactory::CreateSingleNodeScene(std::string_view scene_name) const
   -> std::shared_ptr<Scene>
@@ -429,7 +449,7 @@ auto TestSceneFactory::CreateLinearChainScene(
 
   for (int i = 1; i < depth; ++i) {
     UpdateNamingContext(i, false); // Linear chain = single child at each level
-    const auto child_name = GenerateNodeName(i);
+    const auto child_name = GenerateNodeName(0); // index 0 for single child
     auto child_opt = scene->CreateChildNode(current, child_name);
     if (child_opt.has_value()) {
       current = *child_opt;
@@ -592,19 +612,14 @@ auto TestSceneFactory::ValidateJson(const std::string& json_string)
   }
 }
 
-//! Updates name generator context using modern C++20 concepts.
+//! Updates name generator context using type-erased function pointer.
 void TestSceneFactory::UpdateNamingContext(
   int depth, bool multiple_siblings_expected) const
 {
-  if constexpr (ContextAwareNameGenerator<
-                  std::remove_reference_t<decltype(*name_generator_)>>) {
-    // This won't compile if the generator doesn't support context
-    auto* context_aware
-      = static_cast<DefaultNameGenerator*>(name_generator_.get());
-    context_aware->SetDepth(depth);
-    context_aware->SetMultipleSiblingsExpected(multiple_siblings_expected);
+  // Use stored function to update context - no RTTI required!
+  if (context_updater_) {
+    context_updater_(name_generator_.get(), depth, multiple_siblings_expected);
   }
-  // If the generator doesn't support context, do nothing - zero overhead!
 }
 
 } // namespace oxygen::scene::testing
