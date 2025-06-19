@@ -84,3 +84,13 @@ $ cd DroidNet/projects/Oxygen.Engine
 $  conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
 
 ```
+
+## Useful commands
+
+```powershell
+$repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Where-Object { $_ -match '\.(h|cpp)$' } | ForEach-Object { $abs=Join-Path $repoRoot $_; clang-format -i $abs; Write-Output "Formatted: $abs" }
+```
+
+```powershell
+$repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Where-Object { $_ -match '(CMakeLists\.txt|\.cmake)$' } | ForEach-Object { $abs=Join-Path $repoRoot $_; gersemi -i $abs; Write-Output "Formatted: $abs" }
+```
