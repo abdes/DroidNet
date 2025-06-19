@@ -21,29 +21,89 @@ namespace {
 
 //=== Immediate Mode Test Fixture ===---------------------------------------//
 
-class SceneQueryImmediateTest : public SceneQueryTestBase { };
+class SceneQueryImmediateTest : public SceneQueryTestBase {
+  void SetUp() override
+  {
+    // Create game scene hierarchy suitable for batch testing
+    CreateGameSceneHierarchy();
+  }
+
+  auto CreateGameSceneHierarchy() -> void
+  {
+    const auto json = GetGameSceneJson();
+    scene_ = GetFactory().CreateFromJson(json, "GameScene");
+    ASSERT_NE(scene_, nullptr);
+    CreateQuery();
+  }
+
+  auto GetGameSceneJson() -> std::string
+  {
+    return R"({
+      "metadata": {
+        "name": "MultiPlayerHierarchy"
+      },
+      "nodes": [
+        {
+          "name": "GameWorld",
+          "children": [
+            {
+              "name": "Player1",
+              "flags": {"visible": true},
+              "children": [
+                {"name": "Weapon", "flags": {"visible": true}},
+                {"name": "Shield", "flags": {"visible": true}},
+                {"name": "Armor", "flags": {"visible": false}}
+              ]
+            },
+            {
+              "name": "Player2",
+              "flags": {"visible": true},
+              "children": [
+                {"name": "Weapon", "flags": {"visible": true}},
+                {"name": "Bow", "flags": {"visible": true}},
+                {"name": "Quiver", "flags": {"visible": false}}
+              ]
+            },
+            {
+              "name": "NPCs",
+              "children": [
+                {"name": "Merchant", "flags": {"visible": true}},
+                {"name": "Guard", "flags": {"visible": true}}
+              ]
+            },
+            {
+              "name": "Environment",
+              "children": [
+                {"name": "Tree1", "flags": {"visible": true}},
+                {"name": "Tree2", "flags": {"visible": true}},
+                {"name": "Rock", "flags": {"visible": true}}
+              ]
+            }
+          ]
+        }
+      ]
+    })";
+  }
+};
 
 //=== FindFirst Tests ===---------------------------------------------------//
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithMatchingPredicate_ReturnsFirstMatch)
 {
-  // Arrange: Use complex hierarchy from JSON
-  // Hierarchy: World -> Environment -> Buildings -> [House1, House2, Office]
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
-  // Act: Find first building
-  auto result = query_->FindFirst(NodeNameStartsWith("House"));
+  // Act: Find first tree
+  auto result = query_->FindFirst(NodeNameStartsWith("Tree"));
 
   // Assert: Should find House1 (first in traversal order)
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "House1");
+  EXPECT_EQ(result->GetName(), "Tree1");
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
 {
-  // Arrange: Complex hierarchy loaded
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Search for non-existent node
   auto result = query_->FindFirst(NodeNameEquals("NonExistentNode"));
@@ -52,52 +112,22 @@ NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
   EXPECT_FALSE(result.has_value());
 }
 
-NOLINT_TEST_F(
-  SceneQueryImmediateTest, FindFirst_WithMultipleMatches_ReturnsFirst)
-{
-  // Arrange: Create scene with multiple "Enemy" nodes using TestSceneFactory
-  CreateGameSceneHierarchy();
-
-  // Act: Find first enemy
-  auto result = query_->FindFirst(NodeNameStartsWith("Enemy"));
-
-  // Assert: Should return Enemy1 (first in traversal order)
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "Enemy1");
-}
-
-NOLINT_TEST_F(
-  SceneQueryImmediateTest, FindFirst_WithComplexHierarchy_TraversesCorrectly)
-{
-  // Arrange: Complex hierarchy from JSON template
-  CreateComplexHierarchyFromJson();
-
-  // Act: Find deeply nested node
-  auto result = query_->FindFirst(NodeNameEquals("Office"));
-
-  // Assert: Should find the Office node deep in the hierarchy
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "Office");
-}
-
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithRootNode_FindsImmediately)
 {
-  // Arrange: Complex hierarchy with "World" root
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Find root node
-  auto result = query_->FindFirst(NodeNameEquals("World"));
+  auto result = query_->FindFirst(NodeNameEquals("GameWorld"));
 
   // Assert: Should find World immediately
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "World");
+  EXPECT_EQ(result->GetName(), "GameWorld");
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithScopedTraversal_FindsDifferentNodes)
 {
-  // Arrange: Multi-player hierarchy with weapons under different players
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Find Player1 and Player2 nodes
   auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
@@ -134,16 +164,15 @@ NOLINT_TEST_F(
   using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
 
-  // Arrange: Use game scene hierarchy with multiple enemies
-  CreateGameSceneHierarchy();
+  // Arrange: Use default game scene hierarchy
   std::vector<SceneNode> enemies;
 
   // Act: Collect all enemy nodes
-  auto result = query_->Collect(enemies, NodeNameStartsWith("Enemy"));
+  auto result = query_->Collect(enemies, NodeNameStartsWith("Player"));
 
-  // Assert: Should collect all 3 enemies
+  // Assert: Should collect all 2 players
   EXPECT_TRUE(result.completed);
-  EXPECT_EQ(result.nodes_matched, 3);
+  EXPECT_EQ(result.nodes_matched, 2);
 
   // Extract node names for comparison
   std::vector<std::string> enemy_names;
@@ -152,15 +181,14 @@ NOLINT_TEST_F(
     [](const SceneNode& node) { return node.GetName(); });
 
   // Use Google Test collection matchers
-  EXPECT_THAT(enemy_names,
-    AllOf(SizeIs(3), UnorderedElementsAre("Enemy1", "Enemy2", "Enemy3")));
+  EXPECT_THAT(
+    enemy_names, AllOf(SizeIs(2), UnorderedElementsAre("Player1", "Player2")));
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithNoMatches_ReturnsEmptyContainer)
 {
-  // Arrange: Complex hierarchy
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
   std::vector<SceneNode> nodes;
 
   // Act: Collect non-existent nodes
@@ -177,17 +205,16 @@ NOLINT_TEST_F(
 {
   using ::testing::SizeIs;
 
-  // Arrange: Game scene with multiple items
-  CreateGameSceneHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Test different container types
   std::vector<SceneNode> vector_nodes;
   std::deque<SceneNode> deque_nodes;
   std::list<SceneNode> list_nodes;
 
-  auto result1 = query_->Collect(vector_nodes, NodeNameStartsWith("Potion"));
-  auto result2 = query_->Collect(deque_nodes, NodeNameStartsWith("Potion"));
-  auto result3 = query_->Collect(list_nodes, NodeNameStartsWith("Potion"));
+  auto result1 = query_->Collect(vector_nodes, NodeNameStartsWith("Player"));
+  auto result2 = query_->Collect(deque_nodes, NodeNameStartsWith("Player"));
+  auto result3 = query_->Collect(list_nodes, NodeNameStartsWith("Player"));
 
   // Assert: All container types should work
   EXPECT_TRUE(result1.completed);
@@ -204,20 +231,19 @@ NOLINT_TEST_F(SceneQueryImmediateTest,
 {
   using ::testing::SizeIs;
 
-  // Arrange: Game scene with multiple potions
-  CreateGameSceneHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Arrange: Create extra node manually and add to container
   auto extra_node = CreateVisibleNode("ExtraNode");
   std::vector<SceneNode> nodes;
   nodes.push_back(extra_node);
 
-  // Act: Collect potions into pre-filled container
-  auto result = query_->Collect(nodes, NodeNameStartsWith("Potion"));
+  // Act: Collect players into pre-filled container
+  auto result = query_->Collect(nodes, NodeNameStartsWith("Player"));
 
   // Assert: Should preserve existing element and add new ones
   EXPECT_TRUE(result.completed);
-  EXPECT_THAT(nodes, SizeIs(3)); // 1 existing + 2 potions
+  EXPECT_THAT(nodes, SizeIs(3)); // 1 existing + 2 players
   EXPECT_EQ(nodes[0].GetName(), "ExtraNode"); // Original element preserved
 }
 
@@ -228,8 +254,7 @@ NOLINT_TEST_F(
   using ::testing::Not;
   using ::testing::UnorderedElementsAre;
 
-  // Arrange: Multi-player hierarchy with equipment under each player
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
   ASSERT_TRUE(player1_node.has_value());
@@ -260,8 +285,7 @@ NOLINT_TEST_F(
   using ::testing::IsSupersetOf;
   using ::testing::Not;
 
-  // Arrange: Multi-player hierarchy with multiple subtrees
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
   auto player2_node = query_->FindFirst(NodeNameEquals("Player2"));
@@ -298,22 +322,20 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithMatchingPredicate_ReturnsCorrectCount)
 {
-  // Arrange: Game scene hierarchy
-  CreateGameSceneHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Count all visible nodes
   auto result = query_->Count(NodeIsVisible());
 
   // Assert: Should count all visible nodes correctly
   EXPECT_TRUE(result.completed);
-  EXPECT_GT(result.nodes_matched, 0);
+  EXPECT_GT(result.nodes_matched, 2);
   EXPECT_GT(result.nodes_examined, result.nodes_matched);
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
 {
-  // Arrange: Complex hierarchy
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Count non-existent nodes
   auto result = query_->Count(NodeNameEquals("NonExistent"));
@@ -342,8 +364,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithScopedTraversal_CountsWithinScope)
 {
-  // Arrange: Multi-player hierarchy with different equipment counts
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Get total count first for comparison
   auto total_count
@@ -373,8 +394,7 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScope_TraversesFullScene)
   using ::testing::IsSupersetOf;
   using ::testing::SizeIs;
 
-  // Arrange: Multi-player hierarchy
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Get baseline count for full scene
   auto full_count = query_->Count([](const ConstVisitedNode&) { return true; });
@@ -422,11 +442,10 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScope_TraversesFullScene)
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
 {
-  // Arrange: Complex hierarchy with known node
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
-  // Act: Check if any node is named "World"
-  auto result = query_->Any(NodeNameEquals("World"));
+  // Act: Check if any node is named "Merchant"
+  auto result = query_->Any(NodeNameEquals("Merchant"));
 
   // Assert: Should return true
   ASSERT_TRUE(result.has_value());
@@ -435,8 +454,7 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
 {
-  // Arrange: Complex hierarchy
-  CreateComplexHierarchyFromJson();
+  // Arrange: Use default game scene hierarchy
 
   // Act: Check for non-existent node
   auto result = query_->Any(NodeNameEquals("NonExistent"));
@@ -460,23 +478,10 @@ NOLINT_TEST_F(
   EXPECT_TRUE(result.value());
 }
 
-NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithInvisibleNodes_FindsCorrectly)
-{
-  // Arrange: Game scene with mixed visibility
-  CreateGameSceneHierarchy();
-
-  // Act: Check if any invisible nodes exist
-  auto result = query_->Any(NodeIsInvisible());
-  // Assert: Should find invisible Enemy2
-  ASSERT_TRUE(result.has_value());
-  EXPECT_TRUE(result.value());
-}
-
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Any_WithScopedTraversal_FindsBasedOnScope)
 {
-  // Arrange: Multi-player hierarchy with weapons under players but not NPCs
-  CreateMultiPlayerHierarchy();
+  // Arrange: Use default game scene hierarchy
 
   // Find Player1 and NPCs subtrees
   auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));

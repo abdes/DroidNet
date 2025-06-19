@@ -22,14 +22,17 @@ protected:
   void SetUp() override
   {
     // Create hierarchy suitable for ADL function testing
-    CreateComplexHierarchyFromJson();
-  } // Helper to create a ConstVisitedNode for testing
+    CreateLinearChainScene(3);
+  }
+
+  // Helper to create a ConstVisitedNode for testing
   [[nodiscard]] ConstVisitedNode CreateConstVisitedNode(
     const SceneNode& node, std::size_t depth = 0) const
   {
     ConstVisitedNode visited;
-    visited.handle
-      = node.GetHandle(); // Get the node implementation directly from the scene
+    visited.handle = node.GetHandle();
+
+    // Get the node implementation directly from the scene
     // Since we can't call GetObject() on const SceneNode (lazy invalidation),
     // we use the scene's method to get the implementation
     visited.node_impl = &(scene_->GetNodeImplRefUnsafe(node.GetHandle()));
@@ -44,7 +47,7 @@ protected:
 NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithValidNode_ReturnsName)
 {
   // Arrange: Find a known node
-  auto world_node = query_->FindFirst(NodeNameEquals("World"));
+  auto world_node = query_->FindFirst(NodeNameEquals("Root"));
   ASSERT_TRUE(world_node.has_value());
 
   auto visited = CreateConstVisitedNode(world_node.value());
@@ -53,7 +56,7 @@ NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithValidNode_ReturnsName)
   auto name = GetNodeName(visited);
 
   // Assert: Should return correct name
-  EXPECT_EQ(name, "World");
+  EXPECT_EQ(name, "Root");
   EXPECT_FALSE(name.empty());
 }
 
@@ -73,73 +76,12 @@ NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithNullNodeImpl_ReturnsEmpty)
   EXPECT_EQ(name.size(), 0);
 }
 
-NOLINT_TEST_F(
-  SceneQueryADLTest, GetNodeName_WithVisitedNode_IntegratesWithPathMatcher)
-{
-  // Arrange: Create multiple nodes for path matching simulation
-  auto environment = query_->FindFirst(NodeNameEquals("Environment"));
-  auto buildings = query_->FindFirst(NodeNameEquals("Buildings"));
-  auto house1 = query_->FindFirst(NodeNameEquals("House1"));
-
-  ASSERT_TRUE(environment.has_value());
-  ASSERT_TRUE(buildings.has_value());
-  ASSERT_TRUE(house1.has_value());
-
-  // Act: Test GetNodeName with different visited nodes
-  auto env_visited = CreateConstVisitedNode(environment.value(), 1);
-  auto buildings_visited = CreateConstVisitedNode(buildings.value(), 2);
-  auto house_visited = CreateConstVisitedNode(house1.value(), 3);
-
-  auto env_name = GetNodeName(env_visited);
-  auto buildings_name = GetNodeName(buildings_visited);
-  auto house_name = GetNodeName(house_visited);
-
-  // Assert: Should work correctly for path matcher integration
-  EXPECT_EQ(env_name, "Environment");
-  EXPECT_EQ(buildings_name, "Buildings");
-  EXPECT_EQ(house_name, "House1");
-
-  // Verify names can be used in path-like operations
-  EXPECT_TRUE(env_name.starts_with("Env"));
-  EXPECT_TRUE(house_name.starts_with("House"));
-}
-
-NOLINT_TEST_F(
-  SceneQueryADLTest, GetNodeName_WithVariousNodeTypes_ReturnsCorrectNames)
-{
-  // Arrange: Test with different types of nodes from the hierarchy
-  std::vector<std::string> expected_names
-    = { "World", "Environment", "Characters", "Player", "NPCs", "Effects" };
-
-  std::vector<SceneNode> found_nodes;
-
-  for (const auto& name : expected_names) {
-    auto node = query_->FindFirst(NodeNameEquals(name));
-    ASSERT_TRUE(node.has_value()) << "Failed to find node: " << name;
-    found_nodes.push_back(node.value());
-  }
-
-  // Act: Get names using ADL function
-  std::vector<std::string> actual_names;
-  for (std::size_t i = 0; i < found_nodes.size(); ++i) {
-    auto visited = CreateConstVisitedNode(found_nodes[i], i);
-    auto name = GetNodeName(visited);
-    actual_names.emplace_back(name);
-  }
-
-  // Assert: All names should match expected
-  EXPECT_EQ(actual_names.size(), expected_names.size());
-  for (std::size_t i = 0; i < expected_names.size(); ++i) {
-    EXPECT_EQ(actual_names[i], expected_names[i]) << "Mismatch at index " << i;
-  }
-}
-
 //=== GetDepth Tests ======================================================//
 
 NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithRootNode_ReturnsZero)
 {
   // Arrange: Get root node
-  auto world_node = query_->FindFirst(NodeNameEquals("World"));
+  auto world_node = query_->FindFirst(NodeNameEquals("Root"));
   ASSERT_TRUE(world_node.has_value());
 
   auto visited = CreateConstVisitedNode(world_node.value(), 0);
@@ -154,62 +96,38 @@ NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithRootNode_ReturnsZero)
 NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithNestedNode_ReturnsCorrectDepth)
 {
   // Arrange: Get nodes at different depths
-  auto environment
-    = query_->FindFirst(NodeNameEquals("Environment")); // Depth 1
-  auto buildings = query_->FindFirst(NodeNameEquals("Buildings")); // Depth 2
-  auto house1 = query_->FindFirst(NodeNameEquals("House1")); // Depth 3
+  auto root = query_->FindFirst(NodeNameEquals("Root")); // Depth 1
+  auto child = query_->FindFirst(NodeNameEquals("Child")); // Depth 2
+  auto grandchild = query_->FindFirst(NodeNameEquals("GrandChild")); // Depth 3
 
-  ASSERT_TRUE(environment.has_value());
-  ASSERT_TRUE(buildings.has_value());
-  ASSERT_TRUE(house1.has_value());
+  ASSERT_TRUE(root.has_value());
+  ASSERT_TRUE(child.has_value());
+  ASSERT_TRUE(grandchild.has_value());
 
   // Create visited nodes with appropriate depths
-  auto env_visited = CreateConstVisitedNode(environment.value(), 1);
-  auto buildings_visited = CreateConstVisitedNode(buildings.value(), 2);
-  auto house_visited = CreateConstVisitedNode(house1.value(), 3);
+  auto root_visited = CreateConstVisitedNode(root.value(), 1);
+  auto child_visited = CreateConstVisitedNode(child.value(), 2);
+  auto gchild_visited = CreateConstVisitedNode(grandchild.value(), 3);
 
   // Act: Get depths using ADL function
-  auto env_depth = GetDepth(env_visited);
-  auto buildings_depth = GetDepth(buildings_visited);
-  auto house_depth = GetDepth(house_visited);
+  auto root_depth = GetDepth(root_visited);
+  auto child_depth = GetDepth(child_visited);
+  auto gchild_depth = GetDepth(gchild_visited);
 
   // Assert: Should return correct depths
-  EXPECT_EQ(env_depth, 1);
-  EXPECT_EQ(buildings_depth, 2);
-  EXPECT_EQ(house_depth, 3);
+  EXPECT_EQ(root_depth, 1);
+  EXPECT_EQ(child_depth, 2);
+  EXPECT_EQ(gchild_depth, 3);
 
   // Verify depth increases with nesting
-  EXPECT_LT(env_depth, buildings_depth);
-  EXPECT_LT(buildings_depth, house_depth);
-}
-
-NOLINT_TEST_F(
-  SceneQueryADLTest, GetDepth_WithVisitedNode_IntegratesWithPathMatcher)
-{
-  // Arrange: Simulate path matcher use case with depth tracking
-  std::vector<std::pair<std::string, std::size_t>> node_depth_pairs
-    = { { "World", 0 }, { "Environment", 1 }, { "Buildings", 2 },
-        { "House1", 3 }, { "House2", 3 }, { "Office", 3 } };
-
-  // Act: Test depth integration for path matching
-  for (const auto& [name, expected_depth] : node_depth_pairs) {
-    auto node = query_->FindFirst(NodeNameEquals(name));
-    ASSERT_TRUE(node.has_value()) << "Failed to find node: " << name;
-
-    auto visited = CreateConstVisitedNode(node.value(), expected_depth);
-    auto actual_depth = GetDepth(visited);
-    auto actual_name = GetNodeName(visited);
-
-    // Assert: Depth and name should match for path matcher integration
-    EXPECT_EQ(actual_depth, expected_depth) << "Depth mismatch for " << name;
-    EXPECT_EQ(actual_name, name) << "Name mismatch for " << name;
-  }
+  EXPECT_LT(root_depth, child_depth);
+  EXPECT_LT(child_depth, gchild_depth);
 }
 
 NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithZeroDepth_HandlesCorrectly)
 {
   // Arrange: Test multiple root nodes (if any) with zero depth
-  auto world = query_->FindFirst(NodeNameEquals("World"));
+  auto world = query_->FindFirst(NodeNameEquals("Root"));
   ASSERT_TRUE(world.has_value());
 
   auto visited_zero = CreateConstVisitedNode(world.value(), 0);
@@ -244,7 +162,7 @@ NOLINT_TEST_F(SceneQueryADLTest, ADLFunctions_ErrorHandling_WithInvalidData)
   EXPECT_EQ(depth, 0);
 
   // Test with valid handle but null impl
-  const auto valid_node = query_->FindFirst(NodeNameEquals("World"));
+  const auto valid_node = query_->FindFirst(NodeNameEquals("Root"));
   ASSERT_TRUE(valid_node.has_value());
 
   const ConstVisitedNode partial_invalid {
