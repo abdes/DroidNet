@@ -48,7 +48,7 @@ function(gtest_program program_name)
   endif()
 
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
-  gtest_discover_tests(${program_name})
+  gtest_discover_tests(${program_name} DISCOVERY_TIMEOUT 60)
 
   # Define the test
   add_test(NAME ${program_name} COMMAND ${program_name})
