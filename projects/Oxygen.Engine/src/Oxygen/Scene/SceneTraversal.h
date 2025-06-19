@@ -302,9 +302,11 @@ public:
   using NodeImpl = add_const_if_t<SceneNodeImpl, std::is_const_v<SceneT>>;
   using VisitedNode = VisitedNodeT<std::is_const_v<SceneT>>;
 
-  explicit SceneTraversal(std::shared_ptr<SceneT> scene_weak)
-    : scene_weak_(std::move(scene_weak))
+  explicit SceneTraversal(std::shared_ptr<SceneT> scene)
   {
+    CHECK_F(scene != nullptr, "scene cannot be null");
+    scene_weak_ = std::move(scene);
+
     // Pre-allocate children buffer to avoid repeated small reservations
     children_buffer_.reserve(8);
   }
@@ -591,7 +593,11 @@ template <typename VisitorFunc, typename FilterFunc>
 auto SceneTraversal<SceneT>::Traverse(VisitorFunc&& visitor,
   TraversalOrder order, FilterFunc&& filter) const -> TraversalResult
 {
-  DCHECK_F(!scene_weak_.expired());
+  if (scene_weak_.expired()) [[unlikely]] {
+    DLOG_F(ERROR, "SceneTraversal called on an expired scene");
+    return TraversalResult {};
+  }
+
   auto root_handles = scene_weak_.lock()->GetRootHandles();
   if (root_handles.empty()) [[unlikely]] {
     return TraversalResult {};
