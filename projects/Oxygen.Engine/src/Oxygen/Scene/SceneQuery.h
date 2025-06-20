@@ -10,6 +10,8 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/SceneTraversalAsync.h>
@@ -30,6 +32,31 @@ OXGN_SCN_API [[nodiscard]] std::size_t GetDepth(
 
 //=== Query Result Types ===--------------------------------------------------//
 
+//! Result type for query operations containing performance metrics and status
+/*!
+ Provides detailed performance insights and completion status for both single
+ and batch query operations, enabling optimization decisions and debugging.
+
+ @see SceneQuery::FindFirst, SceneQuery::Collect, SceneQuery::Count,
+ ExecuteBatch
+*/
+struct QueryResult {
+  //! Number of nodes examined by the filter
+  std::size_t nodes_examined = 0;
+  //! Number of nodes that matched the query criteria
+  std::size_t nodes_matched = 0;
+  //! true if query completed successfully, false if interrupted
+  bool completed = true;
+  //! Error message if operation failed (empty if successful)
+  std::string error_message;
+
+  //! Conversion operator for testing query operation success
+  /*!
+   @return true if the query operation completed successfully
+  */
+  explicit operator bool() const noexcept { return completed; }
+};
+
 //! Result type for batch query operations containing aggregated metrics
 /*!
  Provides performance metrics and completion status for batch query operations
@@ -45,31 +72,12 @@ struct BatchResult {
   //! true if batch completed successfully, false if interrupted
   bool completed = true;
 
+  //! Per-operation results
+  std::vector<QueryResult> operation_results;
+
   //! Conversion operator for testing batch operation success
   /*!
    @return true if the batch operation completed successfully
-  */
-  explicit operator bool() const noexcept { return completed; }
-};
-
-//! Result type for individual query operations containing performance metrics
-/*!
- Provides detailed performance insights and completion status for single query
- operations, enabling optimization decisions and debugging.
-
- @see SceneQuery::FindFirst, SceneQuery::Collect, SceneQuery::Count
-*/
-struct QueryResult {
-  //! Number of nodes examined by the filter
-  std::size_t nodes_examined = 0;
-  //! Number of nodes that matched the query criteria
-  std::size_t nodes_matched = 0;
-  //! true if query completed successfully, false if interrupted
-  bool completed = true;
-
-  //! Conversion operator for testing query operation success
-  /*!
-   @return true if the query operation completed successfully
   */
   explicit operator bool() const noexcept { return completed; }
 };
@@ -198,10 +206,34 @@ public:
   template <typename Container>
   QueryResult CollectByPath(
     Container& container, std::string_view path_pattern) const noexcept;
-
   //! Execute multiple queries in single traversal pass for optimal performance
   template <typename BatchFunc>
   BatchResult ExecuteBatch(BatchFunc&& batch_func) const noexcept;
+
+  //=== Batch-Specific Query Methods (Reference-Based Output) ===------------//
+
+  //! Find first matching node in batch mode (populates result by reference)
+  //! @note Only available during ExecuteBatch execution
+  template <std::predicate<const ConstVisitedNode&> Predicate>
+  void BatchFindFirst(
+    std::optional<SceneNode>& result, Predicate&& predicate) const noexcept;
+
+  //! Collect all matching nodes in batch mode (populates container by
+  //! reference)
+  //! @note Only available during ExecuteBatch execution
+  template <typename Container,
+    std::predicate<const ConstVisitedNode&> Predicate>
+  void BatchCollect(Container& result, Predicate&& predicate) const noexcept;
+  //! Count matching nodes in batch mode (does not return result)
+  //! @note Only available during ExecuteBatch execution
+  template <std::predicate<const ConstVisitedNode&> Predicate>
+  void BatchCount(Predicate&& predicate) const noexcept;
+
+  //! Check if any node matches in batch mode (populates result by reference)
+  //! @note Only available during ExecuteBatch execution
+  template <std::predicate<const ConstVisitedNode&> Predicate>
+  void BatchAny(
+    std::optional<bool>& result, Predicate&& predicate) const noexcept;
 
 private:
   //! Weak reference to scene for lifetime safety
@@ -210,7 +242,6 @@ private:
   //! Const-correct traversal interface
   SceneTraversal<const Scene> traversal_;
   AsyncSceneTraversal<const Scene> async_traversal_;
-
   // Batch execution state (mutable for const methods)
   //! Batch mode execution flag
   mutable bool batch_active_ = false;
@@ -267,26 +298,9 @@ private:
   //! Implementation helper for immediate path-based collect (type-erased)
   OXGN_SCN_NDAPI auto ExecuteImmediateCollectByPathImpl(
     std::function<void(const SceneNode&)> add_to_container,
-    std::string_view path_pattern) const noexcept -> QueryResult;
-
-  //=== Batch Operation Helpers //===-----------------------------------------//
-
-  //! Execute batch find first operation setup
-  OXGN_SCN_NDAPI auto ExecuteBatchFindFirst(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> std::optional<SceneNode>;
-
-  //! Execute batch count operation setup
-  OXGN_SCN_NDAPI auto ExecuteBatchCount(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> QueryResult;
-
-  //! Execute batch any operation setup
-  OXGN_SCN_NDAPI auto ExecuteBatchAny(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> std::optional<bool>;
-
-  //=== Type-Erased Implementation Helpers ===--------------------------------//
+    std::string_view path_pattern) const noexcept
+    -> QueryResult; //=== Type-Erased Implementation Helpers
+                    //===--------------------------------//
 
   //! Type-erased batch execution implementation
   OXGN_SCN_NDAPI auto ExecuteBatchImpl(
@@ -298,6 +312,27 @@ private:
     std::function<void(const SceneNode&)> add_to_container,
     const std::function<bool(const ConstVisitedNode&)>& predicate)
     const noexcept -> QueryResult;
+
+  //=== Batch Implementation Helpers ===--------------------------------------//
+
+  //! Implementation for BatchFindFirst (calls coordinator)
+  OXGN_SCN_NDAPI void BatchFindFirstImpl(std::optional<SceneNode>& result,
+    const std::function<bool(const ConstVisitedNode&)>& predicate)
+    const noexcept;
+
+  //! Implementation for BatchCollect (calls coordinator)
+  OXGN_SCN_NDAPI void BatchCollectImpl(std::vector<SceneNode>& result,
+    const std::function<bool(const ConstVisitedNode&)>& predicate)
+    const noexcept;
+  //! Implementation for BatchCount (calls coordinator)
+  OXGN_SCN_NDAPI void BatchCountImpl(
+    const std::function<bool(const ConstVisitedNode&)>& predicate)
+    const noexcept;
+
+  //! Implementation for BatchAny (calls coordinator)
+  OXGN_SCN_NDAPI void BatchAnyImpl(std::optional<bool>& result,
+    const std::function<bool(const ConstVisitedNode&)>& predicate)
+    const noexcept;
 };
 
 //=== Template Implementations ===--------------------------------------------//
@@ -341,12 +376,12 @@ template <std::predicate<const ConstVisitedNode&> Predicate>
 std::optional<SceneNode> SceneQuery::FindFirst(
   Predicate&& predicate) const noexcept
 {
-
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchFindFirst(std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
+  if (scene_weak_.expired()) [[unlikely]] {
+    return std::nullopt;
   }
+
+  CHECK_F(!batch_active_,
+    "FindFirst() called in batch mode - use BatchFindFirst() instead");
 
   // Use private helper for immediate execution
   return ExecuteImmediateFindFirst(std::function<bool(const ConstVisitedNode&)>(
@@ -399,13 +434,9 @@ QueryResult SceneQuery::Collect(
   if (scene_weak_.expired()) [[unlikely]] {
     return QueryResult { .completed = false };
   }
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchCollectImpl(
-      [&container](const SceneNode& node) { container.emplace_back(node); },
-      std::function<bool(const ConstVisitedNode&)>(
-        std::forward<Predicate>(predicate)));
-  }
+
+  CHECK_F(!batch_active_,
+    "Collect() called in batch mode - use BatchCollect() instead");
 
   // Use private helper for immediate execution
   return ExecuteImmediateCollect(container,
@@ -453,11 +484,8 @@ QueryResult SceneQuery::Count(Predicate&& predicate) const noexcept
     return QueryResult { .completed = false };
   }
 
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchCount(std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
-  }
+  CHECK_F(
+    !batch_active_, "Count() called in batch mode - use BatchCount() instead");
 
   // Use private helper for immediate execution
   return ExecuteImmediateCount(std::function<bool(const ConstVisitedNode&)>(
@@ -504,11 +532,8 @@ std::optional<bool> SceneQuery::Any(Predicate&& predicate) const noexcept
     return std::nullopt;
   }
 
-  if (batch_active_) {
-    // Use private helper for batch operation setup
-    return ExecuteBatchAny(std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
-  }
+  CHECK_F(
+    !batch_active_, "Any() called in batch mode - use BatchAny() instead");
 
   // Use private helper for immediate execution
   return ExecuteImmediateAny(std::function<bool(const ConstVisitedNode&)>(
@@ -684,8 +709,62 @@ template <typename BatchFunc>
 BatchResult SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
 {
   // Type-erased wrapper - all complex logic moved to .cpp
-  return ExecuteBatchImpl(std::function<void(const SceneQuery&)>(
-    std::forward<BatchFunc>(batch_func)));
+  return ExecuteBatchImpl([batch_func = std::forward<BatchFunc>(batch_func)](
+                            const SceneQuery& query) { batch_func(query); });
+}
+
+template <std::predicate<const ConstVisitedNode&> Predicate>
+void SceneQuery::BatchFindFirst(
+  std::optional<SceneNode>& result, Predicate&& predicate) const noexcept
+{
+  BatchFindFirstImpl(result,
+    std::function<bool(const ConstVisitedNode&)>(
+      std::forward<Predicate>(predicate)));
+}
+
+template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
+void SceneQuery::BatchCollect(
+  Container& result, Predicate&& predicate) const noexcept
+{
+  if (!batch_active_ || !batch_coordinator_) {
+    // This method is only available during batch execution
+    result.clear();
+    return;
+  }
+
+  // For now, only support std::vector<SceneNode> for the interface
+  if constexpr (std::is_same_v<Container, std::vector<SceneNode>>) {
+    BatchCollectImpl(result,
+      std::function<bool(const ConstVisitedNode&)>(
+        std::forward<Predicate>(predicate)));
+  } else {
+    // Fallback for other container types - collect to temp vector then copy
+    std::vector<SceneNode> temp_result;
+    BatchCollectImpl(temp_result,
+      std::function<bool(const ConstVisitedNode&)>(
+        std::forward<Predicate>(predicate)));
+
+    result.clear();
+    for (auto&& node : temp_result) {
+      result.emplace_back(std::move(node));
+    }
+  }
+}
+
+template <std::predicate<const ConstVisitedNode&> Predicate>
+void SceneQuery::BatchCount(Predicate&& predicate) const noexcept
+{
+  BatchCountImpl(std::function<bool(const ConstVisitedNode&)>(
+    std::forward<Predicate>(predicate)));
+}
+
+template <std::predicate<const ConstVisitedNode&> Predicate>
+void SceneQuery::BatchAny(
+  std::optional<bool>& result, Predicate&& predicate) const noexcept
+{
+  BatchAnyImpl(result,
+    std::function<bool(const ConstVisitedNode&)>(
+      std::forward<Predicate>(predicate)));
 }
 
 } // namespace oxygen::scene
