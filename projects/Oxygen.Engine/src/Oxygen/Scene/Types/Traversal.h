@@ -10,7 +10,6 @@
 #include <deque>
 #include <vector>
 
-#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/api_export.h>
@@ -27,7 +26,7 @@ enum class FilterResult : uint8_t {
   kReject, //!< Skip node, but traverse children
   kRejectSubTree //!< Skip node and skip its entire subtree
 };
-OXGN_SCN_API auto to_string(FilterResult value) -> const char*;
+OXGN_SCN_API const char* to_string(FilterResult value);
 
 //! Visitor result controlling traversal continuation
 enum class VisitResult : uint8_t {
@@ -35,7 +34,7 @@ enum class VisitResult : uint8_t {
   kSkipSubtree, //!< Do not traverse this node's children
   kStop //!< Stop traversal entirely
 };
-OXGN_SCN_API auto to_string(VisitResult value) -> const char*;
+OXGN_SCN_API const char* to_string(VisitResult value);
 
 //! Enumeration of supported traversal orders
 enum class TraversalOrder : uint8_t {
@@ -43,7 +42,7 @@ enum class TraversalOrder : uint8_t {
   kPreOrder, //!< Visit nodes before their children (depth-first pre-order)
   kPostOrder //!< Visit nodes after their children (depth-first post-order)
 };
-OXGN_SCN_API auto to_string(TraversalOrder value) -> const char*;
+OXGN_SCN_API const char* to_string(TraversalOrder value);
 
 //=== Traversal Data Structure ===--------------------------------------------//
 
@@ -102,8 +101,8 @@ concept NonMutatingSceneFilter = SceneFilterT<Filter, const Scene>;
 
 //! Non-mutating filter that accepts all nodes.
 struct AcceptAllFilter {
-  constexpr auto operator()(const auto& /*visited_node*/,
-    FilterResult /*parent_filter_result*/) const noexcept -> FilterResult
+  constexpr FilterResult operator()(const auto& /*visited_node*/,
+    FilterResult /*parent_filter_result*/) const noexcept
   {
     return FilterResult::kAccept;
   }
@@ -127,8 +126,8 @@ static_assert(NonMutatingSceneFilter<AcceptAllFilter>);
    up-to-date, allowing it to compute its own world transform.
 */
 struct DirtyTransformFilter {
-  [[nodiscard]] auto operator()(const auto& visited_node,
-    FilterResult parent_filter_result) const noexcept -> FilterResult
+  [[nodiscard]] FilterResult operator()(
+    const auto& visited_node, FilterResult parent_filter_result) const noexcept
   {
     using enum FilterResult;
 
@@ -161,8 +160,8 @@ static_assert(NonMutatingSceneFilter<DirtyTransformFilter>);
  entire sub-tree below a node if it's not visible.
 */
 struct VisibleFilter {
-  [[nodiscard]] auto operator()(const auto& visited_node,
-    FilterResult /*parent_filter_result*/) const noexcept -> FilterResult
+  [[nodiscard]] FilterResult operator()(const auto& visited_node,
+    FilterResult /*parent_filter_result*/) const noexcept
   {
     const auto& flags = visited_node.node_impl->GetFlags();
     return flags.GetEffectiveValue(SceneNodeFlags::kVisible)
@@ -190,8 +189,7 @@ template <> struct ContainerTraits<TraversalOrder::kBreadthFirst> {
   }
 
   template <typename Container>
-  static constexpr auto pop(Container& container) ->
-    typename Container::value_type
+  static constexpr typename Container::value_type pop(Container& container)
   {
     auto item = container.front();
     container.pop_front();
@@ -199,14 +197,13 @@ template <> struct ContainerTraits<TraversalOrder::kBreadthFirst> {
   }
 
   template <typename Container>
-  static constexpr auto peek(Container& container) ->
-    typename Container::value_type&
+  static constexpr typename Container::value_type& peek(Container& container)
   {
     return container.front();
   }
 
   template <typename Container>
-  static constexpr auto empty(const Container& container) -> bool
+  static constexpr bool empty(const Container& container)
   {
     return container.empty();
   }
@@ -224,8 +221,7 @@ template <> struct ContainerTraits<TraversalOrder::kPreOrder> {
   }
 
   template <typename Container>
-  static constexpr auto pop(Container& container) ->
-    typename Container::value_type
+  static constexpr typename Container::value_type pop(Container& container)
   {
     auto item = container.back();
     container.pop_back();
@@ -233,14 +229,13 @@ template <> struct ContainerTraits<TraversalOrder::kPreOrder> {
   }
 
   template <typename Container>
-  static constexpr auto peek(Container& container) ->
-    typename Container::value_type&
+  static constexpr typename Container::value_type& peek(Container& container)
   {
     return container.back();
   }
 
   template <typename Container>
-  static constexpr auto empty(const Container& container) -> bool
+  static constexpr bool empty(const Container& container)
   {
     return container.empty();
   }

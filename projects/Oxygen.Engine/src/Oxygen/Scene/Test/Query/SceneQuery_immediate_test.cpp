@@ -28,7 +28,7 @@ class SceneQueryImmediateTest : public SceneQueryTestBase {
     CreateGameSceneHierarchy();
   }
 
-  auto CreateGameSceneHierarchy() -> void
+  void CreateGameSceneHierarchy()
   {
     const auto json = GetGameSceneJson();
     scene_ = GetFactory().CreateFromJson(json, "GameScene");
@@ -36,7 +36,7 @@ class SceneQueryImmediateTest : public SceneQueryTestBase {
     CreateQuery();
   }
 
-  auto GetGameSceneJson() -> std::string
+  std::string GetGameSceneJson()
   {
     return R"({
       "metadata": {
@@ -92,67 +92,95 @@ NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithMatchingPredicate_ReturnsFirstMatch)
 {
   // Arrange: Use default game scene hierarchy
+  std::optional<SceneNode> node_result;
 
   // Act: Find first tree
-  auto result = query_->FindFirst(NodeNameStartsWith("Tree"));
+  auto query_result
+    = query_->FindFirst(node_result, NodeNameStartsWith("Tree"));
 
-  // Assert: Should find House1 (first in traversal order)
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "Tree1");
+  // Assert: Should find Tree1 (first in traversal order)
+  EXPECT_TRUE(query_result);
+  EXPECT_EQ(query_result.nodes_matched, 1U);
+  EXPECT_GT(query_result.nodes_examined, 1U);
+  ASSERT_TRUE(node_result.has_value());
+  EXPECT_EQ(node_result->GetName(), "Tree1");
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
 {
   // Arrange: Use default game scene hierarchy
+  std::optional<SceneNode> node_result;
 
   // Act: Search for non-existent node
-  auto result = query_->FindFirst(NodeNameEquals("NonExistentNode"));
+  auto query_result
+    = query_->FindFirst(node_result, NodeNameEquals("NonExistentNode"));
 
   // Assert: Should return nullopt
-  EXPECT_FALSE(result.has_value());
+  EXPECT_TRUE(query_result);
+  EXPECT_EQ(query_result.nodes_matched, 0U);
+  EXPECT_EQ(query_result.nodes_examined, scene_->GetNodeCount());
+  EXPECT_FALSE(node_result.has_value());
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithRootNode_FindsImmediately)
 {
   // Arrange: Use default game scene hierarchy
+  std::optional<SceneNode> node_result;
 
   // Act: Find root node
-  auto result = query_->FindFirst(NodeNameEquals("GameWorld"));
+  auto query_result
+    = query_->FindFirst(node_result, NodeNameEquals("GameWorld"));
 
   // Assert: Should find World immediately
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetName(), "GameWorld");
+  EXPECT_TRUE(query_result);
+  EXPECT_EQ(query_result.nodes_matched, 1U);
+  EXPECT_EQ(query_result.nodes_examined, 1U);
+  ASSERT_TRUE(node_result.has_value());
+  EXPECT_EQ(node_result->GetName(), "GameWorld");
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithScopedTraversal_FindsDifferentNodes)
 {
   // Arrange: Use default game scene hierarchy
-
   // Find Player1 and Player2 nodes
-  auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  auto player2_node = query_->FindFirst(NodeNameEquals("Player2"));
-  ASSERT_TRUE(player1_node.has_value());
-  ASSERT_TRUE(player2_node.has_value());
+  std::optional<SceneNode> player1_node_result;
+  std::optional<SceneNode> player2_node_result;
+  auto player1_query_result
+    = query_->FindFirst(player1_node_result, NodeNameEquals("Player1"));
+  auto player2_query_result
+    = query_->FindFirst(player2_node_result, NodeNameEquals("Player2"));
+  EXPECT_TRUE(player1_query_result);
+  EXPECT_TRUE(player2_query_result);
+  ASSERT_TRUE(player1_node_result.has_value());
+  ASSERT_TRUE(player2_node_result.has_value());
 
   // Act: Find weapon scoped to Player1
-  query_->AddToTraversalScope(*player1_node);
-  auto player1_weapon = query_->FindFirst(NodeNameEquals("Weapon"));
+  std::optional<SceneNode> player1_weapon_result;
+  query_->AddToTraversalScope(*player1_node_result);
+  auto player1_weapon_query_result
+    = query_->FindFirst(player1_weapon_result, NodeNameEquals("Weapon"));
+
   // Reset and scope to Player2
   query_->ResetTraversalScope();
-  query_->AddToTraversalScope(*player2_node);
-  auto player2_weapon = query_->FindFirst(NodeNameEquals("Weapon"));
+  query_->AddToTraversalScope(*player2_node_result);
+  std::optional<SceneNode> player2_weapon_result;
+  auto player2_weapon_query_result
+    = query_->FindFirst(player2_weapon_result, NodeNameEquals("Weapon"));
 
   // Assert: Should find different weapon nodes for different players
-  ASSERT_TRUE(player1_weapon.has_value());
-  ASSERT_TRUE(player2_weapon.has_value());
+  EXPECT_TRUE(player1_weapon_query_result);
+  EXPECT_TRUE(player2_weapon_query_result);
+  ASSERT_TRUE(player1_weapon_result.has_value());
+  ASSERT_TRUE(player2_weapon_result.has_value());
 
   // Verify they are different nodes (different handles)
-  EXPECT_NE(player1_weapon->GetHandle(), player2_weapon->GetHandle());
+  EXPECT_NE(
+    player1_weapon_result->GetHandle(), player2_weapon_result->GetHandle());
 
   // Both should be named "Weapon" but have different parents
-  EXPECT_EQ(player1_weapon->GetName(), "Weapon");
-  EXPECT_EQ(player2_weapon->GetName(), "Weapon");
+  EXPECT_EQ(player1_weapon_result->GetName(), "Weapon");
+  EXPECT_EQ(player2_weapon_result->GetName(), "Weapon");
 }
 
 //=== Collect Tests ===-----------------------------------------------------//
@@ -160,117 +188,130 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithMatchingPredicate_CollectsAllMatches)
 {
-  using ::testing::AllOf;
-  using ::testing::SizeIs;
-  using ::testing::UnorderedElementsAre;
+  using testing::AllOf;
+  using testing::SizeIs;
+  using testing::UnorderedElementsAre;
 
   // Arrange: Use default game scene hierarchy
-  std::vector<SceneNode> enemies;
+  std::vector<SceneNode> nodes_result;
 
   // Act: Collect all enemy nodes
-  auto result = query_->Collect(enemies, NodeNameStartsWith("Player"));
+  auto query_result
+    = query_->Collect(nodes_result, NodeNameStartsWith("Player"));
 
   // Assert: Should collect all 2 players
-  EXPECT_TRUE(result.completed);
-  EXPECT_EQ(result.nodes_matched, 2);
+  EXPECT_TRUE(query_result);
+  EXPECT_EQ(query_result.nodes_matched, 2U);
+  EXPECT_GT(query_result.nodes_examined, 0U);
 
   // Extract node names for comparison
-  std::vector<std::string> enemy_names;
-  std::transform(enemies.begin(), enemies.end(),
-    std::back_inserter(enemy_names),
+  std::vector<std::string> node_names;
+  std::transform(nodes_result.begin(), nodes_result.end(),
+    std::back_inserter(node_names),
     [](const SceneNode& node) { return node.GetName(); });
 
   // Use Google Test collection matchers
   EXPECT_THAT(
-    enemy_names, AllOf(SizeIs(2), UnorderedElementsAre("Player1", "Player2")));
+    node_names, AllOf(SizeIs(2), UnorderedElementsAre("Player1", "Player2")));
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithNoMatches_ReturnsEmptyContainer)
 {
   // Arrange: Use default game scene hierarchy
-  std::vector<SceneNode> nodes;
+  std::vector<SceneNode> nodes_result;
 
   // Act: Collect non-existent nodes
-  auto result = query_->Collect(nodes, NodeNameEquals("NonExistent"));
+  auto query_result
+    = query_->Collect(nodes_result, NodeNameEquals("NonExistent"));
 
   // Assert: Should return empty container
-  EXPECT_TRUE(result.completed);
-  EXPECT_TRUE(nodes.empty());
-  EXPECT_EQ(result.nodes_matched, 0);
+  EXPECT_TRUE(query_result);
+  EXPECT_TRUE(nodes_result.empty());
+  EXPECT_EQ(query_result.nodes_matched, 0U);
+  EXPECT_GT(query_result.nodes_examined, 0U);
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithDifferentContainerTypes_WorksCorrectly)
 {
-  using ::testing::SizeIs;
+  using testing::SizeIs;
 
   // Arrange: Use default game scene hierarchy
 
   // Act: Test different container types
-  std::vector<SceneNode> vector_nodes;
-  std::deque<SceneNode> deque_nodes;
-  std::list<SceneNode> list_nodes;
+  std::vector<SceneNode> vector_nodes_result;
+  std::deque<SceneNode> deque_nodes_result;
+  std::list<SceneNode> list_nodes_result;
 
-  auto result1 = query_->Collect(vector_nodes, NodeNameStartsWith("Player"));
-  auto result2 = query_->Collect(deque_nodes, NodeNameStartsWith("Player"));
-  auto result3 = query_->Collect(list_nodes, NodeNameStartsWith("Player"));
+  auto query_result1
+    = query_->Collect(vector_nodes_result, NodeNameStartsWith("Player"));
+  auto query_result2
+    = query_->Collect(deque_nodes_result, NodeNameStartsWith("Player"));
+  auto query_result3
+    = query_->Collect(list_nodes_result, NodeNameStartsWith("Player"));
 
   // Assert: All container types should work
-  EXPECT_TRUE(result1.completed);
-  EXPECT_TRUE(result2.completed);
-  EXPECT_TRUE(result3.completed);
+  EXPECT_TRUE(query_result1);
+  EXPECT_TRUE(query_result2);
+  EXPECT_TRUE(query_result3);
 
-  EXPECT_THAT(vector_nodes, SizeIs(2));
-  EXPECT_THAT(deque_nodes, SizeIs(2));
-  EXPECT_THAT(list_nodes, SizeIs(2));
+  EXPECT_THAT(vector_nodes_result, SizeIs(2));
+  EXPECT_THAT(deque_nodes_result, SizeIs(2));
+  EXPECT_THAT(list_nodes_result, SizeIs(2));
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest,
   Collect_WithPreallocatedContainer_PreservesExistingElements)
 {
-  using ::testing::SizeIs;
+  using testing::SizeIs;
 
   // Arrange: Use default game scene hierarchy
-
   // Arrange: Create extra node manually and add to container
   auto extra_node = CreateVisibleNode("ExtraNode");
-  std::vector<SceneNode> nodes;
-  nodes.push_back(extra_node);
+  std::vector<SceneNode> nodes_result;
+  nodes_result.push_back(extra_node);
 
   // Act: Collect players into pre-filled container
-  auto result = query_->Collect(nodes, NodeNameStartsWith("Player"));
+  auto query_result
+    = query_->Collect(nodes_result, NodeNameStartsWith("Player"));
 
   // Assert: Should preserve existing element and add new ones
-  EXPECT_TRUE(result.completed);
-  EXPECT_THAT(nodes, SizeIs(3)); // 1 existing + 2 players
-  EXPECT_EQ(nodes[0].GetName(), "ExtraNode"); // Original element preserved
+  EXPECT_TRUE(query_result);
+  EXPECT_EQ(query_result.nodes_matched, 2U);
+  EXPECT_THAT(nodes_result, SizeIs(3)); // 1 existing + 2 players
+  EXPECT_EQ(
+    nodes_result[0].GetName(), "ExtraNode"); // Original element preserved
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithScopedTraversal_CollectsWithinScope)
 {
-  using ::testing::Contains;
-  using ::testing::Not;
-  using ::testing::UnorderedElementsAre;
+  using testing::Contains;
+  using testing::Not;
+  using testing::UnorderedElementsAre;
 
   // Arrange: Use default game scene hierarchy
-
-  auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  ASSERT_TRUE(player1_node.has_value());
+  std::optional<SceneNode> player1_node_result;
+  auto player1_query_result
+    = query_->FindFirst(player1_node_result, NodeNameEquals("Player1"));
+  EXPECT_TRUE(player1_query_result);
+  ASSERT_TRUE(player1_node_result.has_value());
 
   // Act: Collect all nodes in Player1 scope
-  std::vector<SceneNode> nodes;
-  query_->AddToTraversalScope(*player1_node);
-  auto result
-    = query_->Collect(nodes, [](const ConstVisitedNode&) { return true; });
+  std::vector<SceneNode> nodes_result;
+  query_->AddToTraversalScope(*player1_node_result);
+  auto collect_query_result = query_->Collect(
+    nodes_result, [](const ConstVisitedNode&) { return true; });
 
   // Assert: Should collect exactly Player1 + its 3 equipment items
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(collect_query_result);
+  EXPECT_EQ(collect_query_result.nodes_matched, 4U);
 
   // Extract node names for easy comparison
   std::vector<std::string> node_names;
-  std::transform(nodes.begin(), nodes.end(), std::back_inserter(node_names),
+  std::transform(nodes_result.begin(), nodes_result.end(),
+    std::back_inserter(node_names),
     [](const SceneNode& node) { return node.GetName(); });
 
   // Use Google Test collection matchers - exact match
@@ -281,31 +322,38 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithMultipleScopedNodes_CollectsFromAll)
 {
-  using ::testing::Contains;
-  using ::testing::IsSupersetOf;
-  using ::testing::Not;
+  using testing::Contains;
+  using testing::IsSupersetOf;
+  using testing::Not;
 
   // Arrange: Use default game scene hierarchy
-
-  auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  auto player2_node = query_->FindFirst(NodeNameEquals("Player2"));
-  ASSERT_TRUE(player1_node.has_value());
-  ASSERT_TRUE(player2_node.has_value());
+  std::optional<SceneNode> player1_node_result;
+  std::optional<SceneNode> player2_node_result;
+  auto player1_query_result
+    = query_->FindFirst(player1_node_result, NodeNameEquals("Player1"));
+  auto player2_query_result
+    = query_->FindFirst(player2_node_result, NodeNameEquals("Player2"));
+  EXPECT_TRUE(player1_query_result);
+  EXPECT_TRUE(player2_query_result);
+  ASSERT_TRUE(player1_node_result.has_value());
+  ASSERT_TRUE(player2_node_result.has_value());
 
   // Act: Add multiple nodes to traversal scope
-  std::vector<SceneNode> scope_nodes = { *player1_node, *player2_node };
+  std::vector<SceneNode> scope_nodes
+    = { *player1_node_result, *player2_node_result };
   query_->AddToTraversalScope(scope_nodes);
 
-  std::vector<SceneNode> collected;
-  auto result
-    = query_->Collect(collected, [](const ConstVisitedNode&) { return true; });
+  std::vector<SceneNode> nodes_result;
+  auto collect_query_result = query_->Collect(
+    nodes_result, [](const ConstVisitedNode&) { return true; });
 
   // Assert: Should collect from both scoped subtrees
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(collect_query_result);
+  EXPECT_GT(collect_query_result.nodes_matched, 0U);
 
   // Extract node names for comparison
   std::vector<std::string> node_names;
-  std::transform(collected.begin(), collected.end(),
+  std::transform(nodes_result.begin(), nodes_result.end(),
     std::back_inserter(node_names),
     [](const SceneNode& node) { return node.GetName(); });
 
@@ -325,12 +373,15 @@ NOLINT_TEST_F(
   // Arrange: Use default game scene hierarchy
 
   // Act: Count all visible nodes
-  auto result = query_->Count(NodeIsVisible());
+  std::optional<size_t> count_result;
+  auto query_result = query_->Count(count_result, NodeIsVisible());
 
   // Assert: Should count all visible nodes correctly
-  EXPECT_TRUE(result.completed);
-  EXPECT_GT(result.nodes_matched, 2);
-  EXPECT_GT(result.nodes_examined, result.nodes_matched);
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_GT(count_result.value(), 2U);
+  EXPECT_GT(query_result.nodes_examined, query_result.nodes_matched);
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
@@ -338,12 +389,16 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
   // Arrange: Use default game scene hierarchy
 
   // Act: Count non-existent nodes
-  auto result = query_->Count(NodeNameEquals("NonExistent"));
+  std::optional<size_t> count_result;
+  auto query_result
+    = query_->Count(count_result, NodeNameEquals("NonExistent"));
 
   // Assert: Should return zero count
-  EXPECT_TRUE(result.completed);
-  EXPECT_EQ(result.nodes_matched, 0);
-  EXPECT_GT(result.nodes_examined, 0); // Should still examine nodes
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 0U);
+  EXPECT_EQ(query_result.nodes_matched, 0U);
 }
 
 NOLINT_TEST_F(
@@ -353,87 +408,106 @@ NOLINT_TEST_F(
   CreateForestScene(5, 10); // 5 roots with 10 children each = 55+ nodes
 
   // Act: Count all nodes
-  auto result = query_->Count([](const ConstVisitedNode&) { return true; });
+  std::optional<size_t> count_result;
+  auto query_result
+    = query_->Count(count_result, [](const ConstVisitedNode&) { return true; });
 
   // Assert: Should count all nodes efficiently
-  EXPECT_TRUE(result.completed);
-  EXPECT_EQ(result.nodes_matched, result.nodes_examined);
-  EXPECT_GT(result.nodes_matched, 50); // At least 5 roots + 50 children
+  EXPECT_TRUE(query_result);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 55U);
+  EXPECT_EQ(query_result.nodes_matched, query_result.nodes_examined);
+  EXPECT_EQ(query_result.nodes_matched, 55U); // At least 5 roots + 50 children
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithScopedTraversal_CountsWithinScope)
 {
   // Arrange: Use default game scene hierarchy
-
   // Get total count first for comparison
-  auto total_count
-    = query_->Count([](const ConstVisitedNode&) { return true; });
+  std::optional<size_t> total_count_result;
+  auto total_query_result = query_->Count(
+    total_count_result, [](const ConstVisitedNode&) { return true; });
 
   // Find Player1 subtree to scope
-  auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  ASSERT_TRUE(player1_node.has_value());
+  std::optional<SceneNode> player1_node_result;
+  auto player1_query_result
+    = query_->FindFirst(player1_node_result, NodeNameEquals("Player1"));
+  EXPECT_TRUE(player1_query_result);
+  ASSERT_TRUE(player1_node_result.has_value());
 
   // Act: Count all nodes within Player1 scope
-  query_->AddToTraversalScope(*player1_node);
-  auto scoped_count
-    = query_->Count([](const ConstVisitedNode&) { return true; });
+  query_->AddToTraversalScope(*player1_node_result);
+  std::optional<size_t> scoped_count_result;
+  auto scoped_query_result = query_->Count(
+    scoped_count_result, [](const ConstVisitedNode&) { return true; });
 
   // Assert: Scoped count should be less than total count
-  EXPECT_TRUE(scoped_count.completed);
-  EXPECT_GT(scoped_count.nodes_matched, 0);
-  EXPECT_LT(scoped_count.nodes_matched, total_count.nodes_matched);
-  // Should include Player1 + 3 equipment items = 4 nodes
-  EXPECT_EQ(scoped_count.nodes_matched, 4);
+  EXPECT_TRUE(total_query_result);
+  EXPECT_TRUE(scoped_query_result);
+  ASSERT_TRUE(total_count_result.has_value());
+  ASSERT_TRUE(scoped_count_result.has_value());
+  EXPECT_EQ(scoped_count_result.value(), 4U); // Player1 + 3 items
+  EXPECT_LT(scoped_count_result.value(), total_count_result.value());
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScope_TraversesFullScene)
 {
-  using ::testing::AllOf;
-  using ::testing::Contains;
-  using ::testing::IsSupersetOf;
-  using ::testing::SizeIs;
+  using testing::AllOf;
+  using testing::Contains;
+  using testing::IsSupersetOf;
+  using testing::SizeIs;
 
   // Arrange: Use default game scene hierarchy
-
   // Get baseline count for full scene
-  auto full_count = query_->Count([](const ConstVisitedNode&) { return true; });
+  std::optional<size_t> full_count_result;
+  auto full_query_result = query_->Count(
+    full_count_result, [](const ConstVisitedNode&) { return true; });
 
   // Act: Reset scope to empty (which means full scene traversal)
   query_->ResetTraversalScope();
 
   // Test all query methods with empty scope (should traverse full scene)
-  auto empty_scope_count
-    = query_->Count([](const ConstVisitedNode&) { return true; });
+  std::optional<size_t> empty_scope_count_result;
+  auto empty_scope_query_result = query_->Count(
+    empty_scope_count_result, [](const ConstVisitedNode&) { return true; });
 
-  std::vector<SceneNode> collected_nodes;
-  auto collect_result = query_->Collect(
-    collected_nodes, [](const ConstVisitedNode&) { return true; });
-  auto find_result = query_->FindFirst(NodeNameEquals("Player1"));
+  std::vector<SceneNode> collected_nodes_result;
+  auto collect_query_result = query_->Collect(
+    collected_nodes_result, [](const ConstVisitedNode&) { return true; });
 
-  auto any_result = query_->Any(NodeNameEquals("GameWorld"));
+  std::optional<SceneNode> find_node_result;
+  auto find_query_result
+    = query_->FindFirst(find_node_result, NodeNameEquals("Player1"));
+
+  std::optional<bool> any_result;
+  auto any_query_result = query_->Any(any_result, NodeNameEquals("GameWorld"));
 
   // Assert: Empty scope should behave exactly like full scene traversal
-  EXPECT_TRUE(empty_scope_count.completed);
-  EXPECT_EQ(empty_scope_count.nodes_matched, full_count.nodes_matched);
-  EXPECT_EQ(empty_scope_count.nodes_examined, full_count.nodes_examined);
+  EXPECT_TRUE(full_query_result);
+  EXPECT_TRUE(empty_scope_query_result);
+  ASSERT_TRUE(full_count_result.has_value());
+  ASSERT_TRUE(empty_scope_count_result.has_value());
+  EXPECT_EQ(empty_scope_count_result.value(), full_count_result.value());
 
-  EXPECT_TRUE(collect_result.completed);
+  EXPECT_TRUE(collect_query_result);
+  EXPECT_TRUE(find_query_result);
+  EXPECT_TRUE(any_query_result);
 
-  EXPECT_TRUE(find_result.has_value());
-  EXPECT_EQ(find_result->GetName(), "Player1");
-  EXPECT_TRUE(any_result.has_value());
+  ASSERT_TRUE(find_node_result.has_value());
+  EXPECT_EQ(find_node_result->GetName(), "Player1");
+  ASSERT_TRUE(any_result.has_value());
   EXPECT_TRUE(any_result.value());
 
   // Should contain nodes from all parts of the hierarchy
   std::vector<std::string> node_names;
-  std::transform(collected_nodes.begin(), collected_nodes.end(),
+  std::transform(collected_nodes_result.begin(), collected_nodes_result.end(),
     std::back_inserter(node_names),
     [](const SceneNode& node) { return node.GetName(); });
 
   // Use Google Test container matchers properly
   EXPECT_THAT(node_names,
-    AllOf(SizeIs(full_count.nodes_matched),
+    AllOf(SizeIs(full_count_result.value()),
       IsSupersetOf(
         { "GameWorld", "Player1", "Player2", "NPCs", "Environment" })));
 }
@@ -445,11 +519,14 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
   // Arrange: Use default game scene hierarchy
 
   // Act: Check if any node is named "Merchant"
-  auto result = query_->Any(NodeNameEquals("Merchant"));
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("Merchant"));
 
   // Assert: Should return true
-  ASSERT_TRUE(result.has_value());
-  EXPECT_TRUE(result.value());
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_TRUE(any_result.value());
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
@@ -457,11 +534,14 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
   // Arrange: Use default game scene hierarchy
 
   // Act: Check for non-existent node
-  auto result = query_->Any(NodeNameEquals("NonExistent"));
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("NonExistent"));
 
   // Assert: Should return false
-  ASSERT_TRUE(result.has_value());
-  EXPECT_FALSE(result.value());
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_FALSE(any_result.value());
 }
 
 NOLINT_TEST_F(
@@ -471,39 +551,48 @@ NOLINT_TEST_F(
   CreateLinearChainScene(10); // Deep chain for early termination test
 
   // Act: Search for root node (should terminate immediately)
-  auto result = query_->Any(NodeNameEquals("Root"));
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("Root"));
 
   // Assert: Should return true immediately
-  ASSERT_TRUE(result.has_value());
-  EXPECT_TRUE(result.value());
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_TRUE(any_result.value());
 }
 
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Any_WithScopedTraversal_FindsBasedOnScope)
 {
   // Arrange: Use default game scene hierarchy
-
   // Find Player1 and NPCs subtrees
-  auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  auto npcs_node = query_->FindFirst(NodeNameEquals("NPCs"));
+  std::optional<SceneNode> player1_node;
+  std::optional<SceneNode> npcs_node;
+  query_->FindFirst(player1_node, NodeNameEquals("Player1"));
+  query_->FindFirst(npcs_node, NodeNameEquals("NPCs"));
   ASSERT_TRUE(player1_node.has_value());
-  ASSERT_TRUE(npcs_node.has_value());
-
-  // Act: Check for weapons within Player1 scope (should find)
+  ASSERT_TRUE(npcs_node.has_value()); // Act: Check for weapons within Player1
+                                      // scope (should find)
   query_->AddToTraversalScope(*player1_node);
-  auto player1_has_weapon = query_->Any(NodeNameEquals("Weapon"));
+  std::optional<bool> player1_any_result;
+  auto player1_query_result
+    = query_->Any(player1_any_result, NodeNameEquals("Weapon"));
 
   // Reset and check for weapons within NPCs scope (should not find)
   query_->ResetTraversalScope();
   query_->AddToTraversalScope(*npcs_node);
-  auto npcs_has_weapon = query_->Any(NodeNameEquals("Weapon"));
+  std::optional<bool> npcs_any_result;
+  auto npcs_query_result
+    = query_->Any(npcs_any_result, NodeNameEquals("Weapon"));
 
   // Assert: Different scopes should give different results
-  ASSERT_TRUE(player1_has_weapon.has_value());
-  EXPECT_TRUE(player1_has_weapon.value()); // Player1 has weapons
+  EXPECT_TRUE(player1_query_result);
+  ASSERT_TRUE(player1_any_result.has_value());
+  EXPECT_TRUE(player1_any_result.value()); // Player1 has weapons
 
-  ASSERT_TRUE(npcs_has_weapon.has_value());
-  EXPECT_FALSE(npcs_has_weapon.value()); // NPCs have no weapons
+  EXPECT_TRUE(npcs_query_result);
+  ASSERT_TRUE(npcs_any_result.has_value());
+  EXPECT_FALSE(npcs_any_result.value()); // NPCs have no weapons
 }
 
 //=== Edge Cases and Error Conditions ===----------------------------------//
@@ -516,21 +605,34 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScene_HandlesGracefully)
   CreateQuery();
 
   // Act: Perform various queries on empty scene
-  auto find_result = query_->FindFirst(NodeNameEquals("Any"));
-  auto any_result = query_->Any(NodeNameEquals("Any"));
-  auto count_result = query_->Count(NodeNameEquals("Any"));
+  std::optional<SceneNode> find_node_result;
+  auto find_query_result
+    = query_->FindFirst(find_node_result, NodeNameEquals("Any"));
 
-  std::vector<SceneNode> nodes;
-  auto collect_result = query_->Collect(nodes, NodeNameEquals("Any"));
+  std::optional<bool> any_result;
+  auto any_query_result = query_->Any(any_result, NodeNameEquals("Any"));
+
+  std::optional<size_t> count_result;
+  auto count_query_result = query_->Count(count_result, NodeNameEquals("Any"));
+
+  std::vector<SceneNode> nodes_result;
+  auto collect_query_result
+    = query_->Collect(nodes_result, NodeNameEquals("Any"));
 
   // Assert: All operations should complete gracefully
-  EXPECT_FALSE(find_result.has_value());
+  EXPECT_TRUE(find_query_result);
+  EXPECT_FALSE(find_node_result.has_value());
+
+  EXPECT_TRUE(any_query_result);
   ASSERT_TRUE(any_result.has_value());
   EXPECT_FALSE(any_result.value());
-  EXPECT_TRUE(count_result.completed);
-  EXPECT_EQ(count_result.nodes_matched, 0);
-  EXPECT_TRUE(collect_result.completed);
-  EXPECT_TRUE(nodes.empty());
+
+  EXPECT_TRUE(count_query_result);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 0U);
+
+  EXPECT_TRUE(collect_query_result);
+  EXPECT_TRUE(nodes_result.empty());
 }
 
 NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithSingleNodeScene_WorksCorrectly)
@@ -539,15 +641,22 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithSingleNodeScene_WorksCorrectly)
   CreateSimpleScene();
 
   // Act: Query the single node
-  auto find_result = query_->FindFirst(NodeNameEquals("Root"));
-  auto count_result
-    = query_->Count([](const ConstVisitedNode&) { return true; });
+  std::optional<SceneNode> find_node_result;
+  auto find_query_result
+    = query_->FindFirst(find_node_result, NodeNameEquals("Root"));
+
+  std::optional<size_t> count_result;
+  auto count_query_result
+    = query_->Count(count_result, [](const ConstVisitedNode&) { return true; });
 
   // Assert: Should find the single node
-  ASSERT_TRUE(find_result.has_value());
-  EXPECT_EQ(find_result->GetName(), "Root");
-  EXPECT_TRUE(count_result.completed);
-  EXPECT_EQ(count_result.nodes_matched, 1);
+  EXPECT_TRUE(find_query_result);
+  ASSERT_TRUE(find_node_result.has_value());
+  EXPECT_EQ(find_node_result->GetName(), "Root");
+
+  EXPECT_TRUE(count_query_result);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 1U);
 }
 
 } // namespace

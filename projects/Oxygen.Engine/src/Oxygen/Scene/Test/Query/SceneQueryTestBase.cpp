@@ -10,7 +10,7 @@
 
 namespace oxygen::scene::testing {
 
-void SceneQueryTestBase::SetUp()
+auto SceneQueryTestBase::SetUp() -> void
 {
   // Start with a basic scene that can be customized per test
   scene_ = GetFactory().CreateSingleNodeScene("TestScene");
@@ -18,7 +18,7 @@ void SceneQueryTestBase::SetUp()
   CreateQuery();
 }
 
-void SceneQueryTestBase::TearDown()
+auto SceneQueryTestBase::TearDown() -> void
 {
   query_.reset();
   scene_.reset();
@@ -137,13 +137,13 @@ auto SceneQueryTestBase::CreateQuery() -> void
 
 auto SceneQueryTestBase::ExpectQueryResult(const QueryResult& result,
   std::size_t expected_examined, std::size_t expected_matched,
-  bool expected_completed) const -> void
+  bool expected_success) const -> void
 {
   EXPECT_EQ(result.nodes_examined, expected_examined)
     << "Nodes examined mismatch";
   EXPECT_EQ(result.nodes_matched, expected_matched) << "Nodes matched mismatch";
-  EXPECT_EQ(result.completed, expected_completed)
-    << "Completion status mismatch";
+  EXPECT_EQ(static_cast<bool>(result), expected_success)
+    << "Success status mismatch";
 }
 
 auto SceneQueryTestBase::ExpectBatchResult(const BatchResult& result,
@@ -154,7 +154,7 @@ auto SceneQueryTestBase::ExpectBatchResult(const BatchResult& result,
     << "Batch nodes examined mismatch";
   EXPECT_EQ(result.total_matches, expected_total_matches)
     << "Batch total matches mismatch";
-  EXPECT_EQ(result.completed, expected_completed)
+  EXPECT_EQ(static_cast<bool>(result), expected_completed)
     << "Batch completion status mismatch";
 }
 

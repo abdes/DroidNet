@@ -23,12 +23,12 @@ class Scene;
 
 //! ADL-compatible GetNodeName for ConstVisitedNode integration with
 //! PathMatcher.
-OXGN_SCN_API [[nodiscard]] std::string_view GetNodeName(
-  const ConstVisitedNode& visited) noexcept;
+OXGN_SCN_API [[nodiscard]] auto GetNodeName(
+  const ConstVisitedNode& visited) noexcept -> std::string_view;
 
 //! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher.
-OXGN_SCN_API [[nodiscard]] std::size_t GetDepth(
-  const ConstVisitedNode& visited) noexcept;
+OXGN_SCN_API [[nodiscard]] auto GetDepth(
+  const ConstVisitedNode& visited) noexcept -> std::size_t;
 
 //=== Query Result Types ===--------------------------------------------------//
 
@@ -45,16 +45,14 @@ struct QueryResult {
   std::size_t nodes_examined = 0;
   //! Number of nodes that matched the query criteria
   std::size_t nodes_matched = 0;
-  //! true if query completed successfully, false if interrupted
-  bool completed = true;
   //! Error message if operation failed (empty if successful)
-  std::string error_message;
+  std::optional<std::string> error_message {};
 
   //! Conversion operator for testing query operation success
   /*!
    @return true if the query operation completed successfully
   */
-  explicit operator bool() const noexcept { return completed; }
+  explicit operator bool() const noexcept { return !error_message.has_value(); }
 };
 
 //! Result type for batch query operations containing aggregated metrics
@@ -69,8 +67,9 @@ struct BatchResult {
   std::size_t nodes_examined = 0;
   //! Aggregated count of all matches across all batch operations
   std::size_t total_matches = 0;
-  //! true if batch completed successfully, false if interrupted
-  bool completed = true;
+  //! true if batch completed successfully, false if any of the operations had
+  //! errors
+  bool success = true;
 
   //! Per-operation results
   std::vector<QueryResult> operation_results;
@@ -79,7 +78,7 @@ struct BatchResult {
   /*!
    @return true if the batch operation completed successfully
   */
-  explicit operator bool() const noexcept { return completed; }
+  explicit operator bool() const noexcept { return success; }
 };
 
 //=== High-Performance Scene Graph Query ===----------------------------------//
@@ -162,78 +161,89 @@ struct BatchResult {
 */
 class SceneQuery {
 public:
+  //! Type erased (std::function) predicate function type, used to select nodes
+  //! for a query, during a traversal.
+  using QueryPredicate = std::function<bool(const ConstVisitedNode&)>;
+
   //! Construct a scene query interface for the given scene
   OXGN_SCN_API explicit SceneQuery(const std::shared_ptr<const Scene>& scene);
 
   //=== Traversal Scope Configuration API ===--------------------------------//
 
   //! Reset traversal scope to the entire scene.
-  OXGN_SCN_API SceneQuery& ResetTraversalScope() noexcept;
+  OXGN_SCN_API auto ResetTraversalScope() noexcept -> SceneQuery&;
 
   //! Add a single hierarchy to the traversal scope.
-  OXGN_SCN_API SceneQuery& AddToTraversalScope(
-    const SceneNode& starting_node) noexcept;
+  OXGN_SCN_API auto AddToTraversalScope(const SceneNode& starting_node) noexcept
+    -> SceneQuery&;
 
   //! Add multiple hierarchies to the traversal scope.
-  OXGN_SCN_API SceneQuery& AddToTraversalScope(
-    std::span<const SceneNode> starting_nodes) noexcept;
+  OXGN_SCN_API auto AddToTraversalScope(
+    std::span<const SceneNode> starting_nodes) noexcept -> SceneQuery&;
 
   //=== Core Query API ===----------------------------------------------------//
 
   //! Find the first node matching the given predicate with early termination
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  std::optional<SceneNode> FindFirst(Predicate&& predicate) const noexcept;
+  auto FindFirst(std::optional<SceneNode>& output, Predicate&& predicate) const
+    -> QueryResult;
 
   //! Collect all nodes matching the predicate into user-provided container
   template <typename Container,
     std::predicate<const ConstVisitedNode&> Predicate>
-  QueryResult Collect(
-    Container& container, Predicate&& predicate) const noexcept;
+  auto Collect(Container& container, Predicate&& predicate) const noexcept
+    -> QueryResult;
 
   //! Count nodes matching the predicate without allocation
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  QueryResult Count(Predicate&& predicate) const noexcept;
+  auto Count(std::optional<size_t>& output,
+    Predicate&& predicate) const noexcept -> QueryResult;
 
   //! Check if any node matches the predicate with early termination
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  std::optional<bool> Any(Predicate&& predicate) const noexcept;
+  auto Any(std::optional<bool>& output, Predicate&& predicate) const noexcept
+    -> QueryResult;
 
   //! Find first node by absolute path from scene root
-  OXGN_SCN_NDAPI auto FindFirstByPath(std::string_view path) const noexcept
-    -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto FindFirstByPath(std::optional<SceneNode>& output,
+    std::string_view path) const noexcept -> QueryResult;
 
   //! Collect all nodes matching path pattern with wildcard support
   template <typename Container>
-  QueryResult CollectByPath(
-    Container& container, std::string_view path_pattern) const noexcept;
+  auto CollectByPath(Container& container,
+    std::string_view path_pattern) const noexcept -> QueryResult;
+
   //! Execute multiple queries in single traversal pass for optimal performance
   template <typename BatchFunc>
-  BatchResult ExecuteBatch(BatchFunc&& batch_func) const noexcept;
+  auto ExecuteBatch(BatchFunc&& batch_func) const noexcept -> BatchResult;
 
   //=== Batch-Specific Query Methods (Reference-Based Output) ===------------//
 
-  //! Find first matching node in batch mode (populates result by reference)
+  //! Find first matching node in batch mode (populates output by reference)
   //! @note Only available during ExecuteBatch execution
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  void BatchFindFirst(
-    std::optional<SceneNode>& result, Predicate&& predicate) const noexcept;
+  auto BatchFindFirst(
+    std::optional<SceneNode>& output, Predicate&& predicate) const noexcept;
 
   //! Collect all matching nodes in batch mode (populates container by
   //! reference)
   //! @note Only available during ExecuteBatch execution
   template <typename Container,
     std::predicate<const ConstVisitedNode&> Predicate>
-  void BatchCollect(Container& result, Predicate&& predicate) const noexcept;
-  //! Count matching nodes in batch mode (does not return result)
-  //! @note Only available during ExecuteBatch execution
-  template <std::predicate<const ConstVisitedNode&> Predicate>
-  void BatchCount(Predicate&& predicate) const noexcept;
+  auto BatchCollect(Container& result, Predicate&& predicate) const noexcept
+    -> void;
 
-  //! Check if any node matches in batch mode (populates result by reference)
+  //! Count matching nodes in batch mode (does not return output)
   //! @note Only available during ExecuteBatch execution
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  void BatchAny(
-    std::optional<bool>& result, Predicate&& predicate) const noexcept;
+  auto BatchCount(
+    std::optional<size_t>& output, Predicate&& predicate) const noexcept;
+
+  //! Check if any node matches in batch mode (populates output by reference)
+  //! @note Only available during ExecuteBatch execution
+  template <std::predicate<const ConstVisitedNode&> Predicate>
+  auto BatchAny(
+    std::optional<bool>& output, Predicate&& predicate) const noexcept;
 
 private:
   //! Weak reference to scene for lifetime safety
@@ -248,21 +258,32 @@ private:
   //! BroadcastChannel-based batch coordinator (type-erased pointer)
   mutable void* batch_coordinator_ = nullptr;
 
+  auto EnsureCanExecute(const bool immediate) const -> void
+  {
+    if (scene_weak_.expired()) [[unlikely]] {
+      LOG_F(WARNING, "scene is no longer valid -> cannot execute query");
+      throw std::runtime_error(
+        "scene is no longer valid -> cannot execute query");
+    }
+    CHECK_F((immediate && !batch_active_) || (!immediate && batch_active_),
+      "use the appropriate API for immediate / batch execution");
+  }
+
   //=== Traversal Execution ===-----------------------------------------------//
 
   //! Scoped traversal starting nodes (empty means full scene traversal)
   mutable std::vector<SceneNode> traversal_scope_;
 
   //! Helper to determine if scoped traversal is active
-  [[nodiscard]] bool IsScopedTraversal() const noexcept
+  [[nodiscard]] auto IsScopedTraversal() const noexcept -> bool
   {
     return !traversal_scope_.empty();
   }
 
   //! Execute traversal using current scope configuration
   template <typename VisitorFunc, typename FilterFunc>
-  TraversalResult ExecuteTraversal(
-    VisitorFunc&& visitor, FilterFunc&& filter) const
+  auto ExecuteTraversal(VisitorFunc&& visitor, FilterFunc&& filter) const
+    -> TraversalResult
   {
     if (IsScopedTraversal()) {
       return traversal_.TraverseHierarchies(traversal_scope_,
@@ -273,66 +294,52 @@ private:
       TraversalOrder::kPreOrder, std::forward<FilterFunc>(filter));
   }
 
-  //=== Immediate Execution Helpers ===---------------------------------------//
+  //=== Type-Erased Implementation Helpers ===--------------------------------//
 
   //! Type-erased immediate find first implementation
-  OXGN_SCN_NDAPI auto ExecuteImmediateFindFirst(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> std::optional<SceneNode>;
+  OXGN_SCN_NDAPI auto FindFirstImpl(std::optional<SceneNode>& output,
+    const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Type-erased immediate count implementation
-  OXGN_SCN_NDAPI auto ExecuteImmediateCount(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> QueryResult;
+  OXGN_SCN_NDAPI auto CountImpl(std::optional<size_t>& output,
+    const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Type-erased immediate any implementation
-  OXGN_SCN_NDAPI auto ExecuteImmediateAny(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> std::optional<bool>;
+  OXGN_SCN_NDAPI auto AnyImpl(std::optional<bool>& output,
+    const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Execute immediate collect operation with direct traversal
-  QueryResult ExecuteImmediateCollect(auto& container,
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept;
+  auto CollectImpl(auto& container,
+    const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Implementation helper for immediate path-based collect (type-erased)
-  OXGN_SCN_NDAPI auto ExecuteImmediateCollectByPathImpl(
+  OXGN_SCN_NDAPI auto CollectByPathImpl(
     std::function<void(const SceneNode&)> add_to_container,
-    std::string_view path_pattern) const noexcept
-    -> QueryResult; //=== Type-Erased Implementation Helpers
-                    //===--------------------------------//
+    std::string_view path_pattern) const noexcept -> QueryResult;
 
   //! Type-erased batch execution implementation
   OXGN_SCN_NDAPI auto ExecuteBatchImpl(
     std::function<void(const SceneQuery&)> batch_func) const noexcept
     -> BatchResult;
 
-  //! Type-erased batch collect implementation
-  OXGN_SCN_NDAPI auto ExecuteBatchCollectImpl(
-    std::function<void(const SceneNode&)> add_to_container,
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept -> QueryResult;
-
   //=== Batch Implementation Helpers ===--------------------------------------//
 
   //! Implementation for BatchFindFirst (calls coordinator)
   OXGN_SCN_NDAPI void BatchFindFirstImpl(std::optional<SceneNode>& result,
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept;
+    const QueryPredicate& predicate) const noexcept;
 
-  //! Implementation for BatchCollect (calls coordinator)
-  OXGN_SCN_NDAPI void BatchCollectImpl(std::vector<SceneNode>& result,
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept;
+  //! Implementation for BatchCollect (calls coordinator with inserter)
+  OXGN_SCN_NDAPI void BatchCollectImpl(
+    std::function<void(const SceneNode&)> inserter,
+    const QueryPredicate& predicate) const noexcept;
+
   //! Implementation for BatchCount (calls coordinator)
-  OXGN_SCN_NDAPI void BatchCountImpl(
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept;
+  OXGN_SCN_NDAPI void BatchCountImpl(std::optional<size_t>& result,
+    const QueryPredicate& predicate) const noexcept;
 
   //! Implementation for BatchAny (calls coordinator)
   OXGN_SCN_NDAPI void BatchAnyImpl(std::optional<bool>& result,
-    const std::function<bool(const ConstVisitedNode&)>& predicate)
-    const noexcept;
+    const QueryPredicate& predicate) const noexcept;
 };
 
 //=== Template Implementations ===--------------------------------------------//
@@ -346,6 +353,8 @@ private:
  @param predicate Function to test each node during traversal
  @return Optional SceneNode containing the first match, or nullopt if no match
  found
+ @throws runtime_error if the scene is no longer valid.
+ @note Aborts if used within a batch query.
 
  ### Performance Characteristics
 
@@ -367,25 +376,19 @@ private:
           visited.node_impl->GetFlags().GetEffectiveValue(SceneNodeFlags::kVisible);
  });
  ```
-
- @note This method automatically routes to batch execution when called within
- ExecuteBatch()
  @see ExecuteBatch for batch processing multiple FindFirst operations
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
-std::optional<SceneNode> SceneQuery::FindFirst(
-  Predicate&& predicate) const noexcept
+auto SceneQuery::FindFirst(
+  std::optional<SceneNode>& output, Predicate&& predicate) const -> QueryResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  CHECK_F(!batch_active_,
-    "FindFirst() called in batch mode - use BatchFindFirst() instead");
+  EnsureCanExecute(true);
 
-  // Use private helper for immediate execution
-  return ExecuteImmediateFindFirst(std::function<bool(const ConstVisitedNode&)>(
-    std::forward<Predicate>(predicate)));
+  output.reset();
+  return FindFirstImpl(
+    output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 /*!
@@ -428,20 +431,16 @@ std::optional<SceneNode> SceneQuery::FindFirst(
  @see ExecuteBatch for batch processing multiple Collect operations
 */
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
-QueryResult SceneQuery::Collect(
-  Container& container, Predicate&& predicate) const noexcept
+auto SceneQuery::Collect(
+  Container& container, Predicate&& predicate) const noexcept -> QueryResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  CHECK_F(!batch_active_,
-    "Collect() called in batch mode - use BatchCollect() instead");
+  EnsureCanExecute(true);
 
-  // Use private helper for immediate execution
-  return ExecuteImmediateCollect(container,
-    std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
+  // We do not clear the output container, we will only append to it.
+  return CollectImpl(
+    container, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 /*!
@@ -478,18 +477,15 @@ QueryResult SceneQuery::Collect(
  @see ExecuteBatch for batch processing multiple Count operations
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
-QueryResult SceneQuery::Count(Predicate&& predicate) const noexcept
+auto SceneQuery::Count(std::optional<size_t>& output,
+  Predicate&& predicate) const noexcept -> QueryResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  CHECK_F(
-    !batch_active_, "Count() called in batch mode - use BatchCount() instead");
+  EnsureCanExecute(true);
 
-  // Use private helper for immediate execution
-  return ExecuteImmediateCount(std::function<bool(const ConstVisitedNode&)>(
-    std::forward<Predicate>(predicate)));
+  output.reset();
+  return CountImpl(output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 /*!
@@ -526,18 +522,15 @@ QueryResult SceneQuery::Count(Predicate&& predicate) const noexcept
  @see ExecuteBatch for batch processing multiple Any operations
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
-std::optional<bool> SceneQuery::Any(Predicate&& predicate) const noexcept
+auto SceneQuery::Any(std::optional<bool>& output,
+  Predicate&& predicate) const noexcept -> QueryResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return std::nullopt;
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  CHECK_F(
-    !batch_active_, "Any() called in batch mode - use BatchAny() instead");
+  EnsureCanExecute(true);
 
-  // Use private helper for immediate execution
-  return ExecuteImmediateAny(std::function<bool(const ConstVisitedNode&)>(
-    std::forward<Predicate>(predicate)));
+  output.reset();
+  return AnyImpl(output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 /*!
@@ -569,8 +562,8 @@ std::optional<bool> SceneQuery::Any(Predicate&& predicate) const noexcept
  @note This function is used when not in batch mode for immediate results
  @see ExecuteBatchCollectImpl for batch mode equivalent
 */
-QueryResult SceneQuery::ExecuteImmediateCollect(auto& container,
-  const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+auto SceneQuery::CollectImpl(auto& container,
+  const QueryPredicate& predicate) const noexcept -> QueryResult
 {
   QueryResult result {};
   auto traversal_result = ExecuteTraversal(
@@ -585,7 +578,6 @@ QueryResult SceneQuery::ExecuteImmediateCollect(auto& container,
       ++result.nodes_examined;
       return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
     });
-  result.completed = traversal_result.completed;
   return result;
 }
 
@@ -624,20 +616,15 @@ QueryResult SceneQuery::ExecuteImmediateCollect(auto& container,
 /// @note Path queries are not supported in batch mode (ExecuteBatch)
 /// @see FindFirstByPath for single node path navigation
 template <typename Container>
-QueryResult SceneQuery::CollectByPath(
-  Container& container, std::string_view path_pattern) const noexcept
+auto SceneQuery::CollectByPath(Container& container,
+  std::string_view path_pattern) const noexcept -> QueryResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return QueryResult { .completed = false };
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  if (batch_active_) {
-    // Path-based queries are not supported in batch mode
-    return QueryResult { .completed = false };
-  }
+  EnsureCanExecute(true);
 
-  // Use private helper for immediate execution
-  return ExecuteImmediateCollectByPathImpl(
+  // We do not clear the output container, we will only append to it.
+  return CollectByPathImpl(
     [&container](const SceneNode& node) { container.emplace_back(node); },
     path_pattern);
 }
@@ -706,65 +693,71 @@ QueryResult SceneQuery::CollectByPath(
  @see QueryResult, BatchResult for performance metrics
 */
 template <typename BatchFunc>
-BatchResult SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
+auto SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
+  -> BatchResult
 {
   // Type-erased wrapper - all complex logic moved to .cpp
   return ExecuteBatchImpl([batch_func = std::forward<BatchFunc>(batch_func)](
                             const SceneQuery& query) { batch_func(query); });
 }
 
+//! Find first matching node in batch mode (populates output by reference)
+//! @note Only available during ExecuteBatch execution
 template <std::predicate<const ConstVisitedNode&> Predicate>
-void SceneQuery::BatchFindFirst(
-  std::optional<SceneNode>& result, Predicate&& predicate) const noexcept
+auto SceneQuery::BatchFindFirst(
+  std::optional<SceneNode>& output, Predicate&& predicate) const noexcept
 {
-  BatchFindFirstImpl(result,
-    std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
+  LOG_SCOPE_FUNCTION(2);
+
+  EnsureCanExecute(false);
+
+  output.reset();
+  BatchFindFirstImpl(
+    output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
-void SceneQuery::BatchCollect(
-  Container& result, Predicate&& predicate) const noexcept
+auto SceneQuery::BatchCollect(
+  Container& result, Predicate&& predicate) const noexcept -> void
 {
-  if (!batch_active_ || !batch_coordinator_) {
-    // This method is only available during batch execution
-    result.clear();
-    return;
-  }
+  LOG_SCOPE_FUNCTION(2);
 
-  // For now, only support std::vector<SceneNode> for the interface
-  if constexpr (std::is_same_v<Container, std::vector<SceneNode>>) {
-    BatchCollectImpl(result,
-      std::function<bool(const ConstVisitedNode&)>(
-        std::forward<Predicate>(predicate)));
-  } else {
-    // Fallback for other container types - collect to temp vector then copy
-    std::vector<SceneNode> temp_result;
-    BatchCollectImpl(temp_result,
-      std::function<bool(const ConstVisitedNode&)>(
-        std::forward<Predicate>(predicate)));
+  EnsureCanExecute(false);
 
-    result.clear();
-    for (auto&& node : temp_result) {
-      result.emplace_back(std::move(node));
-    }
-  }
+  // We do not clear the output container, we will only append to it.
+
+  // Use inserter pattern - works with any container supporting emplace_back
+  BatchCollectImpl(
+    [&result](const SceneNode& node) { result.emplace_back(node); },
+    QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
+//! Count matching nodes in batch mode (does not return output)
+//! @note Only available during ExecuteBatch execution
 template <std::predicate<const ConstVisitedNode&> Predicate>
-void SceneQuery::BatchCount(Predicate&& predicate) const noexcept
+auto SceneQuery::BatchCount(
+  std::optional<size_t>& output, Predicate&& predicate) const noexcept
 {
-  BatchCountImpl(std::function<bool(const ConstVisitedNode&)>(
-    std::forward<Predicate>(predicate)));
+  LOG_SCOPE_FUNCTION(2);
+
+  EnsureCanExecute(false);
+
+  output.reset();
+  BatchCountImpl(output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
+//! Check if any node matches in batch mode (populates output by reference)
+//! @note Only available during ExecuteBatch execution
 template <std::predicate<const ConstVisitedNode&> Predicate>
-void SceneQuery::BatchAny(
-  std::optional<bool>& result, Predicate&& predicate) const noexcept
+auto SceneQuery::BatchAny(
+  std::optional<bool>& output, Predicate&& predicate) const noexcept
 {
-  BatchAnyImpl(result,
-    std::function<bool(const ConstVisitedNode&)>(
-      std::forward<Predicate>(predicate)));
+  LOG_SCOPE_FUNCTION(2);
+
+  EnsureCanExecute(false);
+
+  output.reset();
+  BatchAnyImpl(output, QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 } // namespace oxygen::scene

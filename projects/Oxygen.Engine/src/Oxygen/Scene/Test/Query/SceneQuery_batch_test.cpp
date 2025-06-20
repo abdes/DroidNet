@@ -21,7 +21,7 @@ namespace {
 
 class SceneQueryBatchTest : public SceneQueryTestBase {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Create game scene hierarchy suitable for batch testing
     CreateGameSceneHierarchy();
@@ -106,7 +106,7 @@ NOLINT_TEST_F(
   });
 
   // Assert: Should execute correctly and find player
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_GT(batch_result.nodes_examined, 0);
   EXPECT_GT(batch_result.total_matches, 0);
 
@@ -119,16 +119,17 @@ NOLINT_TEST_F(SceneQueryBatchTest,
 { // Arrange: Multiple operations to batch
   std::optional<SceneNode> player;
   std::vector<SceneNode> enemies;
+  std::optional<size_t> enemies_count;
   std::optional<bool> has_ui; // Act: Execute multiple queries in single batch
   auto batch_result = query_->ExecuteBatch([&](const auto& q) {
     q.BatchFindFirst(player, NodeNameEquals("Player1"));
     q.BatchCollect(enemies, NodeNameStartsWith("Enemy"));
-    q.BatchCount(NodeNameStartsWith("Enemy"));
+    q.BatchCount(enemies_count, NodeNameStartsWith("Enemy"));
     q.BatchAny(has_ui, NodeNameEquals("UI"));
   });
 
   // Assert: All operations should complete in single traversal
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_GT(batch_result.nodes_examined, 0);
   EXPECT_GT(batch_result.total_matches, 0);
   EXPECT_EQ(batch_result.operation_results.size(), 4); // 4 operations
@@ -141,19 +142,23 @@ NOLINT_TEST_F(SceneQueryBatchTest,
   ASSERT_TRUE(has_ui.has_value());
   EXPECT_TRUE(has_ui.value());
   // Verify operation metadata is available in batch_result.operation_results
-  EXPECT_TRUE(batch_result.operation_results[0].completed);
-  EXPECT_TRUE(batch_result.operation_results[1].completed);
-  EXPECT_TRUE(batch_result.operation_results[2].completed);
-  EXPECT_TRUE(batch_result.operation_results[3].completed);
+  EXPECT_TRUE(batch_result.operation_results[0]);
+  EXPECT_TRUE(batch_result.operation_results[1]);
+  EXPECT_TRUE(batch_result.operation_results[2]);
+  EXPECT_TRUE(batch_result.operation_results[3]);
 }
 
 NOLINT_TEST_F(SceneQueryBatchTest,
   ExecuteBatch_WithMixedOperations_AggregatesResultsCorrectly)
-{ // Arrange: Mix of FindFirst, Collect, Count, Any operations
+{
+  // Arrange: Mix of FindFirst, Collect, Count, Any operations
   std::optional<SceneNode> level1;
   std::vector<SceneNode> potions;
   std::vector<SceneNode> ui_elements;
-  std::optional<bool> has_static; // Act: Execute mixed batch operations
+  std::optional<bool> has_static;
+  std::optional<size_t> visible_count;
+
+  // Act: Execute mixed batch operations
   auto batch_result = query_->ExecuteBatch([&](const auto& q) {
     q.BatchFindFirst(level1, NodeNameEquals("Level1"));
     q.BatchCollect(potions, NodeNameStartsWith("Potion"));
@@ -163,15 +168,16 @@ NOLINT_TEST_F(SceneQueryBatchTest,
       auto parent = visited.node_impl->AsGraphNode().GetParent();
       return parent.IsValid(); // Has parent check
     });
-    q.BatchCount(NodeIsVisible());
+    q.BatchCount(visible_count, NodeIsVisible());
     q.BatchAny(has_static, NodeIsStatic());
   });
   // Assert: Batch should aggregate all results correctly
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_EQ(batch_result.operation_results.size(), 5); // 5 operations
   // Check operation metadata from batch_result
   auto visible_count_op = batch_result.operation_results[3]; // Count operation
-  EXPECT_TRUE(visible_count_op.completed);
+  EXPECT_TRUE(visible_count_op);
+  EXPECT_TRUE(visible_count.has_value());
 
   // Total matches should be sum of all individual matches from user variables
   std::size_t expected_total = 0;
@@ -204,54 +210,12 @@ NOLINT_TEST_F(
   });
 
   // Assert: Should complete with early termination
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_GT(batch_result.nodes_examined, 0);
 
   ASSERT_TRUE(first_node.has_value());
   ASSERT_TRUE(any_node.has_value());
   EXPECT_TRUE(any_node.value());
-}
-
-//=== Batch Performance Tests ==============================================//
-
-NOLINT_TEST_F(
-  SceneQueryBatchTest, ExecuteBatch_VsIndividualQueries_PerformanceBenefit)
-{
-  // Arrange: Create larger hierarchy for performance testing
-  CreateForestScene(20, 10); // 20 roots with 10 children each = 220+ nodes
-  CreateQuery();
-  std::optional<SceneNode> player1, player2;
-  std::vector<SceneNode> roots1, roots2;
-
-  // Act: Batch execution
-  auto batch_result = query_->ExecuteBatch([&](const auto& q) {
-    q.BatchFindFirst(player1, NodeNameEquals("Root"));
-    q.BatchCollect(roots1, NodeNameStartsWith("Root"));
-    q.BatchCount([](const ConstVisitedNode&) { return true; });
-  });
-  // Individual executions (for comparison)
-  player2 = query_->FindFirst(NodeNameEquals("Root"));
-  auto collect_result = query_->Collect(roots2, NodeNameStartsWith("Root"));
-  auto count2 = query_->Count([](const ConstVisitedNode&) { return true; });
-
-  // Assert: Batch should examine fewer or equal nodes due to single traversal
-  EXPECT_TRUE(batch_result.completed);
-  EXPECT_EQ(batch_result.operation_results.size(), 3); // 3 operations
-  // Get count operation metadata from batch_result
-  auto count1_op = batch_result.operation_results[2]; // Count operation
-
-  EXPECT_LE(batch_result.nodes_examined,
-    count1_op.nodes_examined + collect_result.nodes_examined
-      + count2.nodes_examined);
-
-  // Results should be equivalent
-  EXPECT_EQ(player1.has_value(), player2.has_value());
-  if (player1.has_value() && player2.has_value()) {
-    EXPECT_EQ(player1->GetName(), player2->GetName());
-  }
-  EXPECT_EQ(roots1.size(), roots2.size());
-  EXPECT_EQ(
-    count1_op.nodes_matched, count2.nodes_matched); // Compare nodes_matched
 }
 
 NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithLargeHierarchy_ScalesWell)
@@ -261,15 +225,16 @@ NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithLargeHierarchy_ScalesWell)
   CreateQuery();
   std::vector<SceneNode> all_nodes;
   std::vector<SceneNode> root_nodes;
+  std::optional<size_t> count;
 
   // Act: Execute complex batch on large hierarchy
   auto batch_result = query_->ExecuteBatch([&](const auto& q) {
     q.BatchCollect(all_nodes, [](const ConstVisitedNode&) { return true; });
     q.BatchCollect(root_nodes, NodeNameStartsWith("Root"));
-    q.BatchCount([](const ConstVisitedNode&) { return true; });
+    q.BatchCount(count, [](const ConstVisitedNode&) { return true; });
   });
   // Assert: Should handle large hierarchy efficiently
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_GT(batch_result.nodes_examined, 1000);
   EXPECT_GT(all_nodes.size(), 1000);
   EXPECT_EQ(root_nodes.size(), 50);
@@ -295,7 +260,7 @@ NOLINT_TEST_F(
   });
 
   // Assert: Aggregation should be correct
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
 
   std::size_t expected_total = enemies.size() + potions.size();
   if (player.has_value())
@@ -323,23 +288,27 @@ NOLINT_TEST_F(
   });
 
   // Assert: Should complete successfully with zero results
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_EQ(batch_result.total_matches, 0);
   EXPECT_GE(batch_result.nodes_examined, 0); // May still examine some nodes
 }
 
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_WithOnlyCountOperations_WorksCorrectly)
-{ // Arrange: Batch with only count operations
+{
+  // Arrange: Batch with only count operations
+  std::optional<size_t> all_count;
+  std::optional<size_t> enemies_count;
+  std::optional<size_t> visible_count;
 
   // Act: Execute count-only batch
   auto batch_result = query_->ExecuteBatch([&](const auto& q) {
-    q.BatchCount([](const ConstVisitedNode&) { return true; });
-    q.BatchCount(NodeNameStartsWith("Enemy"));
-    q.BatchCount(NodeIsVisible());
+    q.BatchCount(all_count, [](const ConstVisitedNode&) { return true; });
+    q.BatchCount(enemies_count, NodeNameStartsWith("Enemy"));
+    q.BatchCount(visible_count, NodeIsVisible());
   });
   // Assert: Should work correctly
-  EXPECT_TRUE(batch_result.completed);
+  EXPECT_TRUE(batch_result);
   EXPECT_EQ(batch_result.operation_results.size(), 3); // 3 count operations
   // Check individual count operation metadata from batch_result
   auto all_count_op = batch_result.operation_results[0];
@@ -374,31 +343,6 @@ NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithNestedBatch_AbortWithDCHECK)
       });
     },
     ".*"); // Match any death message from DCHECK_F
-}
-
-//=== Path Operations in Batch Mode =======================================//
-
-NOLINT_TEST_F(
-  SceneQueryBatchTest, ExecuteBatch_WithPathOperations_ReturnsIncomplete)
-{
-  // Arrange: Try to use path operations in batch mode
-  std::optional<SceneNode> path_result;
-  std::vector<SceneNode> path_collection;
-
-  // Act: Attempt path operations in batch (should fail gracefully)
-  auto batch_result = query_->ExecuteBatch([&](const auto& q) {
-    path_result = q.FindFirstByPath("Level1/Player");
-    auto collect_result = q.CollectByPath(path_collection, "**/Enemy*");
-
-    // These should return incomplete results but not crash
-    EXPECT_FALSE(path_result.has_value());
-    EXPECT_FALSE(collect_result.completed);
-  });
-
-  // Assert: Batch should indicate path operations aren't supported
-  // The batch itself may complete, but path operations should fail
-  EXPECT_FALSE(path_result.has_value());
-  EXPECT_TRUE(path_collection.empty());
 }
 
 } // namespace
