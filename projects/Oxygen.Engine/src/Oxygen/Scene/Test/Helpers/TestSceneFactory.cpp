@@ -108,8 +108,10 @@ namespace {
   void CreateChildrenFromJson(const TestSceneFactory& factory,
     const std::shared_ptr<Scene>& scene, SceneNode& parent,
     const json& children_spec, std::vector<SceneNode>& all_nodes);
-
   void ApplyNodeProperties(const SceneNode& node, const json& properties);
+
+  // Helper function to count total nodes in JSON template
+  std::size_t CountNodesInJson(const json& json_template);
 
   // Function implementations
 
@@ -383,6 +385,9 @@ auto TestSceneFactory::GenerateNodeName(int index) const -> std::string
 auto TestSceneFactory::CreateEmptyScene(std::string_view scene_name) const
   -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: 0 nodes (empty scene)
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(0);
+
   auto scene = CreateScene(scene_name);
   return scene;
 }
@@ -390,6 +395,9 @@ auto TestSceneFactory::CreateEmptyScene(std::string_view scene_name) const
 auto TestSceneFactory::CreateSingleNodeScene(std::string_view scene_name) const
   -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: 1 node
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(1);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -402,6 +410,9 @@ auto TestSceneFactory::CreateSingleNodeScene(std::string_view scene_name) const
 auto TestSceneFactory::CreateParentChildScene(std::string_view scene_name) const
   -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: 1 parent + 1 child = 2 nodes
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(2);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -417,6 +428,10 @@ auto TestSceneFactory::CreateParentChildScene(std::string_view scene_name) const
 auto TestSceneFactory::CreateParentWithChildrenScene(
   std::string_view scene_name, int child_count) const -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: 1 parent + child_count children
+  const std::size_t capacity = 1 + static_cast<std::size_t>(child_count);
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -437,6 +452,10 @@ auto TestSceneFactory::CreateParentWithChildrenScene(
 auto TestSceneFactory::CreateLinearChainScene(
   std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: depth nodes in a linear chain
+  const std::size_t capacity = std::max(0, depth);
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -462,6 +481,14 @@ auto TestSceneFactory::CreateLinearChainScene(
 auto TestSceneFactory::CreateBinaryTreeScene(
   std::string_view scene_name, int depth) const -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: Binary tree with depth levels
+  // Total nodes = 2^0 + 2^1 + ... + 2^(depth-1) = 2^depth - 1
+  std::size_t capacity = 0;
+  if (depth > 0) {
+    capacity = (1ULL << depth) - 1; // 2^depth - 1
+  }
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -509,6 +536,11 @@ auto TestSceneFactory::CreateBinaryTreeScene(
 auto TestSceneFactory::CreateForestScene(std::string_view scene_name,
   int root_count, int children_per_root) const -> std::shared_ptr<Scene>
 {
+  // Calculate capacity: root_count roots + (root_count * children_per_root) children
+  const std::size_t capacity = static_cast<std::size_t>(root_count)
+    + static_cast<std::size_t>(root_count) * static_cast<std::size_t>(children_per_root);
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(capacity);
+
   auto scene = CreateScene(scene_name);
   name_generator_->Reset();
 
@@ -565,6 +597,9 @@ auto TestSceneFactory::CreateFromTemplate(const std::string& template_name,
     return nullptr;
   }
 
+  // Set default capacity for JSON templates
+  const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(1024);
+
   // Use the cached parsed JSON directly
   return CreateSceneFromJson(
     *this, scene_name, capacity, it->second->parsed_json);
@@ -585,6 +620,9 @@ auto TestSceneFactory::CreateFromJson(const std::string& json_template,
       throw std::invalid_argument(
         "JSON Schema validation failed: " + *validation_error);
     }
+
+    // Set default capacity for JSON templates
+    const_cast<TestSceneFactory*>(this)->SetDefaultCapacity(1024);
 
     return CreateSceneFromJson(*this, scene_name, capacity, json);
   } catch (const json::parse_error& e) {
