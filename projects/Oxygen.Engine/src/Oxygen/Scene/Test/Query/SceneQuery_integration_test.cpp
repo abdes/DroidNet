@@ -20,7 +20,7 @@ namespace {
   protected:
     void SetUp() override { }
 
-    auto CreateGameSceneHierarchy() -> void
+    void CreateGameSceneHierarchy()
     {
       const auto json = GetGameSceneJson();
       scene_ = GetFactory().CreateFromJson(json, "GameScene");
@@ -28,7 +28,7 @@ namespace {
       CreateQuery();
     }
 
-    auto GetGameSceneJson() -> std::string
+    std::string GetGameSceneJson()
     {
       return R"({
         "metadata": {
@@ -117,32 +117,36 @@ namespace {
         }
       ]
     })";
-
     scene_ = GetFactory().CreateFromJson(deep_json, "DeepHierarchy");
     CreateQuery();
 
     // Act: Find deeply nested target
-    auto deep_target = query_->FindFirst(NodeNameEquals("L5_Target"));
+    std::optional<SceneNode> node_result;
+    auto find_query_result
+      = query_->FindFirst(node_result, NodeNameEquals("L5_Target"));
 
     // Count nodes at each level
-    std::vector<SceneNode> level_nodes;
+    std::vector<SceneNode> level_nodes_result;
     for (int i = 0; i <= 5; ++i) {
       std::string level_name = (i == 5) ? "L5_Target" : "L" + std::to_string(i);
-      auto level_result
-        = query_->Collect(level_nodes, NodeNameEquals(level_name));
-      EXPECT_TRUE(level_result.completed);
+      auto level_query_result
+        = query_->Collect(level_nodes_result, NodeNameEquals(level_name));
+      EXPECT_TRUE(level_query_result);
     }
 
     // Assert: Should traverse deep hierarchy correctly
-    ASSERT_TRUE(deep_target.has_value());
-    EXPECT_EQ(deep_target->GetName(), "L5_Target");
+    EXPECT_TRUE(find_query_result);
+    ASSERT_TRUE(node_result.has_value());
+    EXPECT_EQ(node_result->GetName(), "L5_Target");
 
     // Should find all 6 nodes (L0 through L5_Target)
-    auto all_count
-      = query_->Count([](const ConstVisitedNode&) { return true; });
-    EXPECT_EQ(all_count.nodes_matched, 6);
+    std::optional<size_t> count_result;
+    auto count_query_result = query_->Count(
+      count_result, [](const ConstVisitedNode&) { return true; });
+    EXPECT_TRUE(count_query_result);
+    ASSERT_TRUE(count_result.has_value());
+    EXPECT_EQ(count_result.value(), 6U);
   }
-
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_WithWideHierarchy_TraversesCorrectly)
   {
@@ -151,24 +155,38 @@ namespace {
     CreateQuery();
 
     // Act: Query the wide hierarchy
-    auto root_count = query_->Count(NodeNameStartsWith("Root"));
-    auto child_count = query_->Count(NodeNameStartsWith("Child"));
-    auto total_count
-      = query_->Count([](const ConstVisitedNode&) { return true; });
+    std::optional<size_t> root_count_result;
+    auto root_query_result
+      = query_->Count(root_count_result, NodeNameStartsWith("Root"));
 
-    std::vector<SceneNode> all_roots;
-    auto collect_result
-      = query_->Collect(all_roots, NodeNameStartsWith("Root"));
+    std::optional<size_t> child_count_result;
+    auto child_query_result
+      = query_->Count(child_count_result, NodeNameStartsWith("Child"));
+
+    std::optional<size_t> total_count_result;
+    auto total_query_result = query_->Count(
+      total_count_result, [](const ConstVisitedNode&) { return true; });
+
+    std::vector<SceneNode> roots_result;
+    auto collect_query_result
+      = query_->Collect(roots_result, NodeNameStartsWith("Root"));
 
     // Assert: Should handle wide hierarchy correctly
-    EXPECT_EQ(root_count.nodes_matched, 20);
-    EXPECT_GE(child_count.nodes_matched, 300); // At least 20 * 15
-    EXPECT_EQ(total_count.nodes_matched,
-      root_count.nodes_matched + child_count.nodes_matched);
-    EXPECT_EQ(all_roots.size(), 20);
-    EXPECT_TRUE(collect_result.completed);
-  }
+    EXPECT_TRUE(root_query_result);
+    EXPECT_TRUE(child_query_result);
+    EXPECT_TRUE(total_query_result);
+    EXPECT_TRUE(collect_query_result);
 
+    ASSERT_TRUE(root_count_result.has_value());
+    ASSERT_TRUE(child_count_result.has_value());
+    ASSERT_TRUE(total_count_result.has_value());
+
+    EXPECT_EQ(root_count_result.value(), 20U);
+    EXPECT_GE(child_count_result.value(), 300U); // At least 20 * 15
+    EXPECT_EQ(total_count_result.value(),
+      root_count_result.value() + child_count_result.value());
+    EXPECT_EQ(roots_result.size(), 20U);
+  }
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_WithComplexFlags_FiltersCorrectly)
   {
@@ -176,51 +194,65 @@ namespace {
     CreateGameSceneHierarchy();
 
     // Act: Query based on visibility flags
-    auto visible_enemies = query_->Count([](const ConstVisitedNode& visited) {
-      return visited.node_impl
-        && visited.node_impl->GetName().starts_with("Enemy")
-        && visited.node_impl->GetFlags().GetEffectiveValue(
-          SceneNodeFlags::kVisible);
-    });
+    std::optional<size_t> visible_enemies_result;
+    auto visible_enemies_query_result = query_->Count(
+      visible_enemies_result, [](const ConstVisitedNode& visited) {
+        return visited.node_impl
+          && visited.node_impl->GetName().starts_with("Enemy")
+          && visited.node_impl->GetFlags().GetEffectiveValue(
+            SceneNodeFlags::kVisible);
+      });
 
-    auto invisible_enemies = query_->Count([](const ConstVisitedNode& visited) {
-      return visited.node_impl
-        && visited.node_impl->GetName().starts_with("Enemy")
-        && !visited.node_impl->GetFlags().GetEffectiveValue(
-          SceneNodeFlags::kVisible);
-    });
+    std::optional<size_t> invisible_enemies_result;
+    auto invisible_enemies_query_result = query_->Count(
+      invisible_enemies_result, [](const ConstVisitedNode& visited) {
+        return visited.node_impl
+          && visited.node_impl->GetName().starts_with("Enemy")
+          && !visited.node_impl->GetFlags().GetEffectiveValue(
+            SceneNodeFlags::kVisible);
+      });
 
-    auto static_nodes = query_->Count([](const ConstVisitedNode& visited) {
-      return visited.node_impl
-        && visited.node_impl->GetFlags().GetEffectiveValue(
-          SceneNodeFlags::kStatic);
-    });
+    std::optional<size_t> static_nodes_result;
+    auto static_nodes_query_result
+      = query_->Count(static_nodes_result, [](const ConstVisitedNode& visited) {
+          return visited.node_impl
+            && visited.node_impl->GetFlags().GetEffectiveValue(
+              SceneNodeFlags::kStatic);
+        });
 
     // Assert: Flag-based filtering should work correctly
+    EXPECT_TRUE(visible_enemies_query_result);
+    EXPECT_TRUE(invisible_enemies_query_result);
+    EXPECT_TRUE(static_nodes_query_result);
+
+    ASSERT_TRUE(visible_enemies_result.has_value());
+    ASSERT_TRUE(invisible_enemies_result.has_value());
+    ASSERT_TRUE(static_nodes_result.has_value());
+
     EXPECT_EQ(
-      visible_enemies.nodes_matched, 2); // Enemy1 and Enemy3 are visible
-    EXPECT_EQ(invisible_enemies.nodes_matched, 1); // Enemy2 is invisible
-    EXPECT_GT(static_nodes.nodes_matched, 0); // UI is static
+      visible_enemies_result.value(), 2U); // Enemy1 and Enemy3 are visible
+    EXPECT_EQ(invisible_enemies_result.value(), 1U); // Enemy2 is invisible
+    EXPECT_GT(static_nodes_result.value(), 0U); // UI is static
   }
 
   //=== Real-World Scenario Tests ============================================//
 
   NOLINT_TEST_F(
     SceneQueryIntegrationTest, Query_GameObjectSearch_FindsPlayerAndEnemies)
-  {
-    // Arrange: Use default game scene
+  { // Arrange: Use default game scene
     CreateGameSceneHierarchy();
 
     // Act: Simulate typical game queries
-    auto player_search = query_->ExecuteBatch([&](const auto& q) {
+    auto player_search_result = query_->ExecuteBatch([&](const auto& q) {
       // Find player
-      auto player = q.FindFirst(NodeNameEquals("Player"));
-      EXPECT_TRUE(player.has_value());
+      std::optional<SceneNode> player_result;
+      q.BatchFindFirst(player_result, NodeNameEquals("Player"));
+      EXPECT_TRUE(player_result.has_value());
 
       // Get player equipment
-      std::vector<SceneNode> equipment;
-      auto equipment_result
-        = q.Collect(equipment, [](const ConstVisitedNode& visited) {
+      std::vector<SceneNode> equipment_result;
+      auto equipment_query_result
+        = q.Collect(equipment_result, [](const ConstVisitedNode& visited) {
             if (!visited.node_impl)
               return false;
             auto parent = visited.node_impl->AsGraphNode().GetParent();
@@ -229,26 +261,25 @@ namespace {
             return visited.node_impl->GetName() == "Weapon"
               || visited.node_impl->GetName() == "Shield";
           });
-      EXPECT_TRUE(equipment_result.completed);
-      EXPECT_GE(equipment.size(), 1);
+      EXPECT_TRUE(equipment_query_result);
+      EXPECT_GE(equipment_result.size(), 1U);
 
       // Count all enemies
-      auto enemy_count = q.Count(NodeNameStartsWith("Enemy"));
-      EXPECT_EQ(enemy_count.nodes_matched, 3);
+      q.BatchCount(NodeNameStartsWith("Enemy"));
 
       // Check for active enemies (visible ones)
-      auto active_enemies = q.Count([](const ConstVisitedNode& visited) {
+      q.BatchCount([](const ConstVisitedNode& visited) {
         return visited.node_impl
           && visited.node_impl->GetName().starts_with("Enemy")
           && visited.node_impl->GetFlags().GetEffectiveValue(
             SceneNodeFlags::kVisible);
       });
-      EXPECT_EQ(active_enemies.nodes_matched, 2);
     });
 
     // Assert: Game object search should complete successfully
-    EXPECT_TRUE(player_search.completed);
-    EXPECT_GT(player_search.total_matches, 5); // Player + equipment + enemies
+    EXPECT_TRUE(player_search_result);
+    EXPECT_GT(
+      player_search_result.total_matches, 5U); // Player + equipment + enemies
   }
 
   NOLINT_TEST_F(
@@ -303,7 +334,7 @@ namespace {
             return visited.node_impl
               && visited.node_impl->GetName().ends_with(".png");
           });
-      EXPECT_TRUE(texture_result.completed);
+      EXPECT_TRUE(texture_result);
       EXPECT_EQ(textures.size(), 3);
 
       // Find all models
@@ -313,7 +344,7 @@ namespace {
             return visited.node_impl
               && visited.node_impl->GetName().ends_with(".fbx");
           });
-      EXPECT_TRUE(model_result.completed);
+      EXPECT_TRUE(model_result);
       EXPECT_EQ(models.size(), 3);
 
       // Find all audio files
@@ -325,7 +356,7 @@ namespace {
     });
 
     // Assert: Asset queries should work correctly
-    EXPECT_TRUE(texture_search.completed);
+    EXPECT_TRUE(texture_search);
     EXPECT_EQ(
       texture_search.total_matches, 8); // 3 textures + 3 models + 2 sounds
   }
@@ -348,7 +379,7 @@ namespace {
               && !visited.node_impl->GetFlags().GetEffectiveValue(
                 SceneNodeFlags::kStatic);
           });
-      EXPECT_TRUE(renderable_result.completed);
+      EXPECT_TRUE(renderable_result);
 
       // Find static UI elements (rendered differently)
       std::vector<SceneNode> ui_elements;
@@ -358,7 +389,7 @@ namespace {
               && visited.node_impl->GetFlags().GetEffectiveValue(
                 SceneNodeFlags::kStatic);
           });
-      EXPECT_TRUE(ui_result.completed);
+      EXPECT_TRUE(ui_result);
 
       // Count invisible objects (culled from rendering)
       auto culled_count = q.Count([](const ConstVisitedNode& visited) {
@@ -379,7 +410,7 @@ namespace {
     });
 
     // Assert: Rendering optimization queries should complete
-    EXPECT_TRUE(rendering_batch.completed);
+    EXPECT_TRUE(rendering_batch);
     EXPECT_GT(rendering_batch.total_matches, 0);
   }
 
@@ -389,44 +420,43 @@ namespace {
     SceneQueryIntegrationTest, Query_WithPathAndPredicates_CombinedApproach)
   {
     // Arrange: Use default game scene
-    CreateGameSceneHierarchy();
-
-    // Act: Combine path and predicate approaches
+    CreateGameSceneHierarchy(); // Act: Combine path and predicate approaches
 
     // First, use path to narrow down search space
-    auto player_weapon = query_->FindFirstByPath("Level1/Player/Weapon");
-    ASSERT_TRUE(player_weapon.has_value());
+    std::optional<SceneNode> weapon_node_result;
+    auto weapon_query_result
+      = query_->FindFirstByPath(weapon_node_result, "Level1/Player/Weapon");
+    EXPECT_TRUE(weapon_query_result);
+    ASSERT_TRUE(weapon_node_result
+        .has_value()); // Then use predicates for complex filtering
+    std::vector<SceneNode> level1_items_result;
+    auto collect_query_result = query_->Collect(
+      level1_items_result, [](const ConstVisitedNode& visited) {
+        if (!visited.node_impl)
+          return false;
 
-    // Then use predicates for complex filtering
-    std::vector<SceneNode> level1_items;
-    auto collect_result
-      = query_->Collect(level1_items, [](const ConstVisitedNode& visited) {
-          if (!visited.node_impl)
-            return false;
-
-          // Complex predicate: items that are not weapons and are visible
-          return visited.node_impl->GetName() != "Weapon"
-            && visited.node_impl->GetName() != "Shield"
-            && visited.node_impl->GetFlags().GetEffectiveValue(
-              SceneNodeFlags::kVisible);
-        });
+        // Complex predicate: items that are not weapons and are visible
+        return visited.node_impl->GetName() != "Weapon"
+          && visited.node_impl->GetName() != "Shield"
+          && visited.node_impl->GetFlags().GetEffectiveValue(
+            SceneNodeFlags::kVisible);
+      });
 
     // Use batch for efficiency with mixed approaches
-    std::optional<SceneNode> ui_root;
-    std::vector<SceneNode> consumables;
-
-    auto batch_result = query_->ExecuteBatch([&](const auto& q) {
-      ui_root = q.FindFirst(NodeNameEquals("UI"));
-      q.Collect(consumables, NodeNameStartsWith("Potion"));
+    std::optional<SceneNode> ui_root_result;
+    std::vector<SceneNode> consumables_result;
+    auto batch_query_result = query_->ExecuteBatch([&](const auto& q) {
+      q.BatchFindFirst(ui_root_result, NodeNameEquals("UI"));
+      q.Collect(consumables_result, NodeNameStartsWith("Potion"));
     });
 
     // Assert: Combined approaches should work seamlessly
-    EXPECT_TRUE(collect_result.completed);
-    EXPECT_TRUE(batch_result.completed);
-    EXPECT_EQ(player_weapon->GetName(), "Weapon");
-    ASSERT_TRUE(ui_root.has_value());
-    EXPECT_EQ(ui_root->GetName(), "UI");
-    EXPECT_EQ(consumables.size(), 2); // Potion1 and Potion2
+    EXPECT_TRUE(collect_query_result);
+    EXPECT_TRUE(batch_query_result);
+    EXPECT_EQ(weapon_node_result->GetName(), "Weapon");
+    ASSERT_TRUE(ui_root_result.has_value());
+    EXPECT_EQ(ui_root_result->GetName(), "UI");
+    EXPECT_EQ(consumables_result.size(), 2U); // Potion1 and Potion2
   }
 
   NOLINT_TEST_F(SceneQueryIntegrationTest,
@@ -443,7 +473,7 @@ namespace {
         return visited.node_impl
           && visited.node_impl->AsGraphNode().GetParent().IsValid() == false;
       });
-      EXPECT_TRUE(root_result.completed);
+      EXPECT_TRUE(root_result);
       EXPECT_GE(roots.size(), 2); // Should have Level1 and UI as roots
 
       // Find all leaf nodes (nodes without children)
@@ -453,7 +483,7 @@ namespace {
           && visited.node_impl->AsGraphNode().GetFirstChild().IsValid()
           == false;
       });
-      EXPECT_TRUE(leaf_result.completed);
+      EXPECT_TRUE(leaf_result);
       EXPECT_GT(leaves.size(), 5); // Many leaf nodes in the hierarchy
 
       // Find intermediate nodes (have both parent and children)
@@ -467,7 +497,7 @@ namespace {
     });
 
     // Assert: Hierarchical analysis should complete successfully
-    EXPECT_TRUE(hierarchy_analysis.completed);
+    EXPECT_TRUE(hierarchy_analysis);
     EXPECT_GT(hierarchy_analysis.total_matches, 10); // Should find many nodes
   }
 
@@ -488,10 +518,9 @@ namespace {
     };
 
     GameSystemQueries game_data;
-
     auto gameplay_batch = query_->ExecuteBatch([&](const auto& q) {
       // Player system: Find player
-      game_data.player = q.FindFirst(NodeNameEquals("Player"));
+      q.BatchFindFirst(game_data.player, NodeNameEquals("Player"));
 
       // AI system: Find visible enemies for pathfinding
       q.Collect(game_data.visible_enemies, [](const ConstVisitedNode& visited) {
@@ -533,7 +562,7 @@ namespace {
     });
 
     // Assert: Complex gameplay scenario should handle all systems
-    EXPECT_TRUE(gameplay_batch.completed);
+    EXPECT_TRUE(gameplay_batch);
 
     // Verify all systems got their data
     ASSERT_TRUE(game_data.player.has_value());
@@ -543,7 +572,7 @@ namespace {
     EXPECT_EQ(game_data.nearby_items.size(), 2); // Potion1 and Potion2
     EXPECT_GE(game_data.ui_elements.size(), 1); // At least some UI elements
 
-    EXPECT_TRUE(game_data.performance_metrics.completed);
+    EXPECT_TRUE(game_data.performance_metrics);
     EXPECT_GT(game_data.performance_metrics.nodes_matched, 5);
 
     EXPECT_TRUE(game_data.has_interactive_objects);

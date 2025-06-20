@@ -98,11 +98,12 @@ NOLINT_TEST_F(
   // Arrange: Use game scene hierarchy with known paths
   // Hierarchy: GameWorld -> Players -> [Player1, Player2]
   CreateMultiPlayerHierarchy();
-
   // Act: Find specific player using absolute path
-  const auto result = query_->FindFirstByPath("GameWorld/Player1");
+  std::optional<SceneNode> result;
+  auto query_result = query_->FindFirstByPath(result, "GameWorld/Player1");
 
   // Assert: Should find Player1 node
+  EXPECT_TRUE(query_result);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetName(), "Player1");
 }
@@ -111,11 +112,13 @@ NOLINT_TEST_F(SceneQueryPathTest, FindFirstByPath_WithDeepPath_FindsCorrectNode)
 {
   // Arrange: Game scene with deep equipment paths
   CreateMultiPlayerHierarchy();
-
   // Act: Find equipment using deep absolute path
-  const auto result = query_->FindFirstByPath("GameWorld/Player1/Weapon");
+  std::optional<SceneNode> result;
+  auto query_result
+    = query_->FindFirstByPath(result, "GameWorld/Player1/Weapon");
 
   // Assert: Should find the weapon node
+  EXPECT_TRUE(query_result);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetName(), "Weapon");
 }
@@ -125,11 +128,13 @@ NOLINT_TEST_F(
 {
   // Arrange: Use default game scene hierarchy
   CreateGameSceneHierarchy();
-
   // Act: Try to find non-existent path
-  const auto result = query_->FindFirstByPath("GameWorld/NonExistent/Path");
+  std::optional<SceneNode> result;
+  auto query_result
+    = query_->FindFirstByPath(result, "GameWorld/NonExistent/Path");
 
   // Assert: Should return nullopt
+  EXPECT_TRUE(query_result); // Query should succeed but find nothing
   EXPECT_FALSE(result.has_value());
 }
 
@@ -137,11 +142,12 @@ NOLINT_TEST_F(SceneQueryPathTest, FindFirstByPath_WithEmptyPath_ReturnsNullopt)
 {
   // Arrange: Use default game scene hierarchy
   CreateGameSceneHierarchy();
-
   // Act: Try to find with empty path
-  const auto result = query_->FindFirstByPath("");
+  std::optional<SceneNode> result;
+  auto query_result = query_->FindFirstByPath(result, "");
 
   // Assert: Should return nullopt
+  EXPECT_TRUE(query_result); // Query should succeed but find nothing
   EXPECT_FALSE(result.has_value());
 }
 
@@ -149,18 +155,20 @@ NOLINT_TEST_F(SceneQueryPathTest, FindFirstByPath_WithRootPath_FindsRoot)
 {
   // Arrange: Use default game scene hierarchy
   CreateGameSceneHierarchy();
-
   // Act: Find root node
-  auto result = query_->FindFirstByPath("Level1");
+  std::optional<SceneNode> result;
+  auto query_result = query_->FindFirstByPath(result, "Level1");
 
-  // Assert: Should find GameWorld root
+  // Assert: Should find Level1 root
+  EXPECT_TRUE(query_result);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetName(), "Level1");
 
   // Act: Find the other root node
-  result = query_->FindFirstByPath("UI");
+  query_result = query_->FindFirstByPath(result, "UI");
 
-  // Assert: Should find GameWorld root
+  // Assert: Should find UI root
+  EXPECT_TRUE(query_result);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetName(), "UI");
 }
@@ -172,19 +180,25 @@ NOLINT_TEST_F(
   CreateGameSceneHierarchy();
 
   // Find Player1 subtree to scope
-  const auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
+  std::optional<SceneNode> player1_node;
+  [[maybe_unused]] auto _
+    = query_->FindFirst(player1_node, NodeNameEquals("Player1"));
   ASSERT_TRUE(player1_node.has_value());
-
   // Act: Find weapon within Player1 scope using relative path
   query_->AddToTraversalScope(*player1_node);
-  const auto scoped_weapon = query_->FindFirstByPath("Player1/Weapon");
+  std::optional<SceneNode> scoped_weapon;
+  auto scoped_query_result
+    = query_->FindFirstByPath(scoped_weapon, "Player1/Weapon");
 
   // Reset and try same path in full scope
   query_->ResetTraversalScope();
-  const auto full_scope_weapon
-    = query_->FindFirstByPath("Level1/Player1/Weapon");
+  std::optional<SceneNode> full_scope_weapon;
+  auto full_scope_query_result
+    = query_->FindFirstByPath(full_scope_weapon, "Level1/Player1/Weapon");
 
   // Assert: Both should find weapons but scoped search is more efficient
+  EXPECT_TRUE(scoped_query_result);
+  EXPECT_TRUE(full_scope_query_result);
   ASSERT_TRUE(scoped_weapon.has_value());
   ASSERT_TRUE(full_scope_weapon.has_value());
   EXPECT_EQ(scoped_weapon->GetName(), "Weapon");
@@ -210,7 +224,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(level1_children, "Level1/*");
 
   // Assert: Should collect Player, Enemies, Items
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
 
   // Extract node names for comparison
   std::vector<std::string> child_names;
@@ -240,7 +254,7 @@ NOLINT_TEST_F(
     = query_->CollectByPath(player_equipment, "Level1/Player1/*");
 
   // Assert: Should collect Player's equipment
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(player_equipment, SizeIs(3)); // Weapon, Shield, Armor
   // Extract node names for verification
   std::vector<std::string> equipment_names;
@@ -268,7 +282,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(weapons, "**/Weapon");
 
   // Assert: Should find the one weapon under Player
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(weapons, SizeIs(2)); // One weapon undereach Player
 
   // All collected nodes should be named "Weapon"
@@ -290,7 +304,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(enemies, "Level1/Enemies/*");
 
   // Assert: Should collect all 3 enemy nodes
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(enemies, SizeIs(3)); // Enemy1, Enemy2, Enemy3
   // Extract names for verification
   std::vector<std::string> enemy_names;
@@ -314,7 +328,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(nodes, "**/NonExistent");
 
   // Assert: Should return empty container
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_TRUE(nodes.empty());
 }
 
@@ -331,7 +345,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(nodes, "Level1/Player1/Weapon");
 
   // Assert: Should collect exactly one node
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(nodes, SizeIs(1));
   EXPECT_EQ(nodes[0].GetName(), "Weapon");
 }
@@ -348,7 +362,9 @@ NOLINT_TEST_F(
   CreateGameSceneHierarchy();
 
   // Find Player1 subtree to scope
-  const auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
+  std::optional<SceneNode> player1_node;
+  [[maybe_unused]] auto _
+    = query_->FindFirst(player1_node, NodeNameEquals("Player1"));
   ASSERT_TRUE(player1_node.has_value());
 
   // Act: Collect all equipment within Player1 scope
@@ -357,7 +373,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(scoped_equipment, "Player1/*");
 
   // Assert: Should collect only Player1's equipment
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(scoped_equipment, SizeIs(3)); // Weapon, Shield, Armor
   // Extract names for verification
   std::vector<std::string> equipment_names;
@@ -381,9 +397,14 @@ NOLINT_TEST_F(
   // Arrange: Use default game scene hierarchy
   CreateGameSceneHierarchy();
 
-  const auto player1_node = query_->FindFirst(NodeNameEquals("Player1"));
-  const auto player2_node = query_->FindFirst(NodeNameEquals("Player2"));
+  std::optional<SceneNode> player1_node;
+  [[maybe_unused]] auto _1
+    = query_->FindFirst(player1_node, NodeNameEquals("Player1"));
   ASSERT_TRUE(player1_node.has_value());
+
+  std::optional<SceneNode> player2_node;
+  [[maybe_unused]] auto _2
+    = query_->FindFirst(player2_node, NodeNameEquals("Player2"));
   ASSERT_TRUE(player2_node.has_value());
 
   // Act: Add multiple nodes to traversal scope
@@ -394,7 +415,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(collected_weapons, "*/Weapon");
 
   // Assert: Should collect weapons from both scoped players
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(collected_weapons, SizeIs(2)); // One weapon from each player
 
   // Extract names to verify all are weapons
@@ -424,7 +445,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(all_weapons, "**/Weapon");
 
   // Assert: Should find weapons from both players
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(
     all_weapons, SizeIs(2)); // One weapon per player (Player1, Player2)
 
@@ -447,7 +468,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(root_children, "*/*");
 
   // Assert: Should collect children from both Level1 and UI roots
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
 
   // Extract names for verification
   std::vector<std::string> child_names;
@@ -475,7 +496,7 @@ NOLINT_TEST_F(SceneQueryPathTest, CollectByPath_Performance_WithLargeHierarchy)
   const auto result = query_->CollectByPath(all_nodes, "*/*");
 
   // Assert: Should complete successfully with many nodes
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
   EXPECT_THAT(
     all_nodes, SizeIs(200)); // 10 roots × 20 children = 200 child nodes
 }
@@ -495,7 +516,7 @@ NOLINT_TEST_F(
   const auto result = query_->CollectByPath(all_nodes, "**/*");
 
   // Assert: Should collect every node in the scene
-  EXPECT_TRUE(result.completed);
+  EXPECT_TRUE(result);
 
   // Extract node names for verification
   std::vector<std::string> node_names;
@@ -531,15 +552,16 @@ NOLINT_TEST_F(
 {
   // Arrange: Create empty scene
   CreateEmptyScene();
-
   // Act: Perform path queries on empty scene
-  const auto find_result = query_->FindFirstByPath("Any/Path");
+  std::optional<SceneNode> find_result;
+  auto find_query_result = query_->FindFirstByPath(find_result, "Any/Path");
   std::vector<SceneNode> nodes;
   const auto collect_result = query_->CollectByPath(nodes, "**/*");
 
   // Assert: All operations should complete gracefully
+  EXPECT_TRUE(find_query_result); // Query should succeed but find nothing
   EXPECT_FALSE(find_result.has_value());
-  EXPECT_TRUE(collect_result.completed);
+  EXPECT_TRUE(collect_result);
   EXPECT_TRUE(nodes.empty());
 }
 
@@ -547,19 +569,20 @@ NOLINT_TEST_F(
   SceneQueryPathTest, CollectByPath_WithSingleNodeScene_WorksCorrectly)
 {
   using testing::SizeIs;
-
   // Arrange: Create simple single node scene
   CreateSimpleScene();
   std::vector<SceneNode> nodes;
 
   // Act: Query the single node scene with path
-  const auto find_result = query_->FindFirstByPath("Root");
+  std::optional<SceneNode> find_result;
+  auto find_query_result = query_->FindFirstByPath(find_result, "Root");
   const auto collect_result = query_->CollectByPath(nodes, "Root");
 
   // Assert: Should handle single node correctly
+  EXPECT_TRUE(find_query_result);
   ASSERT_TRUE(find_result.has_value());
   EXPECT_EQ(find_result->GetName(), "Root");
-  EXPECT_TRUE(collect_result.completed);
+  EXPECT_TRUE(collect_result);
   EXPECT_THAT(nodes, SizeIs(1));
   EXPECT_EQ(nodes[0].GetName(), "Root");
 }

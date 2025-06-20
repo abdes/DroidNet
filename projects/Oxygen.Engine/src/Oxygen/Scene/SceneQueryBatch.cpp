@@ -42,7 +42,7 @@ namespace oxygen::scene::detail {
 //! Minimal EventLoop implementation for scene query batch processing
 class MinimalEventLoop {
 public:
-  void Run()
+  auto Run() -> void
   {
     running_ = true;
     while (!should_stop_ || !tasks_.empty()) {
@@ -55,9 +55,12 @@ public:
     running_ = false;
   }
 
-  void Stop() { should_stop_ = true; }
-  bool IsRunning() const noexcept { return running_; }
-  void Schedule(std::function<void()> task) { tasks_.push(std::move(task)); }
+  auto Stop() -> void { should_stop_ = true; }
+  auto IsRunning() const noexcept -> bool { return running_; }
+  auto Schedule(std::function<void()> task) -> void
+  {
+    tasks_.push(std::move(task));
+  }
 
 private:
   std::atomic<bool> running_ { false };
@@ -71,19 +74,20 @@ using oxygen::scene::detail::MinimalEventLoop;
 
 //! EventLoopTraits specialization for MinimalEventLoop
 template <> struct oxygen::co::EventLoopTraits<MinimalEventLoop> {
-  static EventLoopID EventLoopId(MinimalEventLoop& loop)
+  static auto EventLoopId(MinimalEventLoop& loop) -> EventLoopID
   {
     return EventLoopID(&loop);
   }
 
-  static void Schedule(MinimalEventLoop& loop, std::function<void()> task)
+  static auto Schedule(MinimalEventLoop& loop, std::function<void()> task)
+    -> void
   {
     loop.Schedule(std::move(task));
   }
 
-  static void Run(MinimalEventLoop& loop) { loop.Run(); }
-  static void Stop(MinimalEventLoop& loop) { loop.Stop(); }
-  static bool IsRunning(const MinimalEventLoop& loop)
+  static auto Run(MinimalEventLoop& loop) -> void { loop.Run(); }
+  static auto Stop(MinimalEventLoop& loop) -> void { loop.Stop(); }
+  static auto IsRunning(const MinimalEventLoop& loop) -> bool
   {
     return loop.IsRunning();
   }
@@ -121,7 +125,7 @@ public:
 
   //! Register FindFirst operation with reference output
   template <typename Predicate>
-  void FindFirst(std::optional<SceneNode>& output, Predicate predicate)
+  auto FindFirst(std::optional<SceneNode>& output, Predicate predicate) -> void
   {
     LOG_F(INFO,
       "BatchQuery: Registering FindFirst operation during registration phase");
@@ -168,7 +172,6 @@ public:
 
             // Update status immediately when work is complete
             op.status = BatchOperation::Status::Completed;
-            result.completed = true;
             LOG_F(INFO,
               "BatchQuery: FindFirst operation completed immediately after "
               "finding match (op_index=%zu)",
@@ -180,7 +183,6 @@ public:
         // Only update status if not already completed
         if (op.status != BatchOperation::Status::Completed) {
           op.status = BatchOperation::Status::Completed;
-          result.completed = true;
         }
       } catch (const std::exception& e) {
         LOG_F(ERROR,
@@ -188,7 +190,6 @@ public:
           "(op_index=%zu): %s",
           operation_index, e.what());
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = e.what();
       } catch (...) {
         LOG_F(ERROR,
@@ -196,16 +197,16 @@ public:
           "during traversal (op_index=%zu)",
           operation_index);
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = "Unknown exception in FindFirst operation";
       }
       co_return;
     };
   }
 
-  //! Register Collect operation with reference output
-  template <typename Container, typename Predicate>
-  void Collect(Container& output, Predicate predicate)
+  //! Register Collect operation with inserter function
+  template <typename Predicate>
+  auto Collect(
+    std::function<void(const SceneNode&)> inserter, Predicate predicate) -> void
   {
     LOG_F(INFO,
       "BatchQuery: Registering Collect operation during registration phase");
@@ -214,7 +215,7 @@ public:
     std::size_t operation_index = operations_.size() - 1;
 
     operation.operation
-      = [this, &output, predicate = std::move(predicate), operation_index](
+      = [this, inserter, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
       LOG_F(INFO,
@@ -227,7 +228,7 @@ public:
 
       try {
         auto reader = channel.ForRead();
-        output.clear(); // Clear output container
+        op.internal_count_result = 0; // Reset internal counter
 
         while (true) {
           auto node_data = co_await reader.Receive();
@@ -243,22 +244,20 @@ public:
           if (predicate(*node_data)) {
             result.nodes_matched++;
             if (node_data->handle.IsValid()) {
-              output.emplace_back(
-                SceneNode { scene_weak_.lock(), node_data->handle });
+              // Use inserter function instead of direct container access
+              inserter(SceneNode { scene_weak_.lock(), node_data->handle });
               op.internal_count_result++; // Track internally
             }
           }
         }
 
         op.status = BatchOperation::Status::Completed;
-        result.completed = true;
       } catch (const std::exception& e) {
         LOG_F(ERROR,
           "BatchQuery: Collect operation failed during traversal "
           "(op_index=%zu): %s",
           operation_index, e.what());
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = e.what();
       } catch (...) {
         LOG_F(ERROR,
@@ -266,7 +265,6 @@ public:
           "traversal (op_index=%zu)",
           operation_index);
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = "Unknown exception in Collect operation";
       }
 
@@ -275,7 +273,8 @@ public:
   }
 
   //! Register Count operation with QueryResult return (no ref needed)
-  template <typename Predicate> void Count(Predicate predicate)
+  template <typename Predicate>
+  auto Count(std::optional<size_t>& output, Predicate predicate) -> void
   {
     LOG_F(INFO,
       "BatchQuery: Registering Count operation during registration phase");
@@ -284,7 +283,7 @@ public:
     std::size_t operation_index = operations_.size() - 1;
 
     operation.operation
-      = [this, predicate = std::move(predicate), operation_index](
+      = [this, &output, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
       LOG_F(INFO,
@@ -314,16 +313,14 @@ public:
             op.internal_count_result++; // Track internally
           }
         }
-
+        output.emplace(result.nodes_matched);
         op.status = BatchOperation::Status::Completed;
-        result.completed = true;
       } catch (const std::exception& e) {
         LOG_F(ERROR,
           "BatchQuery: Count operation failed during traversal (op_index=%zu): "
           "%s",
           operation_index, e.what());
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = e.what();
       } catch (...) {
         LOG_F(ERROR,
@@ -331,7 +328,6 @@ public:
           "traversal (op_index=%zu)",
           operation_index);
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = "Unknown exception in Count operation";
       }
 
@@ -341,7 +337,7 @@ public:
 
   //! Register Any operation with reference output
   template <typename Predicate>
-  void Any(std::optional<bool>& output, Predicate predicate)
+  auto Any(std::optional<bool>& output, Predicate predicate) -> void
   {
     LOG_F(
       INFO, "BatchQuery: Registering Any operation during registration phase");
@@ -388,7 +384,6 @@ public:
 
             // Update status immediately when work is complete
             op.status = BatchOperation::Status::Completed;
-            result.completed = true;
             LOG_F(INFO,
               "BatchQuery: Any operation completed immediately after finding "
               "match (op_index=%zu)",
@@ -398,14 +393,12 @@ public:
         }
 
         op.status = BatchOperation::Status::Completed;
-        result.completed = true;
       } catch (const std::exception& e) {
         LOG_F(ERROR,
           "BatchQuery: Any operation failed during traversal (op_index=%zu): "
           "%s",
           operation_index, e.what());
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = e.what();
       } catch (...) {
         LOG_F(ERROR,
@@ -413,7 +406,6 @@ public:
           "traversal (op_index=%zu)",
           operation_index);
         op.status = BatchOperation::Status::Failed;
-        result.completed = false;
         result.error_message = "Unknown exception in Any operation";
       }
 
@@ -422,9 +414,9 @@ public:
   }
 
   //! Execute all registered operations using BroadcastChannel pattern
-  BatchResult ExecuteBatch(
-    const AsyncSceneTraversal<const Scene>& async_traversal,
+  auto ExecuteBatch(const AsyncSceneTraversal<const Scene>& async_traversal,
     const std::function<void(BatchQueryExecutor&)>& batch_operations)
+    -> BatchResult
   {
     operations_.clear();
 
@@ -432,7 +424,7 @@ public:
     batch_operations(*this);
 
     if (operations_.empty()) {
-      return BatchResult { .completed = true };
+      return {};
     }
 
     // Execute the batch - all reference variables will be populated
@@ -444,8 +436,8 @@ public:
   }
 
   //! Execute batch async (made public for ExecuteBatchImpl)
-  oxygen::co::Co<> ExecuteBatchAsync(
-    const AsyncSceneTraversal<const Scene>& async_traversal)
+  auto ExecuteBatchAsync(
+    const AsyncSceneTraversal<const Scene>& async_traversal) -> oxygen::co::Co<>
   { // Create broadcast channel for node distribution
     oxygen::co::BroadcastChannel<ConstVisitedNode> node_channel;
     auto& writer = node_channel.ForWrite();
@@ -471,10 +463,10 @@ public:
   }
 
   //! Create final result (made public for ExecuteBatchImpl)
-  BatchResult CreateFinalResult()
+  auto CreateFinalResult() -> BatchResult
   {
     BatchResult result;
-    result.completed = true;
+    result.success = true;
 
     // Reserve space to avoid reallocations
     result.operation_results.reserve(
@@ -484,7 +476,8 @@ public:
       result.nodes_examined
         = std::max(result.nodes_examined, op.result.nodes_examined);
       result.total_matches += op.result.nodes_matched;
-      result.completed &= op.result.completed;
+
+      result.success &= static_cast<bool>(op.result);
 
       // Move operation result (avoid copying)
       result.operation_results.emplace_back(std::move(op.result));
@@ -492,12 +485,13 @@ public:
 
     return result;
   }
+
   //! Stream nodes directly during traversal (single-pass, no intermediate
   //! collection)
-  oxygen::co::Co<> StreamTraverseSceneAsync(
+  auto StreamTraverseSceneAsync(
     oxygen::co::detail::channel::BroadcastingWriter<ConstVisitedNode>& writer,
     const AsyncSceneTraversal<const Scene>& async_traversal,
-    const std::vector<SceneNode>& traversal_scope)
+    const std::vector<SceneNode>& traversal_scope) -> oxygen::co::Co<>
   {
     auto streaming_visitor = [this, &writer](const ConstVisitedNode& visited,
                                bool dry_run) -> oxygen::co::Co<VisitResult> {
@@ -569,13 +563,10 @@ public:
 
 //=== SceneQuery BroadcastChannel Integration ===---------------------------//
 
-BatchResult SceneQuery::ExecuteBatchImpl(
+auto SceneQuery::ExecuteBatchImpl(
   std::function<void(const SceneQuery&)> batch_func) const noexcept
+  -> BatchResult
 {
-  if (scene_weak_.expired()) [[unlikely]] {
-    return BatchResult { .completed = false };
-  }
-
   // Initialize batch state
   batch_active_ = true;
   try {
@@ -606,63 +597,45 @@ BatchResult SceneQuery::ExecuteBatchImpl(
 
     // Return failed batch result
     return BatchResult {
-      .nodes_examined = 0, .total_matches = 0, .completed = false
+      .nodes_examined = 0, .total_matches = 0, .success = false
     };
   }
 }
 
 //=== Batch Implementation Methods ===---------------------------------------//
 
-void SceneQuery::BatchFindFirstImpl(std::optional<SceneNode>& result,
+auto SceneQuery::BatchFindFirstImpl(std::optional<SceneNode>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+  -> void
 {
-  if (!batch_active_ || !batch_coordinator_) {
-    // This method is only available during batch execution
-    result = std::nullopt;
-    return;
-  }
-
   // Register with batch coordinator using reference output
   auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
   coordinator->FindFirst(result, predicate);
 }
 
-void SceneQuery::BatchCollectImpl(std::vector<SceneNode>& result,
+auto SceneQuery::BatchCollectImpl(
+  std::function<void(const SceneNode&)> inserter,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+  -> void
 {
-  if (!batch_active_ || !batch_coordinator_) {
-    // This method is only available during batch execution
-    result.clear();
-    return;
-  }
-
-  // Register with batch coordinator using reference output
+  // Register with batch coordinator using inserter function
   auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->Collect(result, predicate);
+  coordinator->Collect(inserter, predicate);
 }
 
-void SceneQuery::BatchCountImpl(
+auto SceneQuery::BatchCountImpl(std::optional<size_t>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+  -> void
 {
-  if (!batch_active_ || !batch_coordinator_) {
-    // This method is only available during batch execution
-    return;
-  }
-
   // Register with batch coordinator - results go into BatchResult
   auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->Count(predicate);
+  coordinator->Count(result, predicate);
 }
 
-void SceneQuery::BatchAnyImpl(std::optional<bool>& result,
+auto SceneQuery::BatchAnyImpl(std::optional<bool>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
+  -> void
 {
-  if (!batch_active_ || !batch_coordinator_) {
-    // This method is only available during batch execution
-    result = std::nullopt;
-    return;
-  }
-
   // Register with batch coordinator using reference output
   auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
   coordinator->Any(result, predicate);
