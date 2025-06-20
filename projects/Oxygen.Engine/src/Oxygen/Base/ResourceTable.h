@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
 
@@ -71,6 +72,13 @@ namespace oxygen {
  set because it is currently only used for deletion. There is no need to harm
  cache locality and alignment of the main object store for infrequently used
  data.
+
+ @warning IMPORTANT: References, pointers, and iterators to items become invalid
+ when the table grows beyond the initial reserve_count capacity. This happens
+ because the underlying std::vector containers may reallocate memory during
+ insertion operations. ResourceHandle objects themselves remain valid as they
+ use indices rather than memory addresses. Always re-acquire references after
+ insertions that might cause reallocation.
 
  Inspired by ID Lookup in the stingray core.
  http://bitsquid.blogspot.com/2011/09/managing-decoupling-part-4-id-lookup.html
@@ -342,6 +350,20 @@ auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
   // unlikely, so we just assert for it and not test it in production.
   assert(Size() < ResourceHandle::kIndexMax
     && "index will be out of range, increase bit size of the index values");
+
+  // Check if we're about to exceed capacity and log a warning
+  const bool will_reallocate_items = (items_.size() == items_.capacity());
+  const bool will_reallocate_sparse
+    = (IsFreeListEmpty() && sparse_table_.size() == sparse_table_.capacity());
+
+  if (will_reallocate_items || will_reallocate_sparse) {
+    LOG_F(WARNING,
+      "ResourceTable reallocation detected! Current size: {}, capacity: {}. "
+      "All references, pointers, and iterators to items will be invalidated. "
+      "Consider increasing reserve_count in constructor to avoid performance "
+      "impact.",
+      items_.size(), items_.capacity());
+  }
 
   ResourceHandle handle(ResourceHandle::kInvalidIndex, item_type_);
   fragmented_ = true;
