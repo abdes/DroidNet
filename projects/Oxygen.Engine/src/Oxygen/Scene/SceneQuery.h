@@ -126,6 +126,15 @@ struct BatchResult {
  - Single-level wildcards: `"*\/Enemy"` (direct children only)
  - Recursive wildcards: `"**\/Weapon"` (any depth)
 
+ ### Exception Safety
+
+ If a predicate throws an exception during a query, the exception is caught
+ internally by the query method, the error is logged, and the returned
+ QueryResult (or BatchResult) will contain an error message and indicate
+ failure. The exception does not propagate to the caller; instead, the error is
+ reported via the result object. This is consistent for both immediate and batch
+ queries.
+
  @warning Path-based queries are not supported in batch mode due to
  architectural incompatibility between direct navigation and traversal-based
  batching.
@@ -412,7 +421,8 @@ private:
     const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Execute immediate collect operation with direct traversal
-  auto CollectImpl(auto& container,
+  OXGN_SCN_NDAPI auto CollectImpl(
+    std::function<void(const SceneNode&)> add_to_container,
     const QueryPredicate& predicate) const noexcept -> QueryResult;
 
   //! Parses path pattern and executes path-based traversal.
@@ -552,7 +562,8 @@ auto SceneQuery::Collect(
 
   // We do not clear the output container, we will only append to it.
   return CollectImpl(
-    container, QueryPredicate(std::forward<Predicate>(predicate)));
+    [&container](const SceneNode& node) { container.emplace_back(node); },
+    QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
 /*!
@@ -643,53 +654,6 @@ auto SceneQuery::Any(std::optional<bool>& output,
 
   output.reset();
   return AnyImpl(output, QueryPredicate(std::forward<Predicate>(predicate)));
-}
-
-/*!
- Executes immediate Collect operation using dedicated scene traversal with
- comprehensive node collection into user-provided container.
-
- @param container Reference to user-provided container for collecting nodes
- @param predicate Node filtering function to test each visited node
- @return QueryResult with nodes_examined, nodes_matched, and completion status
-
- ### Execution Strategy
-
- - Creates counting filter that tracks examined and accepted nodes
- - Uses a visitor that adds scene nodes and continues traversal
- - Maintains separate counters for examination and collection statistics
- - Leverages full traversal for complete collection accuracy
-
- ### Performance Characteristics
-
- - Time Complexity: O(n) full scene traversal required
- - Memory: User-controlled allocation via provided container
- - Container Agnostic: Works with any container supporting emplace_back
-
- ### Container Requirements
-
- - Must support emplace_back(SceneNode) operation - Examples:
- std::vector<SceneNode>, std::deque<SceneNode>
-
- @see BatchCollect for batch mode equivalent
-*/
-auto SceneQuery::CollectImpl(auto& container,
-  const QueryPredicate& predicate) const noexcept -> QueryResult
-{
-  QueryResult result {};
-  auto traversal_result = ExecuteTraversal(
-    [this, &container, &result](
-      const ConstVisitedNode& visited, bool) -> VisitResult {
-      container.emplace_back(scene_weak_.lock(), visited.handle);
-      ++result.nodes_matched;
-      return VisitResult::kContinue;
-    },
-    [&result, &predicate](
-      const ConstVisitedNode& visited, FilterResult) -> FilterResult {
-      ++result.nodes_examined;
-      return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
-    });
-  return result;
 }
 
 /*!
