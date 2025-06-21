@@ -78,7 +78,7 @@ struct BatchResult {
   bool success = true;
 
   //! Per-operation results
-  std::vector<QueryResult> operation_results;
+  std::vector<QueryResult> operation_results {};
 
   //! Conversion operator for testing batch operation success
   /*!
@@ -334,7 +334,7 @@ public:
   //! reference)
   template <typename Container,
     std::predicate<const ConstVisitedNode&> Predicate>
-  auto BatchCollect(Container& result, Predicate&& predicate) const noexcept
+  auto BatchCollect(Container& container, Predicate&& predicate) const noexcept
     -> void;
 
   //! Count matching nodes in batch mode (populates output by reference)
@@ -456,6 +456,8 @@ private:
  stopping immediately upon finding a match for optimal performance.
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
+ @param output Reference to optional SceneNode to receive the first match
  @param predicate Function to test each node during traversal
  @return Optional SceneNode containing the first match, or nullopt if no match
  found
@@ -507,6 +509,7 @@ auto SceneQuery::FindFirst(
 
  @tparam Container Any container type supporting emplace_back(SceneNode)
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
  @param container User-provided container to store matching nodes
  @param predicate Function to test each node during traversal
  @return QueryResult with performance metrics and completion status
@@ -557,6 +560,7 @@ auto SceneQuery::Collect(
  without creating SceneNode objects or allocating memory.
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
  @param output Reference to optional size_t to receive the count
  @param predicate Function to test each node during traversal
  @return QueryResult with performance metrics and completion status
@@ -602,6 +606,8 @@ auto SceneQuery::Count(std::optional<size_t>& output,
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
  and returns bool
+
+ @param output Reference to optional bool to receive the match result
  @param predicate Function to test each node during traversal
  @return Optional bool: true if match found, false if no match, nullopt on error
 
@@ -691,6 +697,7 @@ auto SceneQuery::CollectImpl(auto& container,
  supporting both single-level (*) and recursive (**) wildcards.
 
  @tparam Container Any container type supporting emplace_back(SceneNode)
+
  @param container User-provided container to store matching nodes
  @param path_pattern Path pattern with optional wildcards
  @return QueryResult with performance metrics and completion status
@@ -718,7 +725,7 @@ auto SceneQuery::CollectImpl(auto& container,
  query.CollectByPath(all_enemies, "**\/Weapon");
 
  // Collect all enemies under any direct child of "Level"
- query.CollectByPath(all_enemies, "Level/*\/Enemy");
+ query.CollectByPath(all_enemies, "Level/\*\/Enemy");
  ```
 
  @warning Path-based queries are not supported in batch mode
@@ -745,6 +752,7 @@ auto SceneQuery::CollectByPath(Container& container,
  scenarios common in game engines.
 
  @tparam BatchFunc Callable accepting `const SceneQuery&` for batch operations
+
  @param batch_func Lambda/function containing multiple query calls
  @return BatchResult with aggregated metrics from all batch operations
 
@@ -818,9 +826,9 @@ auto SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
  outside batch context.
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
  @param output Reference to an optional SceneNode to receive the first match
  @param predicate Function to test each node during traversal
- @return void (output is set by reference)
 
  ### Performance Characteristics
 
@@ -861,9 +869,9 @@ auto SceneQuery::BatchFindFirst(
 
  @tparam Container Any container type supporting emplace_back(SceneNode)
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
- @param result Reference to container to receive matching nodes
+
+ @param container Reference to container to receive matching nodes
  @param predicate Function to test each node during batch traversal
- @return void (results available after ExecuteBatch completes)
 
  ### Performance Characteristics
 
@@ -883,14 +891,14 @@ auto SceneQuery::BatchFindFirst(
  // enemies container now contains all matching nodes
  ```
 
- @note Container is not cleared; matching nodes are appended @note Can only be
- used within ExecuteBatch lambda function; will trigger assertion failure
- otherwise
+ @note Container is not cleared; matching nodes are appended
+ @note Can only be used within ExecuteBatch lambda function; will trigger
+ assertion failure otherwise
  @see ExecuteBatch, Collect, BatchFindFirst, BatchCount, BatchAny
 */
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
 auto SceneQuery::BatchCollect(
-  Container& result, Predicate&& predicate) const noexcept -> void
+  Container& container, Predicate&& predicate) const noexcept -> void
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -900,7 +908,7 @@ auto SceneQuery::BatchCollect(
 
   // Use inserter pattern - works with any container supporting emplace_back
   BatchCollectImpl(
-    [&result](const SceneNode& node) { result.emplace_back(node); },
+    [&container](const SceneNode& node) { container.emplace_back(node); },
     QueryPredicate(std::forward<Predicate>(predicate)));
 }
 
@@ -909,9 +917,9 @@ auto SceneQuery::BatchCollect(
  provided reference when the batch completes.
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
  @param output Reference to optional size_t to receive the count
  @param predicate Function to test each node during batch traversal
- @return void (results available after ExecuteBatch completes)
 
  ### Performance Characteristics
 
@@ -952,9 +960,9 @@ auto SceneQuery::BatchCount(
  in the provided reference when the batch completes.
 
  @tparam Predicate A callable predicate that accepts `const ConstVisitedNode&`
+
  @param output Reference to optional bool to receive the result
  @param predicate Function to test each node during batch traversal
- @return void (results available after ExecuteBatch completes)
 
  ### Performance Characteristics
 

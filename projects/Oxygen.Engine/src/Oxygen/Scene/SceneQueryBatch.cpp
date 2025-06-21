@@ -142,14 +142,12 @@ namespace oxygen::scene::detail {
  @note This is an internal implementation detail of BatchQueryExecutor
 */
 struct BatchOperation {
-  enum class Status { Pending, Completed, Failed };
+  enum class Status : uint8_t { kPending, kCompleted, kFailed };
 
-  Status status = Status::Pending;
+  Status status = Status::kPending;
   QueryResult result;
 
-  std::function<oxygen::co::Co<>(
-    oxygen::co::BroadcastChannel<ConstVisitedNode>&)>
-    operation;
+  std::function<co::Co<>(co::BroadcastChannel<ConstVisitedNode>&)> operation;
 };
 
 /*!
@@ -191,6 +189,8 @@ public:
   {
   }
 
+  ~BatchQueryExecutor() = default;
+
   // This class manages a unique execution context and should not be copied or
   // moved.
   OXYGEN_MAKE_NON_COPYABLE(BatchQueryExecutor)
@@ -227,12 +227,11 @@ public:
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
-    pending_operations_++; // Increment for the new operation
+    ++pending_operations_; // Increment for the new operation
 
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
-          oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
-      -> oxygen::co::Co<> {
+          co::BroadcastChannel<ConstVisitedNode>& channel) -> co::Co<> {
       auto& op = operations_[operation_index];
       auto& result = op.result;
       try {
@@ -260,12 +259,12 @@ public:
           }
         }
 
-        op.status = BatchOperation::Status::Completed;
+        op.status = BatchOperation::Status::kCompleted;
       } catch (...) {
         HandleOperationException(op, operation_index, "FindFirst");
       }
 
-      pending_operations_--;
+      --pending_operations_;
       LOG_F(2, "FindFirst({}): completed (remaining operations={})",
         operation_index, pending_operations_.load());
 
@@ -305,12 +304,12 @@ public:
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
-    pending_operations_++; // Increment for the new operation
+    ++pending_operations_; // Increment for the new operation
 
     operation.operation
-      = [this, inserter, predicate = std::move(predicate), operation_index](
-          oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
-      -> oxygen::co::Co<> {
+      = [this, inserter = std::move(inserter), predicate = std::move(predicate),
+          operation_index](
+          co::BroadcastChannel<ConstVisitedNode>& channel) -> co::Co<> {
       auto& op = operations_[operation_index];
       auto& result = op.result;
 
@@ -333,12 +332,12 @@ public:
           }
         }
 
-        op.status = BatchOperation::Status::Completed;
+        op.status = BatchOperation::Status::kCompleted;
       } catch (...) {
         HandleOperationException(op, operation_index, "Collect");
       }
 
-      pending_operations_--;
+      --pending_operations_;
       LOG_F(2, "Collect({}): completed (remaining operations={})",
         operation_index, pending_operations_.load());
 
@@ -377,12 +376,11 @@ public:
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
-    pending_operations_++; // Increment for the new operation
+    ++pending_operations_; // Increment for the new operation
 
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
-          oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
-      -> oxygen::co::Co<> {
+          co::BroadcastChannel<ConstVisitedNode>& channel) -> co::Co<> {
       auto& op = operations_[operation_index];
       auto& result = op.result;
 
@@ -403,12 +401,12 @@ public:
         }
 
         output.emplace(result.nodes_matched);
-        op.status = BatchOperation::Status::Completed;
+        op.status = BatchOperation::Status::kCompleted;
       } catch (...) {
         HandleOperationException(op, operation_index, "Count");
       }
 
-      pending_operations_--;
+      --pending_operations_;
       LOG_F(2, "Count({}): completed (remaining operations={})",
         operation_index, pending_operations_.load());
 
@@ -447,12 +445,11 @@ public:
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
-    pending_operations_++; // Increment for the new operation
+    ++pending_operations_; // Increment for the new operation
 
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
-          oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
-      -> oxygen::co::Co<> {
+          co::BroadcastChannel<ConstVisitedNode>& channel) -> co::Co<> {
       auto& op = operations_[operation_index];
       auto& result = op.result;
       try {
@@ -477,12 +474,12 @@ public:
           }
         }
 
-        op.status = BatchOperation::Status::Completed;
+        op.status = BatchOperation::Status::kCompleted;
       } catch (...) {
         HandleOperationException(op, operation_index, "Any");
       }
 
-      pending_operations_--;
+      --pending_operations_;
       LOG_F(2, "Any({}): completed (remaining operations={})", operation_index,
         pending_operations_.load());
 
@@ -532,7 +529,7 @@ public:
 
     // Execute the batch - all reference variables will be populated
     MinimalEventLoop loop;
-    oxygen::co::Run(loop, ExecuteBatchAsync(async_traversal));
+    co::Run(loop, ExecuteBatchAsync(async_traversal));
 
     // Create final result with metrics
     return CreateFinalResult();
@@ -553,13 +550,13 @@ public:
    @see ExecuteBatch for the public interface and execution strategy details
   */
   auto ExecuteBatchAsync(
-    const AsyncSceneTraversal<const Scene>& async_traversal) -> oxygen::co::Co<>
+    const AsyncSceneTraversal<const Scene>& async_traversal) const -> co::Co<>
   { // Create broadcast channel for node distribution
-    oxygen::co::BroadcastChannel<ConstVisitedNode> node_channel;
+    co::BroadcastChannel<ConstVisitedNode> node_channel;
     auto& writer = node_channel.ForWrite();
 
     // Create a vector of operation coroutines
-    std::vector<oxygen::co::Co<>> operation_coroutines;
+    std::vector<co::Co<>> operation_coroutines;
     operation_coroutines.reserve(operations_.size());
 
     for (auto& operation : operations_) {
@@ -569,8 +566,7 @@ public:
     // The batch completes when EITHER:
     co_await oxygen::co::AnyOf(
       // 1. The traversal finishes (all nodes processed), OR
-      std::move(this->StreamTraverseSceneAsync(
-        writer, async_traversal, traversal_scope_)),
+      this->StreamTraverseSceneAsync(writer, async_traversal, traversal_scope_),
       // 2. ALL operations complete (early termination when no more work needed)
       oxygen::co::AllOf(std::move(operation_coroutines)));
 
@@ -637,15 +633,15 @@ public:
    @see ExecuteBatchAsync for the coordination context and AnyOf racing logic
   */
   auto StreamTraverseSceneAsync(
-    oxygen::co::detail::channel::BroadcastingWriter<ConstVisitedNode>& writer,
+    co::detail::channel::BroadcastingWriter<ConstVisitedNode>& writer,
     const AsyncSceneTraversal<const Scene>& async_traversal,
-    const std::vector<SceneNode>& traversal_scope) -> oxygen::co::Co<>
+    const std::vector<SceneNode>& traversal_scope) const -> co::Co<>
   {
     auto streaming_visitor = [this, &writer](const ConstVisitedNode& visited,
-                               bool dry_run) -> oxygen::co::Co<VisitResult> {
+                               const bool dry_run) -> co::Co<VisitResult> {
       if (!dry_run) {
         // Stream node directly to broadcast channel
-        bool sent = co_await writer.Send(visited);
+        const bool sent = co_await writer.Send(visited);
 
         if (!sent) {
           // Channel closed early - stop traversal
@@ -653,9 +649,9 @@ public:
         }
 
         // Yield to allow operations to process this node
-        co_await oxygen::co::Yield {};
+        co_await co::Yield {};
 
-        // Chekc if all operations are complete, and if so early terminate the
+        // Check if all operations are complete, and if so early terminate the
         // traversal.
         if (pending_operations_.load(std::memory_order_relaxed) == 0) {
           LOG_F(2, "all operations complete, stopping traversal");
@@ -686,6 +682,7 @@ public:
       }
     } catch (...) {
       // Ensure channel is closed even on exception
+      (void)0;
     }
 
     // Close the channel to signal completion
@@ -699,12 +696,12 @@ public:
     co_return;
   }
 
-  void HandleOperationException(
-    BatchOperation& op, std::size_t operation_index, const char* operation_name)
+  static auto HandleOperationException(BatchOperation& op,
+    const std::size_t operation_index, const char* operation_name) -> void
   {
     using namespace std::string_literals;
 
-    op.status = BatchOperation::Status::Failed;
+    op.status = BatchOperation::Status::kFailed;
     try {
       throw; // Rethrow the current exception
     } catch (const std::exception& e) {
@@ -777,8 +774,8 @@ auto SceneQuery::ExecuteBatchImpl(
     batch_coordinator_ = &coordinator;
 
     // Execute coordinated batch traversal with registered operations
-    auto batch_result = coordinator.ExecuteBatch(
-      async_traversal_, [&batch_func, this](BatchQueryExecutor& /*coord*/) {
+    auto batch_result = coordinator.ExecuteBatch(async_traversal_,
+      [&batch_func, this](BatchQueryExecutor& /*coordinator*/) {
         // Call the user's batch function - they will use the new
         // reference-based methods
         batch_func(*this);
@@ -832,7 +829,7 @@ auto SceneQuery::BatchCollectImpl(
   -> void
 {
   // Register with batch coordinator using inserter function
-  batch_coordinator_->Collect(inserter, predicate);
+  batch_coordinator_->Collect(std::move(inserter), predicate);
 }
 
 /*!

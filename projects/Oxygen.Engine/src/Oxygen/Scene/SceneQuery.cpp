@@ -11,7 +11,6 @@
 #include <Oxygen/Scene/SceneQuery.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Scene/Detail/PathMatcher.h>
 #include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -511,7 +510,7 @@ auto SceneQuery::FindFirstByPath(std::optional<SceneNode>& output,
 */
 auto SceneQuery::CollectByPathImpl(
   std::function<void(const SceneNode&)> add_to_container,
-  std::string_view path_pattern) const noexcept -> QueryResult
+  const std::string_view path_pattern) const noexcept -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -521,8 +520,9 @@ auto SceneQuery::CollectByPathImpl(
 
   QueryResult result;
   try {
-    ExecutePathTraversal(
-      result, path_pattern, [&](const ConstVisitedNode& visited) {
+    ExecutePathTraversal(result, path_pattern,
+      [add_to_container = std::move(add_to_container), this](
+        const ConstVisitedNode& visited) {
         add_to_container({ scene_weak_.lock(), visited.handle });
         return VisitResult::kContinue;
       });
