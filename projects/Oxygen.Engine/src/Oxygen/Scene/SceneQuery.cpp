@@ -4,16 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneQuery.h>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Scene/Detail/PathMatcher.h>
-#include <Oxygen/Scene/Detail/PathParser.h>
-#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <cstdlib>
 #include <string_view>
 #include <vector>
+
+#include <Oxygen/Scene/SceneQuery.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Scene/Detail/PathMatcher.h>
+#include <Oxygen/Scene/Detail/PathParser.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 
 using oxygen::scene::ConstVisitedNode;
 using oxygen::scene::QueryResult;
@@ -24,7 +25,6 @@ using oxygen::scene::SceneTraversal;
 
 namespace oxygen::scene {
 
-//! ADL-compatible GetNodeName for ConstVisitedNode integration with PathMatcher
 /*!
  Enables ConstVisitedNode to work directly with concept-based PathMatcher
  without requiring adapter types or data structure conversion.
@@ -41,7 +41,6 @@ auto GetNodeName(const ConstVisitedNode& visited) noexcept -> std::string_view
   return {};
 }
 
-//! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher
 /*!
  Enables ConstVisitedNode to work directly with concept-based PathMatcher
  by providing access to the hierarchical depth tracked during traversal.
@@ -162,8 +161,9 @@ auto SceneQuery::AddToTraversalScope(
  Executes immediate FindFirst operation using dedicated scene traversal with
  early termination optimization for single-result queries.
 
+ @param output Optional SceneNode reference to receive the first match
  @param predicate Node filtering function to test each visited node
- @return Optional SceneNode containing first match, nullopt if no matches
+ @return QueryResult with performance metrics and completion status
 
  ### Execution Strategy
 
@@ -179,7 +179,7 @@ auto SceneQuery::AddToTraversalScope(
  - Optimization: Early termination prevents unnecessary traversal
 
  @note This function is used when not in batch mode for immediate results
- @see ExecuteBatchFindFirst for batch mode equivalent
+ @see BatchFindFirstImpl for batch mode equivalent
 */
 auto SceneQuery::FindFirstImpl(std::optional<SceneNode>& output,
   const QueryPredicate& predicate) const noexcept -> QueryResult
@@ -211,7 +211,7 @@ auto SceneQuery::FindFirstImpl(std::optional<SceneNode>& output,
     result.error_message.emplace(ex.what());
   } catch (...) {
     LOG_F(ERROR, "traversal failed: unknown exception");
-    result.error_message.emplace("Unknown exception in Count operation");
+    result.error_message.emplace("Unknown exception in FindFirst operation");
   }
 
   return result;
@@ -221,8 +221,9 @@ auto SceneQuery::FindFirstImpl(std::optional<SceneNode>& output,
  Executes immediate Count operation using dedicated scene traversal with
  comprehensive node examination and match counting.
 
+ @param output Optional size_t reference to receive the count
  @param predicate Node filtering function to test each visited node
- @return QueryResult with nodes_examined, nodes_matched, and completion status
+ @return QueryResult with performance metrics and completion status
 
  ### Execution Strategy
 
@@ -238,7 +239,7 @@ auto SceneQuery::FindFirstImpl(std::optional<SceneNode>& output,
  - Metrics: Comprehensive performance tracking for optimization
 
  @note This function is used when not in batch mode for immediate results
- @see ExecuteBatchCount for batch mode equivalent
+ @see BatchCountImpl for batch mode equivalent
 */
 auto SceneQuery::CountImpl(std::optional<size_t>& output,
   const QueryPredicate& predicate) const noexcept -> QueryResult
@@ -286,8 +287,9 @@ auto SceneQuery::CountImpl(std::optional<size_t>& output,
  Executes immediate Any operation using dedicated scene traversal with
  early termination optimization for existence checking.
 
+ @param output Optional bool reference to receive the existence result
  @param predicate Node filtering function to test each visited node
- @return Optional bool: true if any match found, false if no matches
+ @return QueryResult with performance metrics and completion status
 
  ### Execution Strategy
 
@@ -303,7 +305,7 @@ auto SceneQuery::CountImpl(std::optional<size_t>& output,
  - Optimization: Early termination prevents unnecessary traversal
 
  @note This function is used when not in batch mode for immediate results
- @see ExecuteBatchAny for batch mode equivalent
+ @see BatchAnyImpl for batch mode equivalent
 */
 auto SceneQuery::AnyImpl(std::optional<bool>& output,
   const QueryPredicate& predicate) const noexcept -> QueryResult
@@ -344,18 +346,88 @@ auto SceneQuery::AnyImpl(std::optional<bool>& output,
     result.error_message.emplace(ex.what());
   } catch (...) {
     LOG_F(ERROR, "traversal failed: unknown exception");
-    result.error_message.emplace("Unknown exception in Count operation");
+    result.error_message.emplace("Unknown exception in Any operation");
   }
 
   return result;
 }
 
 /*!
+ Parses path pattern and drives ExecuteTraversal using PathMatcher to evaluate
+ nodes, converting match results into traversal control decisions.
+
+ @param result QueryResult reference to populate with traversal metrics
+ @param path_pattern Path pattern string to parse and match against
+ @param match_handler Callback function to process complete path matches
+
+ ### Path Processing Pipeline
+
+ - Parses path_pattern using ParsePath and validates syntax
+ - Creates PathMatcher from parsed path and maintains PatternMatchState
+ - Evaluates each visited node using PathMatcher.Match() method
+ - Converts MatchResult enum into VisitResult traversal control decisions
+
+ ### Traversal Control Strategy
+
+ - kCompleteMatch: Invokes match_handler and returns its result
+ - kPartialMatch: Continues traversal deeper into hierarchy
+ - kNoMatch: Skips entire subtree to avoid unnecessary evaluation
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(1) parsing + O(n) traversal, optimized with subtree
+ pruning
+ - Memory: Pattern state maintained during traversal
+ - Error Handling: Invalid patterns populate result.error_message
+
+ @note Parsing errors are captured in result.error_message on failure
+ @see detail::query::ParsePath for supported path pattern syntax
+*/
+auto SceneQuery::ExecutePathTraversal(QueryResult& result,
+  std::string_view path_pattern,
+  const std::function<VisitResult(const ConstVisitedNode&)>& match_handler)
+  const -> void
+{
+  auto parsed_path = detail::query::ParsePath(path_pattern);
+  if (!parsed_path.IsValid()) {
+    result.error_message.emplace(parsed_path.error_info->error_message);
+    return;
+  }
+
+  detail::query::PathMatcher matcher(parsed_path);
+  detail::query::PatternMatchState match_state;
+
+  auto visitor = [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+    switch (matcher.Match(visited, match_state)) {
+    case detail::query::MatchResult::kCompleteMatch:
+      ++result.nodes_matched;
+      return match_handler(visited);
+
+    case detail::query::MatchResult::kPartialMatch:
+      return VisitResult::kContinue;
+
+    case detail::query::MatchResult::kNoMatch:
+      return VisitResult::kSkipSubtree;
+    }
+    OXYGEN_UNREACHABLE_RETURN(VisitResult::kContinue);
+  };
+
+  auto filter = [&](const ConstVisitedNode& /*visited*/,
+                  FilterResult /*parent_result*/) -> FilterResult {
+    ++result.nodes_examined;
+    return FilterResult::kAccept;
+  };
+
+  const auto _ = ExecuteTraversal(visitor, filter);
+}
+
+/*!
  Navigates the scene hierarchy using an absolute path specification,
  starting from scene root nodes. Optimized for simple paths without wildcards.
 
+ @param output Optional SceneNode reference to receive the found node
  @param path Absolute path string (e.g., "World/Player/Equipment/Weapon")
- @return Optional SceneNode if path exists, nullopt if path not found
+ @return QueryResult with performance metrics and completion status
 
  ### Path Navigation
 
@@ -373,11 +445,14 @@ auto SceneQuery::AnyImpl(std::optional<bool>& output,
 
  ```cpp
  // Direct path navigation
- auto weapon = query.FindFirstByPath("World/Player/Equipment/Weapon");
- auto ui_panel = query.FindFirstByPath("UI/HUD/HealthBar");
+ std::optional<SceneNode> weapon;
+ auto result = query.FindFirstByPath(weapon, "World/Player/Equipment/Weapon");
+ std::optional<SceneNode> ui_panel;
+ query.FindFirstByPath(ui_panel, "UI/HUD/HealthBar");
 
- // Invalid paths return nullopt
- auto missing = query.FindFirstByPath("NonExistent/Path");
+ // Invalid paths leave output empty
+ std::optional<SceneNode> missing;
+ query.FindFirstByPath(missing, "NonExistent/Path");
  ```
 
  @note Path queries are not supported in batch mode (ExecuteBatch)
@@ -393,51 +468,18 @@ auto SceneQuery::FindFirstByPath(std::optional<SceneNode>& output,
   output.reset();
 
   QueryResult result;
-
-  // Use new PathParser for parsing
-  auto parsed_path = detail::query::ParsePath(path);
-  if (!parsed_path.IsValid()) {
-    result.error_message.emplace(parsed_path.error_info->error_message);
-    return result;
-  }
-
-  // AcceptAll filter that updates the counters
-  auto filter = [&](const ConstVisitedNode& /*visited*/,
-                  FilterResult /*parent_result*/) -> FilterResult {
-    ++result.nodes_examined;
-    return FilterResult::kAccept;
-  };
-
-  // Use streaming PathMatcher with scene traversal
-  detail::query::PathMatcher matcher(parsed_path);
-  detail::query::PatternMatchState match_state;
-
-  auto visitor = [&](const ConstVisitedNode& visited, bool) -> VisitResult {
-    switch (matcher.Match(visited, match_state)) {
-    case detail::query::MatchResult::kCompleteMatch:
-      // Found our target!
-      output.emplace(scene_weak_.lock(), visited.handle);
-      return VisitResult::kStop; // Stop traversal
-
-    case detail::query::MatchResult::kPartialMatch:
-      // Continue deeper in this subtree
-      return VisitResult::kContinue;
-
-    case detail::query::MatchResult::kNoMatch:
-      // This path doesn't match, skip this subtree
-      return VisitResult::kSkipSubtree;
-    }
-    return VisitResult::kContinue; // Should never reach here
-  };
-
   try {
-    const auto _ = ExecuteTraversal(visitor, filter);
+    ExecutePathTraversal(result, path, [&](const ConstVisitedNode& visited) {
+      output.emplace(scene_weak_.lock(), visited.handle);
+      return VisitResult::kStop;
+    });
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "traversal failed: {}", ex.what());
     result.error_message.emplace(ex.what());
   } catch (...) {
     LOG_F(ERROR, "traversal failed: unknown exception");
-    result.error_message.emplace("Unknown exception in Count operation");
+    result.error_message.emplace(
+      "Unknown exception in FindFirstByPath operation");
   }
 
   return result;
@@ -478,56 +520,19 @@ auto SceneQuery::CollectByPathImpl(
   // We do not clear the output container, we will only append to it.
 
   QueryResult result;
-
-  // Use new PathParser for parsing
-  auto parsed_path = detail::query::ParsePath(path_pattern);
-  if (!parsed_path.IsValid()) {
-    result.error_message.emplace(parsed_path.error_info->error_message);
-    return result;
-  }
-
-  // AcceptAll filter that updates the counters
-  auto filter = [&](const ConstVisitedNode& /*visited*/,
-                  FilterResult /*parent_result*/) -> FilterResult {
-    ++result.nodes_examined;
-    return FilterResult::kAccept;
-  };
-
-  // Use streaming PathMatcher with scene traversal
-  detail::query::PathMatcher matcher(parsed_path);
-  detail::query::PatternMatchState match_state;
-
-  auto visitor = [&](const ConstVisitedNode& visited, bool) -> VisitResult {
-    ++result.nodes_examined;
-
-    switch (matcher.Match(visited, match_state)) {
-    case detail::query::MatchResult::kCompleteMatch:
-      // Found a match! Add to collection
-      add_to_container(SceneNode { scene_weak_.lock(), visited.handle });
-      ++result.nodes_matched;
-      // Continue traversal to find more matches
-      return VisitResult::kContinue;
-
-    case detail::query::MatchResult::kPartialMatch:
-      // Continue deeper in this subtree
-      return VisitResult::kContinue;
-
-    case detail::query::MatchResult::kNoMatch:
-      // This path doesn't match, skip this subtree
-      return VisitResult::kSkipSubtree;
-    }
-
-    return VisitResult::kContinue; // Should never reach here
-  };
-
   try {
-    const auto _ = ExecuteTraversal(visitor, filter);
+    ExecutePathTraversal(
+      result, path_pattern, [&](const ConstVisitedNode& visited) {
+        add_to_container({ scene_weak_.lock(), visited.handle });
+        return VisitResult::kContinue;
+      });
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "traversal failed: {}", ex.what());
     result.error_message.emplace(ex.what());
   } catch (...) {
     LOG_F(ERROR, "traversal failed: unknown exception");
-    result.error_message.emplace("Unknown exception in Count operation");
+    result.error_message.emplace(
+      "Unknown exception in CollectByPath operation");
   }
 
   return result;
