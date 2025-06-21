@@ -19,8 +19,11 @@
 
 namespace oxygen::scene {
 
-namespace detail::query {
-  struct ParsedPath;
+namespace detail {
+  class BatchQueryExecutor;
+  namespace query {
+    struct ParsedPath;
+  } // namespace detail::query
 } // namespace detail::query
 
 class Scene;
@@ -351,10 +354,12 @@ private:
   //! Const-correct traversal interface
   SceneTraversal<const Scene> traversal_;
   AsyncSceneTraversal<const Scene> async_traversal_;
-  //! Batch execution state (mutable for const methods)
-  mutable bool batch_active_ = false;
-  //! BroadcastChannel-based batch coordinator (type-erased pointer)
-  mutable void* batch_coordinator_ = nullptr;
+  //! BroadcastChannel-based batch coordinator. Valid only during a batch query
+  //! execution.
+  mutable detail::BatchQueryExecutor* batch_coordinator_ { nullptr };
+
+  //! True if the query is currently in batch mode.
+  auto IsBatchActive() const noexcept { return batch_coordinator_ != nullptr; }
 
   auto EnsureCanExecute(const bool immediate) const -> void
   {
@@ -363,7 +368,7 @@ private:
       throw std::runtime_error(
         "scene is no longer valid -> cannot execute query");
     }
-    CHECK_F((immediate && !batch_active_) || (!immediate && batch_active_),
+    CHECK_F((immediate && !IsBatchActive()) || (!immediate && IsBatchActive()),
       "use the appropriate API for immediate / batch execution");
   }
 
