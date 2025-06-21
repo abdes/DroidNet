@@ -10,28 +10,29 @@ for future enhancement.
 
 ## Component/Feature Completion Summary
 
-| Component/Feature           | Status         | Notes                                   |
-| --------------------------- | -------------- | --------------------------------------- |
-| Node Creation/Destruction   | ✅ Complete    | -                                       |
-| Hierarchy Management        | ✅ Complete    | Node re-parenting API                   |
-| Transform System            | ✅ Complete    | Advanced constraints (low priority)     |
-| Flag System                 | ✅ Complete    | -                                       |
-| Metadata (Name, Properties) | ✅ Complete    | -                                       |
-| Handle/View Pattern         | ✅ Complete    | -                                       |
-| Node Cloning                | ✅ Complete    | -                                       |
-| Scene Traversal             | ✅ Complete    | -                                       |
-| Scene Query System          | ✅ Complete    | -                                       |
-| ScenePrettyPrinter          | ✅ Complete    | -                                       |
-| Component Attachment System | ❌ Not Started | Generic API, type registry integration  |
-| Tagging/Layer System        | ❌ Not Started | Tag/layer API, integration with queries |
-| Camera Component            | ❌ Not Started | Depends on component system             |
-| Mesh/Renderable Component   | ❌ Not Started | Depends on component & asset system     |
-| Light Component             | ❌ Not Started | Depends on component system             |
-| Scene Serialization         | ❌ Not Started | Component/type registry integration     |
-| Scene Events/Notifications  | ❌ Not Started | Event system integration                |
-| Culling/Visibility System   | ❌ Not Started | Camera, bounding volume dependencies    |
-| Multi-threaded Update       | ❌ Not Started | Threading/job system integration        |
-| Physics/Collider Component  | ❌ Not Started | Physics module integration              |
+| Component/Feature           | Status              | Notes                                        |
+| --------------------------- | ------------------- | -------------------------------------------- |
+| Node Creation/Destruction   | ✅ Complete         | Full API with batch operations               |
+| Hierarchy Management        | ✅ Complete         | Re-parenting, adoption (cross-scene)        |
+| Transform System            | ✅ Complete         | TRS decomposition, lazy evaluation          |
+| Flag System                 | ✅ Complete         | 6 flags with 5-bit layout, inheritance      |
+| Metadata (Name, Properties) | ✅ Complete         | ObjectMetaData component                     |
+| Handle/View Pattern         | ✅ Complete         | ResourceTable + weak_ptr safety             |
+| Node Cloning                | ✅ Complete         | Single node and hierarchy cloning           |
+| Scene Traversal             | ✅ Complete         | Non-recursive, visitor/filter patterns      |
+| Scene Query System          | ✅ Complete         | Path-based and predicate queries            |
+| ScenePrettyPrinter          | ✅ Complete         | Multi-format visualization                   |
+| Scene Update System         | ✅ Complete         | Two-pass: flags + transforms                |
+| Component Attachment System | ✅ Complete         | Full Composition-based system with dependencies |
+| Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists               |
+| Camera Component            | ❌ Not Started      | Empty Light/ directory exists               |
+| Mesh/Renderable Component   | ❌ Not Started      | No rendering components                      |
+| Light Component             | ❌ Not Started      | Empty Light/ directory exists               |
+| Scene Serialization         | ❌ Not Started      | No save/load functionality                   |
+| Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                  |
+| Culling/Visibility System   | ❌ Not Started      | No spatial partitioning                      |
+| Multi-threaded Update       | ❌ Not Started      | Single-threaded only (tests exist)          |
+| Physics/Collider Component  | ❌ Not Started      | No physics integration                       |
 
 ## Table of Contents
 
@@ -65,28 +66,28 @@ supporting future extensibility through components and event systems.
 The Scene system consists of several key components working together:
 
 - **Scene**: Central manager responsible for node lifecycle, hierarchy
-  management, and update orchestration using resource tables for efficient
-  storage and access
+  management, and update orchestration using ResourceTable for efficient
+  storage and handle-based access
 - **SceneNode / SceneNodeImpl**: Public handle interface and internal
-  implementation - SceneNode provides a safe, lightweight view while
-  SceneNodeImpl stores hierarchy, transform, flags, and metadata
+  implementation - SceneNode provides a safe, lightweight view with weak_ptr
+  validation while SceneNodeImpl stores actual data via component composition
 - **ResourceTable**: Dense/sparse storage system enabling fast handle-based
   access and memory efficiency
-- **Flag System**: Hierarchical bitwise flags with inheritance and dirty
-  tracking for efficient state propagation
-- **ObjectMetaData**: Storage for node names and custom properties for
-  identification and editor support
+- **Component Architecture**: SceneNodeImpl uses the Composition system providing
+  full component attachment capabilities: ObjectMetaData (names/properties),
+  NodeData (scene flags), GraphData (hierarchy relationships),
+  TransformComponent (TRS data), plus runtime component attachment via
+  AddComponent<T>(), GetComponent<T>(), HasComponent<T>(), RemoveComponent<T>()
+- **Flag System**: Hierarchical 5-bit flags supporting 6 flag types with
+  inheritance, dirty tracking, and deferred processing
 - **SceneTraversal**: High-performance, non-recursive traversal supporting
-  depth-first and breadth-first algorithms with advanced filtering and visitor
-  patterns
+  depth-first and breadth-first algorithms with visitor/filter patterns
 - **SceneQuery**: High-level, const-correct query interface supporting
-  predicate-based and path-based queries, batch execution, and user-controlled
-  memory allocation
-- **ScenePrettyPrinter**: Flexible, template-based utility for visualizing scene
-  graphs with multiple output targets, configurable character sets, verbosity
-  levels, and line endings
-- **Component System**: (Planned) Will enable arbitrary components (Camera,
-  Mesh, Light) to be attached to nodes for extensibility
+  predicate-based and path-based queries with batch execution
+- **ScenePrettyPrinter**: Template-based utility for scene graph visualization
+  with multiple output formats and configurable rendering options
+- **Update System**: Two-pass update cycle (ProcessDirtyFlags + UpdateTransforms)
+  with dirty tracking for optimal performance
 
 ### Core Component Details
 
@@ -113,7 +114,17 @@ class TransformComponent {
 
 #### SceneFlags - The Property System
 
-**5-Bit Flag Layout:**
+**6-Flag Layout with 5-Bit Per-Flag Storage:**
+
+Current flags supported:
+- `kVisible`: Node visibility for rendering
+- `kStatic`: Transform optimization hint (won't change)
+- `kCastsShadows`: Shadow casting capability
+- `kReceivesShadows`: Shadow receiving capability
+- `kRayCastingSelectable`: Ray-casting selection capability
+- `kIgnoreParentTransform`: Use only local transform
+
+**5-Bit Per-Flag Layout:**
 
 ```text
 Bit 0: Effective Value  - Current resolved state
@@ -126,9 +137,9 @@ Bit 4: Previous Value   - For transition detection
 **State Management Features:**
 
 - **Ternary Logic**: Explicit True/False, Inherited, Default states
-- **Deferred Updates**: Changes staged and applied in batch operations
+- **Deferred Updates**: Changes staged and applied in batch operations via `ProcessDirtyFlags()`
 - **Hierarchical Propagation**: Parent values cascade to children automatically
-- **Atomic Operations**: Thread-safe flag modifications
+- **Constraint**: Maximum 12 flags supported (5 bits × 12 = 60 bits in 64-bit storage)
 
 ---
 
@@ -181,19 +192,62 @@ auto SafeCall(Func&& func) const -> decltype(func()) {
 
 #### 3. Component-Based Architecture
 
-**Current Status: Planned Implementation**
+**Current Implementation: Full Composition System**
 
-- **Loose Coupling**: Components can evolve independently
-- **Extensibility**: New components (Camera, Mesh, Light) easily added
-- **Testability**: Individual components can be unit-tested
-- **Performance**: No virtual dispatch overhead
-- **Flexible Composition**: Nodes will support flexible feature composition
+SceneNodeImpl inherits from Composition, providing complete component management:
 
-**Future Implementation Plans:**
+**Core Components (Added at Construction):**
+- **ObjectMetaData**: Node names and properties
+- **NodeData**: Scene flags storage
+- **GraphData**: Hierarchy relationships (parent, children, siblings)
+- **TransformComponent**: TRS transformation data
 
-- Generic component attachment system for arbitrary node features
-- Type registry for component serialization and reflection
-- Component queries and batch processing capabilities
+**Runtime Component API (Available Now):**
+```cpp
+// Component attachment after construction
+template<IsComponent T, typename... Args>
+auto AddComponent(Args&&... args) -> T&;
+
+template<typename T>
+auto GetComponent() const -> T&;
+
+template<typename T>
+auto HasComponent() const -> bool;
+
+template<typename T>
+void RemoveComponent();
+
+template<typename OldT, typename NewT, typename... Args>
+auto ReplaceComponent(Args&&... args) -> NewT&;
+```
+
+**Advanced Features:**
+- **Component Dependencies**: Components can declare dependencies via ClassDependencies()
+- **Thread Safety**: All operations protected by mutex
+- **Deep Cloning**: CloneableMixin supports component-aware deep copying
+- **Iteration Support**: Range-based iteration over all components
+- **Validation**: Automatic dependency validation and enforcement
+
+**Benefits:**
+
+- **Full Extensibility**: Can attach arbitrary components (Camera, Mesh, Light) at runtime
+- **Type Safety**: Compile-time type validation with concepts
+- **Performance**: Direct component access, no virtual dispatch overhead
+- **Memory Safety**: RAII with automatic cleanup
+- **Dependency Management**: Automatic dependency resolution and validation
+
+**Example Usage:**
+```cpp
+// SceneNodeImpl already provides this API!
+auto& camera = scene_node_impl.AddComponent<CameraComponent>(fov, aspect_ratio);
+auto& mesh = scene_node_impl.AddComponent<MeshComponent>(mesh_resource);
+auto& light = scene_node_impl.AddComponent<DirectionalLight>(direction, color);
+
+if (scene_node_impl.HasComponent<CameraComponent>()) {
+    auto& cam = scene_node_impl.GetComponent<CameraComponent>();
+    cam.SetFieldOfView(new_fov);
+}
+```
 
 #### 4. Type Erasure Pattern
 
@@ -326,21 +380,23 @@ class TransformComponent {
 
 #### 9. Two-Pass Update Cycle Pattern
 
-**Algorithmic Efficiency:**
+**Implemented Update System:**
 
 ```cpp
-void Scene::Update() {
-    ProcessDirtyFlags(*this);      // Pass 1: Linear scan
-    UpdateTransformsIterative(*this); // Pass 2: Hierarchical DFS
+void Scene::Update(bool skip_dirty_flags) noexcept {
+    if (!skip_dirty_flags) {
+        ProcessDirtyFlags(*this);      // Pass 1: Linear flag processing
+    }
+    UpdateTransforms();                // Pass 2: Hierarchical transform updates
 }
 ```
 
 **Performance Benefits:**
 
-- **Cache Locality**: Linear pass processes all flags contiguously
-- **Dependency Resolution**: Flags processed before transforms
-- **Batch Operations**: Related updates grouped together
-- **Hierarchical Pruning**: Clean subtrees skipped
+- **Cache Locality**: Flag processing in linear pass over all nodes
+- **Dependency Resolution**: Flags processed before transforms to ensure consistency
+- **Batch Operations**: Related updates grouped together for efficiency
+- **Hierarchical Pruning**: Clean subtrees completely skipped during transform updates
 
 ### Pattern Integration
 
@@ -373,10 +429,10 @@ engine workloads.
 
 **Memory Efficiency Characteristics:**
 
-- No fragmentation from node creation/destruction
+- No fragmentation from node creation/destruction via ResourceTable
 - Sparse table automatically reuses deleted slots
 - Dense table maintains cache locality during traversals
-- Minimal per-node memory overhead (~152 bytes total)
+- Per-node memory overhead: ~152 bytes total (4 components + handle overhead)
 
 ### Computational Efficiency
 
@@ -492,9 +548,10 @@ void Scene::Update() {
 
 **1. Flag System Constraints**
 
-- **Current Limitations**: Maximum 12 flags with 5-bit layout, fixed bit
-  allocation per flag, no runtime flag definition, limited atomic operation
-  support
+- **Current Limitations**: Maximum 6 flags currently defined, supports up to 12 flags with 5-bit layout
+- **Fixed Flag Definition**: Flags defined at compile-time only (kVisible, kStatic, kCastsShadows, kReceivesShadows, kRayCastingSelectable, kIgnoreParentTransform)
+- **No Runtime Expansion**: Cannot define new flags without modifying SceneNodeFlags enum
+- **Limited Atomic Operations**: Basic flag operations but no advanced atomicity guarantees
 
 **2. Transform System Restrictions**
 
@@ -504,15 +561,92 @@ void Scene::Update() {
 
 **3. Memory Management**
 
-- **Potential Issues**: Fixed initial capacity requirements, no dynamic table
-  resizing, memory usage patterns not optimized for very large scenes, limited
-  memory pool integration
+- **ResourceTable Constraints**: Fixed initial capacity (1024), automatic growth handled internally
+- **Component Composition**: Full Composition system supports unlimited runtime components
+- **Handle Overhead**: Stable but requires weak_ptr validation on every access
+- **Memory Pool Integration**: Not implemented - uses standard allocators
+- **Component Dependencies**: Dependency validation adds slight overhead but ensures correctness
 
 ---
 
 ## Enhancement Recommendations
 
 ### Priority 1: Critical Infrastructure (High Impact, Medium Complexity)
+
+#### Serialization System
+
+**Architecture Design:**
+
+```cpp
+class SceneSerializer {
+public:
+    void Serialize(const Scene& scene, OutputStream& stream);
+    std::unique_ptr<Scene> Deserialize(InputStream& stream);
+
+private:
+    void SerializeNode(const SceneNodeImpl& node, OutputStream& stream);
+    void SerializeHierarchy(const Scene& scene, OutputStream& stream);
+    void SerializeComponent(const Component& component, OutputStream& stream);
+};
+```
+
+**Features:**
+
+- Binary format for performance with component-aware serialization
+- Incremental save/load support for large scenes
+- Version compatibility with migration support
+- Integration with existing Composition system for automatic component serialization
+- Support for component dependencies during deserialization
+
+**Timeline**: 2-3 months
+
+#### Rendering Component Implementations
+
+**Implementation Strategy:**
+
+Since the component system is already complete, the focus should be on implementing specific rendering components:
+
+```cpp
+class CameraComponent : public Component {
+    OXYGEN_COMPONENT(CameraComponent)
+public:
+    explicit CameraComponent(float fov, float aspect_ratio);
+
+    auto GetViewMatrix() const -> Mat4;
+    auto GetProjectionMatrix() const -> Mat4;
+    void SetFieldOfView(float fov) noexcept;
+    // ... camera-specific API
+};
+
+class MeshComponent : public Component {
+    OXYGEN_COMPONENT(MeshComponent)
+    OXYGEN_COMPONENT_REQUIRES(TransformComponent)  // Dependency example
+public:
+    explicit MeshComponent(MeshResource mesh);
+
+    auto GetMesh() const -> const MeshResource&;
+    auto GetBoundingBox() const -> BoundingBox;
+    // ... mesh-specific API
+};
+
+class DirectionalLight : public Component {
+    OXYGEN_COMPONENT(DirectionalLight)
+public:
+    DirectionalLight(Vec3 direction, Vec3 color);
+    // ... light-specific API
+};
+```
+
+**Benefits:**
+
+- Leverage existing component system infrastructure
+- Type-safe component attachment with dependency management
+- Thread-safe operations already implemented
+- Deep cloning support for scene copying
+
+**Timeline**: 1-2 months per component type
+
+### Priority 2: Performance Optimization (High Impact, Medium Complexity)
 
 #### Multi-threading Support
 
@@ -541,34 +675,7 @@ private:
 - Better utilization of modern CPU architectures
 - Scalable to very large scenes
 
-**Timeline**: 2-3 months
-
-#### Serialization System
-
-**Architecture Design:**
-
-```cpp
-class SceneSerializer {
-public:
-    void Serialize(const Scene& scene, OutputStream& stream);
-    std::unique_ptr<Scene> Deserialize(InputStream& stream);
-
-private:
-    void SerializeNode(const SceneNodeImpl& node, OutputStream& stream);
-    void SerializeHierarchy(const Scene& scene, OutputStream& stream);
-};
-```
-
-**Features:**
-
-- Binary format for performance
-- Incremental save/load support
-- Version compatibility
-- Compression integration
-
-**Timeline**: 1-2 months
-
-### Priority 2: Performance Optimization (High Impact, Low Complexity)
+**Timeline**: 3-4 months
 
 #### Enhanced Dirty Tracking
 
@@ -687,17 +794,17 @@ public:
 **Current Memory Footprint per Node:**
 
 ```cpp
-SceneNodeImpl:              ~128 bytes
-├── ObjectMetaData:         ~32 bytes
-├── SceneNodeData:          ~32 bytes
-├── TransformComponent:     ~48 bytes
-└── SceneFlags:             ~16 bytes
+SceneNodeImpl Components:       ~128 bytes
+├── ObjectMetaData:             ~32 bytes
+├── NodeData (SceneFlags):      ~16 bytes
+├── GraphData (Hierarchy):      ~32 bytes
+└── TransformComponent:         ~48 bytes
 
-Additional Overhead:        ~24 bytes
-├── ResourceTable Entry:    ~16 bytes
-└── Handle Management:      ~8 bytes
+Additional Overhead:            ~24 bytes
+├── ResourceTable Entry:        ~16 bytes
+└── Handle Management:          ~8 bytes
 
-Total per Node:             ~152 bytes
+Total per Node:                 ~152 bytes
 ```
 
 ### API Stability and Future Compatibility
@@ -724,28 +831,31 @@ strategies.
 
 ### System Strengths
 
-- Excellent performance characteristics for typical use cases
-- Robust and safe API design
-- Clean architectural separation
-- Efficient memory management
-- Sophisticated flag system for property management
+- Robust and mature core scene graph implementation with comprehensive testing
+- Excellent performance characteristics with two-pass update optimization
+- Clean architectural separation with handle/view pattern providing memory safety
+- Efficient ResourceTable storage with automatic defragmentation
+- Sophisticated 5-bit flag system supporting inheritance and deferred updates
+- Complete traversal and query APIs with const-correctness guarantees
+- Cross-scene operations (adoption) for complex scene management
+- Non-recursive traversal algorithms preventing stack overflow on deep hierarchies
+- **Full Component System**: Complete Composition-based architecture with runtime component attachment, dependency management, and thread-safe operations
 
 ### Areas for Growth
 
-- Multi-threading support for scalability
-- Serialization for content pipeline integration
-- Advanced culling for rendering optimization
-- Event system for reactive programming
+- **Specific Component Implementations**: Camera, Mesh, Light component classes (infrastructure exists)
+- **Serialization Infrastructure**: Save/load with component-aware serialization
+- **Multi-threading Support**: Parallel processing for large-scale scenes
+- **Event System**: Reactive programming and observer notifications
+- **Spatial Partitioning**: Culling and visibility optimization systems
+- **Animation Integration**: Keyframe animation system bridge
 
 ### Recommended Next Steps
 
-1. Implement multi-threading support for immediate performance gains
-2. Add serialization infrastructure for content pipeline integration
-3. Develop event system for better component integration
-4. Optimize memory management for very large scenes
+1. **Implement specific rendering components** (Camera, Mesh, Light) using existing component system
+2. **Add serialization infrastructure** for content pipelines and scene persistence with component-aware serialization
+3. **Develop multi-threading support** for performance scaling on large scenes
+4. **Create event system** for reactive components and editor integration
+5. **Add spatial partitioning and culling systems** for rendering optimization
 
-The system provides a **solid foundation** for a modern game engine, with clear
-paths for enhancement that maintain backward compatibility while significantly
-expanding capabilities. The architecture is well-positioned to support these
-enhancements while maintaining the existing performance and stability
-characteristics that make it effective for high-performance 3D applications.
+The system provides a **complete, production-ready foundation** for a modern game engine. The component architecture is fully implemented and ready for extension with rendering-specific components. The clear architectural patterns can support these enhancements while maintaining the existing performance and stability characteristics that make it effective for high-performance 3D applications.
