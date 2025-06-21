@@ -120,7 +120,7 @@ template <> struct oxygen::co::EventLoopTraits<MinimalEventLoop> {
   }
 };
 
-namespace {
+namespace oxygen::scene::detail {
 
 /*!
  Internal execution context for batch operations containing both public
@@ -701,6 +701,7 @@ public:
 
     return result;
   }
+
   /*!
    Streams scene nodes directly to BroadcastChannel during async traversal
    with early termination optimization for batch query coordination.
@@ -795,9 +796,11 @@ public:
   std::vector<BatchOperation> operations_;
 };
 
-} // anonymous namespace
+} // oxygen::scene::detail
 
 //=== Batch Implementation Methods ===----------------------------------------//
+
+using oxygen::scene::detail::BatchQueryExecutor;
 
 /*!
  Executes multiple query operations in a single scene traversal using
@@ -818,7 +821,7 @@ public:
 
  - **Exception Safety**: Guarantees batch state cleanup on any exception
  - **Graceful Degradation**: Returns failed BatchResult on execution errors
- - **State Consistency**: Ensures batch_active_ and coordinator are reset
+ - **State Consistency**: Ensures the coordinator is reset
 
  ### Performance Benefits
 
@@ -835,7 +838,6 @@ auto SceneQuery::ExecuteBatchImpl(
   -> BatchResult
 {
   // Initialize batch state
-  batch_active_ = true;
   try {
     // Create BroadcastChannel coordinator with current traversal scope
     BatchQueryExecutor coordinator(scene_weak_, traversal_scope_);
@@ -853,18 +855,18 @@ auto SceneQuery::ExecuteBatchImpl(
 
     // Clean up batch state
     batch_coordinator_ = nullptr;
-    batch_active_ = false;
 
     // Return batch result with proper aggregated metrics
     return batch_result;
   } catch (...) {
     // Ensure clean state on exception
     batch_coordinator_ = nullptr;
-    batch_active_ = false;
 
     // Return failed batch result
     return BatchResult {
-      .nodes_examined = 0, .total_matches = 0, .success = false
+      .nodes_examined = 0,
+      .total_matches = 0,
+      .success = false,
     };
   }
 }
