@@ -154,7 +154,7 @@ public:
   OXYGEN_COMP_API void PrintComponents(std::ostream& out) const;
 
 protected:
-  OXYGEN_COMP_API Composition();
+  OXYGEN_COMP_API explicit Composition(std::size_t initial_capacity = 4);
 
   template <IsComponent T, typename... Args>
   auto AddComponent(Args&&... args) -> T&
@@ -172,10 +172,12 @@ protected:
     }
 
     auto component = std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    auto& component_ref
+      = static_cast<T&>(AddComponentImpl(std::move(component)));
     if (!T::ClassDependencies().empty()) {
-      component->UpdateDependencies(*this);
+      component_ref.UpdateDependencies(*this);
     }
-    return static_cast<T&>(AddComponentImpl(std::move(component)));
+    return component_ref;
   }
 
   template <typename T> void RemoveComponent()
@@ -206,11 +208,12 @@ protected:
         }
         auto component
           = std::unique_ptr<NewT>(new NewT(std::forward<Args>(args)...));
-        if (!NewT::ClassDependencies().empty()) {
-          component->UpdateDependencies(*this);
-        }
-        return static_cast<NewT&>(
+        auto& component_ref = static_cast<NewT&>(
           ReplaceComponentImpl(old_id, std::move(component)));
+        if (!NewT::ClassDependencies().empty()) {
+          component_ref.UpdateDependencies(*this);
+        }
+        return component_ref;
       }
     }
 

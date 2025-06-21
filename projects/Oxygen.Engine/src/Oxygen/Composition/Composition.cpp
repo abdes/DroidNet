@@ -16,11 +16,19 @@
 using oxygen::Component;
 using oxygen::Composition;
 using oxygen::TypeId;
+
 using ComponentsCollection = std::vector<std::unique_ptr<Component>>;
 
 struct Composition::ComponentManager {
   ComponentsCollection components_;
   std::unordered_map<TypeId, size_t> component_index_;
+
+  explicit ComponentManager(std::size_t initial_capacity)
+  {
+    // Reserve capacity to prevent reallocations that would invalidate pointers
+    // stored during UpdateDependencies calls
+    components_.reserve(initial_capacity);
+  }
 };
 
 Composition::~Composition() noexcept { DestroyComponents(); }
@@ -80,8 +88,8 @@ auto Composition::operator=(Composition&& other) noexcept -> Composition&
   return *this;
 }
 
-Composition::Composition()
-  : pimpl_(std::make_shared<ComponentManager>())
+Composition::Composition(std::size_t initial_capacity)
+  : pimpl_(std::make_shared<ComponentManager>(initial_capacity))
 {
   DCHECK_NOTNULL_F(pimpl_, "Failed to allocate component manager");
 }
@@ -202,16 +210,24 @@ void Composition::DeepCopyComponentsFrom(const Composition& other)
 {
   DCHECK_NOTNULL_F(
     other.pimpl_, "Composition deep copied from a moved composition!");
-  pimpl_ = std::make_shared<ComponentManager>();
+  // Resize to fit the actual number of components being copied
+  const auto component_count = other.pimpl_->components_.size();
+  pimpl_ = std::make_shared<ComponentManager>(component_count);
   for (const auto& entry : other.pimpl_->components_) {
     if (const auto* comp = entry.get(); comp->IsCloneable()) {
       pimpl_->components_.emplace_back(comp->Clone());
       const auto& clone = pimpl_->components_.back();
-      clone->UpdateDependencies(other);
       pimpl_->component_index_[clone->GetTypeId()]
         = pimpl_->components_.size() - 1;
     } else {
       throw ComponentError("Component must be cloneable");
+    }
+  }
+
+  // Update dependencies AFTER all components are added to prevent invalidation
+  for (const auto& comp : pimpl_->components_) {
+    if (comp->HasDependencies()) {
+      comp->UpdateDependencies(*this);
     }
   }
 }
