@@ -13,6 +13,7 @@ applyTo: '**/*.cpp;**/*.h'
   // copy at https://opensource.org/licenses/BSD-3-Clause.
   // SPDX-License-Identifier: BSD-3-Clause
   //===----------------------------------------------------------------------===//
+- ALWAYS preserve empty lines that exist in the original code, even if they are not needed for formatting.
 
 //=== CODE QUALITY RULES ===-----------------------------------------------------------//
 - Use `constexpr`, `noexcept`, and `auto` return types where appropriate.

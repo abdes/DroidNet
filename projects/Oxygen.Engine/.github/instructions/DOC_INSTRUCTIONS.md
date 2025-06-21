@@ -1,9 +1,15 @@
+---
+applyTo: '**/*.cpp;**/*.h'
+---
 //=== OVERVIEW ===---------------------------------------------------------------------//
 // These rules define how to generate and maintain documentation for the Oxygen Engine
 // codebase. All standards are derived from SceneQuery implementation patterns.
 // Apply these rules to all public APIs, and to private methods as specified.
 
 //=== COMMENT TYPES AND DOXYGEN STYLE ===---------------------------------------------//
+- NEVER USE `/*` block comments inside coe example.
+- ALWAYS ESCAPE '*' and '/' in strings inside code examples.
+- After generating or editing a doc comment, re-scan your output to ensure compliance.
 - Use `//!` for brief, single-line documentation above declarations.
 - Use `/*! ... */` for detailed, multi-line documentation blocks.
 - Use `@command` (not `\command`) for all Doxygen directives.
@@ -20,20 +26,18 @@
   //=== Section Name ===-------------------------------------------------------------//
 
 //=== DOCUMENTATION PLACEMENT RULES ===----------------------------------------------//
-- For inline or template methods (in headers):
+- Identify where the method or freeform function implementation is located.
+- For functions only declared, or methods with only a delcaration inside a class:
+  - Above method declaration: Only a brief `//!` description.
+- For functions implemented inline, or methods implemented inside the class declaration scope:
   - Place full documentation (brief + detailed) with the method declaration.
   - Include usage examples, performance notes, and cross-references in the header.
-- For methods implemented in .cpp files:
-  - In header: Only a brief `//!` description above the declaration.
-  - In .cpp: Place the detailed documentation block immediately before the implementation.
-  - Move all detailed explanations, examples, and performance notes to the .cpp file.
-
-//=== MEMBER AND ENUM DOCUMENTATION ===----------------------------------------------//
-- For struct/class members: Place documentation above each member (not inline).
-- For enum values: Use inline comments after each value.
+- For function implementation in .cpp, or methods implemented outside the class declaration scope in .h or .cpp:
+  - Above implementation: Place the detailed documentation block.
+- Insert a blank line before the doc comment block.
 
 //=== CONTENT STRUCTURE TEMPLATES ===------------------------------------------------//
-- For methods, use this template:
+- For methods detailed content, use this template:
   /*!
    Detailed description of the method.
    @tparam TemplateParam Description

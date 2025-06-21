@@ -134,7 +134,10 @@
       "icon": "terminal-powershell",
       "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
       "args": [
-        "-NoExit"
+        "-NoExit",
+        "--noprofile",
+        "-File",
+        "${workspaceFolder}\\.vscode\\default-profile.ps1"
       ]
     },
     "Command Prompt": {

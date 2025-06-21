@@ -1,3 +1,6 @@
+---
+applyTo: '**/*.cpp;**/*.h'
+---
 //=== STRUCTURE ===-----------------------------------------------------------//
 - Use Google Test; use Google Mock only if required.
 - Write scenario-based tests with clear, descriptive names.
