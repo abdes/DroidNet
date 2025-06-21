@@ -39,7 +39,25 @@ using oxygen::scene::VisitResult;
 
 namespace oxygen::scene::detail {
 
-//! Minimal EventLoop implementation for scene query batch processing
+/*!
+ Minimal EventLoop implementation for scene query batch processing that
+ provides a simple cooperative task scheduler for BroadcastChannel operations.
+
+ ### Key Features
+
+ - **Simple Task Queue**: FIFO execution of scheduled tasks
+ - **Cooperative Scheduling**: Tasks yield control voluntarily
+ - **Atomic State Management**: Thread-safe start/stop operations
+ - **Lightweight Design**: Minimal overhead for batch query coordination
+
+ ### Usage Patterns
+
+ Used internally by BatchQueryExecutor to coordinate coroutine execution
+ during batch query operations. Not intended for general-purpose use.
+
+ @note This is a minimal implementation focused on batch query requirements
+ @see BatchQueryExecutor for the primary use case
+*/
 class MinimalEventLoop {
 public:
   auto Run() -> void
@@ -72,7 +90,16 @@ private:
 
 using oxygen::scene::detail::MinimalEventLoop;
 
-//! EventLoopTraits specialization for MinimalEventLoop
+/*!
+ EventLoopTraits specialization enabling MinimalEventLoop integration
+ with the OxCo coroutine framework for batch query coordination.
+
+ Provides standard EventLoop interface implementation by delegating
+ to MinimalEventLoop methods for scheduling, lifecycle, and identification.
+
+ @note Required specialization for OxCo framework compatibility
+ @see MinimalEventLoop for the underlying event loop implementation
+*/
 template <> struct oxygen::co::EventLoopTraits<MinimalEventLoop> {
   static auto EventLoopId(MinimalEventLoop& loop) -> EventLoopID
   {
@@ -95,7 +122,25 @@ template <> struct oxygen::co::EventLoopTraits<MinimalEventLoop> {
 
 namespace {
 
-//! Internal execution context for batch operations (separate from public data)
+/*!
+ Internal execution context for batch operations containing both public
+ result metadata and private coordination state for early termination.
+
+ ### Architecture
+
+ - **Status Tracking**: Manages operation lifecycle (Pending/Completed/Failed)
+ - **Result Storage**: Public QueryResult for metrics and error reporting
+ - **Internal Coordination**: Private state for early termination decisions
+ - **Coroutine Storage**: Function object for deferred execution
+
+ ### Separation of Concerns
+
+ Public result data (QueryResult) is separate from internal coordination
+ state to maintain clean interfaces while enabling optimization features
+ like early termination and progress tracking.
+
+ @note This is an internal implementation detail of BatchQueryExecutor
+*/
 struct BatchOperation {
   enum class Status { Pending, Completed, Failed };
 
@@ -113,7 +158,36 @@ struct BatchOperation {
     operation;
 };
 
-//! BroadcastChannel-based batch coordinator following the established pattern
+/*!
+ BroadcastChannel-based batch coordinator that executes multiple query
+ operations in a single scene traversal using coroutine-based concurrency.
+
+ ### Architecture
+
+ - **Operation Registration**: Collects query operations during setup phase
+ - **BroadcastChannel Distribution**: Streams nodes to all operations
+ - **Coroutine Coordination**: Uses oxygen::co framework for concurrency
+ - **Early Termination**: Stops when all FindFirst/Any operations complete
+ - **Result Aggregation**: Combines metrics from all operations
+
+ ### Execution Flow
+
+ 1. **Registration Phase**: User lambda registers operations via method calls
+ 2. **Channel Setup**: Creates BroadcastChannel for node distribution
+ 3. **Coroutine Launch**: Starts operation coroutines and traversal
+ 4. **Concurrent Execution**: Operations process nodes concurrently
+ 5. **Result Collection**: Aggregates metrics and populates user references
+
+ ### Performance Benefits
+
+ - **Single Traversal**: All operations share one scene traversal pass
+ - **Memory Efficiency**: No intermediate collections, direct streaming
+ - **Cache Locality**: Maximizes CPU cache utilization
+ - **Early Termination**: Stops traversal when possible
+
+ @note This class follows the established BroadcastChannel pattern
+ @see BatchOperation for individual operation context
+*/
 class BatchQueryExecutor {
 public:
   explicit BatchQueryExecutor(std::weak_ptr<const Scene> scene,
@@ -123,7 +197,30 @@ public:
   {
   }
 
-  //! Register FindFirst operation with reference output
+  /*!
+   Registers a FindFirst operation for batch execution, storing the result
+   in the provided reference when a matching node is found.
+
+   @tparam Predicate Callable predicate accepting const ConstVisitedNode&
+   @param output Reference to optional SceneNode to receive the first match
+   @param predicate Function to test each node during batch traversal
+
+   ### Registration Strategy
+
+   - **Coroutine Creation**: Builds async operation for later execution
+   - **Reference Capture**: Stores user's output reference for result storage
+   - **Early Termination**: Operation completes immediately upon first match
+   - **Metrics Tracking**: Records nodes examined and matched for analytics
+
+   ### Performance Characteristics
+
+   - **Time Complexity**: O(k) where k is position of first match
+   - **Memory**: Minimal, only reference storage and coordination state
+   - **Concurrency**: Executes concurrently with other batch operations
+
+   @note Output reference must remain valid until batch execution completes
+   @see ExecuteBatch for batch execution orchestration
+  */
   template <typename Predicate>
   auto FindFirst(std::optional<SceneNode>& output, Predicate predicate) -> void
   {
@@ -203,7 +300,30 @@ public:
     };
   }
 
-  //! Register Collect operation with inserter function
+  /*!
+   Registers a Collect operation for batch execution using type-erased
+   container insertion via the provided inserter function.
+
+   @tparam Predicate Callable predicate accepting const ConstVisitedNode&
+   @param inserter Function to add matching SceneNodes to user's container
+   @param predicate Function to test each node during batch traversal
+
+   ### Registration Strategy
+
+   - **Type Erasure**: Uses inserter function to avoid template dependencies
+   - **Full Traversal**: Processes all nodes, no early termination
+   - **Container Agnostic**: Works with any container via inserter function
+   - **Metrics Tracking**: Records nodes examined and collected
+
+   ### Performance Characteristics
+
+   - **Time Complexity**: O(n) for full scene traversal
+   - **Memory**: User-controlled via container allocation strategy
+   - **Concurrency**: Executes concurrently with other batch operations
+
+   @note Container must remain valid until batch execution completes
+   @see ExecuteBatch for batch execution orchestration
+  */
   template <typename Predicate>
   auto Collect(
     std::function<void(const SceneNode&)> inserter, Predicate predicate) -> void
@@ -272,7 +392,30 @@ public:
     };
   }
 
-  //! Register Count operation with QueryResult return (no ref needed)
+  /*!
+   Registers a Count operation for batch execution, storing the final count
+   in the provided reference when traversal completes.
+
+   @tparam Predicate Callable predicate accepting const ConstVisitedNode&
+   @param output Reference to optional size_t to receive the final count
+   @param predicate Function to test each node during batch traversal
+
+   ### Registration Strategy
+
+   - **Full Traversal**: Processes all nodes to ensure accurate count
+   - **Reference Output**: Stores count in user's reference variable
+   - **Zero Allocation**: No memory allocation during counting
+   - **Metrics Tracking**: Records nodes examined and counted
+
+   ### Performance Characteristics
+
+   - **Time Complexity**: O(n) for full scene traversal
+   - **Memory**: Zero allocations beyond internal coordination state
+   - **Concurrency**: Executes concurrently with other batch operations
+
+   @note Output reference must remain valid until batch execution completes
+   @see ExecuteBatch for batch execution orchestration
+  */
   template <typename Predicate>
   auto Count(std::optional<size_t>& output, Predicate predicate) -> void
   {
@@ -335,7 +478,30 @@ public:
     };
   }
 
-  //! Register Any operation with reference output
+  /*!
+   Registers an Any operation for batch execution, storing the boolean result
+   in the provided reference when a match is found or traversal completes.
+
+   @tparam Predicate Callable predicate accepting const ConstVisitedNode&
+   @param output Reference to optional bool to receive the existence result
+   @param predicate Function to test each node during batch traversal
+
+   ### Registration Strategy
+
+   - **Early Termination**: Operation completes immediately upon first match
+   - **Reference Output**: Stores boolean result in user's reference variable
+   - **Existence Testing**: Returns true if any match found, false otherwise
+   - **Metrics Tracking**: Records nodes examined until match or completion
+
+   ### Performance Characteristics
+
+   - **Time Complexity**: O(k) where k is position of first match
+   - **Memory**: Minimal, only boolean storage and coordination state
+   - **Concurrency**: Executes concurrently with other batch operations
+
+   @note Output reference must remain valid until batch execution completes
+   @see ExecuteBatch for batch execution orchestration
+  */
   template <typename Predicate>
   auto Any(std::optional<bool>& output, Predicate predicate) -> void
   {
@@ -413,7 +579,32 @@ public:
     };
   }
 
-  //! Execute all registered operations using BroadcastChannel pattern
+  /*!
+   Executes all registered operations using BroadcastChannel pattern with
+   coroutine-based concurrency for optimal performance.
+
+   @param async_traversal Scene traversal engine for async node streaming
+   @param batch_operations Lambda function that registers operations
+   @return BatchResult with aggregated metrics and success status
+
+   ### Execution Strategy
+
+   1. **Operation Registration**: Executes lambda to collect operations
+   2. **Channel Creation**: Sets up BroadcastChannel for node distribution
+   3. **Coroutine Launch**: Starts operation and traversal coroutines
+   4. **Concurrent Execution**: All operations process nodes concurrently
+   5. **Result Aggregation**: Combines metrics from all operations
+
+   ### Performance Benefits
+
+   - **Single Traversal**: All operations share one scene traversal pass
+   - **Concurrent Processing**: Operations execute concurrently via coroutines
+   - **Early Termination**: Stops when all FindFirst/Any operations complete
+   - **Memory Efficiency**: No intermediate collections, direct streaming
+
+   @note All user reference variables are populated during execution
+   @see ExecuteBatchAsync for the coroutine implementation
+  */
   auto ExecuteBatch(const AsyncSceneTraversal<const Scene>& async_traversal,
     const std::function<void(BatchQueryExecutor&)>& batch_operations)
     -> BatchResult
@@ -434,8 +625,21 @@ public:
     // Create final result with metrics
     return CreateFinalResult();
   }
+  /*!
+   Internal coroutine implementation for batch operation execution using
+   BroadcastChannel pattern with early termination optimization.
 
-  //! Execute batch async (made public for ExecuteBatchImpl)
+   @param async_traversal Scene traversal engine for async node streaming
+   @return Coroutine that completes when batch execution finishes
+
+   ### Implementation Notes
+   - Uses AnyOf to race traversal completion against operation completion
+   - Enables early termination when all operations finish before full traversal
+   - Coordinates BroadcastChannel distribution to operation coroutines
+
+   @note This is an internal implementation called by ExecuteBatch
+   @see ExecuteBatch for the public interface and execution strategy details
+  */
   auto ExecuteBatchAsync(
     const AsyncSceneTraversal<const Scene>& async_traversal) -> oxygen::co::Co<>
   { // Create broadcast channel for node distribution
@@ -461,8 +665,20 @@ public:
 
     co_return;
   }
+  /*!
+   Creates aggregated BatchResult from all completed operations with
+   optimized move semantics to avoid copying operation results.
 
-  //! Create final result (made public for ExecuteBatchImpl)
+   @return BatchResult with combined metrics and per-operation details
+
+   ### Key Aggregations
+   - **Nodes Examined**: Maximum across operations (shared traversal)
+   - **Total Matches**: Sum of matches from all operations
+   - **Success Status**: Combined success from all operations
+
+   @note Helper method called by ExecuteBatch after operations complete
+   @see ExecuteBatch for the orchestration context that uses this result
+  */
   auto CreateFinalResult() -> BatchResult
   {
     BatchResult result;
@@ -485,9 +701,29 @@ public:
 
     return result;
   }
+  /*!
+   Streams scene nodes directly to BroadcastChannel during async traversal
+   with early termination optimization for batch query coordination.
 
-  //! Stream nodes directly during traversal (single-pass, no intermediate
-  //! collection)
+   @param writer BroadcastChannel writer for node distribution to operations
+   @param async_traversal Scene traversal engine for async node streaming
+   @param traversal_scope Node scope for traversal (empty = full scene)
+   @return Coroutine that completes when traversal finishes or stops early
+
+   ### Core Features
+   - **Direct Streaming**: Zero-copy node distribution to operation coroutines
+   - **Early Termination**: Stops when all operations complete
+   - **Cooperative Yielding**: Allows operations to process nodes between sends
+   - **Exception Safety**: Ensures proper channel closure on any error
+
+   ### Performance Characteristics
+   - **Time Complexity**: O(k) where k is nodes until early termination
+   - **Memory**: Zero allocations, direct streaming architecture
+   - **Concurrency**: Coordinates with operation coroutines via yielding
+
+   @note Core streaming engine called by ExecuteBatchAsync
+   @see ExecuteBatchAsync for the coordination context and AnyOf racing logic
+  */
   auto StreamTraverseSceneAsync(
     oxygen::co::detail::channel::BroadcastingWriter<ConstVisitedNode>& writer,
     const AsyncSceneTraversal<const Scene>& async_traversal,
@@ -561,8 +797,39 @@ public:
 
 } // anonymous namespace
 
-//=== SceneQuery BroadcastChannel Integration ===---------------------------//
+//=== Batch Implementation Methods ===----------------------------------------//
 
+/*!
+ Executes multiple query operations in a single scene traversal using
+ BroadcastChannel-based coordination for optimal performance.
+
+ @param batch_func Lambda function containing batch operation registrations
+ @return BatchResult with aggregated metrics from all operations
+
+ ### Implementation Strategy
+
+ 1. **Coordinator Creation**: Sets up BatchQueryExecutor with current scope
+ 2. **State Management**: Activates batch mode and stores coordinator reference
+ 3. **Operation Registration**: Executes user lambda to register operations
+ 4. **Batch Execution**: Delegates to coordinator for concurrent execution
+ 5. **State Cleanup**: Resets batch state and returns aggregated results
+
+ ### Error Handling
+
+ - **Exception Safety**: Guarantees batch state cleanup on any exception
+ - **Graceful Degradation**: Returns failed BatchResult on execution errors
+ - **State Consistency**: Ensures batch_active_ and coordinator are reset
+
+ ### Performance Benefits
+
+ - **Single Traversal**: All operations share one scene traversal pass
+ - **Concurrent Processing**: Operations execute concurrently via coroutines
+ - **Memory Efficiency**: User controls all container allocation
+ - **Early Termination**: Stops when FindFirst/Any operations complete
+
+ @note This is the core implementation behind ExecuteBatch template methods
+ @see BatchQueryExecutor for the coordination implementation
+*/
 auto SceneQuery::ExecuteBatchImpl(
   std::function<void(const SceneQuery&)> batch_func) const noexcept
   -> BatchResult
@@ -602,8 +869,14 @@ auto SceneQuery::ExecuteBatchImpl(
   }
 }
 
-//=== Batch Implementation Methods ===---------------------------------------//
+/*!
+ Forwards FindFirst operation registration to the active batch coordinator.
 
+ @param result Reference to receive the first matching node
+ @param predicate Function to test each node during traversal
+ @note Only valid during ExecuteBatch execution
+ @see BatchQueryExecutor::FindFirst for implementation details
+*/
 auto SceneQuery::BatchFindFirstImpl(std::optional<SceneNode>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> void
@@ -613,6 +886,14 @@ auto SceneQuery::BatchFindFirstImpl(std::optional<SceneNode>& result,
   coordinator->FindFirst(result, predicate);
 }
 
+/*!
+ Forwards Collect operation registration to the active batch coordinator.
+
+ @param inserter Function to add matching nodes to user's container
+ @param predicate Function to test each node during traversal
+ @note Only valid during ExecuteBatch execution
+ @see BatchQueryExecutor::Collect for implementation details
+*/
 auto SceneQuery::BatchCollectImpl(
   std::function<void(const SceneNode&)> inserter,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
@@ -623,6 +904,14 @@ auto SceneQuery::BatchCollectImpl(
   coordinator->Collect(inserter, predicate);
 }
 
+/*!
+ Forwards Count operation registration to the active batch coordinator.
+
+ @param result Reference to receive the final count
+ @param predicate Function to test each node during traversal
+ @note Only valid during ExecuteBatch execution
+ @see BatchQueryExecutor::Count for implementation details
+*/
 auto SceneQuery::BatchCountImpl(std::optional<size_t>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> void
@@ -632,6 +921,14 @@ auto SceneQuery::BatchCountImpl(std::optional<size_t>& result,
   coordinator->Count(result, predicate);
 }
 
+/*!
+ Forwards Any operation registration to the active batch coordinator.
+
+ @param result Reference to receive the existence result
+ @param predicate Function to test each node during traversal
+ @note Only valid during ExecuteBatch execution
+ @see BatchQueryExecutor::Any for implementation details
+*/
 auto SceneQuery::BatchAnyImpl(std::optional<bool>& result,
   const std::function<bool(const ConstVisitedNode&)>& predicate) const noexcept
   -> void
