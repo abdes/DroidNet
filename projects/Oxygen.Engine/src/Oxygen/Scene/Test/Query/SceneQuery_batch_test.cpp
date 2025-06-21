@@ -17,7 +17,7 @@ using oxygen::scene::testing::SceneQueryTestBase;
 
 namespace {
 
-//=== Batch Processing Test Fixture ===-------------------------------------//
+//=== Batch Processing Test Fixture ===---------------------------------------//
 
 class SceneQueryBatchTest : public SceneQueryTestBase {
 protected:
@@ -93,8 +93,11 @@ protected:
   }
 };
 
-//=== Basic Batch Tests ===------------------------------------------------//
+//=== Basic Batch Tests ===---------------------------------------------------//
 
+//! Test: ExecuteBatch_WithSingleQuery_ExecutesCorrectly
+//! Verifies that a single batch query executes correctly and finds the expected
+//! node.
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_WithSingleQuery_ExecutesCorrectly)
 {
@@ -114,6 +117,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(player->GetName(), "Player1");
 }
 
+//! Ensures multiple batch operations are executed in a single traversal and all
+//! results are correct.
 NOLINT_TEST_F(SceneQueryBatchTest,
   ExecuteBatch_WithMultipleQueries_ExecutesInSingleTraversal)
 { // Arrange: Multiple operations to batch
@@ -148,6 +153,7 @@ NOLINT_TEST_F(SceneQueryBatchTest,
   EXPECT_TRUE(batch_result.operation_results[3]);
 }
 
+//! Validates that a mix of batch operations aggregates results as expected.
 NOLINT_TEST_F(SceneQueryBatchTest,
   ExecuteBatch_WithMixedOperations_AggregatesResultsCorrectly)
 {
@@ -171,6 +177,7 @@ NOLINT_TEST_F(SceneQueryBatchTest,
     q.BatchCount(visible_count, NodeIsVisible());
     q.BatchAny(has_static, NodeIsStatic());
   });
+
   // Assert: Batch should aggregate all results correctly
   EXPECT_TRUE(batch_result);
   EXPECT_EQ(batch_result.operation_results.size(), 5); // 5 operations
@@ -193,6 +200,7 @@ NOLINT_TEST_F(SceneQueryBatchTest,
   EXPECT_EQ(batch_result.total_matches, expected_total);
 }
 
+//! Checks that batch processing terminates early when all operations complete.
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_WithEarlyTermination_StopsWhenAllComplete)
 {
@@ -218,6 +226,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(any_node.value());
 }
 
+//! Verifies batch query performance and correctness on a large scene hierarchy.
 NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithLargeHierarchy_ScalesWell)
 {
   // Arrange: Create very large hierarchy
@@ -244,6 +253,8 @@ NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithLargeHierarchy_ScalesWell)
     total_count_op.nodes_matched, all_nodes.size()); // Compare nodes_matched
 }
 
+//! Confirms that batch result aggregation matches the sum of all individual
+//! results.
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_ResultAggregation_CalculatesCorrectly)
 {
@@ -275,8 +286,10 @@ NOLINT_TEST_F(
   ASSERT_TRUE(ui.has_value());
 }
 
-//=== Batch Edge Cases and Error Handling ==================================//
+//=== Batch Edge Cases and Error Handling ====================================//
 
+//! Ensures that executing an empty batch completes successfully with zero
+//! results.
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_WithEmptyBatch_CompletesSuccessfully)
 {
@@ -293,6 +306,7 @@ NOLINT_TEST_F(
   EXPECT_GE(batch_result.nodes_examined, 0); // May still examine some nodes
 }
 
+//! Batch with only count operations returns correct counts and metadata.
 NOLINT_TEST_F(
   SceneQueryBatchTest, ExecuteBatch_WithOnlyCountOperations_WorksCorrectly)
 {
@@ -307,6 +321,7 @@ NOLINT_TEST_F(
     q.BatchCount(enemies_count, NodeNameStartsWith("Enemy"));
     q.BatchCount(visible_count, NodeIsVisible());
   });
+
   // Assert: Should work correctly
   EXPECT_TRUE(batch_result);
   EXPECT_EQ(batch_result.operation_results.size(), 3); // 3 count operations
@@ -324,6 +339,8 @@ NOLINT_TEST_F(
       + visible_count_op.nodes_matched);
 }
 
+//! Verifies that attempting a nested batch triggers a DCHECK and aborts as
+//! expected.
 NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithNestedBatch_AbortWithDCHECK)
 {
   // Arrange: Attempt nested batch (should trigger DCHECK_F and abort)
@@ -343,6 +360,73 @@ NOLINT_TEST_F(SceneQueryBatchTest, ExecuteBatch_WithNestedBatch_AbortWithDCHECK)
       });
     },
     ".*"); // Match any death message from DCHECK_F
+}
+
+//! Ensures that if a predicate throws an exception during batch execution, the
+//! error is reported in the BatchResult and the exception does not propagate.
+NOLINT_TEST_F(
+  SceneQueryBatchTest, ExecuteBatch_WithPredicateThrows_ExceptionHandled)
+{
+  // Arrange: Prepare a batch with a throwing predicate
+  std::optional<size_t> count_result;
+
+  // Act: Execute batch with a throwing predicate
+  auto batch_result = query_->ExecuteBatch([&](const auto& q) {
+    q.BatchCount(count_result, [](const ConstVisitedNode&) -> bool {
+      throw std::runtime_error("Predicate exception");
+    });
+  });
+
+  // Assert: BatchResult should indicate failure, error message should be
+  // present
+  EXPECT_FALSE(batch_result);
+  ASSERT_EQ(batch_result.operation_results.size(), 1);
+  EXPECT_FALSE(batch_result.operation_results[0]);
+  EXPECT_TRUE(batch_result.operation_results[0].error_message.has_value());
+  EXPECT_NE(batch_result.operation_results[0].error_message->find(
+              "Predicate exception"),
+    std::string::npos);
+}
+
+//! Ensures that if the container throws during batch collect, the error is
+//! reported in the BatchResult and the exception does not propagate.
+NOLINT_TEST_F(
+  SceneQueryBatchTest, ExecuteBatch_WithContainerThrows_ExceptionHandled)
+{
+  // Arrange: Custom container that throws on push_back/emplace_back
+  struct ThrowingContainer {
+    void push_back(const SceneNode&)
+    {
+      throw std::runtime_error("Container exception");
+    }
+    void emplace_back(const SceneNode& node) { push_back(node); }
+    using value_type = SceneNode;
+    using allocator_type = std::allocator<SceneNode>;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = SceneNode&;
+    using const_reference = const SceneNode&;
+    using pointer = SceneNode*;
+    using const_pointer = const SceneNode*;
+    using iterator = SceneNode*;
+    using const_iterator = const SceneNode*;
+  };
+  ThrowingContainer container;
+
+  // Act: Execute batch with a container that throws
+  auto batch_result = query_->ExecuteBatch([&](const auto& q) {
+    q.BatchCollect(container, [](const ConstVisitedNode&) { return true; });
+  });
+
+  // Assert: BatchResult should indicate failure, error message should be
+  // present
+  EXPECT_FALSE(batch_result);
+  ASSERT_EQ(batch_result.operation_results.size(), 1);
+  EXPECT_FALSE(batch_result.operation_results[0]);
+  EXPECT_TRUE(batch_result.operation_results[0].error_message.has_value());
+  EXPECT_NE(batch_result.operation_results[0].error_message->find(
+              "Container exception"),
+    std::string::npos);
 }
 
 } // namespace

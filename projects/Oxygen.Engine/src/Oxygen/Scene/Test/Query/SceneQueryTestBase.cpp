@@ -50,7 +50,7 @@ auto SceneQueryTestBase::CreateParentChildScene() -> void
   CreateQuery();
 }
 
-auto SceneQueryTestBase::CreateLinearChainScene(int depth) -> void
+auto SceneQueryTestBase::CreateLinearChainScene(const int depth) -> void
 {
   auto name_generator = std::make_unique<DefaultNameGenerator>();
   name_generator->SetPrefix("Node");
@@ -61,7 +61,7 @@ auto SceneQueryTestBase::CreateLinearChainScene(int depth) -> void
   CreateQuery();
 }
 
-auto SceneQueryTestBase::CreateBinaryTreeScene(int depth) -> void
+auto SceneQueryTestBase::CreateBinaryTreeScene(const int depth) -> void
 {
   scene_ = GetFactory().CreateBinaryTreeScene("BinaryTreeScene", depth);
   ASSERT_NE(scene_, nullptr);
@@ -69,7 +69,7 @@ auto SceneQueryTestBase::CreateBinaryTreeScene(int depth) -> void
 }
 
 auto SceneQueryTestBase::CreateForestScene(
-  int root_count, int children_per_root) -> void
+  const int root_count, const int children_per_root) -> void
 {
   scene_ = GetFactory().CreateForestScene(
     "ForestScene", root_count, children_per_root);
@@ -136,8 +136,8 @@ auto SceneQueryTestBase::CreateQuery() -> void
 //=== Assertion Helpers ===------------------------------------------------//
 
 auto SceneQueryTestBase::ExpectQueryResult(const QueryResult& result,
-  std::size_t expected_examined, std::size_t expected_matched,
-  bool expected_success) const -> void
+  const std::size_t expected_examined, const std::size_t expected_matched,
+  const bool expected_success) -> void
 {
   EXPECT_EQ(result.nodes_examined, expected_examined)
     << "Nodes examined mismatch";
@@ -147,8 +147,8 @@ auto SceneQueryTestBase::ExpectQueryResult(const QueryResult& result,
 }
 
 auto SceneQueryTestBase::ExpectBatchResult(const BatchResult& result,
-  std::size_t expected_examined, std::size_t expected_total_matches,
-  bool expected_completed) const -> void
+  const std::size_t expected_examined, const std::size_t expected_total_matches,
+  const bool expected_completed) -> void
 {
   EXPECT_EQ(result.nodes_examined, expected_examined)
     << "Batch nodes examined mismatch";

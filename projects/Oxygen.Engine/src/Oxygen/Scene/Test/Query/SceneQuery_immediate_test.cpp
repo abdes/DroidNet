@@ -19,7 +19,7 @@ using oxygen::scene::testing::SceneQueryTestBase;
 
 namespace {
 
-//=== Immediate Mode Test Fixture ===---------------------------------------//
+//=== Immediate Mode Test Fixture ===-----------------------------------------//
 
 class SceneQueryImmediateTest : public SceneQueryTestBase {
   void SetUp() override
@@ -86,8 +86,11 @@ class SceneQueryImmediateTest : public SceneQueryTestBase {
   }
 };
 
-//=== FindFirst Tests ===---------------------------------------------------//
+//=== FindFirst Tests ===-----------------------------------------------------//
 
+//! Scenario: Finds the first node whose name starts with "Tree" in a
+//! multi-branch environment subtree, verifying traversal order and correct
+//! match.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithMatchingPredicate_ReturnsFirstMatch)
 {
@@ -106,6 +109,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(node_result->GetName(), "Tree1");
 }
 
+//! Scenario: Attempts to find a node with a name that does not exist in the
+//! scene; verifies that the result is nullopt and no matches are found.
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
 {
   // Arrange: Use default game scene hierarchy
@@ -122,6 +127,8 @@ NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithNoMatches_ReturnsNullopt)
   EXPECT_FALSE(node_result.has_value());
 }
 
+//! Scenario: Finds the root node by name in a complex hierarchy; verifies
+//! immediate match and minimal traversal.
 NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithRootNode_FindsImmediately)
 {
   // Arrange: Use default game scene hierarchy
@@ -139,6 +146,8 @@ NOLINT_TEST_F(SceneQueryImmediateTest, FindFirst_WithRootNode_FindsImmediately)
   EXPECT_EQ(node_result->GetName(), "GameWorld");
 }
 
+//! Scenario: Uses scoped traversal to find "Weapon" nodes under Player1 and
+//! Player2; verifies that scoping isolates subtrees and returns distinct nodes.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, FindFirst_WithScopedTraversal_FindsDifferentNodes)
 {
@@ -183,8 +192,34 @@ NOLINT_TEST_F(
   EXPECT_EQ(player2_weapon_result->GetName(), "Weapon");
 }
 
-//=== Collect Tests ===-----------------------------------------------------//
+//! Scenario: Predicate throws an exception during FindFirst; verifies that the
+//! query result indicates failure, the error message is set, and no partial
+//! state is left in the output.
+NOLINT_TEST_F(
+  SceneQueryImmediateTest, FindFirst_WithPredicateThrows_ExceptionHandled)
+{
+  // Arrange: Use default game scene hierarchy
+  std::optional<SceneNode> node_result;
+  // Predicate that always throws
+  auto throwing_predicate = [](const ConstVisitedNode&) -> bool {
+    throw std::runtime_error("Predicate error");
+  };
 
+  // Act: FindFirst with throwing predicate
+  auto query_result = query_->FindFirst(node_result, throwing_predicate);
+
+  // Assert: Should indicate failure and set error message
+  EXPECT_FALSE(query_result);
+  ASSERT_TRUE(query_result.error_message.has_value());
+  EXPECT_NE(
+    query_result.error_message->find("Predicate error"), std::string::npos);
+  EXPECT_FALSE(node_result.has_value());
+}
+
+//=== Collect Tests ===-------------------------------------------------------//
+
+//! Scenario: Collects all nodes whose names start with "Player" in a
+//! multiplayer hierarchy; verifies both players are found and order is correct.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithMatchingPredicate_CollectsAllMatches)
 {
@@ -215,6 +250,8 @@ NOLINT_TEST_F(
     node_names, AllOf(SizeIs(2), UnorderedElementsAre("Player1", "Player2")));
 }
 
+//! Scenario: Attempts to collect nodes with a name that does not exist;
+//! verifies the result is an empty container and no matches are found.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithNoMatches_ReturnsEmptyContainer)
 {
@@ -232,6 +269,8 @@ NOLINT_TEST_F(
   EXPECT_GT(query_result.nodes_examined, 0U);
 }
 
+//! Scenario: Collects nodes into vector, deque, and list containers; verifies
+//! that all container types receive the correct nodes and counts.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithDifferentContainerTypes_WorksCorrectly)
 {
@@ -261,6 +300,9 @@ NOLINT_TEST_F(
   EXPECT_THAT(list_nodes_result, SizeIs(2));
 }
 
+//! Scenario: Collects into a preallocated container with an existing node;
+//! verifies that the original element is preserved and new matches are
+//! appended.
 NOLINT_TEST_F(SceneQueryImmediateTest,
   Collect_WithPreallocatedContainer_PreservesExistingElements)
 {
@@ -284,6 +326,8 @@ NOLINT_TEST_F(SceneQueryImmediateTest,
     nodes_result[0].GetName(), "ExtraNode"); // Original element preserved
 }
 
+//! Scenario: Uses scoped traversal to collect all nodes under Player1;
+//! verifies that only Player1 and its equipment are collected.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithScopedTraversal_CollectsWithinScope)
 {
@@ -319,6 +363,9 @@ NOLINT_TEST_F(
     node_names, UnorderedElementsAre("Player1", "Weapon", "Shield", "Armor"));
 }
 
+//! Scenario: Adds Player1 and Player2 to traversal scope and collects all
+//! nodes; verifies that nodes from both subtrees are present and others are
+//! excluded.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Collect_WithMultipleScopedNodes_CollectsFromAll)
 {
@@ -365,8 +412,34 @@ NOLINT_TEST_F(
   EXPECT_THAT(node_names, Not(Contains("Tree1")));
 }
 
-//=== Count Tests ===-------------------------------------------------------//
+//! Scenario: Predicate throws an exception during Collect; verifies that the
+//! query result indicates failure, the error message is set, and no partial
+//! state is left in the output.
+NOLINT_TEST_F(
+  SceneQueryImmediateTest, Collect_WithPredicateThrows_ExceptionHandled)
+{
+  // Arrange: Use default game scene hierarchy
+  std::vector<SceneNode> nodes_result;
+  // Predicate that always throws
+  auto throwing_predicate = [](const ConstVisitedNode&) -> bool {
+    throw std::runtime_error("Predicate error");
+  };
 
+  // Act: Collect with throwing predicate
+  auto query_result = query_->Collect(nodes_result, throwing_predicate);
+
+  // Assert: Should indicate failure and set error message
+  EXPECT_FALSE(query_result);
+  ASSERT_TRUE(query_result.error_message.has_value());
+  EXPECT_NE(
+    query_result.error_message->find("Predicate error"), std::string::npos);
+  EXPECT_TRUE(nodes_result.empty());
+}
+
+//=== Count Tests ===---------------------------------------------------------//
+
+//! Scenario: Counts all visible nodes in a hierarchy with mixed visibility;
+//! verifies the count matches the expected number of visible nodes.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithMatchingPredicate_ReturnsCorrectCount)
 {
@@ -384,6 +457,8 @@ NOLINT_TEST_F(
   EXPECT_GT(query_result.nodes_examined, query_result.nodes_matched);
 }
 
+//! Scenario: Counts nodes with a predicate that matches nothing;
+//! verifies the result is zero and no matches are found.
 NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
 {
   // Arrange: Use default game scene hierarchy
@@ -401,6 +476,8 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Count_WithNoMatches_ReturnsZero)
   EXPECT_EQ(query_result.nodes_matched, 0U);
 }
 
+//! Scenario: Counts all nodes in a large forest hierarchy;
+//! verifies the count matches the total number of nodes created.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithLargeHierarchy_CountsEfficiently)
 {
@@ -420,6 +497,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(query_result.nodes_matched, 55U); // At least 5 roots + 50 children
 }
 
+//! Scenario: Uses scoped traversal to count nodes under Player1;
+//! verifies the count is limited to Player1 and its children.
 NOLINT_TEST_F(
   SceneQueryImmediateTest, Count_WithScopedTraversal_CountsWithinScope)
 {
@@ -451,6 +530,214 @@ NOLINT_TEST_F(
   EXPECT_LT(scoped_count_result.value(), total_count_result.value());
 }
 
+//! Scenario: Predicate throws an exception during Count; verifies that the
+//! query result indicates failure, the error message is set, and no partial
+//! state is left in the output.
+NOLINT_TEST_F(
+  SceneQueryImmediateTest, Count_WithPredicateThrows_ExceptionHandled)
+{
+  // Arrange: Use default game scene hierarchy
+  std::optional<size_t> count_result;
+  // Predicate that always throws
+  auto throwing_predicate = [](const ConstVisitedNode&) -> bool {
+    throw std::runtime_error("Predicate error");
+  };
+
+  // Act: Count with throwing predicate
+  auto query_result = query_->Count(count_result, throwing_predicate);
+
+  // Assert: Should indicate failure and set error message
+  EXPECT_FALSE(query_result);
+  ASSERT_TRUE(query_result.error_message.has_value());
+  EXPECT_NE(
+    query_result.error_message->find("Predicate error"), std::string::npos);
+  EXPECT_FALSE(count_result.has_value());
+}
+
+//=== Any Tests ===-----------------------------------------------------------//
+
+//! Scenario: Checks if any node is named "Merchant" in a complex hierarchy;
+//! verifies that the result is true and traversal is correct.
+NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
+{
+  // Arrange: Use default game scene hierarchy
+
+  // Act: Check if any node is named "Merchant"
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("Merchant"));
+
+  // Assert: Should return true
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_TRUE(any_result.value());
+}
+
+//! Scenario: Checks for a non-existent node using Any;
+//! verifies that the result is false and all nodes are examined.
+NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
+{
+  // Arrange: Use default game scene hierarchy
+
+  // Act: Check for non-existent node
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("NonExistent"));
+
+  // Assert: Should return false
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_FALSE(any_result.value());
+}
+
+//! Scenario: Uses Any to search for a root node in a deep chain;
+//! verifies that the result is true and traversal terminates early.
+NOLINT_TEST_F(
+  SceneQueryImmediateTest, Any_WithFirstNodeMatching_ReturnsImmediately)
+{
+  // Arrange: Create linear chain where root matches
+  CreateLinearChainScene(10); // Deep chain for early termination test
+
+  // Act: Search for root node (should terminate immediately)
+  std::optional<bool> any_result;
+  auto query_result = query_->Any(any_result, NodeNameEquals("Root"));
+
+  // Assert: Should return true immediately
+  EXPECT_TRUE(query_result);
+  EXPECT_GT(query_result.nodes_examined, 0U);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_TRUE(any_result.value());
+}
+
+//! Scenario: Uses Any with scoped traversal to check for "Weapon" nodes;
+//! verifies that Player1's scope returns true and NPCs' scope returns false.
+NOLINT_TEST_F(
+  SceneQueryImmediateTest, Any_WithScopedTraversal_FindsBasedOnScope)
+{
+  // Arrange: Use default game scene hierarchy
+  // Find Player1 and NPCs subtrees
+  std::optional<SceneNode> player1_node;
+  std::optional<SceneNode> npcs_node;
+  query_->FindFirst(player1_node, NodeNameEquals("Player1"));
+  query_->FindFirst(npcs_node, NodeNameEquals("NPCs"));
+  ASSERT_TRUE(player1_node.has_value());
+  ASSERT_TRUE(npcs_node.has_value()); // Act: Check for weapons within Player1
+                                      // scope (should find)
+  query_->AddToTraversalScope(*player1_node);
+  std::optional<bool> player1_any_result;
+  auto player1_query_result
+    = query_->Any(player1_any_result, NodeNameEquals("Weapon"));
+
+  // Reset and check for weapons within NPCs scope (should not find)
+  query_->ResetTraversalScope();
+  query_->AddToTraversalScope(*npcs_node);
+  std::optional<bool> npcs_any_result;
+  auto npcs_query_result
+    = query_->Any(npcs_any_result, NodeNameEquals("Weapon"));
+
+  // Assert: Different scopes should give different results
+  EXPECT_TRUE(player1_query_result);
+  ASSERT_TRUE(player1_any_result.has_value());
+  EXPECT_TRUE(player1_any_result.value()); // Player1 has weapons
+
+  EXPECT_TRUE(npcs_query_result);
+  ASSERT_TRUE(npcs_any_result.has_value());
+  EXPECT_FALSE(npcs_any_result.value()); // NPCs have no weapons
+}
+
+//! Scenario: Predicate throws an exception during Any; verifies that the
+//! query result indicates failure, the error message is set, and no partial
+//! state is left in the output.
+NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithPredicateThrows_ExceptionHandled)
+{
+  // Arrange: Use default game scene hierarchy
+  std::optional<bool> any_result;
+  // Predicate that always throws
+  auto throwing_predicate = [](const ConstVisitedNode&) -> bool {
+    throw std::runtime_error("Predicate error");
+  };
+
+  // Act: Any with throwing predicate
+  auto query_result = query_->Any(any_result, throwing_predicate);
+
+  // Assert: Should indicate failure and set error message
+  EXPECT_FALSE(query_result);
+  ASSERT_TRUE(query_result.error_message.has_value());
+  EXPECT_NE(
+    query_result.error_message->find("Predicate error"), std::string::npos);
+  EXPECT_FALSE(any_result.has_value());
+}
+
+//=== Edge Cases and Error Conditions ===-------------------------------------//
+
+//! Scenario: Clears the scene to empty and verifies all query methods handle
+//! the empty state gracefully with correct results.
+NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScene_HandlesGracefully)
+{
+  // Arrange: Create empty scene
+  scene_->Clear();
+  ASSERT_TRUE(scene_->IsEmpty());
+  CreateQuery();
+
+  // Act: Perform various queries on empty scene
+  std::optional<SceneNode> find_node_result;
+  auto find_query_result
+    = query_->FindFirst(find_node_result, NodeNameEquals("Any"));
+
+  std::optional<bool> any_result;
+  auto any_query_result = query_->Any(any_result, NodeNameEquals("Any"));
+
+  std::optional<size_t> count_result;
+  auto count_query_result = query_->Count(count_result, NodeNameEquals("Any"));
+
+  std::vector<SceneNode> nodes_result;
+  auto collect_query_result
+    = query_->Collect(nodes_result, NodeNameEquals("Any"));
+
+  // Assert: All operations should complete gracefully
+  EXPECT_TRUE(find_query_result);
+  EXPECT_FALSE(find_node_result.has_value());
+
+  EXPECT_TRUE(any_query_result);
+  ASSERT_TRUE(any_result.has_value());
+  EXPECT_FALSE(any_result.value());
+
+  EXPECT_TRUE(count_query_result);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 0U);
+
+  EXPECT_TRUE(collect_query_result);
+  EXPECT_TRUE(nodes_result.empty());
+}
+
+//! Scenario: Creates a single-node scene and verifies all query methods
+//! operate correctly on the minimal case.
+NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithSingleNodeScene_WorksCorrectly)
+{
+  // Arrange: Create simple single node scene
+  CreateSimpleScene();
+
+  // Act: Query the single node
+  std::optional<SceneNode> find_node_result;
+  auto find_query_result
+    = query_->FindFirst(find_node_result, NodeNameEquals("Root"));
+
+  std::optional<size_t> count_result;
+  auto count_query_result
+    = query_->Count(count_result, [](const ConstVisitedNode&) { return true; });
+
+  // Assert: Should find the single node
+  EXPECT_TRUE(find_query_result);
+  ASSERT_TRUE(find_node_result.has_value());
+  EXPECT_EQ(find_node_result->GetName(), "Root");
+
+  EXPECT_TRUE(count_query_result);
+  ASSERT_TRUE(count_result.has_value());
+  EXPECT_EQ(count_result.value(), 1U);
+}
+
+//! Scenario: Resets traversal scope to empty and verifies all query methods
+//! traverse the full scene as expected.
 NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScope_TraversesFullScene)
 {
   using testing::AllOf;
@@ -510,153 +797,6 @@ NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScope_TraversesFullScene)
     AllOf(SizeIs(full_count_result.value()),
       IsSupersetOf(
         { "GameWorld", "Player1", "Player2", "NPCs", "Environment" })));
-}
-
-//=== Any Tests ===--------------------------------------------------------//
-
-NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithMatchingPredicate_ReturnsTrue)
-{
-  // Arrange: Use default game scene hierarchy
-
-  // Act: Check if any node is named "Merchant"
-  std::optional<bool> any_result;
-  auto query_result = query_->Any(any_result, NodeNameEquals("Merchant"));
-
-  // Assert: Should return true
-  EXPECT_TRUE(query_result);
-  EXPECT_GT(query_result.nodes_examined, 0U);
-  ASSERT_TRUE(any_result.has_value());
-  EXPECT_TRUE(any_result.value());
-}
-
-NOLINT_TEST_F(SceneQueryImmediateTest, Any_WithNoMatches_ReturnsFalse)
-{
-  // Arrange: Use default game scene hierarchy
-
-  // Act: Check for non-existent node
-  std::optional<bool> any_result;
-  auto query_result = query_->Any(any_result, NodeNameEquals("NonExistent"));
-
-  // Assert: Should return false
-  EXPECT_TRUE(query_result);
-  EXPECT_GT(query_result.nodes_examined, 0U);
-  ASSERT_TRUE(any_result.has_value());
-  EXPECT_FALSE(any_result.value());
-}
-
-NOLINT_TEST_F(
-  SceneQueryImmediateTest, Any_WithFirstNodeMatching_ReturnsImmediately)
-{
-  // Arrange: Create linear chain where root matches
-  CreateLinearChainScene(10); // Deep chain for early termination test
-
-  // Act: Search for root node (should terminate immediately)
-  std::optional<bool> any_result;
-  auto query_result = query_->Any(any_result, NodeNameEquals("Root"));
-
-  // Assert: Should return true immediately
-  EXPECT_TRUE(query_result);
-  EXPECT_GT(query_result.nodes_examined, 0U);
-  ASSERT_TRUE(any_result.has_value());
-  EXPECT_TRUE(any_result.value());
-}
-
-NOLINT_TEST_F(
-  SceneQueryImmediateTest, Any_WithScopedTraversal_FindsBasedOnScope)
-{
-  // Arrange: Use default game scene hierarchy
-  // Find Player1 and NPCs subtrees
-  std::optional<SceneNode> player1_node;
-  std::optional<SceneNode> npcs_node;
-  query_->FindFirst(player1_node, NodeNameEquals("Player1"));
-  query_->FindFirst(npcs_node, NodeNameEquals("NPCs"));
-  ASSERT_TRUE(player1_node.has_value());
-  ASSERT_TRUE(npcs_node.has_value()); // Act: Check for weapons within Player1
-                                      // scope (should find)
-  query_->AddToTraversalScope(*player1_node);
-  std::optional<bool> player1_any_result;
-  auto player1_query_result
-    = query_->Any(player1_any_result, NodeNameEquals("Weapon"));
-
-  // Reset and check for weapons within NPCs scope (should not find)
-  query_->ResetTraversalScope();
-  query_->AddToTraversalScope(*npcs_node);
-  std::optional<bool> npcs_any_result;
-  auto npcs_query_result
-    = query_->Any(npcs_any_result, NodeNameEquals("Weapon"));
-
-  // Assert: Different scopes should give different results
-  EXPECT_TRUE(player1_query_result);
-  ASSERT_TRUE(player1_any_result.has_value());
-  EXPECT_TRUE(player1_any_result.value()); // Player1 has weapons
-
-  EXPECT_TRUE(npcs_query_result);
-  ASSERT_TRUE(npcs_any_result.has_value());
-  EXPECT_FALSE(npcs_any_result.value()); // NPCs have no weapons
-}
-
-//=== Edge Cases and Error Conditions ===----------------------------------//
-
-NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithEmptyScene_HandlesGracefully)
-{
-  // Arrange: Create empty scene
-  scene_->Clear();
-  ASSERT_TRUE(scene_->IsEmpty());
-  CreateQuery();
-
-  // Act: Perform various queries on empty scene
-  std::optional<SceneNode> find_node_result;
-  auto find_query_result
-    = query_->FindFirst(find_node_result, NodeNameEquals("Any"));
-
-  std::optional<bool> any_result;
-  auto any_query_result = query_->Any(any_result, NodeNameEquals("Any"));
-
-  std::optional<size_t> count_result;
-  auto count_query_result = query_->Count(count_result, NodeNameEquals("Any"));
-
-  std::vector<SceneNode> nodes_result;
-  auto collect_query_result
-    = query_->Collect(nodes_result, NodeNameEquals("Any"));
-
-  // Assert: All operations should complete gracefully
-  EXPECT_TRUE(find_query_result);
-  EXPECT_FALSE(find_node_result.has_value());
-
-  EXPECT_TRUE(any_query_result);
-  ASSERT_TRUE(any_result.has_value());
-  EXPECT_FALSE(any_result.value());
-
-  EXPECT_TRUE(count_query_result);
-  ASSERT_TRUE(count_result.has_value());
-  EXPECT_EQ(count_result.value(), 0U);
-
-  EXPECT_TRUE(collect_query_result);
-  EXPECT_TRUE(nodes_result.empty());
-}
-
-NOLINT_TEST_F(SceneQueryImmediateTest, Query_WithSingleNodeScene_WorksCorrectly)
-{
-  // Arrange: Create simple single node scene
-  CreateSimpleScene();
-
-  // Act: Query the single node
-  std::optional<SceneNode> find_node_result;
-  auto find_query_result
-    = query_->FindFirst(find_node_result, NodeNameEquals("Root"));
-
-  std::optional<size_t> count_result;
-  auto count_query_result
-    = query_->Count(count_result, [](const ConstVisitedNode&) { return true; });
-
-  // Assert: Should find the single node
-  EXPECT_TRUE(find_query_result);
-  ASSERT_TRUE(find_node_result.has_value());
-  EXPECT_EQ(find_node_result->GetName(), "Root");
-
-  EXPECT_TRUE(count_query_result);
-  ASSERT_TRUE(count_result.has_value());
-  EXPECT_EQ(count_result.value(), 1U);
 }
 
 } // namespace
