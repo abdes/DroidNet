@@ -146,6 +146,7 @@ m_gtest_program(
     "Query/SceneQuery_error_test.cpp"
     "Query/SceneQuery_immediate_test.cpp"
     "Query/SceneQuery_path_test.cpp"
+    "Query/SceneQuery_integration_test.cpp"
     "Query/SceneQueryTestBase.cpp"
     "Query/SceneQueryTestBase.h"
 )

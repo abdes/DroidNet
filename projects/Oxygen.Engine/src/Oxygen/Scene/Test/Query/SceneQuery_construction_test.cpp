@@ -42,6 +42,7 @@ NOLINT_TEST_F(SceneQueryConstructionTest, Construction_WithValidScene_Succeeds)
   EXPECT_NE(query, nullptr);
 }
 
+//! Aborts when constructing SceneQuery with a null scene pointer.
 NOLINT_TEST_F(SceneQueryConstructionTest, Construction_WithNullScene_Aborts)
 {
   // Arrange: Create null scene pointer
@@ -53,6 +54,7 @@ NOLINT_TEST_F(SceneQueryConstructionTest, Construction_WithNullScene_Aborts)
     ".*"); // Match any death message
 }
 
+//! Succeeds when constructing SceneQuery with an empty scene.
 NOLINT_TEST_F(SceneQueryConstructionTest, Construction_WithEmptyScene_Succeeds)
 {
   // Arrange: Create an empty scene using TestSceneFactory
@@ -64,6 +66,23 @@ NOLINT_TEST_F(SceneQueryConstructionTest, Construction_WithEmptyScene_Succeeds)
 
   // Assert: Query should be successfully constructed
   EXPECT_NE(query, nullptr);
+}
+
+//! Verifies multiple SceneQuery instances can be constructed from the same
+//! Scene.
+NOLINT_TEST_F(
+  SceneQueryConstructionTest, Construction_MultipleQueries_SameScene_Succeeds)
+{
+  // Arrange: Create a valid scene
+  auto shared_scene = GetFactory().CreateSingleNodeScene("SharedScene");
+  ASSERT_NE(shared_scene, nullptr);
+
+  // Act: Construct multiple SceneQuery instances
+  SceneQuery query1(shared_scene);
+  SceneQuery query2(shared_scene);
+
+  // Assert: Both queries should be valid and independent
+  EXPECT_NE(&query1, &query2); // Ensure different objects
 }
 
 } // namespace

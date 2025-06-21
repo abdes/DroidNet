@@ -19,19 +19,19 @@ namespace {
 
 class SceneQueryADLTest : public SceneQueryTestBase {
 protected:
-  void SetUp() override
+  auto SetUp() -> void override
   {
     // Create hierarchy suitable for ADL function testing
     CreateLinearChainScene(3);
   }
 
   // Helper to create a ConstVisitedNode for testing ADL functions
-  [[nodiscard]] ConstVisitedNode CreateConstVisitedNode(
-    std::size_t depth = 0) const
+  [[nodiscard]] auto CreateConstVisitedNode(const std::size_t depth = 0) const
+    -> ConstVisitedNode
   {
     // Create ConstVisitedNode manually without using SceneQuery
     // Get a valid node handle from the scene for testing
-    auto root_handle = scene_->GetRootNodes()[0].GetHandle();
+    const auto root_handle = scene_->GetRootNodes()[0].GetHandle();
 
     ConstVisitedNode visited;
     visited.handle = root_handle;
@@ -44,8 +44,8 @@ protected:
   }
 
   // Helper to create invalid ConstVisitedNode for testing error handling
-  [[nodiscard]] ConstVisitedNode CreateInvalidConstVisitedNode(
-    std::size_t depth = 0) const
+  [[nodiscard]] static auto CreateInvalidConstVisitedNode(
+    const std::size_t depth = 0) -> ConstVisitedNode
   {
     ConstVisitedNode invalid;
     invalid.handle = NodeHandle {};
@@ -57,13 +57,14 @@ protected:
 
 //=== GetNodeName Tests ===================================================//
 
+//! Returns the node name for a valid ConstVisitedNode.
 NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithValidNode_ReturnsName)
 {
   // Arrange: Create a ConstVisitedNode directly for testing
-  auto visited = CreateConstVisitedNode(0);
+  const auto visited = CreateConstVisitedNode(0);
 
   // Act: Use ADL GetNodeName function
-  auto name = GetNodeName(visited);
+  const auto name = GetNodeName(visited);
 
   // Assert: Should return a valid name (actual name depends on scene setup)
   EXPECT_FALSE(name.empty());
@@ -71,61 +72,97 @@ NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithValidNode_ReturnsName)
   // ADL behavior
 }
 
+//! Returns empty string when node_impl is null in ConstVisitedNode.
 NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithNullNodeImpl_ReturnsEmpty)
 {
   // Arrange: Create ConstVisitedNode with null implementation
-  auto visited = CreateInvalidConstVisitedNode();
+  const auto visited = CreateInvalidConstVisitedNode();
 
   // Act: Use ADL GetNodeName function with null impl
-  auto name = GetNodeName(visited);
+  const auto name = GetNodeName(visited);
 
   // Assert: Should return empty string
   EXPECT_TRUE(name.empty());
   EXPECT_EQ(name.size(), 0);
 }
 
+//! GetNodeName returns empty for non-existent node handle.
+NOLINT_TEST_F(SceneQueryADLTest, GetNodeName_WithNonexistentNode_ReturnsEmpty)
+{
+  // Arrange: Create a ConstVisitedNode with a non-existent handle
+  ConstVisitedNode visited;
+  visited.handle = NodeHandle { 123456 }; // unlikely to exist
+  visited.node_impl = nullptr;
+  visited.depth = 0;
+
+  // Act: Use ADL GetNodeName function
+  const auto name = GetNodeName(visited);
+
+  // Assert: Should return empty string
+  EXPECT_TRUE(name.empty());
+}
+
 //=== GetDepth Tests ======================================================//
 
+//! Returns the depth for a root node (should be zero).
 NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithRootNode_ReturnsZero)
 {
   // Arrange: Create a ConstVisitedNode with depth 0
-  auto visited = CreateConstVisitedNode();
+  const auto visited = CreateConstVisitedNode();
 
   // Act: Use ADL GetDepth function
-  auto depth = GetDepth(visited);
+  const auto depth = GetDepth(visited);
 
   // Assert: Should return the depth we set (0)
   EXPECT_EQ(depth, 0);
 }
 
+//! Returns correct depth for nested nodes.
 NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithNestedNode_ReturnsCorrectDepth)
 {
   // Arrange: Create ConstVisitedNodes with different depths
-  auto root_visited = CreateConstVisitedNode(1);
-  auto child_visited = CreateConstVisitedNode(2);
-  auto gchild_visited = CreateConstVisitedNode(3);
+  const auto root_visited = CreateConstVisitedNode(1);
+  const auto child_visited = CreateConstVisitedNode(2);
+  const auto grandchild_visited = CreateConstVisitedNode(3);
 
   // Act: Get depths using ADL function
-  auto root_depth = GetDepth(root_visited);
-  auto child_depth = GetDepth(child_visited);
-  auto gchild_depth = GetDepth(gchild_visited);
+  const auto root_depth = GetDepth(root_visited);
+  const auto child_depth = GetDepth(child_visited);
+  const auto grandchild_depth = GetDepth(grandchild_visited);
 
   // Assert: Should return the depths we set
   EXPECT_EQ(root_depth, 1);
   EXPECT_EQ(child_depth, 2);
-  EXPECT_EQ(gchild_depth, 3);
+  EXPECT_EQ(grandchild_depth, 3);
 
   // Verify depth increases with nesting
   EXPECT_LT(root_depth, child_depth);
-  EXPECT_LT(child_depth, gchild_depth);
+  EXPECT_LT(child_depth, grandchild_depth);
 }
 
+//! GetDepth returns 0 for non-existent node handle.
+NOLINT_TEST_F(SceneQueryADLTest, GetDepth_WithNonexistentNode_ReturnsZero)
+{
+  // Arrange: Create a ConstVisitedNode with a non-existent handle
+  ConstVisitedNode visited;
+  visited.handle = NodeHandle { 123456 }; // unlikely to exist
+  visited.node_impl = nullptr;
+  visited.depth = 0;
+
+  // Act: Use ADL GetDepth function
+  const auto depth = GetDepth(visited);
+
+  // Assert: Should return 0 (the depth field)
+  EXPECT_EQ(depth, 0);
+}
+
+//! ADL functions handle invalid ConstVisitedNode data gracefully.
 NOLINT_TEST_F(SceneQueryADLTest, ADLFunctions_ErrorHandling_WithInvalidData)
 {
   // Arrange: Test ADL functions with various invalid inputs
 
   // Test with completely invalid ConstVisitedNode
-  auto invalid_visited = CreateInvalidConstVisitedNode(0);
+  const auto invalid_visited = CreateInvalidConstVisitedNode(0);
 
   // Act & Assert: Functions should handle invalid data gracefully
 

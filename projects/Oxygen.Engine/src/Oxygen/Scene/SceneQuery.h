@@ -133,7 +133,8 @@ struct BatchResult {
  QueryResult (or BatchResult) will contain an error message and indicate
  failure. The exception does not propagate to the caller; instead, the error is
  reported via the result object. This is consistent for both immediate and batch
- queries.
+ queries. A similar approach is used if a collect operation encounters an
+ exception thrown by the caller provided container's back-inserter.
 
  @warning Path-based queries are not supported in batch mode due to
  architectural incompatibility between direct navigation and traversal-based
@@ -308,25 +309,25 @@ public:
   //! Collect all nodes matching the predicate into user-provided container
   template <typename Container,
     std::predicate<const ConstVisitedNode&> Predicate>
-  auto Collect(Container& container, Predicate&& predicate) const noexcept
+  auto Collect(Container& container, Predicate&& predicate) const
     -> QueryResult;
 
   //! Count nodes matching the predicate without allocation
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  auto Count(std::optional<size_t>& output,
-    Predicate&& predicate) const noexcept -> QueryResult;
+  auto Count(std::optional<size_t>& output, Predicate&& predicate) const
+    -> QueryResult;
 
   //! Check if any node matches the predicate with early termination
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  auto Any(std::optional<bool>& output, Predicate&& predicate) const noexcept
+  auto Any(std::optional<bool>& output, Predicate&& predicate) const
     -> QueryResult; //! Find first node by absolute path from scene root
   OXGN_SCN_NDAPI auto FindFirstByPath(std::optional<SceneNode>& output,
-    std::string_view path) const noexcept -> QueryResult;
+    std::string_view path) const -> QueryResult;
 
   //! Collect all nodes matching path pattern with wildcard support
   template <typename Container>
-  auto CollectByPath(Container& container,
-    std::string_view path_pattern) const noexcept -> QueryResult;
+  auto CollectByPath(Container& container, std::string_view path_pattern) const
+    -> QueryResult;
 
   //! Execute multiple queries in single traversal pass for optimal performance
   template <typename BatchFunc>
@@ -337,24 +338,21 @@ public:
   //! Find first matching node in batch mode (populates output by reference)
   template <std::predicate<const ConstVisitedNode&> Predicate>
   auto BatchFindFirst(
-    std::optional<SceneNode>& output, Predicate&& predicate) const noexcept;
+    std::optional<SceneNode>& output, Predicate&& predicate) const;
 
   //! Collect all matching nodes in batch mode (populates container by
   //! reference)
   template <typename Container,
     std::predicate<const ConstVisitedNode&> Predicate>
-  auto BatchCollect(Container& container, Predicate&& predicate) const noexcept
-    -> void;
+  auto BatchCollect(Container& container, Predicate&& predicate) const -> void;
 
   //! Count matching nodes in batch mode (populates output by reference)
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  auto BatchCount(
-    std::optional<size_t>& output, Predicate&& predicate) const noexcept;
+  auto BatchCount(std::optional<size_t>& output, Predicate&& predicate) const;
 
   //! Check if any node matches in batch mode (populates output by reference)
   template <std::predicate<const ConstVisitedNode&> Predicate>
-  auto BatchAny(
-    std::optional<bool>& output, Predicate&& predicate) const noexcept;
+  auto BatchAny(std::optional<bool>& output, Predicate&& predicate) const;
 
 private:
   //! Weak reference to scene for lifetime safety
@@ -471,8 +469,6 @@ private:
  @param predicate Function to test each node during traversal
  @return Optional SceneNode containing the first match, or nullopt if no match
  found
- @throws runtime_error if the scene is no longer valid.
- @note Aborts if used within a batch query.
 
  ### Performance Characteristics
 
@@ -495,6 +491,8 @@ private:
             SceneNodeFlags::kVisible);
  });
  ```
+
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used in immediate mode; will trigger assertion failure
  otherwise
  @see ExecuteBatch, BatchFindFirst for batch processing multiple FindFirst
@@ -547,14 +545,16 @@ auto SceneQuery::FindFirst(
  visited.node_impl->GetFlags().GetEffectiveValue(SceneNodeFlags::kVisible);
  });
  ```
+
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used in immediate mode; will trigger assertion failure
  otherwise
  @see ExecuteBatch, BatchCollect for batch processing multiple Collect
  operations
 */
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
-auto SceneQuery::Collect(
-  Container& container, Predicate&& predicate) const noexcept -> QueryResult
+auto SceneQuery::Collect(Container& container, Predicate&& predicate) const
+  -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -595,13 +595,15 @@ auto SceneQuery::Collect(
    std::cout << "Visible objects: " << *visible_count << std::endl;
  }
  ```
+
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used in immediate mode; will trigger assertion failure
  otherwise
  @see ExecuteBatch, BatchCount for batch processing multiple Count operations
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
-auto SceneQuery::Count(std::optional<size_t>& output,
-  Predicate&& predicate) const noexcept -> QueryResult
+auto SceneQuery::Count(
+  std::optional<size_t>& output, Predicate&& predicate) const -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -640,13 +642,15 @@ auto SceneQuery::Count(std::optional<size_t>& output,
    // Handle explosion logic
  }
  ```
+
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used in immediate mode; will trigger assertion failure
  otherwise
  @see ExecuteBatch, BatchAny for batch processing multiple Any operations
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
-auto SceneQuery::Any(std::optional<bool>& output,
-  Predicate&& predicate) const noexcept -> QueryResult
+auto SceneQuery::Any(std::optional<bool>& output, Predicate&& predicate) const
+  -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -692,13 +696,14 @@ auto SceneQuery::Any(std::optional<bool>& output,
  query.CollectByPath(all_enemies, "Level/\*\/Enemy");
  ```
 
+ @throws runtime_error if the scene is no longer valid.
  @warning Path-based queries are not supported in batch mode
  @see FindFirstByPath for single node path navigation, Collect for
  predicate-based collection
 */
 template <typename Container>
-auto SceneQuery::CollectByPath(Container& container,
-  std::string_view path_pattern) const noexcept -> QueryResult
+auto SceneQuery::CollectByPath(
+  Container& container, std::string_view path_pattern) const -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -810,13 +815,14 @@ auto SceneQuery::ExecuteBatch(BatchFunc&& batch_func) const noexcept
  if (found) { ... use found node }
  ```
 
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used within ExecuteBatch lambda function; will trigger
  assertion failure otherwise
  @see ExecuteBatch, FindFirst, BatchCollect, BatchCount, BatchAny
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
 auto SceneQuery::BatchFindFirst(
-  std::optional<SceneNode>& output, Predicate&& predicate) const noexcept
+  std::optional<SceneNode>& output, Predicate&& predicate) const
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -856,13 +862,14 @@ auto SceneQuery::BatchFindFirst(
  ```
 
  @note Container is not cleared; matching nodes are appended
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used within ExecuteBatch lambda function; will trigger
  assertion failure otherwise
  @see ExecuteBatch, Collect, BatchFindFirst, BatchCount, BatchAny
 */
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
-auto SceneQuery::BatchCollect(
-  Container& container, Predicate&& predicate) const noexcept -> void
+auto SceneQuery::BatchCollect(Container& container, Predicate&& predicate) const
+  -> void
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -903,13 +910,14 @@ auto SceneQuery::BatchCollect(
  }); // visible_count now contains the count
  ```
 
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used within ExecuteBatch lambda function; will trigger
  assertion failure otherwise
  @see ExecuteBatch, Count, BatchFindFirst, BatchCollect, BatchAny
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
 auto SceneQuery::BatchCount(
-  std::optional<size_t>& output, Predicate&& predicate) const noexcept
+  std::optional<size_t>& output, Predicate&& predicate) const
 {
   LOG_SCOPE_FUNCTION(2);
 
@@ -945,13 +953,14 @@ auto SceneQuery::BatchCount(
  }); // has_boss now contains true/false result
  ```
 
+ @throws runtime_error if the scene is no longer valid.
  @note Can only be used within ExecuteBatch lambda function; will trigger
  assertion failure otherwise
  @see ExecuteBatch, Any, BatchFindFirst, BatchCollect, BatchCount
 */
 template <std::predicate<const ConstVisitedNode&> Predicate>
 auto SceneQuery::BatchAny(
-  std::optional<bool>& output, Predicate&& predicate) const noexcept
+  std::optional<bool>& output, Predicate&& predicate) const
 {
   LOG_SCOPE_FUNCTION(2);
 

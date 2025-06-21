@@ -39,50 +39,54 @@ public:
 protected:
   //=== Fixture Management ===------------------------------------------------//
 
-  void SetUp() override;
-  void TearDown() override;
+  auto SetUp() -> void override;
+  auto TearDown() -> void override;
 
   //=== Scene Creation Helpers ===--------------------------------------------//
 
   //! Create an empty scene
-  void CreateEmptyScene();
+  auto CreateEmptyScene() -> void;
 
   //! Create a simple single-node scene for basic testing
-  void CreateSimpleScene();
+  auto CreateSimpleScene() -> void;
 
   //! Create a parent-child hierarchy for basic relationship testing
-  void CreateParentChildScene();
+  auto CreateParentChildScene() -> void;
 
   //! Create a linear chain hierarchy (A -> B -> C -> D)
-  void CreateLinearChainScene(int depth = 4);
+  auto CreateLinearChainScene(int depth = 4) -> void;
 
   //! Create a binary tree hierarchy for complex traversal testing
-  void CreateBinaryTreeScene(int depth = 3);
+  auto CreateBinaryTreeScene(int depth = 3) -> void;
 
   //! Create a forest (multiple root nodes) for multi-root testing
-  void CreateForestScene(int root_count = 3, int children_per_root = 2);
+  auto CreateForestScene(int root_count = 3, int children_per_root = 2) -> void;
 
   //! Create multi-player hierarchy for scoped traversal testing
-  void CreateMultiPlayerHierarchy();
+  auto CreateMultiPlayerHierarchy() -> void;
 
   //=== Node Creation Helpers ===---------------------------------------------//
 
   //! Create a visible node with given name
-  [[nodiscard]] SceneNode CreateVisibleNode(const std::string& name) const;
+  [[nodiscard]] auto CreateVisibleNode(const std::string& name) const
+    -> SceneNode;
 
   //! Create an invisible node with given name
-  [[nodiscard]] SceneNode CreateInvisibleNode(const std::string& name) const;
+  [[nodiscard]] auto CreateInvisibleNode(const std::string& name) const
+    -> SceneNode;
 
   //! Create a static node with given name
-  [[nodiscard]] SceneNode CreateStaticNode(const std::string& name) const;
+  [[nodiscard]] auto CreateStaticNode(const std::string& name) const
+    -> SceneNode;
 
   //! Create a child node under the given parent
-  [[nodiscard]] SceneNode CreateChildNode(
-    SceneNode& parent, const std::string& name) const;
+  [[nodiscard]] auto CreateChildNode(
+    SceneNode& parent, const std::string& name) const -> SceneNode;
 
   //=== Query Helper Methods ===----------------------------------------------//
+
   //! Create a fresh query instance for the current scene
-  void CreateQuery();
+  auto CreateQuery() -> void;
   //! Predicate helper: node name equals given string
   [[nodiscard]] static auto NodeNameEquals(const std::string& name)
   {
@@ -135,49 +139,45 @@ protected:
   //=== Assertion Helpers ===------------------------------------------------//
 
   //! Expect QueryResult to have specific metrics
-  void ExpectQueryResult(const QueryResult& result,
+  static auto ExpectQueryResult(const QueryResult& result,
     std::size_t expected_examined, std::size_t expected_matched,
-    bool expected_success) const;
+    bool expected_success) -> void;
 
   //! Expect BatchResult to have specific metrics
-  void ExpectBatchResult(const BatchResult& result,
+  static auto ExpectBatchResult(const BatchResult& result,
     std::size_t expected_examined, std::size_t expected_total_matches,
-    bool expected_completed) const;
+    bool expected_completed) -> void;
 
   //! Expect node to have specific name
-  void ExpectNodeWithName(const std::optional<SceneNode>& node_opt,
-    const std::string& expected_name) const;
+  auto ExpectNodeWithName(const std::optional<SceneNode>& node_opt,
+    const std::string& expected_name) const -> void;
 
   //! Expect container to contain nodes with specific names
   template <typename Container>
-  void ExpectNodesWithNames(const Container& nodes,
-    const std::vector<std::string>& expected_names) const;
+  auto ExpectNodesWithNames(const Container& nodes,
+    const std::vector<std::string>& expected_names) const -> void;
 
   //=== Test Data Access ===--------------------------------------------------//
 
   //! Get reference to TestSceneFactory instance
-  [[nodiscard]] TestSceneFactory& GetFactory();
+  [[nodiscard]] auto GetFactory() -> TestSceneFactory&;
 
   //! Get reference to TestSceneFactory instance (const)
-  [[nodiscard]] const TestSceneFactory& GetFactory() const;
+  [[nodiscard]] auto GetFactory() const -> const TestSceneFactory&;
 
 private:
-  //=== JSON Templates for Complex Hierarchies ===---------------------------//
-
   //! Get JSON template for complex test hierarchy
-  [[nodiscard]] static std::string GetComplexHierarchyJson();
-  //! Get JSON template for game scene hierarchy
-  [[nodiscard]] static std::string GetGameSceneJson();
+  [[nodiscard]] static auto GetComplexHierarchyJson() -> std::string;
 
   //! Get JSON template for multi-player hierarchy
-  [[nodiscard]] static std::string GetMultiPlayerHierarchyJson();
+  [[nodiscard]] static auto GetMultiPlayerHierarchyJson() -> std::string;
 };
 
-//=== Template Implementation ===--------------------------------------------//
+//=== Template Implementation ===---------------------------------------------//
 
 template <typename Container>
-void SceneQueryTestBase::ExpectNodesWithNames(
-  const Container& nodes, const std::vector<std::string>& expected_names) const
+auto SceneQueryTestBase::ExpectNodesWithNames(const Container& nodes,
+  const std::vector<std::string>& expected_names) const -> void
 {
   ASSERT_EQ(nodes.size(), expected_names.size()) << "Container size mismatch";
 

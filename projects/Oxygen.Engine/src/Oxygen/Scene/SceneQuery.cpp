@@ -524,8 +524,8 @@ auto SceneQuery::ExecutePathTraversal(QueryResult& result,
  @note Path queries are not supported in batch mode (ExecuteBatch)
  @see FindFirstByPath(const SceneNode&, std::string_view) for relative paths
 */
-auto SceneQuery::FindFirstByPath(std::optional<SceneNode>& output,
-  std::string_view path) const noexcept -> QueryResult
+auto SceneQuery::FindFirstByPath(
+  std::optional<SceneNode>& output, std::string_view path) const -> QueryResult
 {
   LOG_SCOPE_FUNCTION(2);
 
