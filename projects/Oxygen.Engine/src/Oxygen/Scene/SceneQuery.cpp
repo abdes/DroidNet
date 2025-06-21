@@ -217,6 +217,73 @@ auto SceneQuery::FindFirstImpl(std::optional<SceneNode>& output,
 }
 
 /*!
+ Executes immediate Collect operation using dedicated scene traversal with
+ comprehensive node collection into user-provided container.
+
+ @param add_to_container Function to add matched SceneNode to container
+ @param predicate Node filtering function to test each visited node
+ @return QueryResult with nodes_examined, nodes_matched, and completion status
+
+ ### Execution Strategy
+
+ - Creates counting filter that tracks examined and accepted nodes
+ - Uses a visitor that adds scene nodes and continues traversal
+ - Maintains separate counters for examination and collection statistics
+ - Leverages full traversal for complete collection accuracy
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(n) full scene traversal required
+ - Memory: User-controlled allocation via provided container
+ - Container Agnostic: Works with any container supporting emplace_back
+
+ ### Container Requirements
+
+ - Must support emplace_back(SceneNode) operation - Examples:
+ std::vector<SceneNode>, std::deque<SceneNode>
+
+ @note This function enables container-agnostic path-based collection
+ @see BatchCollect for batch mode equivalent
+*/
+auto SceneQuery::CollectImpl(
+  std::function<void(const SceneNode&)> add_to_container,
+  const QueryPredicate& predicate) const noexcept -> QueryResult
+{
+  QueryResult result {};
+
+  auto filter = [&result, &predicate](const ConstVisitedNode& visited,
+                  FilterResult) -> FilterResult {
+    ++result.nodes_examined;
+    return predicate(visited) ? FilterResult::kAccept : FilterResult::kReject;
+  };
+
+  auto visitor
+    = [this, add_to_container = std::move(add_to_container), &result](
+        const ConstVisitedNode& visited, bool) -> VisitResult {
+    add_to_container({ scene_weak_.lock(), visited.handle });
+    ++result.nodes_matched;
+    return VisitResult::kContinue;
+  };
+
+  try {
+    const auto traversal_result = ExecuteTraversal(visitor, filter);
+    if (!traversal_result.completed) {
+      LOG_F(ERROR, "traversal did not complete");
+      result.error_message.emplace(
+        "traversal did not complete, container has partial results");
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "traversal failed: {}", ex.what());
+    result.error_message.emplace(ex.what());
+  } catch (...) {
+    LOG_F(ERROR, "traversal failed: unknown exception");
+    result.error_message.emplace("Unknown exception in FindFirst operation");
+  }
+
+  return result;
+}
+
+/*!
  Executes immediate Count operation using dedicated scene traversal with
  comprehensive node examination and match counting.
 
