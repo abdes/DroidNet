@@ -65,5 +65,6 @@ m_gtest_program(
   SOURCES
     "ts_init.cpp"
     "Composition_test.cpp"
+    "memory_invalidation_test.cpp"
     "ObjectMetaData_test.cpp"
 )
