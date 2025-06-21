@@ -145,14 +145,8 @@ struct BatchOperation {
   enum class Status { Pending, Completed, Failed };
 
   Status status = Status::Pending;
-  // Public result data (metadata only - results go to user references)
   QueryResult result;
 
-  // Internal result storage for coordination and early termination
-  std::optional<SceneNode> internal_found_node; // For FindFirst coordination
-  std::optional<bool> internal_any_result; // For Any coordination
-  std::size_t internal_count_result = 0; // For Count/Collect coordination
-  // Internal execution context only
   std::function<oxygen::co::Co<>(
     oxygen::co::BroadcastChannel<ConstVisitedNode>&)>
     operation;
@@ -197,6 +191,11 @@ public:
   {
   }
 
+  // This class manages a unique execution context and should not be copied or
+  // moved.
+  OXYGEN_MAKE_NON_COPYABLE(BatchQueryExecutor)
+  OXYGEN_MAKE_NON_MOVABLE(BatchQueryExecutor)
+
   /*!
    Registers a FindFirst operation for batch execution, storing the result
    in the provided reference when a matching node is found.
@@ -224,78 +223,52 @@ public:
   template <typename Predicate>
   auto FindFirst(std::optional<SceneNode>& output, Predicate predicate) -> void
   {
-    LOG_F(INFO,
-      "BatchQuery: Registering FindFirst operation during registration phase");
+    LOG_F(2, "registering operation for batch execution");
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
+    pending_operations_++; // Increment for the new operation
+
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
-      LOG_F(INFO,
-        "BatchQuery: FindFirst operation starting execution during traversal "
-        "(op_index=%zu)",
-        operation_index);
-
       auto& op = operations_[operation_index];
       auto& result = op.result;
       try {
         auto reader = channel.ForRead();
-        op.internal_found_node = std::nullopt;
         output = std::nullopt; // Initialize output
 
         while (true) {
           auto node_data = co_await reader.Receive();
           if (!node_data) {
             // Channel closed - no match found
-            LOG_F(INFO,
-              "BatchQuery: FindFirst operation completed during traversal "
-              "(op_index=%zu, examined=%zu, matched=%zu)",
+            LOG_F(2, "FindFirst({}): channel closed (examined={}, matched={})",
               operation_index, result.nodes_examined, result.nodes_matched);
             break;
           }
-          result.nodes_examined++;
+          result.nodes_examined++; // statistics update for THIS operation
           if (predicate(*node_data)) {
             result.nodes_matched++;
-            LOG_F(INFO, "BatchQuery: FindFirst found match during traversal");
-
             if (node_data->handle.IsValid()) {
-              auto found_node
-                = SceneNode { scene_weak_.lock(), node_data->handle };
-              op.internal_found_node = found_node; // Store internally
+              SceneNode found_node { scene_weak_.lock(), node_data->handle };
               output = std::move(found_node); // Populate caller's variable
             }
 
-            // Update status immediately when work is complete
-            op.status = BatchOperation::Status::Completed;
-            LOG_F(INFO,
-              "BatchQuery: FindFirst operation completed immediately after "
-              "finding match (op_index=%zu)",
-              operation_index);
+            LOG_F(2, "FindFirst({}): found match", operation_index);
             break; // Early termination
           }
         }
 
-        // Only update status if not already completed
-        if (op.status != BatchOperation::Status::Completed) {
-          op.status = BatchOperation::Status::Completed;
-        }
-      } catch (const std::exception& e) {
-        LOG_F(ERROR,
-          "BatchQuery: FindFirst operation failed during traversal "
-          "(op_index=%zu): %s",
-          operation_index, e.what());
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = e.what();
+        op.status = BatchOperation::Status::Completed;
       } catch (...) {
-        LOG_F(ERROR,
-          "BatchQuery: FindFirst operation failed with unknown exception "
-          "during traversal (op_index=%zu)",
-          operation_index);
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = "Unknown exception in FindFirst operation";
+        HandleOperationException(op, operation_index, "FindFirst");
       }
+
+      pending_operations_--;
+      LOG_F(2, "FindFirst({}): completed (remaining operations={})",
+        operation_index, pending_operations_.load());
+
       co_return;
     };
   }
@@ -328,36 +301,26 @@ public:
   auto Collect(
     std::function<void(const SceneNode&)> inserter, Predicate predicate) -> void
   {
-    LOG_F(INFO,
-      "BatchQuery: Registering Collect operation during registration phase");
+    LOG_F(2, "registering operation for batch execution");
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
+    pending_operations_++; // Increment for the new operation
 
     operation.operation
       = [this, inserter, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
-      LOG_F(INFO,
-        "BatchQuery: Collect operation starting execution during traversal "
-        "(op_index=%zu)",
-        operation_index);
-
       auto& op = operations_[operation_index];
       auto& result = op.result;
 
       try {
         auto reader = channel.ForRead();
-        op.internal_count_result = 0; // Reset internal counter
-
         while (true) {
           auto node_data = co_await reader.Receive();
           if (!node_data) {
-            // Channel closed
-            LOG_F(INFO,
-              "BatchQuery: Collect operation completed during traversal "
-              "(op_index=%zu, examined=%zu, collected=%zu)",
-              operation_index, result.nodes_examined, op.internal_count_result);
+            LOG_F(2, "Collect({}): channel closed (examined={}, collected={})",
+              operation_index, result.nodes_examined, result.nodes_matched);
             break;
           }
           result.nodes_examined++;
@@ -366,27 +329,18 @@ public:
             if (node_data->handle.IsValid()) {
               // Use inserter function instead of direct container access
               inserter(SceneNode { scene_weak_.lock(), node_data->handle });
-              op.internal_count_result++; // Track internally
             }
           }
         }
 
         op.status = BatchOperation::Status::Completed;
-      } catch (const std::exception& e) {
-        LOG_F(ERROR,
-          "BatchQuery: Collect operation failed during traversal "
-          "(op_index=%zu): %s",
-          operation_index, e.what());
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = e.what();
       } catch (...) {
-        LOG_F(ERROR,
-          "BatchQuery: Collect operation failed with unknown exception during "
-          "traversal (op_index=%zu)",
-          operation_index);
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = "Unknown exception in Collect operation";
+        HandleOperationException(op, operation_index, "Collect");
       }
+
+      pending_operations_--;
+      LOG_F(2, "Collect({}): completed (remaining operations={})",
+        operation_index, pending_operations_.load());
 
       co_return;
     };
@@ -419,21 +373,16 @@ public:
   template <typename Predicate>
   auto Count(std::optional<size_t>& output, Predicate predicate) -> void
   {
-    LOG_F(INFO,
-      "BatchQuery: Registering Count operation during registration phase");
+    LOG_F(2, "registering operation for batch execution");
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
+    pending_operations_++; // Increment for the new operation
 
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
-      LOG_F(INFO,
-        "BatchQuery: Count operation starting execution during traversal "
-        "(op_index=%zu)",
-        operation_index);
-
       auto& op = operations_[operation_index];
       auto& result = op.result;
 
@@ -443,36 +392,25 @@ public:
         while (true) {
           auto node_data = co_await reader.Receive();
           if (!node_data) {
-            // Channel closed
-            LOG_F(INFO,
-              "BatchQuery: Count operation completed during traversal "
-              "(op_index=%zu, examined=%zu, counted=%zu)",
-              operation_index, result.nodes_examined, op.internal_count_result);
+            LOG_F(2, "Count({}): channel closed (examined={}, counted={})",
+              operation_index, result.nodes_examined, result.nodes_matched);
             break;
           }
           result.nodes_examined++;
           if (predicate(*node_data)) {
             result.nodes_matched++;
-            op.internal_count_result++; // Track internally
           }
         }
+
         output.emplace(result.nodes_matched);
         op.status = BatchOperation::Status::Completed;
-      } catch (const std::exception& e) {
-        LOG_F(ERROR,
-          "BatchQuery: Count operation failed during traversal (op_index=%zu): "
-          "%s",
-          operation_index, e.what());
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = e.what();
       } catch (...) {
-        LOG_F(ERROR,
-          "BatchQuery: Count operation failed with unknown exception during "
-          "traversal (op_index=%zu)",
-          operation_index);
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = "Unknown exception in Count operation";
+        HandleOperationException(op, operation_index, "Count");
       }
+
+      pending_operations_--;
+      LOG_F(2, "Count({}): completed (remaining operations={})",
+        operation_index, pending_operations_.load());
 
       co_return;
     };
@@ -505,75 +443,48 @@ public:
   template <typename Predicate>
   auto Any(std::optional<bool>& output, Predicate predicate) -> void
   {
-    LOG_F(
-      INFO, "BatchQuery: Registering Any operation during registration phase");
+    LOG_F(2, "registering operation for batch execution");
 
     auto& operation = operations_.emplace_back();
     std::size_t operation_index = operations_.size() - 1;
+    pending_operations_++; // Increment for the new operation
 
     operation.operation
       = [this, &output, predicate = std::move(predicate), operation_index](
           oxygen::co::BroadcastChannel<ConstVisitedNode>& channel)
       -> oxygen::co::Co<> {
-      LOG_F(INFO,
-        "BatchQuery: Any operation starting execution during traversal "
-        "(op_index=%zu)",
-        operation_index);
-
       auto& op = operations_[operation_index];
       auto& result = op.result;
       try {
         auto reader = channel.ForRead();
-        op.internal_any_result = false;
         output = false; // Initialize output
 
         while (true) {
           auto node_data = co_await reader.Receive();
           if (!node_data) {
-            // Channel closed
-            LOG_F(INFO,
-              "BatchQuery: Any operation completed during traversal "
-              "(op_index=%zu, examined=%zu, found=%s)",
+            LOG_F(2, "Any({}): channel closed (examined={}, found={})",
               operation_index, result.nodes_examined,
-              op.internal_any_result.value_or(false) ? "true" : "false");
+              result.nodes_matched != 0 ? "true" : "false");
             break;
           }
           result.nodes_examined++;
           if (predicate(*node_data)) {
             result.nodes_matched++;
-            op.internal_any_result = true; // Store internally
-            output = true; // Set caller's variable
-            LOG_F(INFO,
-              "BatchQuery: Any operation found match during traversal "
-              "(op_index=%zu, examined=%zu)",
-              operation_index, result.nodes_examined);
-
-            // Update status immediately when work is complete
-            op.status = BatchOperation::Status::Completed;
-            LOG_F(INFO,
-              "BatchQuery: Any operation completed immediately after finding "
-              "match (op_index=%zu)",
-              operation_index);
-            break; // Early termination
+            output = true;
+            LOG_F(2, "Any({}): found match (examined={})", operation_index,
+              result.nodes_examined);
+            break;
           }
         }
 
         op.status = BatchOperation::Status::Completed;
-      } catch (const std::exception& e) {
-        LOG_F(ERROR,
-          "BatchQuery: Any operation failed during traversal (op_index=%zu): "
-          "%s",
-          operation_index, e.what());
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = e.what();
       } catch (...) {
-        LOG_F(ERROR,
-          "BatchQuery: Any operation failed with unknown exception during "
-          "traversal (op_index=%zu)",
-          operation_index);
-        op.status = BatchOperation::Status::Failed;
-        result.error_message = "Unknown exception in Any operation";
+        HandleOperationException(op, operation_index, "Any");
       }
+
+      pending_operations_--;
+      LOG_F(2, "Any({}): completed (remaining operations={})", operation_index,
+        pending_operations_.load());
 
       co_return;
     };
@@ -610,6 +521,7 @@ public:
     -> BatchResult
   {
     operations_.clear();
+    pending_operations_ = 0; // Reset for new batch
 
     // Register all operations by calling the lambda
     batch_operations(*this);
@@ -652,15 +564,14 @@ public:
 
     for (auto& operation : operations_) {
       operation_coroutines.emplace_back(operation.operation(node_channel));
-    } // Create the traversal coroutine
-    auto traversal_coroutine = this->StreamTraverseSceneAsync(
-      writer, async_traversal, traversal_scope_);
+    }
 
-    // Use AnyOf to race the traversal against ALL operations completing
     // The batch completes when EITHER:
-    // 1. The traversal finishes (all nodes processed), OR
-    // 2. ALL operations complete (early termination when no more work needed)
-    co_await oxygen::co::AnyOf(std::move(traversal_coroutine),
+    co_await oxygen::co::AnyOf(
+      // 1. The traversal finishes (all nodes processed), OR
+      std::move(this->StreamTraverseSceneAsync(
+        writer, async_traversal, traversal_scope_)),
+      // 2. ALL operations complete (early termination when no more work needed)
       oxygen::co::AllOf(std::move(operation_coroutines)));
 
     co_return;
@@ -744,18 +655,10 @@ public:
         // Yield to allow operations to process this node
         co_await oxygen::co::Yield {};
 
-        // Check if all operations are complete after processing this node
-        bool all_complete = true;
-        for (const auto& op : operations_) {
-          if (op.status == BatchOperation::Status::Pending) {
-            all_complete = false;
-            break;
-          }
-        }
-
-        if (all_complete) {
-          LOG_F(
-            INFO, "BatchQuery: All operations complete, stopping traversal");
+        // Chekc if all operations are complete, and if so early terminate the
+        // traversal.
+        if (pending_operations_.load(std::memory_order_relaxed) == 0) {
+          LOG_F(2, "all operations complete, stopping traversal");
           co_return VisitResult::kStop;
         }
       }
@@ -768,19 +671,18 @@ public:
       return FilterResult::kAccept; // Accept all nodes for broadcast
     };
 
+    TraversalResult traversal_result;
     try {
       // Choose traversal method based on scope configuration
       if (traversal_scope.empty()) {
         // Use full scene traversal
-        auto traversal_result = co_await async_traversal.TraverseAsync(
+        traversal_result = co_await async_traversal.TraverseAsync(
           streaming_visitor, TraversalOrder::kPreOrder, accept_all_filter);
-        (void)traversal_result; // Suppress unused variable warning
       } else {
         // Use scoped traversal
-        auto traversal_result
+        traversal_result
           = co_await async_traversal.TraverseHierarchiesAsync(traversal_scope,
             streaming_visitor, TraversalOrder::kPreOrder, accept_all_filter);
-        (void)traversal_result; // Suppress unused variable warning
       }
     } catch (...) {
       // Ensure channel is closed even on exception
@@ -788,15 +690,44 @@ public:
 
     // Close the channel to signal completion
     writer.Close();
+
+    if (!traversal_result.completed) {
+      LOG_F(ERROR, "Scene traversal did not complete: filtered={}, visited={}",
+        traversal_result.nodes_filtered, traversal_result.nodes_visited);
+    }
+
     co_return;
+  }
+
+  void HandleOperationException(
+    BatchOperation& op, std::size_t operation_index, const char* operation_name)
+  {
+    using namespace std::string_literals;
+
+    op.status = BatchOperation::Status::Failed;
+    try {
+      throw; // Rethrow the current exception
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "{} operation failed during traversal (op_index={}): {}",
+        operation_name, operation_index, e.what());
+      op.result.error_message = e.what();
+    } catch (...) {
+      LOG_F(ERROR,
+        "{} operation failed with unknown exception during "
+        "traversal (op_index={})",
+        operation_name, operation_index);
+      op.result.error_message
+        = "Unknown exception in "s + operation_name + " operation"s;
+    }
   }
 
   std::weak_ptr<const Scene> scene_weak_;
   std::vector<SceneNode> traversal_scope_;
   std::vector<BatchOperation> operations_;
+  std::atomic<std::size_t> pending_operations_ { 0 };
 };
 
-} // oxygen::scene::detail
+} // namespace oxygen::scene::detail
 
 //=== Batch Implementation Methods ===----------------------------------------//
 
@@ -884,8 +815,7 @@ auto SceneQuery::BatchFindFirstImpl(std::optional<SceneNode>& result,
   -> void
 {
   // Register with batch coordinator using reference output
-  auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->FindFirst(result, predicate);
+  batch_coordinator_->FindFirst(result, predicate);
 }
 
 /*!
@@ -902,8 +832,7 @@ auto SceneQuery::BatchCollectImpl(
   -> void
 {
   // Register with batch coordinator using inserter function
-  auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->Collect(inserter, predicate);
+  batch_coordinator_->Collect(inserter, predicate);
 }
 
 /*!
@@ -919,8 +848,7 @@ auto SceneQuery::BatchCountImpl(std::optional<size_t>& result,
   -> void
 {
   // Register with batch coordinator - results go into BatchResult
-  auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->Count(result, predicate);
+  batch_coordinator_->Count(result, predicate);
 }
 
 /*!
@@ -936,6 +864,5 @@ auto SceneQuery::BatchAnyImpl(std::optional<bool>& result,
   -> void
 {
   // Register with batch coordinator using reference output
-  auto coordinator = static_cast<BatchQueryExecutor*>(batch_coordinator_);
-  coordinator->Any(result, predicate);
+  batch_coordinator_->Any(result, predicate);
 }
