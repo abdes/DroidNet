@@ -1,58 +1,51 @@
-# Test Implementation Guidelines
+//=== STRUCTURE ===-----------------------------------------------------------//
+- Use Google Test; use Google Mock only if required.
+- Write scenario-based tests with clear, descriptive names.
+- Group tests by functionality with detailed comment headers (describe
+  hierarchy, scenario, or feature).
+- Place all tests in anonymous namespaces to avoid symbol clashes.
+- Follow the AAA pattern (Arrange, Act, Assert) with clear comments and empty
+  lines between phases.
+- Use NOLINT_* macros from GTest.h for all test cases.
+- Use GCHECK_F for custom assertion messages. Use TRACE_GCHECK_F only when the
+  failure location is ambiguous, and always provide a concise tag. Never use
+  SCOPED_TRACE directly.
 
-## Structure
-- Group tests by functionality with clear comment headers
-- Use anonymous namespace to avoid symbol clashes
-- Follow AAA pattern (Arrange-Act-Assert) with empty lines between phases
-- Use NOLINT_* macros from GTest.h to disable linter warnings
+//=== FIXTURES AND HELPERS ===------------------------------------------------//
+- Derive all fixtures from ::testing::Test for shared setup/teardown.
+- Create separate fixtures for different test types (basic, error, death, edge,
+  complex).
+- Implement helper methods for common actions, node creation, and expectations.
+- Use SetUp() and TearDown() for resource management and clean state.
+- Use and extend existing helper methods and base class patterns as needed.
+- Create reusable helpers for logic and expectation checks (e.g., node order,
+  presence, filtering).
+- Manage all state within fixtures or locally; never use global or static state.
 
-## Fixtures
-- Derive from ::testing::Test for shared setup/teardown
-- Create multiple fixtures for different test types (basic, error, death)
-- Implement helper methods for common actions
-- Use SetUp() and TearDown() for resource management
+//=== TEST CASE DESIGN ===----------------------------------------------------//
+- Test one behavior per test; use the format TestCase_WhatIsTested.
+- Add detailed doc comments (//! or /*! ... */) above each test to describe
+  intent and scenario.
+- Cover normal, boundary, error, edge, and cross-object scenarios.
+- Merge related positive/negative cases into comprehensive tests when possible.
+- Use EXPECT_DEATH for assertion/death scenarios.
+- Verify proper state setup before complex scenarios.
+- Test actual implementation behavior (e.g., empty scope = full scene
+  traversal).
+- Use expressive, scenario-driven test design; avoid trivial or assumption-based
+  tests.
 
-## Test Cases
-- One behavior per test with descriptive names: TestCase_WhatIsTested
-- Cover normal, boundary, error, and cross-object scenarios
-- Merge related positive/negative cases into comprehensive tests
-- Use EXPECT_DEATH for assertion/death scenarios
-
-## Assertions
-- Use EXPECT_* and ASSERT_* with custom failure messages
-- Check both state and side effects
-- Always use Google Test collection matchers:
-  ```cpp
-  using ::testing::AllOf;
-  using ::testing::Contains;
-  using ::testing::IsSupersetOf;
-  using ::testing::SizeIs;
-
-  EXPECT_THAT(collection, AllOf(
-    SizeIs(expected_count),
-    IsSupersetOf({"item1", "item2"})
-  ));
-  ```
-
-## Never Do
-- Manual collection verification with loops and boolean flags
-- Multiple separate EXPECT_THAT calls for same collection
-- Manual size comparisons with EXPECT_EQ(container.size(), expected)
-- Repeating ::testing:: namespace (use using declarations)
-- Creating manual scene hierarchies (use JSON-based CreateXxxHierarchy methods)
-- Changing implementation to fix tests without approval
-- Testing assumptions instead of actual implementation behavior
-
-## Always Do
-- Add using ::testing::MatcherName declarations at test start
-- Use STL algorithms (std::transform) instead of manual loops
-- Follow existing patterns for hierarchy creation
-- Test actual behavior (empty scope = full scene traversal)
-- Verify proper state setup before testing complex scenarios
-- Get approval before changing implementation code during test development
-
-## Test Organization
-- Use existing helper methods and base class patterns
-- Create reusable helpers for common logic
-- Manage all state within fixtures or locally
-- Ensure tests are portable with no hardcoded dependencies
+//=== ASSERTIONS AND MATCHERS ===---------------------------------------------//
+- Use EXPECT_* and ASSERT_* with custom failure messages.
+- Check both state and side effects; verify node order, presence, and filtering
+  as appropriate.
+- Always use Google Test collection matchers: using ::testing::AllOf; using
+  ::testing::Contains; using ::testing::IsSupersetOf; using ::testing::SizeIs;
+  EXPECT_THAT(collection, AllOf( SizeIs(expected_count), IsSupersetOf({"item1",
+  "item2"}) ));
+- Add using ::testing::MatcherName declarations at test start.
+- Use expectation helpers (e.g., ExpectVisitedNodes, ExpectContainsExactlyNodes)
+  for clarity and reuse.
+- Use GCHECK_F or TRACE_GCHECK_F for all critical assertions to improve
+  traceability (TRACE_GCHECK_F only for ambiguous failure locations, with
+  concise tags).
